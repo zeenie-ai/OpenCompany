@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_agents / agent |
-| **Backend handler** | [`server/nodes/agent/ai_agent/__init__.py`](../../../server/nodes/agent/ai_agent/__init__.py) — dispatched via `BaseNode.execute()` + the `@Operation("execute")` method (`execute_op`). Pre-dispatch (edge walk + task inject + prompt fallback) in [`server/nodes/agent/_inline.py::prepare_agent_call`](../../../server/nodes/agent/_inline.py); LLM loop in `AIService.execute_agent`. |
+| **Backend execution** | Temporal graph runs normally use [`AgentWorkflow`](../../../server/services/temporal/agent_workflow.py), with preparation in [`agent_activities.py`](../../../server/services/temporal/agent_activities.py). The node/Activity path uses [`AIAgentNode.execute_op`](../../../server/nodes/agent/ai_agent/__init__.py), [`prepare_agent_call`](../../../server/nodes/agent/_inline.py), and `AIService.execute_agent`. |
 | **Tests** | [`server/tests/nodes/test_ai_agents.py`](../../../server/tests/nodes/test_ai_agents.py) |
 | **Skill (if any)** | n/a (the agent consumes skills via `input-skill`) |
 | **Dual-purpose tool** | no |
@@ -14,12 +14,40 @@
 and system message, continues its stored conversation when a Context node is
 connected on `input-context` (RFC-0002), loads instructions from connected
 skill nodes, binds tool nodes as provider-neutral `AgentToolSpec` values, and
-runs `run_native_agent_loop` until the LLM produces a final answer. All of the
-heavy lifting (native SDK invocation, tool execution, conversation
-persistence) lives behind `AIService.execute_agent`; the handler's job is
-purely to gather the connected-node payloads via
-`edge_walker.collect_agent_connections` (a 5-tuple: context, skill, tool,
-input, task) and forward them.
+runs until the LLM produces a final answer. The node/Activity path gathers
+connected payloads through `edge_walker.collect_agent_connections` (context,
+skill, tool, input, task) and calls `AIService.execute_agent` with
+`run_native_agent_loop`. The default Temporal graph path uses the same native
+provider boundary through durable `AgentWorkflow` scheduling: preparation,
+each LLM step, and each ordinary tool call are regular Activities.
+
+## Temporal execution and Stop/Resume
+
+Routing is frozen in the graph run's input. `aiAgent` takes the child-Workflow
+path when `TEMPORAL_AGENT_WORKFLOW_ENABLED` was captured as true; otherwise it
+runs inside the ordinary node Activity. For new controlled generations with
+`execution_control_version=1`, the child Workflow closes admission before each
+model request, tool, refresh, compaction, and child start. Stop lets admitted
+work and its result bookkeeping finish, including parallel admitted work.
+Pending calls from a recorded model response remain in the live continuation.
+Resume starts the next pending action with the same execution scope rather
+than repeating the response or completed tools.
+
+Attached agents are discovered through their parent's native child tree;
+detached Task Manager runners enroll independently with the generation
+controller. Version 1 continuation carries prepared configuration, resolved
+tools and plugin Activity policies, transcript, thinking, usage, iteration,
+execution identity, and control state. It restores this state at a clean turn
+boundary and reports `AgentContinuationTooLarge` if the complete encoded input
+cannot fit. It never falls back to the opening prompt. Existing generations
+retain legacy paths and do not acquire this stronger acknowledgement contract.
+
+Unlimited LLM retries can keep Stop in `pausing` during an outage. Tool effects
+before recorded completion remain subject to retry/idempotency rules; a
+heartbeat status string cannot checkpoint an opaque request. If child-Workflow
+routing is disabled, the entire node Activity is the cooperative boundary.
+See [Temporal workflow control](../../temporal-workflow-control.md) and
+[Agent continuation](../../TEMPORAL_ARCHITECTURE.md#agent-continuation-under-history-pressure).
 
 ## Inputs (handles)
 
@@ -68,6 +96,9 @@ Source: `AIAgentParams` in [`ai_agent/__init__.py`](../../../server/nodes/agent/
 Wrapped in the standard envelope: `{ success: true, result: <payload>, execution_time: number }`.
 
 ## Logic Flow
+
+This diagram describes the node/Activity entry point. The default Temporal
+child-Workflow loop is documented in [Temporal architecture](../../TEMPORAL_ARCHITECTURE.md#agent-as-child-workflow-f4b).
 
 ```mermaid
 flowchart TD
@@ -125,8 +156,9 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none directly in `execute_op`. `AIService.execute_agent`
-  writes `token_usage_metrics` rows (via `CompactionService.track`). With a
+- **Database writes**: none directly in `execute_op`. A memory-connected
+  in-process `AIService.execute_agent` writes `token_usage_metrics` via
+  `CompactionService.track`; Temporal aggregates usage in its result. With a
   Context node connected, the conversation is saved to `agent_conversations`
   after every turn of a started workflow; a manual node Run saves nothing.
 - **Broadcasts**: `prepare_agent_call` resolves `StatusBroadcaster` and passes

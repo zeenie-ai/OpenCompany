@@ -47,7 +47,7 @@ from services.ws_handler_registry import ws_handler
 
 logger = get_logger(__name__)
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 _DENIED = {"success": False, "error": "access_denied"}
 #: A workflow's chat messages travel through Temporal (``dispatch.emit``
 #: signals its listeners) and only a Temporal activity claims their runs, so
@@ -133,7 +133,17 @@ async def run_snapshots(database: Any, session_id: str) -> List[Dict[str, Any]]:
     hub = get_chat_hub()
     live = hub.session_live(session_id)
     rows = await ledger.live_runs(database, session_id)
-    return [{**reducer.merge_snapshot(reducer.snapshot_from_row(run), live.get(run.run_id)), "hub_epoch": hub.epoch} for run in rows]
+    return [await _run_snapshot(database, run, live.get(run.run_id), hub.epoch) for run in rows]
+
+
+async def _run_snapshot(database: Any, run: Any, live: Any, hub_epoch: str) -> Dict[str, Any]:
+    snapshot = {**reducer.merge_snapshot(reducer.snapshot_from_row(run), live), "hub_epoch": hub_epoch}
+    control = await ledger.owning_control(database, run)
+    if ledger.controlled_generation(control):
+        from services.deployment.control import serialize_control
+
+        snapshot["workflow_control"] = serialize_control(control)
+    return snapshot
 
 
 async def _thread_state(database: Any, session_id: str) -> Dict[str, Any]:
@@ -207,13 +217,14 @@ async def _dispatch(
 ) -> None:
     """Send the owner's message to the workflow's chat triggers: the run it
     starts is the event's id, so the trigger's child workflow is the run's.
+    Without a tracked run, the saved message supplies a stable event identity.
     Its attachments ride along (the trigger's output carries them)."""
     event_data: Dict[str, Any] = {"message": prompt, "timestamp": timestamp, "session_id": session_id, "message_id": message_uid}
     if run_id is not None:
         event_data["run_id"] = run_id
     if attachments:
         event_data["attachments"] = list(attachments)
-    await dispatch_chat_message_received(event_data, workflow_id=workflow_id, event_id=run_id)
+    await dispatch_chat_message_received(event_data, workflow_id=workflow_id, event_id=run_id or message_uid)
     logger.info("Chat message dispatched", session_id=session_id, run_id=run_id)
 
 
@@ -436,16 +447,12 @@ async def handle_get_chat_run(data: Dict[str, Any], websocket: WebSocket) -> Dic
     hub = get_chat_hub()
     live = hub.live_snapshot(run.run_id)
     run = await ledger.get_run(database, run.run_id) or run
-    snapshot = reducer.merge_snapshot(reducer.snapshot_from_row(run), live)
-    return {"success": True, "run": {**snapshot, "hub_epoch": hub.epoch}}
+    return {"success": True, "run": await _run_snapshot(database, run, live, hub.epoch)}
 
 
 @ws_handler("run_id")
 async def handle_stop_chat_run(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
-    """Stop a live run (``ledger.request_stop``). One nothing picked up yet
-    ends ``stopped`` at once; a running one stops itself at its next step,
-    keeping its reply so far. Answers the run's state: ``stopping`` or
-    ``stopped``, ``not_stoppable`` for a run that ended otherwise."""
+    """Suspend a controlled run's generation; retain legacy terminal Stop."""
     database = container.database()
     run = await ledger.get_run(database, str(data["run_id"]))
     if run is None:
@@ -454,6 +461,24 @@ async def handle_stop_chat_run(data: Dict[str, Any], websocket: WebSocket) -> Di
         await authorize_session(database, websocket, run.session_id)
     except ChatAccessDenied:
         return dict(_DENIED)
+    control = await ledger.owning_control(database, run)
+    if ledger.controlled_generation(control):
+        if run.state not in ledger.LIVE_STATES:
+            return {"success": False, "error": "not_stoppable", "run_id": run.run_id, "state": run.state}
+        if not isinstance(data.get("idempotency_key"), str) or not data["idempotency_key"].strip():
+            return {"success": False, "error": "idempotency_key_required"}
+        from services.deployment.handlers import handle_pause_workflow
+
+        result = await handle_pause_workflow(
+            {
+                "workflow_id": control.workflow_id,
+                "expected_root_execution_id": run.run_key,
+                "expected_revision": data.get("expected_revision"),
+                "idempotency_key": data.get("idempotency_key"),
+            },
+            websocket,
+        )
+        return {**result, "run_id": run.run_id, "resumable": True}
     run = await ledger.request_stop(database, run.run_id) or run
     if run.state not in ("stopping", "stopped"):
         return {"success": False, "error": "not_stoppable", "run_id": run.run_id, "state": run.state}

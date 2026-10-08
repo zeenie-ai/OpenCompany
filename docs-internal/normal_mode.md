@@ -68,7 +68,7 @@ is the reference.
 | `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
-| `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. Pausing them, and watching them work, is the Workspace's: the header's Workspace pill opens it on the employee on screen, and its header carries the same main action |
+| `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
 | `connectAI/` | The guided Connect an AI model dialog (below) |
 | `workspace/` | The Workspace dock (below), its header pill, and its Canvas tab, which loads in its own chunk |
 | `settings/` | Settings pages (Profile, Billing, Skills, Connectors, Plugins). Catalog primitives live in `components/catalog`; Connectors embeds the shared `components/credentials/CredentialsBrowser`. Provider dialogs belong to AppShell. |
@@ -79,7 +79,9 @@ is the reference.
 | `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Connect an AI model dialog, the last hire's notice, the Workspace dock, one-shot glow and pulse signals |
 
 Status comes from the server: an employee summary is `working`, `ready`,
-`paused` or `attention` (an automatic pause, see below), and a pending draft
+`paused` or `attention` (an automatic pause, see below). The `paused` summary
+is displayed as **Stopped**; durable control transitions display
+**Stopping…** or **Resuming…** even after the local request has ended. A pending draft
 shows as "Needs you". So does a browser waiting for the owner: when an agent
 calls `request_user`, the summary's `browser_request` (`{node_id, reason,
 since}`, never the agent's message, since summaries reach every socket) is
@@ -167,10 +169,11 @@ Help in browser), else the first on the team.
 
 - **Header**: the avatar, "{Name}’s workspace", the live task line when
   there is one (`useLiveTask`, else the summary's task), and a pill: Live
-  while the employee works, otherwise their status (Ready, Paused, Needs
-  attention, Needs you). Then their main action (Pause, Resume, Start, or
-  connect what is missing), the one place to pause them in Normal mode, and
-  Expand and Close.
+  while the employee works, otherwise their status (Ready, Stopped, Needs
+  attention, Needs you). Then their main action (Stop, Resume, Start, or
+  connect what is missing), and Expand and Close. Stop shows Stopping while
+  admitted work drains; the header follows authoritative generation control
+  instead of treating a completed browser request as a completed Stop.
 - **Canvas**: the board named by the summary's `canvas_node_id`, drawn by
   the editor's Canvas renderer (`CanvasContent`, see [Canvas Node](./canvas_node.md)).
   It loads in its own chunk, which keeps the board's markdown, code and
@@ -362,7 +365,7 @@ owner dismisses it or opens another view; `needs_ai` opens Connect an AI
 model; every error code has plain words (`busy`: they are still being set
 up).
 
-### 3. Start, pause, resume
+### 3. Start, Stop, Resume
 
 `start_employee {workflow_id, expected_revision, idempotency_key}`
 ([start.py](../server/services/employees/start.py)) refuses with
@@ -371,8 +374,27 @@ and the agent it talks to the owner through, `node_roles` `agent` and
 `talk_agent`) onto a usable model, and calls `start_saved_workflow`, the same
 start path the editor uses. One that stopped after a problem is reset first
 (`reset_if_failed`); the reset moves its control revision on, so the revision
-the page sent is checked here instead. Pause and Resume are the editor's
-`pause_workflow` / `resume_workflow`.
+the page sent is checked here instead. Stop and Resume retain the editor's
+`pause_workflow` / `resume_workflow` request names and require
+`expected_revision` and `idempotency_key`.
+
+For new generations with `execution_control_version: 1`, Stop first closes
+admission throughout the generation's execution tree. Already admitted model
+requests, parallel tools and whole-activity agents finish under their existing
+retry policies; their results and bookkeeping are retained. **Stopping** is the
+persisted `pausing` transition, and **Stopped** is acknowledged `paused` after
+that work settles. Resume releases the same continuations at the next pending
+action and then reopens event and schedule producers. It never starts the
+agent again at its opening prompt. A request timeout leaves the durable intent
+in place and status reads reconcile it. Unlimited model retries can keep Stop
+in Stopping during a provider outage. Independent Workspace tasks and approved
+sends have their own execution lifecycle.
+
+Older generations retain their recorded control paths. A missing versioned
+controller fails closed; Resume does not rebuild an empty registry and claim
+the suspended work was recovered. See
+[Temporal Workflow Control](./temporal-workflow-control.md) for acknowledgements,
+rollover, recovery and operating limits.
 
 Automatic pauses now record why: `WorkflowControlExecution.pause_reason`
 (`failures` from the circuit breaker, `recovery` after a crash,
@@ -461,10 +483,11 @@ sending and drafts belong to the chat (wire and client rules in
   "Jump to latest" button counts them. It refetches on `chat.updated`, after a
   runtime reset, and when the socket reopens. The drafts waiting for the
   owner's OK follow the conversation (the host's `afterThread`).
-- **Working** follows the run the message started, not timers: from the
+- **Working** follows the run the message started and its owning generation's
+  control, not timers: from the
   moment the server admits it, the avatar spins its ring and skeleton lines
   stand where the answer will be, with "Thinking" under them, until that run
-  ends, whatever else lands meanwhile (a routine report does not end it). The
+  ends or is intentionally suspended, whatever else lands meanwhile (a routine report does not end it). The
   talk agent's answer streams in as it is written ("Writing · N tok/s", a
   caret after the text), and the apps it uses show above it as steps
   ("Working…", then "Worked for 12s · 3 steps"). A run that failed says so
@@ -474,9 +497,19 @@ sending and drafts belong to the chat (wire and client rules in
   came. While the talk agent waits to retry after a failed attempt, its retry
   message sits on the status line (`useRetryNote`, from the agent's node
   status).
-- **Stop.** While the run works, Send is Stop, and Esc stops it too: the
-  answer so far stays, marked "You stopped this reply." A message still
-  waiting for Resume is withdrawn the same way.
+- **Stop/Resume.** While the run works, Send is Stop, and Esc requests Stop
+  too. In a controlled generation the current tool or model request finishes,
+  its output stays, and the turn shows Stopping while work drains, then
+  "Waiting for you to resume {Name}." The composer offers Resume, followed by
+  disabled Resuming; Esc has no effect while stopping, stopped or resuming.
+  The chat run keeps its run/reply identities and its occupied lane. Resume
+  continues from the next pending action, so editing, trying another answer
+  or sending a second message still waits for this run to end. The control
+  snapshot and subscriptions reconcile on reload; unsaved streamed text still
+  depends on the live server hub (see the chat protocol's streaming limits).
+  For legacy or uncontrolled runs, Stop retains its terminal behavior: the
+  partial answer says "You stopped this reply," or a queued message is
+  withdrawn, and the lane is released.
 - **The box's extras**: Attach (or paste, or drop files anywhere on the
   page) adds up to six files, uploaded at once and sent with the next message
   (a message can be files alone); the employee reads where they are in its
@@ -499,14 +532,17 @@ sending and drafts belong to the chat (wire and client rules in
   it next time, which is when the rating reaches them.
 - **The box** follows the control state the way `send_chat_message` does
   (`talkMode` in `presentation.ts`):
-  - *send* (running, starting, resuming): a message shows at once
-    ("Sending…") and goes to the employee; Send is then Stop until the run
-    ends, since overlapping runs would each save over the other's
+  - *send* (running, starting, resuming): a message accepted by the server shows at once
+    ("Sending…") and goes to the employee; Send is then Stop while the run
+    works, since overlapping runs would each save over the other's
     conversation (the server refuses a second message with
     `run_in_progress`).
-  - *queue* (paused, pausing): one message waits for Resume ("Your message is
+  - *queue* (paused, pausing): the server can admit one queued message when
+    the lane is free, and an accepted event waits for Resume ("Your message is
     waiting…" above the box, "Waiting for you to resume {Name}." in the
-    thread), and Send is Stop until it has been answered or withdrawn.
+    thread). A suspended controlled run keeps the lane occupied; the composer
+    offers Resume while paused, Resuming during release, and disabled Stop
+    while its run drains. Legacy queued runs can still be withdrawn with Stop.
   - *start* (never started, ready, resetting, failed): no box; a line says
     they can't read messages, beside their main action (Start, Start again,
     or what they are missing), which the Workspace header offers too.
@@ -799,12 +835,14 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
 | `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, warnings, idempotent}`; errors include `busy` while the same key's first attempt is still building |
 | `start_employee` | `{workflow_id, expected_revision, idempotency_key}` | as `start_workflow` |
+| `pause_workflow` / `resume_workflow` | `{workflow_id, expected_revision, idempotency_key}` | Generation control snapshot: `state`, `revision`, root and execution identities, capabilities and `execution_control_version`; acknowledged `paused` means admitted work drained for version 1. Transitional status is reconciled after a timeout |
 | `enable_employee_talk` | `{workflow_id, idempotency_key}` | `{employee}`. Errors: `invalid_request`, `not_found`, `unsupported`, `conflict` (a start, pause, resume or reset is under way, or the graph changed meanwhile), `restart_failed`; the last three carry `employee` too |
 | `apply_employee_changes` | `{workflow_id, idempotency_key}` | `{employee}`: running ends running, paused or failed ends ready, ready is left alone. Errors: `invalid_request`, `not_found`, `conflict`, `restart_failed` (the last two with `employee`) |
 | `rename_employee` | `{workflow_id, name}` (spaces collapsed, at most 40 characters) | `{employee}`: renames the workflow (a new slug, the workspace folder moved, `workflow.renamed` sent), and each agent's instructions a hire wrote take the new name in their opening ("You are <name>, ..."); instructions the owner rewrote keep their words. Agents read them on every run, so nothing restarts. Errors: `invalid_request`, `not_found`, `save_failed` |
 | `set_employee_photo` | `{workflow_id, path \| null}` | `{employee}`: `path` is a PNG, JPEG, WebP or GIF the owner uploaded under `uploads/` (`POST /api/workspace/{workflow_id}/uploads`), at most 5 MB (`EMPLOYEE_PHOTO_MAX_BYTES`); `null` takes the photo away. Errors: `invalid_request`, `not_found`, `invalid_photo` (with `detail`), `unsupported` (a workflow built in the editor has no employee row to keep it on) |
 | `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?}` | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live. `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
-| `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
+| `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{protocol_version: 2, messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Controlled active run snapshots also include their owning `workflow_control`. Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
+| `stop_chat_run` | `{run_id, expected_revision, idempotency_key}` for controlled runs; `{run_id}` for legacy | Controlled: generation Stop payload with `run_id` and `resumable: true`; the owning root is checked. Legacy: terminal chat `stopping` / `stopped`. Full acknowledgement and error contract: [chat_protocol.md](./chat_protocol.md#controlled-stop-acknowledgement) |
 | `list_approvals` | `{workflow_id?, status?, limit <= 100}` | `{approvals, counts, server_time}` |
 | `decide_approval` | `{approval_id, decision, text?, subject?, decision_key}` | `{approval, will_send_on_resume}` |
 | `delete_workflow` | `{workflow_id}` | `{workflow_id, contexts_archived, context_archives_pending}`; `DELETE /api/database/workflows/{id}` is the same handler. Error `workflow_shutdown_failed` (with `detail`) when stopping the employee failed: nothing was deleted |
@@ -896,8 +934,12 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   The next message is a new run from the live generation's snapshot, which
   lacks it until the agent asks the Agent Builder for it again (that binds
   the saved node, bind-only). The worker gets it only after Apply.
-- Messages queued while paused each start a run on Resume; the page allows
-  one queued message at a time.
+- A queued message whose Signal reached the controller starts its pending
+  execution on Resume; a suspended run continues its existing execution.
+  The lane permits one nonterminal run, including a stopped controlled run.
+  Event ingress uses eventually consistent Visibility discovery and logs
+  delivery failures; saving a message does not establish an end-to-end durable
+  outbox guarantee. See [Chat Trigger](./node-logic-flows/workflow_triggers/chatTrigger.md#edge-cases--known-limits).
 - Turn on Talk and Apply reset the employee: the conversation starts fresh
   (its thread is cleared with the agent's Context), messages queued while
   paused are dropped, and drafts waiting for the owner are cancelled (the

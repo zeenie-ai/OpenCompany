@@ -306,6 +306,7 @@ class TriggerListenerWorkflow:
         listener_data: Dict[str, Any],
         admission_check=None,
         search_attributes: Optional[TypedSearchAttributes] = None,
+        child_start_control: Any = None,
     ) -> None:
         """Build the filtered downstream graph + start a child MachinaWorkflow.
 
@@ -446,6 +447,11 @@ class TriggerListenerWorkflow:
             "root_execution_id": listener_data.get("root_execution_id"),
             "data_scope_id": listener_data.get("data_scope_id"),
         }
+        if listener_data.get("execution_control_version") == 1:
+            child_payload.update({key: listener_data[key] for key in (
+                "execution_control_version", "controller_workflow_id", "execution_control_state",
+                "execution_control_revision", "execution_control_producers_held",
+            ) if key in listener_data})
         frozen_routing = listener_data.get(TEMPORAL_ROUTING_INPUT_KEY)
         if isinstance(frozen_routing, dict):
             child_payload[TEMPORAL_ROUTING_INPUT_KEY] = dict(
@@ -472,11 +478,11 @@ class TriggerListenerWorkflow:
 
         if listener_data.get("parameter_snapshot"):
             child_payload["parameter_snapshot"] = listener_data["parameter_snapshot"]
-        await workflow.start_child_workflow(
-            "MachinaWorkflow",
-            args=[child_payload],
-            **child_options,
-        )
+        if child_start_control is not None:
+            async with child_start_control.child_start():
+                await workflow.start_child_workflow("MachinaWorkflow", args=[child_payload], **child_options)
+        else:
+            await workflow.start_child_workflow("MachinaWorkflow", args=[child_payload], **child_options)
 
         workflow.logger.info(
             f"TriggerListener spawned child run: child_id={child_id} " f"event.id={event.get('id')} event.type={event.get('type')}"

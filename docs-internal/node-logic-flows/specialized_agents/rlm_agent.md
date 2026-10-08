@@ -15,6 +15,23 @@ LLM is prompted to emit Python code that is executed in a REPL and may
 recursively call `llm_query()` or `rlm_query()` and end with `FINAL(...)`
 to return a result. See [RLM Service](../../rlm_service.md).
 
+## Temporal Stop/Resume boundary
+
+`rlm_agent` is excluded from `AGENT_WORKFLOW_TYPES`: the REPL and recursive
+provider calls run inside one node Activity. For a new controlled generation
+with `execution_control_version=1`, Stop closes admission before new node
+Activities but lets an admitted RLM Activity, including its internal calls,
+settle under its scheduled timeout/retry policy. Its result is recorded normally
+and the graph/parent agent then waits. Resume releases the next pending action;
+it does not relaunch a recorded completed RLM Activity.
+
+This does not pause between REPL iterations or individual internal tools.
+Heartbeat status is liveness information, not a serialized REPL checkpoint;
+failure recovery remains the Activity's own retry/idempotency contract. Legacy
+generations retain their prior control path. See
+[Temporal workflow control](../../temporal-workflow-control.md) and
+[Temporal architecture](../../TEMPORAL_ARCHITECTURE.md#cooperative-generation-stop-and-resume).
+
 ## Inputs (handles)
 
 Same 5 shared handles as the generic specialized agents. **No

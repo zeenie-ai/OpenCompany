@@ -36,7 +36,23 @@ async def temporal_workflow_closed(workflow_id: str, run_id: Optional[str]) -> O
     from temporalio.service import RPCError, RPCStatusCode
 
     try:
-        description = await client.get_workflow_handle(workflow_id, run_id=run_id).describe()
+        description = await client.get_workflow_handle(workflow_id).describe()
+        # Continue-as-new closes a run, not the execution chain. Compare the
+        # claimant's chain when it differs so a reused ID cannot keep a chat alive.
+        current_run = getattr(description, "run_id", None)
+        if run_id and current_run and current_run != run_id:
+            current_first = getattr(getattr(description, "raw_info", None), "first_run_id", None)
+            if current_first != run_id:
+                try:
+                    original = await client.get_workflow_handle(workflow_id, run_id=run_id).describe()
+                except RPCError:
+                    # The older run may have aged out while its chain lives.
+                    return None
+                original_first = getattr(getattr(original, "raw_info", None), "first_run_id", None)
+                if not current_first or not original_first:
+                    return None
+                if current_first != original_first:
+                    return True
     except RPCError as exc:
         return True if exc.status == RPCStatusCode.NOT_FOUND else None
     except Exception:  # noqa: BLE001 - unknown is not closed

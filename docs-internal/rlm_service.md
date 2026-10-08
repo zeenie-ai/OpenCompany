@@ -10,15 +10,29 @@ The RLM (Recursive Language Models) service integrates the `rlms` library into O
 **Paper**: https://arxiv.org/abs/2512.24601
 **Docs**: https://alexzhang13.github.io/rlm/
 
+### Temporal generation Stop/Resume boundary
+
+The RLM REPL and recursive provider/tool calls execute inside one node Activity;
+`rlm_agent` is outside `AGENT_WORKFLOW_TYPES`. In new controlled generations
+(`execution_control_version=1`), Stop lets that admitted Activity settle under
+its scheduled policy, consumes its result normally, and fences the next graph
+or parent-agent action. Resume releases the existing continuation without
+relaunching the recorded completed RLM work. It does not pause at individual
+REPL iterations or recursive calls, and heartbeats do not serialize a REPL
+checkpoint. Failure recovery and unrecorded effects remain subject to the
+Activity/tool retry and idempotency contract. Legacy generation behavior is
+preserved. See [Temporal workflow control](temporal-workflow-control.md) and
+[RLM node control boundary](node-logic-flows/specialized_agents/rlm_agent.md#temporal-stopresume-boundary).
+
 ### How RLM Differs from Standard Agents
 
 | Aspect | Standard Agents (aiAgent, chatAgent, etc.) | RLM Agent (rlm_agent) |
 |--------|---------------------------------------------|----------------------|
 | Execution model | LLM -> tool call -> LLM -> tool call | LLM -> `\`\`\`repl` code block -> exec() -> stdout -> LLM |
 | Tool interface | Provider-neutral `AgentToolSpec` / `ToolDef` values with Pydantic validation | Python functions injected into REPL namespace |
-| State management | Native message accumulation in `run_native_agent_loop` | Python variables in REPL namespace + `context` variable |
+| State management | In-process `run_native_agent_loop` or durable Temporal `AgentWorkflow` transcript | Python variables in REPL namespace + `context` variable |
 | Completion signal | LLM stops making tool calls | LLM calls `FINAL(answer)` or `FINAL_VAR(variable_name)` |
-| Recursion | Agent delegation (fire-and-forget) | `rlm_query()` spawns child RLM with own REPL |
+| Recursion | Attached Temporal children, detached Task Manager runners, or process-local delegation according to routing | `rlm_query()` spawns child RLM with own REPL |
 | Strengths | Structured tool calling, provider-agnostic | Complex reasoning, code-driven decomposition, recursive sub-problems |
 
 ---

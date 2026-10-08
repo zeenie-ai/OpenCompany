@@ -5,7 +5,9 @@
 The OpenCompany execution engine implements a robust workflow orchestration system combining industry-standard patterns from **Netflix Conductor**, **Prefect 3.0**, **Temporal**, and **Redis Streams**. This document details the architectural decisions, design patterns, and standards used.
 
 Related docs:
-- [temporal-execution-engine-rfc.md](ARCHIVE/temporal-execution-engine-rfc.md) - Temporal control, trigger, graph, agent-team, and trace architecture
+
+- [temporal-workflow-control.md](temporal-workflow-control.md) - current generation lifecycle, acknowledged Stop/drain/Resume, messaging, event queues and verification
+- [temporal-execution-engine-rfc.md](ARCHIVE/temporal-execution-engine-rfc.md) - archived execution design
 - [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md) - distributed execution via Temporal activities
 - [event_waiter_system.md](event_waiter_system.md) - push-based trigger waiters
 - [native_llm_sdk.md](native_llm_sdk.md) - LLM provider layer
@@ -43,6 +45,23 @@ workflow.execute(workflow_id, workflow_data)
 When `TEMPORAL_ENABLED=true` and the Temporal server is reachable, every workflow node executes through Temporal. Three dispatch paths coexist (legacy `execute_node_activity` / per-type `node.{type}.v{version}` / Agent-as-child-workflow `AgentWorkflow`) gated by `TEMPORAL_PER_TYPE_DISPATCH` and `TEMPORAL_AGENT_WORKFLOW_ENABLED` flags. Per-node retries, per-node timeouts, horizontal scaling via worker pool, and the FIRST_COMPLETED orchestrator pattern.
 
 Full dispatch matrix + activity inventory (legacy + per-type + the F4.B `agent.*` activities — read the live set from `collect_agent_activities()` in `services/temporal/agent_activities.py`) + worker configuration + heartbeat semantics live in [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A: [tool_building_pipeline.md §9](./tool_building_pipeline.md).
+
+Newly admitted deployment generations record execution control version 1.
+Stop closes scheduling gates before model requests, tools, polling, compaction
+and child starts. Admitted parallel work finishes under its existing retry
+policy, and its results/bookkeeping settle before the generation acknowledges
+Stopped. Resume releases the same pending continuation. The generation
+controller records independently living roots; native execution descriptions
+discover attached descendants after child-start acknowledgement.
+
+Signals retain accepted trigger events, completed Updates acknowledge control
+and root membership, and Queries expose status. Event admission stays immediate
+when running; no inactivity batching is introduced. Controller and agent
+continuation carry explicit state across Continue-As-New. Existing generations
+and pre-marker histories keep their recorded command paths. The
+[control contract](temporal-workflow-control.md) defines timeout reconciliation,
+fail-closed recovery, replay validation and operating limits. These Temporal
+guarantees do not extend to the sequential fallback.
 
 ### 2. Sequential Fallback
 

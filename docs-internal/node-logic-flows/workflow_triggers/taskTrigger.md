@@ -11,15 +11,18 @@
 ## Purpose
 
 Fires when a child agent dispatched from a durable Task Manager assignment completes or
-errors. The delegation code path in
-`server/services/handlers/tools.py::_execute_delegated_agent` calls
-`nodes.agent._events.broadcast_agent_task_completed` for both the success and
-error paths, which emits a CloudEvents `WorkflowEvent`
+errors. The Temporal `agent.finish_delegation` Activity in
+`server/services/temporal/agent_activities.py` and the legacy coordinator in
+`server/services/handlers/tools.py` persist the task outcome before calling
+`nodes.agent._events.broadcast_agent_task_completed` or
+`broadcast_agent_task_failed`. Both emit a CloudEvents `WorkflowEvent`
 (`type: com.opencompany.agent.task.completed`, with the success/error
 discriminator carried in `data.status`) via `dispatch.emit`. `taskTrigger` is
-canary-registered, so `DeploymentManager` starts a `TriggerListenerWorkflow`
-that receives the event via Temporal Signal and spawns a child workflow per
-match. The assigning lead has already returned after receiving `queued`. When
+canary-registered. In controlled deployments its definition and accepted
+Signals live in `WorkflowControlWorkflow`, which filters/queues the event and
+starts a child graph per match. A separate `TriggerListenerWorkflow` remains
+the legacy compatibility path. The assigning lead has already returned after
+receiving `queued`. When
 the detached runner submits or fails the task, this trigger starts the connected
 lead's separate review invocation. The event preserves the owning execution,
 so Task Manager reads the original durable task rather than the trigger run.
@@ -70,8 +73,8 @@ envelope.
 
 ```mermaid
 flowchart TD
-  P[child agent completes/errors] --> Q[broadcast_agent_task_completed<br/>dispatch.emit com.opencompany.agent.task.completed]
-  Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
+  P[Persist terminal task outcome] --> Q[broadcast_agent_task_completed or failed<br/>dispatch.emit com.opencompany.agent.task.completed]
+  Q --> R[Controlled controller receives on_event Signal]
   R --> S[TaskTriggerNode.build_filter<br/>task_id / status / agent_name / parent_node_id]
   S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]
   S -- no match --> R
@@ -96,8 +99,8 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 
 - **Database writes**: none.
 - **Broadcasts**: the producer emits a CloudEvents `WorkflowEvent` via
-  `dispatch.emit`. The `TriggerListenerWorkflow` emits firing-pulse status via
-  `broadcast_trigger_status_activity` around each child spawn.
+  `dispatch.emit`. The controller (or legacy listener) emits firing-pulse
+  status via `broadcast_trigger_status_activity` around each child spawn.
 - **External API calls**: none.
 - **File I/O**: none.
 - **Subprocess**: none.
@@ -107,9 +110,10 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 - **Credentials**: none.
 - **Services**: `services.deployment` (canary listener), `services.events.dispatch`,
   `services.status_broadcaster`.
-- **Upstream dispatcher**: `services.handlers.tools._execute_delegated_agent`
-  calls `nodes.agent._events.broadcast_agent_task_completed` for both success and
-  error paths.
+- **Upstream dispatchers**: `services.temporal.agent_activities.finish_agent_delegation`
+  and the legacy `services.handlers.tools._execute_delegated_agent` use
+  `nodes.agent._events` after persisting the outcome. A failed attempt that is
+  requeued does not publish a terminal failure event.
 - **Python packages**: stdlib only.
 - **Environment variables**: none.
 
@@ -125,8 +129,21 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
   trigger blocks until cancelled.
 - Lead review requires a connected matching trigger path. External consumers
   may use the event without receiving authority to mutate another team.
+- Terminal event IDs are stable (`terminal_event_id` when supplied, otherwise
+  task ID plus persisted terminal status), so Activity redelivery can use the
+  controller's per-trigger deduplication. This does not fix same-label/type
+  trigger Workflow-ID collisions or guarantee producer delivery before a
+  Signal is accepted.
 
 ## Related
+
+- **Stop/Resume**: new versioned generations retain accepted completion
+  events while stopped and start the review graph after Resume. Detached
+  delegation runners enroll as independent execution roots, so Stop controls
+  them even after their assigning parent finishes. Safe Apply's producer-only
+  review drain cannot reopen a whole-generation Stop. Signal acceptance is
+  receipt, not completion; producer delivery remains best effort before
+  acceptance. See [Workflow control](../../temporal-workflow-control.md).
 
 - **Skills using this as a tool**: none.
 - **Architecture docs**: [Event Waiter System](../../event_waiter_system.md),

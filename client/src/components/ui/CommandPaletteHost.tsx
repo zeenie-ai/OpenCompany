@@ -105,7 +105,7 @@ export const buildWorkflowLifecycleCommands = (
   if (handlers.workflowControl.can_pause || state === 'pausing') {
     commands.push({
       id: 'run.pause',
-      label: state === 'pausing' ? 'Retry Pause Workflow' : 'Pause Workflow',
+      label: state === 'pausing' ? 'Stopping Workflow…' : 'Stop Workflow',
       group: 'Run',
       icon: Pause,
       onRun: handlers.pause,

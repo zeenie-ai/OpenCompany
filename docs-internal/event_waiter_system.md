@@ -110,7 +110,7 @@ Durability note: waiter state does NOT survive a process restart — that is by 
 
 ## Deployed Triggers vs Canvas Run
 
-When a workflow is deployed, a trigger type registered with `register_canary_trigger_type` (live list: `grep -rn "register_canary_trigger_type(" server/nodes`) does not use this module. It runs under the Temporal controller, and its producer delivers events with `services.events.dispatch.emit`. The event waiter is involved only for canvas Run and for trigger types that are not canary-registered:
+When a workflow is deployed, a trigger type registered with `register_canary_trigger_type` (live list: `rg 'register_canary_trigger_type\(' server/nodes`) does not use this module. It runs under the Temporal controller, and its producer delivers events with `services.events.dispatch.emit`. The event waiter is involved only for canvas Run and for trigger types that are not canary-registered:
 
 | Trigger Type | Deployed | Canvas Run |
 |---|---|---|
@@ -120,7 +120,34 @@ When a workflow is deployed, a trigger type registered with `register_canary_tri
 | `twitterReceive` | Not canary-registered. It is in `POLLING_TRIGGER_TYPES` but registers no polling factory, so deploy falls back to an in-process `event_waiter` collector | `event_waiter` waiter; see the known gap below |
 | `cronScheduler` | Temporal Schedule (`services/temporal/schedules.py`) | Not a waiter |
 
-Controlled polling triggers are registered with `WorkflowControlWorkflow`, which starts a graph only for deduplicated new events. Legacy uncontrolled polling still uses the deployment compatibility layer. See [temporal-execution-engine-rfc.md](ARCHIVE/temporal-execution-engine-rfc.md) for the deployment architecture.
+Controlled polling triggers are registered with `WorkflowControlWorkflow`, which starts a graph only for deduplicated new events. Legacy uncontrolled polling still uses the deployment compatibility layer. See [Workflow control](./temporal-workflow-control.md) and [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md) for the live deployment architecture; the [execution-engine RFC](ARCHIVE/temporal-execution-engine-rfc.md) is historical.
+
+### Cooperative Stop and durable controller queues
+
+For new generations (`execution_control_version=1`), Stop closes admission
+before another polling fetch or graph child start and drains already-admitted
+business work through result bookkeeping. It does not cancel an Activity or
+an event waiter. Accepted push Signals remain queued while stopped; Resume
+releases the next pending action in the same execution. Polling results that
+finish during Stop update their seen-ID baseline and preserve new events
+before the fetch leaves the drain count. Sleeps between fetches and control
+waits do not count as admitted business work.
+
+The versioned controller uses Event Accumulator queue/deduplication/carry
+practices without inactivity batching. Pending deduplication keys remain
+protected independently of the bounded recent-key window, overflow pages
+restore queued keys, and Continue-As-New fences include events delivered
+during spill awaits. This applies after Temporal accepts the Signal;
+`dispatch.emit` still relies on eventually consistent Visibility and logs or
+suppresses delivery failures, so it is not a durable producer outbox.
+Same-label/type trigger Workflow-ID collisions remain a separate known limit.
+See [Node creation: event contract](./node_creation.md#event-identity-and-delivery-contract)
+and [Temporal Event Accumulator](https://docs.temporal.io/design-patterns/event-accumulator).
+
+Events use Signals; acknowledged control and root membership use completed
+Updates; status uses read-only Queries. A Signal response means receipt into
+Temporal history, not handler completion. Those messages never operate on the
+process-local `_waiters` map. See [Temporal workflow messaging](https://docs.temporal.io/design-patterns/workflow-messaging-patterns).
 
 ### Known gap: canvas Run on canary push triggers
 
@@ -138,6 +165,11 @@ Users can cancel a waiting trigger from the UI (Cancel button on the trigger nod
 2. `handle_cancel_event_wait()` in `server/routers/websocket.py` calls either `event_waiter.cancel(waiter_id)` or `event_waiter.cancel_for_node(node_id)`.
 3. `cancel()` sets `w.cancelled = True` and calls `future.cancel()`.
 4. The suspended `wait_for_event()` raises `asyncio.CancelledError`, which bubbles up through the node executor.
+
+This explicit waiter cancellation is distinct from a controlled generation's
+Stop. It ends the interactive wait; it cannot provide durable Resume after a
+process restart. Use generation `pause_workflow` / `resume_workflow` for the
+cooperative Temporal contract.
 
 ## Debugging
 

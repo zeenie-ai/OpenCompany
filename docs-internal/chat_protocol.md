@@ -1,4 +1,4 @@
-# Chat protocol (v1)
+# Chat protocol (v2)
 
 The wire contract between the server's chat runtime (`server/services/chat/`) and the shared chat UI
 (`client/src/features/chat/`). Home's employee page and Dev's console Chat pane both speak it. It follows AG-UI's
@@ -9,10 +9,13 @@ AG-UI JSON.
 
 Status: built. Change this document in the same commit as any change to the shapes below, and bump
 `protocol_version` (returned by `get_chat_messages`) when an existing field changes meaning.
+Version 2 distinguishes resumable generation Stop from terminal legacy chat Stop. The generation's
+`execution_control_version`, rather than the wire version alone, selects the behavior.
 
 Only the AG-UI events the chat uses are sent. A tool call shows as a step, not as `TOOL_CALL_*` events; reasoning is
 never streamed; and a draft waiting for the owner is an approval card that follows `approval_lifecycle`
-([Approvals](#approvals)), so no run ends with AG-UI's `interrupt` outcome and nothing resumes one.
+([Approvals](#approvals)), so no run ends with AG-UI's `interrupt` outcome. A controlled generation can suspend
+and resume its existing run through workflow control without ending the chat run.
 
 ## Concepts
 
@@ -20,7 +23,7 @@ never streamed; and a draft waiting for the owner is an approval card that follo
 |---|---|
 | Session | One conversation. Its id is the workflow id (`"default"` with no workflow open). |
 | Run | One answer the employee works on: an owner message, an edit, a regenerate, or a button press in generated UI (kinds `message`, `edit`, `regenerate`, `action`). An approved send is not a run: `ApprovedToolCallWorkflow` sends it. |
-| Lane | At most one non-terminal run per session. A second send is refused with `run_in_progress`; the composer shows Stop instead of Send while a run is live. |
+| Lane | At most one non-terminal run per session. A second send is refused with `run_in_progress`; the composer shows Stop while a run is live and Resume while its controlled generation is stopped. Suspension keeps the lane occupied. |
 | Message tree | Messages link to their parent. Owner messages that share a parent are branches; replies under the same owner message are versions. The session's active leaf picks the path shown. |
 | Part | Structured content attached to a reply: steps, generated UI, artifacts, approvals, sources, follow-ups. |
 | Generation | The deployment generation a message was written in (`run_key`). A Reset clears the thread. |
@@ -83,7 +86,8 @@ Every event's `data` carries `{workflow_id, session_id, run_id, seq, hub_epoch}`
 (a Canvas document the run wrote). Sources and follow-ups arrive with the saved reply, in its `parts`.
 
 `custom` names: `opencompany.segment_discarded` (`{message_id}`: a retried LLM attempt replaces this segment),
-`opencompany.stopping` and `opencompany.resync`.
+`opencompany.stopping` (legacy terminal Stop) and `opencompany.resync`. Controlled Stop derives its display from
+generation control; it does not emit a second chat pause lifecycle.
 
 **Text segments.** Only the agent that answers the owner streams text. A segment that ends with `final: false` was
 written beside tool calls (narration, "Let me check the calendar."); the segment with `final: true` is the reply.
@@ -95,12 +99,13 @@ streamed.
 | `outcome.type` | Meaning |
 |---|---|
 | `success` | The run ended. `result.reply_message_id` names the saved reply, or `result.no_reply` is true. |
-| `stopped` | The owner pressed Stop (an OpenCompany addition to AG-UI's outcomes). |
+| `stopped` | A legacy or uncontrolled chat run ended after Stop (an OpenCompany addition to AG-UI's outcomes). Controlled Stop does not emit this terminal outcome. |
 
 Runs nothing will finish end with `run.failed`: code `not_delivered` (never picked up, or the employee stopped
-first), `timed_out` (running longer than `runs.max_running_s`), `interrupted` (its workflow closed without finishing
+first), `timed_out` (running longer than its current `runs.max_running_s` window), `interrupted` (its workflow closed without finishing
 it and no reply was saved; with a saved reply it finishes instead). A Reset ends live runs with code `reset`, the
-owner's Clear with `cleared`, and both delete them.
+owner's Clear with `cleared`, and both delete them. Intentional suspension of a controlled generation excludes
+its live runs from pickup and running expiry; Resume starts a fresh timeout window, as described below.
 
 ## Handlers
 
@@ -116,7 +121,7 @@ All are WebSocket request/response handlers with snake_case payloads. Failures a
 | `chat_subscribe` | `{session_id}` | `{success, session_id, hub_epoch, active_runs: [RunSnapshot]}` |
 | `chat_unsubscribe` | `{session_id}` | `{success, session_id, hub_epoch}` |
 | `get_chat_run` | `{run_id}` | `{success, run: RunSnapshot}`, or `not_found` |
-| `stop_chat_run` | `{run_id}` | `{success, run_id, state: "stopping" \| "stopped"}`; `not_stoppable` (with `state`) for a run that ended otherwise |
+| `stop_chat_run` | `{run_id, expected_revision?, idempotency_key?}` (revision/key required for controlled generations) | Controlled: generation control snapshot plus `{run_id, resumable: true}`, `state` is `pausing` or `paused`. Legacy: `{success, run_id, state: "stopping" \| "stopped"}`. `not_stoppable` for a terminal run. |
 | `chat_ui_state` | `{session_id, part_id, changes: [{path, value}]}` (at most 32; the last value per path wins) | `{success, part_id, state_revision}`; `not_found`, `invalid_request` |
 | `edit_chat_message` | `{session_id, message_id, message, expected_revision?, client_message_id?}` | `{success, message_id, run_id, delivery}` (the edit's id; a resent `client_message_id` answers the first edit) |
 | `regenerate_chat_reply` | `{session_id, message_id, expected_revision?}` (the latest answer, or the owner's last message when its run gave none) | `{success, message_id, run_id, delivery}` (`message_id`: the owner's message answered again) |
@@ -135,6 +140,13 @@ created_at, started_at, finished_at, steps, segments: [{message_id, text, final}
 activity_type, content, patches}], outcome, result, error, error_code}`. `state` is `queued`, `pending`,
 `running`, `stopping`, `finished`, `error` or `stopped`. A snapshot read after a server restart has its steps but no
 text segments or activities (those are stored with the reply).
+
+For a run whose owning generation declares `execution_control_version: 1`, snapshots from `get_chat_messages`,
+`chat_subscribe` and `get_chat_run` also include `workflow_control`, serialized from that generation's existing
+control row. It includes `workflow_id`, `root_execution_id`, `generation`, `execution_control_version`, `state`,
+`revision`, the control capabilities, and `last_resumed_at`. This is derived control state, not an additional
+`ChatRun.state`: a suspended run may still have state `running`, `pending` or `queued`. Terminal states in the
+chat reducer remain terminal even when a control snapshot is present.
 
 ### Approvals (`server/services/approvals/handlers.py`)
 
@@ -227,8 +239,8 @@ Memory updates) still reach only that process.
 - `status`: `complete`, `stopped`, `error`.
 
 A reply shows, in this order whatever order they were produced in: its run's steps (`run.steps` above), its text,
-then its parts: generated UI, artifacts, approvals, sources, follow-ups. A reply the owner stopped has `status:
-"stopped"`.
+then its parts: generated UI, artifacts, approvals, sources, follow-ups. A reply ended by legacy Stop has
+`status: "stopped"`. Controlled suspension does not change a saved reply's status or allocate a replacement reply.
 
 ```
 parts: {
@@ -309,10 +321,16 @@ newer version wins in place.
   filter (`event_waiter.build_filter`). Otherwise it is saved and dispatched without a run, like the editor's
   `"default"` session, which keeps its unscoped delivery.
 - **Dispatch.** The `chat_message_received` event (`services/chat/events.py`, source `opencompany://services/chat`)
-  has the run id as its CloudEvent id and carries `message_id` and `run_id` in `data`, so the listener's child run
-  id is `<slug>-<trigger label>-<run id>`. It is never broadcast. Open threads hear of the message (`chat.updated`)
-  only after it is dispatched, so the sender's answer, which admits the run into their store, reaches them before
+  has the run id as its CloudEvent id when tracked, otherwise the saved message id, and carries `message_id` and
+  `run_id` in `data`. The generation controller receives it through `on_event`, deduplicates each registered
+  trigger's event key, and queues or starts its child `MachinaWorkflow`; legacy standalone listeners retain their
+  existing route. The child id is `<slug>-<trigger label>-<event id>`. It is never broadcast. Open threads hear of the message (`chat.updated`)
+  only after the dispatch attempt, so the sender's answer, which admits the run into their store, reaches them before
   their thread can read the run: told first, the thread showed the run live and read it with `get_chat_run`.
+  The ingress path still uses eventually consistent Visibility and logs delivery errors: saving a message or
+  returning `delivery` does not prove Temporal accepted its Signal. The accumulator's durable pending-event
+  guarantee begins at Signal acceptance; no ingress outbox was added. A duplicate `client_message_id` returns
+  the original message and run without redispatching it.
 - **Start and finish.** MachinaWorkflow, behind the `machina-chat-run-v1` patch, reads the run id only from an event
   with that source and type, claims the run (`chat_run.start`: `pending` or `queued` to `running`, recording the
   Temporal workflow and run ids) once the firing trigger's output is stored, passes `run_scope {run_id, session_id}`
@@ -325,8 +343,13 @@ newer version wins in place.
 - **One chain.** Every message is appended after the session's active leaf (`chat_threads`) inside the same reserved
   transaction, so concurrent writes never fork the thread.
 - **The watchdog** (`services/chat/watchdog.py`, started by `main.py`) sweeps every `runs.watchdog_interval_s` and
-  ends the runs nothing will finish (codes above). A pending run's wait (`runs.pickup_timeout_s`) counts from the
-  later of its creation and the server's start.
+  ends the runs nothing will finish (codes above). It resolves each controlled run's owning generation, not the
+  workflow's latest successor. While that generation is `pausing`, `paused` or `resuming`, its pending, queued and
+  running runs are excluded from age expiry. After successful Resume, the existing generation manifest stores
+  `last_resumed_at`: pending pickup counts from the latest of creation, server start and Resume; queued pickup
+  follows the resumed delivery window; running expiry counts from the later of run start and Resume. Stop does
+  not move controlled runs into the legacy `stopping` state, so they bypass grace-period cancellation. Temporal
+  closure checks follow the current Workflow ID and compare execution chains across continue-as-new.
 
 ## Streaming, steps and Stop
 
@@ -349,7 +372,17 @@ Settings are in `server/config/chat_defaults.json` (`stream`, `steps`, `runs`).
   none, and skill loads (`agent.skill.invoke`) never pass through it. A tool may put a short line in its result as
   `_step_detail` ("3 events on Saturday"): it is shown under the step and taken out before the model reads the
   result.
-- **Stop** (`stop_chat_run`, `ledger.request_stop`). A run nothing has picked up (pending, or queued until Resume)
+- **Controlled Stop/Resume** (`execution_control_version: 1` on the owning generation). `stop_chat_run` resolves
+  the run's exact generation using `workflow_id` and `run_key` matched to `root_execution_id`, then calls generation Stop with the revision,
+  idempotency key and expected generation root. Already admitted work finishes and its results are recorded;
+  queued work waits. The run remains nonterminal with the same reply identity, subscriptions, partial output and
+  occupied lane. Live snapshots include the derived `workflow_control`; no additional persisted chat pause state
+  exists. The watchdog excludes `pausing`, `paused` and `resuming` generations from pickup and running expiry;
+  successful Resume supplies a fresh timeout window using lifecycle metadata `last_resumed_at`. Resume uses
+  `resume_workflow` and releases the existing continuation. Independent Workspace tasks and separately approved
+  sends remain independent. Full execution-tree admission, checkpoint, rollover and compatibility rules are in
+  [Temporal Workflow Control](./temporal-workflow-control.md).
+- **Legacy Stop** (`stop_chat_run`, `ledger.request_stop`). A run nothing has picked up (pending, or queued until Resume)
   ends `stopped` at once and frees the lane; a workflow that picks it up later claims it still `stopped`
   (`chat_run.start`) and its agent answers nothing. A running run moves to `stopping` (`custom`
   `opencompany.stopping`) and stops itself:
@@ -367,8 +400,35 @@ Settings are in `server/config/chat_defaults.json` (`stream`, `steps`, `runs`).
 - **Agents that are not AgentWorkflows.** Only the agents in `AGENT_WORKFLOW_TYPES` (`services/temporal/workflow.py`)
   run as an AgentWorkflow and are prepared by `agent.prepare_payload`. The others (Claude Code, Codex, RLM, Vertex)
   run as one activity and get no `chat_stream`: nothing they write streams, their tool calls show no steps, they
-  cannot show UI, and their answer appears when Reply in Chat saves it. Stop moves their run to `stopping`, nothing
-  in them checks it, and the watchdog ends it `runs.stop_grace_s` later.
+  cannot show UI, and their answer appears when Reply in Chat saves it. Controlled Stop drains their whole activity
+  before suspension. Legacy Stop moves their run to `stopping`, and the watchdog ends it `runs.stop_grace_s` later.
+
+### Controlled Stop acknowledgement
+
+The client sends `stop_chat_run {run_id, expected_revision, idempotency_key}`. The server authorizes the run's
+session, resolves its immutable owning generation and supplies `expected_root_execution_id: run.run_key` to
+`pause_workflow`. A stale chat run cannot stop a newly started generation. The response is the existing workflow
+control payload, with `run_id` and `resumable: true` added; it is not a terminal chat-run snapshot.
+
+`pausing` means Stop was requested and admission is closing or work is draining. Only `paused` acknowledges
+that admitted business work and result bookkeeping have settled across the controlled execution tree. For
+example, Stop during tool A lets A finish once and records its result; tool B from the same model response stays
+pending. Resume starts B in the same continuation without requesting that model response again. Admitted parallel
+tools drain concurrently under their declared retry policies. An LLM call keeps its existing unlimited retries,
+so a persistent provider outage can leave the generation Stopping until that call settles.
+
+The request's acknowledgement deadline may expire while that durable transition continues. Keep the returned
+or refreshed `pausing` state, reconcile with `get_workflow_control_status`, and do not synthesize a chat `stopped`
+outcome or cancel the workflow. Resume sends `resume_workflow {workflow_id, expected_revision, idempotency_key}`
+after checking that the latest control still names the run's owning root; it releases existing descendants before
+producer admission reopens. The protocol uses completed Temporal Updates for control acknowledgement and
+read-only Queries for status, following [Workflow Messaging Patterns](https://docs.temporal.io/design-patterns/workflow-messaging-patterns).
+
+Run and reply ids, saved parts, completed steps, subscriptions and lane occupancy survive suspension. Live text
+already received stays in the mounted conversation and in the process's hub snapshot. A reload restores the
+owning generation's control and persisted chat state; a server process restart still cannot reconstruct text
+deltas that were never saved in a reply. This existing streaming limitation is separate from durable Temporal
+continuation: Resume does not explicitly rerun completed tools to reconstruct the display.
 
 ## Client
 
@@ -402,7 +462,8 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   the key its run's turn had, so neither remounts.
 - **Sending** (`data/send.ts`): the message shows at once; the server's answer admits its run into the store
   (`queued` or `pending`), so the employee shows working before the run's first event. While the lane is held, Send
-  is Stop. A refused or failed send takes the message out of the thread and puts its text back in the box
+  is Stop in a running generation, disabled Stopping during `pausing`, and Resume during controlled suspension.
+  A refused or failed send takes the message out of the thread and puts its text back in the box
   (`state/composerStore.ts`, a draft per session that survives switching conversations); after a failure in transit
   the draft keeps its `client_message_id`, so sending it again is the same message: the server answers with the
   first send's message and run, and when the thread already holds that message the local copy gives way to it.
@@ -412,8 +473,15 @@ editor's console pane (`ConsoleChat`, compact, scope `live`) are the two hosts.
   steps disclosure (`turns/StepsDisclosure.tsx`) sits on the run's first turn: "Working…" and open while the run
   works, "Worked for 12s · 3 steps" after; a run read back later starts it closed. A finished run keeps its turn
   until its saved reply lands in the thread, so the streamed answer and the reply stay one element.
-- **Stop** (`data/stop.ts`): the Stop button, or Esc anywhere in the pane, sends `stop_chat_run` for the lane's run
-  and applies the answer to the store at once; the run's events take it from there.
+- **Stop/Resume** (`data/stop.ts`, `data/control.ts`): Stop or Esc sends `stop_chat_run` for the lane's run.
+  Controlled requests use `WebSocketContext.controlMutation`, with a fresh idempotency key per bounded request
+  attempt and the current control revision. Success and failure responses merge authoritative control snapshots
+  before the request is judged; a transport or acknowledgement failure triggers a status resync. Controlled runs
+  retain their chat state: the status line shows Stopping, the stopped turn says it waits for Resume, and the
+  composer offers Resume, then disabled Resuming. `useChatWorkflowControl` merges a reload snapshot with newer
+  broadcasts for the same root and retains the run's owning snapshot when a successor root differs. Resume
+  re-reads status and checks the owning root before sending the current revision. Esc has no effect while stopped,
+  stopping or resuming. Legacy responses still update the run's terminal lifecycle.
 - **The box's extras** (`composer/`): Attach, a paste and a drop on the chat (`DropOverlay`) all call
   `addAttachments` (`composer/attachments.ts`), which uploads each file at once into the box
   (`state/attachmentStore.ts`, chips with progress and Remove); Send waits while one uploads and sends the finished
@@ -631,6 +699,10 @@ and server tests alike:
 | `not_found` | get_chat_run, stop_chat_run | No such run. |
 | `attachment_rejected` | send | A file outside `uploads/`, gone, or more than six; `detail` says which. |
 | `not_stoppable` | stop_chat_run | The run ended before Stop reached it; `state` says how. |
+| `idempotency_key_required` / `expected_revision_required` | controlled stop_chat_run | The generation mutation lacks its request identity or revision. |
+| `control_generation_conflict` | controlled stop_chat_run, Resume | The run's owning root differs from the generation currently being controlled. Refresh control; do not target the successor using the old run. |
+| `control_revision_conflict` | controlled stop_chat_run, Resume | The generation revision changed; the response/status supplies the authoritative control. This revision is distinct from the thread's revision. |
+| `workflow_control_transition_pending` | controlled stop_chat_run, Resume | A durable lifecycle transition is still in progress. Reconcile control status; the chat run remains live. |
 | `revision_conflict` | edit, regenerate, switch | `expected_revision` is not the thread's revision. |
 | `rule_conflict` | set_ask_first | `expected_revision` is stale; the answer carries the current value. |
 | `not_editable` | edit, regenerate, decide | Not the owner's text message a run answered, not the latest answer, the editor's `default` chat, or an edited argument that is not editable. |

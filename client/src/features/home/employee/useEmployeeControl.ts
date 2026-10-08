@@ -106,7 +106,7 @@ export function useEmployeeControl(employee: EmployeeSummary, onConnect: (provid
   return {
     view,
     label: view.busyLabel ?? (inFlight ? busyLabelFor(inFlight) : primaryActionLabel(view.primary)),
-    busy: Boolean(pending) || Boolean(inFlight),
+    busy: Boolean(pending) || Boolean(inFlight) || employee.control.state === 'pausing' || employee.control.state === 'resuming',
     act,
   };
 }

@@ -42,6 +42,8 @@ def serialize_control(control: Optional[WorkflowControlExecution]) -> Dict[str, 
             "can_edit": True,
         }
     state = "ready" if control.status == "reset" else control.status
+    manifest = getattr(control, "resource_manifest", None)
+    manifest = manifest if isinstance(manifest, dict) else {}
     return {
         "workflow_id": control.workflow_id,
         "generation": control.generation,
@@ -50,6 +52,8 @@ def serialize_control(control: Optional[WorkflowControlExecution]) -> Dict[str, 
         "data_scope_id": control.data_scope_id or control.execution_id,
         "controller_workflow_id": control.controller_workflow_id,
         "controller_run_id": control.controller_run_id,
+        "execution_control_version": int(manifest.get("execution_control_version", 0)),
+        "last_resumed_at": manifest.get("last_resumed_at"),
         "state": state,
         "revision": control.revision,
         "can_start": state == "ready",
@@ -150,6 +154,7 @@ class WorkflowControlService:
                 "workflow_slug": slug if isinstance(slug, str) and slug else None,
             },
             idempotency_key=idempotency_key,
+            resource_manifest={"execution_control_version": 1},
             # Revisions are monotonic across generations so a delayed request
             # from an archived generation cannot pass CAS against a newer one
             # that happens to be at the same lifecycle step.

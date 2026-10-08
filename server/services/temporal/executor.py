@@ -142,6 +142,15 @@ class TemporalExecutor:
                         "root_execution_id": execution_id,
                     }
                 )
+                from core.container import container
+                control = await container.database().get_latest_workflow_control(workflow_id)
+                if control is not None and control.generation == int(generation):
+                    workflow_payload.update({
+                        "root_execution_id": control.root_execution_id,
+                        "data_scope_id": control.data_scope_id or control.execution_id,
+                        "controller_workflow_id": control.controller_workflow_id,
+                        "execution_control_version": int((control.resource_manifest or {}).get("execution_control_version", 0)),
+                    })
 
             result = await self.client.execute_workflow(
                 MachinaWorkflow.run,

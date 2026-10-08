@@ -116,6 +116,31 @@ describe('WebSocket recovery and ownership', () => {
     expect(clear).not.toHaveBeenCalled();
   });
 
+  it('uses the generation control protocol for chat Stop and reconciles a lost acknowledgement', async () => {
+    await mount();
+    await open();
+    const running = { workflow_id: 'chat', state: 'running', revision: 3, generation: 1,
+      root_execution_id: 'g1', execution_control_version: 1, in_flight_count: 2 };
+    act(() => latest().message({ type: 'workflow_control_status', data: running }));
+    let result!: Promise<unknown>;
+    act(() => { result = actions.stopChatRun('chat', 3, 'r1'); });
+    const request = latest().sent.find(item => item.type === 'stop_chat_run')!;
+    expect(request).toMatchObject({ workflow_id: 'chat', run_id: 'r1', expected_revision: 3 });
+    expect(request.idempotency_key).toBeTruthy();
+    await act(async () => {
+      latest().message({ request_id: request.request_id, success: false, error: 'workflow_control_transition_pending',
+        status: { ...running, state: 'pausing', revision: 4 } });
+    });
+    const resync = latest().sent.filter(item => item.type === 'get_workflow_control_status').at(-1)!;
+    expect(resync).toBeDefined();
+    await act(async () => {
+      latest().message({ request_id: resync.request_id, success: true,
+        status: { ...running, state: 'paused', revision: 5, in_flight_count: 0 } });
+    });
+    await expect(result).resolves.toMatchObject({ state: 'paused', revision: 5 });
+    expect(latest().sent.filter(item => item.type === 'stop_chat_run')).toHaveLength(1);
+  });
+
   it.each([false, true])('confirms an exact phone reset ID only after cleanup ends (resetting=%s)', async (workspaceResetting) => {
     await mount();
     await open();

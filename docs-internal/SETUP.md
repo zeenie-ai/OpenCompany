@@ -160,6 +160,11 @@ the arrangement is [desktop_host_contract.md](./desktop_host_contract.md).
 - Ports: gRPC `TEMPORAL_FRONTEND_GRPC_PORT`, Web UI `TEMPORAL_UI_PORT` (values in `.env.template`)
 - Embedded worker runs inside the Python backend (`TemporalWorkerManager` + `TemporalWorkerPool`, built by `services/temporal/lifecycle.py`; `main.py` only schedules `run_temporal_lifecycle`)
 - Running and paused deployments survive restarts: `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP=false` is the default, and the boot-time reconcile pass re-arms them. Setting it `true` is a debug-only sweep (history preserved; active control rows still veto it)
+- New generations record execution control version 1. Stop drains admitted work
+  before reporting Stopped; Resume releases existing continuations. Existing
+  generations retain legacy behavior until Reset and Start. A lost version 1
+  controller fails closed rather than rebuilding an empty root registry. See
+  [control lifecycle, recovery and verification](temporal-workflow-control.md).
 - See [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md) and [CLI Services Guide](./cli_services_integration.md)
 
 ### Database (SQLite)
@@ -267,4 +272,6 @@ Delete `workflow.db` there to reset all data.
 - **WebSocket-First**: WS message handlers replace most REST APIs (live set = `MESSAGE_HANDLERS` in `server/routers/websocket.py` + plugin-registered handlers)
 - **n8n-inspired**: Node definitions follow n8n INodeProperties pattern
 - **Cache Fallback**: Redis (production) → SQLite (dev) → Memory
-- **Event-Driven**: Trigger nodes use asyncio.Future for event waiting
+- **Event-Driven**: Controlled Temporal deployments queue Signals and polling
+  results in their generation controller. Direct/legacy paths retain in-memory
+  event waiters; see [event routing](event_framework.md).

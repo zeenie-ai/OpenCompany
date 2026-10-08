@@ -34,6 +34,16 @@ five-second active snapshot polling and coalesced status refresh; idle polling
 runs every fifteen seconds. Pauses, approvals, disconnects and slow work show
 plain-text status and last activity. Raw internal reasoning is never displayed.
 
+For newly started Temporal generations, Stop closes admission across the
+controller, enrolled job/graph/detached roots and their attached agent children.
+Admitted work and bookkeeping drain before Stopped is acknowledged. Resume
+releases the same pending model/tool continuation without repeating recorded
+completed tools. Queued events and the chat run's lane remain occupied while
+stopped. Independent Workspace tasks and separately approved sends retain their
+own lifecycle. See the [control contract](temporal-workflow-control.md) and
+[chat protocol](chat_protocol.md) for revision guards, timeout reconciliation,
+restart behavior and legacy compatibility.
+
 Creation uses a stable owner-scoped key and payload hash, renewable lease,
 atomic graph/parameter/metadata/grant save, and a recoverable activation
 intent. Failed or abandoned builds keep the same workflow identity. A saved
@@ -46,8 +56,10 @@ remain authoritative. Capability grants are scoped and revocable in Settings
 and checked again inside the graph mutation. Public app messages cannot
 approve expanded access. Execution approval for sending remains separate.
 
-Safe Apply stops new admissions while allowing existing work and its reviews
-to finish. It replaces future snapshots without Reset, preserving Context,
+Safe Apply pauses producer admission while allowing existing work and its reviews
+to finish when generation execution admission is open. It cannot reopen a
+stopped generation or drain reviews while Stop/held Resume closes admission.
+It replaces future snapshots without Reset, preserving Context,
 memory, chats, files, approvals and queued events. Paused employees stay
 paused. “Stop work and apply” is the explicit interruption path. The editor's
 Reset continues to clear execution state as before.

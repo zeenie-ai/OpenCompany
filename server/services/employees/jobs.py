@@ -62,6 +62,7 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
               "parameters": parameters, "outputs": ctx.outputs, "user_id": employee.owner_id,
               "session_id": ctx.session_id, "generation": ctx.raw.get("generation", 0),
               "data_scope_id": ctx.raw.get("data_scope_id"), "graphVersion": (graph.data or {}).get("graphVersion", 2), "team_plan": plan}
+    source.update({key: ctx.raw[key] for key in ("execution_control_version", "controller_workflow_id") if key in ctx.raw})
     async with database.reserved_session() as session:
         row = await session.get(EmployeeJob, identifier)
         if row is not None:
@@ -119,6 +120,7 @@ async def dispatch_job(database: Any, job_id: str) -> bool:
         "generation": job.source.get("generation", 0), "graphVersion": job.source.get("graphVersion", 2),
         "data_scope_id": job.source.get("data_scope_id"), "employee_job_id": job.id,
         "parameter_snapshot": job.source["parameters"]}
+    context.update({key: job.source[key] for key in ("execution_control_version", "controller_workflow_id") if key in job.source})
     try:
         await container.temporal_client().client.start_workflow("EmployeeJobWorkflow", context,
             id=job.id, task_queue=container.settings().temporal_task_queue,

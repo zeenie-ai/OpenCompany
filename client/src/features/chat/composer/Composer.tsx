@@ -18,7 +18,7 @@
  * still answering the last message the box takes text but Send waits.
  */
 
-import { ArrowUp, Mic, Plus, Square } from 'lucide-react';
+import { ArrowUp, Mic, Play, Plus, Square } from 'lucide-react';
 import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -47,6 +47,8 @@ export interface ComposerProps {
   onSend: () => void;
   /** Stops the answer under way; absent while there is none. */
   onStop?: () => void;
+  onResume?: () => void;
+  resuming?: boolean;
   /** The answer is already stopping. */
   stopping?: boolean;
   compact: boolean;
@@ -72,6 +74,8 @@ export function Composer({
   busy,
   onSend,
   onStop,
+  onResume,
+  resuming = false,
   stopping = false,
   compact,
   boxRef,
@@ -156,7 +160,12 @@ export function Composer({
 
   const iconSize = compact ? 'size-3.5' : 'size-4';
   const round = cn('shrink-0 rounded-full', compact ? 'size-7' : 'size-8.5');
-  const sendButton = onStop ? (
+  const sendButton = onResume ? (
+    <Button variant="invert" size="icon" disabled={resuming} onClick={onResume}
+      aria-label={resuming ? 'Resuming' : 'Resume'} title="Resume from the next pending action" className={round}>
+      <Play aria-hidden fill="currentColor" className={iconSize} />
+    </Button>
+  ) : onStop ? (
     <Button
       variant="invert"
       size="icon"

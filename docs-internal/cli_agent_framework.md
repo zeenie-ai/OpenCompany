@@ -63,6 +63,25 @@ Reuses (do not duplicate):
 - `nodes/agent/claude_code_agent/_oauth.py` — Claude `auth login` / `auth status` / `auth logout` wrappers, `bun add` (via `core/js_runtime.add_package`, `trust=True`) into the shared OpenCompany packages tree at `<DATA_DIR>/packages/` (binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.exe]` and runs on bun), `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/`. The `login` spawn passes `stdin=PIPE` (un-written) so the native CLI's stdin reader blocks instead of EOFing — keeps its localhost OAuth callback server alive until the browser flow completes
 - `nodes/stripe/_handlers.py` — pattern reference for marker-token + catalogue broadcast
 
+## Generation Stop and CLI session resume
+
+CLI agent nodes remain whole-node Activities in Temporal, outside
+`AGENT_WORKFLOW_TYPES`. New generation control (`execution_control_version=1`)
+closes admission before later node/tool Activities and waits for an admitted CLI
+Activity, including its subprocess and MCP work, to settle under its scheduled
+policy. Result bookkeeping completes normally before the graph/parent agent
+waits. Generation Resume releases the existing continuation; it does not create
+a replacement CLI task or repeat a recorded completed Activity.
+
+Claude's native `--resume <session_id>`, warm session reuse, and pool crash
+recovery are separate provider/session mechanisms described below. Generation
+Stop does not pause between CLI-internal tools, and heartbeat strings cannot
+serialize the subprocess or JSONL session. External effects before recorded
+completion remain governed by retry/idempotency. Legacy generations retain
+their earlier control behavior. See [Temporal workflow control](temporal-workflow-control.md),
+[Temporal architecture](TEMPORAL_ARCHITECTURE.md#cooperative-generation-stop-and-resume),
+and the [Claude Code node card](node-logic-flows/specialized_agents/claude_code_agent.md#temporal-stopresume-boundary).
+
 ## Provider abstraction (mirrors `services/llm/`)
 
 ```python

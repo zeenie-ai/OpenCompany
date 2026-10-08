@@ -12,16 +12,21 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const sendRequest = vi.fn();
+const getWorkflowControlStatus = vi.fn();
+const resumeWorkflow = vi.fn();
+const stopChatRun = vi.fn();
 
 vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/contexts/WebSocketContext')>()),
-  useWebSocketActions: () => ({ sendRequest, isReady: true, addEventListener: () => () => {} }),
+  useWebSocketActions: () => ({ sendRequest, getWorkflowControlStatus, resumeWorkflow, stopChatRun, isReady: true, addEventListener: () => () => {} }),
 }));
 
 import { resetChatRunStore, useChatRunStore } from '@/stores/chatRunStore';
 import { ChatPane } from '../ChatPane';
 import type { ChatHost } from '../host';
 import { useComposerStore } from '../state/composerStore';
+import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
+import { useWorkflowControlStore } from '@/stores/workflowControlStore';
 // Loaded up front so the turns' lazy markdown resolves from the module cache.
 import '../markdown/ReplyMarkdown';
 
@@ -97,6 +102,10 @@ async function write(text: string) {
 
 beforeEach(() => {
   resetChatRunStore();
+  useWorkflowControlStore.setState({ statuses: {}, pending: {} });
+  getWorkflowControlStatus.mockReset();
+  resumeWorkflow.mockReset();
+  stopChatRun.mockReset();
   useComposerStore.setState({ drafts: {} });
   server = { messages: [], send: { success: true, message_id: 'm1', run_id: 'r1', delivery: 'now' }, activeRuns: [] };
   sendRequest.mockReset().mockImplementation(async (kind: string, data: Wire) => {
@@ -315,6 +324,55 @@ describe('ChatPane', () => {
     renderPane(chat);
     fireEvent.click(await screen.findByRole('button', { name: 'Stop reply' }));
     await waitFor(() => expect(chat.notify).toHaveBeenCalledWith('Couldn’t stop the reply. Try again.', 'error'));
+  });
+
+  it('suspends a controlled reply without ending its run and resumes its existing lane', async () => {
+    const running = normalizeWorkflowControlStatus({ state: 'running', revision: 3, generation: 1,
+      execution_control_version: 1, root_execution_id: 'g1' }, 'w1');
+    const paused = { ...running, state: 'paused' as const, revision: 5, can_pause: false, can_resume: true };
+    server.messages = [row('m1', 'user', 'Book Saturday', { run_id: 'r1' })];
+    server.activeRuns = [{ run_id: 'r1', workflow_id: 'w1', session_id: 'w1', state: 'running', seq: 2, hub_epoch: 'e1',
+      workflow_control: running, segments: [{ message_id: 'a_r1', text: 'Checking the calendar', final: null }] }];
+    const answer = sendRequest.getMockImplementation()!;
+    sendRequest.mockImplementation(async (kind: string, data: Wire) => kind === 'stop_chat_run'
+      ? { success: true, resumable: true, ...paused } : answer(kind, data));
+    getWorkflowControlStatus.mockImplementation(async () => {
+      useWorkflowControlStore.getState().replaceStatuses({ w1: paused });
+      return paused;
+    });
+    stopChatRun.mockImplementation(async () => {
+      useWorkflowControlStore.getState().replaceStatuses({ w1: paused });
+      return paused;
+    });
+    resumeWorkflow.mockImplementation(async () => {
+      const resumed = { ...running, revision: 7 };
+      useWorkflowControlStore.getState().replaceStatuses({ w1: resumed });
+      return resumed;
+    });
+    renderPane();
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop reply' }));
+    expect(await screen.findByRole('button', { name: 'Resume' })).toBeEnabled();
+    expect(screen.getByText('Checking the calendar')).toBeInTheDocument();
+    expect(screen.queryByText('You stopped this reply.')).not.toBeInTheDocument();
+    expect(useChatRunStore.getState().sessions.w1.runs.r1.state).toBe('running');
+    expect(stopChatRun).toHaveBeenCalledWith('w1', 3, 'r1');
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(resumeWorkflow).toHaveBeenCalledWith('w1', 5));
+    expect(await screen.findByRole('button', { name: 'Stop reply' })).toBeEnabled();
+    expect(useChatRunStore.getState().sessions.w1.runs.r1.state).toBe('running');
+  });
+
+  it('restores a suspended generation from its run snapshot after reload', async () => {
+    server.activeRuns = [{ run_id: 'r1', workflow_id: 'w1', session_id: 'w1', state: 'running', seq: 2,
+      workflow_control: normalizeWorkflowControlStatus({ state: 'paused', revision: 5,
+        execution_control_version: 1, root_execution_id: 'g1' }, 'w1'),
+      segments: [{ message_id: 'a_r1', text: 'Saved partial output', final: false }] }];
+    renderPane();
+    expect(await screen.findByRole('button', { name: 'Resume' })).toBeEnabled();
+    expect(screen.getByText('Saved partial output')).toBeInTheDocument();
+    expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    fireEvent.keyDown(box(), { key: 'Escape' });
+    expect(sendRequest.mock.calls.filter(([kind]) => kind === 'stop_chat_run')).toHaveLength(0);
   });
 
   it('offers the next questions the employee suggested, under its latest answer only', async () => {

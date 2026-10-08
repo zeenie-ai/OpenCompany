@@ -63,6 +63,27 @@ logger = logging.getLogger(__name__)
 # the rollover path.
 _SEED_TRANSCRIPT_MAX_BYTES = 1_000_000
 
+
+def _tool_activity_policy(cls: Any) -> Dict[str, Any]:
+    """Freeze declaration values in history rather than consult code on replay."""
+    from services.plugin.base import BaseNode
+
+    cls = cls or BaseNode
+    retry = cls.retry_policy
+    heartbeat = cls.heartbeat_timeout
+    return {
+        "start_to_close_seconds": cls.start_to_close_timeout.total_seconds(),
+        "heartbeat_seconds": heartbeat.total_seconds() if heartbeat else None,
+        "task_queue": cls.task_queue,
+        "retry_policy": {
+            "initial_interval_seconds": retry.initial_interval.total_seconds(),
+            "backoff_coefficient": retry.backoff_coefficient,
+            "maximum_interval_seconds": retry.maximum_interval.total_seconds(),
+            "maximum_attempts": retry.maximum_attempts,
+            "non_retryable_error_types": list(retry.non_retryable_error_types),
+        },
+    }
+
 # Activity result shapes — keep these in sync with AgentWorkflow's
 # expectations. Pydantic was considered but plain dicts keep the
 # payload-serialisation cost flat (Temporal serialises via JSON anyway)
@@ -1434,6 +1455,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 # through the workflow verbatim so ``execute_llm_step`` can
                 # rebuild the real StructuredTool inside the activity.
                 "tool_info": tool_info,
+                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))} if context.get("execution_control_version") == 1 else {}),
                 # Team leads create and dispatch durable work through Task
                 # Manager. Delegate descriptors stay in workflow state for
                 # trusted assignee resolution, but are not callable directly
@@ -1736,6 +1758,7 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "tool_node_id": tool_info["node_id"],
                 "parameters": tool_info["parameters"],
                 "tool_info": tool_info,
+                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))} if payload.get("execution_control_version") == 1 else {}),
                 "llm_hidden": bool(team_lead_refresh and is_agent_delegate),
             }
         )

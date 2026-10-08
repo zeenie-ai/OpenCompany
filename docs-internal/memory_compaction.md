@@ -75,6 +75,48 @@ SDK. On the Temporal path, `prepare_agent_payload` (the `agent.prepare_payload`
 activity) calls `anthropic_config()` only as a provider-agnostic way to
 calculate the numeric threshold `AgentWorkflow` compacts at.
 
+## Temporal Stop, Resume, and continuation capacity
+
+New controlled generations record `execution_control_version=1`. Compaction
+is an admitted business Activity in their `AgentWorkflow`: Stop closes the
+gate before a new summarizer starts, while an already-admitted summarizer
+finishes under its existing retry policy and its result is consumed normally.
+Resume continues the suspended loop. It does not repeat a recorded completed
+compaction, model response, or tool call. Controller maintenance and checkpoint
+waits are excluded from business drain counts.
+
+The agent only continues-as-new at a completed-turn boundary with no live
+delegation handles or Task Manager tasks. A stopped agent parks before this
+boundary until Resume; the Workflow waits for control handlers to finish before
+rollover. Version 1 carries the transcript, prepared payload, resolved tool
+bindings and plugin Activity policies, thinking, iteration, usage, execution
+identity, and pause/revision/hold state. Restoring the continuation skips
+`agent.prepare_payload`, so it does not reload a changed model, graph binding,
+or stored conversation to reconstruct the current turn.
+
+Transcript relief and compaction remain the existing post-turn mechanisms;
+they are not a second checkpoint store. Before version 1 rollover, the payload
+converter measures the complete next input against `_CAN_INPUT_MAX_BYTES`
+(1,900,000 bytes). This includes the graph and bindings as well as messages.
+If it remains oversized, the agent raises non-retryable
+`AgentContinuationTooLarge` with capacity guidance. It never discards the
+transcript and returns to the opening prompt. Compaction can reduce transcript
+pressure, but cannot guarantee that a very large graph or prepared payload fits.
+
+Legacy generations preserve their previous command path, including preparation
+on continuation and the 1,000,000-byte transcript-only fallback that drops an
+oversized carried transcript. That fallback is not used by version 1.
+`ConversationTooLarge` remains a separate fresh-conversation-load guard.
+
+Stop is not a compaction or heartbeat checkpoint. Provider/tool work remains
+regular Activities with declared retries, heartbeat, timeout, and queue
+policies. Current LLM retries are unlimited, so Stop may stay `pausing` during
+a persistent transient provider failure. External effects lost before Temporal
+records completion remain subject to the tool's retry and idempotency contract.
+See [Temporal workflow control](temporal-workflow-control.md),
+[Agent context flow](agent_context_flow.md), and the official
+[Continue-As-New guidance](https://docs.temporal.io/design-patterns/continue-as-new).
+
 ## Database Schema
 
 ### TokenUsageMetric

@@ -62,7 +62,7 @@ describe('command palette workflow lifecycle capabilities', () => {
   });
 
   it.each([
-    ['pausing' as const, 'run.pause', 'Retry Pause Workflow'],
+    ['pausing' as const, 'run.pause', 'Stopping Workflow…'],
     ['resuming' as const, 'run.resume', 'Retry Resume Workflow'],
     ['resetting' as const, 'run.reset', 'Retry Reset Workflow Execution'],
   ])('makes an authoritative %s transition retryable', (state, id, label) => {

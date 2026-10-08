@@ -5,15 +5,20 @@ Workflow deployments use a persisted control generation and a long-lived
 current generation, revision, graph snapshot, and UI authorization; Temporal
 is authoritative for execution history.
 
+This is the current control contract. Use it with
+[Temporal architecture](TEMPORAL_ARCHITECTURE.md),
+[node authoring](node_creation.md), [event routing](event_framework.md), and
+[chat protocol](chat_protocol.md). Archived RFCs describe earlier designs.
+
 ## Control lifecycle
 
 - **Start** creates the first generation and deploys its snapshotted graph.
-- **Pause** cooperatively gates new trigger admissions, workflow nodes, agent
+- **Stop** (the `pause_workflow` API) cooperatively gates new trigger admissions, workflow nodes, agent
   turns, tool calls, polling iterations, and delegated work. In-flight work may
   finish and remains durable. Push events stay queued in the controller,
   provider polling cannot launch graph runs, Temporal cron schedules are
   paused, and armed trigger nodes switch to an explicit paused visual state.
-- **Resume** signals the same running Temporal executions and drains buffered
+- **Resume** releases the same running Temporal executions and drains buffered
   trigger events in FIFO order, unpauses cron schedules, and rearms trigger
   nodes.
 - **Reset** revision-guards the old generation, closes controller and local
@@ -40,7 +45,7 @@ Once the `running` compare-and-swap commits, a status-broadcast/projection
 failure does not tear down that live generation; the failed request is recovered
 by the client's authoritative status resync.
 
-Pause and Resume use the controller's acknowledged `set_control_state` Temporal
+Legacy Pause and Resume use the controller's acknowledged `set_control_state` Temporal
 Update. The database first publishes `pausing`/`resuming`, then publishes the
 stable state only after the Update result confirms `paused`/`running`. If the
 Update is known to have been rejected before admission, the database and local
@@ -64,6 +69,342 @@ request is treated as successful when the immediate authoritative resync
 already reports its requested stable state. Transitional Pause, Resume, and
 Reset states expose an explicit retry rather than trapping the toolbar in a
 permanent spinner.
+
+## Acknowledged Stop for new generations
+
+New generations atomically store `resource_manifest.execution_control_version=1`.
+Existing generations keep their recorded command paths and legacy Signals;
+unordered Signals do not change version 1 control intent. Version 1 uses
+revision-ordered `set_control_state` and `wait_for_checkpoint` Updates, with
+`execution_control_status` Queries on controlled workflows.
+
+Stop during tool A means A finishes under its existing retry policy, its result
+and normal bookkeeping are retained, and the next pending action waits for
+Resume. Completed LLM responses retain their pending tool calls. Parallel work
+already admitted drains concurrently. Stop does not cancel, terminate, or
+replace the execution. `pausing` means admission is closing or admitted work is
+draining; `paused` means the checkpoint has been acknowledged throughout the
+execution tree. A request timeout leaves `pausing` for reconciliation and does
+not cancel the tool. Unlimited LLM retries can keep it there during an outage.
+
+The existing controller stores only independently living roots: graph runs,
+cron firings, employee jobs, and detached delegation runners. Each enrolls
+through an acknowledged controller Update before business work. A small
+maintenance Activity bridges the Workflow to the client Update API. Registry
+entries contain Workflow ID and first execution Run ID, and are carried with
+the membership epoch through controller continue-as-new. Terminal roots remove
+themselves; control operations remove stale registrations after authoritative
+Describe calls. There is no SQL participant registry or periodic lease loop.
+
+Each admission setter closes local scheduling and waits for admitted child
+starts to acknowledge. Native `DescribeWorkflowExecution.pending_children`
+then discovers attached children. Stop closes the complete discovered tree
+before awaiting any checkpoint. Checkpoints count admitted business Activities
+through result bookkeeping; maintenance Activities, permit waits, sleeps and
+child-result waits are excluded. Root membership is reconciled until stable.
+Visibility scans remain part of destructive Reset, not Stop acknowledgement.
+
+### Stop and Resume acknowledgement sequence
+
+The orchestration lives in
+[`transition_generation`](../server/services/deployment/execution_control.py);
+the participant gate and counters live in
+[`ExecutionControl`](../server/services/temporal/execution_control.py).
+
+1. Stop persists the `pausing` revision and closes process-local producers.
+   Cron schedules and trigger projections are paused before tree traversal.
+2. A completed controller admission Update closes controller producers. Each
+   independent root and attached descendant receives the same revision. Its
+   setter waits only for child-start acknowledgements, allowing the subsequent
+   native Describe to enumerate children already being started.
+3. After admission is closed throughout the discovered tree, checkpoint
+   Updates run concurrently. Each waits for local admitted work and result
+   bookkeeping, without waiting for child completion. This lets a paused child
+   remain alive without deadlocking its parent's acknowledgement.
+4. A changed membership epoch restarts discovery. Stale registrations are
+   removed only after native Describe confirms a terminal, missing, or
+   different execution chain. The database publishes `paused` after the
+   membership and checkpoint barriers settle.
+5. Resume persists `resuming` and applies a new running revision with
+   `producers_held=true`. Descendants are released before roots. Controller
+   release checks the membership epoch atomically; a late registration causes
+   another reconciliation pass. Local producers and cron schedules reopen
+   after that release, and the database publishes `running`.
+
+The admission acknowledgement is distinct from complete drain. Status counts
+continue to report admitted business work during `pausing`; a zero UI count
+does not establish the checkpoint. Checkpoint sleeps, permit waits, enrollment
+maintenance and child-result waits are not business work. Completing a child
+result still performs its normal bookkeeping while admission is closed.
+
+Resume sets the next revision while holding producer admission, resumes
+descendants before their roots, and atomically checks controller membership
+before reopening producers. A late root inherits the controller's held state
+and is included in reconciliation. Handles address current Workflow IDs;
+native chain identity and Update payload checks prevent Workflow ID reuse
+from controlling a different execution. Application revisions survive rollover
+because Temporal Update-ID deduplication is scoped to one execution.
+
+Agents roll over only at clean boundaries with no live delegation handles,
+while running and after pending control handlers finish. Continuation carries
+prepared configuration and tool policies, transcript, thinking, iteration,
+usage and control state. The complete encoded continuation input is measured.
+Existing compaction is used; an oversized version 1 continuation reports
+`AgentContinuationTooLarge` rather than restarting at the opening prompt.
+Ordinary tool dispatch respects frozen plugin retry, queue, heartbeat and
+timeout declarations. Heartbeats retain their liveness/failure-recovery role;
+they are not checkpoints for opaque provider or tool sessions.
+
+Controlled chat Stop resolves the run's exact owning generation, preserves its
+run/reply identity, partial output, subscription and occupied lane, and derives
+Stopping/Stopped/Resume from workflow control. Suspension retains live output;
+a server process restart cannot reconstruct unsaved text deltas from the hub.
+See the [chat persistence limits](chat_protocol.md#controlled-stop-acknowledgement).
+The watchdog excludes stopped
+generations from age expiry; successful Resume persists `last_resumed_at` in
+existing control metadata to give a fresh timeout window. Direct Workspace
+tasks and separately approved delivery continuations remain independent.
+Claude Code, RLM and Vertex managed agents drain at their whole Activity boundary.
+
+Real SDK integration tests use stub Activities and replay captured new and
+legacy histories. They exercise parallel drain, attached children, late roots,
+worker restart, pending model tool calls and two actual agent rollovers.
+Admission acknowledgement and complete drain latency are logged separately.
+
+The guarantee applies to recorded completion. Resume does not schedule a
+successfully recorded tool again. If an external effect happened before
+Temporal recorded the Activity result, the Activity's existing retry and
+idempotency contract still determines whether that effect can repeat.
+
+The protocol follows Temporal's [entity lifecycle](https://docs.temporal.io/design-patterns/entity-lifecycle-patterns),
+[event accumulator](https://docs.temporal.io/design-patterns/event-accumulator),
+[long-running Activity](https://docs.temporal.io/design-patterns/long-running-activity),
+and [continue-as-new](https://docs.temporal.io/develop/python/workflows/continue-as-new)
+guidance. The [resumable Activity pattern](https://docs.temporal.io/design-patterns/resumable-activity)
+reruns a failed Activity after corrective input; it does not implement Resume
+after a successfully completed tool. Provider and tool operations remain
+regular Activities rather than [Local Activities](https://docs.temporal.io/design-patterns/local-activities).
+
+## Workflow messaging review
+
+The [messaging patterns](https://docs.temporal.io/design-patterns/workflow-messaging-patterns)
+and [sending reference](https://docs.temporal.io/sending-messages) support this
+division of responsibilities:
+
+| Operation | Message | Acknowledgement |
+|---|---|---|
+| Incoming trigger event | Signal with stable event ID | Temporal accepted the Signal; handler processing is asynchronous |
+| Stop/Resume admission | Completed `set_control_state` Update | Requested revision applied and admitted child starts acknowledged |
+| Stop drain | Completed `wait_for_checkpoint` Update | Admitted work and result bookkeeping settled |
+| Independent root registration/removal | Update through a maintenance Activity | Controller membership mutation completed |
+| UI status | Synchronous Query | Read-only snapshot; not a transition acknowledgement |
+
+The Activity bridge is required because a Workflow cannot directly issue an
+Update to another Workflow. `execute_update` waits for completion; merely
+reaching the Accepted stage does not establish that work drained.
+
+Pure control validators check message shape, state, revision, generation,
+execution chain and admission-hold type before acceptance. Handler-side typed
+`ApplicationError` checks remain for direct calls and replay. An ordinary
+`ValueError` or `TypeError` in an accepted Python Update handler retries the
+Workflow Task rather than rejecting only the Update. These distinctions follow
+the [handler exception rules](https://docs.temporal.io/handling-messages#exceptions-in-message-handlers).
+
+State/revision changes happen before the first await. Checkpoint waits use
+`workflow.wait_condition` and allow newer control handlers to run; a lock held
+through draining would prevent Resume from superseding the wait. Input state
+is initialized with `@workflow.init`; pending handlers finish before return or
+rollover. See the [Python async-handler guidance](https://docs.temporal.io/develop/python/workflows/message-passing#use-async-handlers)
+and [official safe-handler sample](https://github.com/temporalio/samples-python/blob/main/message_passing/safe_message_handlers/workflow.py).
+
+New version 1 histories record `controller-messaging-v1`. Successful controller
+Updates check the existing history-pressure signal and wake the main loop to
+continue-as-new, even when no events or polls occur. The Update handler never
+performs the rollover itself. This accounts for [per-execution Update limits](https://docs.temporal.io/evaluate/cloud/limits#per-workflow-execution-update-limits)
+in addition to event-history growth. Existing revisions, membership and events
+carry into the next run; replay tests cover pre-marker histories.
+
+Employee Safe Apply keeps its producer-only admission pause. Its compatibility
+string Resume can reopen producers only while the versioned participant is
+running and unheld; it cannot override Stop or a held Resume. Task-review
+draining is likewise disabled while generation control closes admission.
+
+A client deadline or cancellation does not cancel an accepted Update. Retain
+the desired revision and transitional state and reconcile the outcome, as
+specified by the [Update client contract](https://python.temporal.io/temporalio.client.WorkflowHandle.html#execute_update).
+Update-ID deduplication covers a single run; application revision and membership
+identity preserve idempotency across rollover and maintenance Activity retries.
+
+### Control interfaces
+
+The WebSocket APIs retain their existing names. Example Stop request data:
+
+```json
+{
+  "workflow_id": "saved-workflow-id",
+  "expected_revision": 12,
+  "idempotency_key": "stop-request-unique-id"
+}
+```
+
+Send this data with `type: "pause_workflow"`; Resume uses
+`type: "resume_workflow"` and the latest returned revision. Status uses
+`get_workflow_control_status`. Read the authoritative response and its
+capabilities before the next mutation: a stable-state CAS also advances the
+database revision. Do not infer the next revision from a local counter.
+
+Controlled `stop_chat_run` takes `run_id`, `expected_revision` and
+`idempotency_key`. It authorizes the session, resolves the run's workflow and
+root execution identity, and delegates to Stop with an owning-generation
+guard. It returns the generation control payload plus `run_id` and
+`resumable: true`. Resume uses the generation's `resume_workflow` API. See
+[chat protocol](chat_protocol.md) for legacy terminal Stop and wire details.
+
+Internal Update payloads are not the browser API:
+
+| Surface | Fields and result |
+|---|---|
+| `set_control_state` | `state` (`paused` or `running`), transition `revision`, `generation`, `first_execution_run_id`, and optional boolean `producers_held`; returns applied intent and admission acknowledgement |
+| `wait_for_checkpoint` | Same intent fields, or omitted payload to wait for existing intent; returns counters and `checkpoint` |
+| `register_execution` | `workflow_id`, `first_execution_run_id`, `generation`; returns controller participant state/revision and hold for the enrolling root |
+| `unregister_execution` | Same membership identity; removes only a matching execution chain |
+| `execution_control_status` | Read-only participant state, revision, hold, active actions, pending child starts and checkpoint |
+| Controller `status` | Also includes `live_roots`, `membership_epoch`, producer state and event queue status |
+
+Final controller release additionally includes `expected_membership_epoch`.
+Rejected shape, state, revision, generation or execution identity produces a
+typed Update error; no accepted mutation should be followed by a raw input
+conversion failure. A stale revision cannot overwrite newer intent. Same-revision
+registration results cannot undo an explicit release. Child inheritance omits
+the parent's root-chain and release markers; same-Workflow continuation carries
+them, so a new child's enrollment still learns the controller's current hold.
+
+Separate identity finding: existing listener IDs and child display prefixes use
+trigger labels. Two same-label trigger nodes can collide during registration.
+That pre-existing naming contract needs an immutable trigger-node identity for
+multi-trigger deployments; the messaging hardening above does not change names
+or recorded child IDs.
+
+## Event accumulation during Stop and rollover
+
+The controller already serves as the generation's event accumulator: its
+stable Workflow ID groups Signals, and its queue retains each accepted event
+until trigger processing can resume. The [Event Accumulator pattern](https://docs.temporal.io/design-patterns/event-accumulator)
+provides useful buffering and deduplication guidance. Inactivity timers and
+batch processing would change the existing immediate, per-event trigger
+behavior, so neither is introduced. Signal-With-Start is not used to replace
+a lost version 1 controller with an empty execution-root registry.
+
+New version 1 histories record `controller-event-accumulator-v1`. This marker
+preserves recorded command decisions for legacy and earlier version 1 histories.
+Pending event keys are protected independently of the bounded recent-ID cache,
+including the event currently being dispatched. Restored overflow pages keep
+their original FIFO position when the same pending event was redelivered.
+Existing durable overflow storage and read receipts are reused.
+
+Continue-as-new drains the appended queue tail after each spill and checks again
+after control handlers finish, so Signals accepted during a spill are included
+in the continuation or overflow store. Reset closes the controller and prevents
+rollover from resurrecting it. An already-started deterministic child is treated
+as a duplicate admission; transient start failures retain the event for retry
+instead of blocking all later events permanently on a successful duplicate.
+
+Message producers use their existing stable provider identities: Telegram's
+chat/message pair, Discord message or interaction ID, WhatsApp chat/message
+and direction, and chat run ID or saved message ID. Payloads without a complete
+provider identity retain a fresh ID rather than merging unrelated messages.
+Recent completed-ID memory remains bounded; deterministic child IDs and the
+existing overflow keys also protect redelivery. This is not an unlimited
+generation-wide deduplication ledger.
+
+These queue guarantees begin when Temporal accepts an event Signal. The existing
+Visibility-based, best-effort producer dispatch remains unchanged; durable
+end-to-end producer delivery would require a separate admission/outbox design.
+
+The published accumulator Python example currently assigns a boolean from
+`workflow.wait_condition`. Follow the installed
+[Python SDK contract](https://python.temporal.io/temporalio.workflow.html#wait_condition):
+it returns normally without a value and raises `asyncio.TimeoutError` on timeout.
+Use `try`/`except` if a timeout outcome is needed. This controller uses admission
+and rollover conditions rather than the example's inactivity timer.
+
+## Compatibility and rollout
+
+Start writes `execution_control_version=1` atomically with a new generation.
+Deploying this code does not upgrade an already-admitted generation or rewrite
+its history. Reset followed by Start admits the stronger protocol for that
+workflow. There is no migration of an old run's continuation into a new root.
+
+| Gate | Purpose |
+|---|---|
+| Persisted generation `execution_control_version=1` | Root enrollment, cooperative gates, acknowledged execution-tree drain, held Resume, frozen agent continuation and controlled chat Stop |
+| `controller-event-accumulator-v1` | Pending-key protection, duplicate-start handling and final Signal fences during controller rollover |
+| `controller-messaging-v1` | Successful Updates request main-loop rollover and Safe Apply producer controls cannot override generation suspension |
+| Existing controller durable-queue markers | Preserve the recorded overflow/spill command paths |
+
+New markers are recorded at the relevant runtime command paths, not in
+constructors, Queries or validators. Pre-marker and legacy histories retain
+their previous paths; native replay tests cover these cases. Update handlers
+request rollover, while the main Workflow waits for handlers and performs it.
+Controller rollover may occur while paused; Agent rollover parks until running
+at a clean boundary without live child handles.
+
+No participant SQL registry, recurring lease heartbeat, separate checkpoint
+store or generic tool progress cursor is added. The existing controller history,
+native execution descriptions, queue overflow storage and application revisions
+provide the necessary control state.
+
+## Verification and operations
+
+The regression suite separates participant behavior, whole-generation control,
+event durability, messaging and chat/UI contracts:
+
+| Tests | Guarantees exercised |
+|---|---|
+| [Participant unit tests](../server/tests/temporal/test_execution_control.py) | A finishes once, B waits; parallel drain; bookkeeping; child-start acknowledgements; delayed registration/revision guards; held release and carry |
+| [Agent SDK integration](../server/tests/temporal/test_agent_execution_control_integration.py) | Recorded model calls and pending tools survive Stop, worker restart and two real agent rollovers; replay and complete-input capacity error |
+| [Control replay integration](../server/tests/temporal/test_execution_control_replay.py) | Suspended worker restart, actual continuation runs, new and legacy history replay |
+| [Generation SDK integration](../server/tests/temporal/test_generation_execution_control_integration.py) | Attached graph/agent children, cron roots and jobs, late enrollment, detached lifetime and controller rollover |
+| [Accumulator unit tests](../server/tests/temporal/test_controller_accumulator.py) and [SDK integration](../server/tests/temporal/test_controller_accumulator_integration.py) | Signals during spill and handler fences, pending-key eviction, restored FIFO, duplicate child start, transient retry, Reset, restart and pre-marker replay |
+| [Messaging unit tests](../server/tests/temporal/test_controller_messaging.py) and [SDK integration](../server/tests/temporal/test_controller_messaging_integration.py) | Malformed Updates rejected before acceptance without Workflow Task failure, valid subsequent messages, Update-only rollover, Safe Apply guards and replay |
+| [Versioned handler tests](../server/tests/services/test_versioned_workflow_control.py) | Timeout keeps intent closed, Resume ordering/deadline metadata, missing controller fail-closed and owning-generation guard |
+| [Chat Stop](../server/tests/services/chat/test_stop.py) and [watchdog](../server/tests/services/chat/test_watchdog.py) | Controlled run identity/lane retention, legacy terminal Stop, long-pause protection and fresh resumed age window |
+
+Run from `server/` after the normal dependency setup:
+
+```bash
+uv run pytest -q -p no:cacheprovider tests/temporal/test_execution_control.py tests/temporal/test_controller_accumulator.py tests/temporal/test_controller_messaging.py tests/services/test_versioned_workflow_control.py
+uv run pytest -q -p no:cacheprovider tests/temporal/test_agent_execution_control_integration.py tests/temporal/test_execution_control_replay.py tests/temporal/test_generation_execution_control_integration.py tests/temporal/test_controller_accumulator_integration.py tests/temporal/test_controller_messaging_integration.py
+uv run pytest -q tests/temporal/test_agent_workflow.py tests/temporal/test_controller_queue.py tests/services/chat
+```
+
+Native tests launch Temporal's time-skipping test server in isolated processes
+and use stub provider/tool Activities. They exercise actual Updates,
+Continue-As-New and `Replayer`, without calling live provider APIs. The local
+test server does not expose production dynamic Update-limit settings: rollover
+tests use deterministic history-pressure hooks held unchanged during replay.
+They validate the rollover path, not production load capacity.
+
+Client control/chat regressions and type checking run from the repository root:
+
+```bash
+bun run --filter react-flow-client test src/components/ui/__tests__/CommandPaletteHost.workflowControl.test.ts src/contexts/__tests__/webSocketLifecycle.test.tsx src/features/chat/__tests__/chatPane.test.tsx src/features/home/__tests__/presentation.test.ts src/features/home/__tests__/employeeView.test.tsx src/features/home/__tests__/workspace.test.tsx
+bun run --filter react-flow-client typecheck
+```
+
+When Stop remains `pausing`, inspect the controller participant revision/hold,
+live-root membership and each participant's `active_actions` and
+`pending_child_starts`. The `Generation admission acknowledged` log measures
+time until admission closes; `Generation checkpoint acknowledged` measures
+the complete transition. A retrying LLM or whole managed-agent Activity can
+legitimately keep Stop in progress. Read status and retry reconciliation with
+the returned revision; do not terminate a tool to make the UI report Stopped.
+
+If a transition RPC times out, the durable Update may still complete. Keep the
+transitional state and reconcile. If a version 1 controller is lost, its root
+registry cannot be reconstructed safely by starting an empty controller; Reset
+and Start are required. Explicit continuation capacity errors likewise surface
+to the operator rather than silently rebuilding an agent conversation.
 
 ## Generation-scoped workflow data
 
@@ -180,10 +521,12 @@ the control plane is hardened against Temporal's per-run event-history ceiling
   under history pressure (`is_continue_as_new_suggested()` or a 10K-event soft
   cap), carrying trigger specs, per-trigger provider `seen_ids` (written back
   into the carried spec after every poll cycle), queued push events, the
-  bounded dedup baseline, and the control state + revision. Rollover works
-  mid-pause; the paused state carries. Because run ids change on rollover,
-  every control surface addresses the controller **by workflow id only** —
-  `controller_run_id` is stored for provenance but never pinned on a handle.
+  bounded recent dedup baseline, pending keys, durable overflow position,
+  control intent/revision/hold, live roots and membership epoch. Rollover works
+  mid-pause; the paused state carries. Because Run IDs change on rollover,
+  control handles address the current controller **by Workflow ID**, with the
+  first execution Run ID checked as the chain identity. The recorded
+  `controller_run_id` is not pinned as the current Run ID on a handle.
 - **Signal narrowing.** The controller upserts the `ControlEventTypes`
   keyword-list Search Attribute as push triggers register; `dispatch.emit`
   skips controllers whose deployment has no matching trigger so other
@@ -216,11 +559,11 @@ the control plane is hardened against Temporal's per-run event-history ceiling
 Three env-driven policies (canonical defaults + semantics in
 `.env.template`; consumed by `services/deployment/handlers.py`) govern how a
 generation behaves around kills, crashes, and failures. All three reuse the
-cooperative control-plane pause — Temporal's native Pause/Unpause (server
-1.28+) is deliberately not used: it is an operational control with no Python
-SDK client methods, and it halts workflow-task dispatch entirely, so a
-natively-paused controller could not process the `set_control_state` Update
-that Resume relies on.
+cooperative control-plane pause. The application requires Workflow Tasks to
+keep processing events, completed results and control messages while stopped;
+it does not use a server-level pause of Workflow Task dispatch for this
+handshake. The registered control Updates remain available for reconciliation
+and Resume.
 
 - **`WORKFLOW_CONTROL_CRASH_RECOVERY`** (`pause` | `resume`, default
   `pause`): after an UNCLEAN shutdown — kill or crash, detected via a
@@ -229,7 +572,7 @@ that Resume relies on.
   every generation still `running` so the user consciously resumes it. A
   clean `company stop` + start always restores deployments as they were.
 - **`WORKFLOW_CONTROL_MISSING_CONTROLLER`** (`pause` | `fail`, default
-  `pause`): a live generation whose controller execution vanished
+  `pause`): a legacy live generation whose controller execution vanished
   (terminated in the Temporal UI, killed, retention-deleted) converges to
   `paused` instead of `failed`. Resume then **rebuilds the controller**:
   same generation-scoped workflow id started with the documented
@@ -240,6 +583,9 @@ that Resume relies on.
   `starting` rows always fail instead (nothing durable runs yet; Reset +
   Start rebuilds cleanly). `fail` preserves the legacy Reset-only
   behaviour.
+  Version 1 generations always fail closed when their controller is lost.
+  Resume cannot rebuild an empty registry and claim verified resumability;
+  Reset followed by Start is required.
 - **`WORKFLOW_CONTROL_PAUSE_ON_FAILURE`** (default `true`): circuit
   breaker — when trigger-spawned runs keep failing, MachinaWorkflow
   schedules `workflow_control.pause_on_failure` and the deployment pauses so the user

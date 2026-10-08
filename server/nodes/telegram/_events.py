@@ -83,7 +83,11 @@ def telegram_message_received(event_data: Mapping[str, Any]) -> WorkflowEvent:
     requires a string subject)."""
     payload = dict(event_data)
     chat_id = payload.get("chat_id")
+    message_id = payload.get("message_id")
+    # Telegram message IDs are unique within a chat, not across chats.
+    fields = {"id": f"telegram:{chat_id}:{message_id}"} if chat_id is not None and message_id is not None else {}
     return WorkflowEvent(
+        **fields,
         source="opencompany://nodes/telegram",
         type="com.opencompany.telegram.message.received",
         subject=str(chat_id) if chat_id is not None else None,

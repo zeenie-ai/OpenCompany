@@ -17,8 +17,9 @@ verified, acknowledged inside Discord's three-second deadline, and emitted as
 
 A second trigger node rather than a mode on `discordReceive`:
 `canary_registry` maps one node type to exactly one CloudEvents type, because
-that string becomes the Temporal `EventType` Search Attribute the listener is
-found by. One node cannot subscribe to both.
+that string determines deployed event routing. Controlled controllers advertise
+their event types and hold the trigger definition; legacy listeners use their
+`EventType` Search Attribute. One registered node type cannot subscribe to both.
 
 ## Inputs (handles)
 
@@ -72,7 +73,7 @@ flowchart TD
   E -- other --> F[shape_interaction: token -> ref]
   F --> G[respond type 5, or 6 for a component]
   G --> H[background task: dispatch.emit]
-  H --> I[Temporal listener matched by EventType SA]
+  H --> I[Controlled controller on_event Signal<br/>legacy listener compatibility]
 ```
 
 ## Decision Logic
@@ -116,6 +117,16 @@ flowchart TD
 - Must appear in both trigger frozensets or deploy ignores it silently.
 
 ## Related
+
+- **Event identity and Stop/Resume**: `_events.discord_interaction_created`
+  uses `discord:interaction:{interaction_id}` when the provider ID is present;
+  otherwise it keeps the random envelope ID. New versioned generations queue
+  accepted interaction Signals while stopped and admit graphs on Resume.
+  Discord's initial HTTP acknowledgement is independent of Temporal
+  acceptance or graph completion; background producer delivery remains best
+  effort. A pause can exceed the ref/token TTL below, so durable event receipt
+  does not guarantee a later interaction response is still possible. See
+  [Workflow control](../../temporal-workflow-control.md).
 
 - **Downstream**: `discordAction[interaction_respond]` completes the reply.
 - **Architecture docs**: [discord_service.md](../../discord_service.md)

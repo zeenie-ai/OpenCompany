@@ -166,7 +166,7 @@ describe('WorkspaceDock', () => {
   it('shows their status and Resume when the employee is not working', () => {
     useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
     renderWith([employee({ status: 'paused' })]);
-    expect(screen.getByText('Paused')).toBeInTheDocument();
+    expect(screen.getByText('Stopped')).toBeInTheDocument();
     expect(screen.queryByText('Live')).toBeNull();
     expect(screen.getByRole('button', { name: 'Resume' })).toBeEnabled();
   });
@@ -175,9 +175,9 @@ describe('WorkspaceDock', () => {
     actions.pauseWorkflow.mockReturnValue(new Promise(() => {}));
     useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
     renderWith([employee({ control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 4 }, 'w1') })]);
-    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
-    expect(screen.getByRole('button', { name: 'Pausing…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
   });
 
   it('follows the employee last opened, else the first', () => {

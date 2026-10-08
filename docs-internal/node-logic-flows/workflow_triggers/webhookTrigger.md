@@ -15,9 +15,10 @@ Start a workflow when an HTTP request hits `/webhook/{path}`. The
 producer [`server/nodes/trigger/webhook_trigger/_events.py`](../../../server/nodes/trigger/webhook_trigger/_events.py)
 emits a CloudEvents `WorkflowEvent` (`type: com.opencompany.webhook.received`)
 via `dispatch.emit`. `webhookTrigger` is canary-registered, so
-`DeploymentManager` starts a `TriggerListenerWorkflow` that receives the event
-via Temporal Signal and spawns a child `MachinaWorkflow` per matching event
-(filtered by `path`).
+the controlled `WorkflowControlWorkflow` receives the event via `on_event`
+Signal and starts a child `MachinaWorkflow` per matching event (filtered by
+`path`). Separate `TriggerListenerWorkflow` executions remain the legacy
+compatibility path; the plugin's waiter body is used for direct canvas Run.
 
 ## Inputs (handles)
 
@@ -64,7 +65,7 @@ Wrapped in the standard envelope.
 ```mermaid
 flowchart TD
   P[HTTP request hits /webhook/path] --> Q[routers/webhook.py + _events.py<br/>dispatch.emit com.opencompany.webhook.received]
-  Q --> R[TriggerListenerWorkflow receives via Temporal Signal]
+  Q --> R[Controlled controller receives on_event Signal]
   R --> S[WebhookTriggerNode.build_filter:<br/>event.path == params.path]
   S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]
   S -- no match --> R
@@ -78,15 +79,15 @@ flowchart TD
 - **Method / authentication** are NOT enforced inside the filter - they are
   supposed to be enforced at the router layer when the HTTP request lands.
   The handler/filter only looks at `path`.
-- **Cancellation**: user-initiated cancel via `cancel_event_wait` produces
+- **Direct waiter cancellation**: user-initiated cancel via `cancel_event_wait` produces
   `success=False, error="Cancelled by user"`.
 
 ## Side Effects
 
 - **Database writes**: none inside the plugin.
 - **Broadcasts**: the producer emits a CloudEvents `WorkflowEvent` via
-  `dispatch.emit`. The `TriggerListenerWorkflow` emits firing-pulse status via
-  `broadcast_trigger_status_activity` around each child spawn.
+  `dispatch.emit`. The controller (or legacy listener) emits firing-pulse
+  status via `broadcast_trigger_status_activity` around each child spawn.
 - **External API calls**: none.
 - **File I/O**: none.
 - **Subprocess**: none.
@@ -102,7 +103,7 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- The handler registers a waiter with `timeout=None`, so it waits forever
+- On direct canvas Run, the handler registers a waiter with `timeout=None`, so it waits forever
   until either an event arrives or the run is cancelled. There is no
   handler-side timeout.
 - When multiple `webhookTrigger` nodes share the same `path` (different
@@ -115,6 +116,15 @@ flowchart TD
   into a `success=False` envelope - no stack trace leaks to the caller.
 
 ## Related
+
+- **Stop/Resume and delivery**: a versioned stopped generation queues accepted
+  webhook Signals and delays graph admission until Resume. An HTTP response
+  from the router is not an acknowledged graph-completion result, and
+  `dispatch.emit` discovery/delivery remains best effort before Signal
+  acceptance. A deferred HTTP response may time out during a long pause; its
+  process-local future is not a durable Temporal result. See
+  [Workflow control](../../temporal-workflow-control.md) and
+  [Event Waiter delivery gap](../../event_waiter_system.md#known-gap-canvas-run-on-canary-push-triggers).
 
 - **Skills using this as a tool**: none.
 - **Companion node**: [`webhookResponse`](./webhookResponse.md) for

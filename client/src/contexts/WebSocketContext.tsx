@@ -162,6 +162,8 @@ export interface WorkflowControlStatus {
   data_scope_id?: string | null;
   controller_workflow_id?: string | null;
   controller_run_id?: string | null;
+  execution_control_version?: number;
+  last_resumed_at?: string | null;
   state: WorkflowControlState;
   revision: number;
   workspace_epoch?: number;
@@ -530,6 +532,7 @@ interface WebSocketContextValue {
   getWorkflowStatus: (workflowId: string) => Promise<{ executing: boolean }>;
   startWorkflow: (workflowId: string, nodes: any[], edges: any[], sessionId?: string, expectedRevision?: number) => Promise<WorkflowStartResult>;
   pauseWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  stopChatRun: (workflowId: string, expectedRevision: number, runId: string) => Promise<WorkflowControlStatus>;
   resumeWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
   resetWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
   getWorkflowControlStatus: (workflowId: string) => Promise<WorkflowControlStatus>;
@@ -704,6 +707,7 @@ type WorkflowControlMutationRequest =
   | 'start_workflow'
   | 'start_employee'
   | 'pause_workflow'
+  | 'stop_chat_run'
   | 'resume_workflow'
   | 'reset_workflow';
 
@@ -716,6 +720,7 @@ const WORKFLOW_CONTROL_PENDING_BY_REQUEST: Record<
   // loads the graph; the editor's canvas is not involved).
   start_employee: { action: 'start', state: 'starting' },
   pause_workflow: { action: 'pause', state: 'pausing' },
+  stop_chat_run: { action: 'pause', state: 'pausing' },
   resume_workflow: { action: 'resume', state: 'resuming' },
   reset_workflow: { action: 'reset', state: 'resetting' },
 };
@@ -765,6 +770,7 @@ export interface WebSocketActions {
    *  refuses while an app it needs is not connected. */
   startEmployee: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
   pauseWorkflow: WebSocketContextValue['pauseWorkflow'];
+  stopChatRun: WebSocketContextValue['stopChatRun'];
   resumeWorkflow: WebSocketContextValue['resumeWorkflow'];
   resetWorkflow: WebSocketContextValue['resetWorkflow'];
   getWorkflowControlStatus: WebSocketContextValue['getWorkflowControlStatus'];
@@ -2982,6 +2988,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const pauseWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
     controlMutation('pause_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
 
+  const stopChatRunAsync = useCallback((workflowId: string, expectedRevision: number, runId: string) =>
+    controlMutation('stop_chat_run', workflowId, { expected_revision: expectedRevision, run_id: runId }), [controlMutation]);
+
   const resumeWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
     controlMutation('resume_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
 
@@ -3619,13 +3628,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     startWorkflow: startWorkflowAsync,
     startEmployee: startEmployeeAsync,
     pauseWorkflow: pauseWorkflowAsync,
+    stopChatRun: stopChatRunAsync,
     resumeWorkflow: resumeWorkflowAsync,
     resetWorkflow: resetWorkflowAsync,
     getWorkflowControlStatus: getWorkflowControlStatusAsync,
     getWorkflowStatus: getWorkflowStatusAsync,
   }), [
     isConnected, isReady, sendRequest, addEventListener,
-    startWorkflowAsync, startEmployeeAsync, pauseWorkflowAsync,
+    startWorkflowAsync, startEmployeeAsync, pauseWorkflowAsync, stopChatRunAsync,
     resumeWorkflowAsync, resetWorkflowAsync, getWorkflowControlStatusAsync,
     getWorkflowStatusAsync,
   ]);
@@ -3699,6 +3709,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     getWorkflowStatus: getWorkflowStatusAsync,
     startWorkflow: startWorkflowAsync,
     pauseWorkflow: pauseWorkflowAsync,
+    stopChatRun: stopChatRunAsync,
     resumeWorkflow: resumeWorkflowAsync,
     resetWorkflow: resetWorkflowAsync,
     getWorkflowControlStatus: getWorkflowControlStatusAsync,
@@ -3760,7 +3771,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     cancelEventWaitAsync,
     deployWorkflowAsync, cancelDeploymentAsync, getDeploymentStatusAsync,
     cancelExecutionAsync, getWorkflowStatusAsync,
-    startWorkflowAsync, pauseWorkflowAsync, resumeWorkflowAsync, resetWorkflowAsync,
+    startWorkflowAsync, pauseWorkflowAsync, stopChatRunAsync, resumeWorkflowAsync, resetWorkflowAsync,
     getWorkflowControlStatusAsync, getTeamTaskTraceAsync,
     executeAiNodeAsync, getAiModelsAsync,
     validateApiKeyAsync, getStoredApiKeyAsync, saveApiKeyAsync, deleteApiKeyAsync,

@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Set
 from temporalio import workflow
 
 from ._retry_policies import DEFAULT_ACTIVITY_RETRY, QUICK_ACTIVITY_RETRY
-from services.workflow_naming import node_label_slug
+from .execution_control import ExecutionControl
 
 # ``conditions`` is pure -- ``re`` + comparisons, no IO, no clock, no
 # randomness -- so it is safe to evaluate inside a workflow.
@@ -215,7 +215,8 @@ class MachinaWorkflow:
       deterministically from Event History on replay).
     """
 
-    def __init__(self) -> None:
+    @workflow.init
+    def __init__(self, workflow_data: Optional[Dict[str, Any]] = None) -> None:
         # Wave 12 A7: per-run event-framework state. Populated by the
         # ``on_event`` signal handler; consumed by Phase C1's
         # ``wait_condition`` predicate in the trigger-waiter rewrite.
@@ -224,17 +225,48 @@ class MachinaWorkflow:
         self._seen_event_ids: Set[str] = set()
         self._matched_events: List[Dict[str, Any]] = []
         self._control_paused = False
+        self._execution_control = ExecutionControl()
+        if workflow_data is not None:
+            self._execution_control.bind(workflow_data)
+        self._action_contexts: Dict[str, Any] = {}
 
     @workflow.signal
     async def pause(self) -> None:
         """Cooperatively gate new node/activity scheduling."""
+        if self._execution_control.enabled:
+            return
         self._control_paused = True
 
     @workflow.signal
     async def resume(self) -> None:
+        if self._execution_control.enabled:
+            return
         self._control_paused = False
 
+    @workflow.update
+    async def set_control_state(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._execution_control.set_control_state(payload)
+
+    @set_control_state.validator
+    def validate_set_control_state(self, payload: Dict[str, Any]) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.update
+    async def wait_for_checkpoint(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self._execution_control.wait_for_checkpoint(payload)
+
+    @wait_for_checkpoint.validator
+    def validate_wait_for_checkpoint(self, payload: Optional[Dict[str, Any]] = None) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.query
+    def execution_control_status(self) -> Dict[str, Any]:
+        return self._execution_control.status()
+
     async def _wait_until_resumed(self) -> None:
+        if self._execution_control.enabled:
+            await self._execution_control.wait_until_running()
+            return
         if self._control_paused:
             await workflow.wait_condition(lambda: not self._control_paused)
 
@@ -462,7 +494,22 @@ class MachinaWorkflow:
         return None
 
     @workflow.run
-    async def run(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, workflow_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        workflow_data = workflow_data or {}
+        self._execution_control.bind(workflow_data)
+        if not self._execution_control.enabled:
+            return await self._run_graph(workflow_data)
+        await self._execution_control.register_root()
+        try:
+            return await self._run_graph(workflow_data)
+        finally:
+            for admission in self._action_contexts.values():
+                await admission.__aexit__(None, None, None)
+            self._action_contexts.clear()
+            await self._execution_control.unregister_root()
+            await workflow.wait_condition(workflow.all_handlers_finished)
+
+    async def _run_graph(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
         """Execute workflow by orchestrating node activities.
 
         Args:
@@ -597,10 +644,18 @@ class MachinaWorkflow:
             # Avoid emitting a redundant wait command on the normal running
             # path.  Once paused, the condition is durable and replay-safe;
             # the resume signal flips the flag and releases scheduling.
-            if self._control_paused:
+            if self._control_paused and not self._execution_control.enabled:
                 await workflow.wait_condition(lambda: not self._control_paused)
             # Find ready nodes (all deps completed, not running/completed)
             ready = self._find_ready_nodes(deps, completed, running, node_map)
+            if self._execution_control.enabled and errors:
+                ready = []
+            if self._execution_control.enabled and self._execution_control.status()["state"] != "running" and running:
+                # Results and graph bookkeeping settle even when admission is
+                # closed. Waiting for Resume here would deadlock checkpoint.
+                ready = []
+            elif self._execution_control.enabled and self._execution_control.status().get("producers_held") and running:
+                ready = []
             workflow.logger.debug(f"Loop {loop_count}: ready={len(ready)}, running={len(running)}, completed={len(completed)}")
 
             # Triggers auto-completed by the skip branch below unblock their
@@ -662,6 +717,9 @@ class MachinaWorkflow:
                     "pre_executed": node.get("_pre_executed", False),
                     "trigger_output": node.get("_trigger_output"),
                 }
+                if self._execution_control.enabled:
+                    context.update({key: value for key, value in self._execution_control.carry().items()
+                                    if key not in {"execution_control_root_run_id", "execution_control_released_revision"}})
                 if (
                     graph_version >= AGENT_CONTEXT_GRAPH_VERSION
                     and generation > 0
@@ -714,6 +772,10 @@ class MachinaWorkflow:
                 # A preceding child start yields to the workflow event loop,
                 # so a pause signal may have landed since ``ready`` was
                 # computed. Re-admit every command in the batch.
+                if self._execution_control.enabled and running and (
+                    self._execution_control.state != "running" or self._execution_control.producers_held
+                ):
+                    break
                 await self._wait_until_resumed()
                 if dispatch["kind"] == "child_workflow":
                     # ``workflow.start_child_workflow`` is ``async def`` —
@@ -738,10 +800,11 @@ class MachinaWorkflow:
                         args=[context],
                         id=child_workflow_id,
                     )
-                    handle = await workflow.start_child_workflow(
-                        dispatch["name"],
-                        **child_start_kwargs,
-                    )
+                    if self._execution_control.enabled:
+                        async with self._execution_control.child_start():
+                            handle = await workflow.start_child_workflow(dispatch["name"], **child_start_kwargs)
+                    else:
+                        handle = await workflow.start_child_workflow(dispatch["name"], **child_start_kwargs)
                     running[node_id] = handle
                     workflow.logger.info(f"Scheduled child workflow for node: {node_id} " f"(workflow={dispatch['name']})")
                 else:
@@ -778,6 +841,10 @@ class MachinaWorkflow:
                     if dispatch.get("queue") is not None:
                         start_kwargs["task_queue"] = dispatch["queue"]
 
+                    if self._execution_control.enabled:
+                        admission = self._execution_control.action()
+                        await admission.__aenter__()
+                        self._action_contexts[node_id] = admission
                     handle = workflow.start_activity(dispatch["name"], **start_kwargs)
                     running[node_id] = handle
                     workflow.logger.info(
@@ -811,10 +878,16 @@ class MachinaWorkflow:
                 }
                 errors.append(error_info)
                 workflow.logger.error(f"Node failed: {done_id} - {error_info['error']}")
+                if done_id in self._action_contexts:
+                    await self._action_contexts.pop(done_id).__aexit__(None, None, None)
 
                 # Stop workflow on failure
                 # TODO: Could add option to continue with partial results
-                break
+                if not self._execution_control.enabled:
+                    break
+
+            if done_id in self._action_contexts:
+                await self._action_contexts.pop(done_id).__aexit__(None, None, None)
 
         # Build final result
         success = len(errors) == 0 and len(completed) == len(node_map)

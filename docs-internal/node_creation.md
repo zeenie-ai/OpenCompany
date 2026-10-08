@@ -34,6 +34,103 @@ Simple plugins inherit directly from `ActionNode` /
 `TriggerNode` / `ToolNode`. Rich plugin folders (telegram,
 stripe) layer additional bases from `services.events` underneath them.
 
+## Temporal execution and Stop/Resume contract
+
+Read [Workflow control](./temporal-workflow-control.md) before adding a node
+that starts external work, a trigger, or an agent tool. New deployment
+generations use `execution_control_version=1`; existing histories retain their
+recorded command paths. A plugin does not implement a second pause lifecycle.
+
+The workflow owns admission. It checks the control gate before admitting a
+node, model request, tool, polling fetch, compaction, or child start. Stop
+closes that admission, lets already-admitted work finish under its existing
+retry policy, records its result and normal bookkeeping, then acknowledges
+Stopped. Resume releases the same continuation at the next pending action.
+For an agent response containing tools A and B, Stop during A preserves A's
+result and the pending B call; Resume executes B without repeating the model
+response or A. Already-admitted parallel tools finish concurrently.
+
+Declare the operation's Temporal policy on the node class:
+
+| Declaration | Meaning |
+|---|---|
+| `task_queue` | Plugin worker pool when the run's frozen worker-pool setting is enabled; otherwise the default worker handles it. |
+| `start_to_close_timeout` | Maximum duration of one Activity attempt. |
+| `heartbeat_timeout` | Liveness window for a long Activity; independent of cooperative Stop. |
+| `retry_policy` | Attempts, intervals, and non-retryable error types for the operation. |
+
+Ordinary per-type agent-tool dispatch applies all four declarations for new
+controlled generations. Graph node dispatch currently applies plugin retry
+and queue declarations but uses generic 24-hour attempt / 2-minute heartbeat
+defaults; the existing Workspace-task override uses that plugin's timeout and
+heartbeat values. Do not assume a graph node's timeout declaration is enforced
+on every path. Resolved tool bindings and policies are recorded during agent
+preparation and carried through
+Continue-As-New, so Resume does not rebuild the pending call from changed
+configuration. The in-process executor does not provide Temporal's policies.
+Keep provider/tool I/O in regular Activities. A heartbeat can report liveness
+or a real recovery checkpoint supported by the operation; a status string
+cannot restore an opaque HTTP request, subprocess, or provider session.
+Managed agents such as Claude Code, RLM, and Vertex stop at their whole
+Activity boundary. Stop can remain Stopping while an admitted operation is
+waiting or retrying; the model request policy currently permits unlimited
+retries. See [Temporal Activity failure detection](https://docs.temporal.io/develop/python/failure-detection)
+and [Long-running Activity](https://docs.temporal.io/design-patterns/long-running-activity).
+
+## Event identity and delivery contract
+
+For a deployed event trigger, register its CloudEvents type with
+`register_canary_trigger_type` and emit a `WorkflowEvent` through
+`services.events.dispatch.emit`. Controlled deployments keep definitions and
+queued events in `WorkflowControlWorkflow`; separate
+`TriggerListenerWorkflow` / `PollingTriggerWorkflow` executions are legacy
+compatibility paths. An interactive canvas waiter is a separate in-memory
+mechanism; check the [Event Waiter delivery gap](./event_waiter_system.md#known-gap-canvas-run-on-canary-push-triggers)
+before assuming `emit` resolves it.
+
+Use a stable event ID only when the provider supplies the complete identity.
+Keep it unchanged on redelivery and distinguish different messages or event
+families. The current producer conventions are:
+
+| Producer | `WorkflowEvent.id` when identity is complete |
+|---|---|
+| Telegram message | `telegram:{chat_id}:{message_id}` |
+| Discord message | `discord:message:{message_id}` |
+| Discord interaction | `discord:interaction:{interaction_id}` |
+| WhatsApp message | `whatsapp:{direction}:{chat_id-or-sender-or-from}:{message_id}` |
+| Tracked chat message | Existing chat `run_id` (untracked messages use their message UID). |
+
+Missing identity uses the envelope's random ID. Do not synthesize a constant
+or partial key that would merge different messages. Random fallback preserves
+distinct messages but cannot deduplicate provider redelivery.
+
+The controller adopts the [Event Accumulator](https://docs.temporal.io/design-patterns/event-accumulator)
+pattern's durable queue, deduplication, and continuation practices while
+keeping immediate per-event processing and accepted queue order through
+overflow. It does not add an inactivity batching window. Deduplication is per
+trigger and event ID: pending keys remain protected
+independently of the bounded recent-key window, overflow pages restore pending
+keys, and queued events remain pending while stopped. Carry and overflow
+spill fences include Signals arriving during awaits before Continue-As-New.
+This protection is versioned with `controller-event-accumulator-v1`; it does
+not retrofit old runs' recorded decisions.
+
+Temporal Signals carry events, completed Updates acknowledge control and
+membership changes, and read-only Queries expose status. Successful Signal
+delivery means Temporal accepted the event into history, not that its handler
+or downstream node finished. `dispatch.emit` still discovers consumers through
+eventually consistent Visibility and logs/suppresses delivery errors; the
+durability guarantee begins after a target accepts its Signal. There is no
+durable producer outbox or promise of external exactly-once effects. Do not
+use Signal-With-Start to recreate a missing versioned controller with an empty
+root registry. See [Workflow messaging](https://docs.temporal.io/design-patterns/workflow-messaging-patterns)
+and [Python message passing](https://docs.temporal.io/develop/python/message-passing).
+
+Known naming limit: triggers with the same display-label/type slug can still
+collide in listener and child Workflow IDs. A stable provider event ID does
+not fix that separate trigger-identity issue. See the control document's
+operating limits when adding multiple similar triggers.
+
 ## Five-minute recipe — one folder, one `__init__.py`
 
 For nodes with no state, no daemon, no signed webhooks (the common
@@ -267,6 +364,7 @@ What you **do** still write:
 | Polling triggers + event_waiter mechanics | [event_waiter_system.md](./event_waiter_system.md) |
 | Memory lifecycle (markdown parse/append/trim, vector store, session resume) — *archived; describes the retired pre-RFC-0002 `input-memory` markdown model* | [ARCHIVE/memory_lifecycle.md](./ARCHIVE/memory_lifecycle.md) |
 | Tool building pipeline (`_build_tool_from_node`, schema, per-type Temporal dispatch) | [tool_building_pipeline.md](./tool_building_pipeline.md) |
+| Cooperative Stop/Resume, root registration, messaging, and rollover | [temporal-workflow-control.md](./temporal-workflow-control.md) |
 | Process supervision (used by `DaemonEventSource`) | [server/services/process_service.py](../server/services/process_service.py) — singleton API |
 | Multi-vendor node behind one `provider` dropdown (two registries, JSON capabilities, per-vendor modules) | [speech_provider_rfc.md](./speech_provider_rfc.md) |
 | Returning media from a node without blowing the payload limits (`AudioRef`, workspace routes, containment) | [media_transport.md](./media_transport.md) |

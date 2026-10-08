@@ -1,8 +1,8 @@
 # Node Logic Flow Documentation
 
-Frozen behavioural contract for every workflow node. One file per node, grouped
-by category. After the upcoming full-stack refactor each handler must still
-match its doc here, and each doc must still describe what the code does.
+Behavioural contract for every workflow node. One file per node, grouped
+by category. Keep each card aligned with its plugin and execution path;
+historical diagrams do not override the current shared execution contract.
 
 ## How to use
 
@@ -27,6 +27,34 @@ match its doc here, and each doc must still describe what the code does.
   duplicating tool-mode behaviour.
 - Keep "Side Effects" honest: every DB write, broadcast, subprocess, and HTTP
   call must be listed.
+
+## Shared execution contract
+
+Cards describe a node's operation. The workflow layer owns cooperative
+admission and continuation for new controlled generations
+(`execution_control_version=1`): Stop allows admitted work and result
+bookkeeping to finish, then waits; Resume begins the next pending action in
+the same execution. Already-admitted parallel tools drain concurrently.
+An operation's sleep or approval wait is part of its admitted Activity when
+the node runs as an Activity; it is not automatically a control checkpoint.
+Legacy cancellation branches in a card describe explicit cancellation or
+older execution paths, not the new generation's Stop behavior.
+
+Controlled push triggers are definitions and Signal queues in
+`WorkflowControlWorkflow`; controller polling uses provider fetch Activities,
+and cron uses Temporal Schedules plus `CronTriggerWorkflow`. Separate
+listener/poller workflows remain legacy compatibility paths. Stable event
+IDs, durable pending-key protection, and Continue-As-New fences apply to the
+versioned controller; interactive canvas waiters remain process-local.
+Signal acceptance acknowledges receipt into Temporal history, while completed
+Updates acknowledge transitions and read-only Queries return status.
+
+Read [Workflow control](../temporal-workflow-control.md),
+[Node creation](../node_creation.md#temporal-execution-and-stopresume-contract),
+and [Event Waiter System](../event_waiter_system.md) for topology, Activity
+policies, compatibility, producer delivery gaps, and known naming limits.
+This shared contract applies to all cards below; individual cards call out
+provider identities and operation-specific stopping boundaries.
 
 ## Index
 

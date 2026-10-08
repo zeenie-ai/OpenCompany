@@ -82,8 +82,7 @@ flowchart TD
   C --> D[_calculate_wait_seconds<br/>maps frequency to seconds]
   D --> E[get_status_broadcaster.update_node_status 'waiting']
   E --> F[await asyncio.sleep wait_seconds]
-  F -- CancelledError --> G[Return success=false<br/>error: Scheduler cancelled]
-  F -- Exception --> H[Return success=false<br/>error: str e]
+  F -- CancelledError --> G[Raise RuntimeError: Scheduler cancelled<br/>BaseNode returns failed envelope]
   F -- ok --> I[Build result_data: timestamp / iteration=1 / frequency / schedule / waited_seconds]
   I --> J{frequency == 'once'?}
   J -- yes --> K[message: 'Triggered after waiting ...']
@@ -106,8 +105,28 @@ flowchart TD
 - **Once vs recurring**: determines whether `next_run` is added to the
   payload and which `message` template is used. Both branches still return
   `success=True`.
-- **Cancellation / exception**: both produce a failed envelope with
-  `success=False`.
+- **Explicit cancellation**: the operation raises `RuntimeError("Scheduler
+  cancelled")`; `BaseNode.execute` turns that failure into its standard
+  envelope. Cooperative generation Stop does not enter this branch.
+
+## Deployed Stop/Resume boundary
+
+For new controlled generations (`execution_control_version=1`), Stop pauses
+the Temporal Schedule and closes producer admission. A cron firing already
+started enrolls with the controller before graph work and respects its current
+revision; Stop waits for any admitted child-start command's start
+acknowledgement. The spawned `MachinaWorkflow` is `ABANDON` and enrolls as an
+independent root, so it remains controlled after the short cron wrapper exits.
+Already-admitted graph work drains through result bookkeeping. Resume releases
+those existing continuations before producer/schedule admission reopens.
+
+The manual or AI-tool operation above remains one regular Activity when
+dispatched through Temporal. Its interval sleep is part of that Activity;
+Stop waits for it to settle under its existing timeout/retry policy before
+acknowledging Stopped. This differs from the workflow's maintenance/control
+sleeps, which are excluded from the drain count. See
+[Workflow control](../../temporal-workflow-control.md) and
+[Temporal Python Schedules](https://docs.temporal.io/develop/python/schedules).
 
 ## Side Effects
 

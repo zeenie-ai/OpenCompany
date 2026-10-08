@@ -4,7 +4,7 @@
 |------|-------|
 | **Category** | whatsapp / trigger |
 | **Backend handler** | [`server/nodes/whatsapp/whatsapp_receive.py`](../../../server/nodes/whatsapp/whatsapp_receive.py) (`WhatsAppReceiveNode`, a `TriggerNode`); filtering is built by [`server/nodes/whatsapp/_filters.py`](../../../server/nodes/whatsapp/_filters.py). CloudEvents type: `com.opencompany.whatsapp.message.received`; controlled deployment routes through `WorkflowControlWorkflow`. |
-| **Tests** | [`server/tests/nodes/test_whatsapp.py`](../../../server/tests/nodes/test_whatsapp.py) |
+| **Tests** | [`server/tests/nodes/test_whatsapp.py`](../../../server/tests/nodes/test_whatsapp.py), [`test_whatsapp_trigger_canary_producer.py`](../../../server/tests/test_whatsapp_trigger_canary_producer.py) (stable envelope identity and producer routing) |
 | **Skill (if any)** | n/a |
 | **Dual-purpose tool** | no - pure trigger node |
 
@@ -93,6 +93,11 @@ flowchart TD
   E -- exception --> Y[success=false<br/>error=str e]
   E -- event dict --> F[Filter closure applied inside wait_for_event<br/>only matching messages resolve the future]
   F --> OK[success=true<br/>result=event_data]
+
+  P[Go RPC message] --> Q[_events.broadcast_whatsapp_message<br/>dispatch.emit CloudEvent]
+  Q --> R[Controlled controller on_event Signal]
+  R --> S[Queue and filter -> admit graph run]
+  Q --> W[WebSocket frame<br/>does not resolve canvas waiter]
 ```
 
 ### Filter closure (`_filters.build_filter`)
@@ -164,6 +169,17 @@ flowchart LR
 - **Filter closure is built once at register-time**: changes to node parameters during a waiting run are not reflected; user must cancel and re-run.
 
 ## Related
+
+- **Event identity and Stop/Resume**: `_events.whatsapp_message_event` uses
+  `whatsapp:{direction}:{conversation}:{message_id}` when the conversation
+  (`chat_id`, else `sender`, else `from`) and message ID are available. Sent
+  and received events have different namespaces. Missing identity keeps the
+  random envelope ID. New versioned generations retain accepted Signals while
+  stopped and admit their pending graphs on Resume; producer discovery and
+  delivery remain best effort before acceptance. The direct canvas waiter has
+  a separate delivery gap. See
+  [Workflow control](../../temporal-workflow-control.md) and
+  [Event Waiter System](../../event_waiter_system.md#known-gap-canvas-run-on-canary-push-triggers).
 
 - **Companion nodes**: [`whatsappSend`](./whatsappSend.md), [`whatsappDb`](./whatsappDb.md)
 - **Architecture docs**: `CLAUDE.md` -> "Event-Driven Trigger Node System", "WhatsApp Integration"

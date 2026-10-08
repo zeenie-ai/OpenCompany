@@ -4,7 +4,7 @@
 |------|-------|
 | **Category** | social / trigger |
 | **Backend handler** | [`server/nodes/telegram/telegram_receive.py`](../../../server/nodes/telegram/telegram_receive.py) (`TelegramReceiveNode`, a `TriggerNode` with `event_type = "telegram_message_received"`); filter via `build_filter` -> [`build_telegram_filter`](../../../server/nodes/telegram/_filters.py) |
-| **Tests** | [`server/tests/nodes/test_telegram_social.py`](../../../server/tests/nodes/test_telegram_social.py) (node level), [`test_telegram_service.py`](../../../server/tests/nodes/test_telegram_service.py) (service level: `_format_message` per content type) |
+| **Tests** | [`server/tests/nodes/test_telegram_social.py`](../../../server/tests/nodes/test_telegram_social.py) (node level), [`test_telegram_service.py`](../../../server/tests/nodes/test_telegram_service.py) (service level: `_format_message` per content type), [`test_telegram_trigger_canary_producer.py`](../../../server/tests/test_telegram_trigger_canary_producer.py) (stable envelope identity and producer routing) |
 | **Skill (if any)** | none |
 | **Dual-purpose tool** | no (trigger only) |
 
@@ -141,9 +141,10 @@ flowchart TD
   subgraph Producer
     P1[TelegramService polling loop] --> P2[_on_message_received]
     P2 --> P3[_format_message -> event_data]
-    P3 --> P4[event_waiter.dispatch<br/>'telegram_message_received']
-    P4 --> P5[matches filter<br/>per waiter]
-    P5 -- match --> P6[Waiter.future.set_result]
+    P3 --> P4[_events.broadcast_telegram_message<br/>dispatch.emit CloudEvent]
+    P4 --> P5[Controlled controller on_event Signal<br/>legacy listener compatibility]
+    P5 --> P6[Queue and filter -> admit graph run]
+    P4 --> P7[WebSocket message broadcast<br/>does not resolve canvas waiter]
   end
 ```
 
@@ -212,7 +213,7 @@ flowchart TD
   so bot-owners who are themselves bots still match.
 - **Cancellation path**: If the trigger is cancelled mid-wait, the handler
   returns `success=false, error="Cancelled by user"` rather than swallowing.
-- **No timeout**: The node waits indefinitely. The only exit routes are an
+- **No direct-wait timeout**: The node waits indefinitely. The only exit routes are an
   event match, an explicit `cancel_event_wait` WebSocket call, or the server
   restarting.
 - **GIFs changed category**: they now arrive as `content_type: "animation"`
@@ -232,6 +233,17 @@ flowchart TD
   use another's.
 
 ## Related
+
+- **Event identity and Stop/Resume**: `_events.telegram_message_received`
+  uses `telegram:{chat_id}:{message_id}` when both IDs are present, since
+  Telegram message IDs are unique within a chat. Missing identity keeps the
+  random envelope ID; attachment `file_unique_id` is not the trigger event
+  key. Accepted Signals stay queued while a versioned generation is stopped;
+  Resume admits the pending graph without repeating recorded node/tool work.
+  Durability starts after Signal acceptance; producer Visibility discovery
+  and delivery remain best effort. See
+  [Workflow control](../../temporal-workflow-control.md) and the
+  [canvas waiter delivery gap](../../event_waiter_system.md#known-gap-canvas-run-on-canary-push-triggers).
 
 - **Sibling nodes**: [`telegramSend`](./telegramSend.md), [`socialReceive`](./socialReceive.md)
 - **Event waiter architecture**: [Event Waiter System](../../event_waiter_system.md)

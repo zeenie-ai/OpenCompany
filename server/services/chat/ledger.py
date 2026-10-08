@@ -26,7 +26,11 @@ running run past ``runs.max_running_s`` (``timed_out``), and a running run
 whose Temporal workflow closed without finishing it: finished when its reply
 was saved, ``interrupted`` otherwise.
 
-**Stop** (``request_stop``) ends a run nothing has picked up at once
+**Controlled Stop** suspends the owning generation while keeping the run
+and its lane alive. The watchdog excludes intentionally suspended generations
+and uses their successful Resume time for a fresh timeout window.
+
+**Legacy Stop** (``request_stop``) ends a run nothing has picked up at once
 (``stopped``, no reply) and moves a running run to ``stopping``. A running
 run stops itself: its agent's next model step returns what it has written so
 far, and a tool not started yet is skipped (``services/chat/stream.py``,
@@ -60,7 +64,7 @@ from sqlmodel import select
 
 from core.logging import get_logger
 from models.chat import LIVE_STATES, TERMINAL_STATES, ChatRun
-from models.database import ChatMessage
+from models.database import ChatMessage, WorkflowControlExecution
 from services.chat.config import runs_setting, steps_setting
 from services.chat.hub import publish_run_event
 from services.chat_thread import delivery_for
@@ -137,6 +141,35 @@ def client_message_uid(session_id: str, client_message_id: Any) -> str:
 async def get_run(database: Any, run_id: str) -> Optional[ChatRun]:
     async with database.get_session() as session:
         return await session.get(ChatRun, run_id)
+
+
+async def owning_control(database: Any, run: ChatRun) -> Optional[WorkflowControlExecution]:
+    """Resolve the immutable generation that admitted this run, not its successor."""
+    if not run.workflow_id or not run.run_key:
+        return None
+    async with database.get_session() as session:
+        result = await session.execute(
+            select(WorkflowControlExecution).where(
+                WorkflowControlExecution.workflow_id == run.workflow_id,
+                WorkflowControlExecution.root_execution_id == run.run_key,
+            ).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
+def controlled_generation(control: Any) -> bool:
+    return bool(control and (control.resource_manifest or {}).get("execution_control_version") == 1)
+
+
+def resumed_at(control: Any) -> Optional[datetime]:
+    """A successful Resume grants a fresh watchdog timeout window."""
+    raw = (getattr(control, "resource_manifest", None) or {}).get("last_resumed_at")
+    if not isinstance(raw, str):
+        return None
+    try:
+        return _aware(datetime.fromisoformat(raw.replace("Z", "+00:00")))
+    except ValueError:
+        return None
 
 
 async def lane_run(database: Any, session_id: str) -> Optional[ChatRun]:
@@ -704,13 +737,20 @@ async def _sweep_one(
     longest: timedelta,
     temporal_status: Optional[TemporalStatus],
 ) -> Optional[ChatRun]:
-    created = max(_aware(run.created_at) or now, process_started)
+    control = await owning_control(database, run)
+    controlled = controlled_generation(control)
+    if controlled and control.status in {"pausing", "paused", "resuming"}:
+        return None
+    resumed = resumed_at(control) if controlled else None
+    created = max(_aware(run.created_at) or now, process_started, resumed or process_started)
     if run.state == "pending":
         if now - created > pickup:
             return await fail_run(database, run, code="not_delivered", message="The employee did not pick up this message.")
         return None
     if run.state == "queued":
-        control = await database.get_latest_workflow_control(run.workflow_id) if run.workflow_id else None
+        # Legacy runs still use the historical deployment-delivery policy.
+        if not controlled:
+            control = await database.get_latest_workflow_control(run.workflow_id) if run.workflow_id else None
         delivery = delivery_for(control)
         if delivery == "queued":
             return None
@@ -721,6 +761,8 @@ async def _sweep_one(
             return None
         return await fail_run(database, run, code="not_delivered", message="The employee stopped before reading this message.")
     started = _aware(run.started_at) or created
+    if resumed is not None:
+        started = max(started, resumed)
     if now - started > longest:
         return await fail_run(database, run, code="timed_out", message="The employee took too long to answer.")
     if temporal_status is None or not run.temporal_workflow_id or now - started < _CLOSED_GRACE:

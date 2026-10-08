@@ -29,7 +29,10 @@ INTERACTION_WIRE_KEY = "discord_interaction_created"
 
 def discord_message_received(event_data: Mapping[str, Any]) -> WorkflowEvent:
     """Envelope for one inbound Discord message."""
+    message_id = event_data.get("message_id")
+    fields = {"id": f"discord:message:{message_id}"} if message_id else {}
     return WorkflowEvent(
+        **fields,
         source=SOURCE,
         type=MESSAGE_RECEIVED_TYPE,
         # Snowflakes are stringified upstream, in _dispatch. The envelope
@@ -47,7 +50,10 @@ def discord_interaction_created(event_data: Mapping[str, Any]) -> WorkflowEvent:
     Search Attribute its listener is found by. One type per trigger node is
     the only shape the routing supports.
     """
+    interaction_id = event_data.get("interaction_id")
+    fields = {"id": f"discord:interaction:{interaction_id}"} if interaction_id else {}
     return WorkflowEvent(
+        **fields,
         source=SOURCE,
         type=INTERACTION_CREATED_TYPE,
         subject=str(event_data.get("interaction_id") or ""),

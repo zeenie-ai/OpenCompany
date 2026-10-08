@@ -513,6 +513,17 @@ def _control_service():
     return WorkflowControlService(container.database())
 
 
+def _versioned_control(control) -> bool:
+    return int((getattr(control, "resource_manifest", None) or {}).get("execution_control_version", 0)) >= 1
+
+
+def _control_scope(control) -> Dict[str, Any]:
+    return {
+        "execution_control_version": 1 if _versioned_control(control) else 0,
+        "controller_workflow_id": control.controller_workflow_id,
+    }
+
+
 async def _start_controller(control, *, use_existing: bool = False) -> Optional[str]:
     """Start the durable controller, or use local mode when Temporal is disabled.
 
@@ -548,6 +559,8 @@ async def _start_controller(control, *, use_existing: bool = False) -> Optional[
             "root_execution_id": control.root_execution_id,
             "data_scope_id": control.data_scope_id or control.execution_id,
             "state": "running",
+            "revision": control.revision,
+            **_control_scope(control),
         }],
         id=control.controller_workflow_id,
         task_queue=container.settings().temporal_task_queue,
@@ -687,7 +700,12 @@ async def _fail_missing_controller(service: WorkflowControlService, control):
     """
     if control.status not in _MISSING_CONTROLLER_FAILS:
         return control
+    if _versioned_control(control):
+        _close_local_admission(control.workflow_id)
+        await _set_cron_pause(control.workflow_id, paused=True, strict=True)
     if (
+        not _versioned_control(control)
+        and
         control.status in _MISSING_CONTROLLER_PAUSES
         and _missing_controller_policy() == "pause"
     ):
@@ -996,11 +1014,12 @@ async def _with_runtime_counts(payload: Dict[str, Any], workflow_id: str) -> Dic
 
     status = container.workflow_service().get_deployment_status(workflow_id)
     workspace = await _workspace_runtime_status(workflow_id)
+    active = payload.get("generation_in_flight_count", status.get("active_runs", 0))
     return {
         **payload,
         **{key: value for key, value in workspace.items() if key != "workspace_active_count"},
-        "active_count": status.get("active_runs", 0) + workspace.get("workspace_active_count", 0),
-        "in_flight_count": status.get("active_runs", 0) + workspace.get("workspace_active_count", 0),
+        "active_count": active + workspace.get("workspace_active_count", 0),
+        "in_flight_count": active + workspace.get("workspace_active_count", 0),
         "queued_count": (
             int(payload.get("queued_count", 0) or 0)
             + int(status.get("queued_events", 0) or 0)
@@ -1073,6 +1092,17 @@ async def _control_payload(
             "queued_count": controller_status.get("queued_events", 0),
             "temporal_available": True,
         })
+        if _versioned_control(control):
+            from core.container import container
+            from services.deployment.execution_control import count_generation_actions
+            wrapper = container.temporal_client()
+            if wrapper is not None and wrapper.client is not None:
+                try:
+                    payload["generation_in_flight_count"] = await count_generation_actions(
+                        wrapper.client, control.controller_workflow_id, controller_status)
+                except Exception as exc:
+                    logger.debug("Generation activity count unavailable", workflow_id=control.workflow_id,
+                                 error=str(exc))
     payload.update(extra or {})
     return await _with_runtime_counts(payload, control.workflow_id)
 
@@ -1124,6 +1154,8 @@ async def _reconcile_control(service: WorkflowControlService, control):
     }.get(control.status)
     if transition_target is None:
         return control, controller_status
+    if _versioned_control(control):
+        return await _finish_versioned_transition(service, control)
     requested_state, stable_state = transition_target
 
     if controller_status is None:
@@ -1204,6 +1236,65 @@ async def _reconcile_control(service: WorkflowControlService, control):
         if latest is not None and latest.generation == control.generation:
             control = latest
     return control, controller_status
+
+
+async def _finish_versioned_transition(service: WorkflowControlService, control):
+    """Finish durable intent without cancelling admitted work on RPC timeout."""
+    from core.container import container
+    from services.deployment.execution_control import transition_generation
+
+    paused = control.status == "pausing"
+    runtime = container.workflow_service()
+    runtime.pause_deployment(control.workflow_id)
+    if paused:
+        schedules = await _set_cron_pause(control.workflow_id, paused=True, strict=True)
+        triggers = await runtime.update_trigger_pause_status(control.workflow_id, paused=True)
+    wrapper = container.temporal_client()
+    if wrapper is None or wrapper.client is None:
+        if container.settings().temporal_enabled:
+            raise TemporalControlUnavailable("temporal_control_unavailable")
+        result = {"controller_status": None, "controlled_executions": 0}
+    else:
+        async def admitted(status):
+            try:
+                await _broadcast_control(control, controller_status=status)
+            except Exception as exc:
+                logger.warning("Control admission status broadcast failed", workflow_id=control.workflow_id,
+                               error=str(exc))
+        result = await transition_generation(wrapper.client, control, paused=paused, on_admission=admitted)
+    details = {"controlled_executions": result["controlled_executions"]}
+    values: Dict[str, Any] = {}
+    if paused:
+        details.update(paused_schedules=schedules, paused_triggers=triggers)
+    else:
+        # The existing execution continuations are released before producers.
+        details["resumed_schedules"] = await _set_cron_pause(control.workflow_id, paused=False, strict=True)
+        details["resumed_queued_events"] = await runtime.resume_deployment(control.workflow_id)
+        details["resumed_triggers"] = await runtime.update_trigger_pause_status(control.workflow_id, paused=False)
+        values.update(CLEAR_PAUSE_REASON)
+        values["resource_manifest"] = {**(control.resource_manifest or {}),
+            "last_resumed_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        control = await service.transition(control, expected_revision=control.revision,
+            from_statuses={control.status}, status="paused" if paused else "running",
+            values=values or None)
+    except ValueError as exc:
+        if str(exc) != "control_revision_conflict":
+            raise
+        latest = await service.database.get_latest_workflow_control(control.workflow_id)
+        if latest is None or latest.generation != control.generation:
+            raise
+        return latest, result["controller_status"]
+    if not paused:
+        await _clear_failure_streak(service.database, control)
+    payload = await _broadcast_control(control, controller_status=result["controller_status"], extra=details)
+    from services.status_broadcaster import get_status_broadcaster
+    broadcaster = get_status_broadcaster()
+    await broadcaster.update_workflow_status(executing=bool(not paused and payload.get("in_flight_count")),
+        current_node=None, progress=0, workflow_id=control.workflow_id)
+    await broadcaster.update_deployment_status(is_running=True, status=control.status,
+        active_runs=payload.get("generation_in_flight_count", 0), workflow_id=control.workflow_id)
+    return control, result["controller_status"]
 
 
 # ---------------------------------------------------------------------------
@@ -1473,6 +1564,7 @@ async def _rearm_generation(control) -> None:
         "edges": edges,
         "parameters_by_id": snapshot.get("parameters") or {},
         "generation": control.generation,
+        **_control_scope(control),
         # Snapshots created before the Context topology deliberately retain version 0,
         # so a process restart cannot mutate their Temporal command sequence.
         "graphVersion": int(
@@ -1578,6 +1670,9 @@ async def _rebuild_missing_controller(service: WorkflowControlService, control):
     controller from the persisted graph snapshot.
     """
     from core.container import container
+
+    if _versioned_control(control):
+        raise ControllerExecutionMissing("Versioned execution registry cannot be reconstructed; Reset is required")
 
     logger.warning(
         "Rebuilding missing workflow controller",
@@ -1767,8 +1862,8 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
             control,
             controller_status=controller_status,
         )
-    await _broadcast_control(control)
     try:
+        await _broadcast_control(control)
         run_id = await _start_controller(control)
         if run_id:
             control = await service.transition(
@@ -1789,6 +1884,7 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
             "parameters_by_id": normalization.node_parameters,
             "graphVersion": normalization.graph_version,
             "generation": control.generation,
+            **_control_scope(control),
             "session_id": control.data_scope_id or control.execution_id,
             "execution_id": control.execution_id,
             "root_execution_id": control.root_execution_id,
@@ -1919,6 +2015,8 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
     control = await service.database.get_latest_workflow_control(workflow_id)
     if control is None:
         return {"success": False, "error": "workflow_never_started"}
+    if data.get("expected_root_execution_id") and data["expected_root_execution_id"] != control.root_execution_id:
+        raise ValueError("control_generation_conflict")
     control, controller_status = await _reconcile_control(service, control)
     if control.status == "paused":
         return {
@@ -1945,6 +2043,9 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
     )
     await _broadcast_control(control)
     container.workflow_service().pause_deployment(workflow_id)
+    if _versioned_control(control):
+        control, controller_status = await _finish_versioned_transition(service, control)
+        return {"success": True, **await _control_payload(control, controller_status=controller_status)}
     try:
         controller_status = await _update_controller_state(
             control,
@@ -2010,6 +2111,8 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     control = await service.database.get_latest_workflow_control(workflow_id)
     if control is None:
         return {"success": False, "error": "workflow_never_started"}
+    if data.get("expected_root_execution_id") and data["expected_root_execution_id"] != control.root_execution_id:
+        raise ValueError("control_generation_conflict")
     control, controller_status = await _reconcile_control(service, control)
     if control.status == "running":
         return {
@@ -2027,6 +2130,9 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
         control, expected_revision=_expected_revision(data, control), from_statuses={"paused"}, status="resuming"
     )
     await _broadcast_control(control)
+    if _versioned_control(control):
+        control, controller_status = await _finish_versioned_transition(service, control)
+        return {"success": True, **await _control_payload(control, controller_status=controller_status)}
     resume_update_key = data.get("idempotency_key") or uuid.uuid4().hex
 
     async def _apply_resume_update(target):

@@ -75,6 +75,7 @@ from .agent_context_pressure import (
     turn_tool_chars,
 )
 from .workflow import AGENT_WORKFLOW_TYPES
+from .execution_control import ExecutionControl
 
 
 # Activity timeouts. LLM step can stream for several minutes on
@@ -98,8 +99,9 @@ async def _execute_plugin_tool_activity(
     activity_id: str,
     tool_payload: Dict[str, Any],
     context: Dict[str, Any],
+    tool_info: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    """Preserve legacy commands; honor embedded task engines' execution policy.
+    """Preserve legacy commands; use frozen plugin policy for new generations.
 
     These plugins can perform irreversible device actions. Temporal's implicit
     retry defaults must not override their explicitly declared attempt limit.
@@ -109,26 +111,48 @@ async def _execute_plugin_tool_activity(
         "start_to_close_timeout": TOOL_STEP_TIMEOUT,
         "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT,
     }
-    cls = get_node_class(tool_payload["node_type"])
-    if getattr(cls, "workspace_task", False) and workflow.patched("workspace-task-activity-policy-v1"):
-        options.update(
-            start_to_close_timeout=cls.start_to_close_timeout,
-            heartbeat_timeout=cls.heartbeat_timeout,
-            retry_policy=cls.retry_policy.to_temporal(),
-            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-        )
-        if context.get("temporal_worker_pool_enabled") is True:
-            options["task_queue"] = cls.task_queue
-        # The caller's authenticated principal is not a model argument. Keep
-        # it on the leaf context so owner-only plugins cannot inherit the
-        # legacy default principal accidentally.
+    policy = (tool_info or {}).get("activity_policy")
+    if context.get("execution_control_version") == 1 and policy:
+        options = _frozen_tool_activity_options(policy, context)
         tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
+    else:
+        cls = get_node_class(tool_payload["node_type"])
+        if getattr(cls, "workspace_task", False) and workflow.patched("workspace-task-activity-policy-v1"):
+            options.update(
+                start_to_close_timeout=cls.start_to_close_timeout,
+                heartbeat_timeout=cls.heartbeat_timeout,
+                retry_policy=cls.retry_policy.to_temporal(),
+                cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+            )
+            if context.get("temporal_worker_pool_enabled") is True:
+                options["task_queue"] = cls.task_queue
+            tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
     return await workflow.execute_activity(
         activity_name,
         args=[tool_payload],
         activity_id=activity_id,
         **options,
     )
+
+
+def _frozen_tool_activity_options(policy: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+    """Use the plugin declaration recorded by payload preparation."""
+    retry = policy["retry_policy"]
+    options: Dict[str, Any] = {
+        "start_to_close_timeout": timedelta(seconds=policy["start_to_close_seconds"]),
+        "heartbeat_timeout": (timedelta(seconds=policy["heartbeat_seconds"]) if policy.get("heartbeat_seconds") else None),
+        "retry_policy": RetryPolicy(
+            initial_interval=timedelta(seconds=retry["initial_interval_seconds"]),
+            backoff_coefficient=retry["backoff_coefficient"],
+            maximum_interval=timedelta(seconds=retry["maximum_interval_seconds"]),
+            maximum_attempts=retry["maximum_attempts"],
+            non_retryable_error_types=retry["non_retryable_error_types"],
+        ),
+        "cancellation_type": ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+    }
+    if context.get("temporal_worker_pool_enabled") is True:
+        options["task_queue"] = policy["task_queue"]
+    return options
 
 # Bounded loop count to defend against a runaway LLM. Plugin classes
 # override via ``payload["max_iterations"]`` (set by
@@ -281,6 +305,10 @@ _INHERITED_SCOPE_KEYS = (
     "run_scope",
     "employee_job_id",
     "parameter_snapshot",
+    "execution_control_version",
+    "controller_workflow_id",
+    "execution_control_state",
+    "execution_control_revision",
 )
 
 
@@ -297,16 +325,23 @@ _AGENT_HISTORY_SOFT_CAP = 10_000
 # payload error limit.
 _RESUME_MARKER = "_agent_resume"
 
-# Byte ceiling for the carried transcript (Temporal's payload error limit is
-# 2 MiB for the WHOLE continue_as_new argument, which also carries the
-# original context). Past this the rollover restarts from the opening
-# prompt with a warning instead of failing the rollover itself.
+# Legacy transcript-only limit remains for replay. Version 1 checks the
+# complete encoded continuation and fails explicitly if it cannot fit.
 _CAN_TRANSCRIPT_MAX_BYTES = 1_000_000
+_CAN_INPUT_MAX_BYTES = 1_900_000
 
 
 def _inherited_scope(context: Dict[str, Any]) -> Dict[str, Any]:
     """Return the scope keys a delegated child must inherit from its parent."""
     return {key: context[key] for key in _INHERITED_SCOPE_KEYS if key in context}
+
+
+def _child_control_scope(control: ExecutionControl) -> Dict[str, Any]:
+    """Fresh intent travels to children; each root owns its chain identity."""
+    return {
+        key: value for key, value in control.carry().items()
+        if key not in {"execution_control_root_run_id", "execution_control_released_revision"}
+    }
 
 
 def _trusted_tool_scope(context: Dict[str, Any]) -> Dict[str, Any]:
@@ -383,8 +418,32 @@ def _duplicate_visible_tool_name_error(tools: List[Dict[str, Any]]) -> Optional[
 class DelegatedTaskWorkflow:
     """Own one queued delegation after the lead returns to its caller."""
 
-    def __init__(self) -> None:
+    @workflow.init
+    def __init__(self, request: Dict[str, Any] = None) -> None:
         self._control_paused = False
+        self._execution_control = ExecutionControl()
+        if request is not None:
+            self._execution_control.bind(request.get("child_context") or request)
+
+    @workflow.update
+    async def set_control_state(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._execution_control.set_control_state(payload)
+
+    @set_control_state.validator
+    def validate_set_control_state(self, payload: Dict[str, Any]) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.update
+    async def wait_for_checkpoint(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self._execution_control.wait_for_checkpoint(payload)
+
+    @wait_for_checkpoint.validator
+    def validate_wait_for_checkpoint(self, payload: Optional[Dict[str, Any]] = None) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.query
+    def execution_control_status(self) -> Dict[str, Any]:
+        return self._execution_control.status()
 
     @workflow.signal
     async def pause(self) -> None:
@@ -395,11 +454,16 @@ class DelegatedTaskWorkflow:
         self._control_paused = False
 
     async def _wait_until_resumed(self) -> None:
+        if self._execution_control.enabled:
+            await self._execution_control.wait_until_running()
+            return
         if self._control_paused:
             await workflow.wait_condition(lambda: not self._control_paused)
 
     @workflow.run
-    async def run(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, request: Dict[str, Any] = None) -> Dict[str, Any]:
+        self._execution_control.bind(request.get("child_context") or request)
+        await self._execution_control.register_root()
         acquire_cancellation_options = {
             "cancellation_type": (
                 ActivityCancellationType.WAIT_CANCELLATION_COMPLETED
@@ -410,6 +474,7 @@ class DelegatedTaskWorkflow:
         root_id = lifecycle["root_execution_id"]
         acquired_permit_id: Optional[str] = None
         began = False
+        completion_action_active = False
         try:
             await self._wait_until_resumed()
             info = workflow.info()
@@ -444,19 +509,21 @@ class DelegatedTaskWorkflow:
                 or task_id
             )
             await self._wait_until_resumed()
-            await workflow.execute_activity(
-                "agent.begin_delegation", args=[lifecycle],
-                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                retry_policy=AGENT_ACTIVITY_RETRY,
-                **acquire_cancellation_options,
-            )
-            began = True
+            async with self._execution_control.action():
+                await workflow.execute_activity(
+                    "agent.begin_delegation", args=[lifecycle],
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                    **acquire_cancellation_options,
+                )
+                began = True
             await self._wait_until_resumed()
             request["child_context"]["team_permit_id"] = acquired_permit_id
-            child_handle = await workflow.start_child_workflow(
-                "AgentWorkflow", args=[request["child_context"]],
-                id=request["child_workflow_id"],
-            )
+            async with self._execution_control.child_start():
+                child_handle = await workflow.start_child_workflow(
+                    "AgentWorkflow", args=[request["child_context"]],
+                    id=request["child_workflow_id"],
+                )
             await workflow.execute_activity(
                 "agent.register_task_execution",
                 args=[{**lifecycle, "runner_workflow_id": info.workflow_id,
@@ -467,6 +534,8 @@ class DelegatedTaskWorkflow:
                 retry_policy=AGENT_ACTIVITY_RETRY,
             )
             result = await child_handle
+            self._execution_control.begin_bookkeeping()
+            completion_action_active = self._execution_control.enabled
             succeeded = bool(result.get("success", True)) if isinstance(result, dict) else True
             _response, summary = _normalise_delegated_result(result)
             return await workflow.execute_activity(
@@ -574,6 +643,13 @@ class DelegatedTaskWorkflow:
                         "DelegatedTaskWorkflow final permit release failed "
                         f"for {task_id}: {release_exc}"
                     )
+            try:
+                await self._execution_control.unregister_root()
+            finally:
+                if completion_action_active:
+                    self._execution_control.end_action()
+                if self._execution_control.enabled:
+                    await workflow.wait_condition(workflow.all_handlers_finished)
 
 
 @workflow.defn(sandboxed=False, name="AgentWorkflow")
@@ -589,8 +665,32 @@ class AgentWorkflow:
     as F4.A per-type activities.
     """
 
-    def __init__(self) -> None:
+    @workflow.init
+    def __init__(self, context: Dict[str, Any] = None) -> None:
         self._control_paused = False
+        self._execution_control = ExecutionControl()
+        if context is not None:
+            self._execution_control.bind(context)
+
+    @workflow.update
+    async def set_control_state(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._execution_control.set_control_state(payload)
+
+    @set_control_state.validator
+    def validate_set_control_state(self, payload: Dict[str, Any]) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.update
+    async def wait_for_checkpoint(self, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return await self._execution_control.wait_for_checkpoint(payload)
+
+    @wait_for_checkpoint.validator
+    def validate_wait_for_checkpoint(self, payload: Optional[Dict[str, Any]] = None) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.query
+    def execution_control_status(self) -> Dict[str, Any]:
+        return self._execution_control.status()
 
     @workflow.signal
     async def pause(self) -> None:
@@ -601,11 +701,15 @@ class AgentWorkflow:
         self._control_paused = False
 
     async def _wait_until_resumed(self) -> None:
+        if self._execution_control.enabled:
+            await self._execution_control.wait_until_running()
+            return
         if self._control_paused:
             await workflow.wait_condition(lambda: not self._control_paused)
 
     @workflow.run
-    async def run(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        self._execution_control.bind(context)
         runtime_v2 = any((node.get("data") or {}).get("employee_recipe_version") == 2 and node.get("id") == context.get("node_id") for node in context.get("nodes", []))
         runtime_v2 = runtime_v2 and workflow.patched("employee-task-manager-runtime-v2")
         self._employee_runtime_v2 = runtime_v2
@@ -625,6 +729,9 @@ class AgentWorkflow:
             from temporalio.exceptions import is_cancelled_exception
             await fail_job(cancelled=is_cancelled_exception(exc))
             raise
+        finally:
+            if self._execution_control.enabled:
+                await workflow.wait_condition(workflow.all_handlers_finished)
 
     async def _run_impl(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Run the agent loop.
@@ -706,20 +813,24 @@ class AgentWorkflow:
         # ---- Step 0: Resolve payload via the prep activity --------------
         # DB lookups + edge walking + tool schema build happen here, NOT
         # in the workflow body (workflows must be deterministic).
-        payload = await workflow.execute_activity(
-            "agent.prepare_payload",
-            args=[context],
-            activity_id="prepare-payload",
-            start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2,  # 60s default
-            retry_policy=AGENT_ACTIVITY_RETRY,
-        )
+        resume = dict(context.get(_RESUME_MARKER) or {})
+        if self._execution_control.enabled and resume.get("prepared_payload"):
+            payload = dict(resume["prepared_payload"])
+        else:
+            async with self._execution_control.action():
+                payload = await workflow.execute_activity(
+                    "agent.prepare_payload",
+                    args=[context],
+                    activity_id="prepare-payload",
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2,
+                    retry_policy=AGENT_ACTIVITY_RETRY,
+                )
         # Stable per-run execution id, forwarded into every tool-call
         # activity so session-keyed nodes (browser) reuse one instance
         # across iterations instead of minting a fresh uuid per call
         # (node_executor.py fallback). Delegation children inherit it via
         # the ``child_context`` spread below. ``workflow.info().run_id``
         # is deterministic — safe inside workflow code.
-        resume = dict(context.get(_RESUME_MARKER) or {})
         # run_id CHANGES on continue-as-new, so a resumed run would mint a
         # different execution id and break browser-session reuse, permit
         # scoping and root_execution_id fallback. Carry it explicitly.
@@ -755,7 +866,7 @@ class AgentWorkflow:
         if payload.get("employee_job_id"):
             context["employee_job_id"] = payload["employee_job_id"]
         binding_refresh_v2 = workflow.patched("agent-node-binding-refresh-v2")
-        tools = payload.get("tools") or []
+        tools = (resume.get("tools") if self._execution_control.enabled and "tools" in resume else payload.get("tools")) or []
         if binding_refresh_v2:
             tools = unique_node_bindings(tools, id_key="tool_node_id")
         duplicate_tool_error = _duplicate_visible_tool_name_error(tools)
@@ -861,7 +972,7 @@ class AgentWorkflow:
             info = tool_index.get(name)
             return tool_output_is_capped(info.get("node_type") if info else None)
 
-        thinking_accumulated = ""
+        thinking_accumulated = str(resume.get("thinking") or "") if self._execution_control.enabled else ""
         final_content: Optional[str] = None
         # Billing/observability is cumulative for the entire execution and
         # survives continue_as_new via the resume marker — the final result
@@ -962,171 +1073,172 @@ class AgentWorkflow:
                 ),
             }
 
-            # Transient provider failures (429 rate limit, 5xx, network)
-            # retry inside the activity under LLM_STEP_RETRY (unlimited,
-            # exponential backoff, provider retry_after honored via
-            # next_retry_delay). Only non-retryable classifications
-            # (invalid_request, authentication, ...) reach this except
-            # block, and those are genuinely terminal for the run.
-            try:
-                step_result = await workflow.execute_activity(
-                    "agent.execute_llm_step",
-                    args=[llm_payload],
-                    activity_id=f"llm-step-{iteration + 1}",
-                    start_to_close_timeout=LLM_STEP_TIMEOUT,
-                    heartbeat_timeout=LLM_STEP_HEARTBEAT_TIMEOUT,
-                    retry_policy=LLM_STEP_RETRY,
-                )
-            except Exception as e:
-                from temporalio.exceptions import is_cancelled_exception
-                if getattr(self, "_employee_runtime_v2", False) and is_cancelled_exception(e):
-                    raise asyncio.CancelledError() from e
-                cause = getattr(e, "cause", None)
-                raw_detail = str(cause) if cause is not None else str(e)
-                cause_type = str(getattr(cause, "type", "") or "")
-                cause_message = str(
-                    getattr(cause, "message", "") or ""
-                ).strip()
-                recovery = {}
-                if cause_type.startswith("LLMError.") or cause_type == "MissingAgentProviderCredential":
-                    diagnostics = getattr(cause, "details", ())
-                    if diagnostics and isinstance(diagnostics[0], dict):
-                        recovery = {
-                            key: diagnostics[0][key]
-                            for key in ("hint", "requires_user_action", "retryable")
-                            if diagnostics[0].get(key) is not None
-                        }
-                        if recovery:
-                            recovery["error_type"] = "NodeUserError"
-                safe_activity_types = {
-                    "MissingAgentProviderCredential",
-                    "EmptyAgentPrompt",
-                }
-                if cause_type.startswith("LLMError."):
-                    detail = (
-                        cause_message
-                        or "The language model request failed."
+            async with self._execution_control.action():
+                # Transient provider failures (429 rate limit, 5xx, network)
+                # retry inside the activity under LLM_STEP_RETRY (unlimited,
+                # exponential backoff, provider retry_after honored via
+                # next_retry_delay). Only non-retryable classifications
+                # (invalid_request, authentication, ...) reach this except
+                # block, and those are genuinely terminal for the run.
+                try:
+                    step_result = await workflow.execute_activity(
+                        "agent.execute_llm_step",
+                        args=[llm_payload],
+                        activity_id=f"llm-step-{iteration + 1}",
+                        start_to_close_timeout=LLM_STEP_TIMEOUT,
+                        heartbeat_timeout=LLM_STEP_HEARTBEAT_TIMEOUT,
+                        retry_policy=LLM_STEP_RETRY,
                     )
-                elif cause_type in safe_activity_types:
-                    detail = (
-                        cause_message
-                        or "The language model request failed."
+                except Exception as e:
+                    from temporalio.exceptions import is_cancelled_exception
+                    if getattr(self, "_employee_runtime_v2", False) and is_cancelled_exception(e):
+                        raise asyncio.CancelledError() from e
+                    cause = getattr(e, "cause", None)
+                    raw_detail = str(cause) if cause is not None else str(e)
+                    cause_type = str(getattr(cause, "type", "") or "")
+                    cause_message = str(
+                        getattr(cause, "message", "") or ""
+                    ).strip()
+                    recovery = {}
+                    if cause_type.startswith("LLMError.") or cause_type == "MissingAgentProviderCredential":
+                        diagnostics = getattr(cause, "details", ())
+                        if diagnostics and isinstance(diagnostics[0], dict):
+                            recovery = {
+                                key: diagnostics[0][key]
+                                for key in ("hint", "requires_user_action", "retryable")
+                                if diagnostics[0].get(key) is not None
+                            }
+                            if recovery:
+                                recovery["error_type"] = "NodeUserError"
+                    safe_activity_types = {
+                        "MissingAgentProviderCredential",
+                        "EmptyAgentPrompt",
+                    }
+                    if cause_type.startswith("LLMError."):
+                        detail = (
+                            cause_message
+                            or "The language model request failed."
+                        )
+                    elif cause_type in safe_activity_types:
+                        detail = (
+                            cause_message
+                            or "The language model request failed."
+                        )
+                    else:
+                        detail = (
+                            "The language model step failed unexpectedly. "
+                            "Retry the run or check server logs."
+                        )
+                    workflow.logger.error(
+                        f"AgentWorkflow LLM step failed terminally "
+                        f"(iteration {iteration + 1}): {raw_detail}"
                     )
-                else:
-                    detail = (
-                        "The language model step failed unexpectedly. "
-                        "Retry the run or check server logs."
-                    )
-                workflow.logger.error(
-                    f"AgentWorkflow LLM step failed terminally "
-                    f"(iteration {iteration + 1}): {raw_detail}"
-                )
-                # A failed model step is terminal for this run.  Clear any
-                # turn-scoped skill badges and publish an error status before
-                # returning; otherwise the normal agent can remain visually
-                # stuck on its last capability while the workflow has already
-                # ended.  Keep the public event free of provider error text.
-                await workflow.execute_activity(
-                    "agent.skill.clear",
-                    args=[{
-                        "workflow_id": payload.get("workflow_id"),
-                        "execution_id": task_scope_execution_id,
-                        "agent_node_id": agent_node_id,
-                    }],
-                    activity_id="clear-active-skills-failed",
-                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                    retry_policy=AGENT_ACTIVITY_RETRY,
-                )
-                await self._emit_phase(
-                    agent_node_id,
-                    agent_workflow_id,
-                    iteration,
-                    max_iterations,
-                    phase="failed",
-                    status="error",
-                    extra={"error": detail, "error_type": "NodeUserError", **recovery}
-                    if recovery else None,
-                )
-                return {
-                    "success": False,
-                    "error": f"LLM step failed: {detail}",
-                    "error_type": "LLMStepError",
-                    **recovery,
-                    "result": {
-                        "iterations": iteration + 1,
-                        "usage": usage_total,
-                    },
-                }
-
-            # Accumulate usage + thinking for the eventual return value.
-            for k, v in (step_result.get("usage") or {}).items():
-                if isinstance(v, int):
-                    usage_total[k] = usage_total.get(k, 0) + v
-                    context_usage_total[k] = (
-                        context_usage_total.get(k, 0) + v
-                    )
-            step_thinking = step_result.get("thinking")
-            if not step_thinking:
-                step_thinking = _native_assistant_thinking(
-                    step_result.get("assistant_message")
-                )
-            if step_thinking:
-                if thinking_accumulated:
-                    thinking_accumulated += (
-                        f"\n\n--- Iteration {iteration + 1} ---\n"
-                        + step_thinking
-                    )
-                else:
-                    thinking_accumulated = step_thinking
-
-            kind = step_result.get("kind")
-
-            # The activity returns the FULL serialized assistant message
-            # (the legacy canonical {type, data} shape).
-            # Appending verbatim preserves Gemini thought_signature, Anthropic
-            # cache markers, OpenAI reasoning content — everything the next
-            # turn's request needs.
-            assistant_message = step_result.get("assistant_message")
-            # Where this turn starts. Transcript-pressure relief never clears
-            # or summarizes the turn whose tool results the model has not
-            # read yet.
-            turn_start = len(messages)
-            if assistant_message:
-                messages.append(assistant_message)
-
-            # A provider that stops to compact has not answered. It carries
-            # no tool calls, so it would otherwise be classified "final" and
-            # its truncated content returned to the user as the response.
-            # Treat it as a no-op turn and let the loop request again.
-            finish_reason = str(step_result.get("finish_reason") or "").strip().lower()
-            if kind != "tool_calls" and finish_reason == "compaction":
-                workflow.logger.info(
-                    f"Provider paused to compact at iteration {iteration + 1}; "
-                    "continuing without treating the stop as a final answer"
-                )
-                continue
-
-            if kind == "final":
-                final_content = step_result.get("content", "")
-                team_id = str(payload.get("team_id") or "")
-                if team_id and payload.get("owns_execution_team"):
-                    # Finalization is opportunistic. Queued/running work keeps
-                    # the durable team active, but must not force this lead
-                    # invocation to wait. Completion will emit taskTrigger and
-                    # start the separately scoped review invocation.
+                    # A failed model step is terminal for this run.  Clear any
+                    # turn-scoped skill badges and publish an error status before
+                    # returning; otherwise the normal agent can remain visually
+                    # stuck on its last capability while the workflow has already
+                    # ended.  Keep the public event free of provider error text.
                     await workflow.execute_activity(
-                        "agent.finalize_team",
-                        args=[{"team_id": team_id}],
-                        activity_id="finalize-agent-team",
+                        "agent.skill.clear",
+                        args=[{
+                            "workflow_id": payload.get("workflow_id"),
+                            "execution_id": task_scope_execution_id,
+                            "agent_node_id": agent_node_id,
+                        }],
+                        activity_id="clear-active-skills-failed",
                         start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                         retry_policy=AGENT_ACTIVITY_RETRY,
                     )
-                await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
-                break
+                    await self._emit_phase(
+                        agent_node_id,
+                        agent_workflow_id,
+                        iteration,
+                        max_iterations,
+                        phase="failed",
+                        status="error",
+                        extra={"error": detail, "error_type": "NodeUserError", **recovery}
+                        if recovery else None,
+                    )
+                    return {
+                        "success": False,
+                        "error": f"LLM step failed: {detail}",
+                        "error_type": "LLMStepError",
+                        **recovery,
+                        "result": {
+                            "iterations": iteration + 1,
+                            "usage": usage_total,
+                        },
+                    }
 
-            if kind != "tool_calls":
-                workflow.logger.error(f"AgentWorkflow: unexpected LLM step kind={kind!r}")
-                break
+                # Accumulate usage + thinking for the eventual return value.
+                for k, v in (step_result.get("usage") or {}).items():
+                    if isinstance(v, int):
+                        usage_total[k] = usage_total.get(k, 0) + v
+                        context_usage_total[k] = (
+                            context_usage_total.get(k, 0) + v
+                        )
+                step_thinking = step_result.get("thinking")
+                if not step_thinking:
+                    step_thinking = _native_assistant_thinking(
+                        step_result.get("assistant_message")
+                    )
+                if step_thinking:
+                    if thinking_accumulated:
+                        thinking_accumulated += (
+                            f"\n\n--- Iteration {iteration + 1} ---\n"
+                            + step_thinking
+                        )
+                    else:
+                        thinking_accumulated = step_thinking
+
+                kind = step_result.get("kind")
+
+                # The activity returns the FULL serialized assistant message
+                # (the legacy canonical {type, data} shape).
+                # Appending verbatim preserves Gemini thought_signature, Anthropic
+                # cache markers, OpenAI reasoning content — everything the next
+                # turn's request needs.
+                assistant_message = step_result.get("assistant_message")
+                # Where this turn starts. Transcript-pressure relief never clears
+                # or summarizes the turn whose tool results the model has not
+                # read yet.
+                turn_start = len(messages)
+                if assistant_message:
+                    messages.append(assistant_message)
+
+                # A provider that stops to compact has not answered. It carries
+                # no tool calls, so it would otherwise be classified "final" and
+                # its truncated content returned to the user as the response.
+                # Treat it as a no-op turn and let the loop request again.
+                finish_reason = str(step_result.get("finish_reason") or "").strip().lower()
+                if kind != "tool_calls" and finish_reason == "compaction":
+                    workflow.logger.info(
+                        f"Provider paused to compact at iteration {iteration + 1}; "
+                        "continuing without treating the stop as a final answer"
+                    )
+                    continue
+
+                if kind == "final":
+                    final_content = step_result.get("content", "")
+                    team_id = str(payload.get("team_id") or "")
+                    if team_id and payload.get("owns_execution_team"):
+                        # Finalization is opportunistic. Queued/running work keeps
+                        # the durable team active, but must not force this lead
+                        # invocation to wait. Completion will emit taskTrigger and
+                        # start the separately scoped review invocation.
+                        await workflow.execute_activity(
+                            "agent.finalize_team",
+                            args=[{"team_id": team_id}],
+                            activity_id="finalize-agent-team",
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
+                    await self._persist_turn(payload, human_text=user_prompt, assistant_text=final_content)
+                    break
+
+                if kind != "tool_calls":
+                    workflow.logger.error(f"AgentWorkflow: unexpected LLM step kind={kind!r}")
+                    break
 
             # ---- Schedule tool activities -------------------------------
             # The LLM activity and phase broadcasts yield long enough for
@@ -1300,6 +1412,7 @@ class AgentWorkflow:
                 child_context = {
                     # Inherited scope first: explicit keys below win.
                     **_inherited_scope(context),
+                    **_child_control_scope(self._execution_control),
                     "node_id": candidate_tool["tool_node_id"],
                     "node_type": candidate_tool["node_type"],
                     "node_data": {
@@ -1355,21 +1468,22 @@ class AgentWorkflow:
                         lifecycle_payload
                     )
                     await self._wait_until_resumed()
-                    await workflow.execute_activity(
-                        "agent.queue_delegation",
-                        args=[{
-                            **lifecycle_payload,
-                            "queued_event_id": (
-                                f"{child_context['team_task_id']}:queued"
+                    async with self._execution_control.action():
+                        await workflow.execute_activity(
+                            "agent.queue_delegation",
+                            args=[{
+                                **lifecycle_payload,
+                                "queued_event_id": (
+                                    f"{child_context['team_task_id']}:queued"
+                                ),
+                            }],
+                            activity_id=(
+                                f"queue-delegation-{iteration + 1}-{call_index + 1}"
                             ),
-                        }],
-                        activity_id=(
-                            f"queue-delegation-{iteration + 1}-{call_index + 1}"
-                        ),
-                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                        retry_policy=AGENT_ACTIVITY_RETRY,
-                        **acquire_cancellation_options,
-                    )
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                            **acquire_cancellation_options,
+                        )
                     await self._wait_until_resumed()
                     acquire_payload = {
                         "root_execution_id": root_execution_id,
@@ -1402,16 +1516,17 @@ class AgentWorkflow:
                     # while the coordinator queues it.
                     try:
                         await self._wait_until_resumed()
-                        await workflow.execute_activity(
-                            "agent.begin_delegation",
-                            args=[lifecycle_payload],
-                            activity_id=(
-                                f"begin-delegation-{iteration + 1}-{call_index + 1}"
-                            ),
-                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                            retry_policy=AGENT_ACTIVITY_RETRY,
-                            **acquire_cancellation_options,
-                        )
+                        async with self._execution_control.action():
+                            await workflow.execute_activity(
+                                "agent.begin_delegation",
+                                args=[lifecycle_payload],
+                                activity_id=(
+                                    f"begin-delegation-{iteration + 1}-{call_index + 1}"
+                                ),
+                                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                                retry_policy=AGENT_ACTIVITY_RETRY,
+                                **acquire_cancellation_options,
+                            )
                     except asyncio.CancelledError:
                         # Cancellation cleanup is owned by the caller's
                         # _cleanup_cancelled_delegations() sweep; releasing
@@ -1428,11 +1543,12 @@ class AgentWorkflow:
                 )
                 try:
                     await self._wait_until_resumed()
-                    delegation_handles[call_index] = await workflow.start_child_workflow(
-                        "AgentWorkflow",
-                        args=[child_context],
-                        id=child_id,
-                    )
+                    async with self._execution_control.child_start():
+                        delegation_handles[call_index] = await workflow.start_child_workflow(
+                            "AgentWorkflow",
+                            args=[child_context],
+                            id=child_id,
+                        )
                     if team_id:
                         child_handle = delegation_handles[call_index]
                         await workflow.execute_activity(
@@ -1534,19 +1650,21 @@ class AgentWorkflow:
                 # idempotent for the pre-created task and records the same
                 # lifecycle event as direct delegation without duplicating it.
                 await self._wait_until_resumed()
-                await workflow.execute_activity(
-                    "agent.queue_delegation",
-                    args=[{**lifecycle, "queued_event_id": f"{task_id}:queued"}],
-                    activity_id=f"queue-task-manager-{iteration + 1}-{call_index + 1}",
-                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                    retry_policy=AGENT_ACTIVITY_RETRY,
-                )
+                async with self._execution_control.action():
+                    await workflow.execute_activity(
+                        "agent.queue_delegation",
+                        args=[{**lifecycle, "queued_event_id": f"{task_id}:queued"}],
+                        activity_id=f"queue-task-manager-{iteration + 1}-{call_index + 1}",
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                        retry_policy=AGENT_ACTIVITY_RETRY,
+                    )
                 if context.get("employee_job_id"):
                     request_context = {**(request_context or {}), "acceptance_criteria": request.get("acceptance_criteria"), "depends_on": request.get("depends_on") or []}
                 context_text = request_context if isinstance(request_context, str) else _serialise_tool_result(request_context)
                 child_context = {
                     # Inherited scope first: explicit keys below win.
                     **_inherited_scope(context),
+                    **_child_control_scope(self._execution_control),
                     "node_id": assignee_id, "node_type": delegate["node_type"],
                     "node_data": {**(delegate.get("parameters") or {}),
                                   "system_message": mission, "prompt": context_text or mission},
@@ -1578,12 +1696,13 @@ class AgentWorkflow:
                     delegated_task_options["search_attributes"] = (
                         search_attributes
                     )
-                await workflow.start_child_workflow(
-                    "DelegatedTaskWorkflow",
-                    args=[{"lifecycle": lifecycle, "child_context": child_context,
-                           "child_workflow_id": child_id, "limit": max_concurrent_subagents}],
-                    **delegated_task_options,
-                )
+                async with self._execution_control.child_start():
+                    await workflow.start_child_workflow(
+                        "DelegatedTaskWorkflow",
+                        args=[{"lifecycle": lifecycle, "child_context": child_context,
+                               "child_workflow_id": child_id, "limit": max_concurrent_subagents}],
+                        **delegated_task_options,
+                    )
                 return {"status": "queued", "result": None, "runner_workflow_id": runner_id}
 
             # Preflight every Task Manager assignment activity in this LLM
@@ -1592,6 +1711,8 @@ class AgentWorkflow:
             # are allowed to reach the child-workflow bridge below.
             task_manager_preflight_indices: List[int] = []
             task_manager_preflight_handles: List[Any] = []
+            preflight_action_active = False
+            recorded_tool_results: set[int] = set()
             for preflight_index, preflight_call in enumerate(calls):
                 preflight_tool = tool_index.get(preflight_call.get("name", ""))
                 preflight_args = preflight_call.get("args") or {}
@@ -1631,6 +1752,14 @@ class AgentWorkflow:
                         # ``start_activity`` does not yield; one admission
                         # check protects this whole concurrent batch.
                         await self._wait_until_resumed()
+                        await self._execution_control.begin_action()
+                        preflight_action_active = self._execution_control.enabled
+                    preflight_options = {
+                        "start_to_close_timeout": TOOL_STEP_TIMEOUT,
+                        "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT,
+                    }
+                    if self._execution_control.enabled and preflight_tool.get("activity_policy"):
+                        preflight_options = _frozen_tool_activity_options(preflight_tool["activity_policy"], context)
                     task_manager_preflight_handles.append(
                         workflow.start_activity(
                             f"node.taskManager.v{preflight_tool['version']}",
@@ -1639,21 +1768,30 @@ class AgentWorkflow:
                                 f"task-manager-preflight-{iteration + 1}-"
                                 f"{preflight_index + 1}"
                             ),
-                            start_to_close_timeout=TOOL_STEP_TIMEOUT,
-                            heartbeat_timeout=TOOL_HEARTBEAT_TIMEOUT,
+                            **preflight_options,
                         )
                     )
 
             task_manager_preflight_results: Dict[int, Any] = {}
             task_manager_delegation_tasks: Dict[int, asyncio.Task[Any]] = {}
             if task_manager_preflight_handles:
-                preflight_results = await asyncio.gather(
-                    *task_manager_preflight_handles, return_exceptions=True
-                )
-                for preflight_index, preflight_result in zip(
-                    task_manager_preflight_indices, preflight_results
-                ):
-                    task_manager_preflight_results[preflight_index] = preflight_result
+                try:
+                    preflight_results = await asyncio.gather(
+                        *task_manager_preflight_handles, return_exceptions=True
+                    )
+                    for preflight_index, preflight_result in zip(
+                        task_manager_preflight_indices, preflight_results
+                    ):
+                        task_manager_preflight_results[preflight_index] = preflight_result
+                        if self._execution_control.enabled:
+                            content = (_serialise_tool_result(preflight_result) if not isinstance(preflight_result, BaseException)
+                                       else _serialise_tool_result({"error": str(preflight_result)}))
+                            _append_tool_result_message(messages, content=content,
+                                tool_call_id=calls[preflight_index].get("id", ""), name=calls[preflight_index].get("name", ""))
+                            recorded_tool_results.add(preflight_index)
+                finally:
+                    if preflight_action_active:
+                        self._execution_control.end_action()
 
                 # Yield a child lead's slot exactly once before descendant
                 # assignment coroutines contend for root-wide permits.
@@ -1808,8 +1946,12 @@ class AgentWorkflow:
                     # via the BaseNode.needs_canvas
                     # ClassVar. Default tools execute against their own
                     # params alone and don't see the parent canvas.
-                    plugin_cls = get_node_class(tool_info["node_type"])
-                    if plugin_cls is not None and plugin_cls.needs_canvas:
+                    if self._execution_control.enabled:
+                        needs_canvas = bool(tool_info.get("needs_canvas"))
+                    else:
+                        plugin_cls = get_node_class(tool_info["node_type"])
+                        needs_canvas = bool(plugin_cls is not None and plugin_cls.needs_canvas)
+                    if needs_canvas:
                         child_nodes = context.get("nodes") or []
                         child_edges = context.get("edges") or []
                     else:
@@ -1899,328 +2041,166 @@ class AgentWorkflow:
                     await _cleanup_cancelled_delegations()
                     raise
 
+                tool_action_active = False
                 try:
-                    if is_delegation and tool_info["node_type"] in AGENT_WORKFLOW_TYPES:
-                        handle = delegation_handles[call_index]
-                        try:
-                            tool_result = await handle
-                        except asyncio.CancelledError:
-                            # Cancellation cleanup is owned by the outer
-                            # _cleanup_cancelled_delegations() sweep.
-                            raise
-                        except BaseException:
-                            await _release_delegation_permit(call_index)
-                            raise
-                        else:
-                            await _release_delegation_permit(call_index)
-                        # The child is done — drop its handle so a completed
-                        # delegation no longer blocks the rollover guard.
-                        # (An agent that delegates every turn previously
-                        # could never continue_as_new and grew until
-                        # Temporal's hard history terminate.)
-                        delegation_handles.pop(call_index, None)
-                        child_succeeded = (
-                            bool(tool_result.get("success", True))
-                            if isinstance(tool_result, dict) else True
-                        )
-                        child_error = (
-                            tool_result.get("error")
-                            if isinstance(tool_result, dict) else None
-                        )
-                        child_response, child_summary = _normalise_delegated_result(
-                            tool_result
-                        )
-                        team_id = str(payload.get("team_id") or context.get("team_id") or "")
-                        if team_id:
-                            task_id = (
-                                f"task-{root_execution_id}-{agent_node_id}-"
-                                f"{iteration + 1}-{call_index + 1}"
-                            )
-                            await workflow.execute_activity(
-                                "agent.finish_delegation",
-                                args=[{
-                                    "team_id": team_id,
-                                    "team_task_id": task_id,
-                                    "parent_agent_node_id": agent_node_id,
-                                    "child_agent_node_id": tool_info["tool_node_id"],
-                                    "child_agent_name": str(
-                                        (tool_info.get("tool_info") or {}).get("label")
-                                        or tool_info.get("node_type")
-                                        or "agent"
-                                    ),
-                                    "workflow_id": payload.get("workflow_id"),
-                                    "parent_agent_workflow_id": workflow.info().workflow_id,
-                                    "root_execution_id": root_execution_id,
-                                    "trace_id": str(call.get("id", "") or ""),
-                                    "success": child_succeeded,
-                                    "result": child_summary,
-                                    "error": child_error,
-                                    "terminal_event_id": f"{task_id}:terminal",
-                                }],
-                                activity_id=(
-                                    f"finish-delegation-{iteration + 1}-{call_index + 1}"
-                                ),
-                                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                                retry_policy=AGENT_ACTIVITY_RETRY,
-                            )
-                            delegation_lifecycles.pop(
-                                call_index,
-                                None,
-                            )
-                        child_recovery = {
-                            key: tool_result[key]
-                            for key in ("hint", "requires_user_action", "retryable")
-                            if isinstance(tool_result, dict) and key in tool_result
-                        }
-                        tool_result = {
-                            "success": child_succeeded,
-                            "status": "submitted" if child_succeeded else "failed",
-                            "result": child_response,
-                            "usage": child_summary.get("usage"),
-                            **({"error": child_error} if child_error else {}),
-                            **child_recovery,
-                        }
-                        if next_delegation_to_start < len(delegation_call_indices):
-                            await _start_delegation(
-                                delegation_call_indices[next_delegation_to_start]
-                            )
-                            next_delegation_to_start += 1
-                    else:
-                        tool_activity_id = _tool_activity_id(
-                            tool_info["tool_node_id"],
-                            iteration,
-                            call_index,
-                        )
-                        if call_index in task_manager_preflight_results:
-                            tool_result = task_manager_preflight_results[call_index]
-                            if isinstance(tool_result, BaseException):
-                                raise tool_result
-                        else:
-                            await self._wait_until_resumed()
-                            tool_result = await _execute_plugin_tool_activity(
-                                tool_activity_name,
-                                tool_activity_id,
-                                tool_payload,
-                                context,
-                            )
-                        if (
-                            tool_info["node_type"] == "taskManager"
-                            and isinstance(tool_result, dict)
-                            and isinstance(tool_result.get("delegation_request"), dict)
-                        ):
-                            if call_index in task_manager_delegation_tasks:
-                                # Await in original tool-call order; every
-                                # child was already started above, so slow
-                                # earlier siblings do not prevent later work.
-                                # pop: a finished task must not block the
-                                # rollover guard for the rest of the turn.
-                                delegated = await task_manager_delegation_tasks.pop(call_index)
+                    try:
+                        if is_delegation and tool_info["node_type"] in AGENT_WORKFLOW_TYPES:
+                            handle = delegation_handles[call_index]
+                            try:
+                                tool_result = await handle
+                                self._execution_control.begin_bookkeeping()
+                                tool_action_active = self._execution_control.enabled
+                            except asyncio.CancelledError:
+                                # Cancellation cleanup is owned by the outer
+                                # _cleanup_cancelled_delegations() sweep.
+                                raise
+                            except BaseException:
+                                self._execution_control.begin_bookkeeping()
+                                tool_action_active = self._execution_control.enabled
+                                await _release_delegation_permit(call_index)
+                                raise
                             else:
-                                delegated = await _run_task_manager_delegation(
-                                    tool_result["delegation_request"], call_index, call
+                                await _release_delegation_permit(call_index)
+                            # The child is done — drop its handle so a completed
+                            # delegation no longer blocks the rollover guard.
+                            # (An agent that delegates every turn previously
+                            # could never continue_as_new and grew until
+                            # Temporal's hard history terminate.)
+                            delegation_handles.pop(call_index, None)
+                            child_succeeded = (
+                                bool(tool_result.get("success", True))
+                                if isinstance(tool_result, dict) else True
+                            )
+                            child_error = (
+                                tool_result.get("error")
+                                if isinstance(tool_result, dict) else None
+                            )
+                            child_response, child_summary = _normalise_delegated_result(
+                                tool_result
+                            )
+                            team_id = str(payload.get("team_id") or context.get("team_id") or "")
+                            if team_id:
+                                task_id = (
+                                    f"task-{root_execution_id}-{agent_node_id}-"
+                                    f"{iteration + 1}-{call_index + 1}"
                                 )
-                            tool_result = {
-                                **tool_result,
-                                "delegation_status": delegated["status"],
-                                "delegation_result": delegated["result"],
-                                "delegation_usage": delegated.get("usage"),
+                                await workflow.execute_activity(
+                                    "agent.finish_delegation",
+                                    args=[{
+                                        "team_id": team_id,
+                                        "team_task_id": task_id,
+                                        "parent_agent_node_id": agent_node_id,
+                                        "child_agent_node_id": tool_info["tool_node_id"],
+                                        "child_agent_name": str(
+                                            (tool_info.get("tool_info") or {}).get("label")
+                                            or tool_info.get("node_type")
+                                            or "agent"
+                                        ),
+                                        "workflow_id": payload.get("workflow_id"),
+                                        "parent_agent_workflow_id": workflow.info().workflow_id,
+                                        "root_execution_id": root_execution_id,
+                                        "trace_id": str(call.get("id", "") or ""),
+                                        "success": child_succeeded,
+                                        "result": child_summary,
+                                        "error": child_error,
+                                        "terminal_event_id": f"{task_id}:terminal",
+                                    }],
+                                    activity_id=(
+                                        f"finish-delegation-{iteration + 1}-{call_index + 1}"
+                                    ),
+                                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                                    retry_policy=AGENT_ACTIVITY_RETRY,
+                                )
+                                delegation_lifecycles.pop(
+                                    call_index,
+                                    None,
+                                )
+                            child_recovery = {
+                                key: tool_result[key]
+                                for key in ("hint", "requires_user_action", "retryable")
+                                if isinstance(tool_result, dict) and key in tool_result
                             }
-                    if (
-                        isinstance(tool_result, dict)
-                        and tool_result.get("error")
-                        and tool_result.get("requires_user_action") is True
-                        and workflow.patched("agent-user-action-error-v1")
-                    ):
-                        blocked_error = blocked_error or {
-                            "error": tool_result["error"],
-                            "error_type": "NodeUserError",
-                            "hint": tool_result.get("hint"),
-                            "requires_user_action": True,
-                            "retryable": False,
-                        }
-                    tool_content = _serialise_tool_result(tool_result)
-                    if (
-                        tool_output_limit
-                        and not is_delegation
-                        and tool_output_is_capped(tool_info["node_type"])
-                    ):
-                        # Only the model's copy is cut; the tool node keeps
-                        # its whole result.
-                        tool_content = bound_tool_output(
-                            tool_content, tool_output_limit
-                        )
-                    await self._emit_phase(
-                        agent_node_id,
-                        agent_workflow_id,
-                        iteration,
-                        max_iterations,
-                        phase="tool_completed",
-                        extra={
-                            "tool_name": call.get("name", ""),
-                            "tool_node_id": tool_info["tool_node_id"],
-                            "tool_call_id": str(
-                                call.get("id") or f"{iteration + 1}:{call_index + 1}"
-                            ),
-                        },
-                    )
-
-                    # Hot-rebind: if the tool returned ``operations`` (canvas
-                    # mutation), schedule ``agent.refresh_tools.v1`` to build
-                    # new tool_payload entries from the ops and splice them
-                    # into the workflow's live ``tools`` / ``tool_index``.
-                    # The next ``execute_llm_step`` invocation rebuilds the
-                    # bound LLM surface from this updated list, so the new
-                    # tool is callable in the very next iteration without a
-                    # Run-stop-Run cycle.
-                    auto_rebind_enabled = bool(payload.get("auto_rebind_tools", True))
-                    if auto_rebind_enabled and isinstance(tool_result, dict):
-                        ops_from_tool = tool_result.get("operations") or []
-                        if ops_from_tool:
-                            # Deliberately multi-attempt (unlike the LLM
-                            # step's one-shot LLM_STEP_RETRY): rebuilding
-                            # the tool surface from canvas state is fully
-                            # idempotent, so retries are free.
-                            refresh_activity_id = _refresh_tools_activity_id(
+                            tool_result = {
+                                "success": child_succeeded,
+                                "status": "submitted" if child_succeeded else "failed",
+                                "result": child_response,
+                                "usage": child_summary.get("usage"),
+                                **({"error": child_error} if child_error else {}),
+                                **child_recovery,
+                            }
+                            if next_delegation_to_start < len(delegation_call_indices):
+                                if not self._execution_control.enabled:
+                                    await _start_delegation(
+                                        delegation_call_indices[next_delegation_to_start]
+                                    )
+                                    next_delegation_to_start += 1
+                        else:
+                            tool_activity_id = _tool_activity_id(
                                 tool_info["tool_node_id"],
                                 iteration,
                                 call_index,
                             )
-                            refresh_payload = {
-                                "operations": ops_from_tool,
-                                "agent_node_type": payload.get("node_type") or context.get("node_type"),
-                                **call_metadata,
-                            }
-                            if binding_refresh_v2:
-                                refresh_payload["bound_node_ids"] = [tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")]
-                                refresh_payload["graph_snapshot"] = {"nodes": context.get("nodes") or [], "edges": context.get("edges") or []}
-                                refresh_payload["parameter_snapshot"] = context.get("parameter_snapshot") or {}
-                            await self._wait_until_resumed()
-                            refresh_result = await workflow.execute_activity(
-                                "agent.refresh_tools",
-                                args=[refresh_payload],
-                                activity_id=refresh_activity_id,
-                                start_to_close_timeout=timedelta(seconds=30),
-                                retry_policy=AGENT_ACTIVITY_RETRY,
-                            )
-                            if binding_refresh_v2 and refresh_result.get("graph_snapshot"):
-                                refreshed_graph = refresh_result["graph_snapshot"]
-                                context["nodes"] = refreshed_graph.get("nodes") or context.get("nodes") or []
-                                context["edges"] = refreshed_graph.get("edges") or context.get("edges") or []
-                                context["parameter_snapshot"] = {**(context.get("parameter_snapshot") or {}), **(refresh_result.get("parameter_updates") or {})}
-                            added_tools = refresh_result.get("tools") or []
-                            if binding_refresh_v2:
-                                added_tools = unique_node_bindings(
-                                    added_tools, id_key="tool_node_id",
-                                    bound=[tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")],
+                            if call_index in task_manager_preflight_results:
+                                tool_result = task_manager_preflight_results[call_index]
+                                if isinstance(tool_result, BaseException):
+                                    raise tool_result
+                            else:
+                                await self._wait_until_resumed()
+                                await self._execution_control.begin_action()
+                                tool_action_active = self._execution_control.enabled
+                                tool_result = await _execute_plugin_tool_activity(
+                                    tool_activity_name,
+                                    tool_activity_id,
+                                    tool_payload,
+                                    context,
+                                    tool_info,
                                 )
-                            refresh_duplicate_error = _duplicate_visible_tool_name_error(
-                                [*tools, *added_tools]
-                            )
-                            refresh_duplicate_conflicts = (
-                                _duplicate_visible_tool_name_conflicts([*tools, *added_tools])
-                                if refresh_duplicate_error
-                                else {}
-                            )
-                            if refresh_duplicate_error:
-                                workflow.logger.warning(
-                                    "AgentWorkflow rejected hot-rebound tools: %s",
-                                    refresh_duplicate_error,
-                                )
-                                tool_content = _serialise_tool_result(
-                                    {
-                                        "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
-                                        "error": refresh_duplicate_error,
-                                        "conflicts": refresh_duplicate_conflicts,
-                                    }
-                                )
-                                await self._emit_phase(
-                                    agent_node_id,
-                                    agent_workflow_id,
-                                    iteration,
-                                    max_iterations,
-                                    phase="tool_error",
-                                    extra={
-                                        "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
-                                        "error": refresh_duplicate_error,
-                                        "conflicts": refresh_duplicate_conflicts,
-                                        **call_metadata,
-                                    },
-                                )
-                                added_tools = []
-                            for new_tool in added_tools:
-                                tools.append(new_tool)
-                                tool_index[new_tool["name"]] = new_tool
-                            if added_tools:
-                                delegates = [tool for tool in tools if tool.get("name", "").startswith("delegate_to_")]
-                                if delegates and binding_refresh_v2:
-                                    roster = "\n".join(
-                                        f"{tool.get('tool_node_id')}: {(tool.get('tool_info') or {}).get('label') or tool.get('node_type')}"
-                                        for tool in delegates
+                            if (
+                                tool_info["node_type"] == "taskManager"
+                                and isinstance(tool_result, dict)
+                                and isinstance(tool_result.get("delegation_request"), dict)
+                            ):
+                                if call_index in task_manager_delegation_tasks:
+                                    # Await in original tool-call order; every
+                                    # child was already started above, so slow
+                                    # earlier siblings do not prevent later work.
+                                    # pop: a finished task must not block the
+                                    # rollover guard for the rest of the turn.
+                                    delegated = await task_manager_delegation_tasks.pop(call_index)
+                                else:
+                                    delegated = await _run_task_manager_delegation(
+                                        tool_result["delegation_request"], call_index, call
                                     )
-                                    messages.append(_native_message(
-                                        role="system",
-                                        content="Updated connected teammates (assignee_node_id: label/type):\n" + roster,
-                                    ))
-                                workflow.logger.info(
-                                    "AgentWorkflow rebound %d tool(s) after canvas mutation (total bound=%d)",
-                                    len(added_tools),
-                                    len(tools),
-                                )
-                except asyncio.CancelledError:
-                    await _cleanup_cancelled_delegations()
-                    raise
-                except Exception as e:  # noqa: BLE001 — Temporal handles retries
-                    # After all retries exhausted, surface the error to
-                    # the LLM (per user decision: LLM sees error and
-                    # continues — matches the in-process agent loop).
-                    workflow.logger.warning(f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}")
-                    team_id = str(payload.get("team_id") or context.get("team_id") or "")
-                    if is_delegation and team_id:
-                        task_id = (
-                            f"task-{root_execution_id}-{agent_node_id}-"
-                            f"{iteration + 1}-{call_index + 1}"
-                        )
-                        try:
-                            await workflow.execute_activity(
-                                "agent.finish_delegation",
-                                args=[{
-                                    "team_id": team_id,
-                                    "team_task_id": task_id,
-                                    "parent_agent_node_id": agent_node_id,
-                                    "child_agent_node_id": tool_info["tool_node_id"],
-                                    "child_agent_name": str(
-                                        (tool_info.get("tool_info") or {}).get(
-                                            "label"
-                                        )
-                                        or tool_info.get("node_type")
-                                        or "agent"
-                                    ),
-                                    "workflow_id": payload.get("workflow_id"),
-                                    "parent_agent_workflow_id": (
-                                        workflow.info().workflow_id
-                                    ),
-                                    "root_execution_id": root_execution_id,
-                                    "trace_id": str(call.get("id", "") or ""),
-                                    "success": False,
-                                    "error": f"{type(e).__name__}: {e}",
-                                    "terminal_event_id": f"{task_id}:terminal",
-                                }],
-                                activity_id=(
-                                    "finish-delegation-"
-                                    f"{iteration + 1}-{call_index + 1}"
-                                ),
-                                start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                                retry_policy=AGENT_ACTIVITY_RETRY,
+                                tool_result = {
+                                    **tool_result,
+                                    "delegation_status": delegated["status"],
+                                    "delegation_result": delegated["result"],
+                                    "delegation_usage": delegated.get("usage"),
+                                }
+                        if (
+                            isinstance(tool_result, dict)
+                            and tool_result.get("error")
+                            and tool_result.get("requires_user_action") is True
+                            and workflow.patched("agent-user-action-error-v1")
+                        ):
+                            blocked_error = blocked_error or {
+                                "error": tool_result["error"],
+                                "error_type": "NodeUserError",
+                                "hint": tool_result.get("hint"),
+                                "requires_user_action": True,
+                                "retryable": False,
+                            }
+                        tool_content = _serialise_tool_result(tool_result)
+                        if (
+                            tool_output_limit
+                            and not is_delegation
+                            and tool_output_is_capped(tool_info["node_type"])
+                        ):
+                            # Only the model's copy is cut; the tool node keeps
+                            # its whole result.
+                            tool_content = bound_tool_output(
+                                tool_content, tool_output_limit
                             )
-                            delegation_lifecycles.pop(
-                                call_index,
-                                None,
-                            )
-                        except asyncio.CancelledError:
-                            await _cleanup_cancelled_delegations()
-                            raise
-                    tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
-                    try:
                         await self._emit_phase(
                             agent_node_id,
                             agent_workflow_id,
@@ -2231,26 +2211,216 @@ class AgentWorkflow:
                                 "tool_name": call.get("name", ""),
                                 "tool_node_id": tool_info["tool_node_id"],
                                 "tool_call_id": str(
-                                    call.get("id")
-                                    or f"{iteration + 1}:{call_index + 1}"
+                                    call.get("id") or f"{iteration + 1}:{call_index + 1}"
                                 ),
-                                # Do not put raw failures into public status
-                                # events.  This safe flag is enough for the
-                                # broadcaster to retain ``tool <name>`` with a
-                                # failed capability state.
-                                "tool_failed": True,
                             },
                         )
+
+                        # Hot-rebind: if the tool returned ``operations`` (canvas
+                        # mutation), schedule ``agent.refresh_tools.v1`` to build
+                        # new tool_payload entries from the ops and splice them
+                        # into the workflow's live ``tools`` / ``tool_index``.
+                        # The next ``execute_llm_step`` invocation rebuilds the
+                        # bound LLM surface from this updated list, so the new
+                        # tool is callable in the very next iteration without a
+                        # Run-stop-Run cycle.
+                        auto_rebind_enabled = bool(payload.get("auto_rebind_tools", True))
+                        if self._execution_control.enabled and call_index not in recorded_tool_results:
+                            _append_tool_result_message(messages, content=tool_content,
+                                tool_call_id=call.get("id", ""), name=call.get("name", ""))
+                            recorded_tool_results.add(call_index)
+                            if tool_action_active:
+                                self._execution_control.end_action()
+                                tool_action_active = False
+                        if auto_rebind_enabled and isinstance(tool_result, dict):
+                            ops_from_tool = tool_result.get("operations") or []
+                            if ops_from_tool:
+                                # Deliberately multi-attempt (unlike the LLM
+                                # step's one-shot LLM_STEP_RETRY): rebuilding
+                                # the tool surface from canvas state is fully
+                                # idempotent, so retries are free.
+                                refresh_activity_id = _refresh_tools_activity_id(
+                                    tool_info["tool_node_id"],
+                                    iteration,
+                                    call_index,
+                                )
+                                refresh_payload = {
+                                    "operations": ops_from_tool,
+                                    "agent_node_type": payload.get("node_type") or context.get("node_type"),
+                                    **call_metadata,
+                                    **({"execution_control_version": 1} if self._execution_control.enabled else {}),
+                                }
+                                if binding_refresh_v2:
+                                    refresh_payload["bound_node_ids"] = [tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")]
+                                    refresh_payload["graph_snapshot"] = {"nodes": context.get("nodes") or [], "edges": context.get("edges") or []}
+                                    refresh_payload["parameter_snapshot"] = context.get("parameter_snapshot") or {}
+                                await self._wait_until_resumed()
+                                async with self._execution_control.action():
+                                    refresh_result = await workflow.execute_activity(
+                                        "agent.refresh_tools",
+                                        args=[refresh_payload],
+                                        activity_id=refresh_activity_id,
+                                        start_to_close_timeout=timedelta(seconds=30),
+                                        retry_policy=AGENT_ACTIVITY_RETRY,
+                                    )
+                                    if binding_refresh_v2 and refresh_result.get("graph_snapshot"):
+                                        refreshed_graph = refresh_result["graph_snapshot"]
+                                        context["nodes"] = refreshed_graph.get("nodes") or context.get("nodes") or []
+                                        context["edges"] = refreshed_graph.get("edges") or context.get("edges") or []
+                                        context["parameter_snapshot"] = {**(context.get("parameter_snapshot") or {}), **(refresh_result.get("parameter_updates") or {})}
+                                    added_tools = refresh_result.get("tools") or []
+                                    if binding_refresh_v2:
+                                        added_tools = unique_node_bindings(
+                                            added_tools, id_key="tool_node_id",
+                                            bound=[tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")],
+                                        )
+                                    refresh_duplicate_error = _duplicate_visible_tool_name_error(
+                                        [*tools, *added_tools]
+                                    )
+                                    refresh_duplicate_conflicts = (
+                                        _duplicate_visible_tool_name_conflicts([*tools, *added_tools])
+                                        if refresh_duplicate_error
+                                        else {}
+                                    )
+                                    if refresh_duplicate_error:
+                                        workflow.logger.warning(
+                                            "AgentWorkflow rejected hot-rebound tools: %s",
+                                            refresh_duplicate_error,
+                                        )
+                                        tool_content = _serialise_tool_result(
+                                            {
+                                                "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
+                                                "error": refresh_duplicate_error,
+                                                "conflicts": refresh_duplicate_conflicts,
+                                            }
+                                        )
+                                        await self._emit_phase(
+                                            agent_node_id,
+                                            agent_workflow_id,
+                                            iteration,
+                                            max_iterations,
+                                            phase="tool_error",
+                                            extra={
+                                                "error_type": DUPLICATE_TOOL_NAME_ERROR_TYPE,
+                                                "error": refresh_duplicate_error,
+                                                "conflicts": refresh_duplicate_conflicts,
+                                                **call_metadata,
+                                            },
+                                        )
+                                        added_tools = []
+                                    for new_tool in added_tools:
+                                        tools.append(new_tool)
+                                        tool_index[new_tool["name"]] = new_tool
+                                    if added_tools:
+                                        delegates = [tool for tool in tools if tool.get("name", "").startswith("delegate_to_")]
+                                        if delegates and binding_refresh_v2:
+                                            roster = "\n".join(
+                                                f"{tool.get('tool_node_id')}: {(tool.get('tool_info') or {}).get('label') or tool.get('node_type')}"
+                                                for tool in delegates
+                                            )
+                                            messages.append(_native_message(
+                                                role="system",
+                                                content="Updated connected teammates (assignee_node_id: label/type):\n" + roster,
+                                            ))
+                                        workflow.logger.info(
+                                            "AgentWorkflow rebound %d tool(s) after canvas mutation (total bound=%d)",
+                                            len(added_tools),
+                                            len(tools),
+                                        )
                     except asyncio.CancelledError:
                         await _cleanup_cancelled_delegations()
                         raise
+                    except Exception as e:  # noqa: BLE001 — Temporal handles retries
+                        # After all retries exhausted, surface the error to
+                        # the LLM (per user decision: LLM sees error and
+                        # continues — matches the in-process agent loop).
+                        workflow.logger.warning(f"AgentWorkflow tool {tool_info['node_type']!r} failed: {e}")
+                        team_id = str(payload.get("team_id") or context.get("team_id") or "")
+                        if is_delegation and team_id:
+                            task_id = (
+                                f"task-{root_execution_id}-{agent_node_id}-"
+                                f"{iteration + 1}-{call_index + 1}"
+                            )
+                            try:
+                                await workflow.execute_activity(
+                                    "agent.finish_delegation",
+                                    args=[{
+                                        "team_id": team_id,
+                                        "team_task_id": task_id,
+                                        "parent_agent_node_id": agent_node_id,
+                                        "child_agent_node_id": tool_info["tool_node_id"],
+                                        "child_agent_name": str(
+                                            (tool_info.get("tool_info") or {}).get(
+                                                "label"
+                                            )
+                                            or tool_info.get("node_type")
+                                            or "agent"
+                                        ),
+                                        "workflow_id": payload.get("workflow_id"),
+                                        "parent_agent_workflow_id": (
+                                            workflow.info().workflow_id
+                                        ),
+                                        "root_execution_id": root_execution_id,
+                                        "trace_id": str(call.get("id", "") or ""),
+                                        "success": False,
+                                        "error": f"{type(e).__name__}: {e}",
+                                        "terminal_event_id": f"{task_id}:terminal",
+                                    }],
+                                    activity_id=(
+                                        "finish-delegation-"
+                                        f"{iteration + 1}-{call_index + 1}"
+                                    ),
+                                    start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                                    retry_policy=AGENT_ACTIVITY_RETRY,
+                                )
+                                delegation_lifecycles.pop(
+                                    call_index,
+                                    None,
+                                )
+                            except asyncio.CancelledError:
+                                await _cleanup_cancelled_delegations()
+                                raise
+                        tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
+                        try:
+                            await self._emit_phase(
+                                agent_node_id,
+                                agent_workflow_id,
+                                iteration,
+                                max_iterations,
+                                phase="tool_completed",
+                                extra={
+                                    "tool_name": call.get("name", ""),
+                                    "tool_node_id": tool_info["tool_node_id"],
+                                    "tool_call_id": str(
+                                        call.get("id")
+                                        or f"{iteration + 1}:{call_index + 1}"
+                                    ),
+                                    # Do not put raw failures into public status
+                                    # events.  This safe flag is enough for the
+                                    # broadcaster to retain ``tool <name>`` with a
+                                    # failed capability state.
+                                    "tool_failed": True,
+                                },
+                            )
+                        except asyncio.CancelledError:
+                            await _cleanup_cancelled_delegations()
+                            raise
 
-                _append_tool_result_message(
-                    messages,
-                    content=tool_content,
-                    tool_call_id=call.get("id", ""),
-                    name=call.get("name", ""),
-                )
+                    if call_index not in recorded_tool_results:
+                        _append_tool_result_message(
+                            messages,
+                            content=tool_content,
+                            tool_call_id=call.get("id", ""),
+                            name=call.get("name", ""),
+                        )
+
+                finally:
+                    if tool_action_active:
+                        self._execution_control.end_action()
+
+                if self._execution_control.enabled and is_delegation and next_delegation_to_start < len(delegation_call_indices):
+                    await _start_delegation(delegation_call_indices[next_delegation_to_start])
+                    next_delegation_to_start += 1
 
             if yielded_own_permit:
                 await self._wait_until_resumed()
@@ -2398,127 +2568,128 @@ class AgentWorkflow:
                     "model": payload["model"],
                 }
                 await self._wait_until_resumed()
-                try:
-                    compact_result = await workflow.execute_activity(
-                        "agent.compact_context",
-                        args=[compact_payload],
-                        activity_id=f"compact-context-{iteration + 1}",
-                        start_to_close_timeout=COMPACT_MEMORY_TIMEOUT,
-                        retry_policy=AGENT_ACTIVITY_RETRY,
-                    )
-                except Exception as compact_error:
-                    # Compaction is the run's pressure-relief valve. If it
-                    # fails even after the activity policy's retries, the
-                    # transcript can only grow until the provider rejects
-                    # it — fail the run loudly NOW, at the moment the
-                    # cause is clear, instead of later with a confusing
-                    # context-overflow error.
-                    cause = getattr(compact_error, "cause", None)
-                    compact_detail = str(
-                        getattr(cause, "message", "") or cause or compact_error
-                    )
-                    workflow.logger.error(
-                        f"AgentWorkflow compaction failed terminally "
-                        f"(iteration {iteration + 1}): {compact_detail}"
-                    )
-                    # Same terminal-cleanup contract as the LLM-failure
-                    # path: clear turn-scoped skill badges before the
-                    # error status, or the canvas stays stuck on the last
-                    # capability after the workflow has ended.
-                    await workflow.execute_activity(
-                        "agent.skill.clear",
-                        args=[{
-                            "workflow_id": payload.get("workflow_id"),
-                            "execution_id": task_scope_execution_id,
-                            "agent_node_id": agent_node_id,
-                        }],
-                        activity_id="clear-active-skills-compaction-failed",
-                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                        retry_policy=AGENT_ACTIVITY_RETRY,
-                    )
-                    await self._emit_phase(
-                        agent_node_id,
-                        agent_workflow_id,
-                        iteration,
-                        max_iterations,
-                        phase="failed",
-                        status="error",
-                    )
-                    return {
-                        "success": False,
-                        "error": f"Compaction failed: {compact_detail}",
-                        "error_type": "CompactionError",
-                        "result": {
-                            "iterations": iteration + 1,
-                            "usage": usage_total,
-                        },
-                    }
-                # The summarizer is another billed model call. Include it in
-                # execution-wide usage, but never in the active-context
-                # counter.
-                for key, value in (
-                    compact_result.get("usage") or {}
-                ).items():
-                    if isinstance(value, int):
-                        usage_total[key] = (
-                            usage_total.get(key, 0) + value
+                async with self._execution_control.action():
+                    try:
+                        compact_result = await workflow.execute_activity(
+                            "agent.compact_context",
+                            args=[compact_payload],
+                            activity_id=f"compact-context-{iteration + 1}",
+                            start_to_close_timeout=COMPACT_MEMORY_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
                         )
-                # The activity raises on any failure, so a result here
-                # always carries a non-empty summary.
-                summary = compact_result.get("summary", "")
-                dropped_count = len(messages) - len(kept_turn)
-                # Rebuild as: the ORIGINAL system prompt, verbatim, plus ONE
-                # user message carrying the summary and the live request.
-                #
-                # The system prompt must never be modified or duplicated by
-                # compaction: (1) it is the agent's contract (personality +
-                # tool/delegation guidance) and must stay byte-stable for
-                # provider prompt caching and behavioral consistency; (2) the
-                # next firing's seeding drops stored system messages so
-                # policy changes take effect — anything compaction stores
-                # under the system role silently vanishes on the next
-                # firing, which is how a summary once survived only until
-                # the next chat message while the noisy tool tail outlived
-                # it.
-                #
-                # The summary rides a USER message for the same reason: user
-                # wires persist through seeding, so the compacted knowledge
-                # crosses firings with the conversation it summarizes.
-                compacted_content = (
-                    "## Compacted conversation summary\n"
-                    "The conversation so far was compacted to stay within "
-                    "the model's context window. Treat this summary as the "
-                    "authoritative record of prior work; do not repeat "
-                    "completed steps.\n\n"
-                    f"{summary}"
-                )
-                if user_prompt:
-                    compacted_content += (
-                        f"\n\n## Current request\n{user_prompt}"
+                    except Exception as compact_error:
+                        # Compaction is the run's pressure-relief valve. If it
+                        # fails even after the activity policy's retries, the
+                        # transcript can only grow until the provider rejects
+                        # it — fail the run loudly NOW, at the moment the
+                        # cause is clear, instead of later with a confusing
+                        # context-overflow error.
+                        cause = getattr(compact_error, "cause", None)
+                        compact_detail = str(
+                            getattr(cause, "message", "") or cause or compact_error
+                        )
+                        workflow.logger.error(
+                            f"AgentWorkflow compaction failed terminally "
+                            f"(iteration {iteration + 1}): {compact_detail}"
+                        )
+                        # Same terminal-cleanup contract as the LLM-failure
+                        # path: clear turn-scoped skill badges before the
+                        # error status, or the canvas stays stuck on the last
+                        # capability after the workflow has ended.
+                        await workflow.execute_activity(
+                            "agent.skill.clear",
+                            args=[{
+                                "workflow_id": payload.get("workflow_id"),
+                                "execution_id": task_scope_execution_id,
+                                "agent_node_id": agent_node_id,
+                            }],
+                            activity_id="clear-active-skills-compaction-failed",
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=AGENT_ACTIVITY_RETRY,
+                        )
+                        await self._emit_phase(
+                            agent_node_id,
+                            agent_workflow_id,
+                            iteration,
+                            max_iterations,
+                            phase="failed",
+                            status="error",
+                        )
+                        return {
+                            "success": False,
+                            "error": f"Compaction failed: {compact_detail}",
+                            "error_type": "CompactionError",
+                            "result": {
+                                "iterations": iteration + 1,
+                                "usage": usage_total,
+                            },
+                        }
+                    # The summarizer is another billed model call. Include it in
+                    # execution-wide usage, but never in the active-context
+                    # counter.
+                    for key, value in (
+                        compact_result.get("usage") or {}
+                    ).items():
+                        if isinstance(value, int):
+                            usage_total[key] = (
+                                usage_total.get(key, 0) + value
+                            )
+                    # The activity raises on any failure, so a result here
+                    # always carries a non-empty summary.
+                    summary = compact_result.get("summary", "")
+                    dropped_count = len(messages) - len(kept_turn)
+                    # Rebuild as: the ORIGINAL system prompt, verbatim, plus ONE
+                    # user message carrying the summary and the live request.
+                    #
+                    # The system prompt must never be modified or duplicated by
+                    # compaction: (1) it is the agent's contract (personality +
+                    # tool/delegation guidance) and must stay byte-stable for
+                    # provider prompt caching and behavioral consistency; (2) the
+                    # next firing's seeding drops stored system messages so
+                    # policy changes take effect — anything compaction stores
+                    # under the system role silently vanishes on the next
+                    # firing, which is how a summary once survived only until
+                    # the next chat message while the noisy tool tail outlived
+                    # it.
+                    #
+                    # The summary rides a USER message for the same reason: user
+                    # wires persist through seeding, so the compacted knowledge
+                    # crosses firings with the conversation it summarizes.
+                    compacted_content = (
+                        "## Compacted conversation summary\n"
+                        "The conversation so far was compacted to stay within "
+                        "the model's context window. Treat this summary as the "
+                        "authoritative record of prior work; do not repeat "
+                        "completed steps.\n\n"
+                        f"{summary}"
                     )
-                messages = [
-                    _native_message(
-                        role="system",
-                        content=system,
-                    ),
-                    _native_message(
-                        role="user",
-                        content=compacted_content,
-                    ),
-                    # Version 1 keeps this turn verbatim, because its tool
-                    # results are still unread. Empty on the original path.
-                    *kept_turn,
-                ]
-                context_usage_total = {}
-                turn_start = len(messages) - len(kept_turn)
-                workflow.logger.info(
-                    f"AgentWorkflow compaction applied at iteration "
-                    f"{iteration + 1}: {dropped_count} messages -> "
-                    f"{len(messages)} (summary {len(summary)} chars; "
-                    f"{len(kept_turn)} message(s) of this turn kept verbatim; "
-                    "earlier tool calls/results now live only inside the "
-                    "summary; system prompt preserved verbatim)"
-                )
+                    if user_prompt:
+                        compacted_content += (
+                            f"\n\n## Current request\n{user_prompt}"
+                        )
+                    messages = [
+                        _native_message(
+                            role="system",
+                            content=system,
+                        ),
+                        _native_message(
+                            role="user",
+                            content=compacted_content,
+                        ),
+                        # Version 1 keeps this turn verbatim, because its tool
+                        # results are still unread. Empty on the original path.
+                        *kept_turn,
+                    ]
+                    context_usage_total = {}
+                    turn_start = len(messages) - len(kept_turn)
+                    workflow.logger.info(
+                        f"AgentWorkflow compaction applied at iteration "
+                        f"{iteration + 1}: {dropped_count} messages -> "
+                        f"{len(messages)} (summary {len(summary)} chars; "
+                        f"{len(kept_turn)} message(s) of this turn kept verbatim; "
+                        "earlier tool calls/results now live only inside the "
+                        "summary; system prompt preserved verbatim)"
+                    )
 
             if pressure_version >= 1:
                 # Last resort, against whatever room the earlier turns now
@@ -2567,6 +2738,36 @@ class AgentWorkflow:
                     delegation_handles or task_manager_delegation_tasks
                 )
                 if not delegations_live:
+                    if self._execution_control.enabled:
+                        # A stopped workflow remains in this run. No live child
+                        # handle or unfinished Update crosses the boundary.
+                        await self._wait_until_resumed()
+                        await workflow.wait_condition(workflow.all_handlers_finished)
+                        next_context = {
+                            **context,
+                            **self._execution_control.carry(),
+                            _RESUME_MARKER: {
+                                "iteration": iteration + 1,
+                                "execution_id": execution_id,
+                                "transcript": messages,
+                                "usage": usage_total,
+                                "context_usage": context_usage_total,
+                                "prepared_payload": payload,
+                                "tools": tools,
+                                "thinking": thinking_accumulated,
+                            },
+                        }
+                        # Measure the converter's complete argument, including
+                        # graph, bindings and preparation, not just messages.
+                        encoded = workflow.payload_converter().to_payloads([next_context])
+                        input_bytes = sum(item.ByteSize() for item in encoded)
+                        if input_bytes > _CAN_INPUT_MAX_BYTES:
+                            from temporalio.exceptions import ApplicationError
+                            raise ApplicationError(
+                                f"Agent continuation requires {input_bytes} bytes; limit is {_CAN_INPUT_MAX_BYTES}. Reduce tool output or enable context compaction.",
+                                type="AgentContinuationTooLarge", non_retryable=True,
+                            )
+                        workflow.continue_as_new(args=[next_context])
                     # The live transcript crosses the boundary directly.
                     # Compaction keeps it token-bounded; the byte guard
                     # below keeps a pathological transcript away from
@@ -2651,10 +2852,11 @@ class AgentWorkflow:
             retry_policy=AGENT_ACTIVITY_RETRY,
         )
         if payload.get("employee_runtime_delivery") and workflow.patched("employee-task-manager-runtime-v2"):
-            await workflow.execute_activity("employee.job.deliver", {**context, "team_id": result_payload.get("team_id"),
-                "outputs": {**(context.get("outputs") or {}), agent_node_id: result_payload}},
-                activity_id="employee-reviewed-delivery", start_to_close_timeout=timedelta(days=31),
-                heartbeat_timeout=timedelta(minutes=2), retry_policy=AGENT_ACTIVITY_RETRY)
+            async with self._execution_control.action():
+                await workflow.execute_activity("employee.job.deliver", {**context, "team_id": result_payload.get("team_id"),
+                    "outputs": {**(context.get("outputs") or {}), agent_node_id: result_payload}},
+                    activity_id="employee-reviewed-delivery", start_to_close_timeout=timedelta(days=31),
+                    heartbeat_timeout=timedelta(minutes=2), retry_policy=AGENT_ACTIVITY_RETRY)
 
         # Final lifecycle broadcast — canvas glow goes green + FE
         # consumers of com.opencompany.agent.progress see phase="completed".

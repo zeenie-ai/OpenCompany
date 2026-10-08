@@ -5,6 +5,7 @@ from typing import Any
 from temporalio import workflow, activity
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import is_cancelled_exception
+from services.temporal.execution_control import ExecutionControl
 
 
 @activity.defn(name="employee.job.deliver")
@@ -45,10 +46,53 @@ async def fail_employee_job(context: dict[str, Any]) -> dict:
 
 @workflow.defn(name="EmployeeJobWorkflow", sandboxed=False)
 class EmployeeJobWorkflow:
+    @workflow.init
+    def __init__(self, context: dict[str, Any] | None = None):
+        self._execution_control = ExecutionControl()
+        if context is not None:
+            self._execution_control.bind(context)
+
+    @workflow.update
+    async def set_control_state(self, payload: dict) -> dict:
+        return await self._execution_control.set_control_state(payload)
+
+    @set_control_state.validator
+    def validate_set_control_state(self, payload: dict) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.update
+    async def wait_for_checkpoint(self, payload: dict) -> dict:
+        return await self._execution_control.wait_for_checkpoint(payload)
+
+    @wait_for_checkpoint.validator
+    def validate_wait_for_checkpoint(self, payload: dict) -> None:
+        self._execution_control.validate_control(payload)
+
+    @workflow.query
+    def execution_control_status(self) -> dict:
+        return self._execution_control.status()
+
     @workflow.run
-    async def run(self, context: dict[str, Any]) -> dict:
+    async def run(self, context: dict[str, Any] | None = None) -> dict:
+        context = context or {}
+        self._execution_control.bind(context)
+        if not self._execution_control.enabled:
+            return await self._run_job(context)
+        await self._execution_control.register_root()
         try:
-            result = await workflow.execute_child_workflow("AgentWorkflow", context, id=workflow.info().workflow_id + ":lead")
+            return await self._run_job(context)
+        finally:
+            await self._execution_control.unregister_root()
+            await workflow.wait_condition(workflow.all_handlers_finished)
+
+    async def _run_job(self, context: dict[str, Any]) -> dict:
+        try:
+            if self._execution_control.enabled:
+                async with self._execution_control.child_start():
+                    handle = await workflow.start_child_workflow("AgentWorkflow", context, id=workflow.info().workflow_id + ":lead")
+                result = await handle
+            else:
+                result = await workflow.execute_child_workflow("AgentWorkflow", context, id=workflow.info().workflow_id + ":lead")
         except BaseException as exc:
             # Cancellation must leave a durable terminal job record too.
             # Shield this short cleanup from the parent's cancellation.
@@ -60,6 +104,11 @@ class EmployeeJobWorkflow:
                 start_to_close_timeout=timedelta(seconds=60), retry_policy=RetryPolicy(maximum_attempts=3))
             return result
         delivery = {**context, "outputs": {**context.get("outputs", {}), context["node_id"]: result.get("result", {})}}
+        if self._execution_control.enabled:
+            async with self._execution_control.action():
+                return await workflow.execute_activity("employee.job.deliver", delivery,
+                    start_to_close_timeout=timedelta(days=31), heartbeat_timeout=timedelta(minutes=2),
+                    retry_policy=RetryPolicy(maximum_attempts=3))
         return await workflow.execute_activity("employee.job.deliver", delivery,
             start_to_close_timeout=timedelta(days=31), heartbeat_timeout=timedelta(minutes=2),
             retry_policy=RetryPolicy(maximum_attempts=3))

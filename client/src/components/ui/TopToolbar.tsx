@@ -140,9 +140,9 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   const canPauseWorkflow = workflowControl.can_pause || workflowControl.state === 'pausing';
   const canResumeWorkflow = workflowControl.can_resume || workflowControl.state === 'resuming';
   const isRetryingReset = workflowControl.state === 'resetting';
-  const controlTransitionLabel = (
-    workflowControlPending?.state ?? workflowControl.state
-  ).replace('_', ' ');
+  const transitionState = workflowControlPending?.state ?? workflowControl.state;
+  const controlTransitionLabel = transitionState === 'pausing' ? 'Stopping…'
+    : transitionState === 'resuming' ? 'Resuming…' : transitionState.replace('_', ' ');
 
   // Global Model Selector state
   const { getValidatedAiProviders, saveGlobalModel, isConnected: apiKeysConnected } = useApiKeys();
@@ -466,11 +466,11 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             intent="stop"
             onClick={onPauseWorkflow}
             title={workflowControl.state === 'pausing'
-              ? 'Retry the interrupted pause transition'
-              : 'Pause new workflow scheduling after in-flight work finishes'}
+              ? 'Check progress of the Stop request'
+              : 'Stop after current work finishes; Resume continues from the next pending action'}
           >
             <Pause className="h-3 w-3 fill-current" />
-            {workflowControl.state === 'pausing' ? 'Retry Pause' : 'Pause'}
+            {workflowControl.state === 'pausing' ? 'Stopping…' : 'Stop'}
           </ActionButton>
         ) : isAuthoritativeTransition ? (
           <ActionButton

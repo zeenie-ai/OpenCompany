@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_agents / agent |
-| **Backend handler** | [`server/nodes/agent/chat_agent/__init__.py`](../../../server/nodes/agent/chat_agent/__init__.py) — dispatched via `BaseNode.execute()` + `@Operation("execute")` (`execute_op`). Pre-dispatch in [`_inline.py::prepare_agent_call`](../../../server/nodes/agent/_inline.py); LLM loop in `AIService.execute_chat_agent`. |
+| **Backend execution** | Default Temporal graph runs use [`AgentWorkflow`](../../../server/services/temporal/agent_workflow.py) and [`agent_activities.py`](../../../server/services/temporal/agent_activities.py). The node/Activity path uses [`ChatAgentNode.execute_op`](../../../server/nodes/agent/chat_agent/__init__.py), [`prepare_agent_call`](../../../server/nodes/agent/_inline.py), and `AIService.execute_chat_agent`. |
 | **Tests** | [`server/tests/nodes/test_ai_agents.py`](../../../server/tests/nodes/test_ai_agents.py) |
 | **Skill (if any)** | n/a (consumes skills via `input-skill`) |
 | **Dual-purpose tool** | no |
@@ -22,7 +22,29 @@ the service method it calls (`AIService.execute_chat_agent` instead of
 takes the **same execution path** — they subclass
 [`SpecializedAgentBase`](../../../server/nodes/agent/_specialized.py) whose
 `execute_op` also runs `prepare_agent_call` + `execute_chat_agent`. Each is its
-own plugin folder; there is no `functools.partial` wiring anymore.
+own plugin folder; there is no `functools.partial` wiring anymore. In a default
+Temporal graph run these supported types route to the same `AgentWorkflow`
+child path instead of executing the whole service loop as one node Activity.
+
+## Temporal execution and Stop/Resume
+
+`chatAgent` and supported specialized/team-lead agents use the same version 1
+control and continuation contract as [`aiAgent`](aiAgent.md#temporal-execution-and-stopresume).
+Stop lets each admitted model/tool Activity finish and retains its response or
+tool result; pending actions wait in the existing continuation. Resume releases
+those pending actions and preserves chat run/reply identity, partial output,
+subscriptions, and lane occupancy. The controlled chat Stop request targets
+the exact owning generation using `run_id`, `expected_revision`, and
+`idempotency_key`. It does not terminalize that reply or trigger the legacy
+grace-period cancellation behavior.
+
+The version 1 agent carries prepared configuration, resolved plugin policies,
+and transcript through clean continue-as-new boundaries. Legacy/uncontrolled
+chat retains terminal Stop behavior, and a run routed as a whole node Activity
+stops at that Activity's boundary. Unlimited LLM retries can delay complete
+Stop acknowledgement. See [Chat protocol](../../chat_protocol.md),
+[Temporal workflow control](../../temporal-workflow-control.md), and
+[Agent context flow](../../agent_context_flow.md#stopped-turns-and-unanswered-calls).
 
 ## Inputs (handles)
 
@@ -56,6 +78,9 @@ Differences:
 
 ## Logic Flow
 
+This diagram describes the node/Activity entry point; the Temporal child path
+uses the [durable agent loop](../../TEMPORAL_ARCHITECTURE.md#agent-as-child-workflow-f4b).
+
 ```mermaid
 flowchart TD
   A[execute_op -> prepare_agent_call] --> B[edge_walker.collect_agent_connections]
@@ -81,10 +106,11 @@ flowchart TD
   `edge_walker.collect_agent_connections`; same rules as `aiAgent` (see that doc
   for the Context descriptor, `masterSkill` expansion, Android service tools,
   child-agent tool discovery).
-- **Native agent loop**: current executions call the shared
-  `run_native_agent_loop` / `run_native_llm_step` service through
-  `ChatUnifier`. It is the only loop; pre-cutover Temporal histories are
-  refused rather than replayed.
+- **Native provider boundary**: current executions use `ChatUnifier` with
+  `run_native_llm_step`; the in-process path owns `run_native_agent_loop`,
+  while Temporal owns the durable scheduling loop. There is one current wire
+  standard. Pre-cutover deployment recovery uses Reset; control version gates
+  preserve compatible legacy command paths rather than upgrading them in place.
 - **Task context injection** mirrors `aiAgent`: `format_task_context` wraps
   the task result as a plain-English instruction that the LLM must "report
   naturally", then all tools are stripped if the task has already completed

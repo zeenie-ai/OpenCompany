@@ -438,7 +438,27 @@ class TestTriggerIsDeployable:
 
 
 class TestEventShaping:
-    """_dispatch.shape_message feeds _filters; the two move together."""
+    """Provider identities and shaped payloads feed trigger filtering."""
+
+    @pytest.mark.parametrize(
+        "factory_name, identity_field", [("discord_message_received", "message_id"), ("discord_interaction_created", "interaction_id")]
+    )
+    def test_provider_redelivery_keeps_a_stable_event_identity(self, factory_name, identity_field):
+        from nodes.discord import _events
+
+        factory = getattr(_events, factory_name)
+        original = factory({identity_field: "123", "channel_id": "456"})
+        redelivery = factory({identity_field: "123", "channel_id": "456", "timestamp": "later"})
+        another = factory({identity_field: "124", "channel_id": "456"})
+
+        assert original.id == redelivery.id
+        assert original.id != another.id
+        assert factory({"channel_id": "456"}).id != factory({"channel_id": "456"}).id
+
+    def test_message_and_interaction_identities_do_not_collide(self):
+        from nodes.discord._events import discord_interaction_created, discord_message_received
+
+        assert discord_message_received({"message_id": "123"}).id != discord_interaction_created({"interaction_id": "123"}).id
 
     def _message(self, **overrides):
         base = SimpleNamespace(

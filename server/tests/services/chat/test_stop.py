@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 from sqlalchemy import update
 
 from models.chat import ChatRun
+from models.database import WorkflowControlExecution
 from services.chat import ledger
 from tests.services.chat._helpers import FakeSocket, talking
 
@@ -219,3 +221,78 @@ async def test_only_the_workflows_owner_may_stop_its_runs(chat):
     for socket in (FakeSocket(user_id="mallory"), FakeSocket(path="/ws/internal")):
         assert (await chat.handlers.handle_stop_chat_run({"run_id": sent["run_id"]}, socket))["error"] == "access_denied"
     assert (await ledger.get_run(chat.database, sent["run_id"])).state == "pending"
+
+
+async def version_control(database, *, status="running", resumed=None):
+    manifest = {"execution_control_version": 1}
+    if resumed:
+        manifest["last_resumed_at"] = resumed.isoformat()
+    async with database.get_session() as session:
+        await session.execute(update(WorkflowControlExecution).where(WorkflowControlExecution.id == "wf-1").values(
+            resource_manifest=manifest, status=status, revision=3,
+        ))
+        await session.commit()
+
+
+async def test_controlled_stop_keeps_the_chat_run_reply_and_lane(chat, monkeypatch):
+    from services.deployment import handlers as deployment_handlers
+
+    await talking(chat.database)
+    await version_control(chat.database)
+    run = await running(chat.database)
+    await ledger.post_reply(chat.database, run=run, node_id="n", text="A partial answer", execution_id="gen-1")
+    pause = AsyncMock(return_value={"success": True, "state": "paused", "revision": 5})
+    monkeypatch.setattr(deployment_handlers, "handle_pause_workflow", pause)
+    reply = await chat.handlers.handle_stop_chat_run({
+        "run_id": run.run_id, "expected_revision": 3, "idempotency_key": "stop-1",
+    }, None)
+    assert reply["resumable"] is True and reply["state"] == "paused"
+    pause.assert_awaited_once_with({
+        "workflow_id": "wf", "expected_root_execution_id": "gen-1", "expected_revision": 3,
+        "idempotency_key": "stop-1",
+    }, None)
+    saved = await ledger.get_run(chat.database, run.run_id)
+    assert saved.state == "running" and saved.stop_requested_at is None and saved.finished_at is None
+    assert (await ledger.lane_run(chat.database, "wf")).run_id == run.run_id
+    assert (await ledger.saved_message(chat.database, saved.reply_message_uid)).message == "A partial answer"
+
+
+async def test_controlled_chat_reload_uses_its_owning_generation(chat):
+    await talking(chat.database)
+    await version_control(chat.database, status="paused")
+    run = await running(chat.database)
+    # A newer generation must not masquerade as this suspended run's owner.
+    await talking(chat.database, generation=2)
+    [snapshot] = await chat.handlers.run_snapshots(chat.database, "wf")
+    assert snapshot["run_id"] == run.run_id and snapshot["state"] == "running"
+    assert snapshot["workflow_control"]["root_execution_id"] == "gen-1"
+    assert snapshot["workflow_control"]["state"] == "paused"
+
+
+async def test_controlled_stop_requires_an_idempotency_key(chat):
+    await talking(chat.database)
+    await version_control(chat.database)
+    run = await running(chat.database)
+    result = await chat.handlers.handle_stop_chat_run({"run_id": run.run_id, "expected_revision": 3}, None)
+    assert result == {"success": False, "error": "idempotency_key_required"}
+    assert (await ledger.get_run(chat.database, run.run_id)).state == "running"
+
+
+async def test_long_controlled_pause_does_not_expire_and_resume_grants_a_fresh_window(database, hub):
+    from services.chat.config import runs_setting
+
+    await talking(database)
+    run = await running(database)
+    longest = timedelta(seconds=runs_setting("max_running_s"))
+    async with database.get_session() as session:
+        await session.execute(update(ChatRun).where(ChatRun.run_id == run.run_id).values(
+            started_at=NOW - timedelta(days=30), created_at=NOW - timedelta(days=30),
+        ))
+        await session.commit()
+    for state in ("pausing", "paused", "resuming"):
+        await version_control(database, status=state)
+        assert await ledger.sweep(database, now=NOW, process_started=NOW - timedelta(days=30)) == []
+    await version_control(database, status="running", resumed=NOW)
+    assert await ledger.sweep(database, now=NOW + longest - timedelta(seconds=1), process_started=NOW) == []
+    assert await ledger.sweep(database, now=NOW + longest + timedelta(seconds=1), process_started=NOW) == [run.run_id]
+    assert (await ledger.get_run(database, run.run_id)).error_code == "timed_out"

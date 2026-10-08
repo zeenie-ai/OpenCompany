@@ -30,7 +30,14 @@ At a glance:
 
 [WorkflowService](server/services/workflow.py) is a thin facade that routes each run through Temporal when available, falling back to a plain sequential walk otherwise. Every run has an isolated `ExecutionContext` with no shared global state. Nodes are scheduled continuously — when any node completes, its newly-ready dependents start immediately (`FIRST_COMPLETED` pattern) instead of waiting for a whole layer to finish.
 
-Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) - [event_framework.md](docs-internal/event_framework.md)
+Newly started Temporal generations use revision-ordered cooperative control:
+Stop closes admission across the execution tree, admitted work finishes with
+its bookkeeping, and Resume releases the same pending continuation. Signals
+queue events, completed Updates acknowledge control and root membership, and
+Queries expose read-only state. Preserve the legacy/version-marker command
+paths when editing Workflow code; validate them with native history replay.
+
+Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) - [temporal-workflow-control.md](docs-internal/temporal-workflow-control.md) - [event_framework.md](docs-internal/event_framework.md)
 
 ## AI Agent System
 
@@ -144,6 +151,11 @@ The diagram above shows the full lifecycle of a workflow node: one self-containe
 - **Behavioral tests** live per category in `server/tests/nodes/test_<category>.py`, driven through `NodeTestHarness` ([server/tests/nodes/_harness.py](server/tests/nodes/_harness.py)) — it executes any node via `NodeExecutor` with mocked services and asserts the result envelope.
 - **Import sanity:** `uv run pytest --collect-only` (from `server/`) is the live plugin-count invariant — it fails if any plugin errors at import.
 - **Credential tests** follow the numbered-invariant style documented in [server/tests/credentials/README.md](server/tests/credentials/README.md).
+- **Temporal control tests** include real SDK workflows with stub Activities,
+  worker restart, Continue-As-New and captured-history replay. Run the
+  [control verification commands](docs-internal/temporal-workflow-control.md#verification-and-operations)
+  when changing admission gates, root enrollment, event queues or messaging.
+  Replay hooks must remain deterministic and unchanged while replaying.
 - Run everything: `uv run pytest` from `server/`, `bun run --filter react-flow-client test` from the repo root, `uv run pytest cli/tests` from the repo root.
 - **Desktop shell:** from `desktop/`, `bun run typecheck && bun run test && bun run test:invariants` (the last needs `bun run stage` first), and `bun run build && bun run test:e2e` for the Playwright Electron smoke. In an editor-hosted terminal unset `ELECTRON_RUN_AS_NODE` before launching Electron by hand.
 
@@ -179,6 +191,8 @@ Full setup and scripts reference: [SETUP.md](docs-internal/SETUP.md) - [SCRIPTS.
 |---|---|
 | [DESIGN.md](docs-internal/DESIGN.md) | Execution engine architecture, design patterns, execution modes |
 | [TEMPORAL_ARCHITECTURE.md](docs-internal/TEMPORAL_ARCHITECTURE.md) | Distributed execution via Temporal activities |
+| [temporal-workflow-control.md](docs-internal/temporal-workflow-control.md) | Versioned Stop/drain/Resume, execution roots, messaging, event accumulation, compatibility and verification |
+| [chat_protocol.md](docs-internal/chat_protocol.md) | Tracked chat runs, controlled Stop/Resume, subscriptions, legacy Stop and watchdog behavior |
 | [workflow-schema.md](docs-internal/workflow-schema.md) | Workflow JSON schema and node catalog (live count = `len(services.node_registry.NODE_METADATA)` after importing `nodes`) |
 | [ROADMAP.md](docs-internal/ARCHIVE/ROADMAP.md) | *Archived* status snapshot; current state is in DESIGN.md and the Temporal docs |
 | [SETUP.md](docs-internal/SETUP.md) | Development environment setup |

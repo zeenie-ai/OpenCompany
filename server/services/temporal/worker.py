@@ -37,6 +37,7 @@ from .activities import (
     NodeExecutionActivities,
     create_shared_session,
 )
+from .execution_control_activities import ExecutionControlActivities
 
 
 
@@ -283,6 +284,7 @@ class TemporalWorkerManager:
             workflows=_framework_workflows(),
             activities=[
                 self._activities.execute_node_activity,
+                *ExecutionControlActivities(self.client).activities(),
                 broadcast_trigger_status_activity,
                 evaluate_trigger_filter_activity,
                 load_persisted_workflow_graph_activity,
@@ -777,6 +779,7 @@ async def run_standalone_worker(
             workflows=_framework_workflows(),
             activities=[
                 activities.execute_node_activity,
+                *ExecutionControlActivities(client).activities(),
                 broadcast_trigger_status_activity,
                 evaluate_trigger_filter_activity,
                 load_persisted_workflow_graph_activity,
@@ -864,6 +867,7 @@ async def create_worker(
         workflows=_framework_workflows(),
         activities=[
             activities.execute_node_activity,
+            *ExecutionControlActivities(client).activities(),
             broadcast_trigger_status_activity,
             evaluate_trigger_filter_activity,
             load_persisted_workflow_graph_activity,

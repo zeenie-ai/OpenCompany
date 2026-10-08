@@ -106,6 +106,38 @@ bounded mission, relevant context, and its own connected tools, skills, and
 memory. The parent receives a compact result; full child output remains
 inspectable through task attempts and execution traces.
 
+## Generation Stop and Resume
+
+New Temporal generations carry `execution_control_version=1`. Detached
+`DelegatedTaskWorkflow` runners enroll independently with the generation
+controller before business work, so Stop still reaches their attached agents
+after the assigning lead completes or the controller rolls over. Attached
+children use their native parent relationships rather than a per-tool registry.
+
+Stop preserves assigned tasks, lane/permit ownership, and existing continuations.
+Already-admitted model/tool Activities and their result bookkeeping drain;
+queued work, later calls, and new child starts wait behind the admission gate.
+Permit waits and child-result waits do not count as local business drain, so
+paused children cannot deadlock the checkpoint. Completion persistence and
+permit release for completed work continue normally. `pausing` describes the
+request/drain phase; `paused` requires topology-wide checkpoint acknowledgement.
+Stop adds no second persisted task pause lifecycle and does not cancel tasks.
+
+Resume applies the next revision with producers held, releases descendants and
+independent roots, reconciles membership, then releases producers. It continues
+the existing task attempt without another model response or completed tool
+being explicitly scheduled. Completion events accumulated while stopped remain
+pending for review; handlers do not batch inactivity or discard them.
+
+Existing generations preserve their legacy protocol. Unlimited LLM retries may
+leave Stop in `pausing` during an outage; a tool's policy/idempotency still governs
+unrecorded external effects. Opaque managed agents finish the whole node
+Activity before acknowledging Stop. Direct Workspace tasks and separately
+approved sends remain independent. See
+[Temporal workflow control](temporal-workflow-control.md),
+[Delegation ownership](agent_delegation.md#generation-stopresume-ownership), and
+[Agent context flow](agent_context_flow.md#stopped-turns-and-unanswered-calls).
+
 ## Completion and events
 
 After durable persistence, lifecycle transitions emit deterministic events such

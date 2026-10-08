@@ -100,6 +100,11 @@ flowchart TD
 
 ## Related
 
+- **Stop/Resume**: `start` is admitted graph work, not a restart command. New
+  controlled generations preserve its completed output while stopped and
+  resume at the next pending node. See
+  [Workflow control](../../temporal-workflow-control.md).
+
 - **Skills using this as a tool**: none.
 - **Other nodes that consume this output**: any downstream node - typical
   pattern is `start -> aiAgent` or `start -> httpRequest` in a hand-run

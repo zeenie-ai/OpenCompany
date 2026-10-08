@@ -119,6 +119,12 @@ flowchart TD
 
 ## Related
 
+- **Stop/Resume**: new controlled generations gate admission before this node
+  and retain an admitted result through bookkeeping. The originating HTTP
+  request still has its own timeout, and its process-local response future
+  does not survive a backend restart or an arbitrarily long pause. See
+  [Workflow control](../../temporal-workflow-control.md).
+
 - **Companion node**: [`webhookTrigger`](./webhookTrigger.md) -
   `webhookResponse` is only useful when the trigger's `responseMode` is
   `responseNode`.

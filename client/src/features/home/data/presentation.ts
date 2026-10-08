@@ -52,13 +52,13 @@ export interface EmployeePresentation {
 const PILL: Record<EmployeeSummary['status'], { label: string; tone: StatusTone }> = {
   working: { label: 'Working', tone: 'working' },
   ready: { label: 'Ready', tone: 'ready' },
-  paused: { label: 'Paused', tone: 'paused' },
+  paused: { label: 'Stopped', tone: 'paused' },
   attention: { label: 'Needs attention', tone: 'attention' },
 };
 
 const BUSY: Record<WorkflowControlPendingMutation['action'], string> = {
   start: 'Starting…',
-  pause: 'Pausing…',
+  pause: 'Stopping…',
   resume: 'Resuming…',
   reset: 'Resetting…',
 };
@@ -100,7 +100,9 @@ export function presentEmployee(
     // Only a green working dot pulses (its ring is green).
     pulse: pill.tone === 'working',
     primary: primaryAction(employee),
-    busyLabel: pending ? BUSY[pending.action] : null,
+    busyLabel: pending ? BUSY[pending.action]
+      : employee.control.state === 'pausing' ? 'Stopping…'
+      : employee.control.state === 'resuming' ? 'Resuming…' : null,
   };
 }
 
@@ -115,7 +117,7 @@ export const OPEN_IN_DEV_LABEL = 'Open in Dev mode';
 export function primaryActionLabel(action: PrimaryAction): string {
   switch (action.kind) {
     case 'pause':
-      return 'Pause';
+      return 'Stop';
     case 'resume':
       return 'Resume';
     case 'start':

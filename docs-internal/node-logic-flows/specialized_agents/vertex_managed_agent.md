@@ -27,6 +27,26 @@ Context store when a Context node is wired (transcript rendered into the
 prompt); legacy `input-memory` graphs keep the recorded Simple Memory chain-id bridge
 (`vertex_interaction_id` / `vertex_environment_id`).
 
+## Temporal Stop/Resume boundary
+
+`vertex_managed_agent` stays outside `AGENT_WORKFLOW_TYPES`. A complete managed
+interaction chain, including local `requires_action` tools and remote tool
+work, runs inside one node Activity. In new controlled generations with
+`execution_control_version=1`, Stop fences later Activity admission and lets an
+admitted chain settle under the declared policy. Its result is consumed
+normally before the graph/parent agent waits. Resume releases the next pending
+action without starting the recorded completed interaction again.
+
+Generation Stop does not interrupt a cloud interaction between internal tool
+calls. `previous_interaction_id` chaining remains the plugin's provider-session
+mechanism, not the generation checkpoint. Heartbeats do not serialize a remote
+session. This plugin's one-attempt retry declaration is preserved when version 1
+ordinary agent-tool dispatch uses its frozen policy. External-effect ambiguity
+before completion remains subject to provider/tool idempotency. Legacy
+generations retain their prior command path. See
+[Temporal workflow control](../../temporal-workflow-control.md) and
+[Temporal architecture](../../TEMPORAL_ARCHITECTURE.md#cooperative-generation-stop-and-resume).
+
 ## Inputs (handles)
 
 `std_agent_handles()` + `STD_AGENT_HINTS` (`width 300`, `height 200`,

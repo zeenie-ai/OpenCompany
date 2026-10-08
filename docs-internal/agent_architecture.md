@@ -225,7 +225,13 @@ Closure responsibilities:
   `tool_executor` can dispatch the new call.
 - The closure is gated on the user toggle: `UserSettings.auto_rebind_tools_after_canvas_change` (default `True`). When off, the LLM is told "Available on your next turn" in the operation summary and the closure isn't wired.
 
-For the F4.B Temporal path, the in-process closure is replaced by the `agent.refresh_tools` activity, which applies the same filter and also binds agent delegates; see [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md). It cannot see what the run already holds, so re-adding a tool added earlier in the same run makes `AgentWorkflow` report a duplicate tool name (the tool stays callable).
+For the F4.B Temporal path, the closure is replaced by `agent.refresh_tools`.
+The `agent-node-binding-refresh-v2` path passes bound node IDs, the run's graph,
+and parameter snapshot, then filters repeated node bindings. A distinct node
+that would introduce a conflicting provider-visible tool name is rejected
+with conflict details. Older histories preserve their recorded refresh path.
+Version 1 preparation/refresh also records plugin Activity policies for each
+bound tool. See [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md).
 
 ### Where it's called
 
@@ -554,10 +560,11 @@ Two settings flags route agent execution through different Temporal paths (see [
 
 | Flag | Off | On (default) |
 |---|---|---|
-| `TEMPORAL_PER_TYPE_DISPATCH` | Every node routes through the legacy `execute_node_activity` single dispatcher (WS round-trip to the FastAPI handler). | Each node routes through its per-type activity `node.{type}.v{version}` registered via `BaseNode.as_activity()`. Per-plugin retry / timeout / heartbeat configs apply. |
-| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | All specialized + team leads + base agents (`aiAgent` / `chatAgent`) run inside `execute_node_activity` using the in-process native loop. | The migrating agent types become Temporal **child workflows** (`AgentWorkflow`). LLM steps + tool calls become activities; `agent.prepare_payload` resolves the DB-backed payload as the workflow's first step; `agent.refresh_tools` refreshes the native tool surface after canvas mutations. `rlm_agent` / `claude_code_agent` stay on the F4.A per-type activity path (externalised session state). |
+| `TEMPORAL_PER_TYPE_DISPATCH` | Ordinary nodes use the legacy `execute_node_activity` dispatcher (WS round-trip); enabled agent child-Workflow routing still takes precedence for supported types. | Ordinary nodes use per-type `node.{type}.v{version}` Activities registered by `BaseNode.as_activity()`. Graph dispatch honors plugin retry/queue; Workspace-task patches and version 1 agent-tool dispatch also use plugin timeout/heartbeat. |
+| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | Supported agents run the in-process loop inside a node Activity: per-type when per-type dispatch is on, otherwise the legacy single dispatcher. | Types in `AGENT_WORKFLOW_TYPES` become **child Workflows** (`AgentWorkflow`). LLM steps and ordinary tools are Activities; preparation resolves configuration and explicit refresh binds canvas changes. `rlm_agent`, `claude_code_agent`, and `vertex_managed_agent` remain whole-node Activities. |
 
-Both flags default to `true` in `.env.template`.
+Both flags default to `true` in `.env.template`; the starter freezes their
+values and the worker-pool routing flag into each execution's input.
 
 `AgentWorkflow` executions carry messages in the single `MessageWire` shape;
 there is one engine and one wire standard, with no `llm_engine` or
@@ -566,10 +573,44 @@ there is one engine and one wire standard, with no `llm_engine` or
 after a provider request starts, and changing the environment does not alter an
 execution whose `agent.prepare_payload` result is already in history.
 
-**Team leads** (`orchestrator_agent`, `ai_employee`) run the same
-`execute_chat_agent` path as the other specialized agents but add an
-`input-teammates` handle. Connected agents become `delegate_to_<type>` tools
-automatically via `collect_teammate_connections()` (in
+### Version 1 cooperative Stop and Resume
+
+New generation manifests enable `execution_control_version=1`, separately
+from the dispatch flags. Workflow gates close before model requests, tools,
+compaction, explicit binding refresh, polling fetches, and child starts. Stop
+drains already-admitted parallel work and its normal result bookkeeping;
+unstarted actions wait. If a recorded response requested A and B, stopping
+during A retains A's result and leaves B pending. Resume continues with B,
+preserving the current model response and transcript.
+
+The controller tracks graph/cron/job roots and detached delegation runners
+that can outlive their parent. Attached agent descendants are discovered by
+native execution descriptions after their child-start acknowledgement fence.
+Completed Updates acknowledge admission closure and drain; Queries report
+state. Resume holds producers while descendants/roots are released, then
+releases controller, local, and schedule producers. Revision and chain checks
+prevent stale intent or reused Workflow IDs from controlling another execution.
+
+At clean continue-as-new boundaries, version 1 carries prepared configuration,
+resolved tools and plugin timeout/retry/heartbeat/queue declarations, transcript,
+thinking, iteration, usage, execution identity, and control state. A stopped
+agent parks before rollover. The complete encoded next input is checked against
+1,900,000 bytes; an oversized continuation raises `AgentContinuationTooLarge`
+instead of returning to the opening prompt. Old generations retain their
+legacy command paths and capacity fallback for replay compatibility.
+
+Unlimited transient LLM retries can keep a Stop in `pausing`. A tool's retry
+and idempotency contract still governs effects lost before recorded completion.
+Opaque CLI/REPL/managed-agent nodes stop after the whole Activity settles;
+heartbeats do not checkpoint their internal sessions. Direct Workspace tasks
+and separately approved sends retain independent ownership. See
+[Temporal workflow control](temporal-workflow-control.md) for lifecycle/API
+details and [Temporal architecture](TEMPORAL_ARCHITECTURE.md#cooperative-generation-stop-and-resume)
+for accounting, topology, and continuation.
+
+**Team leads** (`orchestrator_agent`, `ai_employee`) share the supported agent
+runtime and add an `input-teammates` handle. Connected agents become authorized
+Task Manager assignees via `collect_teammate_connections()` (in
 `server/services/plugin/edge_walker.py`, called from
 `server/nodes/agent/_inline.py:prepare_agent_call`). See [agent_teams.md](agent_teams.md).
 
@@ -708,7 +749,7 @@ Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes
 
 AI Agents delegate to other agents wired to their `input-tools` handle, enabling hierarchical agent trees. There are two execution paths depending on whether the parent runs under Temporal F4.B:
 
-- **F4.B (default, `TEMPORAL_AGENT_WORKFLOW_ENABLED=true`)**: the parent `AgentWorkflow` spawns the child as a **child `AgentWorkflow`** via `workflow.execute_child_workflow` when the child type is in `AGENT_WORKFLOW_TYPES`. The parent's `node_id` rides in `child_context["parent_node_id"]` so the child's `_emit_phase` mirrors progress onto the parent's canvas badge. The LLM's `{task, context}` args travel as `child_context["invocation"]`, applied AFTER config resolution in `prepare_agent_payload` (so stored node parameters never override the delegated task; empty-task calls are rejected at the boundary without spawning). Deterministic child id `f"{parent_workflow_id}-delegate-{child_node_id}-{iteration}"`. The parent waits for the child result synchronously through the child-workflow handle.
+- **F4.B (default, `TEMPORAL_AGENT_WORKFLOW_ENABLED=true`)**: direct non-team delegation starts attached `AgentWorkflow` children when the target type is supported. Parent identity mirrors progress and per-invocation `{task, context}` wins over saved configuration. The deterministic child ID includes parent Workflow ID, child node ID, iteration, and call index. Team leads use Task Manager instead: assignment persists, a detached `DelegatedTaskWorkflow` owns the permit and attached child, and the lead receives `queued` without waiting. Version 1 detached runners independently enroll with generation control; attached children are controlled through the native parent tree.
 - **Legacy / F4.A-only**: fire-and-forget via `asyncio.create_task`. Still the path for `rlm_agent` / `claude_code_agent` (excluded from `AGENT_WORKFLOW_TYPES`) and any deployment with `TEMPORAL_AGENT_WORKFLOW_ENABLED=false`. The `delegate_to_*` tool spawns the child as a background task and returns immediately with `{"status": "delegated", "task_id": "..."}`; the parent keeps working while the child executes independently and broadcasts its own status (executing / success / error).
 
 Design decisions (legacy path): **memory isolation** (child uses its own connected memory, not the parent's), **error isolation** (child errors are logged + broadcast, never propagated to the parent), **task tracking** (background tasks live in `_delegated_tasks`, cleaned up on completion).

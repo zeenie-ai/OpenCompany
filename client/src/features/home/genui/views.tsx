@@ -119,7 +119,7 @@ const AGENT_STATUS = {
     dot: 'bg-status-ready-dot shadow-[0_0_8px_var(--status-ready-dot)]',
     ink: 'text-status-ready-ink',
   },
-  paused: { label: 'Paused', dot: 'bg-status-paused-dot', ink: 'text-status-paused-ink' },
+  paused: { label: 'Stopped', dot: 'bg-status-paused-dot', ink: 'text-status-paused-ink' },
 } as const;
 
 function Pip({ className }: { className?: string }) {

@@ -151,12 +151,20 @@ flowchart TD
   `reconcile_once`, which `list_approvals` runs: local rows created before
   this process started, and Temporal rows whose generation is no longer live.
 - Deciding while the employee is paused is allowed; the response carries
-  `will_send_on_resume: true` and the card says so.
+  `will_send_on_resume: true` for an approved gate draft and the card says so.
+  Gate drafts resume through their graph's downstream admission gate.
+- In a new controlled generation, an approval wait already admitted as a node
+  Activity counts as business work. Stop lets it settle on a decision or expiry
+  under its existing retries, retains the outcome, and can remain Stopping
+  while it waits. Resume admits the downstream action rather than recreating
+  the draft. This differs from separately approved tool calls, whose
+  `ApprovedToolCallWorkflow` send lifecycle is independent of generation Stop.
+  See [Workflow control](../../temporal-workflow-control.md).
 
 ## Related
 
 - **WebSocket handlers**
-  ([`_handlers.py`](../../../server/nodes/workflow/approval_gate/_handlers.py)):
+  ([`services/approvals/handlers.py`](../../../server/services/approvals/handlers.py)):
   `list_approvals {workflow_id?, status?, limit <= 100}` returns the owner's
   drafts, per-workflow pending counts and `server_time`;
   `decide_approval {approval_id, decision: "send" | "discard", text?, subject?, decision_key}`

@@ -56,6 +56,7 @@ import { StatusLine } from './StatusLine';
 import { StepsDisclosure } from './StepsDisclosure';
 import { TurnMeta } from './TurnMeta';
 import { useWritingRate } from './useWritingRate';
+import { useChatWorkflowControl } from '../data/control';
 
 const NO_UI: UiPart[] = [];
 
@@ -130,7 +131,10 @@ export function AssistantTurn({
   onOpenArtifact?: (artifact: ArtifactRef) => void;
 }) {
   const queued = run?.state === 'queued';
-  const live = Boolean(run && isLiveRun(run) && !queued);
+  const control = useChatWorkflowControl(run?.workflowId ?? null, run);
+  const controlled = control?.execution_control_version === 1 && Boolean(run && isLiveRun(run));
+  const suspended = controlled && control.state === 'paused';
+  const live = Boolean(run && isLiveRun(run) && !queued && !suspended);
   // A saved answer is the answer; until then, what the run streamed.
   const streamed = liveText(message ? null : run);
   const text = message ? message.text : streamed.text;
@@ -193,7 +197,7 @@ export function AssistantTurn({
     >
       <ChatAvatar persona={persona} live={live} compact={compact} />
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-        {work && <StepsDisclosure work={work} compact={compact} />}
+        {work && <StepsDisclosure work={suspended ? { ...work, live: false } : work} compact={compact} />}
         {live && !text && <Thinking />}
         {text && (
           <div
@@ -229,14 +233,15 @@ export function AssistantTurn({
         ))}
         {live && run && (
           <StatusLine
-            label={liveLabel(run, streaming)}
+            label={controlled && control.state === 'pausing' ? 'Stopping…'
+              : controlled && control.state === 'resuming' ? 'Resuming…' : liveLabel(run, streaming)}
             rate={rate}
             note={liveNote}
-            stopHint={canStop && run.state !== 'stopping'}
+            stopHint={canStop && run.state !== 'stopping' && !(controlled && control.state !== 'running')}
             compact={compact}
           />
         )}
-        {queued && (
+        {(queued || suspended) && (
           <Note icon="pause">
             <p className="m-0">Waiting for you to resume {persona.name}.</p>
           </Note>

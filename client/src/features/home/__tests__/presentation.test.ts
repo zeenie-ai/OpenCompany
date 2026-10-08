@@ -31,7 +31,7 @@ const whatsapp = { app_id: 'whatsapp', provider_id: 'whatsapp', name: 'WhatsApp'
 describe('presentEmployee', () => {
   it.each([
     ['working', { state: 'running' }, 'Working', 'working', 'pause'],
-    ['paused', { state: 'paused' }, 'Paused', 'paused', 'resume'],
+    ['paused', { state: 'paused' }, 'Stopped', 'paused', 'resume'],
     ['attention', { state: 'paused' }, 'Needs attention', 'attention', 'resume'],
     ['attention', { state: 'failed', can_resume: false }, 'Needs attention', 'attention', 'start'],
     ['attention', { state: 'pausing', can_resume: false }, 'Needs attention', 'attention', 'open_workflow'],
@@ -85,7 +85,7 @@ describe('presentEmployee', () => {
 
   it('labels the button while a change is in flight', () => {
     const view = presentEmployee(employee({ status: 'working' }, { state: 'running' }), { action: 'pause', state: 'pausing' });
-    expect(view.busyLabel).toBe('Pausing…');
+    expect(view.busyLabel).toBe('Stopping…');
     expect(busyLabelFor('start')).toBe('Starting…');
   });
 

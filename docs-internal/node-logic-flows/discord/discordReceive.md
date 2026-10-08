@@ -14,6 +14,10 @@ Fire when a message arrives in a server channel or a DM. Messages come over a
 persistent gateway connection held per bot account, are flattened, and emitted
 as CloudEvents of type `com.opencompany.discord.message.received`.
 
+Controlled deployments keep this trigger's definition and accepted Signal
+queue in `WorkflowControlWorkflow`, which applies the filter before graph
+admission. Separate listener workflows remain the legacy compatibility path.
+
 ## Inputs (handles)
 
 None — this is a trigger; it is the head of a run.
@@ -66,10 +70,10 @@ flowchart TD
   B -- yes --> Z[drop: would loop]
   B -- no --> C[shape_message: stringify snowflakes]
   C --> D[dispatch.emit CloudEvent]
-  D --> E[Temporal listener matched by EventType SA]
+  D --> E[Controlled controller on_event Signal<br/>legacy listener compatibility]
   E --> F[node filter gates the spawn]
   F --> G[child MachinaWorkflow run]
-  D --> H[in-process WS broadcast for canvas Run]
+  D --> H[in-process WS broadcast<br/>does not resolve canvas waiter]
 ```
 
 ## Decision Logic
@@ -114,6 +118,16 @@ flowchart TD
   deploy silently ignores the node.
 
 ## Related
+
+- **Event identity and Stop/Resume**: `_events.discord_message_received`
+  uses `discord:message:{message_id}` when the provider snowflake is present;
+  otherwise it keeps the random envelope ID. It cannot collide with the
+  interaction namespace. Versioned stopped generations retain accepted
+  Signals until graph admission resumes. Signal acceptance acknowledges
+  receipt, not graph completion; Visibility discovery and delivery remain
+  best effort before acceptance. See
+  [Workflow control](../../temporal-workflow-control.md) and
+  [canvas waiter delivery gap](../../event_waiter_system.md#known-gap-canvas-run-on-canary-push-triggers).
 
 - **Downstream**: `discordAction` (download attachments), `discordSend` (reply).
 - **Architecture docs**: [discord_service.md](../../discord_service.md),

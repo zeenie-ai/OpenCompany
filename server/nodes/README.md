@@ -7,6 +7,9 @@ at import time; no other code needs to change.
 
 Full reference: [docs-internal/plugin_system.md](../../docs-internal/plugin_system.md).
 
+Execution contract: [Workflow control](../../docs-internal/temporal-workflow-control.md)
+and [Node creation](../../docs-internal/node_creation.md#temporal-execution-and-stopresume-contract).
+
 ---
 
 ## Five-minute recipe
@@ -104,6 +107,77 @@ On server restart this node is:
 - emitted as NodeSpec at `GET /api/schemas/nodes/acmeSearch/spec.json`
 
 No other edits. Zero frontend changes.
+
+## Activity policy and cooperative Stop
+
+Use the existing node declarations instead of introducing plugin-specific
+pause state or a checkpoint store. `task_queue`, `start_to_close_timeout`,
+`heartbeat_timeout`, and `retry_policy` live on the node class
+([`services/plugin/scaling.py`](../services/plugin/scaling.py)). The queue is
+used when the execution's frozen worker-pool setting is enabled; with pools
+disabled the default worker receives the operation. The in-process executor
+does not enforce Temporal Activity policies.
+
+New deployment generations (`execution_control_version=1`) record resolved
+tool bindings and these policies during agent preparation. Ordinary per-type
+agent tools use that recorded policy, including attempt limits and
+non-retryable error types. Continue-As-New carries the prepared bindings and
+policy rather than reloading a pending tool from edited configuration. Old
+histories retain their previous dispatch decisions.
+
+Graph node dispatch has a narrower policy contract: plugin retry and queue
+declarations apply, but its ordinary Activity starts retain generic 24-hour
+attempt and 2-minute heartbeat defaults. The existing Workspace-task override
+uses that plugin's timeout/heartbeat declarations. Test the intended execution
+path instead of assuming a timeout declaration is honored everywhere.
+
+Stop closes workflow admission before new node/tool/model/poll/compaction work
+or a child start. An admitted Activity finishes, including configured retries;
+its result and bookkeeping are retained before Stopped is acknowledged.
+Resume runs the next pending action in the existing execution. Parallel tools
+already admitted drain concurrently. A stopped generation can therefore remain
+Stopping while a long operation or unlimited model retry is outstanding.
+An opaque CLI or managed-agent invocation has a whole-Activity boundary.
+
+Keep external I/O in regular Activities. Heartbeats support liveness and real
+operation-specific retry recovery; they do not implement Stop-after-completion.
+Do not add a generic heartbeat cursor to an HTTP call, subprocess, or provider
+session that cannot actually resume from that cursor. External side effects
+still require the plugin's retry/idempotency contract when completion was not
+yet recorded by Temporal. Independent Workspace tasks and separately approved
+sends retain their own lifecycle. See [Long-running Activity](https://docs.temporal.io/design-patterns/long-running-activity)
+and [Python Activity failure detection](https://docs.temporal.io/develop/python/failure-detection).
+
+## Trigger events and stable IDs
+
+Registered deployed triggers send CloudEvents with `dispatch.emit`.
+`WorkflowControlWorkflow` owns controlled deployments' definitions and queues;
+separate listener/poller workflows remain compatibility paths. Interactive
+canvas waits use the in-memory event waiter and have a
+[known producer delivery gap](../../docs-internal/event_waiter_system.md#known-gap-canvas-run-on-canary-push-triggers).
+
+Keep provider event IDs stable across redelivery only when the full identity
+is available. Telegram uses chat plus message ID, Discord uses separate message
+and interaction namespaces, and WhatsApp uses direction plus conversation plus
+message ID. Missing identity leaves the envelope's random fallback in place.
+Do not substitute a shared fallback key. Exact formats and producer references
+are in [Node creation](../../docs-internal/node_creation.md#event-identity-and-delivery-contract).
+
+The controller borrows queue/deduplication/carry practices from Temporal's
+[Event Accumulator](https://docs.temporal.io/design-patterns/event-accumulator)
+while processing each admitted event immediately. Pending keys are separate
+from the bounded recent-key window; overflow restoration and Continue-As-New
+retain queued work, including Signals arriving during spill awaits. Stopped
+generations queue accepted events without starting their graph runs. Events
+use Signals, acknowledged control uses completed Updates, and status uses
+read-only Queries ([Workflow messaging](https://docs.temporal.io/design-patterns/workflow-messaging-patterns)).
+
+Signal acceptance is not a node-completion acknowledgement. The producer's
+Visibility lookup and signal fan-out remain best effort, so the durable queue
+guarantee starts after Temporal accepts the Signal. Same-label/type trigger
+Workflow-ID collisions also remain a known limit; stable provider IDs do not
+resolve them. See [Workflow control](../../docs-internal/temporal-workflow-control.md)
+for version gates, membership, rollover fences, and operating limits.
 
 ---
 

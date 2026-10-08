@@ -96,7 +96,7 @@ describe('EmployeeView', () => {
     );
     expect(screen.queryByRole('heading', { name: 'Maya' })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message Maya' })).toBeInTheDocument();
-    for (const name of ['Pause', 'Resume', 'Start', 'Watch live']) {
+    for (const name of ['Stop', 'Resume', 'Start', 'Watch live']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
     for (const text of ['Receptionist', 'Working', 'Waiting for new WhatsApp messages', 'WhatsApp']) {

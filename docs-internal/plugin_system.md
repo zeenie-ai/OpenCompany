@@ -84,8 +84,8 @@ class SpecializedAgentBase(ActionNode, abstract=True):
 | `approval` | `ApprovalSpec` (`services/plugin/approval.py`) for a tool that reaches someone outside: which operations send (`operations`, `when`), who it goes to, the body and subject the owner may edit, the card's other lines, `refuse_while_asking` (Stripe) or `restrict_while_asking` (the browser, read-only). While the workflow asks first, an agent's call that sends is held as a draft for the owner instead of running. See [Chat Protocol, Approvals](./chat_protocol.md#approvals). |
 | `chat_sources` | `ClassVar[bool]` — the tool returns web results (`results: [{title, snippet, url}]`, the searches). When the agent answering a chat run calls it, the results are numbered for the conversation in what the model reads, so the answer can cite them as `[n]`. See [Chat Protocol](./chat_protocol.md#sources). |
 | `task_queue` | Temporal worker pool. See `TaskQueue` constants. |
-| `retry_policy` | `RetryPolicy` dataclass (mirrors `temporalio.common.RetryPolicy`). |
-| `start_to_close_timeout` / `heartbeat_timeout` | Per-node Temporal knobs. |
+| `retry_policy` | `RetryPolicy` dataclass (mirrors `temporalio.common.RetryPolicy`); attempts, intervals, and non-retryable error types. |
+| `start_to_close_timeout` / `heartbeat_timeout` | Per-attempt deadline / liveness window for regular Temporal Activities. Heartbeats do not extend the attempt deadline. |
 
 ### Polymorphic result envelope (`interpret_result`)
 
@@ -465,6 +465,30 @@ per-type activity to its plugin-declared `cls.task_queue`. Setting
 `TEMPORAL_WORKER_POOL_ENABLED=false` stops the pool and routes activities back
 to the manager's single default queue.
 
+Execution routing is recorded in the run's input; changing environment settings
+does not redirect an already-running workflow. New controlled generations
+(`execution_control_version=1`) also freeze resolved agent-tool bindings and
+the plugin's timeout, heartbeat, retry, and queue declarations during payload
+preparation. Ordinary per-type tools use these policies and carry them through
+Continue-As-New. Existing histories retain their recorded policy decisions.
+The in-process executor does not enforce Temporal Activity policies.
+
+Graph Activity starts currently honor plugin retry and queue declarations,
+while ordinary graph nodes retain generic 24-hour attempt / 2-minute heartbeat
+defaults. The existing Workspace-task override applies its declared timeout
+and heartbeat. The frozen v1 ordinary-agent-tool policy described above is
+stronger; do not assume the graph path applies every timeout declaration.
+
+Cooperative Stop is owned by workflow admission gates before node, tool,
+model, polling, compaction, refresh, and child-start work. Admitted work finishes
+under its existing retries and retains its result/bookkeeping; Resume releases
+the existing continuation's next pending action. Already-admitted parallel work
+drains concurrently. Keep provider I/O in regular Activities, and add heartbeat
+progress recovery only when the operation actually supports it. A status
+heartbeat cannot resume an opaque subprocess or HTTP request. See
+[Workflow control](./temporal-workflow-control.md) and
+[Node creation: execution contract](./node_creation.md#temporal-execution-and-stopresume-contract).
+
 ```python
 # Worker collection patterns (both supported).
 
@@ -509,10 +533,11 @@ agents (`android_agent`, `coding_agent`, `web_agent`, `task_agent`,
 `payments_agent`, `consumer_agent`, `autonomous_agent`), 2 team
 leads (`orchestrator_agent`, `ai_employee`).
 
-**Agents that stay as single activities** (2): `rlm_agent`,
-`claude_code_agent`. Their internal session state (RLM REPL / Claude
-CLI `--resume` with stable `cwd`) requires single-process continuity
-that would break across activity boundaries.
+**Agents that stay as single activities**: `rlm_agent`,
+`claude_code_agent`, and `vertex_managed_agent`. Their internal session state
+(RLM REPL, Claude CLI `--resume` with stable `cwd`, or Vertex interaction and
+environment chaining) remains inside one Activity. Cooperative Stop drains
+that whole Activity; it cannot stop between tools hidden inside that session.
 
 Queue distribution (live count via
 `distinct_task_queues()` and `len(_NODE_CLASS_REGISTRY)`):
@@ -1412,7 +1437,7 @@ project that publishes pre-built binaries via GitHub releases.
 |---|---|---|
 | HTTP webhook ingress | `routers/webhook.py` consults `WEBHOOK_SOURCES` registry | `register_webhook_source(MySource())` |
 | Event dispatch into workflows | `event_waiter.dispatch(event)` from `WebhookSource.handle` (canvas Run, and a deploy that runs without Temporal) | provider-specific `shape()` returning `WorkflowEvent` |
-| Deployed delivery (Temporal) | `services.events.dispatch.emit` signals the listeners whose `EventType` matches the envelope's `type` | `register_canary_trigger_type(node_type, <the envelope type>)` + an `emit` of each envelope (Stripe: `_events.emit_stripe_event`, called from `handle`) |
+| Deployed delivery (Temporal) | `services.events.dispatch.emit` discovers consumers through Visibility and sends `on_event` Signals; controlled deployments queue/filter in `WorkflowControlWorkflow`, separate listeners are compatibility paths | `register_canary_trigger_type(node_type, <the envelope type>)` + an `emit` of each envelope (Stripe: `_events.emit_stripe_event`, called from `handle`) |
 | Trigger waiting + filtering | `WebhookTriggerNode.build_filter` (CloudEvents glob); both callers pass the envelope's `data` | override `build_filter` to read the payload (the base rebuilds an envelope from it and raises); `_extra_filter(params)` only on top of the base |
 | Deploy-time setup | `DeploymentManager._prepare_trigger_deployment` calls the trigger class's `prepare_deployment` at Start and at the boot re-arm; a raise is logged and the trigger armed anyway | optional `prepare_deployment(node_id=, workflow_id=, parameters=)` classmethod (Stripe starts `stripe listen` in a background task) |
 | Daemon lifecycle | `DaemonEventSource.start/stop/restart` via `ProcessService` | `build_command(secrets)` + `parse_line(stream, line)` (subscribed via `ProcessService.start(line_handler=...)` — no log-file tailing) |
@@ -1425,6 +1450,20 @@ project that publishes pre-built binaries via GitHub releases.
 | Skill (LLM teaching markdown) | `server/skills/<agent>/<skill-name>/SKILL.md` (auto-discovered by `SkillLoader`) | the markdown itself, plus the linkage in `visuals.json` (`"<nodeType>": { ..., "skill": "<skill-name>" }`) |
 | Connection state surfaced to the modal (CLI-managed auth) | `auth_service.store_oauth_tokens(provider, "cli-managed", "cli-managed")` + `StatusBroadcaster.broadcast_credential_event` (CloudEvents v1.0 envelope wrapping `WorkflowEvent`; locked by `tests/credentials/test_credential_broadcasts.py`) | `_mark_logged_in` / `_mark_logged_out` helper pair; one `broadcaster.broadcast_credential_event("credential.oauth.connected", provider="<id>")` after login and `…disconnected` after logout. Same shape Twitter / Google logout use. |
 | Auto-install of an external CLI binary | `_install.py` with `ensure_<cli>_cli()` + GitHub-releases asset map | pinned `_VERSION` constant, `(system, machine) -> (asset, kind, member)` table, and an override on `DaemonEventSource.start()` that `await`s the helper before `super().start()` (also set `binary_name = ""` to skip the framework's `shutil.which` pre-check) |
+
+Use a stable provider event ID when the complete identity is available and
+preserve it on redelivery; otherwise retain the random envelope fallback.
+The controller borrows durable pending-key, deduplication, and rollover
+practices from the Event Accumulator pattern while preserving immediate
+per-event processing. Accepted Signals queue while stopped, including across
+overflow spill and Continue-As-New. Consumer discovery and delivery errors
+remain best effort before Signal acceptance; there is no producer outbox or
+external exactly-once guarantee. Same-label/type trigger Workflow-ID collisions
+remain a known naming limit. See
+[Node creation: event identity and delivery](./node_creation.md#event-identity-and-delivery-contract),
+[Workflow control](./temporal-workflow-control.md),
+[Event Accumulator](https://docs.temporal.io/design-patterns/event-accumulator),
+and [Workflow messaging](https://docs.temporal.io/design-patterns/workflow-messaging-patterns).
 
 ### Tool / skill / visuals naming contract
 

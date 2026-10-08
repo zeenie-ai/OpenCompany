@@ -32,6 +32,22 @@ class TestAgentWorkflowDefinition:
         assert defn is not None, "AgentWorkflow missing @workflow.defn"
         assert defn.name == "AgentWorkflow"
 
+    def test_new_child_does_not_inherit_ancestor_release_or_chain_identity(self):
+        from services.temporal.agent_workflow import _child_control_scope
+        from services.temporal.execution_control import ExecutionControl
+
+        control = ExecutionControl()
+        control.bind({"execution_control_version": 1, "generation": 1,
+            "controller_workflow_id": "controller", "execution_control_revision": 2,
+            "execution_control_state": "running", "execution_control_producers_held": False,
+            "execution_control_root_run_id": "ancestor-run", "execution_control_released_revision": 2})
+        assert control.carry()["execution_control_released_revision"] == 2
+        child_scope = _child_control_scope(control)
+        assert "execution_control_released_revision" not in child_scope
+        assert "execution_control_root_run_id" not in child_scope
+        assert child_scope["execution_control_revision"] == 2
+        assert child_scope["execution_control_state"] == "running"
+
     def test_detached_delegation_runner_is_workflow_defn(self):
         from services.temporal.agent_workflow import DelegatedTaskWorkflow
 
@@ -230,17 +246,17 @@ class TestConversationIdentity:
     def test_rollover_guards_transcript_size(self):
         """The CAN argument shares Temporal's 2 MiB payload error limit.
 
-        An oversized transcript must degrade to the opening prompt with a
-        warning instead of failing the rollover itself (which would kill
-        the run at exactly the moment it tried to survive).
+        Controlled generations fail explicitly rather than repeat the
+        opening prompt, and measure the complete converter-encoded input.
         """
         import inspect
 
         from services.temporal.agent_workflow import AgentWorkflow
 
         source = inspect.getsource(AgentWorkflow._run_impl)
-        assert "_CAN_TRANSCRIPT_MAX_BYTES" in source
-        guard_at = source.index("_CAN_TRANSCRIPT_MAX_BYTES")
+        assert "AgentContinuationTooLarge" in source
+        assert "workflow.payload_converter().to_payloads([next_context])" in source
+        guard_at = source.index("_CAN_INPUT_MAX_BYTES")
         can_at = source.index("workflow.continue_as_new(")
         assert guard_at < can_at, (
             "the size guard must run before continue_as_new is issued"
@@ -910,7 +926,7 @@ class TestExecutionIdPropagation:
 
         from services.temporal.workflow import MachinaWorkflow
 
-        src = inspect.getsource(MachinaWorkflow.run)
+        src = inspect.getsource(MachinaWorkflow.run) + inspect.getsource(MachinaWorkflow._run_graph)
         assert '"execution_id"' in src, (
             "MachinaWorkflow per-node context must carry execution_id."
         )

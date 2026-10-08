@@ -1,22 +1,26 @@
 /**
- * Stopping the run that is answering (`stop_chat_run`). One nothing picked
- * up yet ends at once; a working one stops at its next step and keeps what
- * it wrote. The run's own events say what happens next; the server's answer
- * is applied at once too, so the Stop button settles without waiting for
- * them. A run that ended meanwhile (`not_stoppable`) is not a failure.
+ * Controlled Stop suspends the owning generation through the existing
+ * workflow-control mutation flow and keeps the chat run alive. Legacy Stop
+ * ends the answer using its existing chat lifecycle. A run that ended
+ * meanwhile (`not_stoppable`) is not a failure.
  */
 
 import { useMutation } from '@tanstack/react-query';
-import { useWebSocketActions } from '@/contexts/WebSocketContext';
+import { useWebSocketActions, type WorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { isLiveRun, type RunSnapshot } from '@/lib/agui/reduceRun';
 import { useChatRunStore } from '@/stores/chatRunStore';
 
-type StopReply = { success?: boolean; error?: string; state?: string };
+type StopReply = { success?: boolean; error?: string; state?: string; resumable?: boolean; control?: WorkflowControlStatus };
 
-export function useStopChatRun(sessionId: string, onFailed?: () => void) {
-  const { sendRequest } = useWebSocketActions();
-  return useMutation<string, Error, RunSnapshot>({
+export function useStopChatRun(sessionId: string, onFailed?: () => void, control?: WorkflowControlStatus) {
+  const { sendRequest, getWorkflowControlStatus, stopChatRun } = useWebSocketActions();
+  return useMutation<StopReply, Error, RunSnapshot>({
     mutationFn: async (run) => {
+      const currentControl = control ?? (run.workflowId ? await getWorkflowControlStatus(run.workflowId) : undefined);
+      if (currentControl?.execution_control_version === 1 && run.workflowId) {
+        await stopChatRun(run.workflowId, currentControl.revision, run.runId);
+        return { resumable: true };
+      }
       let reply: StopReply | undefined;
       try {
         reply = await sendRequest<StopReply>('stop_chat_run', { run_id: run.runId });
@@ -24,9 +28,14 @@ export function useStopChatRun(sessionId: string, onFailed?: () => void) {
         throw new Error('transport');
       }
       if (reply?.success === false) throw new Error(reply.error || 'stop_failed');
-      return typeof reply?.state === 'string' ? reply.state : 'stopping';
+      if (reply?.resumable && run.workflowId) {
+        await getWorkflowControlStatus(run.workflowId);
+      }
+      return reply ?? { state: 'stopping' };
     },
-    onSuccess: (state, run) => {
+    onSuccess: (reply, run) => {
+      if (reply.resumable) return;
+      const state = reply.state;
       const store = useChatRunStore.getState();
       const current = store.sessions[sessionId]?.runs[run.runId] ?? run;
       if (!isLiveRun(current)) return;

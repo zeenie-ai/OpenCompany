@@ -92,7 +92,10 @@ def whatsapp_message_event(
     from the params payload (chat_id / sender / from)."""
     payload = dict(params)
     subject = payload.get("chat_id") or payload.get("sender") or payload.get("from")
+    message_id = payload.get("message_id")
+    fields = {"id": f"whatsapp:{direction}:{subject}:{message_id}"} if subject and message_id else {}
     return WorkflowEvent(
+        **fields,
         source="opencompany://nodes/whatsapp",
         type=f"com.opencompany.whatsapp.message.{direction}",
         subject=str(subject) if subject else None,

@@ -60,6 +60,7 @@ import {
   type DecideInput,
 } from './data/approvals';
 import { useConversation } from './data/conversation';
+import { useChatWorkflowControl, useResumeChatGeneration } from './data/control';
 import {
   useEditChatMessage,
   useRegenerateChatReply,
@@ -83,6 +84,12 @@ import { branchRefusalText, feedbackThanks } from './turns/runCopy';
 export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHandle> }) {
   const { sessionId, scope, persona, composer, notify, onSendRefused, compact = false } = host;
   const { thread, turns, lane } = useConversation(sessionId, scope);
+  const workflowId = sessionId === 'default' ? null : sessionId;
+  const control = useChatWorkflowControl(workflowId, lane);
+  const controlled = control?.execution_control_version === 1;
+  const suspended = controlled && control.state === 'paused';
+  const resuming = controlled && control.state === 'resuming';
+  const resume = useResumeChatGeneration(control, () => notify('Couldn’t resume. Try again.', 'error'));
   const boxRef = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => ({ focusComposer: () => boxRef.current?.focus() }), []);
 
@@ -94,7 +101,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     [notify, onSendRefused],
   );
   const send = useSendChatMessage(sessionId, scope, onRefused);
-  const stop = useStopChatRun(sessionId, () => notify('Couldn’t stop the reply. Try again.', 'error'));
+  const stop = useStopChatRun(sessionId, () => notify('Couldn’t stop the reply. Try again.', 'error'), control);
 
   // Changing the conversation: edit, try again, another version, a rating.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -121,7 +128,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   const changing = edit.isPending || regenerate.isPending || switchBranch.isPending;
 
   const busy = send.isPending || lane !== null || changing;
-  const stopping = lane?.state === 'stopping' || stop.isPending;
+  const stopping = lane?.state === 'stopping' || stop.isPending || (controlled && control.state === 'pausing');
 
   const editMutate = edit.mutate;
   const regenerateMutate = regenerate.mutate;
@@ -174,7 +181,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   };
 
   const stopAnswer = () => {
-    if (lane && !stopping) stop.mutate(lane);
+    if (lane && !stopping && !suspended && !resuming) stop.mutate(lane);
   };
 
   // What an interface's buttons do. Read through a ref, so the handlers an
@@ -230,7 +237,6 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
 
   // Drafts waiting for the owner: on the replies that made them, and the
   // rest (the employee's own work) after the conversation.
-  const workflowId = sessionId === 'default' ? null : sessionId;
   useApprovalEvents();
   const approvalsQuery = useChatApprovals(workflowId);
   const approvals = approvalsQuery.data ?? NO_APPROVALS;
@@ -288,7 +294,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       if (sendNewestDraft()) event.preventDefault();
       return;
     }
-    if (event.key !== 'Escape' || !lane || stopping) return;
+    if (event.key !== 'Escape' || !lane || stopping || suspended || resuming) return;
     event.preventDefault();
     stopAnswer();
   };
@@ -439,7 +445,9 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
               ready={Boolean(thread.data)}
               busy={busy}
               onSend={submit}
-              onStop={lane ? stopAnswer : undefined}
+              onStop={lane && !suspended && !resuming ? stopAnswer : undefined}
+              onResume={suspended || resuming ? () => resume.mutate() : undefined}
+              resuming={resume.isPending || resuming}
               stopping={stopping}
               compact={compact}
               boxRef={boxRef}

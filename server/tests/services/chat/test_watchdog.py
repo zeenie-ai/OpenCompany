@@ -96,7 +96,33 @@ async def test_a_workflow_is_closed_once_it_stops_running(monkeypatch, status, c
 
     _container(monkeypatch, Client())
     assert await watchdog.temporal_workflow_closed("w", "r") is closed
-    assert asked == [("w", "r")]
+    assert asked == [("w", None)]
+
+
+@pytest.mark.parametrize(("current_first", "closed"), [("first", False), ("replacement", True)])
+async def test_continue_as_new_tracks_the_claimants_execution_chain(monkeypatch, current_first, closed):
+    from temporalio.client import WorkflowExecutionStatus
+
+    descriptions = {
+        None: SimpleNamespace(run_id="next", status=WorkflowExecutionStatus.RUNNING,
+                              raw_info=SimpleNamespace(first_run_id=current_first)),
+        "first": SimpleNamespace(run_id="first", status=WorkflowExecutionStatus.CONTINUED_AS_NEW,
+                                 raw_info=SimpleNamespace(first_run_id="first")),
+    }
+
+    class Handle:
+        def __init__(self, run_id):
+            self.run_id = run_id
+
+        async def describe(self):
+            return descriptions[self.run_id]
+
+    class Client:
+        def get_workflow_handle(self, workflow_id, run_id=None):
+            return Handle(run_id)
+
+    _container(monkeypatch, Client())
+    assert await watchdog.temporal_workflow_closed("w", "first") is closed
 
 
 async def test_a_workflow_temporal_no_longer_knows_is_closed(monkeypatch):
@@ -120,6 +146,29 @@ async def test_a_workflow_temporal_no_longer_knows_is_closed(monkeypatch):
     assert await watchdog.temporal_workflow_closed("w", "r") is True
     client.status = RPCStatusCode.UNAVAILABLE
     assert await watchdog.temporal_workflow_closed("w", "r") is None
+
+
+async def test_a_running_chain_does_not_end_when_an_older_run_aged_out(monkeypatch):
+    from temporalio.client import WorkflowExecutionStatus
+    from temporalio.service import RPCError, RPCStatusCode
+
+    class Handle:
+        def __init__(self, run_id):
+            self.run_id = run_id
+
+        async def describe(self):
+            if self.run_id:
+                raise RPCError("aged out", RPCStatusCode.NOT_FOUND, b"")
+            return SimpleNamespace(run_id="new", status=WorkflowExecutionStatus.RUNNING,
+                                   raw_info=SimpleNamespace(first_run_id="first"))
+
+    class Client:
+        def get_workflow_handle(self, workflow_id, run_id=None):
+            return Handle(run_id)
+
+    _container(monkeypatch, Client())
+    assert await watchdog.temporal_workflow_closed("w", "first") is False
+    assert await watchdog.temporal_workflow_closed("w", "intermediate") is None
 
 
 async def test_cancelling_a_stopped_runs_workflow(monkeypatch):

@@ -39,6 +39,23 @@ _EVENTS_EMIT_PATTERN = re.compile(r"\bemit\s*\(")
 class TestTelegramProducerCanaryEmit:
     """Producer wrapper emits via the canary CloudEvents path only."""
 
+    def test_redelivery_keeps_the_message_id_scoped_to_its_chat(self):
+        from nodes.telegram._events import telegram_message_received
+
+        original = telegram_message_received({"chat_id": 123, "message_id": 7, "text": "hello"})
+        redelivery = telegram_message_received({"chat_id": 123, "message_id": 7, "text": "hello", "timestamp": "later"})
+        another_chat = telegram_message_received({"chat_id": 456, "message_id": 7, "text": "hello"})
+        another_message = telegram_message_received({"chat_id": 123, "message_id": 8, "text": "hello"})
+
+        assert original.id == redelivery.id
+        assert len({original.id, another_chat.id, another_message.id}) == 3
+
+    @pytest.mark.parametrize("payload", [{"chat_id": 123}, {"message_id": 7}, {}])
+    def test_missing_provider_identity_does_not_deduplicate_unrelated_messages(self, payload):
+        from nodes.telegram._events import telegram_message_received
+
+        assert telegram_message_received(payload).id != telegram_message_received(payload).id
+
     def test_dispatcher_is_async(self):
         from nodes.telegram._events import dispatch_telegram_message_received
 

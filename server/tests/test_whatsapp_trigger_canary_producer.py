@@ -41,6 +41,25 @@ _DIRECTION_GUARD_PATTERN = re.compile(r"direction\s*==\s*[\"']received[\"']")
 class TestWhatsappProducerDualEmit:
     """Producer wrapper fans out received messages to the canary path."""
 
+    def test_redelivery_keeps_the_id_scoped_to_chat_and_direction(self):
+        from nodes.whatsapp._events import whatsapp_message_event
+
+        payload = {"chat_id": "123@s.whatsapp.net", "message_id": "abc", "text": "hello"}
+        original = whatsapp_message_event("received", payload)
+        redelivery = whatsapp_message_event("received", {**payload, "timestamp": "later"})
+        another_chat = whatsapp_message_event("received", {**payload, "chat_id": "456@s.whatsapp.net"})
+        another_message = whatsapp_message_event("received", {**payload, "message_id": "def"})
+        sent = whatsapp_message_event("sent", payload)
+
+        assert original.id == redelivery.id
+        assert len({original.id, another_chat.id, another_message.id, sent.id}) == 4
+
+    @pytest.mark.parametrize("payload", [{"chat_id": "123@s.whatsapp.net"}, {"message_id": "abc"}, {}])
+    def test_missing_provider_identity_does_not_deduplicate_unrelated_messages(self, payload):
+        from nodes.whatsapp._events import whatsapp_message_event
+
+        assert whatsapp_message_event("received", payload).id != whatsapp_message_event("received", payload).id
+
     def test_broadcaster_is_async(self):
         from nodes.whatsapp._events import broadcast_whatsapp_message
 

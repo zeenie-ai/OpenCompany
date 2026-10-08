@@ -22,6 +22,25 @@ which the CLI resolves only against interactive sessions) over a stable
 `cwd`, not by re-injecting markdown. This is the only
 specialized-agent node that shells out; the others stay in-process.
 
+## Temporal Stop/Resume boundary
+
+Claude Code is excluded from `AGENT_WORKFLOW_TYPES`; its subprocess, CLI
+session, and MCP tool calls execute within a whole node Activity. New controlled
+generations (`execution_control_version=1`) close admission before the next
+Activity. An already-admitted Claude Code Activity continues through its
+internal tools until it settles under its scheduled timeout/retry policy, then
+normal result bookkeeping finishes and the graph/parent agent waits.
+
+Generation Resume releases that existing continuation. It does not launch a
+replacement CLI task or repeat a recorded completed Activity. CLI
+`--resume <session_id>` is the plugin's own conversation mechanism and is
+distinct from generation Resume. No generic heartbeat cursor serializes a CLI
+session or subprocess; ambiguous effects before recorded completion remain
+subject to the plugin/tool retry and idempotency contract. Legacy generations
+keep their previous control path. See
+[Temporal workflow control](../../temporal-workflow-control.md) and
+[Temporal architecture](../../TEMPORAL_ARCHITECTURE.md#cooperative-generation-stop-and-resume).
+
 ## Inputs (handles)
 
 Standard `std_agent_handles()` topology (same as the generic agents).

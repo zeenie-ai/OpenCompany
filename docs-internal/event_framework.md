@@ -1,17 +1,19 @@
-# Event Framework (Wave 12)
+# Event Framework and Durable Trigger Queues
 
 > **Current architecture:** This document retains the Wave-12 rollout history.
 > Controlled deployments now consolidate push registration, event Signals, and
 > polling activities inside `WorkflowControlWorkflow`; see
-> [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md). Listener
+> [workflow control contract](temporal-workflow-control.md). Listener
 > workflows described in the phase log are legacy compatibility contracts.
 
 Temporal-native event-routing layer for OpenCompany. Implements RFC sections
 6.3 (Temporal worker contract) + 6.4 (CloudEvents broadcast contract) from
 [plugin_authoring_rfc.md](./ARCHIVE/plugin_authoring_rfc.md).
 
-This doc is the operator + plugin-author reference. The design rationale +
-phase plan lives in `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`.
+This is the operator and plugin-author reference. The phase log below is
+historical; the current control and queue contract is documented here and in
+[Temporal architecture](TEMPORAL_ARCHITECTURE.md). The original design is in the
+[archived execution RFC](ARCHIVE/temporal-execution-engine-rfc.md).
 
 ## Status (2026-05-15)
 
@@ -57,18 +59,25 @@ Locked by `tests/test_event_framework_phase_a.py::TestEventFrameworkEnabledDefau
 
 ## What this framework does
 
-Every inbound event (HTTP webhook, Telegram message, Gmail poll result,
-task completion, …) becomes a Temporal Signal delivered to whichever
-running workflows are waiting on that event type. Routing happens via
-the Temporal Visibility API — workflows tag themselves with custom
-Search Attributes at start, and the dispatch helper queries
-`ListWorkflows(query="EventType='X' AND ExecutionStatus='Running'")`
-to find consumers.
+Push producers build a `WorkflowEvent` and call `dispatch.emit`. Routing uses
+Temporal Visibility to find running legacy `EventType` consumers and generation
+controllers. A controller advertises `ControlEventTypes` and matches accepted
+Signals against its registered trigger definitions. Polling controllers instead
+call provider Activities and enqueue their returned events; cron uses Temporal
+Schedules and the plugin's `CronTriggerWorkflow`.
 
-Why Temporal: durability, replay safety, server-side dedup
-(`WorkflowIDReusePolicy`), and zero custom infrastructure. The framework
-adds ~300 LOC on top of Temporal primitives rather than reinventing an
-EventBus + event_log + DLQ table.
+Visibility is eventually consistent. The dispatch helper logs and suppresses
+Temporal connection, lookup and individual Signal failures, and returns the
+envelope rather than a delivery receipt. Its return therefore does not prove
+that a consumer accepted the event. Once a Signal RPC succeeds, Temporal stores
+the Signal durably; successful acceptance still does not acknowledge handler
+processing or graph execution. There is no producer outbox in this path.
+
+Controller queues preserve accepted events across Stop, worker restart and
+continue-as-new. Deduplication is an application key contract, supplemented by
+deterministic child Workflow IDs; Workflow ID policies do not deduplicate
+arbitrary Signal payloads. Existing SQL overflow pages and atomic read receipts
+are reused for queue spill, without adding an event bus or separate DLQ.
 
 ## Architecture
 
@@ -76,8 +85,9 @@ EventBus + event_log + DLQ table.
 Inbound source (FastAPI process)
        ↓
 services/events/dispatch.py:emit(event: WorkflowEvent)
-       ├─→ Temporal Visibility query: workflows where EventType=event.type
-       ├─→ Signal each matching workflow
+       ├─→ Temporal Visibility: legacy listeners + generation controllers
+       ├─→ on_event Signal to matching consumers
+       │    └─→ controller queue → admitted graph child
        └─→ status_broadcaster.broadcast() — direct in-process WS fan-out
            (skipped with emit(..., broadcast=False))
 ```
@@ -161,6 +171,50 @@ default attributes (`WorkflowType`, `WorkflowId`, `ExecutionStatus`, …).
 
 ## Temporal contract for plugin authors
 
+### Event keys and accumulator behavior
+
+The controller borrows durable buffering, stable keys and continuation-state
+carry from Temporal's [Event Accumulator pattern](https://docs.temporal.io/design-patterns/event-accumulator).
+The complete inactivity-window batching pattern is unsuitable here: triggers
+process individual events immediately when admission is open. Stop holds the
+queue; Resume admits it in FIFO order without replaying completed graph work.
+
+New version 1 histories use `controller-event-accumulator-v1`. Pending keys are
+protected separately from the bounded recent-completion cache, including an
+event currently being dispatched. Restored overflow pages retain their earlier
+FIFO position over a same-key live redelivery. Continue-as-new rechecks arrivals
+after every spill and after message handlers finish, then carries or spills the
+accepted tail. Reset's close flag prevents rollover from reopening the controller.
+
+Use stable source identities for redelivery of the same occurrence:
+
+| Producer | Event ID |
+|---|---|
+| Telegram | `telegram:{chat_id}:{message_id}` |
+| Discord gateway message | `discord:message:{message_id}` |
+| Discord interaction | `discord:interaction:{interaction_id}` |
+| WhatsApp | `whatsapp:{direction}:{chat_id_or_sender}:{message_id}` |
+| Chat | Tracked run ID, otherwise saved message ID |
+
+A missing component retains a fresh generated ID rather than collapsing
+unrelated messages. Provider event factories own these mappings; do not generate
+random IDs inside a Workflow. Dedup is bounded, not a permanent occurrence ledger.
+An already-started deterministic child is a successful duplicate admission;
+transient child-start failures keep the original event pending for retry.
+
+Signal-With-Start is appropriate when creating a collector is part of the
+producer contract. Here Start owns generation creation and execution-root
+membership. Recreating a lost version 1 controller via Signal-With-Start would
+produce an empty registry, so producers signal the existing controller and its
+loss fails closed. Legacy deployment recovery remains separate.
+
+See [workflow messaging](temporal-workflow-control.md#workflow-messaging-review)
+for completed control Updates and read-only status Queries. The Signal queue
+and controller rollover tests are listed in the
+[verification guide](temporal-workflow-control.md#verification-and-operations).
+
+### Activity policy and Stop boundaries
+
 | Class attribute | Purpose | Default |
 |---|---|---|
 | `start_to_close_timeout` | Per-attempt budget (one activity execution) | Kind-base default: ActionNode=10m, TriggerNode=24h, ToolNode=10m |
@@ -171,6 +225,20 @@ default attributes (`WorkflowType`, `WorkflowId`, `ExecutionStatus`, …).
 Override only when the kind-base default doesn't fit; an inline comment
 explaining why is required (enforced by
 `tests/test_plugin_contract.py::TestStartToCloseTimeoutOverridesAreCommented`).
+
+Ordinary agent tool dispatch carries the resolved plugin's timeout, heartbeat,
+retry and task-queue policy in prepared tool bindings. Routing also respects the
+run's frozen worker-pool setting. Node and tool operations remain regular
+Activities. Stop closes admission for the next operation and lets admitted
+operations finish under their existing retry policies, including bookkeeping.
+Resume consumes recorded results and continues from the next pending action.
+
+Heartbeats track liveness, enable cancellation delivery and can record real
+recoverable progress after failure. A status string cannot checkpoint an opaque
+HTTP request, subprocess or provider session. Do not add a generic heartbeat
+cursor or cancel the current tool to implement Stop. See the
+[node authoring contract](node_creation.md) and
+[long-running Activity guidance](https://docs.temporal.io/design-patterns/long-running-activity).
 
 ### Worker graceful shutdown
 
@@ -424,7 +492,8 @@ Locked by `TestCancelSweepsStuckNodeStatuses` in [`test_deployment_canary_listen
 
 ## References
 
-- Plan: `~/.claude/plans/properly-fix-the-tech-dreamy-tarjan.md`
+- Current contract: [Workflow control](temporal-workflow-control.md), including
+  admission/drain acknowledgements, compatibility gates and verification.
 - RFC: [`plugin_authoring_rfc.md`](./ARCHIVE/plugin_authoring_rfc.md)
-- Temporal: [Search Attributes](https://docs.temporal.io/search-attribute) · [Signals](https://docs.temporal.io/develop/python/message-passing) · [Schedules](https://docs.temporal.io/develop/python/schedules) · [Retry Policies](https://docs.temporal.io/encyclopedia/retry-policies)
+- Temporal: [Messaging patterns](https://docs.temporal.io/design-patterns/workflow-messaging-patterns) · [Python messages](https://docs.temporal.io/develop/python/workflows/message-passing) · [Event Accumulator](https://docs.temporal.io/design-patterns/event-accumulator) · [Search Attributes](https://docs.temporal.io/search-attribute) · [Schedules](https://docs.temporal.io/develop/python/schedules) · [Retry Policies](https://docs.temporal.io/encyclopedia/retry-policies)
 - CloudEvents: [v1.0.2 spec](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md)

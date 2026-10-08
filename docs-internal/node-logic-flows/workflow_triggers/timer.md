@@ -66,8 +66,7 @@ flowchart TD
   S3 --> D
   S4 --> D
   D --> E[await asyncio.sleep wait_seconds]
-  E -- CancelledError --> F[Return success=false<br/>error: Timer cancelled]
-  E -- Exception --> G[Return success=false<br/>error: str e]
+  E -- CancelledError --> F[Raise RuntimeError: Timer cancelled<br/>BaseNode returns failed envelope]
   E -- ok --> H[elapsed_ms = now - start]
   H --> I[Return success envelope<br/>with timestamp / elapsed_ms / duration / unit / message]
 ```
@@ -77,10 +76,22 @@ flowchart TD
 - **Unit mapping**: `seconds` / `minutes` / `hours` multiply duration by
   1 / 60 / 3600. Any other value falls through to the `_` match case and is
   treated as raw seconds.
-- **Cancellation**: `asyncio.CancelledError` is caught and returns
-  `success=False` with `error="Timer cancelled"` rather than propagating.
-- **Generic errors**: any other `Exception` is stringified into the error
-  envelope.
+- **Explicit cancellation**: `asyncio.CancelledError` becomes
+  `RuntimeError("Timer cancelled")`; the node execution wrapper surfaces the
+  failed envelope. Cooperative generation Stop does not cancel this sleep.
+
+## Stop/Resume boundary
+
+When dispatched through Temporal, this operation is one regular Activity.
+For a new controlled generation, Stop before admission holds it; Stop after
+admission lets the delay finish under its existing timeout/retry policy and
+retains its output. Stopped is acknowledged after that result's bookkeeping,
+and Resume admits the next pending graph node or agent tool. The duration is
+not checkpointed halfway through, and Resume does not repeat a completed timer.
+Workflow checkpoint/maintenance sleeps are separately excluded from the drain
+count; this user-requested delay is admitted node work. See
+[Workflow control](../../temporal-workflow-control.md) and
+[Node creation](../../node_creation.md#temporal-execution-and-stopresume-contract).
 
 ## Side Effects
 

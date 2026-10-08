@@ -26,6 +26,49 @@ AI Agents can delegate tasks to other agents connected to their `input-tools` ha
 
 In both paths the parent passes only a `task` string and optional `context` string — per-invocation input that always wins over stored configuration. Everything else -- the child's provider, model, memory, skills, and tools -- comes from the child's own configuration and workflow connections.
 
+## Generation Stop/Resume ownership
+
+The F4.B path has two lifetimes. Direct non-team delegation starts an attached
+`AgentWorkflow` child and collects its result through the existing child
+handle. Task Manager assignment starts a detached `DelegatedTaskWorkflow`
+runner with `ParentClosePolicy.ABANDON`; the runner can outlive the assigning
+lead and owns its attached agent child, permit, and terminal bookkeeping.
+Native parent discovery alone cannot find the runner after the lead closes.
+
+For new `execution_control_version=1` generations, every detached runner
+enrolls with the existing generation controller through an acknowledged Update
+before admitting business work. The maintenance Activity/client bridge returns
+current pause/revision/hold posture so a late runner cannot bypass Stop.
+Attached agent children inherit the scope and require no separate registration.
+The controller's independent-root map and membership epoch survive rollover;
+control checks the execution chain while addressing the current Workflow ID.
+
+Stop closes admission throughout the discovered topology before waiting for
+admitted Activities and result bookkeeping to drain. A child-start gate counts
+only until start acknowledgement, enabling reliable native enumeration. A
+parent waiting for child completion or a runner waiting for a subagent permit
+does not hold the local drain count; its child is acknowledged separately.
+Stopped children therefore do not deadlock a parent's checkpoint. Completion
+persistence and permit cleanup for work already completed still run normally.
+No task is cancelled or re-queued merely because its generation is stopped.
+
+Resume publishes a newer revision with producers held, releases descendants and
+registered roots, reconciles membership, and releases controller/local/schedule
+producers. It uses existing handles and pending continuations rather than
+creating replacement runners or repeating completed tools. Pending task events
+remain queued for later processing. Agent continuation carries prepared
+configuration and bindings; rollover is deferred while child handles or Task
+Manager tasks remain live.
+
+The stronger guarantee is limited to version 1 Temporal generations. It does
+not turn process-local `asyncio.Task` delegation inside an opaque node into
+independent Temporal roots. Claude Code, RLM, and Vertex managed nodes remain
+whole-Activity boundaries; their internal calls may continue until that
+Activity settles. Unlimited LLM retries can delay complete Stop acknowledgement,
+and ambiguous external effects remain subject to tool retries/idempotency.
+See [Temporal workflow control](temporal-workflow-control.md) and
+[Agent continuation](TEMPORAL_ARCHITECTURE.md#agent-continuation-under-history-pressure).
+
 ## Architecture
 
 ```

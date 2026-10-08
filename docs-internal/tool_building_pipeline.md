@@ -229,13 +229,15 @@ When `TEMPORAL_PER_TYPE_DISPATCH=true` and the run is happening inside a Tempora
 
 1. `agent.prepare_payload` builds the payload; there is one wire standard
    with no `llm_engine` / `message_wire_version` discriminators (locked by
-   `tests/llm/test_single_wire_standard.py`).
+   `tests/llm/test_single_wire_standard.py`). New controlled generations also
+   record resolved tool bindings and plugin Activity policies here.
 2. `AgentWorkflow` (the F4.B child workflow) gets the LLM's tool-calls list
    back from `agent.execute_llm_step`, whose native branch sends `ToolDef`
    declarations through `ChatUnifier`.
 3. For each tool call, the workflow schedules
    `f"node.{node_type}.v{version}"` as a Temporal activity on the plugin's
-   declared `task_queue`.
+   declared `task_queue` when the run's frozen worker-pool setting is enabled;
+   otherwise the default worker handles the Activity.
 4. The per-type activity body in
    [`server/services/plugin/base.py:as_activity`](../server/services/plugin/base.py)
    runs the same pipeline `execute_tool` would have — broadcasts, plugin
@@ -243,7 +245,39 @@ When `TEMPORAL_PER_TYPE_DISPATCH=true` and the run is happening inside a Tempora
 5. The result returns to the workflow, is appended to the native message
    history, and the next LLM step sees it.
 
-This means tool calls inside an agent loop get Temporal's retry / timeout / heartbeat semantics independently of the parent agent's. A `code-exec` task burns its own retries; a `browser` task survives past the parent's `start_to_close_timeout` via its own heartbeat. See [TEMPORAL_ARCHITECTURE.md](./TEMPORAL_ARCHITECTURE.md).
+Tool calls inside an agent workflow have their own regular Activity boundary.
+For new generations (`execution_control_version=1`), ordinary plugin tools use
+the recorded `start_to_close_timeout`, `heartbeat_timeout`, `retry_policy`,
+and queue declaration. Heartbeats enforce liveness; they do not extend an
+attempt's `start_to_close_timeout` or checkpoint an opaque provider call.
+The parent is a workflow, so it has no Activity `start_to_close_timeout`.
+Existing histories retain their previous policy decisions. See
+[Temporal Architecture](./TEMPORAL_ARCHITECTURE.md) and
+[Node creation](./node_creation.md#temporal-execution-and-stopresume-contract).
+
+### Stop at the next pending tool
+
+The workflow closes admission before each model request, tool, compaction,
+refresh, or child start. An admitted tool finishes under its recorded retry
+policy, and its result/transcript bookkeeping completes even while stopped.
+For a recorded response requesting A then B, Stop during A preserves A's
+result and B's pending call; Resume executes B once without repeating that
+response or A. Already-admitted parallel tools drain concurrently. Permit
+waits and child-result waits are excluded from local drain acknowledgement;
+the attached child is controlled through the execution tree instead.
+
+Clean Continue-As-New boundaries carry the prepared bindings, transcript,
+thinking, iteration, usage, execution identity, and control revision. Stopped
+agents park before rollover. If existing compaction cannot bring the complete
+continuation input under the limit, the versioned path raises
+`AgentContinuationTooLarge` rather than returning to the opening prompt.
+Do not implement a second tool pause flag, blanket heartbeat cursor, or
+rescheduling loop for already-recorded results. External effects before an
+Activity's completion is recorded still depend on the tool's idempotency and
+retry contract. Opaque Claude Code, RLM, and Vertex managed agents have a
+whole-Activity Stop boundary; independently approved sends and Workspace
+tasks retain their own lifecycle. The full topology and messaging protocol
+is in [Workflow control](./temporal-workflow-control.md).
 
 The v1/v2 wire duality was purged; there is no engine-marker refusal path.
 

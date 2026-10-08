@@ -22,6 +22,7 @@ import {
   type StepState,
 } from './events';
 import { applyPatch } from './patch';
+import type { WorkflowControlStatus } from '@/contexts/WebSocketContext';
 
 export interface RunStep {
   stepId: string;
@@ -55,6 +56,8 @@ export interface RunSnapshot {
   runId: string;
   sessionId: string;
   workflowId: string | null;
+  /** Derived from the run's owning generation, never a chat lifecycle state. */
+  workflowControl?: WorkflowControlStatus;
   kind: RunKind;
   state: RunState;
   /** The newest event folded in; 0 before any. */
@@ -191,6 +194,10 @@ export function snapshotFromWire(raw: unknown): RunSnapshot | null {
     runId,
     sessionId,
     workflowId: textOrNull(raw.workflow_id),
+    ...(isRecord(raw.workflow_control) && typeof raw.workflow_control.revision === 'number'
+      && typeof raw.workflow_control.state === 'string'
+      ? { workflowControl: raw.workflow_control as unknown as WorkflowControlStatus }
+      : {}),
     kind: oneOf(raw.kind, RUN_KINDS, 'message'),
     state: oneOf(raw.state, RUN_STATES, 'pending'),
     seq: typeof raw.seq === 'number' && Number.isInteger(raw.seq) && raw.seq >= 0 ? raw.seq : 0,

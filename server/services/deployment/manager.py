@@ -906,6 +906,8 @@ class DeploymentManager:
                 "root_execution_id": control.root_execution_id,
                 "data_scope_id": control.data_scope_id or control.execution_id,
                 "generation": control.generation,
+                "execution_control_version": int((control.resource_manifest or {}).get("execution_control_version", 0)),
+                "controller_workflow_id": control.controller_workflow_id,
             })
             # The controller owns listeners as child workflows. This keeps
             # trigger activity in the deployment's Temporal execution tree
@@ -1057,6 +1059,17 @@ class DeploymentManager:
             # (worker pool OFF) and silently bypassed per-queue rate limits.
             **capture_temporal_routing_input(),
         }
+
+        control_lookup = self.database.get_latest_workflow_control(workflow_id)
+        control = await control_lookup if inspect.isawaitable(control_lookup) else None
+        if control is not None and control.generation == state.generation:
+            listener_data.update({
+                "graphVersion": state.graph_version, "generation": control.generation,
+                "execution_id": control.execution_id, "root_execution_id": control.root_execution_id,
+                "data_scope_id": control.data_scope_id or control.execution_id,
+                "execution_control_version": int((control.resource_manifest or {}).get("execution_control_version", 0)),
+                "controller_workflow_id": control.controller_workflow_id,
+            })
 
         schedule_id = await create_cron_schedule(
             wrapper.client,
