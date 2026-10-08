@@ -1,60 +1,35 @@
 /**
  * Lock-in tests for `lib/connectionConfig.ts`.
  *
- * The tuning constants here drive AuthContext's TanStack Query retry
- * policy and PartySocket's reconnect envelope. Drift in either —
- * accidentally raising AUTH_RETRY.CAP_MS to 30s, or flipping
- * WS_CLOSE.NORMAL_CLOSURE off RFC 6455's 1000 — would silently
- * regress perceived launch time or break the "intentional close"
+ * The tuning constants here drive the sign-in gate's visible retries and
+ * PartySocket's reconnect envelope. Drift in either (a first check minutes
+ * away, or WS_CLOSE.NORMAL_CLOSURE off RFC 6455's 1000) would silently
+ * regress how fast the app comes back or break the "intentional close"
  * contract.
  */
 
 import { describe, it, expect } from 'vitest';
-import { AUTH_RETRY, WS_CLOSE, WS_RECONNECT } from '../connectionConfig';
+import { CONNECT_RETRY, WS_CLOSE, WS_RECONNECT } from '../connectionConfig';
 
-describe('AUTH_RETRY', () => {
-  it('keeps base under 100 ms for sub-second first retries', () => {
-    // The previous hand-rolled chain started at 1000 ms, which cost
-    // ~3 s of perceived launch time when the backend was ready 100 ms
-    // after the first failure. Anything above 100 ms here would
-    // re-introduce that stall.
-    expect(AUTH_RETRY.BASE_MS).toBeLessThan(100);
+describe('CONNECT_RETRY', () => {
+  it('checks again after 2, 3, 5 and then every 8 seconds', () => {
+    expect(CONNECT_RETRY.DELAYS_S).toEqual([2, 3, 5, 8, 8]);
   });
 
-  it('caps individual retries below 5 s so a slow backend still recovers in <30 s wall', () => {
-    expect(AUTH_RETRY.CAP_MS).toBeGreaterThan(0);
-    expect(AUTH_RETRY.CAP_MS).toBeLessThan(5_000);
+  it('never waits less than before', () => {
+    const delays = CONNECT_RETRY.DELAYS_S;
+    for (let i = 1; i < delays.length; i += 1) expect(delays[i]).toBeGreaterThanOrEqual(delays[i - 1]);
   });
 
-  it('allows enough attempts to span a multi-second backend cold start', () => {
-    // With BASE_MS=50, CAP_MS=4000: cumulative upper bound
-    //   sum_{n=0..N-1} min(CAP_MS, BASE_MS * 2^n)
-    // For N=7 → ~10 s, which covers the typical 4 s backend window.
-    expect(AUTH_RETRY.MAX_ATTEMPTS).toBeGreaterThanOrEqual(5);
-    expect(AUTH_RETRY.MAX_ATTEMPTS).toBeLessThanOrEqual(10);
-  });
-
-  it('full-jitter formula stays within the documented envelope for every attempt', () => {
-    // The actual formula:
-    //   sleep = random(0, min(CAP_MS, BASE_MS * 2 ** attempt))
-    // Sample 1000 draws per attempt and confirm every draw stays under
-    // the cap. (Random.random() is bounded [0, 1) so the upper bound is
-    // strict.)
-    for (let attempt = 0; attempt < AUTH_RETRY.MAX_ATTEMPTS; attempt += 1) {
-      const upperBound = Math.min(AUTH_RETRY.CAP_MS, AUTH_RETRY.BASE_MS * 2 ** attempt);
-      for (let i = 0; i < 100; i += 1) {
-        const draw = Math.random() * upperBound;
-        expect(draw).toBeGreaterThanOrEqual(0);
-        expect(draw).toBeLessThanOrEqual(AUTH_RETRY.CAP_MS);
-      }
-    }
+  it('holds Connected long enough to read, and offers help from the third attempt', () => {
+    expect(CONNECT_RETRY.CONNECTED_HOLD_MS).toBe(1_500);
+    expect(CONNECT_RETRY.HELP_FROM_ATTEMPT).toBe(3);
   });
 });
 
 describe('WS_RECONNECT', () => {
   it('first reconnect attempt is sub-second', () => {
-    // Matches the AuthContext retry shape so first reconnect after a
-    // transient drop is fast.
+    // A transient drop reconnects before the overlay has much to say.
     expect(WS_RECONNECT.MIN_DELAY_MS).toBeGreaterThan(0);
     expect(WS_RECONNECT.MIN_DELAY_MS).toBeLessThan(1_000);
   });

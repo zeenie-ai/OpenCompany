@@ -763,6 +763,8 @@ const WebSocketContext = createContext<WebSocketContextValue | null>(null);
 export interface WebSocketActions {
   isConnected: boolean;
   isReady: boolean;
+  /** The socket was open and closed; it is retrying. */
+  reconnecting: boolean;
   sendRequest: WebSocketContextValue['sendRequest'];
   addEventListener: WebSocketContextValue['addEventListener'];
   startWorkflow: WebSocketContextValue['startWorkflow'];
@@ -3653,6 +3655,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const actions: WebSocketActions = useMemo(() => ({
     isConnected,
     isReady,
+    reconnecting,
     sendRequest,
     addEventListener,
     startWorkflow: startWorkflowAsync,
@@ -3664,7 +3667,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     getWorkflowControlStatus: getWorkflowControlStatusAsync,
     getWorkflowStatus: getWorkflowStatusAsync,
   }), [
-    isConnected, isReady, sendRequest, addEventListener,
+    isConnected, isReady, reconnecting, sendRequest, addEventListener,
     startWorkflowAsync, startEmployeeAsync, pauseWorkflowAsync, stopChatRunAsync,
     resumeWorkflowAsync, resetWorkflowAsync, getWorkflowControlStatusAsync,
     getWorkflowStatusAsync,

@@ -12,7 +12,8 @@ n8n-inspired authentication system with JWT tokens stored in HttpOnly cookies. A
 When `VITE_AUTH_ENABLED=false`:
 - Frontend skips login page entirely
 - User is set to anonymous with owner privileges
-- No backend auth API calls are made
+- The client still asks `GET /api/auth/status` once at boot; it answers
+  `auth_enabled: false`, and that is how the client knows to skip login
 - Useful for local development and testing
 
 ## Deployment Modes (when auth enabled)
@@ -147,20 +148,31 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, displayName: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
+  /** Check the session again; true when the server answered. */
+  checkAuth: () => Promise<boolean>;
 }
 ```
 
 ### Protected Route (`client/src/components/auth/ProtectedRoute.tsx`)
-Wraps protected content, shows LoginPage if not authenticated:
-```typescript
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return <LoadingSpinner />;
-  if (!isAuthenticated) return <LoginPage />;
-  return <>{children}</>;
-};
-```
+The sign-in gate (onboarding handoff R4), in front of the whole app:
+
+| State | Shows |
+|-------|-------|
+| the session is being checked (`isLoading`) | a loading screen |
+| the server can't be reached (`error`, not signed in) | Connecting (`ConnectingPanel`): a countdown to each check, Try now, "Attempt n", and from the third attempt "Still nothing? Make sure OpenCompany is running." |
+| the server answered | "Connected", held `CONNECT_RETRY.CONNECTED_HOLD_MS` (1.5 s, `useHold`) |
+| then | sign-in, or the app when the session is good or login is off |
+| signed in, the WebSocket down (`reconnecting` from `useWebSocketActions`) | Connecting over the app (`role="dialog"`, `z-60`); the app stays mounted, `inert` |
+
+Connecting and sign-in render inside one `ConnectScreen` (the whole window,
+the orb filling it, the logo and the theme button on top), so the orb
+glides from one's slot to the other's. The schedule is `useRetrySchedule`:
+`CONNECT_RETRY.DELAYS_S` (2, 3, 5, 8, 8 s), each check being `checkAuth`;
+over the app the checks are HTTP session checks too, so a session that
+expired while the server was away goes to sign-in, and the overlay goes
+once the WebSocket is back. While a `ConnectScreen` shows, the theme is the
+base of the chosen family (`shellDialogsStore.connectScreenOpen`, read by
+`app/ShellThemeProvider.tsx`).
 
 ### Login Page (`client/src/components/auth/LoginPage.tsx`)
 - shadcn `Form` composition (react-hook-form + zod), matching `EmailPanel` —
@@ -284,34 +296,34 @@ is not `local`. Only a `.env` that `company build` creates itself gets fresh
 install nothing warns. See
 [Credentials Encryption → Placeholder secrets](./credentials_encryption.md#placeholder-secrets).
 
-## Race Condition Handling (TanStack Query bootstrap)
+## Race Condition Handling (the bootstrap check)
 The frontend starts before the backend is ready during cold launch, so the
-auth-status check must tolerate transient failures.
+auth-status check must tolerate the server not being there yet.
 
-The `AuthContext` bootstraps the auth-status check through TanStack Query
-(`useQuery({ queryKey: AUTH_STATUS_QUERY_KEY, queryFn: fetchAuthStatus, retry, retryDelay, signal })`),
-which replaced the previous recursive `setTimeout` retry chain. Behaviour:
+The `AuthContext` runs the check through TanStack Query
+(`useQuery({ queryKey: AUTH_STATUS_QUERY_KEY, queryFn: fetchAuthStatus, retry: false, networkMode: 'always' })`):
 
-- **Full-jitter exponential backoff** per the AWS Architecture Blog formula:
-  `random(0, min(CAP_MS, BASE_MS * 2^attempt))`. Constants live in
-  [`client/src/lib/connectionConfig.ts`](../client/src/lib/connectionConfig.ts)
-  under `AUTH_RETRY`: `BASE_MS = 50`, `CAP_MS = 4000`, `MAX_ATTEMPTS = 7`.
-  Cumulative budget is ~10 s (vs. the old ~31 s); sub-second granularity early
-  covers the typical 4 s backend cold-start window in 4–5 attempts.
-- **401/403 short-circuit the retry chain** — those are valid responses meaning
-  "auth disabled / not logged in", not "backend unavailable", so no retry
-  budget is burned (`authShouldRetry` returns `false` when the wrapped error
-  message contains `HTTP 401` / `HTTP 403`).
+- **No hidden retries.** A failed check (no answer, a 5xx, a 401/403 or a
+  non-JSON 200) sets `error` at once, and the sign-in gate shows Connecting,
+  which checks again through `checkAuth` on a schedule the owner can see
+  (`CONNECT_RETRY` in
+  [`client/src/lib/connectionConfig.ts`](../client/src/lib/connectionConfig.ts)).
+  `checkAuth` refetches and says whether the server answered; a failed check
+  keeps the last answer, so a signed-in owner stays signed in while the
+  server is away. Nothing ever writes a failure into the status cache.
+- **`networkMode: 'always'`**: the browser's idea of being offline never
+  pauses a check of a server on this computer.
 - **AbortController `signal`** is plumbed through `queryFn` so unmount + React
   Strict Mode cleanup cancel in-flight requests automatically.
 - `login` / `register` / `logout` invalidate the cache via
   `queryClient.invalidateQueries({ queryKey: AUTH_STATUS_QUERY_KEY })`
   (`AUTH_STATUS_QUERY_KEY = ['auth', 'status']`).
 
-> Historical note: the original implementation used 5 fixed retries with
-> exponential backoff (1 s, 2 s, 4 s, 8 s, 16 s) and a recursive `setTimeout`
-> chain, surfacing "Failed to connect to server" only after all retries were
-> exhausted. This was superseded by the TanStack Query bootstrap above.
+> Historical note: the check used to retry on its own, first through a
+> recursive `setTimeout` chain (1, 2, 4, 8, 16 s), then through TanStack
+> Query's full-jitter backoff (`AUTH_RETRY`, about 10 s in all), after which
+> the login page showed "Failed to connect to server" and nothing checked
+> again. The visible Connecting screen replaced both.
 
 ## Cookie-Based Auth for API Calls
 All API calls must include `credentials: 'include'` for the HttpOnly cookie:
@@ -366,11 +378,13 @@ useEffect(() => {
 ## Key Files
 | File | Description |
 |------|-------------|
-| `client/src/config/api.ts` | API config with AUTH_ENABLED toggle |
-| `client/src/contexts/AuthContext.tsx` | React auth state with TanStack Query bootstrap + retry logic |
-| `client/src/lib/connectionConfig.ts` | `AUTH_RETRY` backoff constants (`BASE_MS` / `CAP_MS` / `MAX_ATTEMPTS`) |
+| `client/src/config/api.ts` | The backend's base URL (same origin unless `VITE_PYTHON_SERVICE_URL`) |
+| `client/src/contexts/AuthContext.tsx` | React auth state: the TanStack Query bootstrap check, `checkAuth` |
+| `client/src/lib/connectionConfig.ts` | `CONNECT_RETRY` (the Connecting screen's schedule) and the WebSocket envelope |
 | `client/src/components/auth/LoginPage.tsx` | Login UI |
-| `client/src/components/auth/ProtectedRoute.tsx` | Route guard |
+| `client/src/components/auth/ProtectedRoute.tsx` | The sign-in gate (states above) |
+| `client/src/components/auth/ConnectScreen.tsx`, `ConnectingPanel.tsx` | The screen around Connecting and sign-in, and Connecting itself |
+| `client/src/components/auth/useRetrySchedule.ts`, `useHold.ts` | The countdown to each check; "Connected" held a moment |
 | `server/models/auth.py` | User SQLModel with bcrypt |
 | `server/services/user_auth.py` | `UserAuthService`: register / login / JWT mint + verify / `get_current_user`. Holds the encryption service and credentials database but uses neither; its `is_encryption_initialized()` has no callers (see the note under Auth Service) |
 | `server/routers/auth.py` | REST endpoints |

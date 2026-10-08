@@ -6,17 +6,16 @@
  *
  *   1. Anonymous-mode happy path: backend reports `auth_enabled: false`
  *      → user is auto-set to the anonymous owner without further work.
- *   2. Retry-then-recover: 503 fails N times then 200 succeeds → user
- *      is set, no LoginPage flash.
- *   3. 401 fast-fail: backend returns 401 → query reports error
- *      immediately, NO retry budget burned (would otherwise wait 10s).
+ *   2. No hidden retries: a 503 is one failed check, reported at once;
+ *      `checkAuth` (the sign-in gate's visible retry) recovers once the
+ *      server answers, and says whether it did.
+ *   3. A 401 or a non-JSON 200 is one failed check too.
  *   4. Logout invalidates the cache: after logout the cached data shows
  *      `authenticated: false` so the WebSocketContext logout effect
  *      fires deterministically.
  *
- * Backoff is verified at the unit level (the AUTH_RETRY constant is
- * used by `lib/connectionConfig.ts`); the E2E backoff curve is covered
- * by the manual flake-test plan in docs-internal/release_build_pipeline.md.
+ * The gate's schedule (CONNECT_RETRY) is covered by
+ * components/auth/__tests__.
  */
 
 import React from 'react';
@@ -101,26 +100,24 @@ describe('AuthContext (TanStack Query)', () => {
     });
   });
 
-  it('retries on 503 and surfaces the user on the 200', async () => {
-    let attempt = 0;
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      attempt += 1;
-      if (attempt < 3) {
-        return new Response('upstream not ready', { status: 503 });
-      }
-      return new Response(
-        JSON.stringify({
-          auth_enabled: true,
-          auth_mode: 'single',
-          authenticated: true,
-          user: { id: 1, email: 'a@b', display_name: 'A', is_owner: true },
-          can_register: false,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
-    });
+  it('reports a 503 at once, and checkAuth recovers when the server answers', async () => {
+    let up = false;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      up
+        ? new Response(
+            JSON.stringify({
+              auth_enabled: true,
+              auth_mode: 'single',
+              authenticated: true,
+              user: { id: 1, email: 'a@b', display_name: 'A', is_owner: true },
+              can_register: false,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        : new Response('upstream not ready', { status: 503 }),
+    );
 
-    // Allow up to 3 retries here so the third attempt resolves the 200.
+    // A client-wide retry budget changes nothing: the query never retries.
     const client = makeQueryClient({ retry: 3 });
     const { states, Probe } = makeProbe();
     render(
@@ -131,20 +128,35 @@ describe('AuthContext (TanStack Query)', () => {
 
     await waitFor(() => {
       const last = states[states.length - 1];
+      expect(last.isLoading).toBe(false);
+      expect(last.error).not.toBeNull();
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    let answered: boolean | undefined;
+    await act(async () => {
+      answered = await states[states.length - 1].checkAuth();
+    });
+    expect(answered).toBe(false);
+
+    up = true;
+    await act(async () => {
+      answered = await states[states.length - 1].checkAuth();
+    });
+    expect(answered).toBe(true);
+    await waitFor(() => {
+      const last = states[states.length - 1];
       expect(last.isAuthenticated).toBe(true);
       expect(last.user?.email).toBe('a@b');
+      expect(last.error).toBeNull();
     });
-    expect(attempt).toBeGreaterThanOrEqual(3);
   });
 
-  it('does not retry a 401 — surfaces "not authenticated" immediately', async () => {
+  it('reports a 401 as one failed check', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ detail: 'unauthorized' }), { status: 401 }),
     );
 
-    // Even with a generous retry budget the AuthContext's `retry`
-    // predicate refuses 401/403 — `fetchSpy` should be called exactly
-    // ONCE.
     const client = makeQueryClient({ retry: 5 });
     const { states, Probe } = makeProbe();
     render(
@@ -424,10 +436,8 @@ describe('AuthContext login/register', () => {
     await waitFor(() => expect(latest().submitError).toBeNull());
   });
 
-  it('does not retry a non-JSON 200 from /status', async () => {
+  it('reports a non-JSON 200 from /status as one failed check', async () => {
     // A 200 carrying HTML means the SPA fallback swallowed the API route.
-    // Retrying cannot turn HTML into JSON, and the raw SyntaxError matched
-    // none of the fast-fail checks, so this burned the whole retry budget.
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('<!doctype html><html></html>', {
         status: 200,

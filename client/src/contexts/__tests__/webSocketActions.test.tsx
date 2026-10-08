@@ -161,7 +161,7 @@ describe('WebSocket actions for Normal mode', () => {
     unmount();
   });
 
-  it('sends straight away again once the socket has reconnected', async () => {
+  it('says while it reconnects, and sends straight away again once the socket is back', async () => {
     let actions!: WebSocketActions;
     function Probe() {
       actions = useWebSocketActions();
@@ -170,12 +170,16 @@ describe('WebSocket actions for Normal mode', () => {
     const { unmount } = mount(Probe);
     const socket = sockets[0];
     await open(socket);
+    expect(actions.reconnecting).toBe(false);
     act(() => {
       socket.readyState = 3;
       socket.onclose?.({ code: 1006, reason: 'server restarted' });
     });
+    // The sign-in gate covers the app while this is true.
+    expect(actions.reconnecting).toBe(true);
     // PartySocket reopens the same instance.
     await open(socket);
+    expect(actions.reconnecting).toBe(false);
 
     const request = actions.sendRequest('list_employees', {});
     expect(frames(socket).map((frame) => frame.type)).toContain('list_employees');

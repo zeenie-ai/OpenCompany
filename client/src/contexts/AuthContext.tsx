@@ -2,10 +2,13 @@
 /**
  * Authentication Context for user session management.
  *
- * The auth-status check runs through TanStack Query (`useQuery`) so
- * exponential backoff with full jitter, AbortController-based unmount
- * cleanup, Strict-Mode safety, and 401/403 fast-fail are all delegated
- * to the library — see https://tanstack.com/query/v5/docs/framework/react/guides/query-retries.
+ * The auth-status check runs through TanStack Query (`useQuery`), which
+ * owns AbortController-based unmount cleanup and Strict-Mode safety. It
+ * never retries in secret: when the server can't be reached the sign-in
+ * gate (components/auth/ProtectedRoute) shows the Connecting screen and
+ * checks again through `checkAuth` on a schedule the owner can see
+ * (`CONNECT_RETRY`). `networkMode: 'always'` keeps the browser's idea of
+ * being offline from pausing a check of a server on this computer.
  *
  * Login / register / logout are `useMutation`s that settle by invalidating
  * the `['auth', 'status']` query rather than calling a private setter — the
@@ -33,7 +36,6 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_CONFIG } from '../config/api';
-import { AUTH_RETRY } from '../lib/connectionConfig';
 
 export interface User {
   id: number;
@@ -69,7 +71,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, password: string, displayName: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
+  /** Check the session again; true when the server answered. */
+  checkAuth: () => Promise<boolean>;
   /** Clear stale submit errors (mode toggle, field edit). */
   resetAuthErrors: () => void;
 }
@@ -88,31 +91,6 @@ const ANONYMOUS_USER: User = {
 // `['auth', 'status']` is the canonical key for the bootstrap query.
 // Login / register / logout invalidate it via `queryClient.invalidateQueries`.
 export const AUTH_STATUS_QUERY_KEY = ['auth', 'status'] as const;
-
-/**
- * Full-jitter exponential backoff. Constants live in
- * `lib/connectionConfig.ts` (`AUTH_RETRY`) so a future tuning pass is a
- * single-file edit. See that module for the rationale and the reference
- * link to the AWS Architecture Blog.
- */
-const authRetryDelay = (attemptIndex: number): number =>
-  Math.random() * Math.min(AUTH_RETRY.CAP_MS, AUTH_RETRY.BASE_MS * 2 ** attemptIndex);
-
-/**
- * Retry on network failures + 5xx; never retry on auth errors (401/403)
- * because those are valid responses meaning "auth disabled / not logged
- * in", not "backend unavailable". Cap at `AUTH_RETRY.MAX_ATTEMPTS`.
- */
-const authShouldRetry = (failureCount: number, error: unknown): boolean => {
-  if (failureCount >= AUTH_RETRY.MAX_ATTEMPTS) return false;
-  const msg = error instanceof Error ? error.message : String(error);
-  if (msg.includes('HTTP 401') || msg.includes('HTTP 403')) return false;
-  if (msg.includes(NON_RETRYABLE)) return false;
-  return true;
-};
-
-/** Marks an error as pointless to retry (see `authShouldRetry`). */
-const NON_RETRYABLE = 'auth.non-retryable';
 
 const isJsonResponse = (response: Response): boolean =>
   (response.headers.get('content-type') ?? '').toLowerCase().includes('application/json');
@@ -175,16 +153,12 @@ const fetchAuthStatus = async ({ signal }: { signal: AbortSignal }): Promise<Aut
     signal,
   });
   if (!response.ok) {
-    // Wrap status in the error message so `authShouldRetry` can detect
-    // 401/403 without parsing the original Response.
     throw new Error(`auth.status: HTTP ${response.status}`);
   }
-  // A 200 carrying HTML means the SPA fallback swallowed /api/auth/status --
-  // usually a proxy misroute. Retrying cannot turn HTML into JSON, and the
-  // raw SyntaxError message matches none of the fast-fail checks, so it used
-  // to burn the entire retry budget on an unrecoverable condition.
+  // A 200 carrying HTML means the SPA fallback swallowed /api/auth/status,
+  // usually a proxy misroute; parsing it would only throw a SyntaxError.
   if (!isJsonResponse(response)) {
-    throw new Error(`auth.status: ${NON_RETRYABLE} (non-JSON response)`);
+    throw new Error('auth.status: non-JSON response');
   }
   return response.json() as Promise<AuthStatus>;
 };
@@ -199,8 +173,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const authQuery = useQuery({
     queryKey: AUTH_STATUS_QUERY_KEY,
     queryFn: fetchAuthStatus,
-    retry: authShouldRetry,
-    retryDelay: authRetryDelay,
+    // The gate checks again where the owner can see it (checkAuth).
+    retry: false,
+    networkMode: 'always',
     // Boot-once: never refetch on focus / mount / network reconnect.
     // Logout / login explicitly invalidate.
     staleTime: Infinity,
@@ -316,9 +291,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Deliberately NOT `authQuery.refetch()`: `authQuery`'s identity changes on
   // essentially every render, which churned `checkAuth`, which broke the
   // context `useMemo` below and re-rendered every `useAuth()` consumer on
-  // every provider render.
+  // every provider render. A failed check keeps the last answer (a signed-in
+  // owner stays signed in while the server is away) and sets `error`.
   const checkAuth = useCallback(async () => {
     await queryClient.refetchQueries({ queryKey: AUTH_STATUS_QUERY_KEY });
+    return queryClient.getQueryState(AUTH_STATUS_QUERY_KEY)?.status === 'success';
   }, [queryClient]);
 
   const resetAuthErrors = useCallback(() => {

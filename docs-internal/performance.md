@@ -198,7 +198,7 @@ T+51    — example workflows imported (still inline — see follow-ups)
 is idle in this window; the cost lives on the frontend. Likely
 contributors:
 
-1. **TanStack Query auth-bootstrap retry budget** ([client/src/contexts/AuthContext.tsx](../client/src/contexts/AuthContext.tsx) + [client/src/lib/connectionConfig.ts](../client/src/lib/connectionConfig.ts)). The `AUTH_RETRY` envelope (BASE 50 ms, CAP 4000 ms, MAX_ATTEMPTS 7) covers the typical 4 s backend cold-start window in 4-5 attempts. If the backend finishes mid-retry-cycle, the next jittered draw can land 1-3 s after readiness.
+1. **The sign-in gate's visible retry schedule** ([client/src/components/auth/ProtectedRoute.tsx](../client/src/components/auth/ProtectedRoute.tsx) + [client/src/lib/connectionConfig.ts](../client/src/lib/connectionConfig.ts)). The auth check no longer retries on its own: when the backend is not up at the first check, the Connecting screen checks again after 2, 3, 5 and then every 8 s (`CONNECT_RETRY`) and holds "Connected" 1.5 s before sign-in or the app. A backend that becomes ready just after a check waits for the next one. (The measurement above predates this; it used a 50 ms full-jitter backoff.) The desktop shell loads the SPA only after `/health/ready`, so it never shows Connecting at launch.
 2. **React Strict Mode dual-mount** in dev. The 100 ms `connectTimeout` guard in `WebSocketProvider`'s auth-gated connect effect ([WebSocketContext.tsx](../client/src/contexts/WebSocketContext.tsx)) absorbs the bulk; remaining cost is React reconciliation + babel-plugin-react-compiler overhead on first render.
 3. **PartySocket upgrade handshake**. Sub-100 ms in normal cases; would only matter on slow networks.
 
@@ -210,18 +210,19 @@ Single source of truth: [client/src/lib/connectionConfig.ts](../client/src/lib/c
 
 | Constant | Value | Notes |
 |---|---|---|
-| `AUTH_RETRY.BASE_MS` | 50 ms | Full-jitter base; first failure waits up to 50 ms vs. 1 s previously |
-| `AUTH_RETRY.CAP_MS` | 4000 ms | Cap on per-retry delay |
-| `AUTH_RETRY.MAX_ATTEMPTS` | 7 | Cumulative upper bound ~10 s (vs. 31 s on the old recursive `setTimeout`) |
+| `CONNECT_RETRY.DELAYS_S` | 2, 3, 5, 8, 8 s | The Connecting screen's waits before each check, the last repeated |
+| `CONNECT_RETRY.CONNECTED_HOLD_MS` | 1500 ms | "Connected" shows this long before sign-in or the app |
+| `CONNECT_RETRY.HELP_FROM_ATTEMPT` | 3 | "Still nothing? Make sure OpenCompany is running." from here |
 | `WS_RECONNECT.MIN_DELAY_MS` | 250 ms | First reconnect attempt |
 | `WS_RECONNECT.MAX_DELAY_MS` | 8000 ms | Cap on any single reconnect delay |
 | `WS_RECONNECT.GROW_FACTOR` | 1.3 | Multiplier per attempt |
 | `WS_RECONNECT.MAX_ENQUEUED_MESSAGES` | 200 | PartySocket send-while-disconnected buffer |
 | `WS_CLOSE.NORMAL_CLOSURE` | 1000 | RFC 6455 §7.4.1; PartySocket skips reconnect for this code |
 
-Backoff formula (AWS Architecture Blog "full jitter" pattern):
+PartySocket's reconnect delay (no jitter: it randomises only its own default
+minimum, which `MIN_DELAY_MS` replaces):
 
-    sleep = random(0, min(CAP_MS, BASE_MS * 2^attempt))
+    delay(n) = min(MAX_DELAY_MS, MIN_DELAY_MS * GROW_FACTOR^(n-1))
 
 Lock-in tests: [client/src/lib/__tests__/connectionConfig.test.ts](../client/src/lib/__tests__/connectionConfig.test.ts).
 
@@ -309,8 +310,8 @@ cd client
 bun run vitest run src/lib/__tests__/connectionConfig.test.ts
 ```
 
-10 tests, locks RFC 6455 close code, AUTH_RETRY envelope, full-jitter
-formula bound check across 100 × MAX_ATTEMPTS draws.
+Locks the RFC 6455 close code, the Connecting schedule (`CONNECT_RETRY`) and
+the reconnect envelope.
 
 ## Anti-patterns we've removed (don't reintroduce)
 
@@ -320,7 +321,7 @@ These were observed and fixed; the lessons are durable.
 - **Eager SDK import at LLM provider registration, just to reference typed exception classes.** The `services/llm/providers/*` registration blocks did `import anthropic` / `import openai` / `from google.genai import errors` at module bottom solely to populate `ProviderSpec.sdk_exception_types` — re-creating the anti-pattern above through the raw SDKs (~7.6 s warm / ~45 s cold for the AIService import vs the 703 ms baseline; google.genai alone was ~4 s warm / ~15 s cold). Fixed with lazy `"module:ClassName"` refs (`ProviderSpec.sdk_exception_refs`) resolved via `pkgutil.resolve_name` at except/read time — by then the provider factory has already imported the SDK, so resolution is a `sys.modules` cache hit. Locked by [server/tests/llm/test_lazy_sdk_imports.py](../server/tests/llm/test_lazy_sdk_imports.py) (subprocess purity probe). When adding a provider: pass a string ref, never import the SDK at module level. **The guard is per-provider-layer, and every new one needs its own copy** — the probe runs in a clean interpreter because the pytest process already has SDKs loaded by other tests, so an in-process assertion would pass vacuously. `nodes/speech/` ships its equivalent in [tests/nodes/test_speech.py](../server/tests/nodes/test_speech.py) (`TestLazySdkImports`), asserting that importing the whole speech plugin leaves `openai` / `anthropic` / `google.genai` out of `sys.modules`.
 - **Unconditional `client/node_modules/.vite` wipe on every `company dev`.** Forced a full esbuild dependency re-optimization (1-2 minutes on Windows) on every first page load. Vite self-invalidates the dep cache via lockfile/config/NODE_ENV hashes in `.vite/deps/_metadata.json`; the wipe was pure waste on a stable lockfile. Replaced with `company dev --force` → `VITE_FORCE=1` → `optimizeDeps.force` (Vite's own re-bundle mechanism), plus `optimizeDeps.include` for the heavy lazily-reached deps so late discovery can't trigger the mid-session re-optimization behind the "Outdated Optimize Dep" 504 (vitejs/vite#14284).
 - **Synchronous temporalio `Worker()` construction on the event loop.** The constructor derives a default build id by MD5-hashing the bytecode of every module in `sys.modules` (disk reads included) — ~3.1 s at our module count, freezing the loop and inflating concurrent boot work (`broadcaster.refresh_whatsapp` measured 4.2 s vs its ~0.4 s siblings). The value is memoized SDK-globally, so `TemporalWorkerManager.start()` pre-warms it once via `asyncio.to_thread(load_default_build_id)` before constructing the manager worker; all pool workers then construct cheaply. Any new long synchronous call in an async startup path should get the same `to_thread` treatment.
-- **Recursive `setTimeout` retry chain in `useEffect` without `AbortController`.** Survived unmount, leaked timers, called `setState` on stale closures. The React docs explicitly flag this in [https://react.dev/reference/react/useEffect](https://react.dev/reference/react/useEffect). Replaced with TanStack Query's `signal`-aware `queryFn`.
+- **Recursive `setTimeout` retry chain in `useEffect` without `AbortController`.** Survived unmount, leaked timers, called `setState` on stale closures. The React docs explicitly flag this in [https://react.dev/reference/react/useEffect](https://react.dev/reference/react/useEffect). Replaced with TanStack Query's `signal`-aware `queryFn`; the retries themselves are now the sign-in gate's visible schedule (`components/auth/useRetrySchedule.ts`).
 - **Flat `setTimeout(connect, 3000)` reconnect loop.** No exponential backoff, no jitter, no `code === 1000` honouring, no message replay. Replaced with PartySocket — see [client/src/contexts/WebSocketContext.tsx](../client/src/contexts/WebSocketContext.tsx).
 - **`if (event.code !== 1000)` magic numbers** scattered through the WS lifecycle. Replaced with `WS_CLOSE.NORMAL_CLOSURE` from [connectionConfig.ts](../client/src/lib/connectionConfig.ts) per RFC 6455 §7.4.1.
 - **Inline `chunkSizeWarningLimit: 1500`** silently masking bundle bloat. Lowered to 850 KB so future regressions surface at `vite build` time.
@@ -344,7 +345,6 @@ Tracked but explicitly **not** in any active plan.
 
 ## References
 
-- AWS Architecture Blog, ["Exponential Backoff and Jitter"](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/) — full-jitter formula used by `AUTH_RETRY`.
 - RFC 6455 §7.4.1 — WebSocket close codes ([https://datatracker.ietf.org/doc/html/rfc6455#section-7.4.1](https://datatracker.ietf.org/doc/html/rfc6455#section-7.4.1)).
 - TanStack Query v5 retry guide — [https://tanstack.com/query/v5/docs/framework/react/guides/query-retries](https://tanstack.com/query/v5/docs/framework/react/guides/query-retries).
 - PartySocket API — [https://docs.partykit.io/reference/partysocket-api/](https://docs.partykit.io/reference/partysocket-api/).

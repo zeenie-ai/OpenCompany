@@ -21,6 +21,10 @@ interface ShellDialogsState {
   credentialsOptions: CredentialsOptions & { intent: CredentialsIntent };
   /** Repeated opens are navigation requests, even when their target matches. */
   credentialsRequestId: number;
+  /** The sign-in gate's Connecting or sign-in screen is showing
+   *  (components/auth/ConnectScreen): the theme shows as its base. */
+  connectScreenOpen: boolean;
+  setConnectScreenOpen: (open: boolean) => void;
   openSettings: () => void;
   closeSettings: () => void;
   openCredentials: (options?: CredentialsOptions) => void;
@@ -32,6 +36,8 @@ export const useShellDialogsStore = create<ShellDialogsState>((set) => ({
   credentialsOpen: false,
   credentialsOptions: { intent: 'manage' },
   credentialsRequestId: 0,
+  connectScreenOpen: false,
+  setConnectScreenOpen: (open) => set({ connectScreenOpen: open }),
   openSettings: () => set({ settingsOpen: true }),
   closeSettings: () => set({ settingsOpen: false }),
   openCredentials: (options) => set((state) => ({

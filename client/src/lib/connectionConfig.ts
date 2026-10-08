@@ -1,12 +1,8 @@
 /**
- * Centralised tuning constants for the auth + WebSocket connection layer.
- *
- * The hand-rolled retry chain in `AuthContext` and the flat 3-second
- * reconnect timer in `WebSocketContext` were retired in favour of
- * library-backed retry policies (TanStack Query for auth, PartySocket
- * for the WS). The numeric envelope of those policies lives here so a
- * future tuning pass — tighter backoff, longer cap, smaller queue — is
- * a single-file edit and tests can reference the same values.
+ * Centralised tuning constants for the connection layer: when the sign-in
+ * gate checks the server again, PartySocket's reconnect envelope, the app
+ * heartbeat and the close codes. A tuning pass is a single-file edit, and
+ * tests reference the same values.
  *
  * Pattern mirrors `client/src/lib/queryConfig.ts`'s `STALE_TIME` /
  * `GC_TIME` buckets: named, frozen, JSDoc-explained.
@@ -17,46 +13,28 @@
  */
 
 /**
- * Auth-bootstrap retry tuning, consumed by `AuthContext`'s
- * `useQuery({ retry, retryDelay })` config.
- *
- * Full-jitter exponential backoff per the AWS Architecture Blog —
- * https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/.
- *
- * Formula:
- *
- *     sleep = random_between(0, min(CAP_MS, BASE_MS * 2^attempt))
- *
- * Sample sequence (BASE_MS=50, CAP_MS=4000):
- *
- *     attempt 0 → up to 50ms
- *     attempt 1 → up to 100ms
- *     attempt 2 → up to 200ms
- *     attempt 3 → up to 400ms
- *     attempt 4 → up to 800ms
- *     attempt 5 → up to 1600ms
- *     attempt 6 → up to 3200ms
- *     attempt 7 → up to 4000ms (capped)
- *
- * Total upper-bound wall time ≈ 10 s across 7 retries — covers the
- * typical ~4 s backend cold-start window in 4-5 attempts. The previous
- * `1000ms · Math.pow(2, n)` chain needed 31 s in the worst case.
+ * The Connecting screen (components/auth/ConnectingPanel, onboarding
+ * handoff R4). The auth check itself never retries in secret; while the
+ * server can't be reached, the gate checks it again after each of these
+ * waits in turn, then after the last one every time, counting down where
+ * the owner can see it. "Connected" shows for CONNECTED_HOLD_MS before
+ * sign-in or the app, and from attempt HELP_FROM_ATTEMPT a line says to
+ * make sure OpenCompany is running.
  */
-export const AUTH_RETRY = {
-  /** Base for the exponential factor (ms). */
-  BASE_MS: 50,
-  /** Cap on a single retry's delay (ms). */
-  CAP_MS: 4_000,
-  /** Stop retrying after this many failed attempts. */
-  MAX_ATTEMPTS: 7,
+export const CONNECT_RETRY = {
+  /** Seconds before each check. */
+  DELAYS_S: [2, 3, 5, 8, 8],
+  CONNECTED_HOLD_MS: 1_500,
+  HELP_FROM_ATTEMPT: 3,
 } as const;
 
 /**
  * WebSocket reconnect envelope, consumed by `WebSocketContext`'s
  * `new ReconnectingWebSocket(url, [], {...})` constructor.
  *
- * `partysocket/ws` interleaves jitter automatically; these values
- * define the envelope it stays inside.
+ * PartySocket waits MIN_DELAY_MS · GROW_FACTOR^(n-1) before attempt n,
+ * capped at MAX_DELAY_MS. There is no jitter: PartySocket randomises only
+ * its own default minimum, which MIN_DELAY_MS replaces.
  *
  * Sample reconnect sequence (MIN_DELAY_MS=250, GROW_FACTOR=1.3,
  * MAX_DELAY_MS=8000):
