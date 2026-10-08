@@ -73,7 +73,7 @@ class TestTwoHundredWithoutChoices:
         client.chat = AsyncMock(side_effect=error)
         spec = ProviderSpec(name="lmstudio", factory=MagicMock(return_value=client), sdk_exception_refs=("openai:OpenAIError",))
         auth = MagicMock()
-        auth.get_api_key = AsyncMock(return_value=None)
+        auth.resolve_api_key = AsyncMock(return_value=None)
         unifier = ChatUnifier(defaults={"providers": {}}, auth_service=auth)
 
         with patch("services.llm.unifier.get_provider", return_value=spec):
@@ -97,7 +97,7 @@ class TestTwoHundredWithoutChoices:
             name="openai_compatible", factory=MagicMock(return_value=client), sdk_exception_refs=("openai:OpenAIError",)
         )
         auth = MagicMock()
-        auth.get_api_key = AsyncMock(return_value=LEAKY_URL)
+        auth.resolve_api_key = AsyncMock(return_value=LEAKY_URL)
         unifier = ChatUnifier(defaults={"providers": {}}, auth_service=auth)
 
         with patch("services.llm.unifier.get_provider", return_value=spec), patch("services.llm.unifier.logger") as log:

@@ -74,7 +74,7 @@ class ChatModelExtractor:
             api_key = params.get("api_key")
 
             if not api_key and auth:
-                api_key = await auth.get_api_key(provider)
+                api_key = await auth.resolve_api_key(provider)
             if not api_key:
                 logger.warning(f"[RLM] Skipping chat model node {node_type}: no API key")
                 continue

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { buildApiUrl } from '@/config/api';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { browserModifiers, browserPoint, decodeBrowserFrame, type BrowserFrameHeader } from './protocol';
+import BrowserTasks from './BrowserTasks';
 
 export interface BrowserWorkspaceProps {
   workflowId?: string | null;
@@ -16,6 +17,7 @@ type Phase = 'connecting' | 'idle' | 'live' | 'error';
 interface BrowserState {
   state: string;
   challenge_required?: boolean;
+  sensitive_login?: boolean;
   controller?: string | null;
   request?: { message?: string; reason?: string } | null;
 }
@@ -35,6 +37,7 @@ export default function BrowserWorkspace({ workflowId, nodes, visible = true }: 
         </select>
       )}
       <BrowserSessionView key={`${workflowId}:${nodeId}`} workflowId={workflowId} nodeId={nodeId} visible={visible} />
+      <BrowserTasks key={`tasks:${workflowId}:${nodeId}`} workflowId={workflowId} browserNodeId={nodeId} visible={visible} />
     </div>
   );
 }
@@ -63,6 +66,7 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
   const [address, setAddress] = useState('');
   const [hasFrame, setHasFrame] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [dialog, setDialog] = useState<{ kind: string; message: string } | null>(null);
@@ -126,6 +130,10 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
           if (message.type === 'page') setAddress(message.url || '');
           if (message.type === 'tabs') setTabs(message.tabs || []);
           if (message.type === 'dialog') { setDialog(message); setPromptText(''); }
+          if (message.type === 'sensitive') {
+            streamEpoch += 1; setHasFrame(false); frameRef.current = null; setDialog(null); setTabs([]); setAddress('');
+            setState((previous) => ({ ...previous, sensitive_login: !!message.enabled }));
+          }
           if (message.type === 'error') {
             setError(message.message || 'Browser request failed.', message.code === 'screencast');
             if (message.code === 'screencast' && message.retrying === false) {
@@ -264,6 +272,19 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
       if (mountedRef.current) setError(cause instanceof Error ? cause.message : 'Could not start the browser.');
     } finally { if (mountedRef.current) setStarting(false); }
   };
+  const closeProtectedBrowser = async () => {
+    setStopping(true); setError('');
+    try {
+      const result = await sendRequest<{ success: boolean; error?: string }>('browser_session_stop', { workflow_id: workflowId, node_id: nodeId }, 60_000);
+      if (!result.success) throw new Error(result.error || 'Could not close the browser.');
+      if (mountedRef.current) {
+        setHasFrame(false); frameRef.current = null; setTabs([]); setAddress(''); setDialog(null);
+        setState({ state: 'idle' }); setPhase('idle');
+      }
+    } catch (cause) {
+      if (mountedRef.current) setError(cause instanceof Error ? cause.message : 'Could not close the browser.');
+    } finally { if (mountedRef.current) setStopping(false); }
+  };
   const point = (clientX: number, clientY: number) => {
     const rect = surfaceRef.current?.getBoundingClientRect(); const frame = frameRef.current;
     return rect && frame ? browserPoint(clientX - rect.left, clientY - rect.top, rect.width, rect.height, frame.width, frame.height, frame.header) : null;
@@ -316,7 +337,7 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
   return (
     <FullView label="Browser" toolbar={<>
         <span role="status" className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={statusLabel}>{installing ? 'Installing browser…' : starting ? 'Starting browser…' : statusLabel}</span>
-        {phase === 'live' && <Button size="sm" variant="outline" disabled={takingControl} onClick={() => {
+        {phase === 'live' && !state.sensitive_login && <Button size="sm" variant="outline" disabled={takingControl} onClick={() => {
           setError('');
           if (control) send({ type: 'control_release' });
           else { setTakingControl(true); send({ type: 'control_request', ...(state.controller === 'other' ? { force: true } : {}) }); }
@@ -343,7 +364,8 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
         onCompositionEnd={(e) => { if (control && e.data) send({ type: 'insert_text', text: e.data }); }}>
         <canvas ref={canvasRef} aria-label="Browser screenshot" className="absolute inset-0 h-full w-full object-contain" style={{ visibility: hasFrame ? 'visible' : 'hidden' }} />
         {!hasFrame && <div className="relative flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Globe aria-hidden className="size-6" />
-          <span>{phase === 'live' ? 'Waiting for the browser picture…' : phase === 'idle' ? 'The browser will appear when the employee uses it. You can also open it now.' : statusLabel}</span>
+          <span>{state.sensitive_login ? 'Browser observations are paused during protected login.' : phase === 'live' ? 'Waiting for the browser picture…' : phase === 'idle' ? 'The browser will appear when the employee uses it. You can also open it now.' : statusLabel}</span>
+          {state.sensitive_login && <Button variant="outline" disabled={stopping || !isReady} onClick={() => void closeProtectedBrowser()}>{stopping ? 'Closing…' : 'Close browser for manual login'}</Button>}
           {phase === 'idle' && <Button variant="outline" disabled={starting || installing || !isReady} onClick={() => void start()}>{starting ? 'Starting…' : installing ? 'Installing…' : 'Start browser'}</Button>}
           {phase === 'error' && <Button variant="outline" onClick={() => setAttempt((n) => n + 1)}>Reconnect</Button>}
         </div>}

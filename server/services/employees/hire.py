@@ -100,9 +100,9 @@ def _resolve_apps(request: HireEmployeeRequest, connected: List[str]) -> tuple:
     return known, unsupported
 
 
-async def owner_values_for(auth_service: Any) -> Dict[str, str]:
+async def owner_values_for(auth_service: Any, *, principal: Optional[str] = None) -> Dict[str, str]:
     """The owner's own addresses (for reports to them, and sending as them)."""
-    return await _owner_values(Connections(auth_service), auth_service)
+    return await _owner_values(Connections(auth_service, principal=principal), auth_service)
 
 
 async def _owner_values(connections: Connections, auth_service: Any) -> Dict[str, str]:
@@ -326,7 +326,7 @@ async def handle_hire_employee(data: Dict[str, Any], websocket: WebSocket) -> Di
         if answer is not None:
             return answer
 
-    connections = Connections(auth_service)
+    connections = Connections(auth_service, principal=owner)
     connected = await connections.connected_app_ids()
     apps, unsupported = _resolve_apps(request, connected)
     row, claim_token = await store.claim_hire(

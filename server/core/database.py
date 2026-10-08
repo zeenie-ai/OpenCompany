@@ -75,6 +75,11 @@ from models.chat import (  # noqa: F401 - registers SQLModel tables
     ChatThread,
 )
 from models.cache import CacheEntry  # SQLite-backed cache for Redis alternative
+from models.workspace_tasks import WorkspaceTaskRecord  # noqa: F401
+from models.credential_sources import CredentialSource, BrowserCredentialBinding  # noqa: F401
+from models.browser_owners import BrowserOwner, BrowserProfileOwner, BrowserTransientRoute  # noqa: F401
+from models.browser_profiles import BrowserProfileRow  # noqa: F401
+from models.auth import User  # noqa: F401
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -145,23 +150,60 @@ class Database:
 
             # Create tables
             async with self.engine.begin() as conn:
+                if self.engine.dialect.name == "postgresql":
+                    from core.shared_database import install_postgresql_timestamp_types
+                    install_postgresql_timestamp_types(SQLModel.metadata)
+                    await conn.execute(text("SELECT pg_advisory_xact_lock(763746822)"))
                 await conn.run_sync(SQLModel.metadata.create_all)
+                # Earlier development builds of the owner registry predate
+                # the frozen viewer association. These nullable fields add no
+                # ownership or task claims and preserve all recovery latches.
+                from sqlalchemy import inspect as inspect_schema
+                owner_columns = await conn.run_sync(lambda sync: {
+                    column["name"] for column in inspect_schema(sync).get_columns("browser_profile_owners")})
+                for name in ("workflow_id", "browser_node_id"):
+                    if name not in owner_columns:
+                        await conn.execute(text(f"ALTER TABLE browser_profile_owners ADD COLUMN {name} VARCHAR(255)"))
+                from models.browser_owners import BrowserProfileOwner
+                for index in BrowserProfileOwner.__table__.indexes:
+                    await conn.run_sync(lambda sync, index=index: index.create(sync, checkfirst=True))
 
-            # Add missing columns to existing tables (simple migration)
-            await self._migrate_user_settings()
-            await self._migrate_agent_teams()
-            await self._migrate_workflow_controls()
-            await self._migrate_generation_scoped_runtime_data()
-            await self._migrate_chat_messages()
-            await self._migrate_chat_runs()
-            await self._migrate_approvals()
-            await self._migrate_employees()
+            # Existing SQLite upgrades retain their exact backfills. PostgreSQL
+            # starts with the current SQLModel schema; legacy SQLite data is
+            # moved explicitly by the offline database transfer command.
+            if self.engine.dialect.name == "sqlite":
+                await self._migrate_user_settings()
+                await self._migrate_agent_teams()
+                await self._migrate_workflow_controls()
+                await self._migrate_generation_scoped_runtime_data()
+                await self._migrate_chat_messages()
+                await self._migrate_chat_runs()
+                await self._migrate_approvals()
+                await self._migrate_employees()
+            else:
+                await self._validate_shared_schema()
 
             logger.info("Database initialized successfully")
 
         except Exception as e:
             logger.error("Database startup failed", error=str(e))
             raise
+
+    async def _validate_shared_schema(self):
+        """Fail before serving an incompatible shared schema; never mask drift."""
+        from sqlalchemy import inspect as inspect_schema
+
+        async with self.engine.connect() as connection:
+            def missing(sync_connection):
+                inspector = inspect_schema(sync_connection)
+                absent = []
+                for table in SQLModel.metadata.sorted_tables:
+                    names = {entry["name"] for entry in inspector.get_columns(table.name)}
+                    absent.extend(f"{table.name}.{column.name}" for column in table.columns if column.name not in names)
+                return absent
+            absent = await connection.run_sync(missing)
+        if absent:
+            raise RuntimeError("Shared database schema requires migration: " + ", ".join(absent))
 
     async def allocate_identity(self, namespace: str) -> int:
         """Atomically allocate the next positive integer in ``namespace``."""
@@ -473,6 +515,10 @@ class Database:
         async with self.get_session() as session:
             if self.engine is not None and self.engine.dialect.name == "sqlite":
                 await session.execute(text("BEGIN IMMEDIATE"))
+            elif self.engine is not None and self.engine.dialect.name == "postgresql":
+                # Match SQLite's existing write reservation for callers that
+                # perform read/modify/write, including first-row creation.
+                await session.execute(text("SELECT pg_advisory_xact_lock(763746821)"))
             yield session
 
     async def _migrate_workflow_controls(self):
@@ -704,6 +750,8 @@ class Database:
                     await session.execute(text("BEGIN IMMEDIATE"))
                 else:
                     await session.begin()
+                    if self.engine is not None and self.engine.dialect.name == "postgresql":
+                        await session.execute(text("SELECT pg_advisory_xact_lock(763746821)"))
 
                 if mutation_id:
                     found = await session.execute(
@@ -4094,14 +4142,13 @@ class Database:
                         )
                     }
 
-                await session.execute(
-                    text(
-                        "INSERT OR IGNORE INTO subagent_concurrency_counters "
-                        "(root_execution_id, active_count, updated_at) "
-                        "VALUES (:root, 0, CURRENT_TIMESTAMP)"
-                    ),
-                    {"root": root_execution_id},
-                )
+                if self.engine.dialect.name == "postgresql":
+                    from sqlalchemy.dialects.postgresql import insert
+                else:
+                    from sqlalchemy.dialects.sqlite import insert
+                await session.execute(insert(SubagentConcurrencyCounter).values(
+                    root_execution_id=root_execution_id, active_count=0, updated_at=now
+                ).on_conflict_do_nothing(index_elements=["root_execution_id"]))
                 claimed = await session.execute(
                     update(SubagentConcurrencyCounter)
                     .where(

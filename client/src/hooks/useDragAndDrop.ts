@@ -1,5 +1,9 @@
 import { useCallback } from 'react';
-import { Node } from 'reactflow';
+import { Edge, Node } from 'reactflow';
+import { toast } from 'sonner';
+import { useAppStore } from '../store/useAppStore';
+import { createBrowserAgent } from '../services/browserAgentApi';
+import { addSavedNodes, addSavedEdges } from '../lib/workflowOps';
 import { snapToGrid, getDefaultNodePosition, nextNodeInstanceId } from '../utils/workflow';
 import { theme } from '../styles/theme';
 import { getCachedNodeSpec } from '../lib/nodeSpec';
@@ -17,6 +21,8 @@ const isAgentType = (nodeType: string): boolean => {
 interface UseDragAndDropProps {
   nodes: Node[];
   setNodes: (nodes: Node[] | ((nodes: Node[]) => Node[])) => void;
+  edges?: Edge[];
+  setEdges?: (edges: Edge[] | ((edges: Edge[]) => Edge[])) => void;
   saveNodeParameters?: (nodeId: string, parameters: Record<string, any>) => Promise<boolean>;
   globalModelDefaults?: { provider: string; model: string } | null;
   workflowId: string;
@@ -51,7 +57,7 @@ export const generateUniqueLabel = (displayName: string, nodeType: string, exist
   return `${displayName} ${suffix}`;
 };
 
-export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalModelDefaults, workflowId, screenToFlowPosition }: UseDragAndDropProps) => {
+export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNodeParameters, globalModelDefaults, workflowId, screenToFlowPosition }: UseDragAndDropProps) => {
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
@@ -83,6 +89,25 @@ export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalMode
         // If no nodes exist, use default position
         if (nodes.length === 0) {
           position = getDefaultNodePosition(nodes.length);
+        }
+
+        if (nodeData.type === 'browser_agent') {
+          const store = useAppStore.getState();
+          if (!setEdges || !store.currentWorkflow || store.currentWorkflow.id !== workflowId) {
+            toast.error('Open a workflow before adding Browser AI Agent.');
+            return;
+          }
+          store.updateWorkflow({ nodes, edges });
+          if (!(await useAppStore.getState().saveWorkflow())) return;
+          if (useAppStore.getState().currentWorkflow?.id !== workflowId) return;
+          const result = await createBrowserAgent({ workflow_id: workflowId, position: [position.x, position.y],
+            ...(globalModelDefaults || {}) });
+          useAppStore.getState().adoptSavedOperations(workflowId, result.operations);
+          if (useAppStore.getState().currentWorkflow?.id === workflowId) {
+            setNodes(current => addSavedNodes(current, result.operations));
+            setEdges(current => addSavedEdges(current, result.operations));
+          }
+          return;
         }
 
         // Get node definition to access displayName
@@ -122,9 +147,10 @@ export const useDragAndDrop = ({ nodes, setNodes, saveNodeParameters, globalMode
         setNodes((nds) => nds.concat(newNode));
       } catch (error) {
         console.error('Error dropping node:', error);
+        toast.error(error instanceof Error ? error.message : 'Could not add node.');
       }
     },
-    [setNodes, nodes, saveNodeParameters, globalModelDefaults, workflowId, screenToFlowPosition]
+    [setNodes, nodes, edges, setEdges, saveNodeParameters, globalModelDefaults, workflowId, screenToFlowPosition]
   );
 
   const handleComponentDragStart = useCallback((event: React.DragEvent, definition: any) => {

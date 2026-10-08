@@ -38,6 +38,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from services.process_environment import without_onepassword_environment
 from typing import Any, Dict
 
 from core.js_runtime import add_package, shared_tree_bin
@@ -125,7 +126,7 @@ def claude_binary_path() -> str:
 def _claude_env() -> Dict[str, str]:
     env = os.environ.copy()
     env["CLAUDE_CONFIG_DIR"] = str(OPENCOMPANY_CLAUDE_DIR)
-    return env
+    return without_onepassword_environment(env)
 
 
 async def _run_auth(subcommand: str, *, timeout: float) -> Dict[str, Any]:

@@ -28,6 +28,12 @@ async def reset_workspace_task_runtime(payload: dict) -> dict:
         generation = int(control.generation) if control and control.status == "resetting" else 0
         reset_nodes = []
         for node in nodes:
+            if node["type"] == "browser_agent":
+                # Every native Browser Agent child has already acknowledged its
+                # matching-token owner cleanup before the controller reaches us.
+                # Re-resolving editable bindings would target a different profile
+                # or fail after a deliberate graph deletion.
+                continue
             result = await get_node_class(node["type"]).reset_execution_state(
                 node_id=node["id"], workflow_id=workflow_id,
                 execution_id=control.execution_id if control else "",

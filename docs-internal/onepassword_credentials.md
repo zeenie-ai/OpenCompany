@@ -1,0 +1,43 @@
+# 1Password credential sources
+
+OpenCompany retains its encrypted local credential database. A provider can instead enroll an approved 1Password field reference. The application database stores references, ownership, model metadata and public endpoint configuration; it never stores resolved values. Distributed mode accepts these static bindings and configured browser logins, and rejects local/inline/ambient secrets, OAuth refresh stores and machine-local CLI login sessions.
+
+## Provisioning and authorization
+
+The pin is **1Password CLI 2.40.0**, the official stable release dated 2026-10-01. Use the credential UI's installation command or `services.credentials.provision.ensure_cli()` during deployment provisioning. This follows the existing project-local `pooch` download pattern and downloads the versioned official archive into `<DATA_DIR>/packages/onepassword/2.40.0`.
+
+The executable is verified **before execution**. Windows uses valid Authenticode with the 1Password/AgileBits publisher; macOS uses Apple's code-signing verification and the publisher Team ID. Linux requires GnuPG, the archive's `op.sig`, and an exact signature by fingerprint `3FEF9748469ADBE15DA7CA80AC2D62742012EA22`. Provisioning retrieves that exact public key into a private verification keyring. A verified install records its SHA-256, which subsequent reads check. An externally supplied executable must pass publisher verification too; manually installed Linux binaries need their corresponding `op.sig` and the approved verification key. No unverified binary receives a secret-service token.
+
+Set `ONEPASSWORD_CLI_PATH` to an absolute path when using an operator-provisioned executable. `onepassword_status` verifies signature/integrity and the pinned version only: it does not sign in, enumerate a vault or resolve a field. Installation and status failures expose fixed error messages, without raw command streams.
+
+Local defaults use `ONEPASSWORD_AUTH_MODE=desktop`. Enable CLI integration in the desktop app; optionally select an account with `ONEPASSWORD_ACCOUNT`. Desktop authorization is broader than an individual OpenCompany binding, so application ownership and binding restrictions are checked independently. A backend running under another operating-system user, a headless service, or an expired/denied desktop grant must be authorized appropriately; there is no fallback to a different account or old local key.
+
+Distributed mode requires `ONEPASSWORD_AUTH_MODE=service_account`. Supply `OP_SERVICE_ACCOUNT_TOKEN` through trusted deployment configuration, using a dedicated automation vault with read-only field/item access. The private resolver passes it only to its own child process. It deliberately excludes Connect variables, session variables, ambient provider keys and debug options. Ordinary application subprocesses strip every case-insensitive `OP_*` variable after environment merges; browser processes retain their stricter existing allowlists. Never wrap browser-use in `op run` or generate a plaintext `op inject` template.
+
+## Enrolling API credentials
+
+Choose **1Password** in a supported provider's existing credential panel and enter `op://<vault-ID>/<item-ID>/<field>`. Named OpenAI-compatible endpoints additionally accept a public base URL and endpoint name. References require vault/item IDs; OTP query parameters and arbitrary CLI options are unsupported. Validation resolves privately, probes the upstream provider, and saves the reference and safe model metadata only after success.
+
+The generic adapter supports a single static API key. Providers that need additional credential fields, custom validation, OAuth or CLI-managed sessions require an explicitly audited adapter and otherwise remain local-only; their existing local forms keep working. This includes multi-field WhatsApp Business credentials. Native model, Apify, Gemini managed-agent fallback, Mobile model and speech runtime callers use execution-time resolution with the trusted principal. Dictation availability and employee provider/endpoint catalogues use principal-scoped metadata only. Vertex project-based Application Default Credentials remain local-only.
+
+`AuthService.get_credential_source`, `has_valid_key`, `get_stored_models` and `get_model_params` read saved metadata without resolving a field. `get_api_key` preserves the legacy local form behavior but returns no resolved value for a 1Password source. Only `resolve_api_key` is a runtime secret accessor. Provider Activities call it at execution time, with the authenticated principal; workflow preparation, catalogue reads and model dropdowns use metadata. Unavailable/revoked references fail explicitly and never fall back to an old key. Values have no application-level decrypted cache, so later resolution sees rotation and revocation.
+
+The private subprocess uses fixed `op read --no-newline` arguments, no shell, closed stdin and bounded private output pipes. It preserves Unicode, leading/trailing whitespace and embedded newlines. Timeouts and cancellation terminate and wait for the child. Errors distinguish unavailable CLI, invalid references, authorization, rate limits and resolution failures through safe codes/messages; raw stdout/stderr are never logged, persisted or returned.
+
+## Website login bindings
+
+The **Browser profiles** panel enrolls username/password references with an exact login origin, a success origin/path and optional success selector. A binding may be restricted to a profile, workflow or employee; server resource authorization validates those restrictions. Saving a website binding does not retrieve a password or grant a desktop authorization. Model-visible discovery returns opaque IDs, labels, origins and supported fields, excluding vault/item references and values.
+
+The browser owner first reads nonsecret metadata with `get_browser_credential_binding` and enforces policy, Ask first, task ownership and the current login target. It then persists a nonsecret sensitive-login latch, suspends the browser-use daemon and drains/gates captures and page metadata. Only after that can `resolve_browser_credentials` resolve values for the private CDP fill flow. Resolution rechecks ownership, scopes and the current enrollment after authorization waits. The browser revalidates the tab/frame/targets and origin before effects.
+
+Passwords are filled through the existing private CDP connection. During this phase snapshots, page text, screenshots, vision, WebMCP and ordinary browser operations remain gated. A configured private success check ends the phase. An uncertain submit, changed target, failed suspension or unconfirmed completion retains the gate and requests human login. Ask first/read-only policies never receive an autofill bypass. Multi-step login, MFA and passkeys use existing human takeover.
+
+## Verification and limits
+
+Automated credential tests use fake subprocesses and nonsecret fixtures: no developer vault is read. Canaries cover exact value preservation, CLI argument/environment containment, bounded pipes, cancellation, safe errors, metadata-only reads, per-call rotation, scoped bindings, revoked enrollment during authorization, and absence of cluster fallback. Browser tests separately cover gated captures and private CDP login.
+
+An isolated Windows smoke test provisioned the official 2.40.0 archive, verified its valid Agilebits publisher signature before executing it, and passed `ensure_cli()` plus `doctor()` with `{available: true, version: "2.40.0", auth_mode: "desktop"}`. This test only executed version inspection; it performed no desktop authorization, service-account authentication or vault access. The verifier excludes inherited PowerShell module paths so a backend launched from PowerShell 7 can also use the Windows PowerShell fallback safely. macOS/Linux publisher verification still needs platform acceptance.
+
+Live desktop authorization remains a deployment acceptance check on the actual backend user/process and supported OS. A signed CLI pin does not establish vault permissions. Run explicitly authorized GitHub login/read-only issue summarization and Gmail human login/invoice summarization smoke tests only after controlled-fixture acceptance. Do not log actual credentials, vault contents or sign-in URLs during smoke testing.
+
+Official references: [CLI installation and verification](https://www.1password.dev/cli/get-started), [release notes](https://app-updates.agilebits.com/product_history/CLI2), [read command](https://www.1password.dev/cli/reference/commands/read), [desktop authorization](https://www.1password.dev/cli/app-integration-security), [service accounts and Connect precedence](https://www.1password.dev/service-accounts/use-with-1password-cli).

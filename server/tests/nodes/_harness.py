@@ -221,6 +221,7 @@ def _build_mock_ai_service() -> MagicMock:
     svc = MagicMock(name="AIService")
     svc.auth = MagicMock(name="AuthService")
     svc.auth.get_api_key = AsyncMock(return_value="test-api-key")
+    svc.auth.resolve_api_key = AsyncMock(return_value="test-api-key")
     svc.auth.get_stored_models = AsyncMock(return_value=["test-model"])
     svc.auth.get_oauth_tokens = AsyncMock(return_value=None)
     svc.execute_chat = AsyncMock(

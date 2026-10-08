@@ -65,9 +65,10 @@ async def heal_agent_models(database: Any, auth_service: Any, connections: Conne
             endpoint_models = None
             if str(provider).startswith("openai_compatible:"):
                 from services.llm.endpoints import list_endpoints
-                endpoint = next((entry for entry in await list_endpoints(auth_service) if entry.ref == provider), None)
+                principal = getattr(connections, "principal", None)
+                endpoint = next((entry for entry in await list_endpoints(auth_service, **({"principal": principal} if principal is not None else {})) if entry.ref == provider), None)
                 endpoint_models = list(endpoint.models) if endpoint is not None else None
-            model = await _model_for(provider, database, auth_service, local=runs_locally(provider), endpoint_models=endpoint_models)
+            model = await _model_for(provider, database, auth_service, local=runs_locally(provider), endpoint_models=endpoint_models, principal=getattr(connections, "principal", None))
             if model:
                 await database.save_node_parameters(agent_id, {**params, "model": model})
                 changed.append(agent_id)
@@ -119,7 +120,7 @@ async def handle_start_employee(data: Dict[str, Any], websocket: WebSocket) -> D
         error = team_approval_topology_error(getattr(workflow, "data", None), roles, params=params, team_plan=employee.team_plan)
         if error:
             return {"success": False, "error": error}
-    await heal_agent_models(database, auth_service, Connections(auth_service), workflow_id)
+    await heal_agent_models(database, auth_service, Connections(auth_service, principal=execution_principal(data, websocket)), workflow_id)
     # An employee an older builder made comes up to the live Ask first rule
     # before it runs (services/employees/upgrade.py).
     from services.employees.upgrade import upgrade_employee

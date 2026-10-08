@@ -96,3 +96,57 @@ async def test_parameter_snapshot_keeps_original_mission_and_model(descriptor):
     result = await prepare_agent_payload({**_CONTEXT, "parameter_snapshot": snapshot})
     assert result["user_prompt"] == "Original admitted mission"
     assert result["parameter_snapshot"] == snapshot
+
+
+async def test_direct_workspace_prompt_wins_and_never_loads_deployed_conversation(descriptor, monkeypatch):
+    import core.container as container_module
+    database = container_module.container.database()
+    database.get_node_parameters.return_value.update(prompt="Saved chat template", system_message="Keep Browser instructions")
+    descriptor.value = {"kind": "context", "node_id": "context", "workflow_id": "7", "generation": 3}
+    load = AsyncMock(side_effect=AssertionError("Direct tasks cannot load deployed conversation"))
+    monkeypatch.setattr("services.agent_context.load_conversation", load)
+    result = await prepare_agent_payload({**_CONTEXT, "generation": 0,
+        "native_workspace_version": 1, "workspace_task_prompt": "Direct task", "node_data": {"prompt": "ignored"}})
+    assert result["user_prompt"] == "Direct task"
+    assert result["system_message"] == "Keep Browser instructions"
+    assert result["conversation_key"] is None and result["memory_node_id"] == ""
+    assert "sk-test" not in repr(result)
+    load.assert_not_awaited()
+
+
+@pytest.mark.parametrize("native_workspace", [False, True])
+async def test_browser_delegation_preserves_role_and_records_owner_policy(descriptor, monkeypatch, native_workspace):
+    import core.container as container_module
+    container = container_module.container
+    database = container.database()
+    database.get_node_parameters.return_value.update(system_message="Keep Browser instructions")
+    tool = SimpleNamespace(name="browser", description="browser", args_schema={"type": "object"})
+    monkeypatch.setattr(container, "ai_service", lambda: SimpleNamespace(_build_tool_from_node=AsyncMock(return_value=(tool, {}))))
+    async def connections(*args, **kwargs):
+        return None, [], [{"node_id": "browser", "node_type": "browser", "parameters": {"password": "CANARY"}}], {}, None
+    monkeypatch.setattr("services.plugin.edge_walker.collect_agent_connections", connections)
+    binding = {"profile_id": "profile", "owner_id": "owner-a", "task_queue": "owner-a-queue"}
+    result = await prepare_agent_payload({**_CONTEXT, "node_type": "browser_agent", "user_id": "owner",
+        **({"native_workspace_version": 1, "generation": 0} if native_workspace else {}),
+        "browser_bindings": {"browser": binding}, "invocation": {"task": "Read issues", "context": "Repository A"}})
+    assert result["system_message"] == "Keep Browser instructions"
+    assert result["user_prompt"] == "Read issues\n\nRepository A"
+    assert result["tools"][0]["activity_policy"]["task_queue"] == "owner-a-queue"
+    assert result["tools"][0]["activity_policy"]["owner_routing"] is True
+    assert "CANARY" not in repr(result) and "sk-test" not in repr(result)
+
+
+async def test_browser_delegation_without_saved_role_uses_browser_default(descriptor, monkeypatch):
+    import core.container as container_module
+    from services.browser_agent_recipe import BROWSER_AGENT_ROLE
+    monkeypatch.setattr("services.temporal.agent_activities._freeze_browser_tools", AsyncMock(return_value=({}, 0)))
+    async def connections(*args, **kwargs):
+        return None, [], [{"node_id": "browser", "node_type": "browser", "parameters": {}}], {}, None
+    monkeypatch.setattr("services.plugin.edge_walker.collect_agent_connections", connections)
+    tool = SimpleNamespace(name="browser", description="browser", args_schema={"type": "object"})
+    monkeypatch.setattr(container_module.container, "ai_service", lambda: SimpleNamespace(_build_tool_from_node=AsyncMock(return_value=(tool, {}))))
+    result = await prepare_agent_payload({**_CONTEXT, "node_type": "browser_agent",
+        "node_data": {"system_message": "Delegated mission is input"},
+        "invocation": {"task": "Read issues"}})
+    assert result["system_message"] == BROWSER_AGENT_ROLE
+    assert result["user_prompt"] == "Read issues"

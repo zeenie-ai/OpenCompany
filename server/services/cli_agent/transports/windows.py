@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from core.logging import get_logger
+from services.process_environment import without_onepassword_environment
 
 from .base import PtyHandle, PtyTransport
 
@@ -176,7 +177,7 @@ class WindowsPtyTransport(PtyTransport):
             lambda: PtyProcess.spawn(  # type: ignore[attr-defined]
                 argv,
                 cwd=str(cwd),
-                env=env,
+                env=without_onepassword_environment(env),
                 dimensions=(24, 80),
             ),
         )

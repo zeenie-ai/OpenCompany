@@ -399,10 +399,12 @@ async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSo
     from services.credential_registry import get_credential_registry, provider_connection_state
 
     registry = get_credential_registry()
+    auth_service = container.auth_service()
+    principal = execution_principal({}, websocket)
     since = data.get("since")
     # Includes live pairing state, which changes without a credential
     # mutation (see CredentialRegistry.get_live_version).
-    version = registry.get_live_version()
+    version = registry.get_live_version() + "+" + await auth_service.credential_source_version(principal)
     if since and since == version:
         return {"unchanged": True, "version": version}
 
@@ -415,9 +417,8 @@ async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSo
     # renders these flags and never checks key existence itself. The rules
     # live in services.credential_registry.provider_connection_state, which
     # the Normal-mode employee summaries share.
-    auth_service = container.auth_service()
     for provider in catalogue.get("providers", []):
-        provider.update(await provider_connection_state(provider, auth_service))
+        provider.update(await provider_connection_state(provider, auth_service, principal=principal))
 
     return catalogue
 

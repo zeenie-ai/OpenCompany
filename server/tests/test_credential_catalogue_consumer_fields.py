@@ -189,7 +189,7 @@ class TestProviderConnectionState:
     async def test_email_account_is_stored_and_connected_only_with_both_keys(self, registry):
         provider = registry.get_provider("email_himalaya")
         state = await provider_connection_state(provider, FakeAuth(keys={"email_address"}))
-        assert state == {"stored": False, "connected": False, "account_label": None}
+        assert state == {"stored": False, "connected": False, "account_label": None, "sourceSupported": False, "sourceRequired": False}
         state = await provider_connection_state(provider, FakeAuth(keys={"email_address", "email_password"}))
         assert state["stored"] is True and state["connected"] is True
 

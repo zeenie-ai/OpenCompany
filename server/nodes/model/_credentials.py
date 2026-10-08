@@ -172,7 +172,7 @@ class _LocalLLM(_LLMApiKey):
         from services.llm.config import resolve_credential
         from services.plugin.deps import get_auth_service
 
-        api_key = await get_auth_service().get_api_key(cls.id)
+        api_key = await get_auth_service().resolve_api_key(cls.id, principal=user_id)
         return {"api_key": resolve_credential(cls.id, api_key)}
 
     @classmethod
@@ -299,14 +299,14 @@ class OpenAICompatibleCredential(_LLMApiKey):
         return await save_llm_server(ref, candidate, user_key, display=label, label=label)
 
     @classmethod
-    async def catalogue_extras(cls) -> Dict[str, Any]:
+    async def catalogue_extras(cls, *, principal: Optional[str] = None) -> Dict[str, Any]:
         """``stored`` (any endpoint saved) plus the endpoint list for the panel."""
         from services.llm.endpoints import list_endpoints
         from services.plugin.deps import get_auth_service
 
         endpoints = [
             {"ref": e.ref, "label": e.label, "base_url": e.base_url, "kind": e.kind, "model_count": len(e.models)}
-            for e in await list_endpoints(get_auth_service())
+            for e in await list_endpoints(get_auth_service(), **({"principal": principal} if principal is not None else {}))
         ]
         return {"stored": bool(endpoints), "endpoints": endpoints}
 

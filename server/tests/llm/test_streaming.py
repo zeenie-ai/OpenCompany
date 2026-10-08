@@ -267,7 +267,7 @@ def _unifier_with(name: str, client, *, streaming: bool):
 
     registry._REGISTRY[name] = ProviderSpec(name=name, factory=lambda **kwargs: client, sdk_exception_refs=("openai:OpenAIError",))
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     providers = {name: {"streaming": True}} if streaming else {}
     return ChatUnifier(defaults={"providers": providers}, auth_service=auth, client_cache_size=0)
 

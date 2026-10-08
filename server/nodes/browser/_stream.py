@@ -111,9 +111,13 @@ class Viewer:
         self._outstanding: Dict[int, float] = {}
         self._started_at = time.monotonic()
         self._first_frame = True
+        self.privacy_blocked = False
+        self._send_lock = asyncio.Lock()
 
     def send_json(self, message: Dict[str, Any]) -> None:
         if self.closed:
+            return
+        if self.privacy_blocked and message.get("type") in {"page", "tabs", "dialog", "clipboard", "error"}:
             return
         try:
             self.control.put_nowait(message)
@@ -123,7 +127,7 @@ class Viewer:
 
     def offer_frame(self, frame: bytes) -> bool:
         """Keep the latest frame, including the final update inside an FPS interval."""
-        if self.closed or not self.visible:
+        if self.closed or not self.visible or self.privacy_blocked:
             return False
         if self.pending is not None:
             self.metrics.count("replaced")
@@ -165,7 +169,9 @@ class Viewer:
                     captured_at = header.get("ts")
                     if isinstance(captured_at, (int, float)):
                         self.metrics.observe("capture_to_send", time.time() - captured_at)
-                    await self.websocket.send_bytes(frame)
+                    async with self._send_lock:
+                        if not self.privacy_blocked:
+                            await self.websocket.send_bytes(frame)
                     self.metrics.observe("socket_send", time.monotonic() - self.last_frame_at)
                     if self._first_frame:
                         self._first_frame = False
@@ -213,6 +219,7 @@ class ScreencastHub:
 
     async def add(self, viewer: Viewer) -> None:
         self.viewers[viewer.id] = viewer
+        viewer.privacy_blocked = getattr(self.controller, "sensitive_login", False)
         self.controller.viewer_attached(viewer.id)
         await self._refresh()
 
@@ -250,13 +257,21 @@ class ScreencastHub:
             "type": "state", "state": snap["state"], "controller": snap["controller"],
             "request": snap["request"], "profile": snap["profile"],
             "challenge_required": snap["challenge_required"],
+            "sensitive_login": snap.get("sensitive_login", False),
         }
 
     def tabs_message(self) -> Dict[str, Any]:
+        if getattr(self.controller, "sensitive_login", False):
+            return {"type": "tabs", "tabs": []}
         active = self.controller.active_target_id
         return {"type": "tabs", "tabs": [dict(t, active=t.get("target_id") == active) for t in self.controller.tabs.values()]}
 
     async def _on_controller(self, kind: str, payload: Dict[str, Any]) -> None:
+        if kind == "sensitive":
+            await self.sensitive_barrier(bool(payload.get("enabled")))
+            return
+        if getattr(self.controller, "sensitive_login", False) and kind in {"tabs", "page"}:
+            return
         if kind in ("tabs", "page"):
             self.commands.target_changed()
         if kind in ("state", "request", "control_moved"):
@@ -292,7 +307,7 @@ class ScreencastHub:
     async def _refresh(self) -> None:
         async with self._lock:
             size = self._wanted_size()
-            if self.dead or size == (0, 0):
+            if self.dead or size == (0, 0) or getattr(self.controller, "sensitive_login", False):
                 self._cancel_retry()
                 await self._stop_screencast_locked()
                 return
@@ -341,7 +356,7 @@ class ScreencastHub:
 
     async def _start_screencast_locked(self, size: tuple[int, int]) -> None:
         await self._stop_screencast_locked()
-        if not self.runtime.running:
+        if not self.runtime.running or getattr(self.controller, "sensitive_login", False):
             return
         try:
             session = await self.runtime.page_session(self.controller.active_target_id)
@@ -411,7 +426,7 @@ class ScreencastHub:
             self._pending_acks.append((source, ack_id))
         started = time.monotonic()
         self.metrics.count("captured")
-        if not self.visible_viewers():
+        if not self.visible_viewers() or getattr(self.controller, "sensitive_login", False):
             self._ack_now()
             return
         self.seq = next(_FRAME_SEQUENCES)
@@ -467,7 +482,35 @@ class ScreencastHub:
         task.add_done_callback(self._ack_tasks.discard)
 
     def _on_dialog(self, params: Dict[str, Any]) -> None:
+        if getattr(self.controller, "sensitive_login", False):
+            return
         self.broadcast({"type": "dialog", "kind": params.get("type"), "message": str(params.get("message") or "")[:2000]})
+
+    async def sensitive_barrier(self, enabled: bool) -> None:
+        """Drain capture and sends before the resolver can retrieve secrets."""
+        for viewer in list(self.viewers.values()):
+            viewer.privacy_blocked = enabled
+            viewer.pending = None
+            if enabled:
+                await self.commands.barrier(viewer.id)
+                retained = []
+                while not viewer.control.empty():
+                    message = viewer.control.get_nowait()
+                    if message.get("type") not in {"page", "tabs", "dialog", "clipboard", "error"}:
+                        retained.append(message)
+                for message in retained:
+                    viewer.control.put_nowait(message)
+                async with viewer._send_lock:
+                    pass
+                viewer._outstanding.clear()
+                viewer.inflight = 0
+            viewer.send_json({"type": "sensitive", "enabled": enabled})
+            viewer.send_json(self.state_message(viewer))
+        if enabled:
+            await self._stop_screencast()
+        else:
+            self.broadcast(self.tabs_message())
+            await self._refresh()
 
     # -- input ---------------------------------------------------------------------
 
@@ -599,6 +642,8 @@ class ScreencastHub:
             pass
 
     async def copy(self, viewer: Viewer) -> None:
+        if getattr(self.controller, "sensitive_login", False):
+            return
         session = self.commands.input_session(viewer)
         if not self.controller.can_inject_input(viewer.id) or session is None:
             return
@@ -647,8 +692,9 @@ async def browser_live_view(websocket: WebSocket) -> None:
 
     from ._runtime import get_browser_runtime
 
-    owner = await authenticate_ws(websocket, settings=container.settings(), user_auth_service=container.user_auth_service)
-    if owner is None:
+    forwarded = (getattr(websocket, "scope", {}) or {}).get("path") == "/ws/browser/owner"
+    owner = None if forwarded else await authenticate_ws(websocket, settings=container.settings(), user_auth_service=container.user_auth_service)
+    if owner is None and not forwarded:
         return
     await websocket.accept()
 
@@ -661,6 +707,27 @@ async def browser_live_view(websocket: WebSocket) -> None:
         await websocket.close(code=CLOSE_ATTACH, reason="attach expected")
         return
     try:
+        from services.browser_owners import replica_id, settings, verify_forward, routing_for_node
+        from services.plugin.deps import get_database
+        if forwarded:
+            body = json.dumps(first, separators=(",", ":")).encode()
+            owner = verify_forward(websocket.headers.get("X-Browser-Forward", ""), "WS", "/ws/browser/owner", body)
+        if getattr(settings(), "distributed_mode", False) is True:
+            target = first.get("target") or {}
+            from ._routing import handle_binding, proxy_view
+            if target.get("kind") == "node":
+                binding = await routing_for_node(get_database(), str(target.get("workflow_id") or ""), str(target.get("node_id") or ""), owner)
+            elif target.get("kind") == "profile_login":
+                binding = await handle_binding(str(target.get("login_id") or ""), owner)
+            else:
+                raise NodeUserError("Unknown live-view target")
+            if binding["owner_id"] != replica_id():
+                if forwarded:
+                    raise NodeUserError("Browser owner routing changed.")
+                await proxy_view(websocket, first, owner, binding)
+                return
+            from services.browser_owners import assert_runtime_epoch
+            await assert_runtime_epoch(get_database())
         session = await _resolve_attach(owner, first.get("target") or {})
     except NodeUserError as exc:
         await websocket.close(code=CLOSE_FORBIDDEN, reason=str(exc)[:120])

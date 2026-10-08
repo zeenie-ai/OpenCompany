@@ -38,6 +38,7 @@ AI_AGENT_TYPES: FrozenSet[str] = frozenset(
         "android_agent",
         "coding_agent",
         "web_agent",
+        "browser_agent",
         "task_agent",
         "social_agent",
         "travel_agent",

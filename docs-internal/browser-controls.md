@@ -66,6 +66,22 @@ destinations now obey the allowlist too. Read-only interaction still requires
 human help for clicks, typing and site changes; these changes do not infer
 business-action approval from button text.
 
+Ask first restrictions from the trusted tool adapter tighten saved full access
+to read-only in both execution adapters. A model cannot undo that restriction,
+nor can prepared native task parameters broaden a newly saved read-only policy.
+Browser AI Agent tasks hold their profile claim during reasoning and human
+assistance; a competing task receives `BrowserBusy` before an effect. Cleanup
+is token matched and confirms daemon suspension before releasing the claim.
+
+`credential_fill` is a mutating site action subject to these same policies,
+budgets and uncertain-attempt refusal. It supports only an approved configured
+username/password form with fresh element references and a separate submit
+target. It gates CLI, viewer and WebMCP observations before secret resolution.
+Targets are checked again after desktop authorization and before submission.
+Uncertain outcomes keep capture paused and require close/reopen plus manual
+login; the agent cannot replay the fill. `credential_bindings` only exposes
+permitted opaque IDs and nonsecret login metadata.
+
 ### Challenge handoff
 
 Generated scripts check for strong Google `/sorry` and corroborated

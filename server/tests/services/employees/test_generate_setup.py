@@ -47,7 +47,7 @@ class FakeDatabase:
 
 
 class FakeConnections:
-    def __init__(self, auth_service=None):
+    def __init__(self, auth_service=None, *, principal=None):
         pass
 
     async def is_connected(self, provider_id):
@@ -83,7 +83,7 @@ class FakeUnifier:
 
 
 class Auth:
-    async def get_api_key(self, provider, session_id="default"):
+    async def resolve_api_key(self, provider, session_id="default", *, principal=None):
         return "sk-test"
 
 

@@ -99,7 +99,7 @@ async def resolve_model(ctx: NodeContext, params: MobileParams | None = None) ->
     if provider_ref not in adapters:
         raise NodeUserError(f"The selected provider '{provider_ref}' is not supported by the phone engine. Choose an OpenAI, Anthropic, or Gemini model in the global selector or this phone's settings")
     auth = get_ai_service().auth
-    key = await auth.get_api_key(provider_ref, "default")
+    key = await auth.resolve_api_key(provider_ref, "default", principal=ctx.raw.get("user_id"))
     if not key:
         raise NodeUserError("Connect the selected model provider in Settings before running Mobile")
     model = selected_model or await get_default_model_async(provider_ref, database)
@@ -109,7 +109,7 @@ async def resolve_model(ctx: NodeContext, params: MobileParams | None = None) ->
     if provider_ref in endpoint_variables:
         from services.llm.endpoints import base_url_key
 
-        endpoint = await auth.get_api_key(base_url_key(provider_ref), "default")
+        endpoint = await auth.resolve_api_key(base_url_key(provider_ref), "default", principal=ctx.raw.get("user_id"))
         if endpoint:
             # Use the same saved endpoint as the native provider, unchanged.
             # It may contain credentials, so it travels only through private IPC.

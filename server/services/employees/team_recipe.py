@@ -30,7 +30,7 @@ class Responsibility:
 
 
 RESPONSIBILITIES = (
-    Responsibility("research", "web_agent", "Research", "Researches information", ("research", "search", "news", "brief", "web", "competitor", "investigat")),
+    Responsibility("research", "web_agent", "Research", "Researches information", ("research", "search", "news", "brief", "web", "browser", "website", "competitor", "investigat")),
     Responsibility("calendar", "productivity_agent", "Appointments", "Checks your calendar and appointments", ("calendar", "appointment", "meeting", "book", "schedule")),
     Responsibility("coding", "coding_agent", "Development", "Builds and checks software", ("code", "coding", "software", "develop", "program", "github")),
     Responsibility("social", "social_agent", "Content", "Prepares content for your channels", ("social", "post", "content", "marketing", "instagram", "linkedin", "twitter")),
@@ -136,6 +136,9 @@ def build_team(built: Any, inputs: Any) -> Any:
     members: list[dict[str, Any]] = []
     for index, responsibility in enumerate(selected, 1):
         node_type = responsibility.node_type
+        if node_type == "web_agent" and (any(tool.type == "browser" for app in inputs.apps for tool in app.tools)
+                                         or any(word in inputs.request.job.lower() for word in ("browser", "website"))):
+            node_type = "browser_agent"
         if get_node_class(node_type) is None or not inputs.allowed(node_type):
             node_type = "aiAgent"
         if not inputs.allowed(node_type):
@@ -150,6 +153,9 @@ def build_team(built: Any, inputs: Any) -> Any:
         )
         built.nodes.append(graph_node(member, node_type, member_label, (360 + 360 * index, -420), {"responsibility": responsibility.description}))
         built.parameters[member] = {"system_message": instruction, "prompt": "Complete your assigned task and submit the result for lead review.", **model}
+        if node_type == "browser_agent":
+            from services.browser_agent_recipe import BROWSER_AGENT_ROLE
+            built.parameters[member]["system_message"] = BROWSER_AGENT_ROLE + "\n" + instruction
         built.edges.append(Edge(member, "output-top", lead, "input-teammates").to_dict())
         context_id = ids.next(CONTEXT_TYPE)
         built.nodes.append(graph_node(context_id, CONTEXT_TYPE, labels.take(f"{responsibility.label} context"), (360 + 360 * index, -600), context_data(member)))
@@ -194,6 +200,28 @@ def build_team(built: Any, inputs: Any) -> Any:
         recipient = recipient or next((member for member in members if member["role"] == "operations"), members[0])
         built.edges.append(tool_edge(tool, recipient["node_id"]).to_dict())
         recipient["tools"].append(tool)
+    # Complete Browser specialists through the same recipe as canvas/Builder,
+    # reusing the private Browser tool already assigned from the saved app.
+    from services.browser_agent_recipe import browser_agent_additions
+    from services.graph_build import add_to_graph
+    for member in members:
+        if member["node_type"] != "browser_agent":
+            continue
+        browser = next((tool for tool in member["tools"] if nodes[tool]["type"] == "browser"), None)
+        position = next(node["position"] for node in built.nodes if node["id"] == member["node_id"])
+        additions = browser_agent_additions(agent_ref=member["node_id"], browser_node_id=browser,
+            create_agent=False, create_context=False, create_skills=False,
+            position=(position["x"], position["y"]))
+        if any(not inputs.allowed(node.type) for node in additions.nodes):
+            raise BuildError("not_allowed", "Browser tools are not available")
+        placed = add_to_graph(inputs.workflow_id, {"nodes": built.nodes, "edges": built.edges}, additions)
+        built.nodes, built.edges = placed.graph["nodes"], placed.graph["edges"]
+        built.parameters.update(placed.parameters)
+        member["tools"].extend(node["id"] for node in placed.nodes)
+        holder = roles[next(key for key, value in roles.items() if key.startswith("specialist_") and value == member["node_id"]) + "_skills"]
+        default_skills = browser_agent_additions(create_agent=False, create_context=False).nodes
+        config = next(node.params["skills_config"] for node in default_skills if node.type == "masterSkill")
+        built.parameters[holder]["skills_config"].update(config)
     # Keep one memory per member. A legacy Talk line may share the worker's
     # memory: remove that binding and give each agent its own instance.
     memories = {node["id"] for node in built.nodes if node["type"] == "simpleMemory"}

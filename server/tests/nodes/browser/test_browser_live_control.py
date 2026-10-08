@@ -32,6 +32,17 @@ async def drain(queue):
         await asyncio.wait_for(queue._worker, 1)
 
 
+async def test_protected_login_rejects_takeover_and_queued_input_before_dispatch():
+    queue, hub, viewer, session, _ = setup_queue()
+    assert queue.enqueue(viewer, {"type": "navigate", "action": "goto", "url": "https://example.test"}, session)
+    hub.controller.sensitive_login = True
+    assert not queue.enqueue(viewer, {"type": "control_request"}, session)
+    assert not queue.enqueue(viewer, {"type": "insert_text", "text": "secret"}, session)
+    assert await hub.controller.take_over(viewer.id) == (False, "protected_login")
+    await drain(queue)
+    hub.navigate.assert_not_awaited()
+
+
 async def test_only_adjacent_moves_and_wheels_coalesce_without_reordering_keys():
     queue, hub, viewer, session, _ = setup_queue()
     for message in [

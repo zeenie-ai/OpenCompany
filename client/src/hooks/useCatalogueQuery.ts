@@ -132,6 +132,9 @@ export interface ServerProviderConfig {
   account_label?: string | null;
   /** Saved rows, for a provider that holds several (server-resolved). */
   endpoints?: ServerEndpointSummary[];
+  sourceSupported?: boolean;
+  sourceRequired?: boolean;
+  unsupported_reason?: string;
   /** Server-resolved: the provider is usable right now. Equal to `stored`
    *  unless the provider declares a live check (WhatsApp's pairing, the
    *  IMAP/SMTP account's keys). */

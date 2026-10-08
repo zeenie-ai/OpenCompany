@@ -41,21 +41,21 @@ async def _shutdown_browser_runtime() -> None:
     runtime = peek_browser_runtime()
     if runtime is not None:
         await runtime.shutdown()
+    from services.browser_owners import unregister_browser_owner
+    await unregister_browser_owner()
 
 
 async def _on_workflow_deleted(database: Any, workflow_id: str) -> None:
-    import asyncio
-
-    from ._profiles import ProfileStore, remove_profile_files
+    from ._profiles import ProfileStore
     from ._runtime import peek_browser_runtime
 
     runtime = peek_browser_runtime()
     if runtime is not None:
         for session in runtime.sessions_for_workflow(workflow_id):
             controller = runtime.controller(session.profile_id)
-            if controller is not None:
+            if controller is not None and controller.task_id is None:
                 await controller.release_lease(session.session_id)
-            runtime.forget_session(session.session_id)
+                runtime.forget_session(session.session_id)
     # Employee profiles belong to their workflow; shared ones stay.
     store = ProfileStore(database)
     try:
@@ -63,10 +63,46 @@ async def _on_workflow_deleted(database: Any, workflow_id: str) -> None:
     except Exception:  # noqa: BLE001 - cleanup must not fail the delete
         doomed = []
     for profile in doomed:
-        if runtime is not None:
-            await runtime.stop_profile(profile.id, reason="workflow deleted")
-        await store.delete(profile.owner_id, profile.id)
-        await asyncio.to_thread(remove_profile_files, profile.id)
+        try:
+            await _cleanup_deleted_workflow_profile(database, profile.owner_id, profile.id, workflow_id)
+        except Exception:
+            # Retain files and metadata when their owner cannot confirm cleanup.
+            # The authorized profile panel can finish cleanup after recovery.
+            continue
+
+
+async def _cleanup_deleted_workflow_profile(database: Any, principal: str, profile_id: str, workflow_id: str) -> Dict[str, Any]:
+    import asyncio
+    from services.plugin.base import NodeUserError
+    from services.browser_owners import bind_profile, replica_id, assert_runtime_epoch, _persistent, BrowserProfileOwner
+    from ._profiles import ProfileStore, remove_profile_files
+    from ._runtime import get_browser_runtime
+    profile = await ProfileStore(database).get(principal, profile_id)
+    if profile.kind != "employee" or profile.workflow_id != workflow_id or await database.get_workflow(workflow_id) is not None:
+        raise NodeUserError("Browser cleanup is not associated with a deleted workflow.")
+    binding = await bind_profile(database, profile.id, principal)
+    if binding["owner_id"] != replica_id():
+        if not binding.get("available", False):
+            return {"success": False, "deferred": True}
+        from ._routing import forward_command
+        return await forward_command(binding, principal, "cleanup_workflow_profile", {"profile_id": profile.id, "deleted_workflow_id": workflow_id})
+    await assert_runtime_epoch(database)
+    runtime = get_browser_runtime()
+    controller = runtime.controller(profile.id)
+    if controller is not None and controller.task_id is not None:
+        return {"success": False, "deferred": True}
+    if _persistent(database):
+        async with database.get_session() as session:
+            ownership = await session.get(BrowserProfileOwner, profile.id)
+            if ownership is not None and ownership.task_id is not None:
+                return {"success": False, "deferred": True}
+    running = runtime.running(profile.id)
+    await runtime.stop_profile(profile.id, reason="workflow deleted")
+    if running is not None and running.chrome.is_running():
+        return {"success": False, "deferred": True}
+    await ProfileStore(database).delete(principal, profile.id)
+    await asyncio.to_thread(remove_profile_files, profile.id)
+    return {"success": True}
 
 
 def _home_state(workflow_id: str, node_id: str) -> Optional[Dict[str, Any]]:

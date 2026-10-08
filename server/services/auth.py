@@ -75,6 +75,85 @@ class AuthService:
         # ``get_oauth_refresh_token()`` which reads from the DB.
         self._oauth_cache: Dict[str, Dict[str, Any]] = {}
 
+    @property
+    def distributed_credentials(self) -> bool:
+        return bool(getattr(self.settings, "distributed_mode", False))
+
+    def _sources(self):
+        from services.credentials.sources import CredentialSources
+        return CredentialSources(self.database)
+
+    def require_local_credentials(self) -> None:
+        if self.distributed_credentials:
+            from services.credentials.onepassword import CredentialSourceError
+            raise CredentialSourceError("unsupported_source", "Distributed execution requires an approved 1Password binding. Local, inline, ambient and OAuth credentials are unsupported.")
+
+    async def get_credential_source(self, provider: str, session_id: str = "default", *, principal: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Saved metadata only. This method never reads 1Password values."""
+        from services.credentials.onepassword import CredentialSourceError
+        row = await self._sources().get(provider, session_id)
+        if row is None:
+            return None
+        if principal is not None and row.owner_id != principal:
+            raise CredentialSourceError("access_denied", "Credential binding access denied.")
+        return {"source": "onepassword", "reference": row.reference, "models": list(row.models), "model_params": dict(row.model_params), "base_url": row.base_url}
+
+    async def store_credential_source(self, provider: str, reference: str, *, principal: str, session_id: str = "default", models: Optional[List[str]] = None, model_params: Optional[Dict] = None, base_url: Optional[str] = None) -> bool:
+        await self._sources().save(provider, reference, owner_id=principal, session_id=session_id, models=models, model_params=model_params, base_url=base_url)
+        self._api_key_cache.pop(f"{session_id}_{provider}", None)
+        self._bump_catalogue_version()
+        return True
+
+    async def credential_source_version(self, principal: str = "owner") -> str:
+        """Cross-replica catalogue invalidation without resolving a credential."""
+        import json
+        rows = await self._sources().list()
+        metadata = sorted((row.id, row.updated_at.isoformat()) for row in rows if row.owner_id == principal)
+        return hashlib.sha256(json.dumps([principal, metadata], separators=(",", ":")).encode()).hexdigest()[:20]
+
+    async def resolve_api_key(self, provider: str, session_id: str = "default", *, principal: Optional[str] = None) -> Optional[str]:
+        """Runtime-only resolution. No application cache or source fallback."""
+        from services.credentials.onepassword import CredentialSourceError, read_secret
+        # Legacy trusted callers operate as the single-user owner. Omitting a
+        # principal must never grant access to another user's source binding.
+        principal = principal or "owner"
+        source = await self.get_credential_source(provider, session_id, principal=principal)
+        if source is not None:
+            value = await read_secret(source["reference"], self.settings)
+            current = await self.get_credential_source(provider, session_id, principal=principal)
+            if current != source:
+                raise CredentialSourceError("binding_changed", "The API credential binding changed during authorization. Retry using its current configuration.")
+            return value
+        # Endpoint URLs are public central metadata, never local secret rows.
+        if provider.endswith("_proxy"):
+            endpoint = await self.get_credential_source(provider[:-6], session_id, principal=principal)
+            if endpoint is not None:
+                if provider.startswith("openai_compatible:") and not endpoint.get("base_url"):
+                    from services.credentials.onepassword import CredentialSourceError
+                    raise CredentialSourceError("missing_endpoint", "The named endpoint has no approved base URL. Enroll it with a static 1Password credential.")
+                return endpoint.get("base_url")
+        self.require_local_credentials()
+        return await self.get_api_key(provider, session_id)
+
+    async def get_browser_credential_binding(self, binding_id: str, principal: str, *, profile_id: Optional[str] = None, workflow_id: Optional[str] = None, employee_id: Optional[str] = None) -> Dict:
+        from services.credentials.sources import binding_metadata
+        row = await self._sources().browser_binding(binding_id, principal, profile_id=profile_id, workflow_id=workflow_id, employee_id=employee_id)
+        return binding_metadata(row)
+
+    async def resolve_browser_credentials(self, binding_id: str, principal: str, *, profile_id: Optional[str] = None, workflow_id: Optional[str] = None, employee_id: Optional[str] = None) -> Dict:
+        """Private browser-owner caller only, after its observation gate closes."""
+        from services.credentials.onepassword import read_secret
+        from services.credentials.sources import binding_metadata
+        row = await self._sources().browser_binding(binding_id, principal, profile_id=profile_id, workflow_id=workflow_id, employee_id=employee_id)
+        username = await read_secret(row.username_reference, self.settings)
+        password = await read_secret(row.password_reference, self.settings)
+        # Recheck enrollment after desktop authorization waits/edits/revocation.
+        current = await self._sources().browser_binding(binding_id, principal, profile_id=profile_id, workflow_id=workflow_id, employee_id=employee_id)
+        if current.model_dump() != row.model_dump():
+            from services.credentials.onepassword import CredentialSourceError
+            raise CredentialSourceError("binding_changed", "The login binding changed during authorization. Observe the page and retry.")
+        return {**binding_metadata(row), "username": username, "password": password}
+
     def hash_api_key(self, api_key: str) -> str:
         """Create hash for API key identification."""
         return hashlib.sha256(api_key.encode()).hexdigest()[:16]
@@ -126,6 +205,10 @@ class AuthService:
         Returns:
             True if stored successfully, False otherwise
         """
+        self.require_local_credentials()
+        if await self.get_credential_source(provider, session_id):
+            from services.credentials.onepassword import CredentialSourceError
+            raise CredentialSourceError("binding_exists", "Remove the 1Password binding before replacing it with a local key.")
         try:
             cache_key = f"{session_id}_{provider}"
 
@@ -161,7 +244,7 @@ class AuthService:
             logger.error("Failed to store API key", provider=provider, error=str(e))
             return False
 
-    async def get_model_params(self, provider: str, session_id: str = "default") -> Dict[str, Dict[str, Any]]:
+    async def get_model_params(self, provider: str, session_id: str = "default", *, principal: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """Return per-model params (context_length etc.) for the provider.
 
         Reads straight from the credentials DB — there's no in-memory
@@ -171,6 +254,11 @@ class AuthService:
         ``model_registry.json``) and for any local provider that hasn't
         been validated yet.
         """
+        row = await self._sources().get(provider, session_id)
+        if row is not None:
+            return dict(row.model_params) if row.owner_id == (principal or "owner") else {}
+        if self.distributed_credentials:
+            return {}
         try:
             return await self.credentials_db.get_api_key_model_params(provider, session_id)
         except Exception as e:
@@ -189,6 +277,10 @@ class AuthService:
         Returns:
             Decrypted API key or None if not found/expired
         """
+        if await self.get_credential_source(provider, session_id) is not None:
+            return None
+        if self.distributed_credentials:
+            return None
         try:
             cache_key = f"{session_id}_{provider}"
 
@@ -215,7 +307,7 @@ class AuthService:
             logger.error("Failed to get API key", provider=provider, error=str(e))
             return None
 
-    async def list_key_scopes(self, provider: str) -> List[str]:
+    async def list_key_scopes(self, provider: str, *, principal: Optional[str] = None) -> List[str]:
         """List every session_id holding a key for one provider.
 
         Reads the database directly rather than the cache: the cache is
@@ -229,12 +321,14 @@ class AuthService:
             Sorted list of session identifiers, empty on failure
         """
         try:
-            return await self.credentials_db.list_key_scopes(provider)
+            shared = {row.session_id for row in await self._sources().list(provider=provider) if row.owner_id == (principal or "owner")}
+            local = set() if self.distributed_credentials else set(await self.credentials_db.list_key_scopes(provider))
+            return sorted(shared | local)
         except Exception as e:
             logger.error("Failed to list key scopes", provider=provider, error=str(e))
             return []
 
-    async def list_api_key_providers(self, session_id: str = "default") -> List[str]:
+    async def list_api_key_providers(self, session_id: str = "default", *, principal: Optional[str] = None) -> List[str]:
         """List every provider name holding a key in one session.
 
         The other axis of :meth:`list_key_scopes`. Reads the database, not
@@ -248,12 +342,14 @@ class AuthService:
             Provider names, empty on failure
         """
         try:
-            return await self.credentials_db.list_api_keys(session_id)
+            shared = {row.provider for row in await self._sources().list(session_id=session_id) if row.owner_id == (principal or "owner")}
+            local = set() if self.distributed_credentials else set(await self.credentials_db.list_api_keys(session_id))
+            return sorted(shared | local)
         except Exception as e:
             logger.error("Failed to list API key providers", session_id=session_id, error=str(e))
             return []
 
-    async def get_stored_models(self, provider: str, session_id: str = "default") -> List[str]:
+    async def get_stored_models(self, provider: str, session_id: str = "default", *, principal: Optional[str] = None) -> List[str]:
         """Get stored models for provider.
 
         Args:
@@ -263,6 +359,11 @@ class AuthService:
         Returns:
             List of model names or empty list
         """
+        row = await self._sources().get(provider, session_id)
+        if row is not None:
+            return list(row.models) if row.owner_id == (principal or "owner") else []
+        if self.distributed_credentials:
+            return []
         try:
             cache_key = f"{session_id}_{provider}"
 
@@ -290,7 +391,7 @@ class AuthService:
             logger.error("Failed to get stored models", provider=provider, error=str(e))
             return []
 
-    async def remove_api_key(self, provider: str, session_id: str = "default") -> bool:
+    async def remove_api_key(self, provider: str, session_id: str = "default", *, principal: Optional[str] = None) -> bool:
         """Remove API key from storage and cache.
 
         Args:
@@ -300,6 +401,18 @@ class AuthService:
         Returns:
             True if removed successfully
         """
+        if await self.get_credential_source(provider, session_id, principal=principal):
+            # Explicit Disconnect must not uncover an older local credential
+            # shadowed by the source. Delete it while the binding still shields
+            # runtime reads; distributed mode never opens the local DB.
+            if not self.distributed_credentials:
+                await self.credentials_db.delete_api_key(provider, session_id)
+            await self._sources().delete(provider, session_id, principal)
+            self._api_key_cache.pop(f"{session_id}_{provider}", None)
+            self._bump_catalogue_version()
+            return True
+        if self.distributed_credentials:
+            return True
         try:
             cache_key = f"{session_id}_{provider}"
 
@@ -319,7 +432,7 @@ class AuthService:
             logger.error("Failed to remove API key", provider=provider, error=str(e))
             return False
 
-    async def has_valid_key(self, provider: str, session_id: str = "default") -> bool:
+    async def has_valid_key(self, provider: str, session_id: str = "default", *, principal: Optional[str] = None) -> bool:
         """Check if valid API key exists.
 
         Args:
@@ -329,6 +442,9 @@ class AuthService:
         Returns:
             True if a valid key exists
         """
+        row = await self._sources().get(provider, session_id)
+        if row is not None:
+            return row.owner_id == (principal or "owner")
         api_key = await self.get_api_key(provider, session_id)
         return api_key is not None
 
@@ -368,6 +484,7 @@ class AuthService:
         Returns:
             True if stored successfully
         """
+        self.require_local_credentials()
         try:
             cache_key = f"{customer_id}_{provider}"
 
@@ -423,6 +540,7 @@ class AuthService:
             Dict with ``access_token``, ``email``, ``name``, ``scopes`` or
             ``None`` if no tokens are stored.
         """
+        self.require_local_credentials()
         try:
             cache_key = f"{customer_id}_{provider}"
 
@@ -470,6 +588,7 @@ class AuthService:
             The decrypted refresh token, or ``None`` if no tokens are
             stored for ``(provider, customer_id)``.
         """
+        self.require_local_credentials()
         try:
             tokens = await self.credentials_db.get_oauth_tokens(provider, customer_id)
             if tokens:

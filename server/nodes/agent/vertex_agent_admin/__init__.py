@@ -126,8 +126,8 @@ class VertexAgentAdminNode(ActionNode):
     Params = VertexAgentAdminParams
     Output = VertexAgentAdminOutput
 
-    async def _client(self, params: VertexAgentAdminParams) -> Any:
-        api_key = "" if params.project_id else await resolve_gemini_api_key_from_store()
+    async def _client(self, params: VertexAgentAdminParams, ctx: NodeContext) -> Any:
+        api_key = "" if params.project_id else await resolve_gemini_api_key_from_store(ctx.raw)
         return build_genai_client(api_key, params.project_id, params.location)
 
     @staticmethod
@@ -144,7 +144,7 @@ class VertexAgentAdminNode(ActionNode):
         from services.status_broadcaster import get_status_broadcaster
 
         agent_id = self._require_agent_id(params)
-        client = await self._client(params)
+        client = await self._client(params, ctx)
         await get_status_broadcaster().update_node_status(
             ctx.node_id,
             "executing",
@@ -172,7 +172,7 @@ class VertexAgentAdminNode(ActionNode):
 
     @Operation("list", cost={"service": "vertex_agent", "action": "list", "count": 1})
     async def list_op(self, ctx: NodeContext, params: VertexAgentAdminParams) -> Any:
-        client = await self._client(params)
+        client = await self._client(params, ctx)
         try:
             response = await client.aio.agents.list()
         except Exception as exc:  # noqa: BLE001 — mapped below
@@ -191,7 +191,7 @@ class VertexAgentAdminNode(ActionNode):
     @Operation("get", cost={"service": "vertex_agent", "action": "get", "count": 1})
     async def get_op(self, ctx: NodeContext, params: VertexAgentAdminParams) -> Any:
         agent_id = self._require_agent_id(params)
-        client = await self._client(params)
+        client = await self._client(params, ctx)
         try:
             agent = await client.aio.agents.get(id=agent_id)
         except Exception as exc:  # noqa: BLE001 — mapped below
@@ -205,7 +205,7 @@ class VertexAgentAdminNode(ActionNode):
     @Operation("delete", cost={"service": "vertex_agent", "action": "delete", "count": 1})
     async def delete_op(self, ctx: NodeContext, params: VertexAgentAdminParams) -> Any:
         agent_id = self._require_agent_id(params)
-        client = await self._client(params)
+        client = await self._client(params, ctx)
         try:
             await client.aio.agents.delete(id=agent_id)
         except Exception as exc:  # noqa: BLE001 — mapped below

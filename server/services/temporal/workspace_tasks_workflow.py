@@ -97,6 +97,20 @@ class WorkspaceTaskControllerWorkflow:
 
             self._starting = run_id
             try:
+                # Only new server-versioned submissions produce this command;
+                # histories recorded before the projection retain their commands.
+                if payload.get("history_version") == 1:
+                    admitted_record = await workflow.execute_activity(
+                        "workspace_tasks.admit_record", payload,
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=RetryPolicy(maximum_attempts=3),
+                    )
+                    if isinstance(admitted_record, dict) and admitted_record.get("status") in ("completed", "failed", "cancelled"):
+                        # The projection can outlive Temporal retention and
+                        # this controller's bounded dedup window. A terminal
+                        # stable submission must never produce new effects.
+                        _bounded_remember(self._submissions, run_id, fingerprint, MAX_REMEMBERED_SUBMISSIONS)
+                        return {"run_id": run_id, "status": "duplicate"}
                 child = await workflow.start_child_workflow(
                     NodeInvocationWorkflow.run,
                     payload,

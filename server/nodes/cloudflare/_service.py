@@ -26,6 +26,7 @@ path) but stripped for login / whoami / logout (see :func:`login_env`).
 from __future__ import annotations
 
 import os
+from services.process_environment import without_onepassword_environment
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -102,7 +103,7 @@ def cf_env(token: Optional[str] = None, account_id: Optional[str] = None) -> Dic
         env["CLOUDFLARE_API_TOKEN"] = token
     if account_id:
         env["CLOUDFLARE_ACCOUNT_ID"] = account_id
-    return env
+    return without_onepassword_environment(env)
 
 
 def api_auth_headers(key: Optional[str], email: Optional[str]) -> Optional[Dict[str, str]]:
@@ -143,7 +144,7 @@ def login_env() -> Dict[str, str]:
     env = cf_env()
     for var in _AMBIENT_CREDENTIAL_VARS:
         env.pop(var, None)
-    return env
+    return without_onepassword_environment(env)
 
 
 def resolve_cf_light() -> Optional[str]:

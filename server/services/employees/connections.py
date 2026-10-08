@@ -19,8 +19,9 @@ _DISCONNECTED: Dict[str, Any] = {"stored": False, "connected": False, "account_l
 
 
 class Connections:
-    def __init__(self, auth_service: Any) -> None:
+    def __init__(self, auth_service: Any, *, principal: Optional[str] = None) -> None:
         self._auth = auth_service
+        self.principal = principal
         self._registry = get_credential_registry()
         self._states: Dict[str, Dict[str, Any]] = {}
 
@@ -34,7 +35,7 @@ class Connections:
             cached = dict(_DISCONNECTED)
             if provider is not None:
                 try:
-                    cached = await provider_connection_state(provider, self._auth)
+                    cached = await provider_connection_state(provider, self._auth, **({"principal": self.principal} if self.principal is not None else {}))
                 except Exception:
                     # One broken credential check must not take down a team
                     # list; the app just reads as not connected.
@@ -78,7 +79,7 @@ class Connections:
         try:
             from services.llm.endpoints import list_endpoints
 
-            usable += [endpoint.ref for endpoint in await list_endpoints(self._auth)]
+            usable += [endpoint.ref for endpoint in await list_endpoints(self._auth, **({"principal": self.principal} if self.principal is not None else {}))]
         except Exception:
             logger.warning("Could not list OpenAI-compatible endpoints", exc_info=True)
         return usable

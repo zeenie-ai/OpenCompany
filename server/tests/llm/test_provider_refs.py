@@ -37,7 +37,7 @@ SERVER_DIR = Path(__file__).resolve().parents[2]
 
 def _unifier(get_api_key) -> ChatUnifier:
     auth = MagicMock()
-    auth.get_api_key = get_api_key
+    auth.resolve_api_key = get_api_key
     return ChatUnifier(defaults={"providers": {}}, auth_service=auth)
 
 

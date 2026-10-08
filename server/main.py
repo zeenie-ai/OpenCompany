@@ -75,7 +75,7 @@ _startup_log("Importing DI container + all services...")
 from core.container import container
 
 _startup_log("Importing routers...")
-from routers import workflow, database, websocket, webhook, auth, credentials, schemas, workspace
+from routers import workflow, database, websocket, webhook, auth, credentials, schemas, workspace, browser_agents, browser_tasks
 
 _startup_log("All imports complete")
 
@@ -196,6 +196,9 @@ async def lifespan(app: FastAPI):
     # Start services
     await container.database().startup()
     await container.cache().startup()
+    from services import distributed_notifications
+    from services.status_broadcaster import get_status_broadcaster
+    await distributed_notifications.start(container.database(), get_status_broadcaster())
     _startup_log("Database + cache started")
 
     # Ends chat runs nothing will finish (never picked up, or their run
@@ -531,6 +534,7 @@ async def lifespan(app: FastAPI):
     await container.chat_unifier().aclose()
     _startup_log("Lifespan shutdown: LLM clients closed")
     await container.cache().shutdown()
+    await distributed_notifications.stop()
     _startup_log("Lifespan shutdown: cache closed")
     await container.database().shutdown()
     _startup_log("Lifespan shutdown complete")
@@ -612,6 +616,8 @@ app.include_router(websocket.router)
 app.include_router(credentials.router)  # Credentials panel - lazy per-tile icon endpoint (n8n pattern)
 app.include_router(schemas.router)  # Per-node output schema endpoint (GET /api/schemas/nodes/{type}.json)
 app.include_router(workspace.router)  # Per-workflow workspace file serving + uploads
+app.include_router(browser_agents.router)
+app.include_router(browser_tasks.router)
 
 # Desktop shell control surface — mounted only under OPENCOMPANY_DESKTOP=1
 # so the token-gated shutdown route does not exist on server deployments.

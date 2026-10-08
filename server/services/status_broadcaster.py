@@ -225,13 +225,16 @@ class StatusBroadcaster:
                 for exc in eg.exceptions:
                     logger.warning("[StatusBroadcaster] Service refresh task failed: %s", exc)
 
-    async def broadcast(self, message: Dict[str, Any]):
+    async def broadcast(self, message: Dict[str, Any], *, shared: bool = True):
         """Broadcast a message to all connected clients using TaskGroup.
 
         Uses asyncio.TaskGroup (Python 3.11+) for structured concurrency:
         - All tasks complete or cancel together
         - Proper exception handling via ExceptionGroup
         """
+        if shared and message.get("type") in {"browser_updated", "browser_profiles_updated"}:
+            from services.distributed_notifications import publish
+            await publish(message)
         if not self._connections:
             return
 

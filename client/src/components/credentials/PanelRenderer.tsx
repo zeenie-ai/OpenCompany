@@ -85,6 +85,10 @@ const PanelRenderer: React.FC<Props> = ({ config, visible, showTechnicalSections
     );
   }
 
+  if (config.unsupportedReason) {
+    return <EmptyState icon={<AlertTriangle className="h-8 w-8 text-warning" />} message={config.unsupportedReason} />;
+  }
+
   return (
     <Suspense fallback={<PanelFallback />}>
       {/* Provider identity resets transient errors/reveal state. Mode changes

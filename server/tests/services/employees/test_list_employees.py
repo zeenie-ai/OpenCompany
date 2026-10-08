@@ -25,13 +25,13 @@ class FakeAuth:
         self.keys = set(keys)
         self.oauth = dict(oauth or {})
 
-    async def has_valid_key(self, key):
+    async def has_valid_key(self, key, *, principal=None):
         return key in self.keys
 
     async def get_oauth_tokens(self, provider):
         return self.oauth.get(provider)
 
-    async def list_api_key_providers(self):
+    async def list_api_key_providers(self, *, principal=None):
         return sorted(self.keys)
 
 

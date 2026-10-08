@@ -187,6 +187,34 @@ async def test_a_tool_call_cannot_change_the_operator_settings(runtime):
     assert runtime.cli.calls == []
 
 
+@pytest.mark.parametrize("adapter", ["in_process", "temporal"])
+async def test_trusted_ask_first_restriction_survives_saved_full_settings(runtime, adapter):
+    saved = {"interaction": "full"}
+    database = SimpleNamespace(get_node_parameters=AsyncMock(return_value=saved))
+    raw = {"tool_args": {"operation": "click", "interaction": "full"}} if adapter == "temporal" else {}
+    with patch("services.plugin.deps.get_database", return_value=database):
+        result = await BrowserNode().execute_as_tool({"operation": "click", "x": 5, "y": 5, "interaction": "full"},
+                                                     {"interaction": "read_only"}, _ctx(**raw))
+    assert "read-only" in result["error"]
+    assert runtime.cli.calls == []
+
+
+async def test_task_lifetime_prevents_same_node_interleaving(runtime):
+    runtime.controller.claim_task("another-task")
+    result = await _run({"operation": "snapshot"})
+    assert result.get("success") is False and result["error_type"] == "BrowserBusy"
+    assert runtime.cli.calls == []
+
+
+async def test_sensitive_login_blocks_browser_observations(runtime):
+    runtime.controller.sensitive_login = True
+    for operation in ("snapshot", "screenshot", "page_text", "page_info", "tabs", "webmcp_list"):
+        result = await _run({"operation": operation})
+        assert result["error_type"] == "sensitive_login"
+        assert result.get("url") is None and result.get("title") is None
+    assert runtime.cli.calls == []
+
+
 def test_the_model_schema_has_no_operator_settings_or_host_code():
     schema = BrowserToolInput.model_json_schema()
     props = set(schema["properties"])

@@ -84,6 +84,30 @@ def _tool_activity_policy(cls: Any) -> Dict[str, Any]:
         },
     }
 
+
+async def _freeze_browser_tools(database, tools: list[dict], context: dict, *, browser_agent: bool = False) -> tuple[dict, int]:
+    """Record owner destinations and plugin policies at an Activity boundary."""
+    from core.config import Settings
+    from services.node_registry import get_node_class
+    bindings = dict(context.get("browser_bindings") or {})
+    enabled = browser_agent or context.get("browser_routing_version") == 1 or context.get("browser_runtime_version") == 1 or getattr(Settings(), "distributed_mode", False) is True
+    version = 0
+    if enabled:
+        from services.browser_owners import routing_for_node
+        for tool in tools:
+            if tool.get("node_type") != "browser":
+                continue
+            node_id = tool["tool_node_id"]
+            binding = bindings.get(node_id)
+            if binding is None:
+                binding = await routing_for_node(database, str(context.get("workflow_id") or ""), node_id, str(context.get("user_id") or "owner"))
+                bindings[node_id] = binding
+            policy = tool.setdefault("activity_policy", _tool_activity_policy(get_node_class("browser")))
+            if binding.get("task_queue"):
+                policy.update(task_queue=binding["task_queue"], owner_routing=True)
+            version = 1
+    return bindings, version
+
 # Activity result shapes — keep these in sync with AgentWorkflow's
 # expectations. Pydantic was considered but plain dicts keep the
 # payload-serialisation cost flat (Temporal serialises via JSON anyway)
@@ -153,17 +177,37 @@ async def _resolve_activity_api_key(payload: Dict[str, Any]) -> str:
     keep a key in their own configuration instead of the credential service.
     """
 
-    recorded = payload.get("api_key")
-    if isinstance(recorded, str) and recorded:
-        return recorded
-
     from core.container import container
 
+    recorded = payload.get("api_key")
     provider = str(payload.get("provider") or "")
     auth = container.auth_service()
-    api_key = await auth.get_api_key(provider)
+    if isinstance(recorded, str) and recorded:
+        if getattr(auth, "distributed_credentials", False) is True:
+            raise ApplicationError("Distributed execution requires a saved 1Password credential", type="NodeUserError", non_retryable=True)
+        return recorded
+    scope = {"principal": str(payload["user_id"])} if payload.get("user_id") else {}
+    if not scope and payload.get("workflow_id"):
+        # Histories predating principal fields can still resolve a newly
+        # configured binding under their saved workflow owner's authority.
+        saved = await container.database().get_workflow(str(payload["workflow_id"]))
+        graph = getattr(saved, "data", None) if saved is not None else None
+        if graph is None and isinstance(saved, dict):
+            graph = saved.get("data", saved)
+        scope = {"principal": str((graph or {}).get("owner_id") or "owner")}
+    if getattr(auth, "distributed_credentials", False) is True:
+        if recorded:
+            raise ApplicationError("Distributed execution requires a saved 1Password credential", type="NodeUserError", non_retryable=True)
+        api_key = await auth.resolve_api_key(provider, **scope)
+        if not api_key:
+            api_key = await auth.resolve_api_key(f"{provider}_api_key", **scope)
+        if not api_key:
+            raise _unsaved_endpoint_error(provider) or ApplicationError("Configure the provider's 1Password credential", type="MissingAgentProviderCredential", non_retryable=True)
+        return str(api_key)
+    resolve = getattr(auth, "resolve_api_key", auth.get_api_key)
+    api_key = await resolve(provider, **scope)
     if not api_key:
-        api_key = await auth.get_api_key(f"{provider}_api_key")
+        api_key = await resolve(f"{provider}_api_key", **scope)
 
     if not api_key and payload.get("node_id"):
         database = container.database()
@@ -1086,6 +1130,18 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     connection_database = ParameterSnapshotDatabase(database, snapshot)
     db_params = snapshot.get(node_id) if node_id in snapshot else await database.get_node_parameters(node_id) or {}
     parameters = {**(context.get("node_data") or {}), **db_params}
+    if node_type == "browser_agent":
+        from services.browser_agent_recipe import BROWSER_AGENT_ROLE
+        # Delegation's compatibility remap puts its mission in node_data's
+        # system field. Only saved Browser configuration defines this role.
+        if context.get("invocation"):
+            parameters["system_message"] = db_params.get("system_message") or BROWSER_AGENT_ROLE
+        else:
+            parameters["system_message"] = parameters.get("system_message") or BROWSER_AGENT_ROLE
+    from core.config import Settings as _PreflightSettings
+    if getattr(_PreflightSettings(), "distributed_mode", False) is True:
+        from services.credentials.preflight import assert_cluster_credentials
+        await assert_cluster_credentials(database, {"nodes": context.get("nodes") or [], "edges": context.get("edges") or []}, context)
     from services.employees.team_runtime import employee_runtime_plan
     employee_plan = await employee_runtime_plan(database, context)
     if employee_plan:
@@ -1129,8 +1185,14 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # ``prompt`` can never clobber the delegated task.
     invocation = context.get("invocation") or {}
     if invocation.get("task") or invocation.get("context"):
-        system_message = invocation.get("task") or "You are a helpful assistant"
-        prompt = invocation.get("context") or invocation.get("task") or ""
+        if node_type == "browser_agent":
+            # A Browser Agent keeps its saved role and safety instructions.
+            prompt = "\n\n".join(str(invocation[key]) for key in ("task", "context") if invocation.get(key))
+        else:
+            system_message = invocation.get("task") or "You are a helpful assistant"
+            prompt = invocation.get("context") or invocation.get("task") or ""
+    if context.get("native_workspace_version") == 1 and "workspace_task_prompt" in context:
+        prompt = context["workspace_task_prompt"]
 
     api_key = flattened.get("api_key")
     provider = parameters.get("provider", "openai")
@@ -1144,7 +1206,14 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     if not api_key:
         # Try auth_service one more time (covers chatAgent flow where
         # node params don't carry the api_key directly).
-        api_key = await auth.get_api_key(provider) or await auth.get_api_key(f"{provider}_api_key")
+        if node_type == "browser_agent" or context.get("native_workspace_version") == 1 or context.get("browser_routing_version") == 1:
+            principal = str(context.get("user_id") or "owner")
+            source = await auth.get_credential_source(provider, principal=principal)
+            if not source:
+                source = await auth.get_credential_source(f"{provider}_api_key", principal=principal)
+            api_key = bool(source) or await auth.has_valid_key(provider) or await auth.has_valid_key(f"{provider}_api_key")
+        else:
+            api_key = await auth.has_valid_key(provider) or await auth.has_valid_key(f"{provider}_api_key")
     if not api_key:
         endpoint_error = _unsaved_endpoint_error(provider)
         if endpoint_error:
@@ -1210,6 +1279,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         connection_database,
         log_prefix=f"[AgentWorkflow:{node_type}]",
     )
+    if context.get("native_workspace_version") == 1:
+        # Direct tasks have their own transcript. A connected trigger or legacy
+        # memory from employee chat must not steer this independent invocation.
+        input_data, task_data, memory_data = {}, None, None
 
     # taskTrigger may be wired to input-task (task_data) or input-main
     # (input_data). In both cases preserve the CloudEvent payload as invokable
@@ -1455,7 +1528,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 # through the workflow verbatim so ``execute_llm_step`` can
                 # rebuild the real StructuredTool inside the activity.
                 "tool_info": tool_info,
-                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))} if context.get("execution_control_version") == 1 else {}),
+                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))}
+                   if context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
+                   or context.get("browser_routing_version") == 1 or node_type == "browser_agent" else {}),
                 # Team leads create and dispatch durable work through Task
                 # Manager. Delegate descriptors stay in workflow state for
                 # trusted assignee resolution, but are not callable directly
@@ -1609,7 +1684,14 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     else:
         user_images = []
 
-    return {
+    if context.get("native_workspace_version") == 1 and "workspace_task_prompt" in context:
+        prompt = context["workspace_task_prompt"]
+
+    browser_bindings, browser_runtime_version = await _freeze_browser_tools(database, tools_payload, context, browser_agent=node_type == "browser_agent")
+    if node_type == "browser_agent" and len([tool for tool in tools_payload if tool.get("node_type") == "browser"]) != 1:
+        raise ApplicationError("Connect one enabled Browser tool", type="NodeUserError", non_retryable=True)
+
+    prepared = {
         # The chat run this agent works for (stops when the owner presses
         # Stop), and, for the agent that answers it, where its text streams.
         "chat_run_id": chat_run_id_of(context),
@@ -1619,6 +1701,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "workflow_id": workflow_id,
         "session_id": session_id,
         "parameter_snapshot": snapshot,
+        "browser_bindings": browser_bindings,
+        "browser_runtime_version": browser_runtime_version,
         "employee_job_id": context.get("employee_job_id"),
         "employee_team_plan": employee_plan,
         "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")),
@@ -1659,6 +1743,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             or ""
         ),
     }
+    if browser_runtime_version == 1 or context.get("native_workspace_version") == 1:
+        return _strip_credentials(prepared)
+    return prepared
 
 
 @activity.defn(name="agent.refresh_tools")
@@ -1758,7 +1845,9 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "tool_node_id": tool_info["node_id"],
                 "parameters": tool_info["parameters"],
                 "tool_info": tool_info,
-                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))} if payload.get("execution_control_version") == 1 else {}),
+                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))}
+                   if payload.get("execution_control_version") == 1 or payload.get("native_workspace_version") == 1
+                   or payload.get("browser_runtime_version") == 1 or payload.get("browser_routing_version") == 1 else {}),
                 "llm_hidden": bool(team_lead_refresh and is_agent_delegate),
             }
         )
@@ -1776,7 +1865,12 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
                 parameter_updates[str(identifier)] = await database.get_node_parameters(str(identifier)) or {}
     old_snapshot = payload.get("graph_snapshot") or {}
     runtime_graph = extend_runtime_graph(old_snapshot, graph, operations) if old_snapshot else graph
-    return {"tools": new_tools_payload, "graph_snapshot": runtime_graph, "parameter_updates": parameter_updates}
+    result = {"tools": new_tools_payload, "graph_snapshot": runtime_graph, "parameter_updates": parameter_updates}
+    if payload.get("browser_runtime_version") == 1 or payload.get("browser_routing_version") == 1:
+        bindings, version = await _freeze_browser_tools(database, new_tools_payload, payload)
+        result.update(browser_bindings=bindings, browser_runtime_version=version)
+        return _strip_credentials(result)
+    return result
 
 
 @activity.defn(name="agent.skill.invoke")

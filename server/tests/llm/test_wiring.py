@@ -44,7 +44,7 @@ def ai_service():
     settings = MagicMock()
     settings.ai_timeout = 30
     auth = AsyncMock()
-    auth.get_api_key = AsyncMock(return_value=None)  # no proxy
+    auth.resolve_api_key = AsyncMock(return_value=None)  # no proxy
 
     chat_unifier = MagicMock()
     chat_unifier.is_registered = MagicMock(return_value=True)

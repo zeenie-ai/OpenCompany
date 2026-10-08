@@ -26,8 +26,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import JSON, Column, delete, select
-from sqlmodel import Field, SQLModel
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
+from models.browser_profiles import BrowserProfileRow
 
 from core.logging import get_logger
 
@@ -39,24 +40,6 @@ _NAME_MAX = 60
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-class BrowserProfileRow(SQLModel, table=True):
-    __tablename__ = "browser_profiles"
-
-    id: str = Field(primary_key=True, max_length=40)
-    owner_id: str = Field(default="owner", index=True, max_length=255)
-    name: str = Field(max_length=120)
-    kind: str = Field(default="shared", max_length=20)
-    workflow_id: Optional[str] = Field(default=None, index=True, max_length=255)
-    #: Major version of the last Chrome that opened it. A profile written by
-    #: a newer Chrome must not be opened by an older one.
-    chrome_major: Optional[int] = Field(default=None)
-    #: Domains and cookie counts from the last time we looked (never values),
-    #: so the Credentials panel can show them without starting Chrome.
-    sites: Optional[List[Dict[str, Any]]] = Field(default=None, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=_utcnow)
-    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class ProfileError(ValueError):
@@ -239,7 +222,16 @@ class ProfileStore:
             existing = next(iter(rows), None)
             if existing is not None:
                 return _from_row(existing)
-        return await self.create(owner_id, name, kind="employee", workflow_id=workflow_id)
+        try:
+            return await self.create(owner_id, name, kind="employee", workflow_id=workflow_id)
+        except IntegrityError:
+            # Another replica created the same workflow's profile first.
+            async with self.database.get_session() as session:
+                row = (await session.execute(select(BrowserProfileRow).where(
+                    BrowserProfileRow.owner_id == owner_id, BrowserProfileRow.workflow_id == workflow_id,
+                    BrowserProfileRow.kind == "employee"
+                ))).scalar_one()
+                return _from_row(row)
 
     async def employee_profiles_of(self, workflow_id: str) -> List[Profile]:
         """Every owner's employee profile of a workflow (for its deletion)."""

@@ -64,6 +64,7 @@ from ._retry_policies import (
     DELEGATION_CLEANUP_RETRY,
     LLM_STEP_RETRY,
     PERMIT_WAIT_RETRY,
+    frozen_retry_policy,
 )
 from .agent_context_pressure import (
     clear_old_tool_results,
@@ -112,7 +113,8 @@ async def _execute_plugin_tool_activity(
         "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT,
     }
     policy = (tool_info or {}).get("activity_policy")
-    if context.get("execution_control_version") == 1 and policy:
+    if (context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
+            or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1) and policy:
         options = _frozen_tool_activity_options(policy, context)
         tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
     else:
@@ -141,16 +143,10 @@ def _frozen_tool_activity_options(policy: Dict[str, Any], context: Dict[str, Any
     options: Dict[str, Any] = {
         "start_to_close_timeout": timedelta(seconds=policy["start_to_close_seconds"]),
         "heartbeat_timeout": (timedelta(seconds=policy["heartbeat_seconds"]) if policy.get("heartbeat_seconds") else None),
-        "retry_policy": RetryPolicy(
-            initial_interval=timedelta(seconds=retry["initial_interval_seconds"]),
-            backoff_coefficient=retry["backoff_coefficient"],
-            maximum_interval=timedelta(seconds=retry["maximum_interval_seconds"]),
-            maximum_attempts=retry["maximum_attempts"],
-            non_retryable_error_types=retry["non_retryable_error_types"],
-        ),
+        "retry_policy": frozen_retry_policy(retry),
         "cancellation_type": ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
     }
-    if context.get("temporal_worker_pool_enabled") is True:
+    if context.get("temporal_worker_pool_enabled") is True or policy.get("owner_routing") is True:
         options["task_queue"] = policy["task_queue"]
     return options
 
@@ -309,6 +305,11 @@ _INHERITED_SCOPE_KEYS = (
     "controller_workflow_id",
     "execution_control_state",
     "execution_control_revision",
+    "native_workspace_version",
+    "browser_routing_version",
+    "browser_runtime_version",
+    "browser_bindings",
+    "_browser_task_id",
 )
 
 
@@ -331,9 +332,14 @@ _CAN_TRANSCRIPT_MAX_BYTES = 1_000_000
 _CAN_INPUT_MAX_BYTES = 1_900_000
 
 
-def _inherited_scope(context: Dict[str, Any]) -> Dict[str, Any]:
+def _inherited_scope(context: Dict[str, Any], *, delegation: bool = False) -> Dict[str, Any]:
     """Return the scope keys a delegated child must inherit from its parent."""
-    return {key: context[key] for key in _INHERITED_SCOPE_KEYS if key in context}
+    inherited = {key: context[key] for key in _INHERITED_SCOPE_KEYS if key in context}
+    if delegation:
+        # A child owns its own task lifetime. Siblings must not accidentally
+        # share a parent's claim token or release its still-active profile.
+        inherited.pop("_browser_task_id", None)
+    return inherited
 
 
 def _child_control_scope(control: ExecutionControl) -> Dict[str, Any]:
@@ -669,6 +675,8 @@ class AgentWorkflow:
     def __init__(self, context: Dict[str, Any] = None) -> None:
         self._control_paused = False
         self._execution_control = ExecutionControl()
+        self._browser_claims = []
+        self._continuing = False
         if context is not None:
             self._execution_control.bind(context)
 
@@ -707,6 +715,28 @@ class AgentWorkflow:
         if self._control_paused:
             await workflow.wait_condition(lambda: not self._control_paused)
 
+    async def _claim_browser_tools(self, context: dict, tools: list[dict]) -> None:
+        context.setdefault("_browser_task_id", workflow.info().workflow_id)
+        seen_profiles = {binding["profile_id"] for binding in self._browser_claims}
+        for tool in tools:
+            if tool.get("node_type") != "browser":
+                continue
+            binding = context["browser_bindings"][tool["tool_node_id"]]
+            if binding["profile_id"] in seen_profiles:
+                continue
+            seen_profiles.add(binding["profile_id"])
+            self._browser_claims.append(binding)
+            claim = await workflow.execute_activity(
+                "browser_tasks.claim",
+                {"binding": binding, "principal": str(context.get("user_id") or "owner"), "task_id": context["_browser_task_id"]},
+                task_queue=binding.get("task_queue") or workflow.info().task_queue,
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=RetryPolicy(maximum_attempts=1),
+                cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+            )
+            if isinstance(claim, dict) and isinstance(claim.get("binding"), dict):
+                binding.update(claim["binding"])
+
     @workflow.run
     async def run(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
         self._execution_control.bind(context)
@@ -730,6 +760,21 @@ class AgentWorkflow:
             await fail_job(cancelled=is_cancelled_exception(exc))
             raise
         finally:
+            if not self._continuing:
+                for binding in reversed(self._browser_claims):
+                    async def release(binding=binding):
+                        await workflow.execute_activity(
+                            "browser_tasks.release",
+                            {"binding": binding, "task_id": context["_browser_task_id"]},
+                            task_queue=binding.get("task_queue") or workflow.info().task_queue,
+                            start_to_close_timeout=timedelta(seconds=120),
+                            heartbeat_timeout=timedelta(seconds=30),
+                            retry_policy=RetryPolicy(maximum_attempts=0),
+                            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+                        )
+                    # Owner absence leaves cleanup queued. Cancel/Reset wait for
+                    # its receipt instead of releasing another task's claim.
+                    await asyncio.shield(asyncio.create_task(release()))
             if self._execution_control.enabled:
                 await workflow.wait_condition(workflow.all_handlers_finished)
 
@@ -814,7 +859,8 @@ class AgentWorkflow:
         # DB lookups + edge walking + tool schema build happen here, NOT
         # in the workflow body (workflows must be deterministic).
         resume = dict(context.get(_RESUME_MARKER) or {})
-        if self._execution_control.enabled and resume.get("prepared_payload"):
+        durable_runtime = self._execution_control.enabled or context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1
+        if durable_runtime and resume.get("prepared_payload"):
             payload = dict(resume["prepared_payload"])
         else:
             async with self._execution_control.action():
@@ -825,6 +871,11 @@ class AgentWorkflow:
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2,
                     retry_policy=AGENT_ACTIVITY_RETRY,
                 )
+        if payload.get("browser_runtime_version") == 1:
+            context["browser_runtime_version"] = 1
+            context["browser_bindings"] = payload.get("browser_bindings") or {}
+            durable_runtime = True
+            await self._claim_browser_tools(context, payload.get("tools") or [])
         # Stable per-run execution id, forwarded into every tool-call
         # activity so session-keyed nodes (browser) reuse one instance
         # across iterations instead of minting a fresh uuid per call
@@ -972,7 +1023,8 @@ class AgentWorkflow:
             info = tool_index.get(name)
             return tool_output_is_capped(info.get("node_type") if info else None)
 
-        thinking_accumulated = str(resume.get("thinking") or "") if self._execution_control.enabled else ""
+        thinking_accumulated = str(resume.get("thinking") or "") if durable_runtime else ""
+        browser_artifacts = list(resume.get("browser_artifacts") or []) if durable_runtime else []
         final_content: Optional[str] = None
         # Billing/observability is cumulative for the entire execution and
         # survives continue_as_new via the resume marker — the final result
@@ -1072,6 +1124,8 @@ class AgentWorkflow:
                     else {}
                 ),
             }
+            if context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1:
+                llm_payload["user_id"] = str(context.get("user_id") or "owner")
 
             async with self._execution_control.action():
                 # Transient provider failures (429 rate limit, 5xx, network)
@@ -1091,7 +1145,8 @@ class AgentWorkflow:
                     )
                 except Exception as e:
                     from temporalio.exceptions import is_cancelled_exception
-                    if getattr(self, "_employee_runtime_v2", False) and is_cancelled_exception(e):
+                    if (getattr(self, "_employee_runtime_v2", False) or context.get("native_workspace_version") == 1
+                            or context.get("browser_runtime_version") == 1) and is_cancelled_exception(e):
                         raise asyncio.CancelledError() from e
                     cause = getattr(e, "cause", None)
                     raw_detail = str(cause) if cause is not None else str(e)
@@ -1411,7 +1466,7 @@ class AgentWorkflow:
                 )
                 child_context = {
                     # Inherited scope first: explicit keys below win.
-                    **_inherited_scope(context),
+                    **_inherited_scope(context, delegation=True),
                     **_child_control_scope(self._execution_control),
                     "node_id": candidate_tool["tool_node_id"],
                     "node_type": candidate_tool["node_type"],
@@ -1663,7 +1718,7 @@ class AgentWorkflow:
                 context_text = request_context if isinstance(request_context, str) else _serialise_tool_result(request_context)
                 child_context = {
                     # Inherited scope first: explicit keys below win.
-                    **_inherited_scope(context),
+                    **_inherited_scope(context, delegation=True),
                     **_child_control_scope(self._execution_control),
                     "node_id": assignee_id, "node_type": delegate["node_type"],
                     "node_data": {**(delegate.get("parameters") or {}),
@@ -2012,6 +2067,9 @@ class AgentWorkflow:
                         else {}
                     ),
                 }
+                binding = (context.get("browser_bindings") or {}).get(tool_info["tool_node_id"])
+                if tool_info["node_type"] == "browser" and binding:
+                    tool_payload.update(_browser_owner=binding, _browser_task_id=context["_browser_task_id"])
                 if workflow.patched("employee-task-manager-tool-scope-v2"):
                     tool_payload = {**_trusted_tool_scope(context), **tool_payload}
 
@@ -2190,6 +2248,15 @@ class AgentWorkflow:
                                 "requires_user_action": True,
                                 "retryable": False,
                             }
+                        if durable_runtime and tool_info.get("node_type") == "browser" and isinstance(tool_result, dict):
+                            from services.workspace_task_history import safe_result
+                            browser_output = tool_result.get("result") if isinstance(tool_result.get("result"), dict) else tool_result
+                            screenshot = browser_output.get("screenshot")
+                            if isinstance(screenshot, dict):
+                                refs = safe_result({"artifacts": [screenshot]}).get("artifacts") or []
+                                for ref in refs:
+                                    if not any(existing.get("path") == ref.get("path") for existing in browser_artifacts) and len(browser_artifacts) < 32:
+                                        browser_artifacts.append(ref)
                         tool_content = _serialise_tool_result(tool_result)
                         if (
                             tool_output_limit
@@ -2250,6 +2317,9 @@ class AgentWorkflow:
                                     **call_metadata,
                                     **({"execution_control_version": 1} if self._execution_control.enabled else {}),
                                 }
+                                if context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1:
+                                    refresh_payload.update({key: context[key] for key in ("browser_runtime_version", "browser_routing_version", "browser_bindings", "user_id") if key in context})
+                                    refresh_payload["workflow_id"] = payload.get("workflow_id")
                                 if binding_refresh_v2:
                                     refresh_payload["bound_node_ids"] = [tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")]
                                     refresh_payload["graph_snapshot"] = {"nodes": context.get("nodes") or [], "edges": context.get("edges") or []}
@@ -2308,6 +2378,12 @@ class AgentWorkflow:
                                             },
                                         )
                                         added_tools = []
+                                    if added_tools and refresh_result.get("browser_bindings"):
+                                        context["browser_bindings"] = {**(context.get("browser_bindings") or {}), **refresh_result["browser_bindings"]}
+                                        if refresh_result.get("browser_runtime_version") == 1:
+                                            context["browser_runtime_version"] = 1
+                                            durable_runtime = True
+                                            await self._claim_browser_tools(context, added_tools)
                                     for new_tool in added_tools:
                                         tools.append(new_tool)
                                         tool_index[new_tool["name"]] = new_tool
@@ -2331,6 +2407,10 @@ class AgentWorkflow:
                         await _cleanup_cancelled_delegations()
                         raise
                     except Exception as e:  # noqa: BLE001 — Temporal handles retries
+                        from temporalio.exceptions import is_cancelled_exception
+                        if (context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1) and is_cancelled_exception(e):
+                            await _cleanup_cancelled_delegations()
+                            raise asyncio.CancelledError() from e
                         # After all retries exhausted, surface the error to
                         # the LLM (per user decision: LLM sees error and
                         # continues — matches the in-process agent loop).
@@ -2567,6 +2647,8 @@ class AgentWorkflow:
                     "provider": payload["provider"],
                     "model": payload["model"],
                 }
+                if context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1:
+                    compact_payload["user_id"] = str(context.get("user_id") or "owner")
                 await self._wait_until_resumed()
                 async with self._execution_control.action():
                     try:
@@ -2738,7 +2820,7 @@ class AgentWorkflow:
                     delegation_handles or task_manager_delegation_tasks
                 )
                 if not delegations_live:
-                    if self._execution_control.enabled:
+                    if durable_runtime:
                         # A stopped workflow remains in this run. No live child
                         # handle or unfinished Update crosses the boundary.
                         await self._wait_until_resumed()
@@ -2755,6 +2837,7 @@ class AgentWorkflow:
                                 "prepared_payload": payload,
                                 "tools": tools,
                                 "thinking": thinking_accumulated,
+                                "browser_artifacts": browser_artifacts,
                             },
                         }
                         # Measure the converter's complete argument, including
@@ -2767,6 +2850,7 @@ class AgentWorkflow:
                                 f"Agent continuation requires {input_bytes} bytes; limit is {_CAN_INPUT_MAX_BYTES}. Reduce tool output or enable context compaction.",
                                 type="AgentContinuationTooLarge", non_retryable=True,
                             )
+                        self._continuing = True
                         workflow.continue_as_new(args=[next_context])
                     # The live transcript crosses the boundary directly.
                     # Compaction keeps it token-bounded; the byte guard
@@ -2823,6 +2907,8 @@ class AgentWorkflow:
             "execution_id": context.get("execution_id"),
             "root_execution_id": root_execution_id,
         }
+        if browser_artifacts:
+            result_payload["artifacts"] = browser_artifacts
 
         # Persist the result to the OutputStore via the workflow_service
         # so ParameterResolver can resolve {{aiAgent.response}} in

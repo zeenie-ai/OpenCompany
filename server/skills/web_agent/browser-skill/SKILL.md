@@ -51,6 +51,20 @@ If the snapshot says the page offers WebMCP tools, call `webmcp_list` and prefer
 
 ## When a person must act
 
+For a configured single-form login, use `credential_bindings` to discover
+approved opaque binding IDs for this browser. Observe current username,
+password and submit refs first, then call `credential_fill` with
+`credential_binding_id`, `username_ref`, `password_ref` and `submit_ref`.
+Never supply or request credential values, 1Password references or vault IDs.
+The runtime privately fills the approved fields and submits once while
+observations and capture are gated. It returns only safe status.
+
+Under Ask first/read-only policy, or for multi-step login, MFA, passkeys,
+missing bindings or protected-login failure, use `request_user`. A gated
+browser requires the owner's close/reopen manual-login recovery action;
+never evade the gate through screenshots, vision, page text or WebMCP, and
+never replay an uncertain login submission.
+
 Call `request_user` with a short, specific `message` and a `reason` (`login`, `captcha`, `two_factor`, `confirm`, `other`) when:
 
 - a site needs a login, a CAPTCHA or a two-factor code;
@@ -87,4 +101,6 @@ It waits until the owner hands the browser back; the result says `handed_back`, 
 | `wait` | `wait_for`, `wait_value` |
 | `webmcp_list` / `webmcp_call` | the site's own tools |
 | `request_user` | hand the page to the owner |
+| `credential_bindings` | approved opaque IDs for configured website login |
+| `credential_fill` | approved binding ID and current username/password/submit refs |
 | `diagnose` | when the browser itself seems broken |

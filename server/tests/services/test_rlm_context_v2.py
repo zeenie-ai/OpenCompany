@@ -22,7 +22,7 @@ async def test_rlm_loads_context_into_prompt_and_records_the_turn():
         side_effect=lambda prompt: f"portable-history\n{prompt}"
     )
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value="secret")
+    auth.resolve_api_key = AsyncMock(return_value="secret")
     prompts = []
 
     fake_rlm = ModuleType("rlm")

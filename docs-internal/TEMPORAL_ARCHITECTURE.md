@@ -23,6 +23,18 @@ ways depending on the run's frozen settings flags:
 
 **Routing snapshot (`_temporal_routing_v1`).** The three dispatch flags — `TEMPORAL_PER_TYPE_DISPATCH`, `TEMPORAL_AGENT_WORKFLOW_ENABLED` and `TEMPORAL_WORKER_POOL_ENABLED` (which picks the task queue) — are read once by whoever starts the run and frozen into the workflow input under `_temporal_routing_v1` (`services/temporal/executor.py::capture_temporal_routing_input`). `TemporalExecutor.execute_workflow` captures them per run; `DeploymentManager` captures them when it registers a push/poll listener or creates a cron Schedule, and the listener hands the same snapshot to every run it spawns. `MachinaWorkflow.run` dispatches only from that snapshot (`_frozen_routing_from_input`) and never re-reads `Settings`, so changing a flag affects runs started, and triggers registered, afterwards — never a run already in flight. An input without a snapshot (or with an unknown version) gets `_SAFE_FROZEN_ROUTING`: agent workflow and per-type dispatch on, worker pool off. Locked by `tests/temporal/test_frozen_routing.py`.
 
+**Browser owner routing (`browser_routing_version: 1`).** Distributed starts
+also capture server-resolved `browser_bindings`, including profile, principal,
+owner, runtime epoch and physical queue. The Browser queue overrides the
+general pool switch, including when `TEMPORAL_WORKER_POOL_ENABLED=false`.
+Only the registered backend owner consumes it; generic orchestration workers
+exclude Browser Activities. Ordinary Browser nodes and native Browser Agent
+tools share this path. Preparation can associate a new profile with an already
+registered configured backend, but cannot register an orchestration worker as
+a browser owner. Missing registrations fail admission; unavailable existing
+owners keep their assignment. [Deployment and recovery](browser_agent_deployment.md)
+defines the PostgreSQL, shared storage and external Temporal prerequisites.
+
 ## Execution Routing & Running
 
 `WorkflowService.execute_workflow` routes each run (`server/services/workflow.py`):
@@ -716,14 +728,39 @@ the ingress and duplicate-trigger naming limits recorded in the
 
 ### Direct Workspace tasks
 
-A node class that declares `workspace_task = True` (the phone nodes in `server/nodes/mobile/`) can also run a single task outside any graph run. The Workspace's **Ask AI to use the phone** box posts to `/api/mobile/{workflow_id}/{node_id}/tasks` (`server/nodes/mobile/_router.py`), and `services/node_invocations.py::submit` admits the task.
+A node class that declares `workspace_task = True` can run a task outside any
+graph run. Phone nodes post to `/api/mobile/{workflow_id}/{node_id}/tasks`
+(`server/nodes/mobile/_router.py`). The dedicated `browser_agent` task panel
+posts to `/api/browser/tasks` (`server/routers/browser_tasks.py`). Both use
+`services/node_invocations.py::submit`. Direct tasks are generation zero,
+independent of deployed Start/Stop/Resume, and have their own Cancel and Reset
+cleanup.
 
-- **Admission.** Each OpenCompany workflow has one long-lived `WorkspaceTaskControllerWorkflow` (`services/temporal/workspace_tasks_workflow.py`, Temporal id from `node_invocations.controller_id`), created on first use through Update-With-Start. Its `submit` Update checks the admission epoch, bounds the number of active tasks, deduplicates a retried submission by its id and prompt fingerprint, and starts one `NodeInvocationWorkflow` child per task (`services/temporal/node_invocation.py`). The child runs the node's per-type activity once, with no retry, and records the run through `workflow_runs.record_completion`.
+- **Admission.** Each OpenCompany workflow has one long-lived `WorkspaceTaskControllerWorkflow` (`services/temporal/workspace_tasks_workflow.py`, Temporal id from `node_invocations.controller_id`), created on first use through Update-With-Start. Its `submit` Update checks the admission epoch, bounds active tasks, deduplicates the submission UUID and fingerprint, and starts one `NodeInvocationWorkflow` child per task. New Browser payloads carry server-generated `dispatch_version: 1`, `dispatch_kind: native_agent` and `history_version: 1`; their idempotent history admission Activity completes before acceptance is acknowledged. Unversioned payloads retain the original single per-type Activity command path with no retry.
+- **Native Browser execution.** The invocation starts `AgentWorkflow`, using the existing model/tool Activities. Preparation applies the submitted task after saved configuration and templates while preserving system instructions. `native_workspace_version: 1` permits Continue-As-New with generation-zero task identity, frozen tools, policies, owner bindings and transcript, without enrolling direct tasks in generation control or repeating completed turns. The task does not read/write deployed Context or employee chat. Completion is counted once at the invocation parent, including cancellation/error outcomes; agent children and rollover do not add completions.
+- **Browser history.** `WorkspaceTaskRecord` is a projection, not the execution authority. Admission and lifecycle writes are idempotent and terminal states cannot regress. Recent tasks contain prompt, timestamps, bounded safe result/error and authorized relative artifact links, excluding tool transcripts and credentials. Pages default to 20 (maximum 100); terminal records expire after 35 days, while active records and history survive Reset. Workflow authorization protects historical records after node deletion. Retained terminal records also prevent resubmission after controller dedup or Temporal history expiration.
 - **Reset.** The controller's `reset` Update first fences new submissions by advancing the epoch. It then cancels every admitted child and waits for each to close, and runs the `workspace_tasks.reset_runtime` activity (`services/temporal/workspace_task_activities.py::reset_workspace_task_runtime`). That activity cancels invocations started before the controller existed and calls each Workspace-task node's `reset_execution_state`. The Update returns only after that cleanup. If cleanup fails, the fence stays in place, and retrying Reset resumes the same request. The workflow toolbar's Reset reaches the controller through `services/deployment/handlers.py::_reset_workspace_tasks`, even for a workflow that was never started; see [temporal-workflow-control.md](./temporal-workflow-control.md#workspace-tasks).
 - **Registration and rollover.** Both workflow classes are in `worker.py::_framework_workflows`, and every framework worker registers `reset_workspace_task_runtime`. The controller continues-as-new under history pressure, carrying its epoch and its bounded submission and reset records.
 - **Inside graph and agent runs.** Two patch markers give Workspace-task nodes their own activity options. `workspace-node-cancellation-v1` (`MachinaWorkflow`) uses the node class's `start_to_close_timeout` and `heartbeat_timeout`, and makes cancellation wait until the activity has finished cleaning up. `workspace-task-activity-policy-v1` (tool calls in `AgentWorkflow`) does the same and also applies the class's `retry_policy` and, with the worker pool on, its `task_queue`.
 
-What the user sees, including what Reset leaves on the phone, is in [docs/mobile-workspace.md](../docs/mobile-workspace.md#resetting-phone-tasks).
+Browser tasks hold the profile claim during reasoning, tools and human help.
+Finalization waits for matching-token owner cleanup; stale cancellation cannot
+release a newer task. Queued work has no schedule-to-start or schedule-to-close
+deadline, so an owner outage consumes neither retry attempts nor model turns.
+Start-to-close and heartbeat timeouts apply after pickup. Cancel/Reset can stay
+pending until that owner recovers. Later mutating attempts are refused when the
+prior effect is uncertain; recovery requires fresh observation and confirmation,
+not profile transfer or a reset attempt identity. The active workflow/tool
+association restores viewer access to the frozen profile across edits/restarts.
+
+`tests/temporal/test_browser_workspace_replay.py` uses a native Temporal test
+server with separate orchestration and two owner workers. Its model/browser
+Activities are controlled fixtures. Set `TEMPORAL_TEST_CLI` to a provisioned
+native Temporal executable to run the owner-routing, Continue-As-New,
+cancellation/cleanup and SDK replay gate. Old replay fixtures remain required.
+
+What the user sees is documented in [Mobile workspace](../docs/mobile-workspace.md#resetting-phone-tasks)
+and [Browser workspace](browser_workspace.md#direct-browser-tasks).
 
 ### Approved sends
 

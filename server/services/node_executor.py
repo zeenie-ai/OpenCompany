@@ -160,7 +160,7 @@ class NodeExecutor:
 
             # Load, validate, enhance parameters
             params = await self._prepare_parameters(node_id, node_type, parameters, session_id, tool_args=tool_args,
-                parameter_snapshot=context.get("parameter_snapshot"))
+                parameter_snapshot=context.get("parameter_snapshot"), principal=str(context.get("user_id") or "owner"))
 
             # Resolve templates if resolver provided
             nodes = context.get("nodes")
@@ -249,6 +249,7 @@ class NodeExecutor:
         session_id: str,
         tool_args: Optional[Dict[str, Any]] = None,
         parameter_snapshot: Optional[Dict[str, Dict[str, Any]]] = None,
+        principal: str = "owner",
     ) -> Dict:
         """Load from DB, validate, inject API keys."""
         # Merge with DB parameters (DB provides defaults, frontend can override)
@@ -280,16 +281,19 @@ class NodeExecutor:
                 logger.warning("Validation warning", node_type=node_type, errors=str(e))
 
         # Inject API keys
-        return await self._inject_api_keys(node_type, merged)
+        return await self._inject_api_keys(node_type, merged, principal=principal)
 
-    async def _inject_api_keys(self, node_type: str, params: Dict) -> Dict:
+    async def _inject_api_keys(self, node_type: str, params: Dict, *, principal: str = "owner") -> Dict:
         """Auto-inject API keys for AI and Maps nodes."""
         result = params.copy()
+        if getattr(self.settings, "distributed_mode", False) and result.get("api_key"):
+            from services.plugin import NodeUserError
+            raise NodeUserError("Distributed execution requires a saved 1Password credential.")
 
         if node_type in AI_MODEL_TYPES:
             provider = detect_ai_provider(node_type, params)
             if not result.get("api_key"):
-                key = await self.ai_service.auth.get_api_key(provider, "default")
+                key = await self.ai_service.auth.resolve_api_key(provider, "default", principal=principal)
                 if key:
                     result["api_key"] = key
             if not result.get("model"):
@@ -300,10 +304,10 @@ class NodeExecutor:
         elif node_type in GOOGLE_MAPS_TYPES:
             if not result.get("api_key"):
                 # Try database first, then fall back to environment variable
-                key = await self.ai_service.auth.get_api_key("google_maps", "default")
+                key = await self.ai_service.auth.resolve_api_key("google_maps", "default", principal=principal)
                 if key:
                     result["api_key"] = key
-                elif self.settings.google_maps_api_key:
+                elif not getattr(self.settings, "distributed_mode", False) and self.settings.google_maps_api_key:
                     result["api_key"] = self.settings.google_maps_api_key
 
         return result

@@ -141,9 +141,10 @@ def _windows_version(path: Path) -> str:
 
 
 async def browser_version(path: Path) -> str:
+    from services.process_environment import without_onepassword_environment
     if sys.platform == "win32":
         return await asyncio.to_thread(_windows_version, path)
-    process = await asyncio.create_subprocess_exec(str(path), "--version", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    process = await asyncio.create_subprocess_exec(str(path), "--version", env=without_onepassword_environment(), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     try:
         stdout, _ = await asyncio.wait_for(process.communicate(), timeout=5)
     except BaseException:

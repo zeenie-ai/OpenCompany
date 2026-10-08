@@ -60,6 +60,7 @@ from services.cli_agent.lockfile import remove_ide_lockfile, write_ide_lockfile
 from services.cli_agent.protocol import AICliProvider, CanonicalUsage, SessionResult
 from services.cli_agent.transports import PtyHandle, get_pty_transport
 from services.cli_agent.types import BaseAICliTaskSpec
+from services.process_environment import without_onepassword_environment
 
 logger = get_logger(__name__)
 
@@ -234,7 +235,7 @@ class AICliSession(BaseProcessSupervisor):
         parent_run_id = f"{self._workflow_id}:{self._node_id}:{self._batch_token[:8]}"
         e["OPENCOMPANY_PARENT_RUN_ID"] = parent_run_id
         e["MACHINA_PARENT_RUN_ID"] = parent_run_id  # legacy child-process contract
-        return e
+        return without_onepassword_environment(e)
 
     async def _pre_spawn(self) -> None:
         """Create the per-task git worktree (non-memory-bound runs only)
@@ -359,7 +360,7 @@ class AICliSession(BaseProcessSupervisor):
             self._pty_handle = await transport.spawn(
                 argv,
                 cwd=self.cwd() or self._repo_root,
-                env=self.env(),
+                env=without_onepassword_environment(self.env()),
             )
         except FileNotFoundError:
             raise

@@ -113,6 +113,7 @@ def _grant_sandbox_access(directory: Path) -> None:
     runs without it.
     """
     import subprocess
+    from services.process_environment import without_onepassword_environment
 
     try:
         subprocess.run(
@@ -120,6 +121,7 @@ def _grant_sandbox_access(directory: Path) -> None:
             check=False,
             capture_output=True,
             timeout=120,
+            env=without_onepassword_environment(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         logger.debug("[browser] could not grant Chrome's sandbox access to %s: %s", directory, exc)

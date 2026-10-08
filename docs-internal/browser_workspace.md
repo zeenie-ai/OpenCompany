@@ -61,6 +61,46 @@ browser calls the authorized `browser_session_open` handler. Unsaved workflows
 must be saved first. Adding a node to an existing workflow must also be saved
 before the server can authorize it.
 
+## Direct Browser tasks
+
+The task panel beside the selected Browser tool discovers connected
+`browser_agent` nodes from the saved server graph. A standalone Browser tool
+offers **Add Browser AI Agent**, which uses the same atomic creation recipe as
+canvas and Agent Builder and adopts the returned saved graph operations.
+Discovery never marks the agent itself as a Browser viewer node.
+
+Choose an associated agent, enter a task and submit. The API resolves its
+Browser tool, policy, profile and owner; the client sends saved IDs, prompt and
+a submission UUID. Retrying a lost acknowledgement uses the same UUID. The task
+runs through Workspace admission and native AI execution, independently of
+workflow Start/Stop/Resume, employee chat and deployed Context. **Cancel** uses
+the existing invocation cancellation and waits for owner cleanup. Reset keeps
+history and can remain in progress while an owner is unavailable.
+
+Recent tasks show prompt, lifecycle status, a bounded safe result/error and
+authorized artifact links. This projection is separate from chat, excludes
+tool transcripts and secret values, and uses stable invocation IDs. History
+pages contain 20 records (API maximum 100); terminal entries expire after
+35 days while active tasks remain. The UI polls current history and offers
+older pages. A missing owner displays **Browser unavailable — waiting for its
+owner.** Tasks stay queued for the existing owner and do not trigger another
+model turn merely because a Browser Activity has not been picked up.
+
+## Protected login observations
+
+Configured 1Password login displays **Browser observations are paused during
+protected login.** The server blocks capture refresh, drains pending frames
+and raw metadata, and suppresses tabs, page addresses, dialogs and clipboard
+content before retrieving credentials. A `sensitive` event invalidates pending
+client image decodes and clears cached picture, address, tabs and dialogs.
+The same gate applies to newly attached viewers and recovered owners.
+
+If private submission cannot be confirmed, the gate remains in place. Use
+**Close browser for manual login**, then **Start browser** and Take control to
+finish login. Closing must be confirmed by the owner before the sensitive
+latch clears. The normal handoff covers MFA, passkeys and multi-step login.
+See [configured login](browser.md#configured-1password-login).
+
 ## When the agent asks for help
 
 `request_user` puts the profile's controller in `awaiting_user`. The viewer
@@ -86,6 +126,13 @@ a big-endian uint16 JSON-header length, JSON metadata, and JPEG bytes.
 `protocol.ts` validates the envelope. The viewer draws frames serially and
 acknowledges each consumed or skipped frame so the server's two-frame window
 does not stall. Object URLs are released after decoding and on cleanup.
+
+In distributed mode the accepting backend proxies that same binary envelope
+to the saved browser owner. Its signed internal attach binds the authenticated
+principal and original attach body, and the owner reauthorizes the saved
+target. This adds no public CDP endpoint and does not let clients select a
+backend URL. Cross-replica invalidation uses identifiers followed by an
+authorized refresh, never browser frames or private page payloads.
 
 Frames fit the available surface without cropping. Input coordinates exclude
 letterboxing and map through the frame metadata to CDP page coordinates.

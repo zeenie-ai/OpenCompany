@@ -110,6 +110,17 @@ class Settings(BaseSettings):
     # and resolves under ``DATA_DIR`` like every other state path,
     # rather than being hardcoded inside a SQLAlchemy URL string.
     workflow_db_filename: str = Field(env="WORKFLOW_DB_FILENAME")
+    database_url_override: Optional[str] = Field(default=None, validation_alias="DATABASE_URL")
+    distributed_mode: bool = Field(default=False, validation_alias="DISTRIBUTED_MODE")
+    browser_replica_id: Optional[str] = Field(default=None, max_length=120, validation_alias="BROWSER_REPLICA_ID")
+    browser_machine_id: Optional[str] = Field(default=None, max_length=255, validation_alias="BROWSER_MACHINE_ID")
+    browser_replica_url: Optional[str] = Field(default=None, validation_alias="BROWSER_REPLICA_URL")
+    browser_router_secret: Optional[str] = Field(default=None, validation_alias="BROWSER_ROUTER_SECRET")
+    onepassword_cli_path: Optional[str] = Field(default=None, validation_alias="ONEPASSWORD_CLI_PATH")
+    onepassword_cli_version: str = Field(default="2.40.0", validation_alias="ONEPASSWORD_CLI_VERSION")
+    onepassword_auth_mode: Literal["desktop", "service_account"] = Field(default="desktop", validation_alias="ONEPASSWORD_AUTH_MODE")
+    onepassword_account: Optional[str] = Field(default=None, validation_alias="ONEPASSWORD_ACCOUNT")
+    onepassword_read_timeout_seconds: float = Field(default=30, ge=1, le=300, validation_alias="ONEPASSWORD_READ_TIMEOUT_SECONDS")
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
     database_pool_size: int = Field(default=20, env="DATABASE_POOL_SIZE", ge=5, le=100)
     database_max_overflow: int = Field(default=30, env="DATABASE_MAX_OVERFLOW", ge=10, le=100)
@@ -532,18 +543,41 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """Compose the SQLAlchemy URL from ``DATA_DIR`` + ``WORKFLOW_DB_FILENAME``.
-
-        Always ``sqlite+aiosqlite:///<abspath>`` — the only DB engine
-        OpenCompany uses. Parent dir is mkdir'd here so the DB file can
-        be opened on first access without a separate bootstrap step.
-        Reads :meth:`_resolve_under_data` so the same DEV / daemon
-        toggle (``.env.dev`` swapping ``DATA_DIR=.opencompany``) that moves
-        every other state path moves ``workflow.db`` too.
-        """
+        """Explicit shared PostgreSQL URL, or the existing local SQLite path."""
+        if self.database_url_override:
+            value = self.database_url_override
+            if value.startswith("postgresql://"):
+                value = "postgresql+asyncpg://" + value[len("postgresql://"):]
+            if not value.startswith(("postgresql+asyncpg://", "sqlite+aiosqlite://")):
+                raise ValueError("DATABASE_URL must use PostgreSQL asyncpg or SQLite aiosqlite")
+            return value
         db_path = Path(self._resolve_under_data(self.workflow_db_filename))
         db_path.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite+aiosqlite:///{db_path}"
+
+    @model_validator(mode="after")
+    def _validate_distributed_browser(self):
+        if not self.distributed_mode:
+            return self
+        from urllib.parse import urlsplit
+
+        if not self.database_url.startswith("postgresql+asyncpg://"):
+            raise ValueError("DISTRIBUTED_MODE requires a shared PostgreSQL DATABASE_URL")
+        if not self.temporal_enabled or not self.temporal_agent_workflow_enabled or not self.temporal_per_type_dispatch:
+            raise ValueError("Distributed Browser tasks require Temporal native agent and per-type dispatch")
+        host = self.temporal_server_address.rsplit(":", 1)[0].strip("[]")
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            raise ValueError("DISTRIBUTED_MODE requires an external shared TEMPORAL_SERVER_ADDRESS")
+        if not self.browser_replica_id or not self.browser_replica_url:
+            raise ValueError("DISTRIBUTED_MODE requires BROWSER_REPLICA_ID and BROWSER_REPLICA_URL")
+        url = urlsplit(self.browser_replica_url)
+        if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment or url.path not in {"", "/"}:
+            raise ValueError("BROWSER_REPLICA_URL must be a trusted backend HTTP(S) origin")
+        if self.workers != 1:
+            raise ValueError("Each distributed backend replica must run one browser-owner process (WORKERS=1)")
+        if self.onepassword_auth_mode != "service_account":
+            raise ValueError("DISTRIBUTED_MODE requires ONEPASSWORD_AUTH_MODE=service_account")
+        return self
 
     @property
     def is_development(self) -> bool:
@@ -595,6 +629,7 @@ class Settings(BaseSettings):
         # carrying ``TEMPORAL_BACKEND`` / ``TEMPORAL_BIND_LOCAL_ONLY`` /
         # etc. would raise ValidationError on startup.
         "extra": "ignore",
+        "populate_by_name": True,
         "env_parse_none_str": "none",
         "env_nested_delimiter": "__",
     }

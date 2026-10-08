@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { buildApiUrl } from '@/config/api';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import type { ProviderConfig } from '../types';
+import BrowserLoginBindings from './BrowserLoginBindings';
 
 interface BrowserSite {
   domain: string;
@@ -190,6 +191,8 @@ const BrowserProfilesPanel: React.FC<{ config: ProviderConfig; visible: boolean 
           ))}
         </ul>
       )}
+
+      <BrowserLoginBindings visible={visible} profiles={list} />
 
       <input
         ref={fileInput}

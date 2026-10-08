@@ -338,7 +338,7 @@ class ChatUnifier:
         # The base-URL row is keyed by the full reference, so each named
         # endpoint reads its own URL while sharing one registration.
         ref = provider_ref or spec.name
-        proxy_url = await self._auth.get_api_key(base_url_key(ref))
+        proxy_url = await self._auth.resolve_api_key(base_url_key(ref))
         unconfigured = unconfigured_endpoint_message(ref)
         if unconfigured and not proxy_url:
             # A named endpoint exists only as its credential rows. Without

@@ -43,7 +43,7 @@ def payload(**patch):
 class FakeConnections:
     ai = True
 
-    def __init__(self, _auth=None):
+    def __init__(self, _auth=None, *, principal=None):
         pass
 
     async def connected_app_ids(self):

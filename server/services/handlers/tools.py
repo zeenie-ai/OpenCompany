@@ -508,7 +508,7 @@ async def _execute_delegated_agent(
         from constants import detect_ai_provider
 
         provider = detect_ai_provider(node_type, child_params)
-        key = await ai_service.auth.get_api_key(provider, "default")
+        key = await ai_service.auth.resolve_api_key(provider, "default", principal=str(config.get("user_id") or "owner"))
         if key:
             child_params["api_key"] = key
             logger.debug(f"[Delegated Agent] Injected API key for provider={provider}")
@@ -526,6 +526,9 @@ async def _execute_delegated_agent(
     # Schema-canonical key is snake_case; drop any pre-migration camelCase
     # mirror so the saved-params dict downstream uses the canonical key.
     child_params["system_message"] = task_description
+    if node_type == "browser_agent":
+        from services.browser_agent_recipe import BROWSER_AGENT_ROLE
+        child_params["system_message"] = BROWSER_AGENT_ROLE + "\n" + task_description
     child_params.pop("systemMessage", None)
     child_params["prompt"] = task_context if task_context else task_description
 

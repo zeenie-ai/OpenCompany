@@ -108,7 +108,7 @@ class RLMService:
                 model = await get_default_model_async(provider, database)
 
             if not api_key and self.auth:
-                api_key = await self.auth.get_api_key(provider)
+                api_key = await self.auth.resolve_api_key(provider)
             if not api_key:
                 raise ValueError(f"API key required for RLM Agent (provider: {provider})")
 

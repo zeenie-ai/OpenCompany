@@ -8,6 +8,39 @@ this file picks the right entry point based on what you're adding.
 
 ## Decision tree
 
+### Browser AI Agent creation
+
+`browser_agent` is a `SpecializedAgentBase` plugin using the existing native
+agent loop. Browser control stays in the pinned browser-use CLI (`0.13.10`).
+`services/browser_agent_recipe.py` defines its complete creation bundle:
+agent, one private Browser tool, private Context, Master Skill with the shipped
+browser skill enabled, and `visionAnalyze`. Canvas drop and the workspace's
+**Add Browser AI Agent** action call `POST /api/browser/agents`, which persists
+the bundle atomically through `apply_graph_additions`. Agent Builder and new
+employee Browser capabilities use the same recipe. Existing employees and
+Browser/`web_agent` nodes retain their graphs.
+
+Reuse an explicitly selected saved Browser tool. The server allocates IDs and
+checks graph ownership and operator blocklists; transport retries use the same
+mutation UUID. Repeating Add for an already associated Browser agent returns
+its association without recreating a deliberately deleted Context or Skills
+node. The viewer remains bound to the Browser tool; `browser_agent` must never
+carry `isBrowserPanel`.
+
+`services/browser_agent_recipe.py::browser_tool_id` requires exactly one
+connected saved Browser tool before task admission. Creation returns allocated
+`node_ids`, graph `operations`, `applied` and `saved_revision`; clients apply
+those acknowledged operations through the existing graph update path. They
+do not construct an executable task graph. Provider/model fields use standard
+agent configuration and inheritance. Companion deletion remains an explicit
+graph edit, not a trigger to rebuild the bundle.
+
+See [Browser workspace](./browser_workspace.md),
+[agent architecture](./agent_architecture.md) and
+[distributed deployment](./browser_agent_deployment.md) for runtime contracts.
+
+### General node selection
+
 | You're adding… | Read this | Boilerplate |
 |---|---|---|
 | A simple action node (one HTTP call, no state) | [Quick start](./plugin_system.md#quick-start--adding-a-new-node) | folder under `server/nodes/<group>/<name>/` with `__init__.py` |

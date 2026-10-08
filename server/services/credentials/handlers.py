@@ -35,7 +35,7 @@ from services.ws_handler_registry import ws_handler
 logger = get_logger(__name__)
 
 
-@ws_handler("provider", "api_key")
+@ws_handler("provider")
 async def handle_validate_api_key(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Validate and store an API key.
 
@@ -50,7 +50,10 @@ async def handle_validate_api_key(data: Dict[str, Any], websocket: WebSocket) ->
     from services.plugin.credential import CREDENTIAL_REGISTRY
 
     provider = data["provider"].lower()
-    normalized = dict(data, provider=provider)
+    from services.authz.ws_surface import execution_principal
+    if (getattr(websocket, "scope", {}) or {}).get("path") == "/ws/internal":
+        return {"success": False, "error": "Credential enrollment requires an authenticated client."}
+    normalized = dict(data, provider=provider, _principal=execution_principal({}, websocket))
 
     cred_cls = CREDENTIAL_REGISTRY.get(provider)
     if cred_cls is None:
@@ -59,6 +62,10 @@ async def handle_validate_api_key(data: Dict[str, Any], websocket: WebSocket) ->
             "valid": False,
             "error": f"Unknown provider '{provider}' — no Credential class registered.",
         }
+    if data.get("credential_source") == "onepassword":
+        from services.plugin.credential import Credential
+        if cred_cls.validate.__func__ is not Credential.validate.__func__:
+            return {"success": False, "valid": False, "error": "Use the 1Password endpoint enrollment form for this connection."}
     return await cred_cls.validate(normalized)
 
 
@@ -104,6 +111,10 @@ async def handle_get_stored_api_key(data: Dict[str, Any], websocket: WebSocket) 
 
     auth_service = container.auth_service()
     provider = data["provider"].lower()
+    from services.authz.ws_surface import execution_principal
+    source = await auth_service.get_credential_source(provider, data.get("session_id", "default"), principal=execution_principal({}, websocket))
+    if source is not None:
+        return {"provider": provider, "hasKey": True, "credentialSource": source, "models": source["models"], "timestamp": time.time()}
     api_key = await auth_service.get_api_key(provider, data.get("session_id", "default"))
     if not api_key:
         default = _lookup_credential_default(provider)
@@ -166,7 +177,8 @@ async def handle_delete_api_key(data: Dict[str, Any], websocket: WebSocket) -> D
         auth_service = container.auth_service()
         broadcaster = get_status_broadcaster()
         session_id = data.get("session_id", "default")
-        await auth_service.remove_api_key(provider, session_id)
+        from services.authz.ws_surface import execution_principal
+        await auth_service.remove_api_key(provider, session_id, principal=execution_principal({}, websocket))
         # A provider's Base URL row and its registered models belong to it:
         # deleting a named endpoint (or a local server's key) must leave
         # neither behind. Both are no-ops for a provider that has none.

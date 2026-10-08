@@ -30,7 +30,7 @@ async def activate_pending(database: Any, workflow_id: str | None = None) -> Non
         if not blocked:
             from services.employees.start import heal_agent_models
             from services.employees.connections import Connections
-            await heal_agent_models(database, container.auth_service(), Connections(container.auth_service()), intent.workflow_id)
+            await heal_agent_models(database, container.auth_service(), Connections(container.auth_service(), principal=intent.owner_id), intent.workflow_id)
             # The deployment control service arbitrates concurrent admissions
             # with this stable identity; no external calls inside our DB txn.
             result = await start_saved_workflow(intent.workflow_id, owner_id=intent.owner_id, idempotency_key=intent.id)

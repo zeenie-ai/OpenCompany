@@ -125,6 +125,10 @@ class BrowserUseCli:
         from core.paths import daemons_dir, safe_path_component
 
         root = daemons_dir() / "browser-use" / safe_path_component(self.profile_id, fallback="profile")
+        from services.browser_owners import settings, replica_id, RUNTIME_EPOCH
+        if getattr(settings(), "distributed_mode", False) is True:
+            import tempfile
+            root = Path(tempfile.gettempdir()) / "opencompany-browser-runtime" / safe_path_component(replica_id()) / RUNTIME_EPOCH / safe_path_component(self.profile_id)
         found = {name: root / name for name in ("home", "runtime", "tmp", "workspace", "config")}
         for path in found.values():
             path.mkdir(parents=True, exist_ok=True)
@@ -242,6 +246,60 @@ class BrowserUseCli:
         if proc is not None:
             await self._kill(proc)
             self.stop_daemon()
+
+    async def suspend_for_credentials(self) -> bool:
+        """Confirm the harness is gone before plaintext enters private CDP.
+
+        Never accept an unreadable or unrelated PID as proof of suspension.
+        This path receives no secrets and returns no daemon diagnostics.
+        """
+        import psutil
+        if self._proc is not None:
+            await self._kill(self._proc)
+            if self._proc.returncode is None:
+                return False
+        pidfile = self.dirs()["runtime"] / "bu.pid"
+        if not pidfile.exists():
+            return True
+        try:
+            pid = int(pidfile.read_text().strip())
+            process = psutil.Process(pid)
+            if "browser_harness" not in " ".join(process.cmdline()).lower():
+                return False
+            daemon_home = process.environ().get("BH_HOME", "")
+            if Path(daemon_home).resolve() != self.dirs()["home"].resolve():
+                return False
+        except psutil.NoSuchProcess:
+            self.stop_daemon()
+            return True
+        except (OSError, ValueError, psutil.Error):
+            return False
+        self.stop_daemon()
+        try:
+            await asyncio.to_thread(process.wait, timeout=5)
+        except psutil.NoSuchProcess:
+            pass
+        except psutil.Error:
+            return False
+        return not process.is_running()
+
+    async def suspend_prior_epochs(self) -> bool:
+        """Retire this machine's old profile daemons before starting new Chrome."""
+        from services.browser_owners import settings, RUNTIME_EPOCH
+        if getattr(settings(), "distributed_mode", False) is not True:
+            return True
+        current = self.dirs()["home"].parent
+        for epoch in current.parent.parent.iterdir():
+            if epoch.name == RUNTIME_EPOCH or len(epoch.name) != 32 or any(c not in "0123456789abcdef" for c in epoch.name):
+                continue
+            previous = epoch / current.name
+            if not (previous / "runtime" / "bu.pid").is_file():
+                continue
+            old = BrowserUseCli(cli_path=self.cli_path, python_path=self.python_path, profile_id=self.profile_id, cdp_http_url="")
+            old.dirs = lambda root=previous: {name: root / name for name in ("home", "runtime", "tmp", "workspace", "config")}
+            if not await old.suspend_for_credentials():
+                return False
+        return True
 
     async def doctor(self) -> Dict[str, Any]:
         """browser-harness's own health report (``doctor --json``)."""

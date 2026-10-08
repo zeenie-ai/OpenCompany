@@ -20,13 +20,13 @@ from .._credentials import ApifyCredential
 logger = get_logger(__name__)
 
 
-async def _get_apify_client():
+async def _get_apify_client(*, principal: str | None = None):
     """Return an authenticated Apify client, or None if no token saved."""
     from apify_client import ApifyClientAsync  # lazy — optional dep
     from services.plugin.deps import get_auth_service
 
     auth_service = get_auth_service()
-    api_token = await auth_service.get_api_key("apify", "default")
+    api_token = await auth_service.resolve_api_key("apify", "default", principal=principal)
     if not api_token:
         return None
     return ApifyClientAsync(api_token)
@@ -264,7 +264,7 @@ class ApifyActorNode(ActionNode):
 
     @Operation("run")
     async def run(self, ctx: NodeContext, params: ApifyActorParams) -> ApifyActorOutput:
-        client = await _get_apify_client()
+        client = await _get_apify_client(principal=ctx.raw.get("user_id"))
         if not client:
             raise NodeUserError(
                 "Apify API token not configured. Please add your token in Credentials.",

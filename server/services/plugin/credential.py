@@ -28,7 +28,10 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Dict, List, Literal, Optional, Sequence
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Literal, Optional, Sequence
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import httpx
 
@@ -110,7 +113,7 @@ def classify_credential_error(exc: BaseException, *, display_name: str) -> Probe
     # is still useful, but don't dump a stacktrace into the user's toast.
     return ProbeResult(
         valid=False,
-        message=f"Could not validate {display_name}: {type(exc).__name__}: {exc}",
+        message=f"Could not validate {display_name}: {type(exc).__name__}.",
     )
 
 
@@ -277,7 +280,22 @@ class Credential:
         from core.container import container
         from services.status_broadcaster import get_status_broadcaster
 
-        api_key = (data.get("api_key") or "").strip()
+        source = data.get("credential_source")
+        auth_service = container.auth_service()
+        reference = None
+        if source == "onepassword":
+            from services.credentials.onepassword import CredentialSourceError, read_secret, validate_reference
+            try:
+                if cls.auth != "api_key" or getattr(cls, "extra_fields", ()):
+                    raise CredentialSourceError("unsupported_source", "This connection does not support static 1Password credentials.")
+                await auth_service.get_credential_source(cls.id, data.get("session_id", "default"), principal=data.get("_principal"))
+                reference = validate_reference(data.get("reference"))
+                api_key = await read_secret(reference, auth_service.settings)
+            except CredentialSourceError as exc:
+                return {"success": False, "valid": False, "error": str(exc), "code": exc.code}
+        else:
+            auth_service.require_local_credentials()
+            api_key = (data.get("api_key") or "").strip()
         session_id = data.get("session_id", "default")
         if not api_key:
             return {
@@ -297,17 +315,30 @@ class Credential:
                 result.message,
             )
 
-        broadcaster = get_status_broadcaster()
-        auth_service = container.auth_service()
+        if reference is not None:
+            # Upstream validators may echo request fields in successful
+            # metadata. Never persist or broadcast an echoed secret.
+            def contains_secret(value):
+                if isinstance(value, str):
+                    return api_key in value
+                if isinstance(value, dict):
+                    return any(contains_secret(key) or contains_secret(item) for key, item in value.items())
+                if isinstance(value, (list, tuple)):
+                    return any(contains_secret(item) for item in value)
+                return False
+            if contains_secret({"models": result.models, "params": result.model_params, "extra": result.extra}):
+                result = ProbeResult(valid=False, message="The provider returned unsafe credential metadata.")
+            result.message = result.message.replace(api_key, "[credential]")
 
+        broadcaster = get_status_broadcaster()
         if result.valid:
-            await auth_service.store_api_key(
-                provider=cls.id,
-                api_key=api_key,
-                models=result.models,
-                session_id=session_id,
-                model_params=result.model_params,
-            )
+            if reference is not None:
+                await auth_service.store_credential_source(cls.id, reference, principal=data["_principal"], models=result.models, session_id=session_id, model_params=result.model_params)
+            else:
+                await auth_service.store_api_key(
+                    provider=cls.id, api_key=api_key, models=result.models,
+                    session_id=session_id, model_params=result.model_params,
+                )
 
         await broadcaster.update_api_key_status(
             provider=cls.id,
@@ -341,7 +372,7 @@ class Credential:
         raise NotImplementedError(f"Credential subclass {cls.__name__} must override _probe()")
 
     @classmethod
-    async def catalogue_extras(cls) -> Optional[Dict[str, Any]]:
+    async def catalogue_extras(cls, *, principal: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Extra catalogue fields computed from stored state, or ``None``.
 
         ``handle_get_credential_catalogue`` merges the result into this
@@ -465,7 +496,7 @@ class ApiKeyCredential(Credential):
         from core.container import container
 
         auth_service = container.auth_service()
-        api_key = await auth_service.get_api_key(cls.id)
+        api_key = await auth_service.resolve_api_key(cls.id, principal=user_id)
         if not api_key:
             err = PermissionError(f"No API key for '{cls.id}'. Add via Credentials modal.")
             err.provider = cls.id
@@ -473,10 +504,10 @@ class ApiKeyCredential(Credential):
             err.auth = cls.auth  # "api_key"
             raise err
         secrets: Dict[str, Any] = {"api_key": api_key}
-        for field in cls.extra_fields:
-            value = await auth_service.get_api_key(field)
+        for field_name in cls.extra_fields:
+            value = await auth_service.resolve_api_key(field_name, principal=user_id)
             if value:
-                secrets[field] = value
+                secrets[field_name] = value
         return secrets
 
     @classmethod

@@ -484,7 +484,7 @@ boot mid-reset can never sweep the namespace.
 
 ## Workspace tasks
 
-Phone tasks submitted directly from the Workspace run outside the control
+Phone and Browser AI tasks submitted directly from the Workspace run outside the control
 generation, under a per-workflow `WorkspaceTaskControllerWorkflow` (see
 [TEMPORAL_ARCHITECTURE.md → Direct Workspace tasks](./TEMPORAL_ARCHITECTURE.md#direct-workspace-tasks)).
 They can exist before the first Start and after a Reset. Pause and Resume do
@@ -510,6 +510,83 @@ submissions. The control plane covers them in two places.
   is false when Temporal or the controller query is unavailable. While the
   controller is resetting, the payload reports `state: "resetting"` and turns
   off `can_start`, `can_pause`, `can_resume` and `can_edit`.
+
+### Native Browser tasks
+
+New Browser submissions carry server-generated `dispatch_version: 1`,
+`history_version: 1` and `native_workspace_version: 1`. The controller persists
+the history admission record before acknowledging acceptance, then starts
+`NodeInvocationWorkflow → AgentWorkflow → model/tool Activities`. Existing
+payloads without the dispatch version retain their single-Activity command
+path. Submission UUIDs, stable invocation IDs, payload fingerprints and saved
+workflow authorization remain the admission boundary; clients cannot submit
+executable graphs, credential references or browser-owner addresses.
+
+The submitted prompt is applied after saved configuration and template
+preparation. It replaces the task prompt while preserving the Browser Agent's
+system instructions. Generation-zero direct tasks use a separate transcript
+and do not load or persist deployed Context. The narrow native Workspace
+runtime capability allows Continue-As-New without enrolling these tasks in
+Start/Stop/Resume generation control. Rollover carries the prepared payload,
+transcript, tools, frozen policies, owner bindings, task token and authorized
+artifact references; completed tool calls and model turns are not repeated.
+Completion accounting remains at the invocation parent, once per task.
+
+The API is `/api/browser/tasks`: POST accepts the saved workflow/agent IDs,
+task prompt and submission UUID; GET `/discovery` resolves agents attached to
+the selected saved Browser tool; GET `/history` returns recent tasks; GET and
+DELETE `/{submission_id}` read status or cancel a task. History is a small
+`WorkspaceTaskRecord` projection of Temporal execution, with idempotent
+Activity writes and terminal compare-and-set protection. It stores bounded
+public results and relative artifact references, excluding tool transcripts
+and credential values. Pages default to 20 records and allow at most 100;
+terminal records expire after 35 days while active records and Reset history
+remain. Historical authorization uses the accessible workflow even after an
+agent node is removed. Terminal projection records also prevent a repeated
+submission from starting again after controller dedup eviction or expiration
+of its Temporal execution history.
+
+### Browser owners and confirmed cleanup
+
+Distributed browser bindings freeze the profile, stable backend owner,
+runtime epoch and owner-specific Activity queue. Browser Activities use that
+queue even when the general worker-pool flag is disabled. Generic orchestration
+workers do not register Browser Activities. Each backend registers and
+heartbeats its owner before starting its dedicated Browser worker, using
+logical plugin selection separately from the physical queue name. Ordinary
+Browser nodes receive the same versioned owner routing; old inputs retain
+their recorded routing behavior.
+
+The native Agent child claims a profile for the entire task, including model
+reasoning and human assistance. Competing tasks fail with `BrowserBusy`
+before browser effects. A Continue-As-New reacquires the same token
+idempotently and does not release the continuing task. Finalization routes
+matching-token cleanup to the owner and waits for its receipt. Cancel and
+Reset wait for the attached child and that cleanup; Reset does not resolve
+mutable or deleted graph bindings again. An unavailable owner keeps its
+ownership and leaves work queued with “Browser unavailable — waiting for its
+owner.” Owner Activities have no schedule-to-close timeout; start-to-close
+and heartbeat deadlines apply after pickup. Cleanup can therefore keep a
+Reset in progress until the owner recovers.
+
+Recovery retries retain the owner queue and attempt identity. The Browser
+runtime refuses replay of mutating operations on later attempts and requires
+fresh observation for uncertain effects. Renewed runtime epochs and nonsecret
+assistance state are explicit owner metadata; Temporal does not restore
+Chrome tabs or stale element references. No automatic profile transfer is
+performed. Distributed deployment requires PostgreSQL, shared artifact
+storage and an external shared Temporal service; local SQLite and embedded
+Temporal remain supported.
+
+The native integration gate in
+`server/tests/temporal/test_browser_workspace_replay.py` runs separate
+orchestration and two owner workers against a native Temporal test server.
+It covers an absent owner, owner routing with worker pools disabled,
+Continue-As-New, cancellation waiting for cleanup, artifact preservation and
+SDK replay. Set `TEMPORAL_TEST_CLI` to a native Temporal binary to enable it;
+the Activities are controlled fixtures and access no external accounts.
+Existing replay fixtures continue to cover unversioned graph, agent and
+invocation histories.
 
 ## Months-long generations
 

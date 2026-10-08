@@ -1214,6 +1214,8 @@ class AIService:
                     # Stable per-run id so session-keyed tools (browser)
                     # reuse one instance across the agent loop.
                     config["execution_id"] = context.get("execution_id")
+                    config["_browser_task_id"] = context.get("_browser_task_id")
+                    config["_browser_owner"] = (context.get("browser_bindings") or {}).get(str(tool_node_id))
                     config["root_execution_id"] = context.get("root_execution_id")
                     config["delegation_depth"] = context.get("delegation_depth", 0)
                     config["team_id"] = context.get("team_id")
@@ -1985,6 +1987,8 @@ class AIService:
                         # Stable per-run id so session-keyed tools (browser)
                         # reuse one instance across the agent loop.
                         config["execution_id"] = context.get("execution_id")
+                        config["_browser_task_id"] = context.get("_browser_task_id")
+                        config["_browser_owner"] = (context.get("browser_bindings") or {}).get(str(tool_node_id))
                         config["root_execution_id"] = context.get("root_execution_id")
                         config["delegation_depth"] = context.get("delegation_depth", 0)
                         config["team_id"] = context.get("team_id")
@@ -2595,6 +2599,7 @@ class AIService:
             "android_agent",
             "coding_agent",
             "web_agent",
+            "browser_agent",
             "task_agent",
             "social_agent",
             "travel_agent",

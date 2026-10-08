@@ -148,21 +148,25 @@ async def load_speech_voices(params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     try:
         from services.plugin.deps import get_auth_service
+        from services.ws_handler_registry import current_load_options_principal
 
         from . import _unifier
 
-        api_key = await get_auth_service().get_api_key(
-            speech_config.credential_id(provider)
+        api_key = await get_auth_service().resolve_api_key(
+            speech_config.credential_id(provider), principal=current_load_options_principal()
         )
         if not api_key:
             return static
         voices = await _unifier.list_voices(provider=provider, api_key=api_key)
         return [voice.as_option() for voice in voices] or static
     except Exception as exc:
+        from services.credentials.onepassword import CredentialSourceError
+        if isinstance(exc, CredentialSourceError):
+            raise
         logger.warning(
             "live voice lookup failed; falling back to the configured list",
             provider=provider,
-            error=str(exc),
+            error=type(exc).__name__,
         )
         return static
 

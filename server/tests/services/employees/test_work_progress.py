@@ -217,7 +217,7 @@ async def test_employee_detail_preserves_job_progress_and_adds_work_progress(rea
     await real_database.save_workflow(workflow_id=wf.id, name="Maya", slug="progress-maya", data=wf.data)
     await add(real_database, Employee(id="employee-row", workflow_id=wf.id, owner_id="owner", team_plan={"version": 1}), job(team_id=None, state="queued"))
     monkeypatch.setattr(summaries, "_summary", AsyncMock(return_value={"workflow_id": wf.id, "pending_approvals": 0, "browser_request": None}))
-    monkeypatch.setattr(summaries, "Connections", lambda _: SimpleNamespace(has_ai=AsyncMock(return_value=True)))
+    monkeypatch.setattr(summaries, "Connections", lambda _, **kwargs: SimpleNamespace(has_ai=AsyncMock(return_value=True)))
     result = await summaries.get_employee_summary(real_database, wf.id, auth_service=None)
     assert result["job_progress"] == await job_progress(real_database, wf.id)
     assert result["work_progress"]["state"] == "queued"

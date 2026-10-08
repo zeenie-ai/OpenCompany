@@ -9,6 +9,7 @@ import secrets
 import socket
 import time
 from pathlib import Path
+from services.process_environment import without_onepassword_environment
 from ._control import DeviceControl, Lease, MobileError
 from ._install import AVD_NAME, install_engine, create_device, engine_ready, sdk_tool, sdk_root
 from ._paths import mobile_root, runtime_python
@@ -306,7 +307,7 @@ class MobileRuntime:
                 "-no-audio",
                 stdout=log,
                 stderr=log,
-                env=env,
+                env=without_onepassword_environment(env),
                 **hidden_options(),
             )
         finally:
@@ -368,7 +369,7 @@ class MobileRuntime:
         )
         for name in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"):
             env.pop(name, None)
-        return env
+        return without_onepassword_environment(env)
 
     async def _start_driver(self):
         event("driver_starting")

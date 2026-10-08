@@ -1234,7 +1234,7 @@ class TestDelegatedChildrenInheritScope:
         from services.temporal.agent_workflow import AgentWorkflow
 
         source = inspect.getsource(AgentWorkflow._run_impl)
-        assert source.count("**_inherited_scope(context)") == 2
+        assert source.count("**_inherited_scope(context, delegation=True)") == 2
 
     def test_inherited_scope_never_overrides_explicit_child_keys(self):
         import inspect
@@ -1243,7 +1243,7 @@ class TestDelegatedChildrenInheritScope:
 
         source = inspect.getsource(AgentWorkflow._run_impl)
         for block in source.split("child_context = {")[1:]:
-            spread = block.index("**_inherited_scope(context)")
+            spread = block.index("**_inherited_scope(context, delegation=True)")
             node_id = block.index('"node_id"')
             assert spread < node_id, "spread must come first so explicit keys win"
 

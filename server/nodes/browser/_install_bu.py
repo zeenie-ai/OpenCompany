@@ -23,6 +23,7 @@ from typing import Dict, Optional
 
 from core.logging import get_logger
 from services.plugin.base import NodeUserError
+from services.process_environment import without_onepassword_environment
 
 from ._config import BrowserUsePin, get_config
 
@@ -132,7 +133,7 @@ class BrowserUseInstaller:
         logger.info("[browser] installing %s", self.pin.spec)
         try:
             proc = await asyncio.create_subprocess_exec(
-                *argv, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                *argv, env=without_onepassword_environment(env), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
             try:
                 _, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)

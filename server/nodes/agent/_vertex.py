@@ -107,6 +107,8 @@ def build_genai_client(api_key: str, project_id: str, location: str = DEFAULT_LO
     from google import genai
 
     if project_id:
+        from services.plugin.deps import get_ai_service
+        get_ai_service().auth.require_local_credentials()
         # Enterprise Agent Platform surface — ADC auth (gcloud).
         return genai.Client(
             enterprise=True,
@@ -138,7 +140,7 @@ def resolve_api_key_from_context(raw_context: dict) -> str:
     return ""
 
 
-async def resolve_gemini_api_key_from_store() -> str:
+async def resolve_gemini_api_key_from_store(raw_context: dict | None = None) -> str:
     """Fetch the stored gemini credential for nodes outside AI_MODEL_TYPES.
 
     ``vertex_agent_admin`` is not an agent/model type, so
@@ -147,8 +149,11 @@ async def resolve_gemini_api_key_from_store() -> str:
     """
     from services.plugin.deps import get_ai_service
 
+    from services.credentials.onepassword import CredentialSourceError
     try:
-        key = await get_ai_service().auth.get_api_key("gemini", "default")
+        key = await get_ai_service().auth.resolve_api_key("gemini", "default", principal=(raw_context or {}).get("user_id"))
+    except CredentialSourceError:
+        raise
     except Exception:  # noqa: BLE001 — missing key is handled by the caller
         return ""
     return key or ""

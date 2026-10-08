@@ -61,6 +61,8 @@ ModelOperation = Literal[
     "webmcp_call",
     "request_user",
     "diagnose",
+    "credential_fill",
+    "credential_bindings",
 ]
 NodeOperation = Literal[
     "navigate",
@@ -83,6 +85,8 @@ NodeOperation = Literal[
     "webmcp_call",
     "request_user",
     "diagnose",
+    "credential_fill",
+    "credential_bindings",
     "evaluate",
     "run_python",
     "close",
@@ -90,7 +94,7 @@ NodeOperation = Literal[
 
 #: Permission policy. Retry safety and traffic accounting are separate:
 #: navigation can be permitted in read-only mode but cannot be blindly replayed.
-MUTATING = frozenset({"click", "type", "press", "select", "back", "forward", "reload", "webmcp_call", "evaluate", "run_python"})
+MUTATING = frozenset({"click", "type", "press", "select", "back", "forward", "reload", "webmcp_call", "evaluate", "run_python", "credential_fill"})
 #: Operations with a target element.
 _TARGETED = {"click", "hover", "type", "select", "scroll", "page_text"}
 #: Only workflow nodes may run these; they are not in the model's schema.
@@ -156,6 +160,10 @@ class BrowserToolInput(BaseModel):
     frame_id: str = Field(default="", description="Only when webmcp_list shows the same tool in several frames.", json_schema_extra=_show("webmcp_call"))
     reason: Literal["login", "captcha", "two_factor", "confirm", "other"] = Field(default="other", json_schema_extra=_show("request_user"))
     message: str = Field(default="", description="What the owner should do in the browser.", json_schema_extra=_show("request_user"))
+    credential_binding_id: str = Field(default="", description="Opaque approved website-login binding ID. Never pass a password or 1Password reference.", json_schema_extra=_show("credential_fill"))
+    username_ref: str = Field(default="", description="Username input ref from the current snapshot.", json_schema_extra=_show("credential_fill"))
+    password_ref: str = Field(default="", description="Password input ref from the current snapshot.", json_schema_extra=_show("credential_fill"))
+    submit_ref: str = Field(default="", description="A separately selected submit-button ref. Required for configured automatic login.", json_schema_extra=_show("credential_fill"))
 
     model_config = ConfigDict(extra="ignore")
 
@@ -293,7 +301,17 @@ async def _config(ctx: NodeContext, params: BaseModel) -> BrowserParams:
     saved = await get_database().get_node_parameters(ctx.node_id)
     if saved is None:
         raise NodeUserError("This Browser node's settings could not be loaded. Save the workflow and try again.")
-    return BrowserParams.model_validate(saved)
+    snapshot = ctx.raw.get("parameter_snapshot") or {}
+    frozen = snapshot.get(ctx.node_id) if isinstance(snapshot, dict) else None
+    versioned = ctx.raw.get("native_workspace_version") == 1 or ctx.raw.get("browser_runtime_version") == 1 or ctx.raw.get("browser_routing_version") == 1
+    cfg = BrowserParams.model_validate(frozen if versioned and isinstance(frozen, dict) else saved)
+    # This is the adapter's validated server configuration, never tool_args.
+    # An employee's Ask first restriction must survive reloading saved settings.
+    trusted = ctx.raw.get("_tool_config")
+    trusted_interaction = trusted.interaction if isinstance(trusted, BrowserParams) else trusted.get("interaction") if isinstance(trusted, dict) else None
+    if saved.get("interaction") == "read_only" or trusted_interaction == "read_only":
+        cfg = cfg.model_copy(update={"interaction": "read_only"})
+    return cfg
 
 
 async def _profile_for(ctx: NodeContext, cfg: BrowserParams):
@@ -304,6 +322,9 @@ async def _profile_for(ctx: NodeContext, cfg: BrowserParams):
     store = ProfileStore(get_database())
     owner = ctx.user_id or "owner"
     try:
+        binding = ctx.raw.get("_browser_owner")
+        if isinstance(binding, dict) and binding.get("profile_id"):
+            return await store.get(owner, str(binding["profile_id"]))
         if cfg.profile_id:
             return await store.get(owner, cfg.profile_id)
         if ctx.workflow_id:
@@ -332,6 +353,7 @@ class BrowserNode(ToolNode):
     group = ("browser", "tool")
     description = "A real Chrome the agent drives through its accessibility tree and a site's WebMCP tools; watch and take over live."
     component_kind = "square"
+    usable_as_tool = True
     tool_name = "browser"
     tool_schema_locked = True
     tool_error_fields = frozenset({"success", "error_type", "retry_after", "next_action", "session_id", "profile", "url", "title", "tab_id"})
@@ -384,6 +406,10 @@ class BrowserNode(ToolNode):
             return {"reset": False}
         controller = runtime.controller(session.profile_id)
         if controller is not None:
+            if controller.task_id is not None:
+                # The owning agent's reset hook carries its exact task token.
+                # A legacy Browser hook must not release an unrelated task.
+                return {"reset": False, "managed_by_agent": True}
             await controller.release_lease(session.session_id)
         return {"reset": True}
 
@@ -412,6 +438,12 @@ class BrowserNode(ToolNode):
         runtime = get_browser_runtime()
         profile = await _profile_for(ctx, cfg)
         owner = ctx.user_id or "owner"
+        task_id = str(ctx.raw.get("_browser_task_id") or ctx.execution_id or "")
+        from services.browser_owners import assert_owner, bind_profile, _persistent
+        from services.plugin.deps import get_database
+        if ctx.raw.get("_browser_owner") or _persistent(get_database()):
+            binding = ctx.raw.get("_browser_owner") or await bind_profile(get_database(), profile.id, owner)
+            await assert_owner(get_database(), binding, owner, task_id)
         workflow_key = ctx.workflow_id or f"unsaved:{ctx.execution_id or 'run'}"
         policy = runtime.base_policy(
             allow_private_network=cfg.allow_private_network, allowed_domains=parse_allowed_domains(cfg.allowed_domains)
@@ -424,6 +456,13 @@ class BrowserNode(ToolNode):
             BrowserSession(key=SessionKey(owner, workflow_key, ctx.node_id), profile_id=profile.id, label=label, policy=policy)
         )
         out = BrowserOutput(operation=op, session_id=session.session_id, profile=profile.name)
+        controller_lookup = getattr(runtime, "controller", None)
+        existing_controller = controller_lookup(profile.id) if callable(controller_lookup) else controller_lookup
+        if existing_controller is not None:
+            if existing_controller.task_id is not None and existing_controller.task_id != task_id:
+                return _failure(out, "BrowserBusy", "This browser profile is already assigned to another task.", next_action="wait")
+            if existing_controller.sensitive_login and op not in {"request_user", "close", "credential_bindings"}:
+                return _failure(out, "sensitive_login", "Browser observations are paused during a protected login. Close and reopen this browser to finish login manually.", next_action="request_user")
         budget = _TOOL_CALL_BUDGET if tool_call else 3600.0
 
         def remaining() -> float:
@@ -441,12 +480,41 @@ class BrowserNode(ToolNode):
             out.notice = "The browser was closed."
             return out
 
+        if op == "credential_bindings":
+            from core.container import container
+            from .._credentials import scoped_bindings
+            out.data = {"bindings": await scoped_bindings(ctx, container.auth_service(), profile.id)}
+            return out
+
         if op == "diagnose":
             out.data = await _diagnose(runtime, profile)
             return out
 
         prt = await runtime.open(profile, wait=min(remaining(), 300.0))
         controller = prt.controller
+        if controller.task_id is not None and controller.task_id != task_id:
+            return _failure(out, "BrowserBusy", "This browser profile is already assigned to another task.", next_action="wait")
+        await controller.restore_assistance(session)
+        if controller.sensitive_login and op != "request_user":
+            return _failure(out, "sensitive_login", "Browser observations are paused during a protected login. Ask the owner to finish login and hand the browser back.", next_action="request_user")
+        if op == "credential_fill":
+            from .._credentials import fill_credentials
+            if controller.needs_observation:
+                return _failure(out, "outcome_unknown", "Inspect a fresh snapshot before attempting login.", next_action="snapshot")
+            async with controller.agent_op(session, interrupt=prt.cli.interrupt):
+                decision = runtime.action_guard.admit(origin=_action_origin(op, call, controller), profile_id=profile.id,
+                    operation=op, arguments={"binding": call.credential_binding_id, "username_ref": call.username_ref,
+                    "password_ref": call.password_ref, "submit_ref": call.submit_ref},
+                    min_interval_ms=cfg.min_action_interval_ms, max_actions_per_minute=cfg.max_actions_per_minute,
+                    max_repeat_actions=cfg.max_repeat_actions)
+                if decision is not None:
+                    return _failure(out, decision.error_type, decision.error, retry_after=decision.retry_after, next_action=decision.next_action)
+                result = await fill_credentials(ctx, prt, call, timeout=min(float(cfg.op_timeout_s), remaining()))
+            if result.get("success"):
+                out.data = {"status": "authenticated"}
+                out.notice = "Configured website login completed. Take a fresh snapshot."
+                return out
+            return _failure(out, result.get("error_type", "login_required"), result.get("error", "Please finish login manually."), next_action="request_user")
 
         if op == "request_user":
             wait = min(float(cfg.request_user_timeout_s), _TOOL_REQUEST_WAIT) if tool_call else float(cfg.request_user_timeout_s)
@@ -549,6 +617,8 @@ def _action_arguments(op: str, call: BrowserToolInput, cfg: BrowserParams, contr
 
 
 def _fill_page(out: BrowserOutput, controller: Any) -> None:
+    if getattr(controller, "sensitive_login", False):
+        return
     tab = controller.tabs.get(controller.active_target_id or "") or {}
     out.tab_id = controller.active_target_id
     out.url = out.url or tab.get("url")

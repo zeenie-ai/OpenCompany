@@ -12,6 +12,7 @@ dependencies = [
     # Database
     "sqlmodel>=0.0.22",
     "aiosqlite>=0.20.0",
+    "asyncpg>=0.30.0,<1",  # Shared application metadata for distributed deployments.
     "greenlet>=3.0.0",  # Required by SQLAlchemy asyncio on macOS ARM64
 
     # HTTP/WebSocket

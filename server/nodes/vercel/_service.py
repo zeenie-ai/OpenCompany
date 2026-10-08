@@ -16,6 +16,7 @@ helpers only — no plugin subpaths in ``core/paths.py``).
 from __future__ import annotations
 
 import os
+from services.process_environment import without_onepassword_environment
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -65,7 +66,7 @@ def vercel_env(token: Optional[str] = None) -> Dict[str, str]:
     env["NO_COLOR"] = "1"
     if token:
         env["VERCEL_TOKEN"] = token
-    return env
+    return without_onepassword_environment(env)
 
 
 async def stored_token() -> Optional[str]:

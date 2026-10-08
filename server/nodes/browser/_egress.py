@@ -128,16 +128,20 @@ class EgressProxy:
         if loop is None:
             return
 
-        def _shutdown() -> None:
+        async def _shutdown() -> None:
             if server is not None:
                 server.close()
-            for task in asyncio.all_tasks(loop):
+                await server.wait_closed()
+            pending = [task for task in asyncio.all_tasks(loop) if task is not asyncio.current_task()]
+            for task in pending:
                 task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
             loop.call_soon(loop.stop)
 
         try:
-            loop.call_soon_threadsafe(_shutdown)
-        except RuntimeError:
+            future = asyncio.run_coroutine_threadsafe(_shutdown(), loop)
+            future.result(timeout=5)
+        except (RuntimeError, TimeoutError):
             pass
         if self._thread is not None:
             self._thread.join(timeout=5)

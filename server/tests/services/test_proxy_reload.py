@@ -35,7 +35,7 @@ async def test_provider_reload_serializes_fetch_build_and_swap():
     allow_old = asyncio.Event()
 
     class Auth:
-        async def get_api_key(self, key: str):
+        async def resolve_api_key(self, key: str):
             if "proxy_old_username" in key:
                 old_started.set()
                 await allow_old.wait()

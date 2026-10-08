@@ -453,6 +453,8 @@ class TriggerListenerWorkflow:
                 "execution_control_revision", "execution_control_producers_held",
             ) if key in listener_data})
         frozen_routing = listener_data.get(TEMPORAL_ROUTING_INPUT_KEY)
+        if listener_data.get("browser_routing_version") == 1:
+            child_payload.update(browser_routing_version=1, browser_bindings=listener_data.get("browser_bindings") or {})
         if isinstance(frozen_routing, dict):
             child_payload[TEMPORAL_ROUTING_INPUT_KEY] = dict(
                 frozen_routing

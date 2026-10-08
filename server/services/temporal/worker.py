@@ -159,6 +159,7 @@ class TemporalWorkerManager:
         self._worker_task: Optional[asyncio.Task] = None
         self._session: Optional[aiohttp.ClientSession] = None
         self._activities: Optional[NodeExecutionActivities] = None
+        self._browser_pool = None
 
     @property
     def is_running(self) -> bool:
@@ -243,7 +244,10 @@ class TemporalWorkerManager:
             store_node_output_activity,
         )
 
-        per_type = collect_plugin_activities()  # no queue filter; all plugins
+        per_type = _generic_plugin_activities()
+        from services.temporal.browser_task_activities import HISTORY_ACTIVITIES, BROWSER_OWNER_ACTIVITIES
+        from core.config import Settings
+        local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
         agent_activities = collect_agent_activities()
         polling_activities = collect_polling_activities()
         # Plugin-owned workflow classes (e.g. cron's
@@ -291,6 +295,8 @@ class TemporalWorkerManager:
                 pause_workflow_on_failure_activity,
                 record_run_completion_activity,
                 reset_workspace_task_runtime,
+                *HISTORY_ACTIVITIES,
+                *local_browser_activities,
                 *CHAT_RUN_ACTIVITIES,
                 *APPROVAL_ACTIVITIES,
                 store_node_output_activity,
@@ -375,9 +381,9 @@ class TemporalWorkerManager:
 
     async def stop(self) -> None:
         """Stop the Temporal worker and cleanup resources."""
-        if not self.is_running:
-            return
-
+        if self._browser_pool is not None:
+            await self._browser_pool.stop()
+            self._browser_pool = None
         logger.info("Stopping Temporal worker")
 
         if self._worker_task:
@@ -386,6 +392,8 @@ class TemporalWorkerManager:
                 await self._worker_task
             except asyncio.CancelledError:
                 pass
+            except Exception as exc:
+                logger.warning("Worker task already failed during shutdown: %s", type(exc).__name__)
             self._worker_task = None
 
         # Close shared session
@@ -561,6 +569,9 @@ class TemporalWorkerPool:
         )
 
         activities = collect_plugin_activities(task_queue=queue)
+        from core.config import Settings
+        if getattr(Settings(), "distributed_mode", False) is True and queue == "browser":
+            return None
         if not activities:
             return None
         concurrency = self._concurrency_for(queue)
@@ -669,6 +680,38 @@ class TemporalWorkerPool:
         logger.info("[Pool] All workers stopped")
 
 
+def _generic_plugin_activities() -> list:
+    """Generic workers cannot operate process-local browsers in a cluster."""
+    from core.config import Settings
+    from services.node_registry import registered_node_classes
+    from services.temporal.plugin_activities import collect_plugin_activities
+    if getattr(Settings(), "distributed_mode", False) is not True:
+        return collect_plugin_activities()
+    return collect_plugin_activities(include_types=[kind for kind in registered_node_classes() if kind != "browser"])
+
+
+class BrowserOwnerWorkerPool(TemporalWorkerPool):
+    """The backend alone polls its physical owner queue, independently of pool flags."""
+
+    def __init__(self, client: Client, owner_id: str):
+        from services.browser_owners import owner_queue
+        super().__init__(client, queues=[owner_queue(owner_id)], default_pool_size=4)
+
+    def _build_queue_worker(self, queue: str) -> Worker:
+        from services.temporal.plugin_activities import collect_plugin_activities
+        from services.temporal.browser_task_activities import BROWSER_OWNER_ACTIVITIES
+        # Filtering by this physical queue would discard the Browser class:
+        # its declared logical queue remains "browser".
+        return Worker(
+            self.client, task_queue=queue,
+            activities=[*collect_plugin_activities(include_types=["browser"]), *BROWSER_OWNER_ACTIVITIES],
+            max_concurrent_activities=4,
+            graceful_shutdown_timeout=_graceful_shutdown_timeout(),
+            identity=_worker_identity(queue),
+            interceptors=[ObservabilityWorkerInterceptor()],
+        )
+
+
 async def run_standalone_worker(
     server_address: str | None = None,
     namespace: str = "default",
@@ -738,6 +781,14 @@ async def run_standalone_worker(
         logger.error(f"Could not connect to Temporal server at {server_address} after 5 attempts")
         return
 
+    from core.config import Settings
+    if getattr(Settings(), "distributed_mode", False) is True:
+        # Native provider/preparation Activities use DI directly. The legacy
+        # backend bridge alone never initialized their shared database here.
+        from core.container import container
+        import nodes  # noqa: F401 -- populate the native plugin registry
+        await container.database().startup()
+
     # Create shared session and activities
     session = await create_shared_session(pool_size)
     activities = NodeExecutionActivities(session)
@@ -765,7 +816,10 @@ async def run_standalone_worker(
     registered_agent_activities = [
         *collect_agent_activities(),
     ]
-    registered_plugin_activities = collect_plugin_activities()
+    registered_plugin_activities = _generic_plugin_activities()
+    from services.temporal.browser_task_activities import HISTORY_ACTIVITIES, BROWSER_OWNER_ACTIVITIES
+    from core.config import Settings
+    local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
 
     # No socket follows a chat here: its events go to the backend's hub.
     from services.chat.relay import start_relay, stop_relay
@@ -786,6 +840,8 @@ async def run_standalone_worker(
                 pause_workflow_on_failure_activity,
                 record_run_completion_activity,
                 reset_workspace_task_runtime,
+                *HISTORY_ACTIVITIES,
+                *local_browser_activities,
                 *CHAT_RUN_ACTIVITIES,
                 *APPROVAL_ACTIVITIES,
                 store_node_output_activity,
@@ -859,7 +915,10 @@ async def create_worker(
     registered_agent_activities = [
         *collect_agent_activities(),
     ]
-    registered_plugin_activities = collect_plugin_activities()
+    registered_plugin_activities = _generic_plugin_activities()
+    from services.temporal.browser_task_activities import HISTORY_ACTIVITIES, BROWSER_OWNER_ACTIVITIES
+    from core.config import Settings
+    local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
 
     return Worker(
         client,
@@ -874,6 +933,8 @@ async def create_worker(
             pause_workflow_on_failure_activity,
             record_run_completion_activity,
             reset_workspace_task_runtime,
+            *HISTORY_ACTIVITIES,
+            *local_browser_activities,
             *CHAT_RUN_ACTIVITIES,
             *APPROVAL_ACTIVITIES,
             store_node_output_activity,

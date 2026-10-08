@@ -24,6 +24,7 @@ PUBLIC_PATHS = frozenset(
         "/api/auth/register",
         "/api/auth/logout",
         "/ws/internal",  # Internal WebSocket for Temporal workers
+        "/api/browser/owner/command",  # Owner route verifies scoped signed forwarding itself.
     ]
 )
 

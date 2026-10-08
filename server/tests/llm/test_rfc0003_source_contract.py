@@ -17,6 +17,7 @@ LLM_DIR = SERVER_DIR / "services" / "llm"
 MODEL_NODES_DIR = SERVER_DIR / "nodes" / "model"
 ENDPOINTS_PY = LLM_DIR / "endpoints.py"
 LOCAL_VALIDATOR_PY = MODEL_NODES_DIR / "_local_validator.py"
+ONEPASSWORD_ENROLLMENT_PY = SERVER_DIR / "services" / "credentials" / "enrollment.py"
 
 # The two places allowed to touch a "/v1" path segment (AG2): the save-time
 # resolver, and the native-host derivation used only by native probes.
@@ -99,7 +100,7 @@ def test_client_construction_does_no_io():
         assert not any(isinstance(n, ast.Await) for n in ast.walk(init)), f"{path.name}:{class_name}.__init__ awaits"
 
     for path in _python_files(SERVER_DIR / "services", SERVER_DIR / "nodes"):
-        if path in (ENDPOINTS_PY, LOCAL_VALIDATOR_PY):
+        if path in (ENDPOINTS_PY, LOCAL_VALIDATOR_PY, ONEPASSWORD_ENROLLMENT_PY):
             continue
         assert "resolve_base_url" not in path.read_text(encoding="utf-8"), (
             f"{path.relative_to(SERVER_DIR)} probes a base URL; only the save path may"

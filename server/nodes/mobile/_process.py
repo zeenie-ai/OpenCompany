@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 from typing import Callable
+from services.process_environment import without_onepassword_environment
 
 OUTPUT_TAIL_BYTES = 64 * 1024
 
@@ -31,7 +32,7 @@ async def command(
         stdin=asyncio.subprocess.PIPE if input_text is not None else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
-        env=env,
+        env=without_onepassword_environment(env),
         cwd=cwd,
         **hidden_options(),
     )

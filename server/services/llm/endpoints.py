@@ -189,7 +189,7 @@ async def resolve_base_url(candidate: str, *, api_key: str, timeout: float = 10.
     )
 
 
-async def list_endpoint_refs(auth: "AuthService") -> List[str]:
+async def list_endpoint_refs(auth: "AuthService", *, principal: Optional[str] = None) -> List[str]:
     """Every saved named endpoint, as provider references, sorted.
 
     Enumerated from the credential rows themselves rather than a separate
@@ -198,7 +198,7 @@ async def list_endpoint_refs(auth: "AuthService") -> List[str]:
     prefix = f"{ENDPOINT_PROVIDER}:"
     return sorted(
         provider
-        for provider in await auth.list_api_key_providers()
+        for provider in await auth.list_api_key_providers(**({"principal": principal} if principal is not None else {}))
         if provider.startswith(prefix) and not provider.endswith(BASE_URL_SUFFIX)
     )
 
@@ -218,18 +218,19 @@ class SavedEndpoint:
     models: List[str]
 
 
-async def list_endpoints(auth: "AuthService") -> List[SavedEndpoint]:
+async def list_endpoints(auth: "AuthService", *, principal: Optional[str] = None) -> List[SavedEndpoint]:
     """Every saved named endpoint with its display metadata and models."""
     endpoints: List[SavedEndpoint] = []
-    for ref in await list_endpoint_refs(auth):
-        meta = (await auth.get_model_params(ref)).get(SERVER_META_KEY) or {}
+    scope = {"principal": principal} if principal is not None else {}
+    for ref in await list_endpoint_refs(auth, **scope):
+        meta = (await auth.get_model_params(ref, **scope)).get(SERVER_META_KEY) or {}
         endpoints.append(
             SavedEndpoint(
                 ref=ref,
                 label=meta.get("label") or split_provider_ref(ref)[1],
                 base_url=meta.get("base_url", ""),
                 kind=meta.get("kind", "generic"),
-                models=list(await auth.get_stored_models(ref)),
+                models=list(await auth.get_stored_models(ref, **scope)),
             )
         )
     return endpoints

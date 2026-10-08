@@ -22,6 +22,41 @@ Detailed architecture reference for how AI Agent (`aiAgent`) and Chat Agent (`ch
 
 ## End-to-End Data Flow
 
+### Browser AI Agent
+
+`browser_agent` inherits `SpecializedAgentBase`, standard parameters, provider
+selection/model inheritance, handles and the existing output envelope. It uses
+the provider-neutral reasoning loop and its saved Browser tool; it does not
+invoke Browser Use's Agent SDK. The private creation bundle is defined once
+in `services/browser_agent_recipe.py` and reused by canvas creation, Agent
+Builder and new employee Browser capabilities.
+
+Employee chat delegates through the ordinary delegation schema. Direct tasks
+are server-admitted Workspace invocations using the saved agent/tool binding:
+`WorkspaceTaskControllerWorkflow → NodeInvocationWorkflow → AgentWorkflow`.
+Their submitted prompt is applied after saved/template preparation, preserving
+the saved Browser system role. Their conversation is isolated from employee
+chat and deployed Context. A versioned native Workspace continuation permits
+generation-zero Continue-As-New without enrolling direct tasks in deployment
+Start/Stop/Resume. Cancel and Reset wait for owner cleanup; prepared tools,
+policy and routing remain frozen across continuation.
+
+A stable task token holds the Browser profile during reasoning, tool calls
+and human assistance. Delegated agents have separate tokens. Both in-process
+tool adapters forward trusted Browser bindings and task identity. The saved
+policy is tightened by trusted `interaction=read_only` restrictions, including
+Ask first; model arguments cannot relax it. The viewer remains attached to
+the saved Browser tool, preserving takeover and the binary frame protocol.
+
+1Password values are resolved inside the calling model Activity or browser
+owner, never during catalogue reads or into Temporal inputs. Configured login
+uses private CDP only while browser-use is suspended and page/capture channels
+are gated; the model receives an opaque binding ID and safe status. Multi-step
+login, MFA and passkeys use human assistance. See
+[1Password credentials](./onepassword_credentials.md),
+[Browser workspace](./browser_workspace.md) and
+[Temporal control](./temporal-workflow-control.md).
+
 ```
 User clicks "Run" on AI Agent
         |
@@ -545,7 +580,7 @@ authoritative agent list, or read `AI_AGENT_TYPES` in
 [`server/constants.py`](../server/constants.py) — do not hand-maintain a
 count here. The frozenset currently spans: the two
 base agents (`aiAgent`, `chatAgent`), the specialized agents
-(`android_agent`, `coding_agent`, `web_agent`, `task_agent`, `social_agent`,
+(`android_agent`, `browser_agent`, `coding_agent`, `web_agent`, `task_agent`, `social_agent`,
 `travel_agent`, `tool_agent`, `productivity_agent`, `payments_agent`,
 `consumer_agent`, `autonomous_agent`), the 2 team leads
 (`orchestrator_agent`, `ai_employee`), the 2 CLI/REPL agents that bypass
@@ -565,6 +600,12 @@ Two settings flags route agent execution through different Temporal paths (see [
 
 Both flags default to `true` in `.env.template`; the starter freezes their
 values and the worker-pool routing flag into each execution's input.
+
+Distributed Browser bindings additionally freeze an owner-specific queue.
+That queue applies to Browser Activities even when worker pools are disabled;
+generic orchestration workers cannot execute them. Direct `browser_agent`
+Workspace tasks use the versioned native child path described above, while
+older Workspace submissions retain their recorded single-Activity path.
 
 `AgentWorkflow` executions carry messages in the single `MessageWire` shape;
 there is one engine and one wire standard, with no `llm_engine` or

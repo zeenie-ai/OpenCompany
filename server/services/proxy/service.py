@@ -404,8 +404,8 @@ class ProxyService:
 
             # Load credentials from AuthService
             cred_key = f"proxy_{config.name}"
-            username = await self._auth_service.get_api_key(f"{cred_key}_username")
-            password = await self._auth_service.get_api_key(f"{cred_key}_password")
+            username = await self._auth_service.resolve_api_key(f"{cred_key}_username")
+            password = await self._auth_service.resolve_api_key(f"{cred_key}_password")
             if username and password:
                 runtime.username = username
                 runtime.password = password

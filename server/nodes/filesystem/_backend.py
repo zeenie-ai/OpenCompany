@@ -25,6 +25,8 @@ from typing import Any, Callable, Dict, Final, Optional
 from uuid import uuid4
 from weakref import WeakValueDictionary
 
+from services.process_environment import without_onepassword_environment
+
 
 EMPTY_CONTENT_WARNING = "System reminder: File exists but has empty contents"
 
@@ -1053,7 +1055,7 @@ class WorkspaceBackend:
                 stdin=subprocess.DEVNULL,
                 text=True,
                 timeout=effective_timeout,
-                env=self._env,
+                env=without_onepassword_environment(self._env),
                 cwd=str(self.cwd),
             )
             return self._shape_process_result(

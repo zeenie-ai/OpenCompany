@@ -68,6 +68,7 @@ class Connection:
         return self._client
 
     async def aclose(self) -> None:
+        self._secrets = None
         if self._client is not None:
             await self._client.aclose()
             self._client = None

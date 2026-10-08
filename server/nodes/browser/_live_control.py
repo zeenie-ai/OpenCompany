@@ -114,6 +114,7 @@ class LiveControlQueue:
         viewer = command.viewer
         return (
             not self._closed and not viewer.closed and viewer.visible
+            and not getattr(self.controller, "sensitive_login", False)
             and (not owner or viewer.id not in self._blocked)
             and command.epoch == self._epochs.get(viewer.id, 0)
             and command.target == self._target()
@@ -148,7 +149,7 @@ class LiveControlQueue:
         self._input_epoch = epoch
 
     def enqueue(self, viewer, message: dict, session) -> bool:
-        if self._closed or viewer.closed or not viewer.visible:
+        if self._closed or viewer.closed or not viewer.visible or getattr(self.controller, "sensitive_login", False):
             return False
         kind = message.get("type")
         if kind == "control_request" and viewer.id in self._takeover_pending:

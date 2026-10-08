@@ -1241,6 +1241,23 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           break;
         }
 
+        case 'browser_invalidated': {
+          // Cross-replica NOTIFY contains only identifiers. Read the actual
+          // Browser state through the authenticated application API.
+          const identity = data as { workflow_id?: string; node_id?: string };
+          const socket = wsRef.current;
+          if (socket && identity?.workflow_id === useAppStore.getState().currentWorkflow?.id && identity.node_id) {
+            void sendOnSocket<{ session?: { state?: string } }>(socket, {
+              type: 'browser_session', workflow_id: identity.workflow_id, node_id: identity.node_id,
+            }, REQUEST_TIMEOUT).then((response) => {
+              if (response.session?.state === 'awaiting_user' && identity.workflow_id === useAppStore.getState().currentWorkflow?.id) {
+                useCanvasDockStore.getState().showBrowser();
+              }
+            }).catch(() => { /* Owner outage: the Browser viewer reports availability. */ });
+          }
+          break;
+        }
+
         case 'browser_updated': {
           // CloudEvents-typed browser control change from
           // server/nodes/browser/_events.py: identity + state only; the live

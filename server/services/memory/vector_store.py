@@ -511,7 +511,7 @@ async def get_memory_vector_store(
     if normalized == "openai" and resolved_key is None:
         if auth_service is not None:
             try:
-                auth_key = await auth_service.get_api_key(
+                auth_key = await auth_service.resolve_api_key(
                     "openai",
                     "default",
                 )

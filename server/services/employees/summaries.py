@@ -403,10 +403,15 @@ async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id:
     controls = await database.list_latest_workflow_controls(ids)
     pending = await _pending_counts(database, ids)
     done = await _done_today(database, ids)
-    connections = Connections(auth_service)
-    needs_ai = not await connections.has_ai()
-    return [
-        await _summary(
+    connections_by_owner = {}
+    summaries = []
+    for workflow in workflows:
+        principal = employee_owner(workflow, employees.get(workflow.id))
+        if principal not in connections_by_owner:
+            connection = Connections(auth_service, principal=principal)
+            connections_by_owner[principal] = (connection, not await connection.has_ai())
+        connections, needs_ai = connections_by_owner[principal]
+        summaries.append(await _summary(
             workflow,
             employees.get(workflow.id),
             controls.get(workflow.id),
@@ -414,9 +419,8 @@ async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id:
             needs_ai=needs_ai,
             pending=pending.get(workflow.id, 0),
             done_today=done.get(workflow.id, 0),
-        )
-        for workflow in workflows
-    ]
+        ))
+    return summaries
 
 
 async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Optional[tuple]:
@@ -427,7 +431,7 @@ async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Op
     control = await database.get_latest_workflow_control(workflow_id)
     pending = await _pending_counts(database, [workflow_id])
     done = await _done_today(database, [workflow_id])
-    connections = Connections(auth_service)
+    connections = Connections(auth_service, principal=employee_owner(workflow, employee))
     summary = await _summary(
         workflow,
         employee,

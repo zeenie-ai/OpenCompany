@@ -68,7 +68,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(deployment_handlers, "start_saved_workflow", start_saved)
 
     class Connections:
-        def __init__(self, _auth):
+        def __init__(self, _auth, *, principal=None):
             pass
 
         async def ai_providers(self):

@@ -58,6 +58,24 @@ def test_selection_is_bounded_and_job_specific():
     assert len(select_responsibilities("Research software and social posts and email appointments")) == 3
 
 
+def test_new_browser_employee_gets_complete_private_capability():
+    built = build(job="Use the browser to read website accounts")
+    member = next(member for member in built.team_plan["members"] if member["node_type"] == "browser_agent")
+    tools = [node for node in built.nodes if node["id"] in member["tools"]]
+    assert {node["type"] for node in tools} >= {"browser", "visionAnalyze"}
+    browser = next(node for node in tools if node["type"] == "browser")
+    assert [edge["target"] for edge in built.edges if edge.get("source") == browser["id"] and edge.get("targetHandle") == "input-tools"] == [member["node_id"]]
+    skills = next(edge["source"] for edge in built.edges if edge["target"] == member["node_id"] and edge.get("targetHandle") == "input-skill")
+    assert built.parameters[skills]["skills_config"]["browser-skill"]["enabled"]
+    assert sum(edge["target"] == member["node_id"] and edge.get("targetHandle") == "input-context" for edge in built.edges) == 1
+    assert built.parameters[member["node_id"]]["model"] == "configured-model"
+
+
+def test_browser_employee_respects_companion_node_policy():
+    with pytest.raises(BuildError, match="Browser tools"):
+        build(job="Use the browser to read website accounts", allowed=lambda kind: kind != "visionAnalyze")
+
+
 def test_hire_refuses_a_recipe_that_reintroduces_shared_tools(monkeypatch):
     from services.employees import team_recipe
     from services.graph_build import tool_edge

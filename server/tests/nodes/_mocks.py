@@ -76,6 +76,8 @@ def patched_container(
 
     auth_service = MagicMock(name="AuthService")
     auth_service.get_api_key = AsyncMock(side_effect=lambda provider, *a, **kw: api_keys.get(provider))
+    auth_service.resolve_api_key = AsyncMock(side_effect=lambda provider, *a, **kw: api_keys.get(provider))
+    auth_service.has_valid_key = AsyncMock(side_effect=lambda provider, *a, **kw: bool(api_keys.get(provider)))
     auth_service.get_oauth_tokens = AsyncMock(side_effect=lambda provider, *a, **kw: oauth_tokens.get(provider))
     auth_service.get_stored_models = AsyncMock(return_value=[])
     # Awaitable async writes (handlers like Twitter call these in refresh paths)

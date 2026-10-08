@@ -17,11 +17,31 @@ agent-browser driver and separate `browserHarness` node are retired.
 | Live picture | `_stream.py` → `Page.startScreencast` → binary `/ws/browser` frames | One capture hub per running profile, bounded queues per viewer |
 | Human input | `_live_control.py` → dedicated page CDP session | One ordered command worker per hub; independent of CLI and capture resizing |
 | Session and profile requests | `_handlers.py` over the application's authenticated request socket | Resolve ownership and saved node settings before opening sessions |
+| Configured website login | `_credentials.py` through a pinned private CDP page session | CLI daemon and observations are suspended before secrets are resolved |
 
 The native viewer is a streamed Chrome surface. Canvas URL items continue to
 use sandboxed iframe previews. Neither displaying a Canvas URL nor attaching a
 viewer silently starts a browser; **Start browser** explicitly opens an idle
 session. Normal and Dev modes use the same viewer component.
+
+## Browser AI Agent
+
+`browser_agent` uses `SpecializedAgentBase`, the existing provider-neutral AI
+runtime and the installed `browser-use==0.13.10` CLI. It is available on the
+workflow canvas, through employee delegation, and beside the live browser.
+Existing `browser` nodes and `web_agent` graphs keep their contracts.
+
+Creation uses one atomic graph recipe: the agent, a private Browser tool,
+Master Skill with the shipped browser skill, private Context and the existing
+`visionAnalyze` tool. Selecting an existing saved Browser tool reuses it.
+Intentionally deleted companion nodes are not recreated. The viewer stays
+attached to the Browser tool; only that tool has `isBrowserPanel`.
+
+Direct tasks use the existing Workspace controller and native agent workflow.
+They have independent conversation/history, submission UUIDs and cancellation,
+and do not deploy their prompt into saved Context or employee chat. See
+[Browser workspace](browser_workspace.md#direct-browser-tasks) and
+[deployment and recovery](browser_agent_deployment.md).
 
 ## Installation and configuration
 
@@ -132,6 +152,12 @@ WebMCP permissions, domain restrictions and private-network permission come
 from saved operator settings, not model-supplied tool arguments.
 
 `ProfileController` coordinates the profile lease and agent operation lock.
+Browser AI Agent tasks also hold a stable, task-lifetime profile claim through
+model reasoning, browser calls and human assistance. Competing tasks receive
+`BrowserBusy` before browser effects. Cleanup checks the same task token, settles
+admitted work and confirms daemon suspension before releasing the claim; a late
+cancellation cannot release a newer task. The human-control lease remains
+separate. Assigned tasks and protected-login gates prevent idle reaping.
 **Take control** waits for or interrupts an agent step before granting user
 ownership. Human commands carry viewer and page generations and are checked
 again immediately before CDP dispatch. **Hand back**, hiding, blur and
@@ -161,6 +187,12 @@ runs with `interaction: read_only`, set by the plugin's approval spec
 the agent reads pages and hands any change to the owner through
 `request_user`. The employee's instructions say when to call it.
 
+The trusted per-call restriction is combined with saved policy monotonically:
+either source can require read-only, and model arguments cannot relax it. This
+applies to both the in-process and Temporal adapters. Versioned native tasks use
+their prepared configuration/profile bindings; a subsequently saved read-only
+policy can still tighten a prepared full-access policy.
+
 While the agent waits in `request_user`, the plugin's node-state source
 (`services/employees/node_signals.py`) reports `awaiting_user`, and the
 employee summary carries `browser_request` (`{node_id, reason, since}`, never
@@ -186,6 +218,72 @@ contains the legacy browser-node migration. `BrowserParams` also normalizes
 legacy parameters from saved deployment snapshots. Use the current `browser`
 node for new graphs; the [retired harness reference](./browser_harness.md)
 exists to direct older links to the current implementation.
+
+## Configured 1Password login
+
+Enroll an approved website binding in Credentials as described in
+[1Password credentials](onepassword_credentials.md). `credential_bindings`
+lists permitted opaque IDs, labels, login origins and field names; it never
+lists vault contents or secret references. `credential_fill` accepts that ID
+and fresh username, password and separate submit references. The owner checks
+principal, saved profile/workflow/employee scope, policy, exact top-frame
+origin and current targets before retrieving values. Under Ask first/read-only,
+the agent requests human login instead.
+
+Automatic login supports a configured single username/password form with
+saved success origin/path or selector cues. Before private resolution, the
+runtime persists a nonsecret sensitive-login latch, confirms the browser-use
+daemon has stopped, drains and stops live capture, and blocks page text,
+snapshots, screenshots, vision, WebMCP and page/tab/dialog metadata. Credentials
+are passed only to the existing private CDP transport. Assigned values are
+checked exactly; a browser-normalized value is not submitted.
+
+Only the separately selected submit action is allowed during this phase.
+Completion requires the saved cues and absence of password fields before
+ordinary operations resume, with a fresh observation required. Uncertain
+suspension, target changes, unsuccessful confirmation or cancellation retain
+the gate. **Close browser for manual login** confirms Chrome is stopped before
+clearing it; reopen and use human takeover. MFA, passkeys and multi-step forms
+use that handoff. This flow does not pass passwords through model input,
+Temporal payloads, browser-use scripts, task results or viewer frames.
+
+## Distributed ownership
+
+Distributed mode stores permanent profile ownership, runtime epochs, task
+claims and nonsecret assistance state in the shared application database.
+Each configured backend replica runs one browser owner process and consumes
+its own Browser Activity queue; orchestration workers do not consume those
+queues. All Browser operations, saved profiles, uploaded session files,
+open/stop requests and binary live streams are routed to the registered owner
+through authenticated application endpoints. Signed forwarding binds the
+principal, method, path, body and expiry, and the owner rechecks saved-resource
+authorization. CDP addresses and owner URLs never come from client arguments.
+
+Deleting a workflow routes employee-profile cleanup to that owner. An active
+task, unavailable owner or unconfirmed Chrome shutdown leaves its profile
+metadata/files intact for authorized cleanup after recovery; another replica
+does not remove files underneath a running browser.
+
+Ownership is not transferred on heartbeat expiry. The UI reports **Browser
+unavailable — waiting for its owner.** Queued Activities remain on that owner's
+queue. Recovery requires the same machine identity and an exclusive process
+lock, advances the epoch explicitly and requires fresh observation. Chrome
+tabs and element references are not recovered from Temporal. Sensitive-login
+and nonsecret assistance state survive backend restart. Mutating Activity
+attempts greater than one retain the refusal to replay an uncertain action.
+
+The active task also persists its workflow/Browser-tool association. Viewer
+routing uses that frozen profile after current saved-resource authorization,
+even if profile parameters change mid-task or the local/backend owner restarts.
+Matching release clears the
+association; an ambiguous active association fails closed. A recovered runtime
+restores the durable task token before later browser or profile effects.
+
+Profile files have one writer. CLI homes, temporary files and PID state are
+local to the owning machine/runtime, while artifacts use shared relative
+FileRefs. Local SQLite remains supported; multi-machine deployment requires
+PostgreSQL, shared storage and external Temporal. See the
+[deployment guide](browser_agent_deployment.md) for setup and recovery.
 
 ## Troubleshooting and validation
 

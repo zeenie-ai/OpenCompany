@@ -41,14 +41,14 @@ def dictation_providers() -> list[str]:
     return [str(provider) for provider in configured if str(provider) in available]
 
 
-async def dictation_provider() -> Optional[str]:
+async def dictation_provider(*, principal: str | None = None) -> Optional[str]:
     """The first dictation provider with a stored key, or None."""
     from core.container import container
 
     auth = container.auth_service()
     for provider in dictation_providers():
         try:
-            if await auth.get_api_key(speech_config.credential_id(provider)):
+            if await auth.has_valid_key(speech_config.credential_id(provider), principal=principal):
                 return provider
         except Exception:  # noqa: BLE001 - an unreadable key is no key
             logger.warning("Dictation key could not be read", provider=provider, exc_info=True)
@@ -74,7 +74,8 @@ async def handle_dictation_status(data: Dict[str, Any], websocket: WebSocket) ->
     """``{available, provider}``: whether a recording can be turned into
     text now."""
     await _owner_session(data, websocket)
-    provider = await dictation_provider()
+    from services.authz.ws_surface import execution_principal
+    provider = await dictation_provider(principal=execution_principal({}, websocket))
     return {"success": True, "available": provider is not None, "provider": provider}
 
 
@@ -88,7 +89,9 @@ async def handle_transcribe_audio(data: Dict[str, Any], websocket: WebSocket) ->
     from services.workspace_locator import resolve_workspace_root
 
     workflow_id = await _owner_session(data, websocket)
-    provider = await dictation_provider()
+    from services.authz.ws_surface import execution_principal
+    principal = execution_principal({}, websocket)
+    provider = await dictation_provider(principal=principal)
     if provider is None:
         return {"success": False, "error": "speech_unavailable"}
     rel = str(data.get("path") or "").replace("\\", "/")
@@ -105,7 +108,7 @@ async def handle_transcribe_audio(data: Dict[str, Any], websocket: WebSocket) ->
     if isinstance(max_bytes, int) and size > max_bytes:
         raise NodeUserError("The recording is too long to transcribe. Record a shorter one.")
     try:
-        api_key = await container.auth_service().get_api_key(speech_config.credential_id(provider))
+        api_key = await container.auth_service().resolve_api_key(speech_config.credential_id(provider), principal=principal)
         result = await _unifier.transcribe(
             provider=provider,
             api_key=str(api_key or ""),

@@ -166,7 +166,7 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
 
     database = container.database()
     auth_service = container.auth_service()
-    connections = Connections(auth_service)
+    connections = Connections(auth_service, principal=owner)
     choice: Optional[LLMChoice] = await resolve_llm_choice(database, auth_service, connections)
     if choice is None:
         return _failure("no_ai_provider", request.token)
@@ -182,7 +182,7 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
         if attempt == 1 and remaining < MIN_RETRY_SECONDS:
             break
         try:
-            response = await employees_chat(container.chat_unifier(), auth_service, choice, messages, timeout=remaining)
+            response = await employees_chat(container.chat_unifier(), auth_service, choice, messages, timeout=remaining, principal=owner)
         except asyncio.TimeoutError:
             if kept is not None:
                 break

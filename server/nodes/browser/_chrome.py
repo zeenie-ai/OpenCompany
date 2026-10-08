@@ -241,6 +241,12 @@ def sweep_orphan(pidfile: Path) -> bool:
         return False
     kill_tree(pid)
     try:
+        proc.wait(timeout=5)
+    except psutil.NoSuchProcess:
+        pass
+    except psutil.Error:
+        raise NodeUserError("The previous browser runtime has not stopped. Wait for owner recovery before reopening this profile.") from None
+    try:
         pidfile.unlink()
     except OSError:
         pass
@@ -288,6 +294,13 @@ class ChromeProcess(BaseProcessSupervisor):
 
     @property
     def pidfile(self) -> Path:
+        from services.browser_owners import settings, replica_id
+        if getattr(settings(), "distributed_mode", False) is True:
+            import tempfile
+            import hashlib
+            directory = Path(tempfile.gettempdir()) / "opencompany-browser-runtime" / hashlib.sha256(replica_id().encode()).hexdigest() / "chrome"
+            directory.mkdir(parents=True, exist_ok=True)
+            return directory / (hashlib.sha256(self.profile_id.encode()).hexdigest() + ".json")
         return self._root / "oc-chrome.json"
 
     # -- BaseProcessSupervisor surface ---------------------------------------
@@ -311,20 +324,23 @@ class ChromeProcess(BaseProcessSupervisor):
         return chrome_env()
 
     def stdout_log(self, line: str) -> None:
+        if getattr(self, "sensitive_login", False):
+            return
         self._logger.debug(line)
 
     def stderr_log(self, line: str) -> None:
         # Chrome is chatty on stderr (GPU, dbus, updater); none of it is an error of ours.
-        self._logger.debug(line)
+        if not getattr(self, "sensitive_login", False):
+            self._logger.debug(line)
 
     async def _pre_spawn(self) -> None:
-        sweep_orphan(self.pidfile)
         if not self._profile_lock.acquire():
             raise NodeUserError(
                 "This browser profile is open in another OpenCompany (for example the desktop app and a terminal "
                 "install sharing a data folder). Close it there, or use another profile."
             )
         self._locked = True
+        await asyncio.to_thread(sweep_orphan, self.pidfile)
         try:
             (self._user_data_dir / "DevToolsActivePort").unlink()
         except OSError:

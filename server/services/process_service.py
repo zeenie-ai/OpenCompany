@@ -22,6 +22,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from core.ansi import strip_ansi
 from core.logging import get_logger
 from services._supervisor.util import kill_tree
+from services.process_environment import without_onepassword_environment
 
 logger = get_logger(__name__)
 
@@ -146,8 +147,9 @@ class ProcessService:
                 "error": (f"Command not found: '{argv[0] if argv else ''}'. " "Check spelling or ensure the binary is on PATH."),
             }
         argv[0] = resolved
-        env = {**os.environ, **(extra_env or {}), "PYTHONUNBUFFERED": "1"}
-        requested_ports = self._requested_ports(argv, ports or [], extra_env or {})
+        safe_extra_env = without_onepassword_environment(extra_env or {})
+        env = without_onepassword_environment({**os.environ, **safe_extra_env, "PYTHONUNBUFFERED": "1"})
+        requested_ports = self._requested_ports(argv, ports or [], safe_extra_env)
         from core.config import Settings
         from core.paths import daemons_dir
 
@@ -249,7 +251,7 @@ class ProcessService:
                 log_dir=log_dir,
                 line_handler=line_handler,
                 ports=tuple(requested_ports),
-                extra_env=dict(extra_env or {}),
+                extra_env=safe_extra_env,
             )
             managed.stdout_task = asyncio.create_task(
                 self._read_stream(managed, proc.stdout, "stdout"), name=f"proc-stdout-{name}",

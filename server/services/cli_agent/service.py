@@ -48,6 +48,7 @@ from services.cli_agent.mcp_server import (
 from services.cli_agent.protocol import BatchResult, SessionResult
 from services.cli_agent.session import AICliSession
 from services.cli_agent.types import BaseAICliTaskSpec, ClaudeTaskSpec
+from services.process_environment import without_onepassword_environment
 
 logger = get_logger(__name__)
 
@@ -677,7 +678,7 @@ class AICliService:
                 session_key,
                 spec=task,
                 cwd=cwd,
-                env=env,
+                env=without_onepassword_environment(env),
                 defaults=defaults,
                 mcp_endpoint_url=mcp_endpoint_url,
                 mcp_bearer_token=mcp_bearer_token,
@@ -882,6 +883,7 @@ class AICliService:
                 result = await anyio.run_process(
                     ["git", "-C", str(start), "rev-parse", "--show-toplevel"],
                     check=False,
+                    env=without_onepassword_environment(),
                 )
             except FileNotFoundError:
                 # `git` not on PATH at all — fail-fast, nothing to fall back to.

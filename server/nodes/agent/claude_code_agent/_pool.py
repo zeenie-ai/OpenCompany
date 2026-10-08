@@ -768,10 +768,11 @@ class ClaudeSessionPool:
         # Subprocess spawn — the VSCode-extension pattern. PIPE on
         # stdin/stdout/stderr; no PTY. The stdout-reader task below
         # parses each stream-json line into an event and dispatches it.
+        from services.process_environment import without_onepassword_environment
         process = await asyncio.create_subprocess_exec(
             *argv,
             cwd=str(cwd),
-            env=env,
+            env=without_onepassword_environment(env),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

@@ -208,6 +208,21 @@ class BrowserRuntime:
 
     async def open(self, profile: Profile, *, wait: float = 60.0) -> ProfileRuntime:
         """The profile's running browser, starting Chrome if needed."""
+        from services.browser_owners import _persistent
+        from services.plugin.deps import get_database
+        if getattr(self._settings(), "distributed_mode", False) is True or _persistent(get_database()):
+            from services.browser_owners import bind_profile, replica_id, RUNTIME_EPOCH
+            from services.plugin.deps import get_database
+            binding = await bind_profile(get_database(), profile.id, profile.owner_id)
+            if binding["owner_id"] != replica_id() or binding["runtime_epoch"] != RUNTIME_EPOCH:
+                raise NodeUserError("Browser unavailable — waiting for its owner.")
+            controller = self.controller_for(profile)
+            if binding.get("profile_task_id"):
+                controller.claim_task(str(binding["profile_task_id"]))
+            controller.sensitive_login = bool(binding.get("sensitive_login"))
+            controller.needs_observation |= bool(binding.get("needs_observation"))
+            controller.challenge_required = bool(binding.get("challenge_required"))
+            controller.recovered_assistance = binding.get("assistance")
         runtime = self._profiles.get(profile.id)
         if runtime is not None and runtime.running:
             return runtime
@@ -276,8 +291,10 @@ class BrowserRuntime:
         cli = BrowserUseCli(
             cli_path=bu_paths["cli"], python_path=bu_paths["python"], profile_id=profile.id, cdp_http_url="http://127.0.0.1:0"
         )
-        cli.stop_daemon()  # one left from an earlier Chrome would point at a dead port
+        if not await cli.suspend_prior_epochs() or not await cli.suspend_for_credentials():
+            raise NodeUserError("The previous browser daemon has not stopped. Wait for owner recovery before reopening this profile.")
 
+        chrome.sensitive_login = controller.sensitive_login
         cdp = await chrome.launch()
         cli.cdp_http_url = f"http://127.0.0.1:{chrome.port}"
         webmcp = WebMcpTracker()
@@ -321,9 +338,11 @@ class BrowserRuntime:
                     if runtime.provider == "testing":
                         await session.send("Network.setUserAgentOverride", {"userAgent": ua, "userAgentMetadata": metadata}, timeout=10)
                     await session.send("Page.enable", timeout=10)
-                    await runtime.webmcp.attach(session.target_id, session)
+                    if not getattr(controller, "sensitive_login", False):
+                        await runtime.webmcp.attach(session.target_id, session)
             except (CDPError, CDPDisconnected, TimeoutError):
-                logger.debug("[browser] configuring page %s failed", target.get("targetId"), exc_info=True)
+                if not getattr(controller, "sensitive_login", False):
+                    logger.debug("[browser] configuring page %s failed", target.get("targetId"), exc_info=True)
             finally:
                 if waiting:
                     try:
@@ -343,7 +362,7 @@ class BrowserRuntime:
             previous = controller.tabs.get(info["targetId"])
             if previous and previous.get("url") != info.get("url"):
                 controller.refs.pop(info["targetId"], None)
-            controller.tabs[info["targetId"]] = {"target_id": info["targetId"], "url": info.get("url"), "title": info.get("title")}
+            controller.tabs[info["targetId"]] = {"target_id": info["targetId"]} if getattr(controller, "sensitive_login", False) else {"target_id": info["targetId"], "url": info.get("url"), "title": info.get("title")}
             asyncio.ensure_future(controller.emit("tabs", {"tabs": list(controller.tabs.values())}))
 
         def on_destroyed(params: Dict[str, Any]) -> None:
@@ -362,7 +381,7 @@ class BrowserRuntime:
         await cdp.send("Target.setDiscoverTargets", {"discover": True})
         await cdp.send("Target.setAutoAttach", {"autoAttach": True, "waitForDebuggerOnStart": True, "flatten": True})
         for page in await cdp.page_targets():
-            controller.tabs[page["targetId"]] = {"target_id": page["targetId"], "url": page.get("url"), "title": page.get("title")}
+            controller.tabs[page["targetId"]] = {"target_id": page["targetId"]} if getattr(controller, "sensitive_login", False) else {"target_id": page["targetId"], "url": page.get("url"), "title": page.get("title")}
             session = await cdp.attach(page["targetId"])
             await configure(session, page, False)
             try:
@@ -411,6 +430,12 @@ class BrowserRuntime:
         controller = runtime.controller
         await controller.release_lease()
         await self._teardown(runtime)
+        if controller.sensitive_login and not runtime.chrome.is_running():
+            from services.browser_owners import set_sensitive
+            from services.plugin.deps import get_database
+            await set_sensitive(get_database(), profile_id, controller.task_id, False)
+            controller.sensitive_login = False
+            controller.needs_observation = True
         controller.tabs.clear()
         controller.active_target_id = None
         await controller.emit("closed", {"reason": reason or "stopped"})

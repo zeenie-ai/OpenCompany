@@ -23,7 +23,7 @@ def dispatch(monkeypatch):
         sdk_exception_refs=("google.genai.errors:APIError",),
     ))
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     return ChatUnifier(defaults={"providers": {}}, auth_service=auth, client_cache_size=0), client
 
 

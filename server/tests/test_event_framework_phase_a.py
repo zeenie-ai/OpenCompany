@@ -467,8 +467,9 @@ class TestTriggerOutputPersistenceForTemplateResolution:
     The legacy ``DeploymentManager._execute_from_trigger`` path called
     ``_store_output(trigger_node_id, "output_0", trigger_output)``
     before executing downstream. The fix adds a
-    ``store_node_output_activity`` call inside MachinaWorkflow.run's
-    pre-executed loop that mirrors that persist.
+    ``store_node_output_activity`` call inside MachinaWorkflow's
+    pre-executed loop (now in ``_run_graph``, which ``run`` drives) that
+    mirrors that persist.
     """
 
     def test_activity_exists_and_is_async(self):
@@ -481,14 +482,14 @@ class TestTriggerOutputPersistenceForTemplateResolution:
         )
 
     def test_opencompany_workflow_calls_persist_activity_for_pre_executed(self):
-        """Source-introspection regression: MachinaWorkflow.run's
+        """Source-introspection regression: MachinaWorkflow's
         pre-executed handler must call store_node_output_activity so
         ParameterResolver can read the trigger output back."""
         import inspect
 
         from services.temporal.workflow import MachinaWorkflow
 
-        src = inspect.getsource(MachinaWorkflow.run)
+        src = inspect.getsource(MachinaWorkflow.run) + inspect.getsource(MachinaWorkflow._run_graph)
 
         assert "store_node_output_activity" in src, (
             "MachinaWorkflow.run no longer schedules the "

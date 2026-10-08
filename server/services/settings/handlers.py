@@ -137,6 +137,8 @@ async def handle_get_validated_ai_providers(
 
     auth_service = container.auth_service()
     database = container.database()
+    from services.authz.ws_surface import execution_principal
+    principal = execution_principal({}, websocket)
 
     from services.llm.config import PROVIDER_CONFIGS
 
@@ -151,11 +153,10 @@ async def handle_get_validated_ai_providers(
 
     providers = []
     for provider in AI_PROVIDERS:
-        api_key = await auth_service.get_api_key(provider, data.get("session_id", "default"))
-        if not api_key:
+        if not await auth_service.has_valid_key(provider, data.get("session_id", "default"), principal=principal):
             continue
 
-        stored_models = await auth_service.get_stored_models(provider, data.get("session_id", "default"))
+        stored_models = await auth_service.get_stored_models(provider, data.get("session_id", "default"), principal=principal)
 
         provider_config = llm_defaults.get("providers", {}).get(provider, {})
         default_model = provider_config.get("default_model", "")
@@ -187,7 +188,7 @@ async def handle_get_validated_ai_providers(
     # key, so the loop above already skipped it.
     from services.llm.endpoints import list_endpoints
 
-    for endpoint in await list_endpoints(auth_service):
+    for endpoint in await list_endpoints(auth_service, principal=principal):
         endpoint_defaults = await database.get_provider_defaults(endpoint.ref)
         providers.append(
             {

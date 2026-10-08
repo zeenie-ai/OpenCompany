@@ -30,6 +30,7 @@ import json
 import os
 import shutil
 import subprocess
+from services.process_environment import without_onepassword_environment
 import sys
 from pathlib import Path
 
@@ -111,7 +112,7 @@ def add_package(spec: str, *, trust: bool = False, root: Path | None = None) -> 
     if trust:
         argv.append("--trust")
     argv.append(spec)
-    return subprocess.run(argv, capture_output=True, text=True)
+    return subprocess.run(argv, capture_output=True, text=True, env=without_onepassword_environment())
 
 
 __all__ = [

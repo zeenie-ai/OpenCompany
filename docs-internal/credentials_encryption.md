@@ -1,14 +1,39 @@
 # Encrypted Credentials System
 
-API keys, OAuth tokens, and other secrets in OpenCompany are stored in a separate encrypted SQLite database (`credentials.db`) using Fernet (AES-128-CBC + HMAC-SHA256). The encryption key is derived from a server-scoped config key using PBKDF2HMAC with 600,000 iterations, following the n8n pattern.
+Locally entered API keys, OAuth tokens, and other local secrets in OpenCompany are stored in a separate encrypted SQLite database (`credentials.db`) using Fernet (AES-128-CBC + HMAC-SHA256). The encryption key is derived from a server-scoped config key using PBKDF2HMAC with 600,000 iterations, following the n8n pattern.
 
-This document covers the encryption pipeline, the two separate credential systems (OAuth vs API keys), the single-point-of-access rule, and the multi-backend abstraction.
+This document covers local encryption, the separate OAuth and API-key stores, the single-point-of-access rule, and the legacy multi-backend abstraction. Approved 1Password sources use a separate runtime-resolution path through the same `AuthService`; see [1Password credentials](onepassword_credentials.md) for setup and supported providers.
+
+## Credential-source boundary
+
+| Source | Saved state | Runtime access |
+| --- | --- | --- |
+| Local API key or OAuth token | Ciphertext in the machine-local `credentials.db` | Existing `AuthService` local accessors and caches |
+| 1Password API field | Approved ID reference, principal and model/endpoint metadata in the application database | `resolve_api_key` inside the calling Activity |
+| 1Password website login | Approved username/password references, exact origin and resource restrictions in the application database | `resolve_browser_credentials` inside the browser owner while observations are gated |
+
+`get_credential_source`, `has_valid_key`, `get_stored_models` and
+`get_model_params` read source metadata without resolving 1Password values.
+`get_api_key` retains local form behavior and does not return a resolved
+1Password value. Provider runtime callers use `resolve_api_key` with the
+trusted principal. Resolution rechecks enrollment after authorization waits;
+there is no application-level cache of resolved 1Password values or fallback
+to a local key when a binding is unavailable or revoked.
+
+Distributed mode requires the shared PostgreSQL application database and
+approved 1Password static bindings. Local encrypted keys, OAuth refresh stores,
+ambient credentials and CLI-managed sessions remain local-only unless an
+explicit static-secret adapter has been audited. Neither SQLite database may
+be mounted over NFS/SMB. [Offline transfer](browser_agent_deployment.md#offline-sqlite-transfer)
+preserves approved references and application IDs but excludes local secret
+stores and token caches. The application database is therefore sensitive
+metadata, even though approved references contain no resolved secret values.
 
 ## Why a Separate Database
 
 Credentials are isolated from the main `workflow.db` for three reasons:
 
-1. **Blast radius**: a dump of `workflow.db` for debugging never contains secrets.
+1. **Blast radius**: local credential ciphertext is kept out of `workflow.db`. Approved 1Password references and other private application data still require protected exports; legacy inline graph credentials must be removed before distributed transfer.
 2. **Independent backups**: `credentials.db` can be excluded from snapshots and SQLite dumps.
 3. **Backend pluggability**: the file-backed SQLite is designed to be swappable for OS keyring or AWS Secrets Manager without touching workflow storage (the abstraction exists but is not wired in yet; see [Multi-Backend Abstraction](#multi-backend-abstraction)).
 
@@ -22,7 +47,8 @@ server/core/
 `-- config.py                  credential_backend, aws_secret_arn settings (read only by the uncalled create_backend)
 
 server/services/
-`-- auth.py                    AuthService (single access point, caching)
+|-- auth.py                    AuthService (source metadata, runtime resolution, local caches)
+`-- credentials/               1Password source storage, private CLI resolver and provisioning
 ```
 
 ## Cryptographic Pipeline
@@ -68,7 +94,7 @@ CredentialsDatabase.initialize()  -> creates tables, returns existing or new sal
 container.encryption_service().initialize(password=API_KEY_ENCRYPTION_KEY, salt=<bytes>)
     |
     v
-AuthService caches decrypted credentials in memory-only dicts
+AuthService caches decrypted local credentials in memory-only dicts
     |
     v
 Routers call AuthService.get_api_key() / get_oauth_tokens() ...
@@ -130,13 +156,13 @@ How the pieces are wired:
 - `AuthService` maintains the memory-only decryption cache.
 - `CredentialsDatabase` is a DI singleton (`container.credentials_database()`). The container injects it into `AuthService` and into `UserAuthService` (which holds it but never uses it), and `main.py` resolves it at startup to create tables and read the salt. The container does not stop anything else from resolving it, so "routers and services go through `AuthService`" is a rule to follow, not something DI enforces.
 
-The in-memory cache is important: decrypting on every request would be slow, and writing decrypted values to Redis would defeat the encryption. Each `AuthService` instance caches decrypted credentials in process memory only, and `AuthService.clear_cache()` flushes them on demand (`POST /api/auth/logout` calls it).
+The local in-memory cache avoids repeated decryption without putting plaintext in Redis. Each `AuthService` instance caches decrypted local credentials in process memory only, and `AuthService.clear_cache()` flushes them on demand (`POST /api/auth/logout` calls it). These caches do not hold resolved 1Password values.
 
 ## Multi-Backend Abstraction
 
 For deployment flexibility, `credential_backends.py` defines an abstract interface intended to be selected via the `CREDENTIAL_BACKEND` env var.
 
-**Status: not wired in.** Nothing in the server calls `create_backend()`, and `Settings.credential_backend` / `aws_secret_arn` / `aws_region` are read only inside it. `AuthService` always talks to `CredentialsDatabase` directly, so every install uses Fernet-encrypted SQLite and setting `CREDENTIAL_BACKEND` currently has no effect. The value is still validated: the field is a `Literal["fernet", "keyring", "aws"]`, so any other value fails `Settings` at startup. The rest of this section describes the abstraction as written.
+**Status: not wired in.** Nothing in the server calls `create_backend()`, and `Settings.credential_backend` / `aws_secret_arn` / `aws_region` are read only inside it. Local secrets use `CredentialsDatabase`; setting `CREDENTIAL_BACKEND` currently has no effect. 1Password sources are selected per saved binding through `AuthService`, independently of this factory. The value is still validated: the field is a `Literal["fernet", "keyring", "aws"]`, so any other value fails `Settings` at startup. The rest of this section describes the abstraction as written.
 
 ```python
 class CredentialBackend(ABC):
@@ -225,7 +251,12 @@ Do this before the first credential is saved. After that, never change `API_KEY_
 
 ## Source of Truth
 
-`CredentialsDatabase` (encrypted SQLite at `credentials.db`) is the **canonical source** for every credential. Two derived in-memory caches exist for performance, both invalidated atomically on every DB write/delete:
+`CredentialsDatabase` (encrypted SQLite at `credentials.db`) is the canonical
+source for local API keys and OAuth tokens. 1Password values remain in
+1Password; approved references and catalogue metadata live in the application
+database. Source-status versions include principal-scoped saved-row changes,
+so catalogue refreshes across replicas do not need to resolve secrets. The
+following caches describe the local path:
 
 - **Backend** (`server/services/auth.py`):
   - `_api_key_cache: Dict[str, ApiKeyCacheEntry]` keyed by `{session}_{provider}`. Single dataclass entry per provider carries decrypted key + models + `stored_at`. Replaces the previous pair of `_memory_cache` (key) + `_models_cache` (models) which shared the same key shape but had separate write/evict sites — invitation to drift.
@@ -261,6 +292,8 @@ All credential providers come from the backend `get_credential_catalogue` handle
 
 ## Related Docs
 
+- [1Password credentials](onepassword_credentials.md) - source enrollment, runtime resolution, private login and compatibility
+- [Browser deployment](browser_agent_deployment.md) - PostgreSQL prerequisites and offline transfer
 - [DESIGN.md](DESIGN.md) - overall security posture
 - [new_service_integration.md](ARCHIVE/new_service_integration.md) - where to put credentials for new service integrations
 - [status_broadcaster.md](status_broadcaster.md) - WebSocket handlers for credentials (get/save/delete)

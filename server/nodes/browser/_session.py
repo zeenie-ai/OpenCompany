@@ -144,6 +144,9 @@ class ProfileController:
         self.pending: Optional[UserRequest] = None
         self.challenge_required = False
         self.needs_observation = False
+        self.task_id: Optional[str] = None
+        self.sensitive_login = False
+        self.recovered_assistance: Optional[dict] = None
         self._challenge_message = ""
         self.viewers: set[str] = set()
         self.active_target_id: Optional[str] = None
@@ -196,6 +199,7 @@ class ProfileController:
             "profile": {"id": self.profile_id, "name": self.profile_name},
             "request": self.pending.to_wire() if self.pending else None,
             "challenge_required": self.challenge_required,
+            "sensitive_login": self.sensitive_login,
             "revision": self.revision,
         }
 
@@ -209,6 +213,14 @@ class ProfileController:
         await self._broadcast()
 
     async def _broadcast(self) -> None:
+        from services.browser_owners import persist_control
+        from services.plugin.deps import get_database
+        assistance = None
+        if self.pending:
+            assistance = {"reason": self.pending.reason, "message": self.pending.message,
+                          "deadline": time.time() + max(0, self.pending.deadline - time.monotonic())}
+        await persist_control(get_database(), self.profile_id, self.task_id, challenge=self.challenge_required,
+                              needs_observation=self.needs_observation, assistance=assistance)
         session = self.lease_session
         if session is None:
             return
@@ -253,9 +265,43 @@ class ProfileController:
         holder = self.lease_session
         if holder is None or holder.session_id == session.session_id:
             return True
+        if self.task_id is not None:
+            return False
         if self.state == ControlState.IDLE and self.pending is None and time.monotonic() - self.lease_renewed > LEASE_IDLE_SECONDS:
             return True
         return False
+
+    def claim_task(self, task_id: str) -> None:
+        """Hold a profile through reasoning and assistance, not only input."""
+        if self.task_id is not None and self.task_id != task_id:
+            raise NodeUserError("BrowserBusy: this profile is already assigned to another task.")
+        self.task_id = task_id
+
+    async def release_task(self, task_id: str) -> bool:
+        if self.task_id != task_id:
+            return False
+        await self.release_lease()
+        self.task_id = None
+        return True
+
+    async def set_sensitive_login(self, enabled: bool) -> None:
+        self.sensitive_login = enabled
+        if enabled:
+            self.tabs = {key: {"target_id": key} for key in self.tabs}
+        self.revision += 1
+        await self.emit("sensitive", {"enabled": enabled})
+        await self._broadcast()
+
+    async def restore_assistance(self, session: BrowserSession) -> None:
+        saved, self.recovered_assistance = self.recovered_assistance, None
+        if saved is None or self.pending is not None:
+            return
+        remaining = float(saved.get("deadline") or 0) - time.time()
+        if remaining > 0 or self.challenge_required:
+            await self.acquire_lease(session)
+            await self._ensure_user_request(session, reason=str(saved.get("reason") or "other"),
+                                            message=str(saved.get("message") or "Please finish this step."),
+                                            timeout=max(60 if self.challenge_required else 0, remaining))
 
     async def acquire_lease(self, session: BrowserSession, *, wait: float = LEASE_WAIT_SECONDS) -> None:
         if not self._lease_free_for(session):
@@ -407,6 +453,8 @@ class ProfileController:
         return self.challenge_required or self._user_claim or self.state in (ControlState.USER, ControlState.AWAITING_USER)
 
     async def take_over(self, viewer_id: str, *, force: bool = False, valid: Optional[Callable[[], bool]] = None) -> tuple[bool, str]:
+        if self.sensitive_login:
+            return False, "protected_login"
         if valid is not None and not valid():
             return False, "viewer_unavailable"
         if self.controller_viewer and self.controller_viewer != viewer_id and not force:
@@ -478,7 +526,7 @@ class ProfileController:
         return True
 
     def can_inject_input(self, viewer_id: str) -> bool:
-        return self.state == ControlState.USER and self.controller_viewer == viewer_id
+        return not self.sensitive_login and self.state == ControlState.USER and self.controller_viewer == viewer_id
 
     def touch_user_input(self) -> None:
         now = time.monotonic()
@@ -522,7 +570,7 @@ class ProfileController:
                 self._resolve_pending("timeout", "")
 
     def idle_for(self) -> float:
-        busy = self.state != ControlState.IDLE or self.viewers or self.pending is not None
+        busy = self.state != ControlState.IDLE or self.viewers or self.pending is not None or self.task_id is not None or self.sensitive_login
         return 0.0 if busy else time.monotonic() - self.last_activity
 
 

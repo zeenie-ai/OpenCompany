@@ -117,6 +117,9 @@ class UserAuthService:
             # Inline the lookups rather than calling get_user_by_email /
             # get_user_count: those open their own sessions, which would
             # reintroduce the very race this block exists to close.
+            if session.bind.dialect.name == "postgresql":
+                from sqlalchemy import text
+                await session.execute(text("SELECT pg_advisory_xact_lock(763746821)"))
             existing = (
                 await session.execute(select(User).where(User.email == normalized_email))
             ).scalars().first()

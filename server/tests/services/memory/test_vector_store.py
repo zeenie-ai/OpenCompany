@@ -61,7 +61,7 @@ async def test_store_cache_separates_credentials_without_exposing_them(
         def __init__(self, key):
             self.key = key
 
-        async def get_api_key(self, provider, session_id):
+        async def resolve_api_key(self, provider, session_id):
             assert (provider, session_id) == ("openai", "default")
             return self.key
 

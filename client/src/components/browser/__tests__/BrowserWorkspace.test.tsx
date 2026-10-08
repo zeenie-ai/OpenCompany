@@ -248,4 +248,18 @@ describe('browser frame and input lifecycle boundaries', () => {
     await act(async () => loads[1]());
     expect(socket.sent.filter((m) => m.type === 'ack')).toHaveLength(10);
   });
+  it('discards a pending picture during protected login and exposes authorized close for manual recovery', async () => {
+    const { frame, loads, draw } = mockFrameRenderer(true);
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
+    const socket = MockSocket.instances[0];
+    act(() => { socket.open(); socket.message({ type: 'state', state: 'agent' }); socket.onmessage?.({ data: frame.buffer }); });
+    await waitFor(() => expect(loads).toHaveLength(1));
+    act(() => socket.message({ type: 'sensitive', enabled: true }));
+    await act(async () => loads[0]());
+    expect(draw).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Take control' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close browser for manual login' }));
+    await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledWith('browser_session_stop', { workflow_id: 'wf', node_id: 'browser-1' }, 60_000));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start browser' })).toBeInTheDocument());
+  });
 });

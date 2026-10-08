@@ -113,6 +113,7 @@ AGENT_WORKFLOW_TYPES = frozenset(
         "chatAgent",
         # Specialized agents (11)
         "android_agent",
+        "browser_agent",
         "coding_agent",
         "web_agent",
         "task_agent",
@@ -754,6 +755,11 @@ class MachinaWorkflow:
                 context["temporal_worker_pool_enabled"] = bool(
                     frozen_routing.get("worker_pool_enabled")
                 )
+                if workflow_data.get("browser_routing_version") == 1:
+                    context.update(browser_routing_version=1, browser_bindings=workflow_data.get("browser_bindings") or {})
+                    binding = context["browser_bindings"].get(node_id)
+                    if node_type == "browser" and binding:
+                        context.update(_browser_owner=binding, _browser_task_id=str(workflow.info().workflow_id))
 
                 # F4.B: agent-as-child-workflow takes precedence over the
                 # activity path for the 15 migrating agent types when its
@@ -769,6 +775,11 @@ class MachinaWorkflow:
                     ),
                     routing_snapshot=frozen_routing,
                 )
+                if node_type == "browser" and context.get("_browser_owner"):
+                    from services.node_registry import get_node_class
+                    cls = get_node_class("browser")
+                    dispatch = {"kind": "activity", "name": f"node.browser.v{cls.version}",
+                                "queue": context["_browser_owner"].get("task_queue")}
                 # A preceding child start yields to the workflow event loop,
                 # so a pause signal may have landed since ``ready`` was
                 # computed. Re-admit every command in the batch.
@@ -975,7 +986,9 @@ class MachinaWorkflow:
             worker_pool_enabled = (
                 routing_snapshot.get("worker_pool_enabled") is True
             )
-        if agent_workflow_enabled and node_type in AGENT_WORKFLOW_TYPES:
+        # This new capability has no historical single-Activity implementation
+        # to replay. Its task-lifetime Browser ownership requires native dispatch.
+        if node_type == "browser_agent" or (agent_workflow_enabled and node_type in AGENT_WORKFLOW_TYPES):
             return {"kind": "child_workflow", "name": "AgentWorkflow"}
 
         name, queue = self._resolve_activity(

@@ -61,7 +61,7 @@ def runs_locally(provider: str) -> bool:
     return bool(entry.get("runs_locally"))
 
 
-async def _model_for(provider: str, database: Any, auth_service: Any, *, local: bool, endpoint_models: Optional[List[str]] = None) -> str:
+async def _model_for(provider: str, database: Any, auth_service: Any, *, local: bool, endpoint_models: Optional[List[str]] = None, principal: Optional[str] = None) -> str:
     from services.llm.config import get_default_model
 
     try:
@@ -74,7 +74,7 @@ async def _model_for(provider: str, database: Any, auth_service: Any, *, local: 
         return endpoint_models[0]
     if local:
         try:
-            models = await auth_service.get_stored_models(provider)
+            models = await auth_service.get_stored_models(provider, **({"principal": principal} if principal is not None else {}))
         except Exception:
             models = []
         if models:
@@ -95,7 +95,8 @@ async def resolve_llm_choice(
     try:
         from services.llm.endpoints import list_endpoints
 
-        endpoints = await list_endpoints(auth_service)
+        principal = getattr(connections, "principal", None)
+        endpoints = await list_endpoints(auth_service, **({"principal": principal} if principal is not None else {}))
     except Exception:
         logger.warning("Could not list OpenAI-compatible endpoints", exc_info=True)
     endpoint_models = {endpoint.ref: list(endpoint.models) for endpoint in endpoints}
@@ -110,7 +111,7 @@ async def resolve_llm_choice(
     async def choose(provider: str, model: Optional[str] = None) -> LLMChoice:
         local = runs_locally(provider)
         chosen = model or await _model_for(
-            provider, database, auth_service, local=local, endpoint_models=endpoint_models.get(provider)
+            provider, database, auth_service, local=local, endpoint_models=endpoint_models.get(provider), principal=getattr(connections, "principal", None)
         )
         return LLMChoice(provider=provider, model=chosen, local=local)
 
@@ -136,10 +137,11 @@ async def employees_chat(
     *,
     max_tokens: int = SETUP_MAX_TOKENS,
     timeout: Optional[float] = None,
+    principal: Optional[str] = None,
 ) -> LLMResponse:
     """One completion on the chosen model. Raises ``asyncio.TimeoutError``
     past the budget and ``NodeUserError`` for provider failures."""
-    api_key = await auth_service.get_api_key(choice.provider) or ""
+    api_key = await auth_service.resolve_api_key(choice.provider, principal=principal) or ""
     try:
         from services.model_registry import get_model_registry
 

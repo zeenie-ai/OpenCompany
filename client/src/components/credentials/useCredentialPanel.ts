@@ -25,6 +25,16 @@ import { queryKeys, STALE_TIME } from '../../lib/queryConfig';
 import type { ProviderConfig } from './types';
 
 export type CredentialFormValues = Record<string, string>;
+export interface SavedCredentialSource {
+  source: 'onepassword';
+  reference: string;
+  base_url?: string;
+}
+interface CredentialValues {
+  values: CredentialFormValues;
+  hadStored: boolean;
+  sources?: Record<string, SavedCredentialSource>;
+}
 
 const EMPTY_VALUES: CredentialFormValues = {};
 
@@ -66,26 +76,28 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
   // install. ``hadStored`` tracks the real server state separately so
   // the validated/connected badge stays honest — pre-filled defaults
   // do NOT flip it to true.
-  const credentialValuesQuery = useQuery<{ values: CredentialFormValues; hadStored: boolean }, Error>({
+  const credentialValuesQuery = useQuery<CredentialValues, Error>({
     queryKey: queryKeys.credentialValues.byProvider(config.id).queryKey,
     queryFn: async () => {
       if (!config.fields) return { values: EMPTY_VALUES, hadStored: false };
       const results = await Promise.all(
         config.fields.map(async (field) => {
           const storeKey = field.key === 'apiKey' ? config.id : field.key;
-          const r = await sendRequest<{ hasKey: boolean; apiKey?: string }>(
+          const r = await sendRequest<{ hasKey: boolean; apiKey?: string; credentialSource?: SavedCredentialSource }>(
             'get_stored_api_key', { provider: storeKey },
           );
-          return { key: field.key, hasKey: r.hasKey, apiKey: r.apiKey };
+          return { key: field.key, hasKey: r.hasKey, apiKey: r.apiKey, source: r.credentialSource };
         }),
       );
       const next: CredentialFormValues = {};
       let hadStored = false;
+      const sources: Record<string, SavedCredentialSource> = {};
       for (const r of results) {
         if (r.apiKey) next[r.key] = r.apiKey;
         if (r.hasKey) hadStored = true;
+        if (r.source) sources[r.key] = r.source;
       }
-      return { values: next, hadStored };
+      return { values: next, hadStored, sources };
     },
     enabled: visible && isConnected && !!config.fields,
     staleTime: STALE_TIME.FOREVER,
@@ -111,11 +123,12 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
   // preserve `hadStored` verbatim.
   const writeValues = useCallback(
     (updater: (prev: CredentialFormValues) => CredentialFormValues) => {
-      qc.setQueryData<{ values: CredentialFormValues; hadStored: boolean }>(
+      qc.setQueryData<CredentialValues>(
         queryKeys.credentialValues.byProvider(providerKey).queryKey,
         (prev) => ({
           values: updater(prev?.values ?? EMPTY_VALUES),
           hadStored: prev?.hadStored ?? false,
+          sources: prev?.sources,
         }),
       );
     },
@@ -219,6 +232,7 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
 
   return {
     form, values, loading, error, stored, setStored, setError,
+    sources: credentialValuesQuery.data?.sources ?? {},
     verificationCode,
     execute, actions, isConnected,
     getProviderDefaults, saveProviderDefaults,

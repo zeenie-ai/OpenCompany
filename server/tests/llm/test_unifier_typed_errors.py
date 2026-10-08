@@ -23,7 +23,7 @@ from services.plugin import NodeUserError
 def auth_service_stub():
     """Stub auth_service whose get_api_key returns None for ``{provider}_proxy`` lookups."""
     stub = MagicMock()
-    stub.get_api_key = AsyncMock(return_value=None)
+    stub.resolve_api_key = AsyncMock(return_value=None)
     return stub
 
 

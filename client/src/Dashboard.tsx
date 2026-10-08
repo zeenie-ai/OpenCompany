@@ -260,7 +260,7 @@ const DashboardContent: React.FC = () => {
     return false;
   }, [canvasLock.locked, canvasLock.reason]);
   const [globalModelDefaults, setGlobalModelDefaults] = React.useState<{ provider: string; model: string } | null>(null);
-  const { onDragOver, onDrop, handleComponentDragStart } = useDragAndDrop({ nodes, setNodes, saveNodeParameters, globalModelDefaults, workflowId: currentWorkflow?.id ?? 'new', screenToFlowPosition: reactFlowInstance.screenToFlowPosition });
+  const { onDragOver, onDrop, handleComponentDragStart } = useDragAndDrop({ nodes, setNodes, edges, setEdges, saveNodeParameters, globalModelDefaults, workflowId: currentWorkflow?.id ?? 'new', screenToFlowPosition: reactFlowInstance.screenToFlowPosition });
   // Palette drop creates nodes AND persists their default parameters —
   // an HTML5 drop that React Flow's nodesDraggable/Connectable cannot
   // block, so it goes through the shared guard.

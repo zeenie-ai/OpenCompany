@@ -118,6 +118,12 @@ used when the execution's frozen worker-pool setting is enabled; with pools
 disabled the default worker receives the operation. The in-process executor
 does not enforce Temporal Activity policies.
 
+Distributed Browser Activities are an exception to the pool switch: their
+frozen profile binding selects an owner-specific queue even with worker pools
+disabled. Each backend runs that worker; generic orchestration workers must
+exclude Browser Activities. Do not route browser effects onto a generic queue.
+See [Browser deployment](../../docs-internal/browser_agent_deployment.md).
+
 New deployment generations (`execution_control_version=1`) record resolved
 tool bindings and these policies during agent preparation. Ordinary per-type
 agent tools use that recorded policy, including attempt limits and
@@ -612,11 +618,16 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   `model_config = ConfigDict(json_schema_extra={"groups": {...}})`.
   Main-entry fields stay top-level. Full spec in
   [`docs-internal/plugin_system.md`](../../docs-internal/plugin_system.md).
-- **Never declare `api_key` as a Params field.** Credentials live in
-  the credentials DB via `ApiKeyCredential` / `OAuthCredential`
-  subclasses and auto-inject at execution time. Plugins that need the
+- **Never declare `api_key` as a Params field.** Use `ApiKeyCredential` /
+  `OAuthCredential` subclasses and `AuthService`. Local credentials use the
+  encrypted database; approved 1Password bindings resolve privately at the
+  calling Activity, with the trusted principal. Catalogue and form reads use
+  saved source metadata. Plugins that need the
   injected key read `ctx.raw["_raw_parameters"]["api_key"]` — it's
   stashed before Pydantic validation strips it.
+  Distributed mode requires an audited static-secret adapter and rejects
+  local keys, inline secrets, OAuth refresh stores and CLI-managed sessions.
+  See [1Password credentials](../../docs-internal/onepassword_credentials.md).
 - **`isConfigNode` is auto-derived — don't declare it.** Plugins
   whose `group` tuple contains `"memory"` or `"tool"` automatically
   export `uiHints.isConfigNode: True` (set by `_derive_auto_ui_hints`

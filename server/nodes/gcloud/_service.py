@@ -28,6 +28,7 @@ lands isolated at ``<DATA_DIR>/gcloud/application_default_credentials.json``).
 from __future__ import annotations
 
 import os
+from services.process_environment import without_onepassword_environment
 from typing import Any, Dict, Optional
 
 # Ambient credential/config env vars that would mask the pinned-config
@@ -60,7 +61,7 @@ def gcloud_env() -> Dict[str, str]:
     env["CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK"] = "1"
     env["CLOUDSDK_CORE_DISABLE_USAGE_REPORTING"] = "1"
     env["NO_COLOR"] = "1"
-    return env
+    return without_onepassword_environment(env)
 
 
 def login_env() -> Dict[str, str]:
@@ -73,7 +74,7 @@ def login_env() -> Dict[str, str]:
     env = gcloud_env()
     for var in _AMBIENT_CREDENTIAL_VARS:
         env.pop(var, None)
-    return env
+    return without_onepassword_environment(env)
 
 
 def resolve_gcloud_light() -> Optional[str]:

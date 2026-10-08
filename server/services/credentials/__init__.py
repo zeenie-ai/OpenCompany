@@ -15,4 +15,7 @@ from .handlers import WS_HANDLERS as _CREDENTIALS_WS_HANDLERS
 
 _register_ws_handlers(_CREDENTIALS_WS_HANDLERS)
 
+from .enrollment import WS_HANDLERS as _SOURCE_WS_HANDLERS
+_register_ws_handlers(_SOURCE_WS_HANDLERS)
+
 __all__ = ["handlers"]

@@ -327,7 +327,7 @@ def _status_fingerprint(providers: List[Dict[str, Any]]) -> str:
     return ",".join(sorted(parts))
 
 
-async def _connected_check(check: Dict[str, Any], auth_service: Any) -> bool:
+async def _connected_check(check: Dict[str, Any], auth_service: Any, *, principal: Optional[str] = None) -> bool:
     """Evaluate a provider's declarative ``connected_check``.
 
     ``{"type": "status", "key": K, "field": F}``: the live status slot the
@@ -347,14 +347,14 @@ async def _connected_check(check: Dict[str, Any], auth_service: Any) -> bool:
         if not keys:
             return False
         for key in keys:
-            if not await auth_service.has_valid_key(str(key)):
+            if not await auth_service.has_valid_key(str(key), **({"principal": principal} if principal is not None else {})):
                 return False
         return True
     logger.warning("Unknown connected_check type in credential_providers.json", check_type=kind)
     return False
 
 
-async def provider_connection_state(provider: Dict[str, Any], auth_service: Any) -> Dict[str, Any]:
+async def provider_connection_state(provider: Dict[str, Any], auth_service: Any, *, principal: Optional[str] = None) -> Dict[str, Any]:
     """Live credential state for one resolved catalogue provider.
 
     Returns ``{"stored", "connected", "account_label"}`` plus whatever the
@@ -369,7 +369,7 @@ async def provider_connection_state(provider: Dict[str, Any], auth_service: Any)
     Shared by the ``get_credential_catalogue`` handler and the Normal-mode
     employee summaries, so both answer "is this app connected" the same way.
     """
-    from services.plugin.credential import CREDENTIAL_REGISTRY
+    from services.plugin.credential import CREDENTIAL_REGISTRY, ApiKeyCredential, Credential
 
     pid = provider.get("id", "")
     kind = provider.get("kind", "")
@@ -377,12 +377,19 @@ async def provider_connection_state(provider: Dict[str, Any], auth_service: Any)
     check = provider.get("connected_check")
 
     state: Dict[str, Any] = {}
+    cred_cls = CREDENTIAL_REGISTRY.get(pid)
+    supported = bool(cred_cls and issubclass(cred_cls, ApiKeyCredential) and not getattr(cred_cls, "extra_fields", ()) and (cred_cls.validate.__func__ is Credential.validate.__func__ or pid == "openai_compatible"))
+    state["sourceSupported"] = supported
+    state["sourceRequired"] = bool(getattr(auth_service, "distributed_credentials", False))
+    if state["sourceRequired"] and not supported and not (check and check.get("type") == "builtin"):
+        return {**state, "stored": False, "connected": False, "account_label": None, "unsupported_reason": "This connection requires local execution; distributed credentials support approved static API keys and browser logins."}
     tokens = None
     checked: Dict[str, bool] = {}
+    scope = {"principal": principal} if principal is not None else {}
 
     async def check_passes() -> bool:
         if "result" not in checked:
-            checked["result"] = await _connected_check(check, auth_service)
+            checked["result"] = await _connected_check(check, auth_service, principal=principal)
         return checked["result"]
 
     # Declarative per-provider override for the "stored" check. Lets Telegram
@@ -393,7 +400,7 @@ async def provider_connection_state(provider: Dict[str, Any], auth_service: Any)
     # OAuth flow completes.
     stored_check = provider.get("stored_check")
     if stored_check and stored_check.get("type") == "api_key":
-        state["stored"] = await auth_service.has_valid_key(stored_check.get("key", pid))
+        state["stored"] = await auth_service.has_valid_key(stored_check.get("key", pid), **scope)
     elif status_hook:
         # Providers that declare ``status_hook`` in credential_providers.json
         # (the messaging, Google / Microsoft and CLI-login entries among
@@ -401,7 +408,7 @@ async def provider_connection_state(provider: Dict[str, Any], auth_service: Any)
         tokens = await auth_service.get_oauth_tokens(status_hook)
         state["stored"] = tokens is not None
     elif kind == "apiKey":
-        state["stored"] = await auth_service.has_valid_key(pid)
+        state["stored"] = await auth_service.has_valid_key(pid, **scope)
     elif kind == "oauth":
         tokens = await auth_service.get_oauth_tokens(pid)
         state["stored"] = tokens is not None
@@ -417,7 +424,7 @@ async def provider_connection_state(provider: Dict[str, Any], auth_service: Any)
 
     cred_cls = CREDENTIAL_REGISTRY.get(pid)
     if cred_cls is not None:
-        extras = await cred_cls.catalogue_extras()
+        extras = await cred_cls.catalogue_extras(**scope)
         if extras:
             state.update(extras)
 

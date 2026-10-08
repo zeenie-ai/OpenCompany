@@ -129,7 +129,7 @@ async def _talk_tools_for(auth_service: Any, row: Any) -> List[TalkTool]:
     from services.node_allowlist import is_hire_allowed
 
     apps = [app for app in (get_app(app_id) for app_id in row.apps or []) if app is not None]
-    return talk_tools(apps, owner_values=await owner_values_for(auth_service), allowed=is_hire_allowed)
+    return talk_tools(apps, owner_values=await owner_values_for(auth_service, principal=getattr(row, "owner_id", None)), allowed=is_hire_allowed)
 
 
 async def _new_talk_agent(database: Any, workflow: Any, row: Any, state: TalkState, *, sends: bool = False) -> TalkAgent:

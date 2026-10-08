@@ -3,7 +3,7 @@
  * Composes: Card header + ApiKeyInput. Config-driven, zero per-provider JSX.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,9 @@ import { CREDENTIAL_PROBE_REQUEST_TIMEOUT } from '@/contexts/WebSocketContext';
 import type { ServerEndpointSummary } from '@/hooks/useCatalogueQuery';
 import type { CredentialPanelProps } from '../PanelRenderer';
 import EndpointList from './EndpointList';
+import OnePasswordField from './OnePasswordField';
+import OnePasswordSetup from './OnePasswordSetup';
+import { Button } from '@/components/ui/button';
 
 const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
   config,
@@ -48,6 +51,9 @@ const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
   // defaults do NOT flip it to true.
   const validated = endpoints ? Boolean(config.stored) : panel.stored;
   const busy = panel.loading !== null;
+  const [sourceMode, setSourceMode] = useState<'local' | 'onepassword'>(config.sourceRequired ? 'onepassword' : 'local');
+  const source = panel.sources?.[field?.key ?? 'apiKey'];
+  useEffect(() => { if (source || config.sourceRequired) setSourceMode('onepassword'); }, [source, config.sourceRequired]);
 
   // Every field goes out under its catalogue key; the backend Credential
   // decides what each means. A rejected save carries its reason in
@@ -66,6 +72,15 @@ const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
     }
   };
   const refreshEndpoint = async (endpoint: ServerEndpointSummary) => {
+    const stored = await panel.actions.sendWs('get_stored_api_key', { provider: endpoint.ref });
+    if (stored?.credentialSource?.source === 'onepassword') {
+      const res = await panel.actions.sendWs('onepassword_endpoint_validate', {
+        provider: endpoint.ref, reference: stored.credentialSource.reference,
+        base_url: stored.credentialSource.base_url, label: endpoint.label,
+      }, CREDENTIAL_PROBE_REQUEST_TIMEOUT);
+      if (!res?.valid) panel.setError(res?.error || 'Could not refresh the 1Password endpoint.');
+      return;
+    }
     const res = await panel.actions.sendWs('validate_api_key', {
       provider: config.id,
       api_key: endpoint.base_url || endpoint.ref,
@@ -109,10 +124,19 @@ const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
           )}
         </CardHeader>
         <CardContent>
+          {config.sourceSupported && <div className="mb-4 flex gap-2">
+            {!config.sourceRequired && <Button variant={sourceMode === 'local' ? 'secondary' : 'ghost'} size="sm" onClick={() => setSourceMode('local')}>Local credential</Button>}
+            <Button variant={sourceMode === 'onepassword' ? 'secondary' : 'ghost'} size="sm" onClick={() => setSourceMode('onepassword')}>1Password</Button>
+          </div>}
           {endpoints && config.instructions && (
             <p className="text-xs text-muted-foreground">{config.instructions}</p>
           )}
-          {field && !endpoints && (
+          {sourceMode === 'onepassword' && config.sourceSupported && <>
+            <OnePasswordSetup visible={visible} />
+            <OnePasswordField provider={config.id} saved={source} endpoint={Boolean(endpoints)} onError={panel.setError} onSaved={() => panel.setStored(true)} />
+          </>}
+          {sourceMode === 'onepassword' && source && !endpoints && <Button className="mt-3" variant="ghost" size="sm" onClick={() => panel.actions.remove(config.id)}>Remove 1Password binding</Button>}
+          {field && !endpoints && sourceMode === 'local' && (
             <ApiKeyInput
               value={inputValue}
               onChange={(v) => panel.form.setFieldValue(field.key, v)}
@@ -159,7 +183,7 @@ const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
           path because these are operator metadata, not credentials
           to probe upstream. Save writes via the same auth_service
           path the primary uses (panel.actions.save). */}
-      {(endpoints ? config.fields ?? [] : secondaryFields).map((sf) => (
+      {(endpoints && sourceMode !== 'local' ? [] : endpoints ? config.fields ?? [] : secondaryFields).map((sf) => (
         <SecondaryFieldRow
           key={sf.key}
           fieldKey={sf.key}
@@ -176,11 +200,11 @@ const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
 
       {endpoints && (
         <>
-          <div className="flex justify-end">
+          {sourceMode === 'local' && <div className="flex justify-end">
             <ActionButton intent="save" onClick={addEndpoint} disabled={busy || !inputValue.trim()}>
               Add endpoint
             </ActionButton>
-          </div>
+          </div>}
           <EndpointList endpoints={endpoints} busy={busy} onRefresh={refreshEndpoint} onRemove={removeEndpoint} />
         </>
       )}

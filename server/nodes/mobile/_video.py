@@ -10,6 +10,7 @@ import contextlib
 import hashlib
 import secrets
 from fastapi import WebSocket, WebSocketDisconnect
+from services.process_environment import without_onepassword_environment
 from ._control import MobileError
 from ._install import SCRCPY_SHA256, SCRCPY_VERSION, sdk_tool
 from ._paths import mobile_root
@@ -85,6 +86,7 @@ async def stream_video(websocket: WebSocket, viewer: str) -> None:
             raise MobileError("video_tunnel_failed", "Invalid video tunnel port")
         proc = await asyncio.create_subprocess_exec(
             *server_arguments(serial, scid),
+            env=without_onepassword_environment(),
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,

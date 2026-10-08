@@ -40,6 +40,7 @@ Refs
 from __future__ import annotations
 
 from datetime import timedelta
+from typing import Any, Mapping
 
 from temporalio.common import RetryPolicy
 
@@ -131,6 +132,24 @@ PERMIT_WAIT_RETRY: RetryPolicy = RetryPolicy(
 )
 
 
+def frozen_retry_policy(retry: Mapping[str, Any]) -> RetryPolicy:
+    """Rebuild a tool plugin's retry policy from the values frozen into history.
+
+    ``agent_activities._tool_activity_policy`` records the plugin's declared
+    policy as plain numbers when the payload is prepared, so a replay never
+    consults plugin code that may have changed since. Workflow code turns
+    those numbers back into a ``RetryPolicy`` here instead of constructing
+    one inline, which keeps every policy a workflow schedules in this module.
+    """
+    return RetryPolicy(
+        initial_interval=timedelta(seconds=retry["initial_interval_seconds"]),
+        backoff_coefficient=retry["backoff_coefficient"],
+        maximum_interval=timedelta(seconds=retry["maximum_interval_seconds"]),
+        maximum_attempts=retry["maximum_attempts"],
+        non_retryable_error_types=retry["non_retryable_error_types"],
+    )
+
+
 __all__ = [
     "NON_RETRYABLE_ERROR_TYPES",
     "DEFAULT_ACTIVITY_RETRY",
@@ -138,4 +157,5 @@ __all__ = [
     "LLM_STEP_RETRY",
     "DELEGATION_CLEANUP_RETRY",
     "PERMIT_WAIT_RETRY",
+    "frozen_retry_policy",
 ]

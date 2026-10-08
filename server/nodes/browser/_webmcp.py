@@ -56,6 +56,7 @@ class WebMcpTracker:
         self._sessions: Dict[str, CDPSession] = {}
         self._pending: Dict[str, asyncio.Future] = {}
         self._early: Dict[str, Dict[str, Any]] = {}
+        self._sensitive = False
 
     # -- wiring ---------------------------------------------------------------
 
@@ -66,11 +67,25 @@ class WebMcpTracker:
         session.on("WebMCP.toolsRemoved", lambda p: self._removed(target_id, p))
         session.on("WebMCP.toolResponded", self._responded)
         session.on("Page.frameNavigated", lambda p: self._navigated(target_id, p))
+        if self._sensitive:
+            return
         try:
             await session.send("WebMCP.enable", timeout=10)
         except CDPError as exc:
             if not exc.method_not_found:
                 logger.debug("[browser] WebMCP.enable failed on %s: %s", target_id, exc)
+
+    async def sensitive_barrier(self, enabled: bool) -> None:
+        """Disable page-provided metadata before credential values are fetched."""
+        self._sensitive = enabled
+        self._tools.clear()
+        self._early.clear()
+        for session in list(self._sessions.values()):
+            try:
+                await session.send("WebMCP.disable" if enabled else "WebMCP.enable", timeout=5)
+            except CDPError as exc:
+                if not exc.method_not_found:
+                    raise RuntimeError("WebMCP suspension could not be confirmed") from None
 
     def detach(self, target_id: str) -> None:
         self._sessions.pop(target_id, None)
@@ -78,6 +93,8 @@ class WebMcpTracker:
         self._main_frames.pop(target_id, None)
 
     def _added(self, target_id: str, params: Dict[str, Any]) -> None:
+        if self._sensitive:
+            return
         frames = self._tools.setdefault(target_id, {})
         for tool in params.get("tools") or []:
             name, frame = tool.get("name"), tool.get("frameId")
@@ -102,6 +119,8 @@ class WebMcpTracker:
             self._tools.get(target_id, {}).pop(frame_id, None)
 
     def _responded(self, params: Dict[str, Any]) -> None:
+        if self._sensitive:
+            return
         invocation = params.get("invocationId") or ""
         future = self._pending.get(invocation)
         if future is not None:
@@ -118,7 +137,7 @@ class WebMcpTracker:
 
     def tools(self, target_id: Optional[str]) -> List[Dict[str, Any]]:
         """The page's tools, shaped for the agent (no stack traces or node ids)."""
-        if not target_id:
+        if self._sensitive or not target_id:
             return []
         out = []
         main = self._main_frames.get(target_id)
@@ -152,6 +171,8 @@ class WebMcpTracker:
         mode: str = "read_only",
         timeout: float = INVOKE_TIMEOUT,
     ) -> Dict[str, Any]:
+        if self._sensitive:
+            raise NodeUserError("Browser observations are paused during protected login.")
         if mode == "disabled":
             raise NodeUserError("WebMCP tools are turned off for this Browser node.")
         session = self._sessions.get(target_id or "")

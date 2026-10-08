@@ -82,6 +82,59 @@ def test_testing_browser_flags_are_explicit(tmp_path):
     assert any(a.startswith("--user-agent=") for a in argv)
 
 
+async def test_live_profile_lock_prevents_orphan_sweep(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+    from nodes.browser import _chrome
+    chrome = _chrome.ChromeProcess(profile_id="locked", exe=Path("chrome"), profile_root=tmp_path,
+        user_data_dir=tmp_path / "user-data", proxy_port=1, major=154, no_sandbox=False, small_shm=False)
+    monkeypatch.setattr(chrome._profile_lock, "acquire", lambda: False)
+    sweep = Mock()
+    monkeypatch.setattr(_chrome, "sweep_orphan", sweep)
+    with pytest.raises(_chrome.NodeUserError, match="open in another"):
+        await chrome._pre_spawn()
+    sweep.assert_not_called()
+
+
+async def test_secret_phase_refuses_pid_for_another_daemon_home(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    import psutil
+    cli = BrowserUseCli(cli_path=Path("cli"), python_path=Path("py"), profile_id="profile", cdp_http_url="")
+    homes = {name: tmp_path / name for name in ("home", "runtime", "tmp", "workspace", "config")}
+    for home in homes.values(): home.mkdir()
+    (homes["runtime"] / "bu.pid").write_text("9")
+    monkeypatch.setattr(cli, "dirs", lambda: homes)
+    process = SimpleNamespace(cmdline=lambda: ["python", "browser_harness"], environ=lambda: {"BH_HOME": str(tmp_path / "other-profile")})
+    monkeypatch.setattr(psutil, "Process", lambda _: process)
+    stop = Mock()
+    monkeypatch.setattr(cli, "stop_daemon", stop)
+    assert await cli.suspend_for_credentials() is False
+    stop.assert_not_called()
+
+
+async def test_prior_epoch_retirement_only_visits_matching_profile(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from services import browser_owners
+    current = tmp_path / browser_owners.RUNTIME_EPOCH / "profile"
+    current.mkdir(parents=True)
+    previous = tmp_path / ("0" * 32) / "profile"
+    (previous / "runtime").mkdir(parents=True)
+    (previous / "runtime" / "bu.pid").write_text("9")
+    other = tmp_path / ("1" * 32) / "other-profile" / "runtime"
+    other.mkdir(parents=True)
+    (other / "bu.pid").write_text("10")
+    cli = BrowserUseCli(cli_path=Path("cli"), python_path=Path("py"), profile_id="profile", cdp_http_url="")
+    monkeypatch.setattr(cli, "dirs", lambda: {"home": current / "home"})
+    monkeypatch.setattr(browser_owners, "settings", lambda: SimpleNamespace(distributed_mode=True))
+    visited = []
+    async def suspended(self):
+        visited.append(self.dirs()["runtime"])
+        return True
+    monkeypatch.setattr(BrowserUseCli, "suspend_for_credentials", suspended)
+    assert await cli.suspend_prior_epochs()
+    assert visited == [previous / "runtime"]
+
+
 async def test_cli_timeout_stops_the_daemon_and_reports_uncertain_outcome(monkeypatch, tmp_path):
     import asyncio
     from types import SimpleNamespace

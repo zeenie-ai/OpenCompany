@@ -22,7 +22,7 @@ from services.llm.providers.openai import OpenAIProvider
 @pytest.fixture
 def auth_service_stub():
     stub = MagicMock()
-    stub.get_api_key = AsyncMock(return_value=None)
+    stub.resolve_api_key = AsyncMock(return_value=None)
     return stub
 
 

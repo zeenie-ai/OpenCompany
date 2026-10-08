@@ -26,13 +26,13 @@ SOCKET = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(use
 
 
 class Auth:
-    async def has_valid_key(self, key):
+    async def has_valid_key(self, key, *, principal=None):
         return key == "openai"
 
     async def get_oauth_tokens(self, provider):
         return None
 
-    async def list_api_key_providers(self):
+    async def list_api_key_providers(self, *, principal=None):
         return ["openai"]
 
 

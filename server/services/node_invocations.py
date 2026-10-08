@@ -60,13 +60,17 @@ async def _controller_update(workflow_id: str, update, argument, *, update_id: s
     except WorkflowUpdateFailedError as exc:
         cause = exc.cause
         messages = {
-            "WorkspaceResetInProgress": "Phone tasks are resetting. Wait for Reset to finish.",
+            "WorkspaceResetInProgress": "Workspace tasks are resetting. Wait for Reset to finish.",
             "WorkspaceAdmissionChanged": "This submission crossed a Reset. Submit a new task.",
             "WorkspaceSubmissionConflict": "Submission ID was already used for a different task",
             "WorkspaceTaskQueueFull": "The Workspace task queue is full",
         }
-        if getattr(cause, "type", None) in messages:
-            raise NodeUserError(messages[cause.type]) from None
+        for _ in range(8):
+            if getattr(cause, "type", None) in messages:
+                raise NodeUserError(messages[cause.type]) from None
+            if getattr(cause, "cause", None) is None:
+                break
+            cause = cause.cause
         raise
 
 
@@ -167,7 +171,7 @@ async def submit(principal: str, workflow_id: str, node_id: str, prompt: str, su
     database = get_database()
     control = await database.get_latest_workflow_control(workflow_id)
     if (admission or {}).get("resetting") or (control and control.status == "resetting"):
-        raise NodeUserError("Phone tasks are resetting. Wait for Reset to finish.")
+        raise NodeUserError("Workspace tasks are resetting. Wait for Reset to finish.")
     run_id = invocation_id(principal, workflow_id, node_id, submission_id)
     fingerprint = hashlib.sha256(prompt.encode()).hexdigest()
     params = {**(await get_database().get_node_parameters(node_id) or {}), "prompt": prompt}
@@ -198,6 +202,28 @@ async def submit(principal: str, workflow_id: str, node_id: str, prompt: str, su
         "context": context,
         "admission_epoch": (admission or {}).get("epoch", 0),
     }
+    if node["type"] == "browser_agent":
+        if getattr(settings, "distributed_mode", False) is True:
+            from services.credentials.preflight import assert_cluster_credentials
+            await assert_cluster_credentials(database, graph, context)
+        from services.browser_tasks import browser_tool_for_agent
+        from services.browser_owners import routing_for_node
+        browser_node = browser_tool_for_agent(graph, node_id)
+        binding = await routing_for_node(database, workflow_id, browser_node["id"], principal)
+        snapshot = {saved_node["id"]: await database.get_node_parameters(saved_node["id"]) or {}
+                    for saved_node in graph.get("nodes", []) if saved_node.get("id")}
+        from services.temporal.agent_activities import _strip_credentials
+        snapshot = _strip_credentials(snapshot)
+        context["node_data"] = _strip_credentials(context["node_data"])
+        context["nodes"] = _strip_credentials(context["nodes"])
+        context.update(native_workspace_version=1, workspace_task_prompt=prompt,
+                       parameter_snapshot=snapshot, temporal_worker_pool_enabled=settings.temporal_worker_pool_enabled,
+                       browser_bindings={browser_node["id"]: binding}, _browser_task_id=run_id)
+        payload.update(dispatch_version=1, dispatch_kind="native_agent", history_version=1,
+                       history_record={"invocation_id": run_id, "submission_id": str(UUID(submission_id)),
+                                       "principal": principal, "workflow_id": workflow_id, "node_id": node_id,
+                                       "fingerprint": fingerprint, "prompt": prompt,
+                                       "browser_owner_ids": [binding["owner_id"]] if binding.get("task_queue") else []})
     client = temporal_client()
     # The controller owns submission idempotence. A new Update ID permits a
     # retry after queue-full/reset rejection; a completed failed Update would
@@ -207,8 +233,19 @@ async def submit(principal: str, workflow_id: str, node_id: str, prompt: str, su
         update_id=f"submit:{run_id}:{uuid4().hex}",
     )
     if admitted.get("status") == "duplicate":
-        existing = await client.get_workflow_handle(run_id).query(NodeInvocationWorkflow.describe)
-        if existing["fingerprint"] != fingerprint:
+        from temporalio.service import RPCError, RPCStatusCode
+        try:
+            existing = await client.get_workflow_handle(run_id).query(NodeInvocationWorkflow.describe)
+            existing_fingerprint = existing["fingerprint"]
+        except RPCError as exc:
+            if exc.status != RPCStatusCode.NOT_FOUND or node["type"] != "browser_agent":
+                raise
+            from services.workspace_task_history import get_task, TERMINAL
+            record = await get_task(database, principal, workflow_id, run_id)
+            if record is None or record.status not in TERMINAL:
+                raise NodeUserError("This Workspace task was not found") from None
+            existing_fingerprint = record.fingerprint
+        if existing_fingerprint != fingerprint:
             raise NodeUserError("Submission ID was already used for a different task") from None
     from services.deployment.handlers import _with_runtime_counts
     from services.deployment.control import serialize_control
@@ -232,7 +269,13 @@ async def status(principal: str, workflow_id: str, node_id: str, submission_id: 
     from services.plugin import NodeUserError
     from temporalio.service import RPCError, RPCStatusCode
 
-    await resolve_workflow_node(principal, workflow_id, node_id)
+    from services.plugin.deps import get_database
+    from services.workspace_task_history import get_task
+    database = get_database()
+    record = await get_task(database, principal, workflow_id, invocation_id(principal, workflow_id, node_id, submission_id))
+    if record is None:
+        # Legacy device tasks have no history projection and retain saved-node authorization.
+        await resolve_workflow_node(principal, workflow_id, node_id)
     handle = temporal_client().get_workflow_handle(invocation_id(principal, workflow_id, node_id, submission_id))
     try:
         if cancel:
@@ -240,6 +283,9 @@ async def status(principal: str, workflow_id: str, node_id: str, submission_id: 
         result = await handle.query(NodeInvocationWorkflow.describe)
     except RPCError as exc:
         if exc.status == RPCStatusCode.NOT_FOUND:
+            if record is not None and record.status in ("completed", "failed", "cancelled"):
+                from services.workspace_task_history import serialize
+                return serialize(record)
             raise NodeUserError("This Workspace task was not found") from None
         raise NodeUserError("Workflow engine is temporarily unavailable") from None
     if result.get("status") in ("completed", "failed"):
@@ -247,4 +293,9 @@ async def status(principal: str, workflow_id: str, node_id: str, submission_id: 
             result["result"] = await handle.result()
         except Exception:
             result["status"] = "failed"
+    if record is not None:
+        from services.workspace_task_history import task_availability, safe_result
+        result.update(await task_availability(database, record.browser_owner_ids))
+        if "result" in result:
+            result["result"] = safe_result(result["result"])
     return result

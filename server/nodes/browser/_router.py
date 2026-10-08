@@ -20,6 +20,17 @@ from ._stream import browser_live_view
 router = APIRouter()
 # Registered directly: include_router would add a pathless entry here.
 router.add_api_websocket_route("/ws/browser", browser_live_view)
+router.add_api_websocket_route("/ws/browser/owner", browser_live_view)
+
+
+@router.post("/api/browser/owner/command")
+async def route_owner_command(request: Request) -> Dict[str, Any]:
+    from ._routing import owner_command
+    from services.plugin.base import NodeUserError
+    try:
+        return await owner_command(request)
+    except (NodeUserError, ValueError) as exc:
+        raise HTTPException(status_code=403, detail="Browser owner request refused.") from None
 
 _CHUNK = 256 * 1024
 
@@ -64,6 +75,13 @@ async def upload_session_file(
         chunks.append(chunk)
     if not total:
         raise HTTPException(status_code=400, detail="The file is empty.")
+    from services.browser_owners import bind_profile, replica_id, settings
+    if getattr(settings(), "distributed_mode", False) is True:
+        from ._routing import forward_command
+        import base64
+        binding = await bind_profile(get_database(), profile_id, owner)
+        if binding["owner_id"] != replica_id():
+            return await forward_command(binding, owner, "session_file", {"profile_id": profile_id, "payload": base64.b64encode(b"".join(chunks)).decode()})
     try:
         jar = parse_session_file(b"".join(chunks))
     except CookieFormatError as exc:
@@ -71,6 +89,8 @@ async def upload_session_file(
     finally:
         chunks.clear()
     job = get_import_jobs().add_file(owner, jar)
+    from ._routing import record_handle
+    await record_handle(job.id, owner, profile_id=profile_id)
     return {"success": True, "profile_id": profile_id, **job.to_wire()}
 
 

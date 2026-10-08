@@ -84,14 +84,15 @@ async def _session_for_node(owner_id: str, workflow_id: str, node_id: str, *, cr
 
     saved = await get_database().get_node_parameters(node_id) or {}
     cfg = BrowserParams.model_validate(saved)
+    from services.browser_owners import routing_for_node
+
     store = ProfileStore(get_database())
     try:
-        if cfg.profile_id:
-            profile = await store.get(owner_id, cfg.profile_id)
-        else:
-            workflow = await get_database().get_workflow(workflow_id)
-            name = getattr(workflow, "name", None) or "Browser"
-            profile = await store.default_for_workflow(owner_id, workflow_id, str(name))
+        # A recovered task keeps its admitted profile even if the saved node
+        # was edited while its owner was unavailable. This lookup is required
+        # locally too: only distributed requests pass through route_handler.
+        binding = await routing_for_node(get_database(), workflow_id, node_id, owner_id)
+        profile = await store.get(owner_id, binding["profile_id"])
     except ProfileError as exc:
         raise NodeUserError(str(exc)) from exc
     policy = runtime.base_policy(allow_private_network=cfg.allow_private_network, allowed_domains=parse_allowed_domains(cfg.allowed_domains))
@@ -117,7 +118,8 @@ def _session_view(runtime: Any, session: Any) -> Dict[str, Any]:
     else:
         view["held_by_other"] = controller.lease_session is not None
     tab = controller.tabs.get(controller.active_target_id or "") or {}
-    view.update(url=tab.get("url"), title=tab.get("title"), tabs=len(controller.tabs))
+    if not controller.sensitive_login:
+        view.update(url=tab.get("url"), title=tab.get("title"), tabs=len(controller.tabs))
     return view
 
 
@@ -267,7 +269,12 @@ async def handle_browser_profile_delete(data: Dict[str, Any], websocket: WebSock
     except ProfileError as exc:
         raise NodeUserError(str(exc)) from exc
     runtime = get_browser_runtime()
+    from services.browser_owners import assert_owner, bind_profile, _persistent
+    if _persistent(get_database()):
+        await assert_owner(get_database(), await bind_profile(get_database(), profile.id, owner), owner)
     controller = runtime.controller(profile.id)
+    if controller is not None and controller.task_id is not None:
+        raise NodeUserError("BrowserBusy: finish or cancel the task before deleting its profile.")
     if controller is not None and controller.lease_session is not None:
         raise NodeUserError(f"{profile.name!r} is in use by {controller.lease_session.label}. Stop it first.")
     await runtime.stop_profile(profile.id, reason="profile deleted")
@@ -284,6 +291,12 @@ async def _running_profile(owner: str, profile_id: str, *, wait: float = 30.0) -
         profile = await ProfileStore(get_database()).get(owner, profile_id)
     except ProfileError as exc:
         raise NodeUserError(str(exc)) from exc
+    from services.browser_owners import assert_owner, bind_profile, _persistent
+    if _persistent(get_database()):
+        await assert_owner(get_database(), await bind_profile(get_database(), profile.id, owner), owner)
+    controller = get_browser_runtime().controller(profile.id)
+    if controller is not None and controller.task_id is not None:
+        raise NodeUserError("BrowserBusy: finish or cancel the task before changing its saved logins.")
     return profile, await get_browser_runtime().open(profile, wait=wait)
 
 
@@ -297,6 +310,8 @@ async def handle_browser_profile_clear_site(data: Dict[str, Any], websocket: Web
     if not domain:
         raise NodeUserError("domain required")
     profile, running = await _running_profile(owner, str(data.get("profile_id") or ""))
+    if running.controller.task_id is not None:
+        raise NodeUserError("BrowserBusy: finish or cancel the task before clearing its logins.")
     cookies = (await running.cdp.send("Storage.getCookies")).get("cookies") or []
     for cookie in cookies:
         cookie_domain = str(cookie.get("domain") or "").lstrip(".").lower()
@@ -331,6 +346,8 @@ async def handle_browser_profile_login_start(data: Dict[str, Any], websocket: We
         if reason:
             raise NodeUserError(f"Cannot open {url}: {reason}.")
     profile, running = await _running_profile(owner, str(data.get("profile_id") or ""))
+    if running.controller.task_id is not None:
+        raise NodeUserError("BrowserBusy: use this task's Browser workspace to take control and log in.")
     login_id = f"login_{uuid.uuid4().hex[:12]}"
     session = runtime.register_session(
         BrowserSession(
@@ -423,6 +440,8 @@ async def handle_browser_import_commit(data: Dict[str, Any], websocket: WebSocke
         raise NodeUserError("Pick at least one site to import.")
     profile, running = await _running_profile(owner, str(data.get("profile_id") or ""))
     controller = running.controller
+    if controller.task_id is not None:
+        raise NodeUserError("BrowserBusy: finish or cancel the task before importing logins.")
     if controller.lease_session is not None and controller.lease_session.kind == "node" and controller.state.value != "idle":
         raise NodeUserError(f"{profile.name!r} is busy ({controller.lease_session.label}); try again when it is idle.")
     result = await apply_jar(running, job.jar, domains)
@@ -483,6 +502,8 @@ WS_HANDLERS: Dict[str, WSHandler] = {
     "browser_runtime_status": handle_browser_runtime_status,
     "browser_runtime_prepare": handle_browser_runtime_prepare,
 }
+from ._routing import route_handler
+WS_HANDLERS = {name: route_handler(name, handler) for name, handler in WS_HANDLERS.items()}
 
 
 async def load_browser_profiles(params: Dict[str, Any]) -> list:

@@ -81,3 +81,28 @@ async def test_pending_retry_stops_when_no_visible_viewer_or_browser_closes(monk
         await hub._on_controller("closed", {"reason": "stopped"})
     await asyncio.gather(retry, return_exceptions=True)
     assert retry.cancelled() and runtime.page_session.await_count == 1
+
+
+async def test_sensitive_barrier_drains_frames_and_redacts_metadata():
+    hub, viewer, runtime, session = make_hub()
+    controller = ProfileController("profile", "Work")
+    controller.active_target_id = "page"
+    controller.tabs = {"page": {"target_id": "page", "url": "https://example.com/?secret=canary", "title": "canary"}}
+    hub.controller = controller
+    await hub.add(viewer)
+    viewer.pending = b"canary-frame"
+    viewer.send_json({"type": "page", "url": "canary"})
+    controller.sensitive_login = True
+    await hub.sensitive_barrier(True)
+    assert viewer.pending is None and viewer.privacy_blocked is True
+    assert hub.tabs_message() == {"type": "tabs", "tabs": []}
+    messages = []
+    while not viewer.control.empty():
+        messages.append(viewer.control.get_nowait())
+    assert "canary" not in str(messages)
+    calls = runtime.page_session.await_count
+    await hub._refresh()
+    assert runtime.page_session.await_count == calls
+    hub._on_dialog({"message": "canary"})
+    assert viewer.control.empty()
+    await hub.remove(viewer)

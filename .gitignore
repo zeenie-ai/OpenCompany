@@ -210,3 +210,6 @@ desktop/vendor/
 desktop/build/icon.png
 desktop/test-results/
 desktop/playwright-report/
+
+# Isolated integration-test runtimes and disposable databases.
+/.test-runtime/

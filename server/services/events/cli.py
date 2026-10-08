@@ -16,6 +16,7 @@ import shutil
 from typing import Any, Dict, List, Optional, Type
 
 from services._supervisor.util import kill_tree
+from services.process_environment import without_onepassword_environment
 
 
 async def run_cli_command(
@@ -33,7 +34,8 @@ async def run_cli_command(
     """Run ``<binary> <argv> [api_key_arg <key>]`` once, return parsed JSON.
 
     ``env``: optional process environment override. When None, the child
-    inherits the parent's environment (asyncio default).
+    inherits ordinary parent variables. 1Password authentication variables
+    are removed after any caller overrides, before spawning the child.
 
     ``cwd``: optional working directory for the child. Needed by CLIs
     whose commands are directory-scoped (``vercel deploy`` deploys the
@@ -96,7 +98,7 @@ async def run_cli_command(
             stdin=stdin,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env,
+            env=without_onepassword_environment(env),
             cwd=cwd,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(input=input), timeout=timeout)

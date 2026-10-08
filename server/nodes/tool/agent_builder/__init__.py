@@ -1199,6 +1199,14 @@ class AgentBuilderNode(ToolNode):
         nodes = [NewNode("agent", agent_type, label, specialist_params, position=(x + 300, y + 200)),
                  NewNode("context", _CONTEXT_TYPE, "Context", position=(x + 300, y + 20), context_of="agent")]
         edges = [Edge("agent", _TEAMMATE_OUTPUT, str(caller), _TEAMMATES_INPUT)]
+        if agent_type == "browser_agent":
+            from services.browser_agent_recipe import BROWSER_AGENT_ROLE, browser_agent_additions
+            if not {"browser", "visionAnalyze"}.issubset(_allowed_tool_types()) or "web_agent" in _allowlist_config().get("disabled_skill_folders", []):
+                return _refused("add_subagent", "Browser tools or instructions are disabled by the operator.")
+            specialist_params["system_message"] = BROWSER_AGENT_ROLE + "\n" + specialist_params["system_message"]
+            bundle = browser_agent_additions(agent_parameters=specialist_params, position=(x + 300, y + 200))
+            nodes = list(bundle.nodes)
+            edges.extend(bundle.edges)
         for index, tool_type in enumerate(dict.fromkeys(params.tool_types)):
             if tool_type not in _allowed_tool_types():
                 return _refused("add_subagent", f"The specialist cannot use '{tool_type}'. Inspect available tools first.")
@@ -1210,10 +1218,15 @@ class AgentBuilderNode(ToolNode):
                 validated = cls.Params.model_validate(config).model_dump(exclude_unset=True)
             except ValueError:
                 return _refused("add_subagent", f"'{tool_type}' needs valid configuration. Inspect its node contract first.")
+            if agent_type == "browser_agent" and tool_type in {"browser", "visionAnalyze"}:
+                # These private tools are already present in the shared recipe.
+                continue
             ref = f"tool_{index}"
             nodes.append(NewNode(ref, tool_type, getattr(cls, "display_name", "") or tool_type, validated, position=(x + 160 + index * 170, y + 440)))
             edges.append(tool_edge(ref, "agent"))
         skill_config = {}
+        if agent_type == "browser_agent":
+            skill_config.update(next(node.params["skills_config"] for node in nodes if node.ref == "skills"))
         for name in dict.fromkeys(params.skill_names):
             skill = await _find_skill(database, name, employee=False)
             if skill is None:
@@ -1223,15 +1236,19 @@ class AgentBuilderNode(ToolNode):
             from services.employees.policy import SKILL_TOOL_ENTRY, SKILL_TOOL_NAME
 
             skill_config[SKILL_TOOL_NAME] = dict(SKILL_TOOL_ENTRY)
-            nodes.append(NewNode("skills", _MASTER_SKILL_TYPE, "Specialist skills", {"skill_folder": "assistant", "skills_config": skill_config}, position=(x + 20, y + 200)))
-            edges.append(skill_edge("skills", "agent"))
+            if agent_type == "browser_agent":
+                from dataclasses import replace
+                nodes = [replace(node, params={**node.params, "skills_config": skill_config}) if node.ref == "skills" else node for node in nodes]
+            else:
+                nodes.append(NewNode("skills", _MASTER_SKILL_TYPE, "Specialist skills", {"skill_folder": "assistant", "skills_config": skill_config}, position=(x + 20, y + 200)))
+                edges.append(skill_edge("skills", "agent"))
         additions = GraphAdditions(
             nodes=tuple(nodes), edges=tuple(edges),
         )
         grant_ids: List[str] = []
         if employee is not None and not existing:
             permission = await _permission(database, ctx, params, agent_type, [str(caller)], {
-                "purpose": specialist_params["system_message"], "tool_types": sorted(set(params.tool_types)),
+                "purpose": specialist_params["system_message"], "tool_types": sorted(set(params.tool_types) | ({"browser", "visionAnalyze"} if agent_type == "browser_agent" else set())),
                 "tool_parameters": params.tool_parameters, "skill_names": sorted(set(params.skill_names)),
                 "model": specialist_params.get("model"), "provider": specialist_params.get("provider"),
             }, grant_ids)

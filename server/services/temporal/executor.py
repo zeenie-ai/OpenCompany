@@ -47,6 +47,20 @@ def capture_temporal_routing_input() -> Dict[str, Any]:
     }
 
 
+async def capture_browser_routing_input(workflow_id: str, nodes: list[dict], user_id: str) -> dict:
+    """Resolve distributed Browser destinations before recording workflow input."""
+    from core.config import Settings
+    if not getattr(Settings(), "distributed_mode", False):
+        return {}
+    from core.container import container
+    from services.browser_owners import routing_for_node
+    bindings = {}
+    for node in nodes:
+        if node.get("type") == "browser" and not (node.get("data") or {}).get("disabled"):
+            bindings[node["id"]] = await routing_for_node(container.database(), workflow_id, node["id"], user_id)
+    return {"browser_routing_version": 1, "browser_bindings": bindings}
+
+
 class TemporalExecutor:
     """Workflow executor that uses Temporal for durable execution.
 
@@ -131,6 +145,7 @@ class TemporalExecutor:
                 "execution_id": execution_id,
                 "user_id": str(user_id or "owner"),
                 **capture_temporal_routing_input(),
+                **await capture_browser_routing_input(workflow_id, nodes, str(user_id or "owner")),
             }
             if parameter_snapshot:
                 workflow_payload["parameter_snapshot"] = parameter_snapshot

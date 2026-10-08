@@ -17,6 +17,7 @@ for ``gh auth login`` / ``status`` / ``logout`` (see
 from __future__ import annotations
 
 import os
+from services.process_environment import without_onepassword_environment
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -33,7 +34,7 @@ def gh_env() -> Dict[str, str]:
     env["NO_COLOR"] = "1"
     env["GH_NO_UPDATE_NOTIFIER"] = "1"
     env["GH_PAGER"] = "cat"
-    return env
+    return without_onepassword_environment(env)
 
 
 def login_env() -> Dict[str, str]:
@@ -50,7 +51,7 @@ def login_env() -> Dict[str, str]:
     env.pop("GH_TOKEN", None)
     env.pop("GITHUB_TOKEN", None)
     env.pop("GH_PROMPT_DISABLED", None)
-    return env
+    return without_onepassword_environment(env)
 
 
 def resolve_gh_light() -> Optional[str]:

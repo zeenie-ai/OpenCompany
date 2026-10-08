@@ -4,6 +4,7 @@ import time
 import httpx
 import asyncio
 import subprocess
+from services.process_environment import without_onepassword_environment
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -169,6 +170,7 @@ class AndroidService:
                 encoding="utf-8",
                 errors="replace",
                 timeout=5,
+                env=without_onepassword_environment(),
             )
         except FileNotFoundError:
             logger.error("[Android] ADB not found in PATH")

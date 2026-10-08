@@ -18,6 +18,8 @@ from typing import Any, Optional
 
 import anyio
 
+from services.process_environment import without_onepassword_environment
+
 from .base import BaseSupervisor
 from .util import drain_stream, terminate_then_kill
 
@@ -96,7 +98,7 @@ class BaseProcessSupervisor(BaseSupervisor):
         argv = self.argv()
         kwargs: dict[str, Any] = {
             "cwd": str(self.cwd()) if self.cwd() else None,
-            "env": self.env(),
+            "env": without_onepassword_environment(self.env()),
         }
         if self.pipe_streams:
             kwargs["stdout"] = subprocess.PIPE

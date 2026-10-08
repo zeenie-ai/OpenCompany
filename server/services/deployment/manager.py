@@ -206,6 +206,8 @@ class DeploymentManager:
         workflow_slug = await self._generation_slug(workflow_id, generation) or (wf and wf.slug) or workflow_id
 
         # Setup
+        from services.credentials.preflight import assert_cluster_credentials
+        await assert_cluster_credentials(self.database, {"nodes": nodes, "edges": edges}, {"user_id": user_id})
         deployment_id = f"deploy_{workflow_id}_{int(time.time() * 1000)}"
         self._status_callbacks[workflow_id] = status_callback
         self._run_counters[workflow_id] = 0
@@ -834,6 +836,7 @@ class DeploymentManager:
 
         from services.temporal.executor import (
             capture_temporal_routing_input,
+            capture_browser_routing_input,
         )
         from services.workflow_naming import node_label_slug
 
@@ -862,6 +865,7 @@ class DeploymentManager:
             "session_id": state.session_id,
             "user_id": state.user_id,
             **capture_temporal_routing_input(),
+            **(await capture_browser_routing_input(workflow_id, state.nodes, state.user_id)),
         }
         if state.graph_version > 0 and state.generation > 0:
             listener_args.update(
@@ -1029,7 +1033,7 @@ class DeploymentManager:
         if state is None:
             raise RuntimeError(f"No deployment state for workflow {workflow_id}")
 
-        from services.temporal.executor import capture_temporal_routing_input
+        from services.temporal.executor import capture_temporal_routing_input, capture_browser_routing_input
         from services.workflow_naming import node_label_slug
 
         trigger_label = node_label_slug(node)
@@ -1058,6 +1062,7 @@ class DeploymentManager:
             # routing snapshot, so its runs fell back to the safe default
             # (worker pool OFF) and silently bypassed per-queue rate limits.
             **capture_temporal_routing_input(),
+            **(await capture_browser_routing_input(workflow_id, state.nodes, state.user_id)),
         }
 
         control_lookup = self.database.get_latest_workflow_control(workflow_id)

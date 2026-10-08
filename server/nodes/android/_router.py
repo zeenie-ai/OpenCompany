@@ -1,6 +1,6 @@
 """Android System Services routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 
@@ -124,7 +124,8 @@ async def setup_port_forwarding(
         # list is passed to ``subprocess.run`` with ``shell=False`` (the default).
         cmd = ["adb", "-s", device_id, "forward", f"tcp:{local_port}", f"tcp:{device_port}"]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5)
+        from services.process_environment import without_onepassword_environment
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, env=without_onepassword_environment())
 
         if result.returncode == 0:
             logger.info(f"[Android] Port forwarding setup: {device_id} tcp:{local_port} -> tcp:{device_port}")

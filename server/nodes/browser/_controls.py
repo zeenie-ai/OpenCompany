@@ -16,8 +16,8 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, Optional
 
 
-_OBSERVATIONS = frozenset({"snapshot", "page_text", "page_info", "screenshot", "diagnose", "webmcp_list", "wait"})
-_SITE_ACTIONS = frozenset({"navigate", "click", "hover", "type", "press", "select", "scroll", "back", "forward", "reload", "webmcp_call", "evaluate", "run_python"})
+_OBSERVATIONS = frozenset({"snapshot", "page_text", "page_info", "screenshot", "diagnose", "webmcp_list", "wait", "credential_bindings"})
+_SITE_ACTIONS = frozenset({"navigate", "click", "hover", "type", "press", "select", "scroll", "back", "forward", "reload", "webmcp_call", "evaluate", "run_python", "credential_fill"})
 _WINDOW_SECONDS = 60.0
 
 

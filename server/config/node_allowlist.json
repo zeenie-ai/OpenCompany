@@ -11,6 +11,7 @@
     "aiAgent",
     "ai_employee",
     "web_agent",
+    "browser_agent",
     "productivity_agent",
     "coding_agent",
     "social_agent",

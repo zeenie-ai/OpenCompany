@@ -30,7 +30,7 @@ async def test_unifier_caches_by_credential_and_retry_policy_and_closes_clients(
         sdk_exception_refs=("openai:OpenAIError",),
     )
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     unifier = ChatUnifier(
         defaults={"providers": {}},
         auth_service=auth,
@@ -78,7 +78,7 @@ async def test_unifier_can_surface_structured_error_for_agent_retry_policy():
     )
     registry._REGISTRY[name] = spec
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     unifier = ChatUnifier(
         defaults={"providers": {}},
         auth_service=auth,
@@ -130,7 +130,7 @@ async def test_unifier_public_error_does_not_expose_raw_sdk_message():
         sdk_exception_refs=("openai:OpenAIError",),
     )
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     unifier = ChatUnifier(
         defaults={"providers": {}},
         auth_service=auth,
@@ -171,7 +171,7 @@ async def test_client_constructor_failure_is_structured_and_safe():
         sdk_exception_refs=("openai:OpenAIError",),
     )
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     unifier = ChatUnifier(
         defaults={"providers": {}},
         auth_service=auth,
@@ -219,7 +219,7 @@ async def test_unifier_closes_ephemeral_client_when_cache_is_disabled():
         sdk_exception_refs=("openai:OpenAIError",),
     )
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     unifier = ChatUnifier(
         defaults={"providers": {}},
         auth_service=auth,
@@ -269,7 +269,7 @@ async def test_lru_eviction_defers_close_until_in_flight_chat_releases_lease():
         sdk_exception_refs=("openai:OpenAIError",),
     )
     auth = MagicMock()
-    auth.get_api_key = AsyncMock(return_value=None)
+    auth.resolve_api_key = AsyncMock(return_value=None)
     unifier = ChatUnifier(
         defaults={"providers": {}},
         auth_service=auth,

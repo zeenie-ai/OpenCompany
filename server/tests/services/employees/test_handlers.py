@@ -16,13 +16,13 @@ from services.ws_handler_registry import get_ws_handlers
 @pytest.fixture()
 def container(monkeypatch, real_database):
     class Auth:
-        async def has_valid_key(self, key):
+        async def has_valid_key(self, key, *, principal=None):
             return False
 
         async def get_oauth_tokens(self, provider):
             return None
 
-        async def list_api_key_providers(self):
+        async def list_api_key_providers(self, *, principal=None):
             return []
 
     import core.container as container_module

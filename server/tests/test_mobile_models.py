@@ -17,8 +17,8 @@ def models(monkeypatch):
         get_user_settings=AsyncMock(return_value={"default_llm_provider": "gemini", "default_llm_model": "global-vision"}),
         get_provider_defaults=AsyncMock(return_value={"default_model": "provider-default"}),
     )
-    auth = SimpleNamespace(get_api_key=AsyncMock(return_value="selected-key"))
-    auth.get_api_key.side_effect = lambda provider, *_: None if provider.endswith("_proxy") else auth.get_api_key.return_value
+    auth = SimpleNamespace(resolve_api_key=AsyncMock(return_value="selected-key"))
+    auth.resolve_api_key.side_effect = lambda provider, *_, **kw: None if provider.endswith("_proxy") else auth.resolve_api_key.return_value
     monkeypatch.setattr(deps, "get_database", lambda: database)
     monkeypatch.setattr(deps, "get_ai_service", lambda: SimpleNamespace(auth=auth))
     monkeypatch.setattr(registry, "get_node_class", lambda _: SimpleNamespace(component_kind="model"))
@@ -36,7 +36,7 @@ async def test_global_selection_is_read_fresh_and_ignores_drag_defaults(models):
     result = await resolve_model(context(), params)
     assert result == {"provider": "google", "model": "global-vision", "model_env": {"GOOGLE_API_KEY": "selected-key", "GOOGLE_GENAI_USE_VERTEXAI": "false"}}
     db.get_user_settings.assert_awaited_once_with("default")
-    auth.get_api_key.assert_awaited_once_with("gemini", "default")
+    auth.resolve_api_key.assert_awaited_once_with("gemini", "default", principal=None)
     db.get_user_settings.return_value = {"default_llm_provider": "openai", "default_llm_model": "new-global"}
     assert (await resolve_model(context(), params))["model"] == "new-global"
 
@@ -74,12 +74,12 @@ async def test_missing_or_unsupported_global_is_actionable(models, settings, mat
     db.get_user_settings.return_value = settings
     with pytest.raises(NodeUserError, match=match):
         await resolve_model(context(), MobileParams())
-    auth.get_api_key.assert_not_awaited()
+    auth.resolve_api_key.assert_not_awaited()
 
 
 async def test_missing_key_is_actionable(models):
     _, auth = models
-    auth.get_api_key.return_value = None
+    auth.resolve_api_key.return_value = None
     with pytest.raises(NodeUserError, match="Settings"):
         await resolve_model(context(), MobileParams())
 
@@ -89,12 +89,21 @@ async def test_blank_custom_model_uses_provider_default(models):
     assert result["model"] == "provider-default"
 
 
+async def test_private_runtime_resolution_uses_trusted_execution_principal(models):
+    _, auth = models
+    ctx = context()
+    ctx.raw = {"user_id": "alice"}
+    await resolve_model(ctx, MobileParams(model_source="custom", provider="openai", model="vision"))
+    assert [call.args[0] for call in auth.resolve_api_key.await_args_list] == ["openai", "openai_proxy"]
+    assert all(call.kwargs["principal"] == "alice" for call in auth.resolve_api_key.await_args_list)
+
+
 @pytest.mark.parametrize("key,mode", [("AQ.synthetic-express-key", "true"), ("AIza-synthetic-developer-key", "false")])
 @pytest.mark.parametrize("source", ["global", "custom", "connected"])
 async def test_gemini_backend_matches_saved_key_type(models, monkeypatch, key, mode, source):
     import constants
     db, auth = models
-    auth.get_api_key.return_value = key
+    auth.resolve_api_key.return_value = key
     ctx = context()
     params = MobileParams()
     if source == "custom":
@@ -118,7 +127,7 @@ async def test_openai_and_claude_use_selected_model_credentials_and_endpoint(mod
     import constants
     db, auth = models
     db.get_user_settings.return_value = {"default_llm_provider": provider, "default_llm_model": "selected-vision-model"}
-    auth.get_api_key.side_effect = lambda name, *_: endpoint if name == provider + "_proxy" else "selected-key"
+    auth.resolve_api_key.side_effect = lambda name, *_, **kw: endpoint if name == provider + "_proxy" else "selected-key"
     ctx = context()
     params = MobileParams()
     if source == "custom":

@@ -19,6 +19,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from services.process_environment import without_onepassword_environment
 
 
 class UnsafeArchiveError(ValueError):
@@ -37,9 +38,9 @@ def extract_zip(archive: Path, dest: Path) -> None:
     """Extract ``archive`` into ``dest`` (created if missing)."""
     dest.mkdir(parents=True, exist_ok=True)
     if sys.platform == "darwin" and shutil.which("ditto"):
-        subprocess.run(["ditto", "-x", "-k", str(archive), str(dest)], check=True, capture_output=True)
+        subprocess.run(["ditto", "-x", "-k", str(archive), str(dest)], check=True, capture_output=True, env=without_onepassword_environment())
         if shutil.which("xattr"):
-            subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(dest)], check=False, capture_output=True)
+            subprocess.run(["xattr", "-dr", "com.apple.quarantine", str(dest)], check=False, capture_output=True, env=without_onepassword_environment())
         return
     _extract_portable(archive, dest)
 

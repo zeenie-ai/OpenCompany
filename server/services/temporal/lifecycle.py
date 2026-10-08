@@ -70,7 +70,10 @@ async def run_temporal_lifecycle(
     from core.container import container
 
     wrapper = container.temporal_client()
-    owned = owns_dev_server(settings.temporal_server_address)
+    distributed = getattr(settings, "distributed_mode", False)
+    if distributed and owns_dev_server(settings.temporal_server_address):
+        raise ValueError("Distributed deployment requires an external shared Temporal service")
+    owned = owns_dev_server(settings.temporal_server_address) and not distributed
     if owned:
         # Same BaseSupervisor singleton pattern as the WhatsApp and
         # JS-executor runtimes; registering makes lifespan teardown
@@ -207,19 +210,33 @@ async def _start_execution_engine(
         client=client,
         task_queue=settings.temporal_task_queue,
     )
-    await manager.start()
+    if getattr(settings, "distributed_mode", False):
+        from services.browser_owners import register_browser_owner, replica_id
+        from services.temporal.worker import BrowserOwnerWorkerPool
+        await register_browser_owner(container.database())
+    pool = None
+    try:
+        await manager.start()
+        if getattr(settings, "distributed_mode", False):
+            manager._browser_pool = BrowserOwnerWorkerPool(client, replica_id())
+            await manager._browser_pool.start()
+
+        # Start specialized queues after framework workflow registration.
+        # The Browser owner above is mandatory regardless of this flag.
+        if settings.temporal_worker_pool_enabled:
+            from services.temporal.worker import TemporalWorkerPool
+            pool = TemporalWorkerPool(client=client)
+            await pool.start()
+    except BaseException:
+        # The outer lifecycle retries startup. Do not leave workers polling
+        # an abandoned client if one of the later pool constructions fails.
+        if pool is not None:
+            await pool.stop()
+        await manager.stop()
+        raise
     app_state.temporal_worker_manager = manager
     container.temporal_client().worker_manager = manager
-
-    # Wave 16: per-queue activity worker pool (default-on since 16.4;
-    # TEMPORAL_WORKER_POOL_ENABLED=false is the rollback channel).
-    # Starts AFTER the manager so workflow registration is in place
-    # before specialised activity workers poll.
-    if settings.temporal_worker_pool_enabled:
-        from services.temporal.worker import TemporalWorkerPool
-
-        pool = TemporalWorkerPool(client=client)
-        await pool.start()
+    if pool is not None:
         app_state.temporal_pool = pool
         log(f"[Temporal] Worker pool started ({len(pool.queues)} queues)")
 

@@ -321,7 +321,8 @@ async def test_start_records_connected_version_and_passes_actual_major(monkeypat
     chrome = SimpleNamespace(launch=AsyncMock(return_value=cdp), port=9000)
     constructor = Mock(return_value=chrome)
     monkeypatch.setattr(module, "ChromeProcess", constructor)
-    monkeypatch.setattr(module, "BrowserUseCli", Mock(return_value=SimpleNamespace(stop_daemon=Mock())))
+    monkeypatch.setattr(module, "BrowserUseCli", Mock(return_value=SimpleNamespace(stop_daemon=Mock(),
+        suspend_prior_epochs=AsyncMock(return_value=True), suspend_for_credentials=AsyncMock(return_value=True))))
     record = AsyncMock()
     monkeypatch.setattr(_profiles, "ProfileStore", lambda db: SimpleNamespace(record_chrome_major=record))
     monkeypatch.setattr(deps, "get_database", lambda: object())
