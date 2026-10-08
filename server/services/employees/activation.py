@@ -36,12 +36,20 @@ async def activate_pending(database: Any, workflow_id: str | None = None) -> Non
             result = await start_saved_workflow(intent.workflow_id, owner_id=intent.owner_id, idempotency_key=intent.id)
             state = "running" if result.get("success") else "failed"
             detail = str(result.get("error") or "") or None
+        changed = False
         async with database.reserved_session() as session:
             current = await session.get(EmployeeActivation, intent.id)
             if current and current.state != "running":
+                changed = (current.state, current.detail) != (state, detail)
                 current.state, current.detail = state, detail
                 current.updated_at = datetime.now(timezone.utc)
                 await session.commit()
+        # The summary says how the hire's start went (``activation_state``).
+        # A start that is blocked or fails before Start made a control row
+        # changes nothing else the page hears about, so it is announced here.
+        if changed:
+            from services.employees.events import employee_changed_now
+            employee_changed_now(intent.workflow_id)
 
 
 async def recovery_loop(database: Any) -> None:

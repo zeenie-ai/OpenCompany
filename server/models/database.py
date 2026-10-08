@@ -331,6 +331,8 @@ class UserSettings(SQLModel, table=True):
     getting_started_ran_example: bool = Field(default=False)  # Latched: chatted while a workflow was deployed
     getting_started_built_workflow: bool = Field(default=False)  # Latched: saved a self-built workflow with nodes
     getting_started_tried_theme: bool = Field(default=False)  # Latched: switched visual theme at least once
+    getting_started_said_hello: bool = Field(default=False)  # Latched: messaged their first employee (Home's checklist)
+    getting_started_approved_draft: bool = Field(default=False)  # Latched: sent a draft an employee held for them
     default_llm_provider: Optional[str] = Field(default=None, max_length=50)  # Global default AI provider
     default_llm_model: Optional[str] = Field(default=None, max_length=200)  # Global default AI model
     auto_add_skill_for_tools: bool = Field(

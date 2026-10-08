@@ -22,6 +22,8 @@ GETTING_STARTED_COLUMNS = [
     "getting_started_ran_example",
     "getting_started_built_workflow",
     "getting_started_tried_theme",
+    "getting_started_said_hello",
+    "getting_started_approved_draft",
 ]
 
 

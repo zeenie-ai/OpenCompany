@@ -128,6 +128,8 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
     workflow = await harness.database.get_workflow(workflow_id)
     types = {node["type"] for node in workflow.data["nodes"]}
     assert {"chatTrigger", "aiAgent", "ai_employee", "taskTrigger", "context", "console", "writeTodos", "canvas"} <= types
+    # The first day's "Workflow built · N blocks".
+    assert result["node_count"] == len(workflow.data["nodes"])
     assert "employeeJob" not in types
     assert workflow.data["owner_id"] == "owner"
     row = await store.get_by_workflow(harness.database, workflow_id)
@@ -148,6 +150,7 @@ async def test_the_same_key_finds_the_same_employee(harness):
     again = await hire.handle_hire_employee(payload(), SOCKET)
     assert again["success"] is True and again["idempotent"] is True
     assert again["employee"]["workflow_id"] == first["employee"]["workflow_id"]
+    assert again["node_count"] == first["node_count"] > 0
     await asyncio.sleep(0)
     assert len(harness.starts) == 1
 

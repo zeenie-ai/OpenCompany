@@ -24,6 +24,8 @@ GETTING_STARTED_FIELDS = [
     "getting_started_ran_example",
     "getting_started_built_workflow",
     "getting_started_tried_theme",
+    "getting_started_said_hello",
+    "getting_started_approved_draft",
 ]
 
 # Bookkeeping columns the save path never writes and the getter formats

@@ -327,6 +327,8 @@ class Database:
                     "getting_started_ran_example",
                     "getting_started_built_workflow",
                     "getting_started_tried_theme",
+                    "getting_started_said_hello",
+                    "getting_started_approved_draft",
                 ]:
                     if col not in columns:
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT 0"))
@@ -2474,6 +2476,8 @@ class Database:
                     "getting_started_ran_example": settings.getting_started_ran_example,
                     "getting_started_built_workflow": settings.getting_started_built_workflow,
                     "getting_started_tried_theme": settings.getting_started_tried_theme,
+                    "getting_started_said_hello": settings.getting_started_said_hello,
+                    "getting_started_approved_draft": settings.getting_started_approved_draft,
                     "default_llm_provider": settings.default_llm_provider,
                     "default_llm_model": settings.default_llm_model,
                     "auto_add_skill_for_tools": settings.auto_add_skill_for_tools,

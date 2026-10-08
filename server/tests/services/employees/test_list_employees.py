@@ -179,6 +179,23 @@ async def test_a_hired_employee_waiting_on_an_app(real_database):
     assert summary["revision"] > 0
 
 
+async def test_a_hire_says_how_its_own_start_went(real_database):
+    from models.employees import EmployeeActivation
+
+    await save(real_database, "1", "Maya", RECEPTIONIST)
+    await hire(real_database, "1", role="Receptionist", apps=["whatsapp"], trigger={"kind": "app_event", "app": "whatsapp"})
+    await save(real_database, "2", "Support bot", graph(node("2:aiAgent:1", "aiAgent", "Support")))
+    async with real_database.get_session() as session:
+        session.add(EmployeeActivation(id="hire:k1", workflow_id="1", owner_id="owner", state="blocked", detail="missing_apps"))
+        await session.commit()
+    auth = FakeAuth(keys={"openai"})
+    listed = {summary["workflow_id"]: summary for summary in await list_employee_summaries(real_database, auth_service=auth)}
+    assert listed["1"]["activation_state"] == "blocked"
+    # A workflow built in the editor was never started by a hire.
+    assert listed["2"]["activation_state"] is None
+    assert (await get_employee_summary(real_database, "1", auth_service=auth))["activation_state"] == "blocked"
+
+
 async def test_an_editor_workflow_is_described_from_its_graph(real_database):
     await save(
         real_database,

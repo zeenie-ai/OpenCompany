@@ -20,8 +20,11 @@
    what to connect.
 
 Response: ``{employee, started, missing_apps, needs_ai, unsupported_apps,
-warnings, idempotent}``. Errors: ``invalid_request``, ``too_large``,
-``conflict``, ``busy``, ``not_allowed``, ``build_failed``, ``save_failed``.
+node_count, warnings, idempotent, request_id, activation_state,
+readiness_issue}``. ``node_count`` is the saved graph's size (the new hire's
+first day says "Workflow built · 9 blocks"). Errors: ``invalid_request``,
+``too_large``, ``conflict``, ``busy``, ``not_allowed``, ``build_failed``,
+``save_failed``.
 """
 
 from __future__ import annotations
@@ -180,12 +183,15 @@ async def _response_for(database: Any, auth_service: Any, workflow_id: str, **ex
     summary = await get_employee_summary(database, workflow_id, auth_service=auth_service)
     if summary is None:
         return _fail("save_failed")
+    workflow = await database.get_workflow(workflow_id)
     return {
         "success": True,
         "employee": summary,
         "missing_apps": summary["missing_apps"],
         "needs_ai": summary["needs_ai"],
         "unsupported_apps": summary["unsupported_apps"],
+        # Read from the saved graph, so a replay of the same key says the same.
+        "node_count": len((getattr(workflow, "data", None) or {}).get("nodes") or []),
         **extra,
     }
 

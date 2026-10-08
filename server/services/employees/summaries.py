@@ -22,6 +22,11 @@ node ids are the ones that report status; otherwise the saved graph.
 ``pending_changes`` says the saved graph would run differently from the
 live generation (a tool added in Talk, an edit in Dev mode), so a restart
 ("Apply") is waiting.
+
+``activation_state`` says how a hire's own start went (``saved`` until it
+is tried, then ``blocked``, ``running`` or ``failed``; activation.py), so a
+new hire's page can tell a start still under way from one that will not
+come without the owner. It is null for a workflow built in the editor.
 """
 
 from __future__ import annotations
@@ -266,6 +271,7 @@ async def _summary(
     needs_ai: bool,
     pending: int,
     done_today: int,
+    activation_state: Optional[str] = None,
 ) -> Dict[str, Any]:
     from services.workspace_capabilities import workspace_nodes
 
@@ -333,6 +339,7 @@ async def _summary(
             getattr(control_row, "updated_at", None),
         ),
         "hired_at": employee.hired_at.isoformat() if employee is not None and employee.hired_at else None,
+        "activation_state": activation_state,
     }
 
 
@@ -345,6 +352,24 @@ async def _pending_counts(database: Any, workflow_ids: Iterable[str]) -> Dict[st
     except Exception:
         logger.warning("Could not count waiting drafts", exc_info=True)
         return {}
+
+
+async def _activation_states(database: Any, workflow_ids: Iterable[str]) -> Dict[str, str]:
+    """How each hire's own start went, per workflow (employee_activations)."""
+    from sqlmodel import select
+
+    from models.employees import EmployeeActivation
+
+    ids = list(workflow_ids)
+    if not ids:
+        return {}
+    try:
+        async with database.get_session() as session:
+            rows = (await session.execute(select(EmployeeActivation).where(EmployeeActivation.workflow_id.in_(ids)))).scalars().all()
+    except Exception:
+        logger.warning("Could not read how hires started", exc_info=True)
+        return {}
+    return {row.workflow_id: row.state for row in rows}
 
 
 async def _owner_zone(database: Any) -> ZoneInfo:
@@ -403,6 +428,7 @@ async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id:
     controls = await database.list_latest_workflow_controls(ids)
     pending = await _pending_counts(database, ids)
     done = await _done_today(database, ids)
+    activations = await _activation_states(database, ids)
     connections_by_owner = {}
     summaries = []
     for workflow in workflows:
@@ -419,6 +445,7 @@ async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id:
             needs_ai=needs_ai,
             pending=pending.get(workflow.id, 0),
             done_today=done.get(workflow.id, 0),
+            activation_state=activations.get(workflow.id),
         ))
     return summaries
 
@@ -431,6 +458,7 @@ async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Op
     control = await database.get_latest_workflow_control(workflow_id)
     pending = await _pending_counts(database, [workflow_id])
     done = await _done_today(database, [workflow_id])
+    activations = await _activation_states(database, [workflow_id])
     connections = Connections(auth_service, principal=employee_owner(workflow, employee))
     summary = await _summary(
         workflow,
@@ -440,6 +468,7 @@ async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Op
         needs_ai=not await connections.has_ai(),
         pending=pending.get(workflow_id, 0),
         done_today=done.get(workflow_id, 0),
+        activation_state=activations.get(workflow_id),
     )
     if employee and employee.team_plan:
         from services.employees.jobs import job_progress

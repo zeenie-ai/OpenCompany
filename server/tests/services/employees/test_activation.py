@@ -44,3 +44,38 @@ async def test_readiness_blocks_teams_but_preserves_legacy_activation_identity(r
         assert saved.state == "running" and saved.detail is None
     await activation.activate_pending(real_database)
     assert admit.await_count == 1
+
+
+async def test_a_change_in_how_the_start_went_is_announced_once(real_database, monkeypatch):
+    """A start that is blocked or fails makes no control row, so the page
+    hears of it from here: once per change, not on every recovery pass."""
+    import core.container as container_module
+    import services.deployment.handlers as handlers
+    import services.employees.events as events
+    import services.employees.start as start
+    import services.employees.summaries as summaries
+    import services.employees.team_runtime as runtime
+
+    monkeypatch.setattr(container_module, "container", SimpleNamespace(auth_service=lambda: SimpleNamespace()))
+    summary = {"missing_apps": [{"app_id": "whatsapp"}], "needs_ai": False}
+    monkeypatch.setattr(summaries, "get_employee_summary", AsyncMock(side_effect=lambda *_args, **_kwargs: summary))
+    monkeypatch.setattr(start, "heal_agent_models", AsyncMock())
+    monkeypatch.setattr(runtime, "team_runtime_error", lambda: None)
+    monkeypatch.setattr(handlers, "start_saved_workflow", AsyncMock(return_value={"success": False, "error": "temporal_unavailable"}))
+    announced = []
+    monkeypatch.setattr(events, "employee_changed_now", announced.append)
+    async with real_database.get_session() as session:
+        session.add(Employee(id="employee", workflow_id="7", owner_id="owner", hire_state="ready"))
+        session.add(EmployeeActivation(id="hire:employee", workflow_id="7", owner_id="owner"))
+        await session.commit()
+
+    await activation.activate_pending(real_database)
+    await activation.activate_pending(real_database)
+    assert announced == ["7"]
+
+    summary = {"missing_apps": [], "needs_ai": False}
+    await activation.activate_pending(real_database)
+    assert announced == ["7", "7"]
+    async with real_database.get_session() as session:
+        saved = await session.get(EmployeeActivation, "hire:employee")
+    assert (saved.state, saved.detail) == ("failed", "temporal_unavailable")
