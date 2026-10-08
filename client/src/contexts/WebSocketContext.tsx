@@ -2921,6 +2921,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     try {
+      if (
+        pending.action === 'start'
+        && previousStatus?.state === 'running'
+        && previousStatus.revision > Number(data.expected_revision ?? 0)
+      ) {
+        // A hire's background Start can finish while an employee summary or
+        // toolbar still carries the earlier revision. Confirm the running
+        // state without submitting another Start. Never rebase stale intent
+        // onto a newer ready generation after Reset.
+        const current = await requestWorkflowControlStatus(workflowId);
+        if (isReconciled(current)) return current;
+        throw new Error('control_revision_conflict');
+      }
       return await sendMutationAttempt(data);
     } catch (error) {
       let reconciled: WorkflowControlStatus | undefined;

@@ -40,6 +40,47 @@ def _control(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("latest", "expected_revision", "state", "revision"),
+    [
+        (_control("running", 2), 0, "running", 2),
+        (_control("reset", 4), 3, "ready", 4),
+        (None, 3, "never_started", 0),
+    ],
+)
+async def test_stale_start_returns_current_status_without_starting_or_error_trace(
+    monkeypatch, caplog, latest, expected_revision, state, revision,
+):
+    service = SimpleNamespace(
+        database=SimpleNamespace(
+            get_workflow_control_by_idempotency_key=AsyncMock(return_value=None),
+            get_latest_workflow_control=AsyncMock(return_value=latest),
+        ),
+        begin_generation=AsyncMock(),
+    )
+    start_controller = AsyncMock()
+    deploy = AsyncMock()
+    snapshot = {"workflow_id": "wf", "state": state, "revision": revision}
+    monkeypatch.setattr(handlers, "_control_service", lambda: service)
+    monkeypatch.setattr(handlers, "_control_payload", AsyncMock(return_value=snapshot))
+    monkeypatch.setattr(handlers, "_with_runtime_counts", AsyncMock(return_value=snapshot))
+    monkeypatch.setattr(handlers, "_start_controller", start_controller)
+    monkeypatch.setattr(handlers, "handle_deploy_workflow", deploy)
+
+    result = await handlers.handle_start_workflow(
+        {"workflow_id": "wf", "expected_revision": expected_revision,
+         "idempotency_key": "stale-start"},
+        None,
+    )
+
+    assert result == {"success": False, "error": "control_revision_conflict", **snapshot}
+    service.begin_generation.assert_not_awaited()
+    start_controller.assert_not_awaited()
+    deploy.assert_not_awaited()
+    assert not any(record.levelno >= 40 or record.exc_info for record in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_start_waits_for_deployment_setup_before_publishing_running(monkeypatch):
     starting = _control("starting", 0)
     starting_with_run = _control("starting", 1)

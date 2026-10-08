@@ -92,6 +92,59 @@ describe('WebSocket recovery and ownership', () => {
     vi.useRealTimers();
   });
 
+  it.each(['canvas', 'employee'])('reconciles a stale %s Start after Hire without submitting another mutation', async (surface) => {
+    await mount();
+    await open();
+    const running = { workflow_id: 'ravi', state: 'running', generation: 1, revision: 2,
+      can_start: false, can_pause: true, can_reset: true };
+    act(() => latest().message({ type: 'workflow_control_status', data: running }));
+    let result!: Promise<unknown>;
+    act(() => { result = surface === 'canvas'
+      ? actions.startWorkflow('ravi', [], [], 'default', 0)
+      : actions.startEmployee('ravi', 0); });
+    const read = latest().sent.filter(item => item.type === 'get_workflow_control_status').at(-1)!;
+    expect(read).toBeDefined();
+    expect(latest().sent.some(item => ['start_workflow', 'start_employee'].includes(item.type))).toBe(false);
+    await act(async () => { latest().message({ request_id: read.request_id, success: true, ...running }); });
+    await expect(result).resolves.toMatchObject({ state: 'running', revision: 2 });
+    expect(latest().sent.some(item => ['start_workflow', 'start_employee'].includes(item.type))).toBe(false);
+  });
+
+  it('does not rebase a stale Start onto a newer ready generation after Reset', async () => {
+    await mount();
+    await open();
+    act(() => latest().message({ type: 'workflow_control_status', data: {
+      workflow_id: 'ravi', state: 'running', generation: 1, revision: 2, can_start: false,
+    } }));
+    let result!: Promise<unknown>;
+    act(() => { result = actions.startEmployee('ravi', 0).catch(error => error.message); });
+    const read = latest().sent.filter(item => item.type === 'get_workflow_control_status').at(-1)!;
+    const ready = { workflow_id: 'ravi', state: 'ready', generation: 1, revision: 4, can_start: true };
+    await act(async () => { latest().message({ request_id: read.request_id, success: true, ...ready }); });
+    const resync = latest().sent.filter(item => item.type === 'get_workflow_control_status').at(-1)!;
+    await act(async () => { latest().message({ request_id: resync.request_id, success: true, ...ready }); });
+    await expect(result).resolves.toBe('control_revision_conflict');
+    expect(latest().sent.some(item => item.type === 'start_employee')).toBe(false);
+    expect(context.workflowControlStatuses.ravi).toMatchObject({ state: 'ready', revision: 4 });
+  });
+
+  it('reconciles a Start conflict that arrives with the background hire running snapshot', async () => {
+    await mount();
+    await open();
+    let result!: Promise<unknown>;
+    act(() => { result = actions.startEmployee('ravi', 0); });
+    const start = latest().sent.find(item => item.type === 'start_employee')!;
+    expect(start.expected_revision).toBe(0);
+    const running = { workflow_id: 'ravi', state: 'running', generation: 1, revision: 2, can_start: false };
+    await act(async () => { latest().message({ request_id: start.request_id, success: false,
+      error: 'control_revision_conflict', ...running }); });
+    expect(context.workflowControlStatuses.ravi).toMatchObject({ state: 'running', revision: 2 });
+    const resync = latest().sent.filter(item => item.type === 'get_workflow_control_status').at(-1)!;
+    await act(async () => { latest().message({ request_id: resync.request_id, success: true, ...running }); });
+    await expect(result).resolves.toMatchObject({ state: 'running', revision: 2 });
+    expect(latest().sent.filter(item => item.type === 'start_employee')).toHaveLength(1);
+  });
+
   it('does not clear phone UI when a failed reset resync finds an unchanged ready workflow', async () => {
     await mount();
     await open();

@@ -253,6 +253,18 @@ Send this data with `type: "pause_workflow"`; Resume uses
 capabilities before the next mutation: a stable-state CAS also advances the
 database revision. Do not infer the next revision from a local counter.
 
+Hire can finish its background Start while a card or toolbar still holds an
+earlier revision. A stale Start returns `success: false`,
+`error: "control_revision_conflict"` and the current control snapshot, without
+starting another generation. The server logs the requested/current revisions,
+generation and state as an expected warning. The client merges the snapshot
+and reconciles status. When it already knows a newer running revision, it
+confirms that state before sending another Start. It never rebases stale Start
+intent onto a ready generation created by Reset. A conflict at this API
+boundary is distinct from a failed Temporal Workflow Task or Activity; inspect
+the corresponding execution history and pending Activity attempts when
+diagnosing a worker/runtime failure.
+
 Controlled `stop_chat_run` takes `run_id`, `expected_revision` and
 `idempotency_key`. It authorizes the session, resolves the run's workflow and
 root execution identity, and delegates to Stop with an owning-generation

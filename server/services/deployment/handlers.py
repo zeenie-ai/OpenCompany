@@ -1789,7 +1789,23 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         raise ValueError("expected_revision_required")
     expected_revision = int(data["expected_revision"])
     if expected_revision != (latest.revision if latest else 0):
-        raise ValueError("control_revision_conflict")
+        # Hire may have started the generation after the caller read its
+        # summary. Keep the revision fence, but return the authoritative
+        # snapshot so the client can reconcile this expected conflict.
+        logger.warning(
+            "Start rejected for stale control revision",
+            workflow_id=workflow_id,
+            expected_revision=expected_revision,
+            current_revision=latest.revision if latest else 0,
+            generation=latest.generation if latest else 0,
+            state=latest.status if latest else "never_started",
+        )
+        payload = (
+            await _control_payload(latest)
+            if latest is not None
+            else await _with_runtime_counts(serialize_control(None), workflow_id)
+        )
+        return {"success": False, "error": "control_revision_conflict", **payload}
     if latest is not None and latest.status != "reset":
         raise ValueError("workflow_already_started")
 
