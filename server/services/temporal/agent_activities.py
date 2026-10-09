@@ -35,7 +35,7 @@ References:
 
 from __future__ import annotations
 
-from services.agent_bindings import is_runtime_tool, unique_node_bindings, rebind_allowed, ParameterSnapshotDatabase, extend_runtime_graph
+from services.agent_bindings import is_runtime_tool, node_tools, unique_node_bindings, rebind_allowed, ParameterSnapshotDatabase, extend_runtime_graph
 
 import asyncio
 from dataclasses import asdict
@@ -1513,11 +1513,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         effective_tool_data.append(progressive_skill_tool)
     for tool_info in unique_node_bindings(effective_tool_data):
         try:
-            tool, _config = await ai_service._build_tool_from_node(tool_info)
+            built = await node_tools(ai_service, tool_info)
         except Exception as e:  # noqa: BLE001 — defensive: skip a broken tool
             activity.logger.warning(f"prepare_payload: failed to build tool {tool_info.get('node_type')!r}: {e}")
-            continue
-        if tool is None:
             continue
         # Look up plugin class for activity-dispatch metadata.
         from services.node_registry import get_node_class
@@ -1526,37 +1524,41 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         version = getattr(cls, "version", 1) if cls else 1
         task_queue = getattr(cls, "task_queue", "machina-default") if cls else "machina-default"
 
-        tools_payload.append(
-            {
-                "name": tool.name,
-                # Provider-neutral function declaration for the native
-                # activity branch.  It is JSON-only so it can live safely in
-                # Temporal history and never requires rebuilding a
-                # StructuredTool inside the native LLM activity.
-                "definition": _native_tool_definition(tool),
-                "node_type": tool_info.get("node_type", ""),
-                "version": version,
-                "task_queue": task_queue,
-                "tool_node_id": tool_info.get("node_id", ""),
-                "parameters": tool_info.get("parameters") or {},
-                # Raw tool_info — what ``collect_agent_connections`` returned
-                # and what ``_build_tool_from_node`` accepts as input. Passed
-                # through the workflow verbatim so ``execute_llm_step`` can
-                # rebuild the real StructuredTool inside the activity.
-                "tool_info": tool_info,
-                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))}
-                   if context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
-                   or context.get("browser_routing_version") == 1 or node_type == "browser_agent" else {}),
-                # Team leads create and dispatch durable work through Task
-                # Manager. Delegate descriptors stay in workflow state for
-                # trusted assignee resolution, but are not callable directly
-                # by the model.
-                "llm_hidden": (
-                    node_type in {"orchestrator_agent", "ai_employee"}
-                    and tool.name.startswith("delegate_to_")
-                ),
-            }
-        )
+        for tool, config in built:
+            tools_payload.append(
+                {
+                    "name": tool.name,
+                    # Provider-neutral function declaration for the native
+                    # activity branch.  It is JSON-only so it can live safely in
+                    # Temporal history and never requires rebuilding a
+                    # StructuredTool inside the native LLM activity.
+                    "definition": _native_tool_definition(tool),
+                    "node_type": tool_info.get("node_type", ""),
+                    "version": version,
+                    "task_queue": task_queue,
+                    "tool_node_id": tool_info.get("node_id", ""),
+                    # One entry per tool: a node that gives several
+                    # (ToolNode.tool_bindings) has one per binding.
+                    "binding_key": config.get("binding_key") or tool_info.get("node_id", ""),
+                    "parameters": config.get("parameters") or {},
+                    # Raw tool_info — what ``collect_agent_connections`` returned
+                    # and what ``_build_tool_from_node`` accepts as input. Passed
+                    # through the workflow verbatim so ``execute_llm_step`` can
+                    # rebuild the real StructuredTool inside the activity.
+                    "tool_info": tool_info,
+                    **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))}
+                       if context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
+                       or context.get("browser_routing_version") == 1 or node_type == "browser_agent" else {}),
+                    # Team leads create and dispatch durable work through Task
+                    # Manager. Delegate descriptors stay in workflow state for
+                    # trusted assignee resolution, but are not callable directly
+                    # by the model.
+                    "llm_hidden": (
+                        node_type in {"orchestrator_agent", "ai_employee"}
+                        and tool.name.startswith("delegate_to_")
+                    ),
+                }
+            )
 
     if any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
         from services.plugin.edge_walker import format_teammate_roster_line
@@ -1840,33 +1842,35 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
         if database:
             tool_info["parameters"] = await database.get_node_parameters(str(tool_info["node_id"])) or {}
         try:
-            tool, _config = await ai_service._build_tool_from_node(tool_info)
+            built = await node_tools(ai_service, tool_info)
         except Exception as e:  # noqa: BLE001 — skip one, keep building the batch
             activity.logger.warning(
                 f"refresh_tools: failed to build tool {node_type!r}: {e}"
             )
             continue
-        if tool is None:
+        if not built:
             continue
         bound.add(tool_info["node_id"])
         version = getattr(cls, "version", 1)
         task_queue = getattr(cls, "task_queue", "machina-default")
-        new_tools_payload.append(
-            {
-                "name": tool.name,
-                "definition": _native_tool_definition(tool),
-                "node_type": node_type,
-                "version": version,
-                "task_queue": task_queue,
-                "tool_node_id": tool_info["node_id"],
-                "parameters": tool_info["parameters"],
-                "tool_info": tool_info,
-                **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))}
-                   if payload.get("execution_control_version") == 1 or payload.get("native_workspace_version") == 1
-                   or payload.get("browser_runtime_version") == 1 or payload.get("browser_routing_version") == 1 else {}),
-                "llm_hidden": bool(team_lead_refresh and is_agent_delegate),
-            }
-        )
+        for tool, config in built:
+            new_tools_payload.append(
+                {
+                    "name": tool.name,
+                    "definition": _native_tool_definition(tool),
+                    "node_type": node_type,
+                    "version": version,
+                    "task_queue": task_queue,
+                    "tool_node_id": tool_info["node_id"],
+                    "binding_key": config.get("binding_key") or tool_info["node_id"],
+                    "parameters": config.get("parameters") or {},
+                    "tool_info": tool_info,
+                    **({"activity_policy": _tool_activity_policy(cls), "needs_canvas": bool(getattr(cls, "needs_canvas", False))}
+                       if payload.get("execution_control_version") == 1 or payload.get("native_workspace_version") == 1
+                       or payload.get("browser_runtime_version") == 1 or payload.get("browser_routing_version") == 1 else {}),
+                    "llm_hidden": bool(team_lead_refresh and is_agent_delegate),
+                }
+            )
 
     activity.logger.info(
         "refresh_tools: built %d tool(s) from %d operation(s)",

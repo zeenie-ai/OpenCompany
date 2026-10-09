@@ -536,12 +536,21 @@ class AICliService:
         if not connected_tools:
             return []
         from services.plugin.deps import get_ai_service
+        from services.plugin.tool import node_tool_bindings
         from services.tool_identity import ensure_unique_tool_names
 
         ai_service = ai_service or get_ai_service()
         surface: List[Dict[str, Any]] = []
         identities: List[Dict[str, str]] = []
         for tool_info in connected_tools:
+            # The surface gives one tool per node; a node that gives several
+            # (a custom MCP connector) is left out.
+            if await node_tool_bindings(tool_info) is not None:
+                logger.warning(
+                    "[cli_agent] skipping %r: a CLI agent can't use a node that gives several tools",
+                    tool_info.get("node_type"),
+                )
+                continue
             tool, execution = await ai_service._build_tool_from_node(tool_info)
             if tool is None or execution is None:
                 # Skip-and-log, matching the pre-existing contract. Raising

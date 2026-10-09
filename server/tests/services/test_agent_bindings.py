@@ -27,6 +27,62 @@ def test_temporal_payload_identity():
     assert unique_node_bindings(tools, id_key="tool_node_id", bound=["a"]) == [tools[2]]
 
 
+def test_the_tools_of_one_node_are_told_apart_by_binding_key():
+    tools = [
+        {"tool_node_id": "a", "binding_key": "a:lookup"},
+        {"tool_node_id": "a", "binding_key": "a:refund"},
+        {"tool_node_id": "a", "binding_key": "a:lookup"},
+    ]
+    assert unique_node_bindings(tools, id_key="binding_key") == tools[:2]
+    assert unique_node_bindings(tools, id_key="binding_key", bound=["a:lookup"]) == [tools[1]]
+
+
+def _bindings(*keys):
+    from services.plugin.tool import ToolBinding
+
+    async def bindings(tool_info):
+        if tool_info["node_type"] != "mcpConnector":
+            return None
+        schema = {"type": "object", "properties": {"order": {"type": "string"}}}
+        return [ToolBinding(key=key, name=f"orders__{key}", description=f"{key} an order.", schema=schema, parameters={"mcp_tool": key}) for key in keys]
+
+    return bindings
+
+
+async def test_a_node_that_gives_several_tools_builds_one_per_binding(monkeypatch):
+    from services.agent_bindings import node_tools
+    from services.plugin import tool as tool_module
+
+    monkeypatch.setattr(tool_module, "node_tool_bindings", _bindings("lookup", "refund"))
+    built = await node_tools(
+        SimpleNamespace(), {"node_id": "n1", "node_type": "mcpConnector", "parameters": {"mcp_connector": "mcp:orders"}, "label": "Orders"}
+    )
+    # Each runs with its own settings over the node's.
+    assert [(tool.name, config["binding_key"], config["parameters"]) for tool, config in built] == [
+        ("orders__lookup", "n1:lookup", {"mcp_connector": "mcp:orders", "mcp_tool": "lookup"}),
+        ("orders__refund", "n1:refund", {"mcp_connector": "mcp:orders", "mcp_tool": "refund"}),
+    ]
+    assert built[0][0].definition.parameters["properties"] == {"order": {"type": "string"}}
+
+
+async def test_cli_agents_leave_out_a_node_that_gives_several_tools(monkeypatch):
+    from services.cli_agent.service import AICliService
+    from services.plugin import tool as tool_module
+
+    monkeypatch.setattr(tool_module, "node_tool_bindings", _bindings("lookup"))
+    built = []
+
+    class AI:
+        async def _build_tool_from_node(self, tool_info):
+            built.append(tool_info["node_type"])
+            return SimpleNamespace(name="calculator", description="", parameters={}, args_schema=None), {"node_id": tool_info["node_id"]}
+
+    surface = await AICliService._canonical_tool_surface(
+        [{"node_type": "mcpConnector", "node_id": "m"}, {"node_type": "calculatorTool", "node_id": "c"}], ai_service=AI()
+    )
+    assert built == ["calculatorTool"] and [entry["node_type"] for entry in surface] == ["calculatorTool"]
+
+
 def test_team_readiness_requires_both_execution_engines_and_connection():
     settings = SimpleNamespace(temporal_enabled=True, temporal_agent_workflow_enabled=True)
     client = SimpleNamespace(is_connected=True)

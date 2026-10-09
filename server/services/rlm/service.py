@@ -146,8 +146,15 @@ class RLMService:
             if progressive_skill_tool:
                 effective_tool_data.append(progressive_skill_tool)
             if ai_service is not None:
+                from services.plugin.tool import node_tool_bindings
+
                 canonical_tool_data = []
                 for tool_info in effective_tool_data:
+                    if await node_tool_bindings(tool_info) is not None:
+                        raise ValueError(
+                            f"An RLM agent can't use {tool_info.get('label') or tool_info.get('node_type')!r}: "
+                            "it gives several tools. Connect it to an AI Agent instead."
+                        )
                     tool, execution = await ai_service._build_tool_from_node(
                         tool_info
                     )

@@ -255,7 +255,7 @@ Closure responsibilities:
   (excluding `component_kind == "model"`, and the Skills node, whose
   `uiHints.isMasterSkillEditor` marks it: tool-kind, but it feeds
   `input-skill`), skip a node already bound, synthesize a `tool_info` dict,
-  call `self._build_tool_from_node(tool_info)`, and return the new specs. Tool
+  call `node_tools(self, tool_info)` (`services/agent_bindings.py`), and return the new specs. Tool
   configs get folded into the captured `tool_configs` dict so
   `tool_executor` can dispatch the new call.
 - The closure is gated on the user toggle: `UserSettings.auto_rebind_tools_after_canvas_change` (default `True`). When off, the LLM is told "Available on your next turn" in the operation summary and the closure isn't wired.
@@ -267,6 +267,18 @@ that would introduce a conflicting provider-visible tool name is rejected
 with conflict details. Older histories preserve their recorded refresh path.
 Version 1 preparation/refresh also records plugin Activity policies for each
 bound tool. See [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md).
+
+**A node that gives several tools.** A ToolNode may stand for several tools
+(`ToolNode.tool_bindings`, read from its settings: a custom MCP connector gives
+one per remote tool it has on, see [MCP Connectors](mcp_connectors.md)). Every
+place that builds an agent's tools goes through `node_tools`
+(`services/agent_bindings.py`). It returns the one tool
+`AIService._build_tool_from_node` builds, or one tool per `ToolBinding`, each
+named by its binding and run with the binding's settings over the node's. Each Temporal tool entry carries a
+`binding_key` (`<node id>:<key>`, or the node id for a single tool); behind
+`agent-tool-binding-key-v1` the workflow drops repeats by it instead of by
+`tool_node_id`, so the tools of one node are not collapsed into one. CLI agents
+(Claude Code, Codex) leave such a node out, and RLM refuses it.
 
 ### Where it's called
 

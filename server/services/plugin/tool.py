@@ -8,8 +8,9 @@ JSON Schema the LLM sees — derived from :class:`Params` automatically.
 from __future__ import annotations
 
 from copy import copy, deepcopy
+from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, ClassVar, Dict, FrozenSet, Optional, Type
+from typing import Any, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Type
 
 from pydantic import BaseModel, ConfigDict, create_model
 
@@ -106,6 +107,21 @@ def inline_schema_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
     return inlined
 
 
+@dataclass(frozen=True)
+class ToolBinding:
+    """One of the tools a node gives an agent, when it gives several."""
+
+    #: Tells it apart within its node (a remote tool's name).
+    key: str
+    #: What the model calls it.
+    name: str
+    description: str
+    #: Its arguments, as a JSON Schema object.
+    schema: Dict[str, Any]
+    #: Settings a call of it runs with, over the node's own.
+    parameters: Dict[str, Any] = field(default_factory=dict)
+
+
 class ToolNode(BaseNode, abstract=True):
     """Base class for AI-Agent tool nodes (calculatorTool, currentTimeTool)."""
 
@@ -146,6 +162,13 @@ class ToolNode(BaseNode, abstract=True):
     def tool_input_model(cls) -> Type[BaseModel]:
         """Return the invocation model, defaulting to persisted ``Params``."""
         return cls.ToolInput or cls.Params
+
+    @classmethod
+    async def tool_bindings(cls, parameters: Mapping[str, Any]) -> Optional[List[ToolBinding]]:
+        """The tools this node gives an agent, from its settings. None (the
+        default): the one tool built from the class. A node that stands for
+        several (a custom MCP connector) returns one binding each."""
+        return None
 
     @classmethod
     @lru_cache(maxsize=None)
@@ -216,3 +239,14 @@ class ToolNode(BaseNode, abstract=True):
         if isinstance(result, dict) and "success" not in result:
             return True, result, None
         return super().interpret_result(result)
+
+
+async def node_tool_bindings(tool_info: Mapping[str, Any]) -> Optional[List[ToolBinding]]:
+    """A connected node's :meth:`ToolNode.tool_bindings`; None for a node
+    that gives one tool."""
+    from services.node_registry import get_node_class
+
+    cls = get_node_class(str(tool_info.get("node_type") or ""))
+    if cls is None or not issubclass(cls, ToolNode):
+        return None
+    return await cls.tool_bindings(tool_info.get("parameters") or {})

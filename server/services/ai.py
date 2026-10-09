@@ -17,7 +17,7 @@ import json
 # sentinel used to surface typed SDK errors cleanly through
 # ``BaseNode.execute()``.
 from services.plugin import NodeUserError
-from services.agent_bindings import delegation_roster, is_runtime_tool, unique_node_bindings, rebind_allowed, extend_runtime_graph
+from services.agent_bindings import delegation_roster, is_runtime_tool, node_tools, unique_node_bindings, rebind_allowed, extend_runtime_graph
 from services.tool_identity import DuplicateToolNameError, ensure_unique_tool_names
 
 if TYPE_CHECKING:
@@ -1095,8 +1095,7 @@ class AIService:
                 await broadcast_status("building_tools", {"message": f"Building {len(effective_tool_data)} tool(s)...", "tool_count": len(effective_tool_data)})
 
                 for tool_info in effective_tool_data:
-                    tool, config = await self._build_tool_from_node(tool_info)
-                    if tool:
+                    for tool, config in await node_tools(self, tool_info):
                         tools.append(tool)
                         tool_bindings.append((tool, config))
                         tool_identities.append(
@@ -1363,17 +1362,17 @@ class AIService:
                     if tool_info["node_id"] in bound:
                         continue
                     try:
-                        tool, tool_config = await self._build_tool_from_node(tool_info)
+                        built = await node_tools(self, tool_info)
                     except Exception as exc:  # noqa: BLE001 — log + skip one tool
                         logger.warning(
-                            "[Agent] rebind: _build_tool_from_node raised for %s: %s",
+                            "[Agent] rebind: building tools raised for %s: %s",
                             node_type,
                             exc,
                         )
                         continue
-                    if tool is None:
+                    if not built:
                         continue
-                    new_bindings.append((tool, tool_config or tool_info))
+                    new_bindings.extend((tool, tool_config or tool_info) for tool, tool_config in built)
                     bound.add(tool_info["node_id"])
 
                 new_identities = [
@@ -1727,9 +1726,8 @@ class AIService:
                 for tool_info in effective_tool_data:
                     if task_manager_bound and tool_info.get("delegate_tool_name"):
                         continue
-                    # Use AI Agent's _build_tool_from_node for all tool types
-                    tool, config = await self._build_tool_from_node(tool_info)
-                    if tool:
+                    # The same tool building as the AI Agent, for all tool types
+                    for tool, config in await node_tools(self, tool_info):
                         all_tools.append(tool)
                         tool_bindings.append((tool, config))
                         tool_identities.append(
@@ -2106,17 +2104,17 @@ class AIService:
                         if tool_info["node_id"] in bound:
                             continue
                         try:
-                            tool, tool_config = await self._build_tool_from_node(tool_info)
+                            built = await node_tools(self, tool_info)
                         except Exception as exc:  # noqa: BLE001
                             logger.warning(
-                                "[ChatAgent] rebind: _build_tool_from_node raised for %s: %s",
+                                "[ChatAgent] rebind: building tools raised for %s: %s",
                                 node_type,
                                 exc,
                             )
                             continue
-                        if tool is None:
+                        if not built:
                             continue
-                        new_bindings.append((tool, tool_config or tool_info))
+                        new_bindings.extend((tool, tool_config or tool_info) for tool, tool_config in built)
                         bound.add(tool_info["node_id"])
 
                     new_identities = [

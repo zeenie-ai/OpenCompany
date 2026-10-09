@@ -919,9 +919,12 @@ class AgentWorkflow:
         if payload.get("employee_job_id"):
             context["employee_job_id"] = payload["employee_job_id"]
         binding_refresh_v2 = workflow.patched("agent-node-binding-refresh-v2")
+        # A node that gives several tools (ToolNode.tool_bindings) has one
+        # entry per tool, told apart by ``binding_key``.
+        tool_key = "binding_key" if workflow.patched("agent-tool-binding-key-v1") else "tool_node_id"
         tools = (resume.get("tools") if self._execution_control.enabled and "tools" in resume else payload.get("tools")) or []
         if binding_refresh_v2:
-            tools = unique_node_bindings(tools, id_key="tool_node_id")
+            tools = unique_node_bindings(tools, id_key=tool_key)
         duplicate_tool_error = _duplicate_visible_tool_name_error(tools)
         duplicate_tool_conflicts = (
             _duplicate_visible_tool_name_conflicts(tools)
@@ -2350,8 +2353,8 @@ class AgentWorkflow:
                                     added_tools = refresh_result.get("tools") or []
                                     if binding_refresh_v2:
                                         added_tools = unique_node_bindings(
-                                            added_tools, id_key="tool_node_id",
-                                            bound=[tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")],
+                                            added_tools, id_key=tool_key,
+                                            bound=[tool.get(tool_key) for tool in tools if tool.get(tool_key)],
                                         )
                                     refresh_duplicate_error = _duplicate_visible_tool_name_error(
                                         [*tools, *added_tools]

@@ -2,6 +2,44 @@
 from __future__ import annotations
 from typing import Any, Iterable, Mapping
 
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+async def node_tools(ai_service: Any, tool_info: Mapping[str, Any]) -> list:
+    """The tools a connected node gives an agent, as ``(tool, config)``: the
+    one ``ai_service._build_tool_from_node`` builds, or one per binding of a
+    node that stands for several (``ToolNode.tool_bindings``, a custom MCP
+    connector's tools). A binding's call runs with its settings over the
+    node's, and its ``binding_key`` tells it apart from the node's others."""
+    from services.agent_runtime import AgentToolSpec
+    from services.llm.protocol import ToolDef
+    from services.plugin.tool import node_tool_bindings
+
+    try:
+        bindings = await node_tool_bindings(tool_info)
+    except Exception as exc:  # noqa: BLE001 - skip the node, as a tool that cannot be built
+        logger.error("Could not read the tools of a connected node", node_type=tool_info.get("node_type"), error=str(exc))
+        return []
+    if bindings is None:
+        tool, config = await ai_service._build_tool_from_node(tool_info)
+        return [(tool, config)] if tool is not None else []
+    node_id = tool_info.get("node_id", "")
+    built = []
+    for binding in bindings:
+        config = {
+            "node_type": tool_info.get("node_type", ""),
+            "node_id": node_id,
+            "parameters": {**(tool_info.get("parameters") or {}), **binding.parameters},
+            "label": tool_info.get("label") or tool_info.get("node_type", ""),
+            "connected_services": [],
+            "binding_key": f"{node_id}:{binding.key}",
+        }
+        definition = ToolDef(name=binding.name, description=binding.description, parameters=binding.schema)
+        built.append((AgentToolSpec(definition=definition, args_schema=None, execution=config), config))
+    return built
+
 
 def is_runtime_tool(cls: Any) -> bool:
     """Agents delegate; models and skill editors never bind as function tools."""

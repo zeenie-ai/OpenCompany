@@ -614,6 +614,7 @@ class VertexManagedAgentNode(ActionNode):
         if not tool_data:
             return [], {}
         from constants import AI_AGENT_TYPES
+        from services.agent_bindings import node_tools
         from services.plugin.deps import get_ai_service
         from services.plugin.tool import inline_schema_refs
         from services.tool_identity import ensure_unique_tool_names
@@ -675,10 +676,8 @@ class VertexManagedAgentNode(ActionNode):
                     tool_info.get("node_id"),
                 )
                 continue
-            structured, config = await ai_service._build_tool_from_node(tool_info)
-            if structured is None:
-                continue
-            _declare(structured, config)
+            for structured, config in await node_tools(ai_service, tool_info):
+                _declare(structured, config)
 
         # Sub-agent support: delegation may time out and fall back to a
         # task_id — the cloud agent then needs check_delegated_tasks to
