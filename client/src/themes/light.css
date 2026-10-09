@@ -234,6 +234,14 @@
   --status-paused-dot: #9aa1ac;
 }
 
+/* The light theme only, not the stylized themes that inherit :root above:
+ * the editor canvas's dot grid, and native controls drawn light. */
+:root[data-theme="light"] {
+  --grid-dot: color-mix(in srgb, var(--fg-muted) 20%, transparent);
+
+  color-scheme: light;
+}
+
 /* Code & syntax tokens (code editor / JSON output / variable tree) */
 :root,
 :root[data-theme="light"] {

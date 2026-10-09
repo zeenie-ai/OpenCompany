@@ -12,7 +12,7 @@ import secrets
 from fastapi import WebSocket, WebSocketDisconnect
 from services.process_environment import without_onepassword_environment
 from ._control import MobileError
-from ._install import SCRCPY_SHA256, SCRCPY_VERSION, sdk_tool
+from ._install import SCRCPY_SHA256, SCRCPY_VERSION, VIDEO_MAX_FPS, sdk_tool
 from ._paths import mobile_root
 from ._process import command, hidden_options
 
@@ -46,7 +46,7 @@ def server_arguments(serial: str, scid: str) -> list[str]:
         "power_on=false",
         "video_codec=h264",
         "max_size=1280",
-        "max_fps=30",
+        f"max_fps={VIDEO_MAX_FPS}",
         "video_bit_rate=4000000",
         "send_dummy_byte=true",
         "send_device_meta=true",

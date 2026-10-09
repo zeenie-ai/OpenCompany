@@ -18,9 +18,12 @@
 import type { LucideIcon } from 'lucide-react';
 import { Code, Maximize2, Minimize2, Monitor, PanelsTopLeft, X } from 'lucide-react';
 import BrowserWorkspace from '@/components/browser/BrowserWorkspace';
+import { useSurfaceRunning } from '@/components/workspace/activity';
 import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
 import MobileWorkspace from '@/components/mobile/MobileWorkspace';
-import { Suspense, lazy, useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import type { SurfaceControl } from '@/components/workspace/surface';
+import { Suspense, lazy, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
+import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePanelResize } from '@/hooks/usePanelResize';
@@ -34,7 +37,10 @@ import type { EmployeeSummary } from '../data/schemas';
 import { PrimaryActionButton } from '../employee/PrimaryActionButton';
 import { useEmployeeControl } from '../employee/useEmployeeControl';
 import { useHomeStore } from '../state/homeStore';
+import { pillToast } from '../ui/pillToast';
 import { Avatar, StatusPill } from '../ui/primitives';
+import { useTakeOver } from './takeover';
+import { WorkspaceTimeline } from './WorkspaceTimeline';
 
 // Its own chunk: the board's viewers (markdown, code, JSON) stay out of Home's.
 const WorkspaceCanvas = lazy(() => import('./WorkspaceCanvas'));
@@ -122,15 +128,111 @@ function CanvasTab({ employee }: { employee: EmployeeSummary }) {
   );
 }
 
-function DockTabs({ employee, visible }: { employee: EmployeeSummary; visible: boolean }) {
+/**
+ * The tabs, and the footer under them: the timeline of the employee's steps
+ * (WorkspaceTimeline) and Take over (takeover.ts), which takes the screen
+ * the Browser or Mobile tab shows and stops the employee; while the owner
+ * has it, a banner says the employee is waiting, the body is framed, and
+ * Hand back gives it back.
+ */
+function DockBody({ employee, visible }: { employee: EmployeeSummary; visible: boolean }) {
   const tab = useHomeStore((s) => s.workspaceTab);
   const setTab = useHomeStore((s) => s.setWorkspaceTab);
+  const browserRef = useRef<SurfaceControl>(null);
+  const mobileRef = useRef<SurfaceControl>(null);
+  const takeover = useTakeOver(employee, () =>
+    tab === 'browser' ? browserRef.current : tab === 'android' ? mobileRef.current : null,
+  );
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div
+        className={cn(
+          'relative flex min-h-0 flex-1 flex-col',
+          takeover.active && 'outline-2 -outline-offset-2 outline-action-config-border',
+        )}
+      >
+        <DockTabs employee={employee} visible={visible} browserRef={browserRef} mobileRef={mobileRef} />
+        {takeover.active && (
+          <p
+            role="status"
+            className="absolute inset-x-6 top-14 z-10 m-0 flex h-8 items-center justify-center rounded-pill border border-action-config-border bg-bg-elevated px-3 text-meta font-medium text-action-config-ink shadow-card-hover"
+          >
+            You’re in control · {employee.name} is waiting
+          </p>
+        )}
+      </div>
+      <footer className="shrink-0 border-t border-border-default px-3.5 py-3">
+        <WorkspaceTimeline workflowId={employee.workflow_id} onTab={setTab}>
+          {takeover.active ? (
+            <ActionButton intent="run" disabled={takeover.busy} onClick={() => void takeover.handBack()} className="h-7.5 shrink-0 px-3 text-meta">
+              Hand back
+            </ActionButton>
+          ) : (
+            tab !== 'board' && (
+              <Button
+                variant="quiet"
+                disabled={takeover.busy}
+                onClick={() => void takeover.takeOver()}
+                className="h-7.5 shrink-0 border-border-strong px-3 text-meta font-semibold text-fg-default"
+              >
+                Take over
+              </Button>
+            )
+          )}
+        </WorkspaceTimeline>
+      </footer>
+    </div>
+  );
+}
+
+function DockTabs({
+  employee,
+  visible,
+  browserRef,
+  mobileRef,
+}: {
+  employee: EmployeeSummary;
+  visible: boolean;
+  browserRef: Ref<SurfaceControl>;
+  mobileRef: Ref<SurfaceControl>;
+}) {
+  const tab = useHomeStore((s) => s.workspaceTab);
+  const setTab = useHomeStore((s) => s.setWorkspaceTab);
+  // A dot on a tab while its surface is busy: one of its nodes running, or,
+  // for the browser, the employee waiting for the owner there.
+  const browserIds = useMemo(() => employee.browser_nodes.map((node) => node.node_id), [employee.browser_nodes]);
+  const mobileIds = useMemo(
+    () => employee.workspace_nodes.filter((node) => node.kind === 'mobile').map((node) => node.node_id),
+    [employee.workspace_nodes],
+  );
+  const browserRunning = useSurfaceRunning(employee.workflow_id, browserIds);
+  const mobileRunning = useSurfaceRunning(employee.workflow_id, mobileIds);
   return (
     <WorkspaceTabs
       tab={tab}
       onTabChange={setTab}
-      browser={<BrowserWorkspace key={employee.workflow_id} workflowId={employee.workflow_id} nodes={employee.browser_nodes} visible={visible && tab === 'browser'} />}
-      android={<MobileWorkspace key={employee.workflow_id} workflowId={employee.workflow_id} nodes={employee.workspace_nodes.filter((node) => node.kind === 'mobile')} visible={visible && tab === 'android'} />}
+      activity={{ browser: browserRunning || Boolean(employee.browser_request), android: mobileRunning }}
+      browser={
+        <BrowserWorkspace
+          key={employee.workflow_id}
+          ref={browserRef}
+          workflowId={employee.workflow_id}
+          nodes={employee.browser_nodes}
+          visible={visible && tab === 'browser'}
+          agentName={employee.name}
+        />
+      }
+      android={
+        <MobileWorkspace
+          key={employee.workflow_id}
+          ref={mobileRef}
+          workflowId={employee.workflow_id}
+          nodes={employee.workspace_nodes.filter((node) => node.kind === 'mobile')}
+          visible={visible && tab === 'android'}
+          canvasNodeId={employee.canvas_node_id}
+          notify={(message, tone) => pillToast(message, { tone })}
+        />
+      }
       board={<CanvasTab employee={employee} />}
     />
   );
@@ -246,7 +348,7 @@ export function WorkspaceDock({ onConnect }: { onConnect: (providerId: string) =
             )}
             <DockButtons />
           </header>
-          {employee ? <DockTabs employee={employee} visible={open} /> : <NoEmployee status={team.status} />}
+          {employee ? <DockBody employee={employee} visible={open} /> : <NoEmployee status={team.status} />}
         </div>
       )}
     </aside>

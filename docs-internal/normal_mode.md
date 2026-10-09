@@ -70,7 +70,7 @@ is the reference.
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
 | `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
-| `workspace/` | The Workspace dock (below), its header pill, and its Canvas tab, which loads in its own chunk |
+| `workspace/` | The Workspace dock (below), its header pill, its Canvas tab (which loads in its own chunk), and its footer: the timeline of steps (`steps.ts`, `WorkspaceTimeline.tsx`) and Take over (`takeover.ts`) |
 | `settings/` | Settings pages (App access, Profile, Billing, Help, Skills, Connectors, Plugins). Catalog primitives live in `components/catalog`; Connectors embeds the shared `components/credentials/CredentialsBrowser`. Provider dialogs belong to AppShell. |
 | `approvals/` | The drafts query, the decide mutation (optimistic), the approval broadcast listener |
 | `data/` | zod-parsed queries for employees, connectors and the profile; `employeeCache.ts`, the team's query keys and `removeEmployee` (shared with the app store's delete); `talk.ts`, Turn on Talk, Apply and the retry note (the thread itself is the shared chat's); `presentation.ts` maps server state to pills, actions and the message box's mode without deriving new rules |
@@ -109,15 +109,23 @@ summary when it changes. Motion goes through [lib/motion.ts](../client/src/lib/m
 which reads the `--dur-*` / `--ease-*` tokens, runs at 1 ms under reduced
 motion and while the page is hidden ([lib/pageActivity.ts](../client/src/lib/pageActivity.ts)),
 and never starts loops then. Toasts are a second sonner toaster
-(`ui/pillToast.tsx`): one bottom-centre pill at a time.
+(`ui/pillToast.tsx`): one bottom-centre pill at a time, springing up from
+16px below at .96 scale over `--dur-toast-in` and dropping 10px as it fades
+over `--dur-toast-out` (`.pill-toaster` in index.css replaces sonner's slide).
+Start, Resume and Stop say they went through ("{Name} started" / "resumed" /
+"stopped"), and so does turning Ask first on or off in the chat ("{Name} will
+ask before sending" / "will send without asking").
 
 ### Deleting an employee
 
 Each row in the team sidebar has a delete button, an X at its end: on a
 device with hover it shows when the row is hovered or focused, on touch it is
 always there. [HomeSidebar.tsx](../client/src/features/home/sidebar/HomeSidebar.tsx)
-asks for confirmation, sends one delete while it is pending, and on failure
-keeps the employee where it was and says so, so the owner can try again.
+asks for confirmation; confirming closes the dialog and folds the row away
+(opacity, height and 12px to the left over `--dur-slow`), then sends one
+delete, with the X disabled while it is pending. Success says "{Name} was
+deleted"; on failure the fold is cancelled, so the row is back where it was,
+and a toast says so, so the owner can try again.
 
 - **One delete for both modes.** Home and the editor's workflow list call
   `useAppStore.deleteWorkflow` ([store/useAppStore.ts](../client/src/store/useAppStore.ts)),
@@ -171,10 +179,13 @@ orb glides into (`--size-orb-hire`, `--size-orb-employee`, and
 an employee's page, where the conversation needs the room). Stages and slots
 are stacks: a screen mounted over another (Connecting over Home) borrows the
 orb and hands it back when it goes. The composer sets the energy target
-(focused, holding text, a setup being written). These spike it: a hire, a theme
-or mode switch, a connect, a task change, opening Settings or the Workspace, a
-setup arriving or failing, saving the profile, the server answering again and
-signing in (`SPIKE` in orb.ts). While the server can't be reached
+(focused, holding text, a setup being written), and so does the message box on
+an employee's page (through the chat host's `onComposerChange`). These spike
+it: a hire, a theme or mode switch, a connect, a task change, opening Settings
+or the Workspace, a setup arriving or failing, saving the profile, the server
+answering again, signing in, a message sent and a draft approved (the host's
+`onSent`), a start or resume, Apply, a skill added or created, and a plugin's
+hire starting (`SPIKE` in orb.ts). While the server can't be reached
 (`setOrbWaiting`) it eases into a waiting mode (onboarding handoff R3): slower,
 a double heartbeat in the core, the heads breathing out and back in turn
 (each head and its crescent are one group), one searching ping per line,
@@ -215,17 +226,65 @@ Help in browser), else the first on the team.
   Markdown, Copy and Download. A document card in a reply (a note the
   employee wrote or revised while answering) opens the Workspace here, on
   that employee and item at that version (`homeStore.openCanvasItem`).
+  Under the item: Library (the count), the six newest items as chips, and
+  Latest while an older one is shown; the Library lists the board's
+  Artifacts (notes) and Files (screenshots, uploads, pages).
 - **Browser**: the shared `components/browser/BrowserWorkspace` attaches to
   the employee's saved Browser nodes, supplied by `browser_nodes` in its
   summary. Multiple nodes get a selector. Running sessions appear automatically;
   Start browser opens an idle session. The view supports navigation, tabs,
-  Take control / Hand back, and browser dialogs. Frames use `/ws/browser`,
+  Take control / Hand back, and browser dialogs, and shows the employee's
+  cursor (an arrow with their name) gliding to each click, hover, field
+  typed into or list chosen from (`agent_action`). Frames use `/ws/browser`,
   not a URL iframe. Help in browser, above the message box on the
   employee's page while the agent waits for the owner, opens the Workspace
   on this tab. See
   [Browser workspace](./browser_workspace.md).
-- **Android**: a shared panel explains that live mirroring is not yet available.
-  Dev mode uses the same three workspace tabs and browser viewer.
+- **Mobile**: the managed local Android phone, streamed live through the
+  shared `MobileWorkspace` (see [Mobile Workspace](../docs/mobile-workspace.md))
+  in a phone frame shaped by its screen, under the server's line for which
+  phone it is. The device bar has Back, Home, Recent apps and Rotate (while
+  the owner uses the phone) and Screenshot to Canvas, which saves the screen
+  to the workspace and puts it on the employee's Canvas.
+  Dev mode uses the same three workspace tabs, browser viewer and phone.
+- **Tabs**: an inactive tab whose surface is busy shows a pulsing dot:
+  Browser while one of the employee's Browser nodes runs or they wait for
+  the owner there (`browser_request`), Mobile while a phone node runs. A
+  switch brings the new body in with a short rise. Browser offers Open in new
+  tab for the web page it shows. Switching tabs, closing the dock or leaving
+  the window no longer answers the employee's request for help; only the
+  owner who took control hands it back (see [Browser workspace](./browser_workspace.md#when-the-agent-asks-for-help)).
+- **Timeline** ([workspace/WorkspaceTimeline.tsx](../client/src/features/home/workspace/WorkspaceTimeline.tsx)),
+  in the footer: a segment for each step the employee took, coloured by its
+  surface (Browser cyan, Mobile green, Canvas purple), and under them the
+  step shown, "n/N", its words and its time. It follows the newest step;
+  picking an older one shows that step, opens its surface's tab and offers
+  Jump to live. It lists what happened and replays nothing: the surfaces
+  stay live. The steps are the server's step log
+  ([services/workspace_steps.py](../server/services/workspace_steps.py),
+  read with `workspace_steps_list` and again on each `workspace_step`): the
+  Browser node's site actions and screenshots ("Opened example.com"), each
+  Canvas display ("Showed The plan on the Canvas"), each action of an AI
+  task on the phone ("Tapped the screen"), and the owner taking the phone
+  over and handing it back, one line each, worded by whatever took the step.
+  A step never says what was typed or shown, nothing is recorded during a
+  protected login or for an action that failed, recording never fails the
+  action, and a workflow keeps its newest 200 steps (deleted with it).
+- **Take over** ([workspace/takeover.ts](../client/src/features/home/workspace/takeover.ts)),
+  at the end of the footer's line while the Browser or Mobile tab shows:
+  takes the screen the tab shows (the
+  surface's `claim`, `components/workspace/surface.ts`: Browser asks for
+  control and waits for the server's answer; Mobile takes the phone's
+  lease), and only then Stops a running employee (`pause_workflow`), so the
+  employee never acts on the screen again once the owner has it. While the
+  owner has it the body is framed in orange and a banner says "You’re in
+  control · {Name} is waiting". **Hand back** gives the screen back
+  (Browser hands control back; Mobile releases the lease and lets a waiting
+  phone task go on, through `/resume` when this view no longer holds the
+  lease) and resumes the employee only when Take over stopped them;
+  `homeStore.takeover` keeps that, so it holds across a closed dock or a
+  changed tab. Toasts: "You have control — {Name} will wait", "Handed back
+  to {Name}".
 - **Size and motion**: 460px wide by default. The left edge drags from
   360px to the window less 420px, and Expand gives a bigger dock without
   a drag. At 1100px and wider the dock pushes the page aside; narrower, it
@@ -562,6 +621,19 @@ sending and drafts belong to the chat (wire and client rules in
   start, the box shows but takes nothing ("{Name} is starting…", the host's
   `wait`); once they can read messages, two greetings under the card put
   their words in it. The small orb stays above.
+- **The model picker** ([chat/composer/ModelPicker.tsx](../client/src/features/chat/composer/ModelPicker.tsx),
+  design handoff chat v2) sits in the message box before Dictate, when the
+  employee's talk agent runs as an AgentWorkflow (`get_chat_context`
+  `model_choice`). Its button names the model ("Auto", "Sonnet 5.5") and the
+  thinking level unless it is Balanced ("· Thorough"); its panel lists Auto
+  (what it uses now: the owner's default model, else the employee's own),
+  then the models in `llm_defaults.json` `chat_models` whose provider is
+  connected, and a slider for Quick, Balanced and Thorough (or "{model} sets
+  its own pace"). The choice is the owner's, kept in their settings, and
+  every message, edit and retry carries it; a model that can't answer is
+  refused in the server's words and the message comes back into the box.
+  The Dev editor's chat has none: each node keeps its model. See
+  [Chat Protocol → Model and thinking](./chat_protocol.md#model-and-thinking).
 - **The thread** is `get_chat_messages` with `all_generations: true` (the
   newest 200 messages): the conversation since the employee last started,
   since a Reset clears it (see [Turn on Talk and Apply](#turn-on-talk-and-apply)).
@@ -836,7 +908,9 @@ Every trigger-spawned run that finishes writes a `workflow_run_records` row
 from `DeploymentManager`. The count starts at local midnight in the owner's
 timezone, and rows are pruned after 35 days, which is longer than a month, so
 Billing's count of this month's tasks (from the 1st, in the owner's timezone,
-across the whole team) is always complete.
+across the whole team) is always complete. `get_employee_usage` also returns
+that 1st as `since` (YYYY-MM-DD), so the page names the period in the owner's
+own terms.
 
 ## Settings
 
@@ -854,8 +928,10 @@ changing page clears it.
   save by [services/settings/profile.py](../server/services/settings/profile.py).
   Every hire reads them into its instructions.
 - **Billing**: usage only. It shows the tasks done this month
-  (`get_employee_usage`) and the number of employees in the sidebar. A count
-  that can't be read shows a dash, never a zero.
+  (`get_employee_usage`), "Since {Mon D}, across your whole team", and the
+  number of employees, "In your sidebar now". A count that can't be read
+  shows a dash, never a zero. A page picked in the nav slides in from 14px
+  to the right (`slideSettingsPage`) before its blocks stagger in.
 - **Help**: Welcome guide · Replay, which closes Settings and opens the guide
   at its first step, and Get started checklist · Show, which brings the
   hidden checklist back ([onboarding.md](./onboarding.md)).
@@ -928,7 +1004,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 |---|---|---|
 | `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
-| `get_employee_usage` | `{}` | `{tasks_this_month}` (successful runs since the 1st, owner's timezone, whole team) |
+| `get_employee_usage` | `{}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone, whole team; `since` is that 1st as YYYY-MM-DD) |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
 | `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building |
@@ -938,9 +1014,11 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `apply_employee_changes` | `{workflow_id, idempotency_key}` | `{employee}`: running ends running, paused or failed ends ready, ready is left alone. Errors: `invalid_request`, `not_found`, `conflict`, `restart_failed` (the last two with `employee`) |
 | `rename_employee` | `{workflow_id, name}` (spaces collapsed, at most 40 characters) | `{employee}`: renames the workflow (a new slug, the workspace folder moved, `workflow.renamed` sent), and each agent's instructions a hire wrote take the new name in their opening ("You are <name>, ..."); instructions the owner rewrote keep their words. Agents read them on every run, so nothing restarts. Errors: `invalid_request`, `not_found`, `save_failed` |
 | `set_employee_photo` | `{workflow_id, path \| null}` | `{employee}`: `path` is a PNG, JPEG, WebP or GIF the owner uploaded under `uploads/` (`POST /api/workspace/{workflow_id}/uploads`), at most 5 MB (`EMPLOYEE_PHOTO_MAX_BYTES`); `null` takes the photo away. Errors: `invalid_request`, `not_found`, `invalid_photo` (with `detail`), `unsupported` (a workflow built in the editor has no employee row to keep it on) |
-| `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?}` | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live. `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
+| `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?, options?: {web?, model?, effort?}}` (`model_unavailable` with `detail` when the model chosen can't answer) | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live. `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{protocol_version: 2, messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Controlled active run snapshots also include their owning `workflow_control`. Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
 | `stop_chat_run` | `{run_id, expected_revision, idempotency_key}` for controlled runs; `{run_id}` for legacy | Controlled: generation Stop payload with `run_id` and `resumable: true`; the owning root is checked. Legacy: terminal chat `stopping` / `stopped`. Full acknowledgement and error contract: [chat_protocol.md](./chat_protocol.md#controlled-stop-acknowledgement) |
+| `get_chat_models` | `{session_id: <workflow_id>}` | `{auto, models, efforts}`: the model picker's rows, each `{id, name, short, description, effort, effort_note, available, reason}`; the owner's choice is `chat_model` / `chat_effort` in `get_user_settings`, saved with `save_user_settings` (refused with `chat_choice_refused` and `detail`) |
+| `workspace_steps_list` | `{workflow_id}` | `{workflow_id, steps}`, oldest first, each `{id, surface: "browser" \| "canvas" \| "mobile", text, node_id, at}` (`at` an ISO time). Only the workflow's owner reads them (`access_denied` otherwise, and always for the internal worker socket) |
 | `list_approvals` | `{workflow_id?, status?, limit <= 100}` | `{approvals, counts, server_time}` |
 | `decide_approval` | `{approval_id, decision, text?, subject?, decision_key}` | `{approval, will_send_on_resume}` |
 | `delete_workflow` | `{workflow_id}` | `{workflow_id, contexts_archived, context_archives_pending}`; `DELETE /api/database/workflows/{id}` is the same handler. Error `workflow_shutdown_failed` (with `detail`) when stopping the employee failed: nothing was deleted |
@@ -955,6 +1033,7 @@ every frame but `workflow_ops_apply` carries the whole envelope:
 | `approval_lifecycle` | `com.opencompany.approval.{requested,decided,expired,cancelled}` | Identity only, never the message or the recipient |
 | `workflow_lifecycle` | gains `created` and `deleted` stages | So open editors refresh their workflow lists. `deleted` also makes every tab forget the workflow and its employee (`forgetWorkflow`, see [Deleting an employee](#deleting-an-employee)) |
 | `chat.updated` | `com.opencompany.chat.updated` | Sent after every chat insert and clear (`services/chat_thread.py`), and when a chat run ends. Data `{workflow_id, session_id, role}`, identity only: `role` is null for a clear or a run's end, `workflow_id` null for session `"default"`. Home's thread and the editor's chat pane refetch |
+| `workspace_step` | `com.opencompany.workspace.step` | A step was recorded (`services/workspace_steps.py`). Subject is the workflow id; data `{workflow_id, surface, step_id}`, identity only. The Workspace's timeline for that workflow refetches |
 | `workflow_ops_apply` | `com.opencompany.workflow.ops.applied` | The frame is the event's flat data, `{workflow_id, caller_node_id, operations, persisted?}`, not the envelope. `persisted: true` marks a batch the server already saved (`apply_graph_additions`: Turn on Talk, the Agent Builder), whose ops carry the server's ids; editors adopt it without saving. See [Workflow Operations Protocol](./workflow_ops_protocol.md#persisted-batches) |
 
 ## Tests
@@ -968,7 +1047,8 @@ Server: `tests/services/employees/`, `tests/services/approvals/`,
 folder against each other and the app registry, and each starter built with
 "ask me first" on),
 `tests/temporal/test_machina_run_record.py` (including replay of a pre-patch
-history). Talk and growing a saved employee: `tests/services/employees/`
+history), `tests/services/test_workspace_steps.py` (the step log). Talk and
+growing a saved employee: `tests/services/employees/`
 (`test_talk.py`, `test_enable_talk.py`, `test_apply_changes.py`,
 `test_policy.py`, and `test_builder_snapshot.py` against
 `tests/fixtures/employee_builder_snapshot.json`),
@@ -1013,8 +1093,11 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   in multi-user mode, like the team list.
 - An employee hired before Canvas has no Canvas node, so its
   `canvas_node_id` is null. Adding one in Dev mode fills it in.
-- The Workspace's Android tab has no live mirror yet. Browser now uses the
-  shared live viewer described above; timeline and replay are not available.
+- The Workspace's timeline replays nothing: it lists what an employee did,
+  and the surfaces show only what is live now. A step recorded by a
+  standalone worker reaches the timeline when it next reads the steps (on
+  opening, or on another step's broadcast), not at once: the
+  `workspace_step` broadcast stays in the worker's process.
 - The Web browser app counts as connected even on a machine with no
   installed Chrome, Edge or Chromium; the employee's first browser step
   reports it. An employee hired before the app existed has no browser;

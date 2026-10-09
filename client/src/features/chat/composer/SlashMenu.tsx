@@ -6,9 +6,12 @@
  * stays in the box: the list is the popup it controls (`aria-controls`), and
  * the highlighted option is its `aria-activedescendant`. cmdk names its list
  * and options itself, so both ids are read from the list once it has drawn.
+ * The list is placed against the box through a ref (`anchorRef`): it has no
+ * button of its own that could claim the anchor, and the box itself may be
+ * the model picker's anchor (composer/ModelPicker.tsx).
  */
 
-import { useLayoutEffect, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, type RefObject } from 'react';
 import { Command, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import type { ChatCommand } from '../data/chatContext';
@@ -19,23 +22,23 @@ export function SlashMenu({
   items,
   active,
   boxRef,
+  anchorRef,
   onPick,
   onActive,
   onDismiss,
-  children,
 }: {
   open: boolean;
   listId: string;
   items: readonly ChatCommand[];
   /** The highlighted command's index. */
   active: number;
-  /** The message box: the combobox whose popup this is. */
+  /** The text box: the combobox whose popup this is. */
   boxRef: RefObject<HTMLTextAreaElement | null>;
+  /** The message box (its border) the list opens above. */
+  anchorRef: RefObject<HTMLDivElement | null>;
   onPick: (command: ChatCommand) => void;
   onActive: (index: number) => void;
   onDismiss: () => void;
-  /** The message box the list opens above. */
-  children: ReactNode;
 }) {
   const shown = open && items.length > 0;
   const selected = items[active]?.command ?? '';
@@ -55,7 +58,7 @@ export function SlashMenu({
 
   return (
     <Popover open={shown} onOpenChange={(next) => !next && onDismiss()}>
-      <PopoverAnchor asChild>{children}</PopoverAnchor>
+      <PopoverAnchor virtualRef={anchorRef} />
       <PopoverContent
         side="top"
         align="start"

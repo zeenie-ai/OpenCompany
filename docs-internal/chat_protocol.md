@@ -116,22 +116,27 @@ All are WebSocket request/response handlers with snake_case payloads. Failures a
 
 | Handler | Request | Response |
 |---|---|---|
-| `send_chat_message` | `{session_id, message, role: "user", timestamp?, client_message_id?, attachments?: [{path}], options?: {web?: bool}, ui_event?: {part_id, element_id, action, params}}` | `{success, message_id, run_id, delivery: "now" \| "queued", timestamp}`; `run_id` is null when the message starts no run; `attachment_rejected` for files that cannot go (see [Attachments](#attachments)) |
+| `send_chat_message` | `{session_id, message, role: "user", timestamp?, client_message_id?, attachments?: [{path}], options?: Options, ui_event?: {part_id, element_id, action, params}}` | `{success, message_id, run_id, delivery: "now" \| "queued", timestamp}`; `run_id` is null when the message starts no run; `attachment_rejected` for files that cannot go (see [Attachments](#attachments)); `model_unavailable` for a model that can't answer (see [Model and thinking](#model-and-thinking)) |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{success, protocol_version, session_id, messages, thread: {active_leaf_id, revision}, active_runs: [RunSnapshot]}` |
 | `chat_subscribe` | `{session_id}` | `{success, session_id, hub_epoch, active_runs: [RunSnapshot]}` |
 | `chat_unsubscribe` | `{session_id}` | `{success, session_id, hub_epoch}` |
 | `get_chat_run` | `{run_id}` | `{success, run: RunSnapshot}`, or `not_found` |
 | `stop_chat_run` | `{run_id, expected_revision?, idempotency_key?}` (revision/key required for controlled generations) | Controlled: generation control snapshot plus `{run_id, resumable: true}`, `state` is `pausing` or `paused`. Legacy: `{success, run_id, state: "stopping" \| "stopped"}`. `not_stoppable` for a terminal run. |
 | `chat_ui_state` | `{session_id, part_id, changes: [{path, value}]}` (at most 32; the last value per path wins) | `{success, part_id, state_revision}`; `not_found`, `invalid_request` |
-| `edit_chat_message` | `{session_id, message_id, message, expected_revision?, client_message_id?}` | `{success, message_id, run_id, delivery}` (the edit's id; a resent `client_message_id` answers the first edit) |
-| `regenerate_chat_reply` | `{session_id, message_id, expected_revision?}` (the latest answer, or the owner's last message when its run gave none) | `{success, message_id, run_id, delivery}` (`message_id`: the owner's message answered again) |
+| `edit_chat_message` | `{session_id, message_id, message, expected_revision?, client_message_id?, options?: Options}` | `{success, message_id, run_id, delivery}` (the edit's id; a resent `client_message_id` answers the first edit) |
+| `regenerate_chat_reply` | `{session_id, message_id, expected_revision?, options?: Options}` (the latest answer, or the owner's last message when its run gave none) | `{success, message_id, run_id, delivery}` (`message_id`: the owner's message answered again) |
 | `switch_chat_branch` | `{session_id, message_id, expected_revision?}` (a message beside one on the path) | `{success, leaf_id}` |
 | `set_chat_feedback` | `{session_id, message_id, value: "up" \| "down" \| null}` | `{success, message_id, value, reaches: ["next_turn"]}` (`[]` when taken back) |
-| `get_chat_context` | `{session_id}` | `{success, session_id, commands: [{command, description, fill, suggest}], capabilities: {attachments, web}, limits: {max_attachments, max_upload_bytes}}` |
+| `get_chat_context` | `{session_id}` | `{success, session_id, commands: [{command, description, fill, suggest}], capabilities: {attachments, web, model_choice}, limits: {max_attachments, max_upload_bytes}}` |
+| `get_chat_models` | `{session_id}` (a workflow's chat; `invalid_request` for `default`) | `{success, session_id, auto: Model, models: [Model], efforts: [{id, label, hint}]}`; `Model` is `{id, name, short, description, effort, effort_note, available, reason}` (see [Model and thinking](#model-and-thinking)) |
 | `clear_chat_messages` | `{session_id}` | `{success}`; also clears runs, parts, snapshots, notes and feedback, and makes the employee forget the conversation |
 
 `send_chat_message` with the same `client_message_id` (1 to 100 letters, digits or `_.:-`) returns the message
 and run the first call created, and dispatches nothing again.
+
+**Options** are the choices sent with a message, an edit or a retry, kept on the run it starts
+(`ChatRun.options`): `{web?: bool, model?: "auto" | "<provider>::<model>", effort?: "low" | "high"}`. An option
+left out changes nothing.
 
 **RunSnapshot** is the state the client reducer would hold after replaying the run's events
 (`server/services/chat/reducer.py` folds them the same way):
@@ -437,8 +442,10 @@ private, tests excepted). Hosts give it a `ChatHost` (`host.ts`): the session an
 message box sends now, waits for Resume, shows but takes nothing yet (`wait`, with the host's `placeholder`: a new
 hire still starting) or is closed, and what sits around the conversation (notices, a top slot, a slot after the
 thread, an empty state, greetings that fill the box in place of the suggested commands, a footnote, how to tell the
-owner something). Home's employee page (`EmployeeChat`) and the editor's console pane (`ConsoleChat`, compact, scope
-`live`) are the two hosts.
+owner something), and two optional reports: `onSent` (a message went, or a draft the owner approved was sent) and
+`onComposerChange` (the box gained or lost the cursor or its text), which Home turns into the orb's spikes and
+energy. Home's employee page (`EmployeeChat`) and the editor's console pane (`ConsoleChat`, compact, scope `live`)
+are the two hosts.
 
 - **Run events** reach `stores/chatRunStore.ts` through one `case 'chat_run_event'` in `WebSocketContext.tsx`.
   `lib/agui/events.ts` checks each frame (source, type prefix, `subject`, `id` = `<run id>:<seq>`, scope fields) and
@@ -490,7 +497,14 @@ owner something). Home's employee page (`EmployeeChat`) and the editor's console
   ones' paths. The microphone (`VoiceRecorder`, MediaRecorder with live levels) shows when `dictation_status` says a
   provider can transcribe. A draft that is one word starting with `/` opens `SlashMenu` (Popover over cmdk; focus
   stays in the box, which carries `aria-controls` and `aria-activedescendant`). The Web chip keeps the employee off
-  web search for the next messages (`composerStore.web`). In an empty chat on Home, commands marked `suggest` show
+  web search for the next messages (`composerStore.web`). On Home, where `capabilities.model_choice` says the
+  employee takes it, the model picker sits before the microphone (`composer/ModelPicker.tsx`; the host's
+  `modelPicker`): a Popover anchored to the whole box (`PopoverAnchor virtualRef`), a cmdk list of Auto and the
+  models from `get_chat_models` (`data/models.ts`), and a `LevelSlider` (`components/ui/slider.tsx`) for the level,
+  or the model's `effort_note`. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
+  once and put back when `save_user_settings` refuses it (`SettingsSaveError`, its `detail` shown); a message waits
+  until it is known. Every send, edit and retry carries the same `options` (`sendOptions` in `data/send.ts`), and a
+  `model_unavailable` refusal shows the server's `detail`. In an empty chat on Home, commands marked `suggest` show
   as cards that fill the box; the editor's chat, a console for trying chat triggers, shows none. Cmd/Ctrl+K focuses the box on Home; the editor's palette has Focus Chat.
 - **Changing the conversation** (`data/branches.ts`, `thread/turnActions.ts`): under the owner's message a hover bar
   (`turns/UserTurn.tsx`: time, ‹ 1 / 2 › between versions, Edit, Copy; Edit opens `turns/UserEditBox.tsx` in place,
@@ -507,7 +521,9 @@ owner something). Home's employee page (`EmployeeChat`) and the editor's console
   renderer (`genui/ChatUi.tsx`, with json-render, in its own chunk) sanitizes again (`genui/prepare.ts`), draws the
   twelve components (`genui/views.tsx`, through `lib/jsonRender/guard.tsx`), reveals a live one element by element
   (forward only, so patches arriving in bursts never restart it), and routes any button action (`genui/actions.ts`,
-  a Proxy over action names). Development builds show the element and patch counts and an Inspect view.
+  a Proxy over action names). The slot picker sits in a panel, and a toggle's whole row is its switch's label.
+  Development builds show, on one row under the interface, its element count, the number of patches that build it
+  (`specToPatches`, what the Inspect chip's patches tab lists) and the Inspect chip.
 
 ## Approvals
 
@@ -590,11 +606,46 @@ that declares `vision.user_images` (`llm_defaults.json`: Anthropic, OpenAI, Gemi
 with their workspace path for any other.
 
 **Web off** (`options.web: false`, kept on the run) leaves the tools in the `search` group out of that run
-(`agent_activities._without_web_tools`). **Dictation** (`nodes/speech/_handlers.py`): the first provider in
+(`agent_activities._without_web_tools`, over the options `_chat_run_options` reads once). **Dictation** (`nodes/speech/_handlers.py`): the first provider in
 `speech_defaults.json` `dictation.providers` with a stored key transcribes a recording the chat uploaded, and the
 recording is deleted. **Commands** come from `chat_defaults.json` `commands.generic` and the employee's apps
 (`employee_apps.json` `commands`, found through the saved graph's node types); `{name}` is the workflow's name, and
 `suggest` puts a command in an empty chat. `capabilities.web` is whether the saved graph has a search tool.
+
+## Model and thinking
+
+`services/chat/choice.py`. Home's employee chat has a model picker: **Auto**, then the models in
+`llm_defaults.json` `chat_models` (each a `provider::model` id from that provider's `popular_models`), and how hard
+the model thinks: Quick (`effort: "low"`), Balanced (no effort sent: the agent's own settings) or Thorough
+(`"high"`). Every word the picker shows comes from `chat_defaults.json` `choice`. The Dev editor's chat has no
+picker: each node keeps its model.
+
+- **Auto** is the owner's default model (Set Global Model, `UserSettings.default_llm_provider` /
+  `default_llm_model`). With none set it changes nothing, and the employee answers on its own model.
+- **The choice is the owner's**, saved with their settings (`UserSettings.chat_model`, default `"auto"`, and
+  `chat_effort`, default `""`) through `save_user_settings`, which refuses a model the picker doesn't offer or an
+  effort other than `low` / `high` (`chat_choice_refused`). The client sends it as `options.model` /
+  `options.effort` with every message, edit and retry.
+- **Admission resolves it** (`run_options`) and keeps the result on the run: Auto becomes the default's
+  `provider::model` (nothing when no default is set). A model whose provider has no key, or one the picker no longer
+  offers, is refused with `model_unavailable` and a `detail` in the owner's words, and nothing is saved; there is
+  never a silent fallback to another model.
+- **Only the agent that answers the chat run** applies it (`chat_stream_for`): `agent.prepare_payload` replaces the
+  node's provider and model with the chosen ones before the credential check, and drops the node's own `api_key`, so
+  the chosen provider's key is the one checked. Other agents in the run keep their own models. The LLM step falls
+  back to a node's own key only for the node's own provider (`_resolve_activity_api_key`), so a node's key never
+  goes to another vendor.
+- **Effort** rides the prepared payload into each LLM step (`effort`, activity input only) and reaches the provider
+  only for a model in its provider's `effort_models` (`ChatUnifier`, `supports_effort`): Anthropic as
+  `output_config.effort`, OpenAI as `reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses),
+  Gemini 3 as `thinking_level`. It never turns thinking on or off; any other model answers as without it, and the
+  picker shows `effort_note` ("{model} sets its own pace") in place of the levels.
+- **`get_chat_models`** lists the picker for one employee: Auto's row says what Auto uses now (the default model, or
+  the answering agent's own), then the offered models whose provider is connected, plus the saved choice's row even
+  when it can't answer (`available: false` with its `reason`).
+- **`capabilities.model_choice`** (`get_chat_context`) is whether the employee applies a choice: its answering agent
+  runs as an AgentWorkflow (`AGENT_WORKFLOW_TYPES`, with `TEMPORAL_AGENT_WORKFLOW_ENABLED` on). A Claude Code or
+  RLM agent never does, so the client shows no picker for it.
 
 ## Branches
 
@@ -696,7 +747,9 @@ and server tests alike:
 | `save_failed` | send, edit, regenerate, switch | The change could not be saved; nothing was dispatched. |
 | `not_running` | send, edit, regenerate, switch | The employee is not running and cannot queue messages (a switch: nothing was started since the last Reset). |
 | `engine_unavailable` | send, edit, regenerate | A workflow's chat while Temporal is not connected: nothing could deliver the message, so nothing was saved. |
-| `invalid_request` | send, save | A malformed field (`detail` says which): an empty message, a role other than the owner's, or a bad `client_message_id`. |
+| `invalid_request` | send, save, edit, regenerate, get_chat_models | A malformed field (`detail` says which): an empty message, a role other than the owner's, a bad `client_message_id`, or an effort other than `low` / `high`; `get_chat_models` for the `default` session. |
+| `model_unavailable` | send, edit, regenerate | The model chosen can't answer: its provider isn't connected, or the picker no longer offers it. `detail` says so in the owner's words; nothing was saved. |
+| `chat_choice_refused` | save_user_settings | A saved `chat_model` the picker doesn't offer, or a `chat_effort` other than `""`, `low` or `high`. |
 | `read_failed` | get_chat_messages, chat_subscribe | The thread could not be read. Never answered as an empty thread. |
 | `not_found` | get_chat_run, stop_chat_run | No such run. |
 | `attachment_rejected` | send | A file outside `uploads/`, gone, or more than six; `detail` says which. |

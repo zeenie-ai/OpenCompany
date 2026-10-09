@@ -26,7 +26,7 @@ from urllib.parse import urlsplit
 
 from core.logging import get_logger
 
-from ._netpolicy import NetPolicy, address_block_reason, host_block_reason
+from services.netpolicy import NetPolicy, address_block_reason, host_block_reason
 
 logger = get_logger(__name__)
 

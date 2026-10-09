@@ -16,6 +16,7 @@ import { useStarterHire } from '../genui';
 import { useSkillLibrary } from '../data/skills';
 import { STARTERS, type Starter } from '../hire/templates';
 import { useHomeStore } from '../state/homeStore';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
 import type { CatalogItem } from './catalog';
 import { CatalogLayout } from './CatalogLayout';
@@ -58,6 +59,7 @@ export function PluginsTab() {
       return;
     }
     setHiring(starter.id);
+    spikeOrb(SPIKE.pluginInstall);
     const hired = await hire(starter);
     setHiring(null);
     // The new employee's page is already showing behind Settings.

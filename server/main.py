@@ -26,8 +26,6 @@ except ImportError:
     pass  # Windows - uvloop not available, use default asyncio
 
 import asyncio
-import functools
-import json
 from datetime import datetime
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -58,8 +56,8 @@ from core.env_defaults import apply_file_defaults_to_environ
 apply_file_defaults_to_environ()
 
 from core.approot import (
+    app_version as _app_version,
     client_dist as _client_dist,
-    package_json_path as _package_json_path,
     resolve_static_asset as _resolve_static_asset,
 )
 from core.config import Settings, cookie_posture_warnings, dev_secret_offenders
@@ -175,6 +173,10 @@ async def lifespan(app: FastAPI):
     # (list_approvals / decide_approval / set_ask_first / ...), the
     # approval_lifecycle broadcast and the cleanup on workflow delete.
     import services.approvals  # noqa: F401
+
+    # services/workspace_steps.py self-registers workspace_steps_list (the
+    # Workspace timeline) and its cleanup on workflow delete.
+    import services.workspace_steps  # noqa: F401
 
     # Wave 13.8: services/pricing_handlers.py self-registers the 3
     # pricing handlers (get_pricing_config / save_pricing_config /
@@ -554,7 +556,8 @@ _expose_docs = (
 # Create FastAPI app
 app = FastAPI(
     title="OpenCompany API",
-    # version: set from package.json below, once _app_version() exists.
+    # The OpenAPI document (/docs, /openapi.json) carries the package version.
+    version=_app_version(),
     description="OpenCompany workflow automation backend",
     lifespan=lifespan,
     docs_url="/docs" if _expose_docs else None,
@@ -690,26 +693,6 @@ async def _sweep_cli_lockfiles_on_startup() -> None:
     except Exception as exc:
         logger.debug("[main] CLI lockfile sweep failed: %s", exc)
 
-
-@functools.lru_cache(maxsize=1)
-def _app_version() -> str:
-    """The published OpenCompany version, read from the root ``package.json``.
-
-    That file is the single source of truth (``company version sync`` writes it
-    from the git tag), and it ships inside the npm package one level above
-    ``server/``. Never hardcode a literal here — ``/health`` previously reported
-    a stale ``3.3.0`` while the package was ``0.1.1``.
-    """
-    try:
-        pkg = json.loads(_package_json_path().read_text(encoding="utf-8"))
-        return str(pkg.get("version") or "0.0.0")
-    except (OSError, json.JSONDecodeError):
-        return "0.0.0"
-
-
-# The OpenAPI document (/docs, /openapi.json) carries the package version
-# too; the FastAPI constructor runs before this helper exists.
-app.version = _app_version()
 
 
 @app.get("/health")

@@ -43,7 +43,7 @@ from typing import Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 from core.logging import get_logger
 from services.plugin.base import NodeUserError, NodeWaitInterrupted
 
-from ._netpolicy import NetPolicy
+from services.netpolicy import NetPolicy
 
 logger = get_logger(__name__)
 

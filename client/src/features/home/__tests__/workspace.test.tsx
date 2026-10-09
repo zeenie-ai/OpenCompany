@@ -1,25 +1,38 @@
 /**
  * The Workspace dock: what it saves and how it reads that back, the orb
  * spike on opening, whose workspace it shows, the header's pill and main
- * action (Pause lives here), the placeholder tabs, the Canvas tab (no
- * request without a Canvas, the board with one), closing, and the header
- * pill's dot.
+ * action (Stop lives here), the tabs, the Canvas tab (no request without a
+ * Canvas, the board with one), the footer's timeline of steps and Take
+ * over, closing, and the header pill's dot.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 
+// Broadcast listeners, so a test can send the dock a frame (`emit`).
+const listeners = new Map<string, Set<(data: unknown) => void>>();
 const actions = {
   isReady: true,
   sendRequest: vi.fn(),
-  addEventListener: () => () => {},
+  addEventListener: (type: string, listener: (data: unknown) => void) => {
+    const forType = listeners.get(type) ?? new Set();
+    forType.add(listener);
+    listeners.set(type, forType);
+    return () => {
+      forType.delete(listener);
+    };
+  },
   pauseWorkflow: vi.fn(),
   resumeWorkflow: vi.fn(),
   startEmployee: vi.fn(),
 };
+
+function emit(type: string, data: unknown) {
+  act(() => listeners.get(type)?.forEach((listener) => listener(data)));
+}
 
 vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/contexts/WebSocketContext')>()),
@@ -27,13 +40,21 @@ vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
 }));
 
 vi.mock('../../../app/useShellActions', () => ({ enterDev: vi.fn() }));
-vi.mock('@/components/browser/BrowserWorkspace', () => ({
-  default: ({ workflowId, nodes, visible }: { workflowId: string; nodes: { node_id: string; label: string }[]; visible: boolean }) => (
-    <div data-testid="browser-workspace" data-workflow={workflowId} data-visible={String(visible)}>
-      {nodes.length ? nodes.map((node) => <span key={node.node_id}>{node.label}</span>) : 'No Browser node in this workflow'}
-    </div>
-  ),
-}));
+// The browser's Take over handle (components/workspace/surface.ts).
+const screenControl = vi.hoisted(() => ({ claim: vi.fn(), release: vi.fn() }));
+vi.mock('@/components/browser/BrowserWorkspace', async () => {
+  const { useImperativeHandle } = await import('react');
+  return {
+    default: function Browser({ workflowId, nodes, visible, ref }: { workflowId: string; nodes: { node_id: string; label: string }[]; visible: boolean; ref?: import('react').Ref<typeof screenControl> }) {
+      useImperativeHandle(ref, () => screenControl);
+      return (
+        <div data-testid="browser-workspace" data-workflow={workflowId} data-visible={String(visible)}>
+          {nodes.length ? nodes.map((node) => <span key={node.node_id}>{node.label}</span>) : 'No Browser node in this workflow'}
+        </div>
+      );
+    },
+  };
+});
 
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
@@ -87,6 +108,7 @@ function renderWith(team: EmployeeSummary[], ui: ReactElement = <WorkspaceDock o
 
 beforeEach(() => {
   localStorage.clear();
+  listeners.clear();
   actions.sendRequest.mockReset();
   actions.sendRequest.mockResolvedValue({ success: true, items: [], revision: 0 });
   vi.mocked(enterDev).mockClear();
@@ -200,6 +222,52 @@ describe('WorkspaceDock', () => {
     expect(screen.queryByTestId('browser-workspace')).toBeNull();
   });
 
+  it('takes over the screen and stops the employee, and hands both back', async () => {
+    screenControl.claim.mockReset().mockResolvedValue(true);
+    screenControl.release.mockReset();
+    actions.pauseWorkflow.mockReset().mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 5 }, 'w1'));
+    actions.resumeWorkflow.mockReset().mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 6 }, 'w1'));
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser', takeover: null });
+    renderWith([employee({ control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 4 }, 'w1') })]);
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    // The screen first, so the employee never acts on it again, then Stop.
+    expect(screenControl.claim).toHaveBeenCalledOnce();
+    expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
+    expect(screenControl.claim.mock.invocationCallOrder[0]).toBeLessThan(actions.pauseWorkflow.mock.invocationCallOrder[0]);
+    expect(await screen.findByText('You’re in control · Maya is waiting')).toBeInTheDocument();
+    expect(useHomeStore.getState().takeover).toEqual({ workflowId: 'w1', stopped: true });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hand back' }));
+    expect(screenControl.release).toHaveBeenCalledOnce();
+    expect(actions.resumeWorkflow).toHaveBeenCalledOnce();
+    expect(screen.queryByText('You’re in control · Maya is waiting')).toBeNull();
+    expect(useHomeStore.getState().takeover).toBeNull();
+  });
+
+  it('leaves a stopped employee stopped, and stops no one when the screen is refused', async () => {
+    screenControl.claim.mockReset().mockResolvedValue(true);
+    actions.pauseWorkflow.mockReset();
+    actions.resumeWorkflow.mockReset();
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser', takeover: null });
+    renderWith([employee({ status: 'paused' })]);
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(await screen.findByText('You’re in control · Maya is waiting')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Hand back' }));
+    expect(actions.pauseWorkflow).not.toHaveBeenCalled();
+    expect(actions.resumeWorkflow).not.toHaveBeenCalled();
+
+    screenControl.claim.mockResolvedValue(false);
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(actions.pauseWorkflow).not.toHaveBeenCalled();
+    expect(screen.queryByText('You’re in control · Maya is waiting')).toBeNull();
+  });
+
+  it('offers no Take over on the Canvas tab', () => {
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'board', takeover: null });
+    renderWith([employee({ canvas_node_id: null })]);
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+  });
+
   it('hides the live viewer when the workspace closes without changing its employee', () => {
     useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
     renderWith([employee()]);
@@ -257,8 +325,98 @@ describe('WorkspaceDock', () => {
     expect(orbState.spike).toBe(SPIKE.workspace);
     expect(loadWorkspacePrefs()).toMatchObject({ open: true, tab: 'board' });
     expect(await screen.findByText('The plan')).toBeInTheDocument();
-    expect(screen.getByText('1/2')).toBeInTheDocument();
+    // The first of two: the Library strip shows it chosen, and Latest goes back to the newest.
+    expect(screen.getByRole('button', { name: 'Library, 2 items' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
     expect(actions.sendRequest).toHaveBeenCalledWith('canvas_list', { workflow_id: 'w2', node_id: 'w2:canvas:1' });
+  });
+});
+
+describe('Workspace timeline', () => {
+  const STEPS = [
+    { id: 1, surface: 'browser', text: 'Opened example.com', at: '2026-10-09T10:00:00Z' },
+    { id: 2, surface: 'canvas', text: 'Showed The plan on the Canvas', at: '2026-10-09T10:01:00Z' },
+    { id: 3, surface: 'mobile', text: 'Tapped Send', at: '2026-10-09T10:02:00Z' },
+  ];
+  const clock = (at: string) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let steps: typeof STEPS;
+
+  function answerSteps() {
+    actions.sendRequest.mockImplementation(async (type: string, data?: Record<string, unknown>) =>
+      type === 'workspace_steps_list'
+        ? { success: true, workflow_id: data?.workflow_id, steps }
+        : { success: true, items: [], revision: 0 },
+    );
+  }
+
+  const stepCalls = () => actions.sendRequest.mock.calls.filter(([type]) => type === 'workspace_steps_list');
+
+  /** The line under the segments: "n/N" and the step's words and time. */
+  async function shownLine(count: string) {
+    return (await screen.findByText(count)).parentElement;
+  }
+
+  beforeEach(() => {
+    steps = STEPS;
+    answerSteps();
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser', takeover: null });
+  });
+
+  it('lists what the employee did, coloured by surface, and follows the newest step', async () => {
+    renderWith([employee()]);
+    expect(await shownLine('3/3')).toHaveTextContent(`Tapped Send · ${clock(STEPS[2].at)}`);
+    expect(stepCalls()).toEqual([['workspace_steps_list', { workflow_id: 'w1' }]]);
+    const segments = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
+    expect(segments.map((segment) => segment.getAttribute('aria-label'))).toEqual(
+      STEPS.map((step) => `${step.text}, ${clock(step.at)}`),
+    );
+    // Done steps in their surface's soft shade, the step shown in its ink.
+    expect(segments[0]).toHaveClass('bg-action-save-border');
+    expect(segments[1]).toHaveClass('bg-action-tools-border');
+    expect(segments[2]).toHaveClass('bg-action-run-ink');
+    expect(segments[2]).toHaveAttribute('aria-current', 'step');
+    expect(screen.queryByRole('button', { name: 'Jump to live' })).toBeNull();
+  });
+
+  it('shows an older step on its surface’s tab, and Jump to live goes back to the newest', async () => {
+    renderWith([employee()]);
+    await shownLine('3/3');
+    const segments = within(screen.getByRole('list', { name: 'Steps' })).getAllByRole('listitem');
+
+    await userEvent.click(segments[1]);
+    expect(await shownLine('2/3')).toHaveTextContent('Showed The plan on the Canvas');
+    expect(useHomeStore.getState().workspaceTab).toBe('board');
+    expect(segments[1]).toHaveAttribute('aria-current', 'step');
+    expect(segments[2]).toHaveClass('bg-border-default');
+
+    await userEvent.click(segments[0]);
+    expect(await shownLine('1/3')).toHaveTextContent('Opened example.com');
+    expect(useHomeStore.getState().workspaceTab).toBe('browser');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Jump to live' }));
+    expect(await shownLine('3/3')).toHaveTextContent('Tapped Send');
+    expect(screen.queryByRole('button', { name: 'Jump to live' })).toBeNull();
+  });
+
+  it('reads the steps again when this employee takes one, and only then', async () => {
+    steps = STEPS.slice(0, 2);
+    renderWith([employee()]);
+    await shownLine('2/2');
+
+    steps = STEPS;
+    // Another employee's step first: had it read again, there would be one
+    // read more by the time this employee's step shows.
+    emit('workspace_step', { type: 'com.opencompany.workspace.step', subject: 'w2', data: { workflow_id: 'w2', surface: 'browser', step_id: 9 } });
+    emit('workspace_step', { type: 'com.opencompany.workspace.step', subject: 'w1', data: { workflow_id: 'w1', surface: 'mobile', step_id: 3 } });
+    expect(await shownLine('3/3')).toHaveTextContent('Tapped Send');
+    expect(stepCalls()).toHaveLength(2);
+  });
+
+  it('says it is waiting before the first step', async () => {
+    steps = [];
+    renderWith([employee()]);
+    expect(await screen.findByText('Waiting for work')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Steps' })).toBeNull();
   });
 });
 

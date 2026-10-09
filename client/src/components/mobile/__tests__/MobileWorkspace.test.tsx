@@ -4,10 +4,10 @@ import userEvent from '@testing-library/user-event';
 import MobileWorkspace from '../MobileWorkspace';
 import { mobilePoint, mobileRequest } from '../api';
 
-const { connectVideo, listeners, addEventListener } = vi.hoisted(() => {
+const { connectVideo, listeners, addEventListener, sendRequest } = vi.hoisted(() => {
   const listeners = new Map<string, Set<(data: unknown) => void>>();
   return {
-    connectVideo: vi.fn(() => () => {}), listeners,
+    connectVideo: vi.fn(() => () => {}), listeners, sendRequest: vi.fn(),
     addEventListener: (type: string, handler: (data: unknown) => void) => {
       const handlers = listeners.get(type) ?? new Set();
       handlers.add(handler); listeners.set(type, handlers);
@@ -16,7 +16,7 @@ const { connectVideo, listeners, addEventListener } = vi.hoisted(() => {
   };
 });
 vi.mock('../video', () => ({ connectMobileVideo: connectVideo }));
-vi.mock('@/contexts/WebSocketContext', () => ({ useWebSocketActions: () => ({ addEventListener }) }));
+vi.mock('@/contexts/WebSocketContext', () => ({ useWebSocketActions: () => ({ addEventListener, sendRequest }) }));
 const fetchMock = vi.fn();
 const nodes = [{ node_id: 'flow:mobile_agent:1', label: 'Phone assistant' }];
 const ready = { supported: true, adb: true, emulator: true, image: true, engine: true, video: true, acceleration: 'WHPX is installed and usable.' };
@@ -37,6 +37,53 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('Mobile Workspace', () => {
+  it('frames the phone by its screen and names it', async () => {
+    snapshot = { ...snapshot, running: true, device: 'Pixel 7 · local emulator · up to 30 fps' };
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} />);
+    expect(await screen.findByText('Pixel 7 · local emulator · up to 30 fps')).toBeInTheDocument();
+    const screenArea = screen.getByLabelText('Phone screen, view only');
+    expect(screenArea.parentElement?.style.aspectRatio).toBe(String(1080 / 1920));
+    // The buttons wait until the owner uses the phone; without a Canvas there is no screenshot.
+    for (const name of ['Back', 'Home', 'Recent apps', 'Rotate']) expect(screen.getByRole('button', { name })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Screenshot to Canvas' })).toBeNull();
+  });
+
+  it('presses Recent apps and rotates the phone on its side and back', async () => {
+    snapshot.running = true;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/takeover')) {
+        snapshot = { ...snapshot, controller: 'viewer:server-hash', control_state: 'human', epoch: 3 };
+        return json({ owner: 'viewer:server-hash', epoch: 3 });
+      }
+      if (url.endsWith('/input')) return json({ success: true, result: true });
+      return json(url.endsWith('/doctor') ? ready : snapshot);
+    });
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Use phone' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Recent apps' })).toBeEnabled());
+    const inputs = () => fetchMock.mock.calls.filter(([url]) => url.endsWith('/input')).map(([, options]) => JSON.parse(options.body));
+    await userEvent.click(screen.getByRole('button', { name: 'Recent apps' }));
+    await waitFor(() => expect(inputs()).toHaveLength(1));
+    expect(inputs()[0]).toMatchObject({ operation: 'key', parameters: { key: 'recent' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Rotate' }));
+    await waitFor(() => expect(inputs()).toHaveLength(2));
+    expect(inputs()[1]).toMatchObject({ operation: 'rotate', parameters: { orientation: 'left' } });
+  });
+
+  it('puts a screenshot on the Canvas', async () => {
+    snapshot.running = true;
+    const notify = vi.fn();
+    sendRequest.mockReset().mockResolvedValue({ success: true });
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/screenshot')) return json({ success: true, ref: { path: 'media/phone-1.png' } });
+      return json(url.endsWith('/doctor') ? ready : snapshot);
+    });
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} canvasNodeId="flow:canvas:1" notify={notify} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Screenshot to Canvas' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Screenshot added to Canvas', 'success'));
+    expect(sendRequest).toHaveBeenCalledWith('canvas_add', { workflow_id: 'flow', node_id: 'flow:canvas:1', path: 'media/phone-1.png' });
+  });
+
   it('clears the old run, task recovery IDs and lease after a matching workflow reset', async () => {
     sessionStorage.setItem('mobile-task:flow:flow:mobile_agent:1', 'old-submission');
     sessionStorage.setItem('mobile-task:flow:flow:android:2', 'other-phone-submission');
@@ -54,13 +101,13 @@ describe('Mobile Workspace', () => {
     await screen.findByText('Old phone task');
     await screen.findByText('Working on your request');
     await userEvent.click(screen.getByRole('button', { name: 'Use phone' }));
-    await screen.findByRole('button', { name: 'Phone Home' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Home' })).toBeEnabled());
     snapshot = { ...snapshot, active: null, last_task: null };
     reset('flow');
     await screen.findByText('Ready');
     expect(screen.queryByText('Old phone task')).toBeNull();
     expect(screen.queryByText('Working on your request')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Phone Home' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Home' })).toBeDisabled();
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/release'))).toBe(false);
     expect(sessionStorage.getItem('mobile-task:flow:flow:mobile_agent:1')).toBeNull();
     expect(sessionStorage.getItem('mobile-task:flow:flow:android:2')).toBeNull();
@@ -295,9 +342,10 @@ describe('Mobile Workspace', () => {
       return json(url.endsWith('/doctor') ? ready : snapshot);
     });
     const view = render(<MobileWorkspace workflowId="flow" nodes={nodes} />);
-    expect(screen.queryByRole('button', { name: 'Phone Home' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Home' })).toBeDisabled();
     await userEvent.click(await screen.findByRole('button', { name: 'Use phone' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Phone Home' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Home' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Home' }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/input'))).toBe(true));
     const request = fetchMock.mock.calls.find(([url]) => url.endsWith('/input'))!;
     expect(JSON.parse(request[1].body)).toMatchObject({ epoch: 7, operation: 'key', parameters: { key: 'home' } });

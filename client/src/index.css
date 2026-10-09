@@ -241,6 +241,7 @@
 
   --text-2xs:   var(--text-2xs);
   --text-md:    var(--text-md);
+  --text-micro: var(--text-micro);
   --text-meta:  var(--text-meta);
   --text-row:   var(--text-row);
   --text-lead:  var(--text-lead);
@@ -264,6 +265,7 @@
   /* Design-system elevation steps (base.css, dark.css), used by the chat. */
   --shadow-card:       var(--shadow-card);
   --shadow-card-hover: var(--shadow-card-hover);
+  --shadow-knob:       var(--shadow-knob);
   --shadow-modal:      var(--shadow-modal);
 
   --blur-scrim: var(--blur-scrim);
@@ -337,8 +339,10 @@
  * on `.xy-flow` (v12 sets a default opaque background via custom
  * property). */
 
+/* The editor's dot grid (Dashboard's <Background>): drawn in the base
+ * themes, transparent in the stylized ones (--grid-dot, themes/*.css). */
 .react-flow__background pattern circle {
-  fill: color-mix(in srgb, var(--muted-foreground) 30%, transparent) !important;
+  fill: var(--grid-dot) !important;
 }
 
 .react-flow__controls,
@@ -416,26 +420,26 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--muted);
+  background: var(--scrollbar-track);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  background: var(--fg-faint);
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--muted);
+  background: var(--scrollbar-track);
 }
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--muted);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
 /* ============================================================================
@@ -450,6 +454,33 @@ html {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+ * Normal mode: the pill toast (features/home/ui/pillToast.tsx) springs up
+ * from 16px below at .96 scale, and drops 10px as it fades (design handoff
+ * "Toast"), in place of sonner's own slide. Each selector out-specifies the
+ * sonner rule it replaces (sonner injects its stylesheet after this one);
+ * sonner turns every transition off under reduced motion.
+ * ============================================================================ */
+
+.pill-toaster [data-sonner-toast][data-y-position] {
+  --y: translateY(16px) scale(0.96);
+  transition:
+    transform var(--dur-toast-in) var(--ease-spring),
+    opacity var(--dur-toast-in) var(--ease-spring);
+}
+
+.pill-toaster [data-sonner-toast][data-mounted='true'] {
+  --y: none;
+}
+
+.pill-toaster [data-sonner-toast][data-removed='true'][data-front='true'][data-swipe-out='false'] {
+  --y: translateY(10px);
+  opacity: 0;
+  transition:
+    transform var(--dur-toast-out) var(--ease-default),
+    opacity var(--dur-toast-out) var(--ease-default);
 }
 
 /* ============================================================================

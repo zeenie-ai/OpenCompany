@@ -79,6 +79,7 @@ class GeminiProvider:
         thinking: Optional[ThinkingConfig] = None,
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         del context_management  # Gemini stays on portable Context checkpoints.
         from google.genai import types
@@ -97,12 +98,20 @@ class GeminiProvider:
         # let the SDK/API validate per model. `level` is None unless the
         # user explicitly set thinking_level (Vertex rejects an unsolicited
         # thinking_level on 2.5-era models with 400 INVALID_ARGUMENT).
+        thinking_kwargs: Dict[str, Any] = {}
         if thinking and thinking.enabled:
-            thinking_kwargs: Dict[str, Any] = {"include_thoughts": True}
+            thinking_kwargs["include_thoughts"] = True
             if thinking.level:
                 thinking_kwargs["thinking_level"] = thinking.level
             elif thinking.budget:
                 thinking_kwargs["thinking_budget"] = thinking.budget
+        if effort:
+            # The owner's chat choice (Quick / Thorough) as the thinking level,
+            # over the agent's own; a level and a budget never go together.
+            # Only the effort_models (Gemini 3) receive one (ChatUnifier).
+            thinking_kwargs.pop("thinking_budget", None)
+            thinking_kwargs["thinking_level"] = effort
+        if thinking_kwargs:
             config["thinking_config"] = types.ThinkingConfig(**thinking_kwargs)
 
         # Tools

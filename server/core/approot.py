@@ -39,6 +39,8 @@ the stubbed-core test environment file-loads it directly.
 
 from __future__ import annotations
 
+import functools
+import json
 import os
 from pathlib import Path
 
@@ -112,6 +114,22 @@ def package_json_path() -> Path:
     return app_root() / "package.json"
 
 
+@functools.lru_cache(maxsize=1)
+def app_version() -> str:
+    """The published OpenCompany version, read from the root ``package.json``.
+
+    That file is the single source of truth (``company version sync`` writes it
+    from the git tag), and it ships inside the npm package one level above
+    ``server/``. Never hardcode a literal here: ``/health`` once reported a
+    stale ``3.3.0`` while the package was ``0.1.1``.
+    """
+    try:
+        pkg = json.loads(package_json_path().read_text(encoding="utf-8"))
+        return str(pkg.get("version") or "0.0.0")
+    except (OSError, json.JSONDecodeError):
+        return "0.0.0"
+
+
 def example_workflows_root() -> Path:
     """Parent of the shipped seed workflows (``<app root>/.opencompany``)."""
     return app_root() / ".opencompany"
@@ -125,5 +143,6 @@ __all__ = [
     "env_template_path",
     "env_file_path",
     "package_json_path",
+    "app_version",
     "example_workflows_root",
 ]

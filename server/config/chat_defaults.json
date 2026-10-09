@@ -23,6 +23,23 @@
     "max_snapshots_per_session": 50,
     "max_snapshot_bytes": 1048576
   },
+  "choice": {
+    "_comment": "The words of the chat's model picker (services/chat/choice.py, get_chat_models): Auto's row, the three thinking levels (the id is the effort sent: low, nothing for Balanced, high), the line shown for a model that picks its own pace, and the refusals. {model} is a model's name, {provider} a provider's, {name} the employee's.",
+    "auto": {"name": "Auto", "short": "Auto"},
+    "default_model": "Uses {model}, your default model",
+    "own_model": "Uses {model}, {name}’s own model",
+    "own": "Uses {name}’s own model",
+    "efforts": [
+      {"id": "low", "label": "Quick", "hint": "Answers right away"},
+      {"id": "", "label": "Balanced", "hint": "A good mix of speed and care"},
+      {"id": "high", "label": "Thorough", "hint": "Takes longer, double-checks the details"}
+    ],
+    "effort_off": "{model} sets its own pace",
+    "unavailable": "{model} can’t answer right now: {provider} isn’t connected. Connect it in Settings > Connectors, or pick another model.",
+    "default_unavailable": "Your default model, {model}, can’t answer right now: {provider} isn’t connected. Connect it in Settings > Connectors, or pick another model.",
+    "not_offered": "That model isn’t offered any more. Pick another one.",
+    "bad_effort": "Pick Quick, Balanced or Thorough."
+  },
   "commands": {
     "_comment": "Slash commands every workflow's chat offers (get_chat_context); an employee's apps add theirs (employee_apps.json commands). fill is the text the command puts in the message box; suggest also shows it in an empty chat. {name} is the employee's name.",
     "generic": [

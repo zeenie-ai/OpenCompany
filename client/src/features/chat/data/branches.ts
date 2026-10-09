@@ -18,25 +18,30 @@ import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { queryKeys } from '@/lib/queryConfig';
 import { useChatRunStore } from '@/stores/chatRunStore';
 import type { ChatThreadData, Feedback } from './schemas';
+import type { SendOptions } from './send';
 import { chatThreadKey, type ThreadScope } from './thread';
 
 /** A change to the conversation that did not go through: `code` is the
  *  server's (`revision_conflict`, `run_in_progress`, `cannot_rewind`,
  *  `older_generation`, `branch_unavailable`, `not_editable`, `not_running`,
- *  ...) or `transport`. */
+ *  `model_unavailable`, ...) or `transport`; `detail` is the server's own
+ *  words, where it gave them. */
 export class ChatBranchError extends Error {
   readonly code: string;
+  readonly detail: string | null;
 
-  constructor(code: string) {
+  constructor(code: string, detail: string | null = null) {
     super(code);
     this.name = 'ChatBranchError';
     this.code = code;
+    this.detail = detail;
   }
 }
 
 type Reply = {
   success?: boolean;
   error?: string;
+  detail?: string;
   run_id?: string | null;
   message_id?: string | null;
   delivery?: string;
@@ -60,7 +65,7 @@ function useBranchRequest(sessionId: string, scope: ThreadScope) {
     } catch {
       throw new ChatBranchError('transport');
     }
-    if (!reply || reply.success === false) throw new ChatBranchError(reply?.error || 'failed');
+    if (!reply || reply.success === false) throw new ChatBranchError(reply?.error || 'failed', reply?.detail ?? null);
     return reply;
   };
   const refetch = () => queryClient.invalidateQueries({ queryKey: queryKeys.chatThread.bySession(sessionId).queryKey });
@@ -84,23 +89,33 @@ function started(sessionId: string, reply: Reply): StartedRun {
 }
 
 /** Edit one of the owner's messages: the edit goes after the same earlier
- *  message, as a new version of it, and the employee answers it. */
+ *  message, as a new version of it, and the employee answers it, with the
+ *  `options` a message would carry. */
 export function useEditChatMessage(sessionId: string, scope: ThreadScope, onRefused?: (error: ChatBranchError) => void) {
   const { request, refetch } = useBranchRequest(sessionId, scope);
-  return useMutation<StartedRun, ChatBranchError, { messageId: string; text: string; clientMessageId: string }>({
-    mutationFn: async ({ messageId, text, clientMessageId }) =>
-      started(sessionId, await request('edit_chat_message', { message_id: messageId, message: text, client_message_id: clientMessageId })),
+  return useMutation<StartedRun, ChatBranchError, { messageId: string; text: string; clientMessageId: string; options?: SendOptions }>({
+    mutationFn: async ({ messageId, text, clientMessageId, options }) =>
+      started(
+        sessionId,
+        await request('edit_chat_message', {
+          message_id: messageId,
+          message: text,
+          client_message_id: clientMessageId,
+          ...(options ? { options } : {}),
+        }),
+      ),
     onError: (error) => onRefused?.(error),
     onSettled: refetch,
   });
 }
 
 /** Try the latest answer again: a new version of it, answering the same
- *  message. */
+ *  message, with the `options` a message would carry. */
 export function useRegenerateChatReply(sessionId: string, scope: ThreadScope, onRefused?: (error: ChatBranchError) => void) {
   const { request, refetch } = useBranchRequest(sessionId, scope);
-  return useMutation<StartedRun, ChatBranchError, { messageId: string }>({
-    mutationFn: async ({ messageId }) => started(sessionId, await request('regenerate_chat_reply', { message_id: messageId })),
+  return useMutation<StartedRun, ChatBranchError, { messageId: string; options?: SendOptions }>({
+    mutationFn: async ({ messageId, options }) =>
+      started(sessionId, await request('regenerate_chat_reply', { message_id: messageId, ...(options ? { options } : {}) })),
     onError: (error) => onRefused?.(error),
     onSettled: refetch,
   });

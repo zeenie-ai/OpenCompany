@@ -391,14 +391,20 @@ async def _done_today(database: Any, workflow_ids: Iterable[str]) -> Dict[str, i
         return {}
 
 
-async def employee_usage(database: Any) -> Dict[str, int]:
-    """Settings > Billing: the team's successful runs so far this month.
+async def employee_usage(database: Any, *, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Settings > Billing: the team's successful runs so far this month, and
+    ``since``, the day the count starts (the 1st in the owner's zone, as
+    YYYY-MM-DD), so the page says the period in the owner's own terms.
 
     Errors propagate, so the page shows that the count is unavailable
     rather than a zero.
     """
     zone = await _owner_zone(database)
-    return {"tasks_this_month": await runs.done_this_month(database, zone=zone)}
+    now = now or datetime.now(timezone.utc)
+    return {
+        "tasks_this_month": await runs.done_this_month(database, zone=zone, now=now),
+        "since": runs.start_of_month(now, zone).astimezone(zone).date().isoformat(),
+    }
 
 
 async def _latest_run(database: Any, workflow_id: str) -> Optional[Dict[str, Any]]:

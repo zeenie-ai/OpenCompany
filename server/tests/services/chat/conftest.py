@@ -81,7 +81,14 @@ def chat(monkeypatch, database, hub, frames):
 
     # Temporal, which delivers the messages; a test may disconnect it.
     engine = SimpleNamespace(is_connected=True)
-    monkeypatch.setattr(handlers, "container", SimpleNamespace(database=lambda: database, temporal_client=lambda: engine))
+    # The credential service the model picker asks which providers are
+    # connected; the picker's tests decide that (services/chat/choice.py).
+    auth = SimpleNamespace()
+    monkeypatch.setattr(
+        handlers,
+        "container",
+        SimpleNamespace(database=lambda: database, temporal_client=lambda: engine, auth_service=lambda: auth),
+    )
     monkeypatch.setattr(handlers, "dispatch_chat_message_received", dispatch)
     monkeypatch.setattr(chat_thread, "_CLEARED_LISTENERS", [])
-    return SimpleNamespace(database=database, hub=hub, frames=frames, dispatched=dispatched, handlers=handlers, engine=engine)
+    return SimpleNamespace(database=database, hub=hub, frames=frames, dispatched=dispatched, handlers=handlers, engine=engine, auth=auth)

@@ -351,6 +351,12 @@ class Database:
                         default_on = 1 if UserSettings.model_fields[col].default else 0
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT {default_on}"))
                         logger.info(f"Added {col} column to user_settings")
+                # The chat's model picker; existing rows take the model default.
+                for col, length in [("chat_model", 300), ("chat_effort", 10)]:
+                    if col not in columns:
+                        default = str(UserSettings.model_fields[col].default)
+                        await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} VARCHAR({length}) NOT NULL DEFAULT '{default}'"))
+                        logger.info(f"Added {col} column to user_settings")
 
                 # Migrate token_usage_metrics table - add cost columns
                 result = await conn.execute(text("PRAGMA table_info(token_usage_metrics)"))
@@ -2480,6 +2486,8 @@ class Database:
                     "getting_started_approved_draft": settings.getting_started_approved_draft,
                     "default_llm_provider": settings.default_llm_provider,
                     "default_llm_model": settings.default_llm_model,
+                    "chat_model": settings.chat_model,
+                    "chat_effort": settings.chat_effort,
                     "auto_add_skill_for_tools": settings.auto_add_skill_for_tools,
                     "auto_rebind_tools_after_canvas_change": settings.auto_rebind_tools_after_canvas_change,
                     "agent_recursion_limit": settings.agent_recursion_limit,

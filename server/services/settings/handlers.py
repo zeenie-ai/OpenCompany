@@ -59,6 +59,13 @@ async def handle_save_user_settings(data: Dict[str, Any], websocket: WebSocket) 
     # Profile text reaches every hired employee's instructions: clean it here.
     raw = data.get("settings")
     settings_data = normalize_profile_patch(raw if isinstance(raw, dict) else {})
+    # The chat's model picker keeps to what it offers (services/chat/choice.py).
+    from services.chat.choice import ChoiceRefused, check_settings
+
+    try:
+        check_settings(settings_data)
+    except ChoiceRefused as exc:
+        return {"success": False, "error": "chat_choice_refused", "detail": exc.detail}
 
     success = await database.save_user_settings(settings_data, user_id)
 

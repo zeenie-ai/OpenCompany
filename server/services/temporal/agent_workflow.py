@@ -1125,6 +1125,13 @@ class AgentWorkflow:
                     if payload.get("chat_stream")
                     else {}
                 ),
+                # The owner's chat choice (Quick / Thorough), for the agent
+                # that answers them. Activity input only, like the two above.
+                **(
+                    {"effort": payload["effort"]}
+                    if payload.get("effort")
+                    else {}
+                ),
             }
             if context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1:
                 llm_payload["user_id"] = str(context.get("user_id") or "owner")

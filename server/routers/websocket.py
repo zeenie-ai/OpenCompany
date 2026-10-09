@@ -420,6 +420,14 @@ async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSo
     for provider in catalogue.get("providers", []):
         provider.update(await provider_connection_state(provider, auth_service, principal=principal))
 
+    # Cards a plugin builds from what was saved (one per custom connector),
+    # each with its own state.
+    from services.plugin.credential import CREDENTIAL_REGISTRY
+
+    scope = {"principal": principal} if principal is not None else {}
+    for cred_cls in list(CREDENTIAL_REGISTRY.values()):
+        catalogue["providers"].extend(await cred_cls.catalogue_entries(**scope))
+
     return catalogue
 
 

@@ -145,6 +145,17 @@ class CredentialRegistry:
             return None
         return entry
 
+    def get_template(self, provider_id: str) -> Optional[Dict[str, Any]]:
+        """A resolved abstract entry: the shared fields a plugin builds its own
+        cards from (``Credential.catalogue_entries``). None when it is missing
+        or concrete."""
+        entry = self._resolve_all().get(provider_id)
+        if entry is None or not entry.get("_abstract"):
+            return None
+        template = copy.deepcopy(entry)
+        template.pop("_abstract", None)
+        return template
+
     def get_categories(self) -> List[Dict[str, Any]]:
         """Return ordered category metadata derived from the raw file."""
         raw = self._load_raw()

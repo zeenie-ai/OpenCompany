@@ -66,6 +66,7 @@ class TestCatalogueFields:
             "language",
             "developer",
             "devices",
+            "custom",
             "ai",
         ]
 
@@ -95,6 +96,10 @@ class TestCatalogueFields:
             # A user identity no node acts as yet; its OAuth app keys are
             # fields on the Discord entry.
             "discord_oauth",
+            # Each custom MCP connector the owner adds is its own card
+            # (McpConnectorCredential.catalogue_entries), added from the
+            # Connectors page's Add, so no single entry stores one.
+            "mcp",
         }
         # Plugin credentials only: test modules register stubs in the same
         # registry (test_connection_multipart's `multipart_stub`), and which

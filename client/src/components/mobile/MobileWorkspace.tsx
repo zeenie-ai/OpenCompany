@@ -1,20 +1,27 @@
 import { PhoneActivity } from './PhoneActivity';
 import { FullView } from '../workspace/FullView';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
-import { ArrowLeft, Home, Play, RotateCw, Smartphone, Square } from 'lucide-react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { PointerEvent, ReactNode, Ref } from 'react';
+import { ArrowLeft, Home, LayoutList, Play, RotateCw, RotateCcwSquare, ScanLine, Smartphone, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { buildApiUrl } from '@/config/api';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { mobilePath, mobilePoint, mobileRequest, type Doctor, type Geometry, type Invocation, type MobileStatus } from './api';
+import type { SurfaceControl } from '../workspace/surface';
 
 const fieldClass = 'min-w-0 rounded border border-border-default bg-bg-input px-2 py-1.5 text-sm text-fg-default outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const finished = new Set(['completed', 'success', 'succeeded', 'failed', 'cancelled', 'canceled']);
 const taskState = (task: Invocation | null) => task?.status ?? task?.state ?? '';
 const describe = (value: unknown): string => typeof value === 'string' ? value : value == null ? '' : JSON.stringify(value);
 
-export default function MobileWorkspace({ workflowId, nodes, visible = true }: {
+export default function MobileWorkspace({ workflowId, nodes, visible = true, canvasNodeId = null, notify, ref }: {
   workflowId?: string | null; nodes: { node_id: string; label: string }[]; visible?: boolean;
+  /** The Workspace's Take over (SurfaceControl), for the phone shown. */
+  ref?: Ref<SurfaceControl>;
+  /** The Canvas board a screenshot goes to; without one there is no Screenshot to Canvas. */
+  canvasNodeId?: string | null;
+  /** A short message for the owner (Home: the pill toast; Dev: a toast). */
+  notify?: (message: string, tone: 'success' | 'error') => void;
 }) {
   const { addEventListener } = useWebSocketActions();
   const [selected, setSelected] = useState('');
@@ -38,7 +45,7 @@ export default function MobileWorkspace({ workflowId, nodes, visible = true }: {
     {nodes.length > 1 && <select className={`${fieldClass} mx-2 mt-2 shrink-0`} aria-label="Mobile agent" value={nodeId} onChange={(event) => setSelected(event.target.value)}>
       {nodes.map((node) => <option key={node.node_id} value={node.node_id}>{node.label}</option>)}
     </select>}
-    <MobileSession key={`${workflowId}:${nodeId}:${sessionVersion}`} workflowId={workflowId} nodeId={nodeId} visible={visible} isCurrentSession={isCurrentSession} />
+    <MobileSession key={`${workflowId}:${nodeId}:${sessionVersion}`} workflowId={workflowId} nodeId={nodeId} visible={visible} isCurrentSession={isCurrentSession} canvasNodeId={canvasNodeId} notify={notify} ref={ref} />
   </div>;
 }
 
@@ -46,7 +53,11 @@ function Empty({ message }: { message: string }) {
   return <div className="m-auto flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Smartphone aria-hidden className="size-6" />{message}</div>;
 }
 
-function MobileSession({ workflowId, nodeId, visible, isCurrentSession }: { workflowId: string; nodeId: string; visible: boolean; isCurrentSession: () => boolean }) {
+function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNodeId, notify, ref }: {
+  workflowId: string; nodeId: string; visible: boolean; isCurrentSession: () => boolean;
+  canvasNodeId: string | null; notify?: (message: string, tone: 'success' | 'error') => void; ref?: Ref<SurfaceControl>;
+}) {
+  const { sendRequest } = useWebSocketActions();
   const path = mobilePath(workflowId, nodeId);
   const [viewerId] = useState(() => crypto.randomUUID());
   const [status, setStatus] = useState<MobileStatus | null>(null);
@@ -196,6 +207,40 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession }: { work
     setSubmission(attempt.id); setTask(response); setPrompt(''); pendingSubmission.current = null;
     try { sessionStorage.setItem(`mobile-task:${workflowId}:${nodeId}`, attempt.id); } catch { /* optional recovery */ }
   });
+  // Use phone, and the Workspace's Take over: the phone's lease for this view.
+  const takeControl = async () => {
+    const claim = await mobileRequest<{ epoch: number; owner: string }>(`${path}/takeover`, { viewer_id: viewerId });
+    if (!active.current || !isCurrentSession() || !viewActive.current) {
+      await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch: claim.epoch, resume: false });
+      return false;
+    }
+    leaseEpoch.current = claim.epoch; setEpoch(claim.epoch); setLeaseOwner(claim.owner);
+    return true;
+  };
+  // Hand back: give the phone back and let a task waiting for the owner go
+  // on; without the lease (this view let it go) only the task resumes.
+  const handBack = async () => {
+    const held = leaseEpoch.current;
+    if (held !== null) {
+      await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch: held, resume: true });
+      leaseEpoch.current = null; setEpoch(null);
+    } else {
+      await mobileRequest(`${path}/resume`, {});
+    }
+  };
+  useImperativeHandle(ref, () => ({
+    claim: () => takeControl().catch(() => false),
+    release: () => { void handBack().catch((cause) => { if (active.current) setError(cause instanceof Error ? cause.message : 'Could not hand the phone back.'); }); },
+  }));
+  // The phone's screen as a PNG in the workspace, then on the Canvas board.
+  const screenshot = () => perform('saving a screenshot', async () => {
+    const { ref } = await mobileRequest<{ ref: { path: string } }>(`${path}/screenshot`, {});
+    const added = await sendRequest<{ success?: boolean; error?: string }>('canvas_add', { workflow_id: workflowId, node_id: canvasNodeId, path: ref.path });
+    if (added?.success === false) throw new Error(added.error || 'The screenshot could not go on the Canvas.');
+    notify?.('Screenshot added to Canvas', 'success');
+  });
+  // Rotate turns a phone held upright on its side, and back.
+  const rotate = () => perform('input', () => input('rotate', { orientation: status?.geometry?.rotation ? 'natural' : 'left' }));
   const installed = doctor?.adb && doctor?.emulator && doctor?.image && doctor?.engine && doctor?.video;
   const setupActive = typeof status?.setup === 'string' && status.setup.startsWith('installing_');
   const setupFailed = status?.setup === 'error' || status?.setup === 'interrupted' || !!status?.setup_error;
@@ -212,9 +257,7 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession }: { work
       {running && (held ? <>
         <Button size="sm" onClick={() => void perform('releasing', async () => { await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch, resume: true }); leaseEpoch.current = null; setEpoch(null); })} disabled={!!busy}>Let AI continue</Button>
         <Button size="sm" variant="outline" onClick={() => void perform('releasing', async () => { await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch, resume: false }); leaseEpoch.current = null; setEpoch(null); })} disabled={!!busy}>Finish using phone</Button>
-      </> : <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void perform('taking control', async () => { const claim = await mobileRequest<{ epoch: number; owner: string }>(`${path}/takeover`, { viewer_id: viewerId });
-          if (!active.current || !isCurrentSession() || !viewActive.current) { await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch: claim.epoch, resume: false }); return; }
-          leaseEpoch.current = claim.epoch; setEpoch(claim.epoch); setLeaseOwner(claim.owner); })}>Use phone</Button>)}
+      </> : <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void perform('taking control', async () => { await takeControl(); })}>Use phone</Button>)}
     </>} controls={<>
       <div className="flex flex-wrap items-center gap-2">
         {running && powerControl}
@@ -264,14 +307,25 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession }: { work
         {!running && !status?.starting && installed && !status?.start_error && <p className="m-0 text-sm text-fg-muted">Your phone is ready to turn on. Click Start phone to use it.</p>}
       </div>}
       {running && <>
-        <div ref={surface} className={`relative flex min-h-0 min-w-0 flex-1 touch-none items-center justify-center overflow-hidden bg-slate-950 ${held ? 'cursor-crosshair' : ''}`} onPointerDown={down} onPointerUp={up} onPointerCancel={() => { pointer.current = null; }} aria-label={held ? 'Phone screen: tap or drag to interact' : 'Phone screen, view only'}>
-          <canvas ref={canvas} className="absolute inset-0 h-full w-full object-contain" />
-          {!live && !videoError && <p className="pointer-events-none z-10 text-sm text-fg-muted">Connecting live view…</p>}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center gap-2.5 p-3">
+          {status.device && <p role="status" className="m-0 flex shrink-0 items-center gap-2 font-mono text-2xs text-fg-muted"><span aria-hidden className="size-1.5 rounded-full bg-action-run-ink" />{status.device}</p>}
+          <PhoneFrame geometry={status.geometry}>
+            <div ref={surface} className={`relative h-full w-full touch-none overflow-hidden rounded-(--radius-phone-screen) bg-(--phone-bezel) ${held ? 'cursor-crosshair' : ''}`} onPointerDown={down} onPointerUp={up} onPointerCancel={() => { pointer.current = null; }} aria-label={held ? 'Phone screen: tap or drag to interact' : 'Phone screen, view only'}>
+              <canvas ref={canvas} className="absolute inset-0 h-full w-full object-contain" />
+              {!live && !videoError && <p className="pointer-events-none absolute inset-0 z-10 m-0 grid place-items-center text-sm text-fg-muted">Connecting live view…</p>}
+            </div>
+          </PhoneFrame>
+          <div role="toolbar" aria-label="Phone buttons" className="flex shrink-0 items-center gap-0.5 rounded-pill border border-border-default bg-bg-panel p-0.75">
+            <DeviceButton label="Back" disabled={!held || !!busy} onClick={() => void perform('input', () => input('key', { key: 'back' }))}><ArrowLeft /></DeviceButton>
+            <DeviceButton label="Home" disabled={!held || !!busy} onClick={() => void perform('input', () => input('key', { key: 'home' }))}><Home /></DeviceButton>
+            <DeviceButton label="Recent apps" disabled={!held || !!busy} onClick={() => void perform('input', () => input('key', { key: 'recent' }))}><LayoutList /></DeviceButton>
+            <span aria-hidden className="mx-1 h-4.5 w-px bg-border-default" />
+            {canvasNodeId && <DeviceButton label="Screenshot to Canvas" disabled={!!busy} onClick={() => void screenshot()}><ScanLine /></DeviceButton>}
+            <DeviceButton label="Rotate" disabled={!held || !!busy} onClick={() => void rotate()}><RotateCcwSquare /></DeviceButton>
+          </div>
         </div>
         {videoError && <div className="flex shrink-0 items-center gap-2 p-2"><p role="alert" className="m-0 flex-1 text-xs text-fg-muted">{videoError}</p><Button size="sm" variant="outline" onClick={() => setVideoAttempt((value) => value + 1)}>Reconnect</Button></div>}
         {held && <div className="flex shrink-0 flex-wrap gap-1 border-t border-border-default p-2">
-          <Button size="icon-sm" variant="outline" aria-label="Phone Back" disabled={!!busy} onClick={() => void perform('input', () => input('key', { key: 'back' }))}><ArrowLeft /></Button>
-          <Button size="icon-sm" variant="outline" aria-label="Phone Home" disabled={!!busy} onClick={() => void perform('input', () => input('key', { key: 'home' }))}><Home /></Button>
           <input className={`${fieldClass} flex-1`} aria-label="Text to type on phone" value={text} onChange={(event) => setText(event.target.value)} placeholder="Type on phone" />
           <Button size="sm" variant="outline" disabled={!text || !!busy} onClick={() => void perform('input', async () => { await input('text', { text }); setText(''); })}>Type</Button>
         </div>}
@@ -294,6 +348,22 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession }: { work
       </details>
     </div>
   </FullView>;
+}
+
+/** The phone around the live screen: a bezel shaped by the screen's width
+ *  and height (it turns with the phone), as large as the view allows. */
+function PhoneFrame({ geometry, children }: { geometry?: Geometry | null; children: ReactNode }) {
+  const ratio = geometry && geometry.width > 0 && geometry.height > 0 ? geometry.width / geometry.height : null;
+  return <div className="flex min-h-0 w-full flex-1 items-center justify-center [container-type:size]">
+    <div className="box-border overflow-hidden rounded-(--radius-phone) border-7 border-(--phone-bezel) bg-(--phone-bezel) shadow-(--shadow-phone)"
+      style={ratio ? { aspectRatio: String(ratio), width: `min(100cqw, min(100cqh, var(--h-phone-max)) * ${ratio})` } : { width: '100%', height: '100%' }}>
+      {children}
+    </div>
+  </div>;
+}
+
+function DeviceButton({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
+  return <Button size="icon-sm" variant="quiet" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="size-7.5 rounded-lg [&_svg]:size-4">{children}</Button>;
 }
 
 function SetupProgress({ status, ticking }: { status: MobileStatus | null; ticking: boolean }) {

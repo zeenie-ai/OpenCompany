@@ -40,6 +40,42 @@ export function browserPoint(
   };
 }
 
+/** Where a viewport CSS point shows on the picture, as fractions of its width
+ *  and height (0 to 1 inside it): the inverse of `browserPoint`. */
+export function framePosition(x: number, y: number, header: BrowserFrameHeader): { x: number; y: number } {
+  const pageScale = header.page_scale_factor && header.page_scale_factor > 0 ? header.page_scale_factor : 1;
+  return { x: (x * pageScale) / header.device_width, y: (y * pageScale + (header.offset_top ?? 0)) / header.device_height };
+}
+
+/** Where the agent acted (`agent_action`), in the viewport CSS pixels
+ *  `browserPoint` gives: `point` is where its cursor goes, `box` the field it
+ *  typed into or chose from. `id` counts actions, so the same point twice
+ *  still shows twice. */
+export interface BrowserAgentAction {
+  id: number;
+  action: 'click' | 'hover' | 'type' | 'select';
+  targetId?: string;
+  point: { x: number; y: number };
+  box?: { left: number; top: number; width: number; height: number };
+}
+
+const AGENT_ACTIONS: ReadonlySet<string> = new Set(['click', 'hover', 'type', 'select']);
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/** An `agent_action` message, or null. The cursor goes into a field where
+ *  the design aims at one: 55% across (at most 60px in) and 55% down. */
+export function parseAgentAction(message: Record<string, unknown>, id: number): BrowserAgentAction | null {
+  const action = message.action;
+  if (typeof action !== 'string' || !AGENT_ACTIONS.has(action)) return null;
+  const base = { id, action: action as BrowserAgentAction['action'], targetId: typeof message.target_id === 'string' ? message.target_id : undefined };
+  const box = message.box;
+  if (Array.isArray(box) && box.length === 4 && box.every(finite) && box[2] >= 0 && box[3] >= 0) {
+    const [left, top, width, height] = box;
+    return { ...base, box: { left, top, width, height }, point: { x: left + Math.min(width * 0.55, 60), y: top + height * 0.55 } };
+  }
+  return finite(message.x) && finite(message.y) ? { ...base, point: { x: message.x, y: message.y } } : null;
+}
+
 export function browserModifiers(event: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): number {
   return (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
 }

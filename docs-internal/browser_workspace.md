@@ -21,6 +21,15 @@ switch to Canvas. Mobile renders the local Android phone through
 The Browser node's parameter panel (`MiddleSection`, `isBrowserPanel`) shows
 the same viewer above the node's settings.
 
+An inactive tab whose surface is busy shows a pulsing dot (`activity`, from
+`components/workspace/activity.ts` `useSurfaceRunning`: one of the surface's
+nodes executing in the workflow's node statuses; Home also dots Browser while
+the employee's `browser_request` waits for the owner). The body arriving on a
+tab switch fades and rises out of a blur (`--dur-slow`, spring). Browser
+controls offer **Open in new tab** for the page the browser shows, as the
+server last reported it (`page`), when it is an http(s) page; the link opens in
+the owner's own browser with `noopener noreferrer`.
+
 ## Full view
 
 The normal Browser and Mobile views fill the remaining Workspace height and
@@ -101,6 +110,18 @@ finish login. Closing must be confirmed by the owner before the sensitive
 latch clears. The normal handoff covers MFA, passkeys and multi-step login.
 See [configured login](browser.md#configured-1password-login).
 
+## Steps in Home's timeline
+
+Each site action the agent takes through the Browser node (open, click,
+hover, type, press, select, scroll, history, tabs, page tools, scripts) and
+each screenshot adds one line to the employee's Workspace timeline
+(`nodes/browser/_steps.py` into `services/workspace_steps.py`; see
+[Normal Mode](normal_mode.md#the-workspace)), naming the action and the
+page's host: "Opened example.com", "Typed into a field on example.com".
+A line never holds what was typed, selected or shown. Nothing is recorded
+while a protected login is in progress, or for an action that failed, and
+a step that cannot be saved never fails the action.
+
 ## When the agent asks for help
 
 `request_user` puts the profile's controller in `awaiting_user`. The viewer
@@ -116,6 +137,19 @@ and employee summaries reach every connected socket:
 - **Dev:** a `browser_updated` broadcast for the open workflow in
   `awaiting_user` opens the dock on its Browser tab
   (`canvasDockStore.showBrowser`).
+
+The request waits for the owner until they take control or it times out. A
+viewer that never took control cannot answer it: switching tabs, closing the
+dock, blurring the window or hiding the page sends a release, and
+`LiveControlQueue.release` hands control back only for the viewer in control,
+so the request keeps waiting (it used to resolve as `control_lost`).
+
+Every `control_request` gets a `control` answer, granted or not: a hidden or
+closed viewer, a protected login (`reason: "protected_login"`), a full queue,
+or a request the page outran before it ran (`viewer_unavailable`) is refused
+out loud (`LiveControlQueue._refuse_claim`), so a viewer never waits on
+"Taking control…". Home's Take over (`normal_mode.md`) relies on it: the
+viewer's `claim()` resolves on that answer.
 
 ## Transport and display
 
@@ -144,6 +178,35 @@ Navigation, page-tab selection, mouse, wheel, keyboard, pasted text and page
 dialogs require Take control; the server remains the authority on the control
 lease. Hand back returns control to the agent. Another controlling viewer is
 identified explicitly before a forced takeover is offered.
+
+## The agent's cursor
+
+After each click, hover, type or select the agent makes, the viewers get an
+`agent_action` message: `{action, target_id, x, y}` for a point (click,
+hover) or `{action, target_id, box: [left, top, width, height]}` for the
+field typed into or chosen from, in the page's viewport CSS pixels, the
+space the owner's own input uses. The operation's script reports the
+position beside its result (`_scripts.py` `_oc_mark`, carried in
+`CliResult.extra`), so the agent's result is unchanged; the Browser node
+checks it (`_cursor_of`: finite numbers, a box no smaller than nothing)
+and emits it through the controller, and the hub sends it to every viewer
+(`_stream.py`). It never carries what was typed or chosen, and nothing goes
+out during a protected login: it is one of the hub's private types
+(`_PRIVATE_TYPES`, with page, tabs, dialogs, clipboard and errors), dropped
+while the login runs and purged by its barrier. Finding a position never
+fails the action.
+
+The viewer (`AgentCursor.tsx`) draws an arrow there, with the employee's
+name on Home (`agentName`), gliding from the last action
+(`--dur-cursor-glide`, the reveal curve), then a ripple for a click
+(`--dur-cursor-ripple`) or a ring round the field; the page's own caret
+and text show in the picture. Positions map back onto the picture with
+`framePosition`, the inverse of `browserPoint`, inside a box the picture's
+shape, so a resize or Full view needs no measuring. A field's point is 55%
+across it (at most 60px in) and 55% down. The cursor shows only on the
+picture it was reported for (its tab), hides while the owner or another
+viewer has control, and goes with the picture (idle, a protected login, a
+closed socket).
 
 Transient socket disconnects reconnect. Authentication and target errors need
 explicit action. Initial CDP screencast failures produce visible errors and
@@ -285,7 +348,9 @@ benchmark script:   283e28a5afa86c16370e39b989b8d800462b940d1e81f6755f29bded129a
 ## Tests
 
 - `client/src/components/browser/__tests__`: stream envelope, geometry, attach,
-  rendering/ACK, cleanup, visibility and control gating.
+  rendering/ACK, cleanup, visibility and control gating, and the agent's
+  cursor (`framePosition`, `parseAgentAction`, where it shows and when it
+  hides).
 - `client/src/features/home/__tests__/workspace.test.tsx`: employee identity and
   browser discovery integration, tab changes and hidden dock state.
 - `client/src/components/ui/__tests__/WorkspaceDock.test.tsx`: Dev tabs, schema
@@ -297,7 +362,9 @@ benchmark script:   283e28a5afa86c16370e39b989b8d800462b940d1e81f6755f29bded129a
 - `client/src/stores/__tests__/canvasDockStore.test.ts`: a Canvas push never
   leaves a live browser; `showBrowser` opens the Browser tab.
 - `server/tests/nodes/browser/test_browser_stream.py`: fake-CDP startup failure
-  recovery and cancellation.
+  recovery and cancellation; `agent_action` reaching viewers, never during a
+  protected login. `test_browser_scripts.py` and `test_browser_node.py`: each
+  action's reported position, beside its result, and a made-up one dropped.
 - `server/tests/nodes/browser/test_browser_frame_delivery.py`: trailing frames,
   independent viewer credit, duplicate ACKs, capture replacement and diagnostics.
 - `server/tests/nodes/browser/test_browser_live_control.py`: bounded input queues,

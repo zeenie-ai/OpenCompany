@@ -119,6 +119,13 @@ lone op regardless of `parameters["operation"]`). Item sources, in order:
 An empty call raises `NodeUserError("Nothing to display — pass paths, url,
 or content …")` so the LLM gets a one-line correctable error.
 
+Each display also adds a line to the employee's Workspace timeline
+(`services/workspace_steps.py`, best effort, see
+[Normal Mode](./normal_mode.md#the-workspace)): "Showed {title} on the
+Canvas", "Showed {n} items on the Canvas", or "Updated {title} on the
+Canvas" for a new version. An untitled item goes by its file name or its
+URL's host, else "a note".
+
 **Revising an item** (`update_id`): with the id of an item already on the
 board (from an earlier result's `added`), the call's one item (one path,
 url or content, of the same kind) becomes that item's next version instead
@@ -258,6 +265,7 @@ interface CanvasItem {
 | Channel | Shape |
 |---|---|
 | `canvas_list {workflow_id, node_id}` | `{success, items: CanvasItem[], revision}` |
+| `canvas_add {workflow_id, node_id, path}` | `{success, item, revision, count}` + broadcast. The owner's own addition (Screenshot to Canvas on the phone): `path` is workspace-relative and the reference is rebuilt from the file (`_build_ref`, as `display` does), `source: "owner"` |
 | `canvas_remove {workflow_id, node_id, item_id}` | `{success, removed, revision}` + broadcast |
 | `canvas_clear {workflow_id, node_id}` | `{success, cleared, revision}` + broadcast |
 | `canvas_version {workflow_id, node_id, item_id, version}` | `{success, item: CanvasItem-at-that-version & {latest}}` |
@@ -299,7 +307,14 @@ prefix `['canvasBoard']` for broadcast-driven invalidation.
   employee's board, named by the employee summary's `canvas_node_id`,
   loads lazily so the renderer's viewers stay out of Home's chunk, and
   passes an owner-facing empty hint. Hires get a Canvas node from the
-  Hire builder.
+  Hire builder. It turns on `CanvasContent`'s `library`
+  ([`CanvasLibrary.tsx`](../client/src/components/parameterPanel/canvas/CanvasLibrary.tsx)):
+  the footer is the Library button (the count), the six newest items as
+  chips (each with its kind's tile: the file's extension, MD, WEB, PDF...)
+  and Latest while an older item is shown, in place of prev/next (the
+  ←/→/Home/End keys stay). The Library lists *Artifacts* (notes, with their
+  version) and *Files* (everything else, images as thumbnails); picking one
+  shows it.
 
 A document card in a chat reply opens its item through the host:
 `homeStore.openCanvasItem` (Home: opens the Workspace on that employee's

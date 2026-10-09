@@ -57,6 +57,7 @@ class AnthropicProvider:
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
         on_event: Optional[StreamSink] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         system, api_msgs = self._split_system(messages)
         policy = self._model_policy(model)
@@ -92,6 +93,12 @@ class AnthropicProvider:
         if policy["sampling_params"]:
             # Anthropic requires temperature=1 alongside budget thinking.
             params["temperature"] = 1 if thinking_on else temperature
+
+        if effort:
+            # The owner's chat choice (Quick / Thorough): how much the model
+            # spends on the answer, thinking or not. Only the effort_models
+            # receive one (ChatUnifier).
+            params["output_config"] = {"effort": effort}
 
         # Tools
         if tools:

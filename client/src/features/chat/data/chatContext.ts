@@ -2,8 +2,9 @@
  * What a chat's message box offers (`get_chat_context`): slash commands (the
  * generic ones and those the employee's apps add; the ones marked `suggest`
  * also show as suggestions in an empty chat), whether files can be attached
- * (a workflow's chat), whether the Web chip has search to turn off, and the
- * limits. Dictation (`dictation_status`): whether a recording can be turned
+ * (a workflow's chat), whether the Web chip has search to turn off, whether
+ * the employee takes the model picker's choice (`model_choice`: its agent
+ * runs as an AgentWorkflow), and the limits. Dictation (`dictation_status`): whether a recording can be turned
  * into text, which needs a speech provider's key; `transcribe` sends one.
  */
 
@@ -22,6 +23,7 @@ export interface ChatContext {
   commands: ChatCommand[];
   attachments: boolean;
   web: boolean;
+  modelChoice: boolean;
   maxAttachments: number;
 }
 
@@ -37,7 +39,9 @@ const commandSchema = z
 const contextSchema = z
   .object({
     commands: z.array(z.unknown()).catch([]),
-    capabilities: z.object({ attachments: z.boolean().catch(false), web: z.boolean().catch(false) }).catch({ attachments: false, web: false }),
+    capabilities: z
+      .object({ attachments: z.boolean().catch(false), web: z.boolean().catch(false), model_choice: z.boolean().catch(false) })
+      .catch({ attachments: false, web: false, model_choice: false }),
     limits: z.object({ max_attachments: z.number().int().positive().catch(6) }).catch({ max_attachments: 6 }),
   })
   .transform(
@@ -48,11 +52,12 @@ const contextSchema = z
       }),
       attachments: raw.capabilities.attachments,
       web: raw.capabilities.web,
+      modelChoice: raw.capabilities.model_choice,
       maxAttachments: raw.limits.max_attachments,
     }),
   );
 
-export const NO_CHAT_CONTEXT: ChatContext = { commands: [], attachments: false, web: false, maxAttachments: 6 };
+export const NO_CHAT_CONTEXT: ChatContext = { commands: [], attachments: false, web: false, modelChoice: false, maxAttachments: 6 };
 
 export function parseChatContext(reply: unknown): ChatContext {
   const parsed = contextSchema.safeParse(reply);

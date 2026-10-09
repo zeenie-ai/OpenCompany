@@ -3,7 +3,7 @@
 ``list_employees`` -> ``{employees: EmployeeSummary[]}``: the whole team for
 the Home sidebar. ``get_employee {workflow_id}`` -> ``{employee}``: one
 summary plus what the employee card and its setup screen show.
-``get_employee_usage {}`` -> ``{tasks_this_month}``: Settings > Billing.
+``get_employee_usage {}`` -> ``{tasks_this_month, since}``: Settings > Billing.
 Shapes are documented in services/employees/summaries.py.
 
 Two change the employee, and answer with its fresh summary

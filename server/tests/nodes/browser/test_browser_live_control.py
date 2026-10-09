@@ -351,3 +351,46 @@ async def test_socket_reader_handles_ack_visibility_and_ping_while_navigation_wa
         socket.messages.put_nowait(None)
         await asyncio.wait_for(task, 1)
         await drain(queue)
+
+
+async def test_a_view_going_away_leaves_the_employees_help_request_waiting():
+    queue, hub, viewer, session, _ = setup_queue()
+    controller = hub.controller
+    controller.state = ControlState.IDLE
+    controller.controller_viewer = None
+    assert (await controller.request_user(session, reason="login", message="Sign in, please", timeout=60, wait=0))["status"] == "still_waiting"
+    assert controller.state == ControlState.AWAITING_USER
+    request = controller.pending
+    # The owner switches tabs, blurs the window or closes the dock: nobody
+    # had taken control, so the request keeps waiting for them.
+    queue.release(viewer, note="the live view was hidden")
+    await drain(queue)
+    assert controller.state == ControlState.AWAITING_USER and not request.future.done()
+    # The viewer who takes control and hands it back answers it.
+    assert (await controller.take_over(viewer.id))[0]
+    queue.release(viewer, outcome="handed_back")
+    await drain(queue)
+    assert request.future.result()["status"] == "handed_back"
+    assert controller.state == ControlState.IDLE
+
+
+async def test_every_refused_control_request_is_answered():
+    queue, hub, viewer, session, messages = setup_queue()
+    hub.controller.state = ControlState.AGENT
+    hub.controller.controller_viewer = None
+    # Hidden: refused at the door.
+    viewer.visible = False
+    assert not queue.enqueue(viewer, {"type": "control_request"}, session)
+    assert messages[-1] == {"type": "control", "granted": False, "reason": "viewer_unavailable"}
+    # Protected login: refused, and says why.
+    viewer.visible = True
+    hub.controller.sensitive_login = True
+    assert not queue.enqueue(viewer, {"type": "control_request"}, session)
+    assert messages[-1] == {"type": "control", "granted": False, "reason": "protected_login"}
+    # Admitted, then the page changed before it ran: still answered.
+    hub.controller.sensitive_login = False
+    assert queue.enqueue(viewer, {"type": "control_request"}, session)
+    hub.controller.tabs = {"page": {"url": "https://example.test/next"}}
+    await drain(queue)
+    assert messages[-1] == {"type": "control", "granted": False, "reason": "viewer_unavailable"}
+    assert hub.controller.controller_viewer is None

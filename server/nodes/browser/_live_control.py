@@ -99,6 +99,12 @@ class LiveControlQueue:
     def _error(self, viewer, code, message):
         viewer.send_json({"type": "error", "code": code, "message": message})
 
+    def _refuse_claim(self, viewer) -> None:
+        """Every control request is answered: the viewer waits for it (the
+        Workspace's Take over resolves on it)."""
+        reason = "protected_login" if getattr(self.controller, "sensitive_login", False) else "viewer_unavailable"
+        viewer.send_json({"type": "control", "granted": False, "reason": reason})
+
     def _target(self):
         target = self.controller.active_target_id
         current = target, (self.controller.tabs.get(target or "") or {}).get("url")
@@ -149,9 +155,12 @@ class LiveControlQueue:
         self._input_epoch = epoch
 
     def enqueue(self, viewer, message: dict, session) -> bool:
-        if self._closed or viewer.closed or not viewer.visible or getattr(self.controller, "sensitive_login", False):
-            return False
         kind = message.get("type")
+        if self._closed or viewer.closed or not viewer.visible or getattr(self.controller, "sensitive_login", False):
+            if kind == "control_request":
+                self._refuse_claim(viewer)
+            return False
+        # A second request while one is pending is answered with the first.
         if kind == "control_request" and viewer.id in self._takeover_pending:
             return False
         if kind in INPUT_KINDS and (viewer.id in self._blocked or self._unsafe or not self.controller.can_inject_input(viewer.id)):
@@ -170,6 +179,8 @@ class LiveControlQueue:
                 return True
         if len(self._queue) >= MAX_COMMANDS or self._bytes + command.size > MAX_BYTES:
             self._error(viewer, "control_overloaded", "Browser input is busy. Wait for the current action, then try again.")
+            if kind == "control_request":
+                self._refuse_claim(viewer)
             # Never silently lose a key-up on overflow: stop admission and
             # release everything after the current command settles.
             self.release(viewer, note="input queue overflow")
@@ -208,7 +219,10 @@ class LiveControlQueue:
 
     def release(self, viewer, *, outcome="control_lost", note="") -> None:
         self.invalidate(viewer.id)
-        if getattr(self.controller, "controller_viewer", None) != viewer.id and getattr(self.controller, "state", None) != "awaiting_user":
+        # Only the viewer in control hands it back. While the employee waits
+        # for the owner (awaiting_user) no viewer has it yet, so a view that
+        # is hidden, blurred or closed leaves the request waiting.
+        if getattr(self.controller, "controller_viewer", None) != viewer.id:
             return
         # A zero-byte priority barrier is always admissible. At most one per
         # viewer remains because invalidate removes its previous barrier.
@@ -291,6 +305,7 @@ class LiveControlQueue:
                         await self.controller.hand_back(viewer.id, outcome=message.get("outcome", "handed_back"), note=message.get("note", ""))
                     elif kind == "control_request":
                         if not self.valid(command, owner=False):
+                            self._refuse_claim(viewer)
                             continue
                         self._takeover_viewer = viewer.id
                         self._takeover = asyncio.create_task(self._claim(command))
@@ -329,6 +344,7 @@ class LiveControlQueue:
         viewer = command.viewer
         await self.controller.acquire_lease(command.session, wait=2.0)
         if not self.valid(command, owner=False):
+            self._refuse_claim(viewer)
             return
         granted, reason = await self.controller.take_over(
             viewer.id, force=bool(command.message.get("force")),

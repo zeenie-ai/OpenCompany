@@ -1,4 +1,4 @@
-"""Where the agent's browser may go (nodes/browser/_netpolicy.py, _egress.py)."""
+"""Where the agent's browser may go (services/netpolicy.py, nodes/browser/_egress.py)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nodes.browser._netpolicy import (
+from services.netpolicy import (
     NetPolicy,
     address_block_reason,
     domain_allowed,

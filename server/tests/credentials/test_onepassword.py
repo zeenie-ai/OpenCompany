@@ -366,6 +366,8 @@ async def test_catalogue_since_changes_with_shared_binding_and_keeps_principal_s
     registry = SimpleNamespace(
         get_live_version=lambda: "fixed-replica-local-version",
         get_catalogue=lambda: {"providers": [{"id": "openai", "kind": "apiKey"}], "categories": []},
+        # No card templates: no custom connector cards (nodes/mcp).
+        get_template=lambda provider_id: None,
     )
     monkeypatch.setattr(credential_registry, "get_credential_registry", lambda: registry)
     monkeypatch.setattr(websocket.container, "auth_service", lambda: source_auth)

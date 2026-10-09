@@ -1,17 +1,21 @@
 import { FullView } from '../workspace/FullView';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent, PointerEvent } from 'react';
-import { ArrowLeft, ArrowRight, Globe, RotateCw } from 'lucide-react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { KeyboardEvent, PointerEvent, Ref } from 'react';
+import { ArrowLeft, ArrowRight, ExternalLink, Globe, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { buildApiUrl } from '@/config/api';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import { browserModifiers, browserPoint, decodeBrowserFrame, type BrowserFrameHeader } from './protocol';
+import { browserModifiers, browserPoint, decodeBrowserFrame, parseAgentAction, type BrowserAgentAction, type BrowserFrameHeader } from './protocol';
+import { AgentCursor, type PictureShape } from './AgentCursor';
 import BrowserTasks from './BrowserTasks';
+import type { SurfaceControl } from '../workspace/surface';
 
 export interface BrowserWorkspaceProps {
   workflowId?: string | null;
   nodes: { node_id: string; label: string }[];
   visible?: boolean;
+  /** The name on the agent's cursor (the employee's, on Home). */
+  agentName?: string;
 }
 type Phase = 'connecting' | 'idle' | 'live' | 'error';
 interface BrowserState {
@@ -24,7 +28,15 @@ interface BrowserState {
 interface Tab { target_id: string; title?: string; url?: string; active?: boolean }
 const inputClass = 'min-w-0 rounded border border-border-default bg-bg-panel px-2 py-1 text-xs text-fg-default outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-export default function BrowserWorkspace({ workflowId, nodes, visible = true }: BrowserWorkspaceProps) {
+/** A page the owner's own browser can open: http(s) only. */
+function webPage(url: string): boolean {
+  if (!URL.canParse(url)) return false;
+  const { protocol } = new URL(url);
+  return protocol === 'http:' || protocol === 'https:';
+}
+
+/** `ref`: the Workspace's Take over (SurfaceControl), for the browser shown. */
+export default function BrowserWorkspace({ workflowId, nodes, visible = true, agentName, ref }: BrowserWorkspaceProps & { ref?: Ref<SurfaceControl> }) {
   const [selected, setSelected] = useState('');
   const nodeId = nodes.some((n) => n.node_id === selected) ? selected : nodes[0]?.node_id;
   if (!workflowId) return <EmptyBrowser message="Save this workflow to open its browser." />;
@@ -36,7 +48,7 @@ export default function BrowserWorkspace({ workflowId, nodes, visible = true }: 
           {nodes.map((node) => <option key={node.node_id} value={node.node_id}>{node.label || 'Browser'}</option>)}
         </select>
       )}
-      <BrowserSessionView key={`${workflowId}:${nodeId}`} workflowId={workflowId} nodeId={nodeId} visible={visible} />
+      <BrowserSessionView key={`${workflowId}:${nodeId}`} workflowId={workflowId} nodeId={nodeId} visible={visible} agentName={agentName} ref={ref} />
       <BrowserTasks key={`tasks:${workflowId}:${nodeId}`} workflowId={workflowId} browserNodeId={nodeId} visible={visible} />
     </div>
   );
@@ -46,7 +58,7 @@ function EmptyBrowser({ message }: { message: string }) {
   return <div className="m-auto flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Globe aria-hidden className="size-6" />{message}</div>;
 }
 
-function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: string; nodeId: string; visible: boolean }) {
+function BrowserSessionView({ workflowId, nodeId, visible, agentName, ref }: { workflowId: string; nodeId: string; visible: boolean; agentName?: string; ref?: Ref<SurfaceControl> }) {
   const { sendRequest, isReady } = useWebSocketActions();
   const socketRef = useRef<WebSocket | null>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -64,6 +76,9 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
   }, []);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [address, setAddress] = useState('');
+  // The page the browser shows, as the server last said: the address box can
+  // hold what the owner is typing instead.
+  const [pageUrl, setPageUrl] = useState('');
   const [hasFrame, setHasFrame] = useState(false);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -72,6 +87,10 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
   const [dialog, setDialog] = useState<{ kind: string; message: string } | null>(null);
   const [promptText, setPromptText] = useState('');
   const [takingControl, setTakingControl] = useState(false);
+  // Where the agent last acted (`agent_action`), on the picture it acted on;
+  // cleared with the picture.
+  const [agentAction, setAgentAction] = useState<{ action: BrowserAgentAction; picture: PictureShape } | null>(null);
+  const actionIds = useRef(0);
   const control = phase === 'live' && state.state === 'user' && state.controller === 'you';
   const controlRef = useRef(control);
   controlRef.current = control;
@@ -88,6 +107,28 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
     setState((previous) => ({ ...previous, controller: null }));
     send({ type: 'control_release', outcome: 'control_lost' });
   }, [send]);
+
+  // The Workspace's Take over asks for control and waits for the server's
+  // answer (`control`, which it always sends); a closed socket answers no.
+  const claimRef = useRef<((granted: boolean) => void) | null>(null);
+  const answerClaim = useCallback((granted: boolean) => {
+    claimRef.current?.(granted);
+    claimRef.current = null;
+  }, []);
+  useImperativeHandle(ref, () => ({
+    claim: () => new Promise<boolean>((resolve) => {
+      if (controlRef.current) { resolve(true); return; }
+      const socket = socketRef.current;
+      if (!socket || socket.readyState !== WebSocket.OPEN) { resolve(false); return; }
+      answerClaim(false);
+      claimRef.current = resolve;
+      setError(''); setTakingControl(true);
+      socket.send(JSON.stringify({ type: 'control_request', force: true }));
+    }),
+    release: () => {
+      if (controlRef.current) send({ type: 'control_release' });
+    },
+  }), [answerClaim, send, setError]);
 
   useEffect(() => {
     if (!isReady) { setPhase('connecting'); return; }
@@ -111,8 +152,8 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
     const transmit = (message: Record<string, unknown>) => {
       if (!disposed && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     };
-    setPhase('connecting'); setError(''); setHasFrame(false); frameRef.current = null;
-    setState({ state: 'idle' }); setTabs([]); setAddress(''); setDialog(null); setTakingControl(false);
+    setPhase('connecting'); setError(''); setHasFrame(false); frameRef.current = null; setAgentAction(null);
+    setState({ state: 'idle' }); setTabs([]); setAddress(''); setPageUrl(''); setDialog(null); setTakingControl(false);
     const url = new URL(buildApiUrl('/ws/browser'), window.location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     const socket = new WebSocket(url.toString());
@@ -126,22 +167,31 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
           const message = JSON.parse(event.data);
           if (message.type === 'attached') setPhase(message.running ? 'live' : 'idle');
           if (message.type === 'state') { setState(message); if (!terminalStreamError) setPhase('live'); setTakingControl(false); }
-          if (message.type === 'idle') { streamEpoch += 1; setPhase('idle'); setState({ state: 'idle' }); setHasFrame(false); frameRef.current = null; setDialog(null); }
-          if (message.type === 'page') setAddress(message.url || '');
+          if (message.type === 'idle') { streamEpoch += 1; setPhase('idle'); setState({ state: 'idle' }); setHasFrame(false); frameRef.current = null; setAgentAction(null); setDialog(null); }
+          if (message.type === 'page') { setAddress(message.url || ''); setPageUrl(message.url || ''); }
+          if (message.type === 'agent_action') {
+            // Drawn on the picture shown: none before the first one, none for another tab.
+            const picture = frameRef.current;
+            const action = parseAgentAction(message, (actionIds.current += 1));
+            if (picture && action && (!action.targetId || !picture.header.target_id || action.targetId === picture.header.target_id)) {
+              setAgentAction({ action, picture });
+            }
+          }
           if (message.type === 'tabs') setTabs(message.tabs || []);
           if (message.type === 'dialog') { setDialog(message); setPromptText(''); }
           if (message.type === 'sensitive') {
-            streamEpoch += 1; setHasFrame(false); frameRef.current = null; setDialog(null); setTabs([]); setAddress('');
+            streamEpoch += 1; setHasFrame(false); frameRef.current = null; setAgentAction(null); setDialog(null); setTabs([]); setAddress(''); setPageUrl('');
             setState((previous) => ({ ...previous, sensitive_login: !!message.enabled }));
           }
           if (message.type === 'error') {
             setError(message.message || 'Browser request failed.', message.code === 'screencast');
             if (message.code === 'screencast' && message.retrying === false) {
               terminalStreamError = true; streamEpoch += 1;
-              setPhase('error'); setHasFrame(false); frameRef.current = null;
+              setPhase('error'); setHasFrame(false); frameRef.current = null; setAgentAction(null);
             }
           }
           if (message.type === 'control') {
+            answerClaim(Boolean(message.granted));
             setTakingControl(false);
             if (!message.granted) setError(message.message || (message.reason === 'taken_over_elsewhere' ? 'Control moved to another viewer.' : 'Control could not be granted. Try again.'));
           }
@@ -214,8 +264,9 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
     socket.onerror = () => { if (!disposed) setError('Browser connection interrupted.'); };
     socket.onclose = (event) => {
       if (disposed) return;
+      answerClaim(false);
       streamEpoch += 1;
-      setPhase('error'); setHasFrame(false); frameRef.current = null; setTakingControl(false);
+      setPhase('error'); setHasFrame(false); frameRef.current = null; setAgentAction(null); setTakingControl(false);
       setError(event.reason || 'Browser connection lost.');
       // Authentication/ownership failures need user action, not a retry loop.
       if (![4001, 4002, 4003, 4004].includes(event.code)) retryTimer = setTimeout(() => setAttempt((n) => n + 1), 2000);
@@ -229,14 +280,14 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
     window.addEventListener('blur', releaseControl);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      disposed = true; window.removeEventListener('blur', releaseControl); clearTimeout(retryTimer); observer.disconnect(); document.removeEventListener('visibilitychange', onVisibility);
+      disposed = true; answerClaim(false); window.removeEventListener('blur', releaseControl); clearTimeout(retryTimer); observer.disconnect(); document.removeEventListener('visibilitychange', onVisibility);
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'control_release', outcome: 'control_lost' }));
       socket.close(); if (socketRef.current === socket) socketRef.current = null;
       if (pendingImage) { pendingImage.onerror?.(new Event('error')); pendingImage.src = ''; }
       for (const objectUrl of urls) URL.revokeObjectURL(objectUrl);
       urls.clear();
     };
-  }, [workflowId, nodeId, isReady, attempt, setError, releaseControl]);
+  }, [workflowId, nodeId, isReady, attempt, setError, releaseControl, answerClaim]);
 
   useEffect(() => {
     send({ type: 'visibility', visible: visible && document.visibilityState !== 'hidden' });
@@ -278,7 +329,7 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
       const result = await sendRequest<{ success: boolean; error?: string }>('browser_session_stop', { workflow_id: workflowId, node_id: nodeId }, 60_000);
       if (!result.success) throw new Error(result.error || 'Could not close the browser.');
       if (mountedRef.current) {
-        setHasFrame(false); frameRef.current = null; setTabs([]); setAddress(''); setDialog(null);
+        setHasFrame(false); frameRef.current = null; setAgentAction(null); setTabs([]); setAddress(''); setPageUrl(''); setDialog(null);
         setState({ state: 'idle' }); setPhase('idle');
       }
     } catch (cause) {
@@ -348,6 +399,13 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
         <Button type="button" size="icon-sm" variant="ghost" aria-label="Forward" disabled={!control} onClick={() => navigate('forward')}><ArrowRight className="size-4" /></Button>
         <Button type="button" size="icon-sm" variant="ghost" aria-label="Reload page" disabled={!control} onClick={() => navigate('reload')}><RotateCw className="size-4" /></Button>
         <input aria-label="Browser address" className={`${inputClass} flex-1`} value={address} disabled={!control} placeholder="Enter a website" onChange={(e) => setAddress(e.target.value)} />
+        {webPage(pageUrl) && (
+          <Button asChild size="icon-sm" variant="ghost">
+            <a href={pageUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in new tab" title="Open in new tab">
+              <ExternalLink className="size-4" />
+            </a>
+          </Button>
+        )}
       </form>
       {tabs.length > 1 && <select aria-label="Browser tab" className={`${inputClass} w-full`} disabled={!control} value={tabs.find((tab) => tab.active)?.target_id || ''} onChange={(e) => send({ type: 'tab', action: 'activate', target_id: e.target.value })}>
         {tabs.map((tab) => <option key={tab.target_id} value={tab.target_id}>{tab.title || tab.url || 'New tab'}</option>)}
@@ -363,6 +421,9 @@ function BrowserSessionView({ workflowId, nodeId, visible }: { workflowId: strin
         onPaste={(e) => { if (control) { e.preventDefault(); send({ type: 'insert_text', text: e.clipboardData.getData('text/plain') }); } }}
         onCompositionEnd={(e) => { if (control && e.data) send({ type: 'insert_text', text: e.data }); }}>
         <canvas ref={canvasRef} aria-label="Browser screenshot" className="absolute inset-0 h-full w-full object-contain" style={{ visibility: hasFrame ? 'visible' : 'hidden' }} />
+        {hasFrame && agentAction && (
+          <AgentCursor action={agentAction.action} picture={agentAction.picture} name={agentName} hidden={control || state.controller === 'other'} />
+        )}
         {!hasFrame && <div className="relative flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Globe aria-hidden className="size-6" />
           <span>{state.sensitive_login ? 'Browser observations are paused during protected login.' : phase === 'live' ? 'Waiting for the browser picture…' : phase === 'idle' ? 'The browser will appear when the employee uses it. You can also open it now.' : statusLabel}</span>
           {state.sensitive_login && <Button variant="outline" disabled={stopping || !isReady} onClick={() => void closeProtectedBrowser()}>{stopping ? 'Closing…' : 'Close browser for manual login'}</Button>}

@@ -2,13 +2,14 @@
  * An interface the employee showed in its reply (design handoff chat,
  * "Generated UI"), under the reply's text. The renderer loads lazily
  * (genui/ChatUi.tsx, with json-render); until it has, a dashed shimmer
- * stands where the interface will be. Development builds also show its size
- * and the spec and patches it came from.
+ * stands where the interface will be. Development builds also show, on one
+ * line, its size and an Inspect chip for the spec and patches it came from.
  *
  * `chat-genui` is the theme hook for the block.
  */
 
 import { Suspense, lazy, useMemo } from 'react';
+import { specToPatches } from '@/lib/jsonRender/reveal';
 import { SpecInspector } from '@/lib/jsonRender/SpecInspector';
 import type { UiStateChange } from '@/lib/jsonRender/uiState';
 import type { UiPart } from '../data/parts';
@@ -19,15 +20,20 @@ const ChatUi = lazy(() => import('../genui/ChatUi'));
 
 function DevDetails({ part }: { part: UiPart }) {
   const spec = useMemo(() => prepareChatSpec(part.spec), [part.spec]);
+  // The count matches what the inspector's patches tab lists.
+  const patches = useMemo(() => (spec ? specToPatches(spec).length : 0), [spec]);
   if (!spec) return null;
   const elements = Object.keys(spec.elements).length;
   return (
-    <div className="flex flex-col gap-1">
-      <span className="font-mono text-2xs text-fg-faint">
-        {elements} elements{part.patches > 0 ? ` · ${part.patches} patches` : ''}
-      </span>
-      <SpecInspector spec={spec} label="Inspect" />
-    </div>
+    <SpecInspector
+      spec={spec}
+      label="Inspect"
+      meta={
+        <span className="font-mono text-2xs text-fg-faint">
+          {elements} elements · {patches} patches
+        </span>
+      }
+    />
   );
 }
 

@@ -18,6 +18,12 @@ Two rules keep this safe:
   on a line tagged with a per-call random nonce, and the parser takes the
   last such line, so text a page makes the script print earlier (page text,
   a tool's output) cannot pose as the result.
+
+An action also says where it happened (``cursor``, beside ``value`` and never
+in it, so the agent's result is unchanged): click and hover their point,
+type and select the box of the field, in the page's viewport CSS pixels. The
+live view draws the agent's cursor there. It never says what was typed or
+chosen, and finding it never fails the action.
 """
 
 from __future__ import annotations
@@ -35,6 +41,33 @@ from urllib.parse import urlsplit as _oc_urlsplit
 _oc_args = _oc_json.loads(__ARGS__)
 _oc_nonce = __NONCE__
 _oc_operation = __OPERATION__
+_oc_cursor = None
+
+
+def _oc_mark(x=None, y=None, box=None):
+    # Where the action happened, for the live view's agent cursor. A page
+    # can make its box nonsense; that only loses the cursor.
+    global _oc_cursor
+    try:
+        if box is not None:
+            _oc_cursor = {"box": [round(float(v), 1) for v in box]}
+        else:
+            _oc_cursor = {"x": round(float(x), 1), "y": round(float(y), 1)}
+    except (TypeError, ValueError):
+        _oc_cursor = None
+
+
+def _oc_focused_box():
+    # The box of the element that has the focus, or None.
+    try:
+        box = js(
+            "(() => { const el = document.activeElement;"
+            " if (!el || el === document.body || el === document.documentElement) return null;"
+            " const b = el.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; })()"
+        )
+    except Exception:
+        return None
+    return box if isinstance(box, list) and len(box) == 4 else None
 
 
 class _OcError(Exception):
@@ -209,7 +242,10 @@ try:
     _oc_value = _oc_main(_oc_args)
     if _oc_operation != "screenshot":
         _oc_check_challenge()
-    _oc_emit({"ok": True, "value": _oc_value})
+    _oc_done = {"ok": True, "value": _oc_value}
+    if _oc_cursor is not None:
+        _oc_done["cursor"] = _oc_cursor
+    _oc_emit(_oc_done)
 except _OcError as _oc_e:
     _oc_emit({"ok": False, "error": {"type": _oc_e.kind, "message": str(_oc_e)}})
 except SystemExit:
@@ -305,6 +341,7 @@ _OPS["click"] = r'''
 def _oc_main(a):
     x, y = _oc_click_point(a)
     click_at_xy(x, y, button=a.get("button") or "left", clicks=int(a.get("clicks") or 1))
+    _oc_mark(x, y)
     _oc_settle(float(a.get("timeout", 5)))
     return {"x": round(x, 1), "y": round(y, 1)}
 '''
@@ -313,6 +350,7 @@ _OPS["hover"] = r'''
 def _oc_main(a):
     x, y = _oc_point(a)
     cdp("Input.dispatchMouseEvent", type="mouseMoved", x=x, y=y)
+    _oc_mark(x, y)
     wait(0.2)
     return {"x": round(x, 1), "y": round(y, 1)}
 '''
@@ -333,6 +371,9 @@ def _oc_main(a):
     text = a.get("text") or ""
     if text:
         type_text(text)
+    box = _oc_focused_box()
+    if box is not None:
+        _oc_mark(box=box)
     if a.get("submit"):
         press_key("Enter")
         _oc_settle(float(a.get("timeout", 10)))
@@ -358,7 +399,8 @@ def _oc_main(a):
             " for (const o of this.options) { const hit = want.has(o.value) || want.has(o.textContent.trim());"
             " o.selected = hit; if (hit) n++; }"
             " this.dispatchEvent(new Event('input', {bubbles: true}));"
-            " this.dispatchEvent(new Event('change', {bubbles: true})); return {selected: n}; }"
+            " this.dispatchEvent(new Event('change', {bubbles: true}));"
+            " const b = this.getBoundingClientRect(); return {selected: n, box: [b.left, b.top, b.width, b.height]}; }"
         ),
         arguments=[{"value": list(a.get("values") or [])}],
         returnByValue=True,
@@ -369,6 +411,9 @@ def _oc_main(a):
         raise _OcError("script", value["error"])
     if not value.get("selected"):
         raise _OcError("not_found", "None of those options exist in the list")
+    box = value.pop("box", None)
+    if isinstance(box, list) and len(box) == 4:
+        _oc_mark(box=box)
     return value
 '''
 

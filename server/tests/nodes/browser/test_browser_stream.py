@@ -38,6 +38,38 @@ async def test_live_state_preserves_the_challenge_pause_flag(challenge_required)
     assert message["challenge_required"] is challenge_required
 
 
+async def test_agent_actions_reach_viewers_but_never_during_protected_login():
+    hub, viewer, _, _ = make_hub()
+    hub.controller = ProfileController("bp_1", "Work")
+    hub.viewers[viewer.id] = viewer
+    await hub._on_controller("agent_action", {"action": "click", "target_id": "page", "x": 10.0, "y": 20.0})
+    assert viewer.control.get_nowait() == {"type": "agent_action", "action": "click", "target_id": "page", "x": 10.0, "y": 20.0}
+
+    hub.controller.sensitive_login = True
+    await hub._on_controller("agent_action", {"action": "type", "target_id": "page", "box": [1.0, 2.0, 3.0, 4.0]})
+    assert viewer.control.empty()
+    # A viewer behind the privacy barrier takes none either.
+    viewer.privacy_blocked = True
+    viewer.send_json({"type": "agent_action", "action": "click", "x": 1.0, "y": 1.0})
+    assert viewer.control.empty()
+
+
+async def test_the_privacy_barrier_drops_a_queued_agent_action():
+    hub, viewer, _, _ = make_hub()
+    controller = ProfileController("profile", "Work")
+    controller.active_target_id = "page"
+    hub.controller = controller
+    await hub.add(viewer)
+    viewer.send_json({"type": "agent_action", "action": "click", "x": 1.0, "y": 1.0})
+    controller.sensitive_login = True
+    await hub.sensitive_barrier(True)
+    messages = []
+    while not viewer.control.empty():
+        messages.append(viewer.control.get_nowait())
+    assert all(message["type"] != "agent_action" for message in messages)
+    await hub.remove(viewer)
+
+
 async def test_initial_attach_failure_recovers_without_viewer_resize(monkeypatch):
     monkeypatch.setattr(_stream, "_SCREENCAST_RETRY_DELAYS", (0, 0, 0))
     hub, viewer, runtime, session = make_hub(failures=1)

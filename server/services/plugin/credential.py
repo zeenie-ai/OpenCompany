@@ -385,6 +385,17 @@ class Credential:
         return None
 
     @classmethod
+    async def catalogue_entries(cls, *, principal: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Whole catalogue entries built from stored state, one per saved item.
+
+        For a credential whose saved items each get their own card (a custom
+        MCP connector) rather than one provider entry. The catalogue handler
+        adds them after the static providers; each carries its own ``stored``
+        and ``connected``. Must not do network IO, as above.
+        """
+        return []
+
+    @classmethod
     async def is_configured(cls, auth_service: Any, parameters: Dict[str, Any]) -> bool:
         """Whether a node with these ``parameters`` has what this credential needs.
 

@@ -7,7 +7,7 @@ Pure config and resolution logic.
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, List, Mapping, Optional, Tuple
 
 from core.logging import get_logger
 
@@ -201,6 +201,53 @@ async def get_default_model_async(provider: str, database) -> str:
         except Exception as e:
             logger.warning(f"Failed to get DB defaults for {provider}: {e}")
     return get_default_model(provider)
+
+
+async def agent_model(parameters: Mapping[str, Any], database) -> Tuple[str, str]:
+    """The provider and model an agent node runs on: its saved ``provider``
+    and ``model`` (an OpenRouter ``[FREE] `` prefix dropped), or that
+    provider's default model when the saved one is missing or not the
+    provider's. The run (``prepare_agent_payload``) and the chat's model
+    picker (services/chat/choice.py) both read an agent's model here, so
+    they never disagree."""
+    provider = parameters.get("provider", "openai")
+    model = parameters.get("model", "")
+    if isinstance(model, str) and model.startswith("[FREE] "):
+        model = model[7:]
+    if not model or not is_model_valid_for_provider(model, provider):
+        model = await get_default_model_async(provider, database)
+    return provider, model
+
+
+# ---------------------------------------------------------------------------
+# The chat's model picker (Home's employee chat)
+# ---------------------------------------------------------------------------
+
+
+def chat_models() -> List[Dict[str, Any]]:
+    """The models the chat's picker offers after Auto (``chat_models`` in
+    llm_defaults.json), in order: ``{id: "provider::model", name, short,
+    description}``."""
+    block = LLM_DEFAULTS.get("chat_models") or {}
+    return [dict(entry) for entry in block.get("models") or []]
+
+
+def split_chat_model(model_id: str) -> Tuple[str, str]:
+    """A picker id ``provider::model`` as ``(provider, model)``."""
+    provider, _, model = (model_id or "").partition("::")
+    return provider, model
+
+
+def supports_effort(provider: str, model: str) -> bool:
+    """Whether ``model`` takes the chat's effort choice as its own request
+    setting: listed (prefix-matched) in its provider's ``effort_models``."""
+    prefixes = _provider_block(provider).get("effort_models") or []
+    return any(model.startswith(prefix) for prefix in prefixes)
+
+
+def provider_display_name(provider: str) -> str:
+    """The provider's name as the owner sees it (``display_name``)."""
+    return str(_provider_block(provider).get("display_name", provider))
 
 
 def curated_models(provider: str) -> list:

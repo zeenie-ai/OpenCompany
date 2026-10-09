@@ -1,22 +1,24 @@
-"""Where the agent's browser may go. Pure functions, no I/O.
+"""Where an outbound connection made for an agent may go.
 
-A page the agent opens is untrusted, and the agent itself follows untrusted
-instructions (prompt injection). From the agent's Chrome, these kinds of
-address must stay out of reach:
+Two callers: the agent's browser (``nodes/browser``: each navigation, and the
+egress proxy on the addresses it resolved itself), and the custom MCP
+connectors (``nodes/mcp_connector``: the server the owner added, on every
+address its host resolves to). What they reach is untrusted, and an agent
+follows untrusted instructions (prompt injection), so these stay out of
+reach:
 
 - **OpenCompany itself**: its ports on this machine (the app, the code
   sidecar, the WhatsApp bridge, Temporal) and the managed Chromes' debugging
-  ports. These are refused on every address of this host, always.
+  ports. Refused on every address of this host, always.
 - **Cloud metadata** (``169.254.169.254`` and friends), which hands out the
   VM's credentials. Link-local is refused always.
-- **The private network**, refused unless the operator ticked "Allow local
-  network" on the Browser node. Loopback is allowed by default so the
-  browser can test local apps, except on the protected ports above.
+- **The private network**, unless the policy allows it (the Browser node's
+  "Allow local network"; a connector always may, for a server on the owner's
+  own network). Loopback is allowed so local apps work, except on the
+  protected ports above.
 
-The egress proxy (``_egress.py``) applies :func:`address_block_reason` to the
-addresses it resolved itself, so DNS rebinding cannot swap in a private
-address after the check. :func:`url_block_reason` is the earlier, friendlier
-check before a navigation.
+Pure functions, except :func:`local_addresses`, which reads this machine's
+interface addresses (no network).
 """
 
 from __future__ import annotations
@@ -49,6 +51,8 @@ class NetPolicy:
     local_addresses: FrozenSet[IPAddress] = field(default_factory=frozenset)
     #: When non-empty, only these domains (and their subdomains).
     allowed_domains: Tuple[str, ...] = ()
+    #: How the caller's owner allows the private network, said with the refusal.
+    private_network_hint: str = ""
 
 
 def own_ports_from_env(environ: Optional[dict] = None) -> FrozenSet[int]:
@@ -70,6 +74,23 @@ def own_ports_from_env(environ: Optional[dict] = None) -> FrozenSet[int]:
     return frozenset(ports)
 
 
+def local_addresses() -> FrozenSet[IPAddress]:
+    """This machine's addresses: loopback plus every interface's."""
+    found = {ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("::1")}
+    try:
+        import psutil
+
+        for addrs in psutil.net_if_addrs().values():
+            for addr in addrs:
+                try:
+                    found.add(ipaddress.ip_address(addr.address.split("%", 1)[0]))
+                except ValueError:
+                    continue
+    except Exception:  # noqa: BLE001 - loopback alone still protects the local case
+        pass
+    return frozenset(found)
+
+
 def parse_allowed_domains(raw: Union[str, Iterable[str], None]) -> Tuple[str, ...]:
     if raw is None:
         return ()
@@ -89,34 +110,48 @@ def domain_allowed(host: str, allowed: Tuple[str, ...]) -> bool:
     if not allowed:
         return True
     host = host.lower().rstrip(".")
-    literal = _literal_ip(host)
+    literal = literal_ip(host)
     if literal is not None:
-        return any(_literal_ip(d) == literal for d in allowed)
-    return any(_literal_ip(d) is None and (host == d.rstrip(".") or host.endswith("." + d.rstrip("."))) for d in allowed)
+        return any(literal_ip(d) == literal for d in allowed)
+    return any(literal_ip(d) is None and (host == d.rstrip(".") or host.endswith("." + d.rstrip("."))) for d in allowed)
 
 
-def _literal_ip(host: str) -> Optional[IPAddress]:
+def literal_ip(host: str) -> Optional[IPAddress]:
+    """``host`` as an IP address, or None when it is a name."""
     try:
         return ipaddress.ip_address(host.strip("[]"))
     except ValueError:
         return None
 
 
+def _unmapped(address: IPAddress) -> IPAddress:
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address
+
+
+def is_local_network(address: IPAddress, policy: NetPolicy) -> bool:
+    """Loopback, this host, or the private network: not the internet."""
+    address = _unmapped(address)
+    return address.is_loopback or address in policy.local_addresses or address.is_private or address in _CGNAT
+
+
 def address_block_reason(address: IPAddress, port: int, policy: NetPolicy) -> Optional[str]:
     """Why ``address:port`` is refused, or ``None`` when it is allowed."""
-    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
-        address = address.ipv4_mapped
+    address = _unmapped(address)
     if address in _METADATA_ADDRESSES or address.is_link_local:
         return "cloud metadata and link-local addresses are never reachable"
     if address.is_unspecified or address.is_multicast or (address.is_reserved and not address.is_loopback):
-        return "this address is not reachable from the browser"
+        return "this address is not reachable"
     is_local = address.is_loopback or address in policy.local_addresses
     if is_local and port in policy.blocked_local_ports:
-        return "OpenCompany's own services are never reachable from the browser"
+        return "OpenCompany's own services are never reachable"
     if address.is_loopback:
         return None
     if is_local or address.is_private or address in _CGNAT:
-        return None if policy.allow_private_network else "the private network is blocked; allow local network on the Browser node to use it"
+        if policy.allow_private_network:
+            return None
+        return "the private network is blocked" + (f"; {policy.private_network_hint}" if policy.private_network_hint else "")
     return None
 
 
@@ -128,15 +163,16 @@ def host_block_reason(host: str, policy: NetPolicy) -> Optional[str]:
     if host in _METADATA_HOSTS:
         return "cloud metadata addresses are never reachable"
     if not domain_allowed(host, policy.allowed_domains):
-        return f"{host} is not in this Browser node's allowed domains"
+        return f"{host} is not in the allowed domains"
     return None
 
 
 def url_block_reason(url: str, policy: NetPolicy) -> Optional[str]:
-    """Why the browser may not navigate to ``url``, or ``None``.
+    """Why ``url`` may not be opened, or ``None``.
 
     ``about:blank`` is always fine. Literal IP hosts are checked here too;
-    hostnames are checked again, by resolved address, in the egress proxy.
+    a hostname is checked again by its resolved addresses (the browser's
+    egress proxy, the connector's connect).
     """
     if url.strip() == "about:blank":
         return None
@@ -151,7 +187,7 @@ def url_block_reason(url: str, policy: NetPolicy) -> Optional[str]:
     reason = host_block_reason(host, policy)
     if reason:
         return reason
-    literal = _literal_ip(host)
+    literal = literal_ip(host)
     if literal is not None:
         try:
             port = parts.port or (443 if scheme == "https" else 80)
@@ -167,6 +203,9 @@ __all__ = [
     "address_block_reason",
     "domain_allowed",
     "host_block_reason",
+    "is_local_network",
+    "literal_ip",
+    "local_addresses",
     "own_ports_from_env",
     "parse_allowed_domains",
     "url_block_reason",

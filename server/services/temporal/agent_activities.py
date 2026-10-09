@@ -216,7 +216,9 @@ async def _resolve_activity_api_key(payload: Dict[str, Any]) -> str:
         )
         options = parameters.get("options") or {}
         candidate = parameters.get("api_key") or options.get("api_key")
-        if isinstance(candidate, str) and candidate:
+        # The node's own key is for the node's own provider: a run on another
+        # one (the model the owner picked in the chat) never sends it there.
+        if isinstance(candidate, str) and candidate and parameters.get("provider", "openai") == provider:
             api_key = candidate
 
     if not api_key:
@@ -532,6 +534,9 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
                     # where it is converted to a safe Temporal failure.
                     translate_errors=False,
                     on_event=emitter,
+                    # The owner's chat choice (Quick / Thorough), for the
+                    # agent that answers them only (prepare_agent_payload).
+                    effort=payload.get("effort"),
                 ),
                 chat_run_id if isinstance(chat_run_id, str) else None,
             ),
@@ -988,22 +993,26 @@ async def store_agent_output(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"stored": True}
 
 
-async def _without_web_tools(database: Any, context: Dict[str, Any], tool_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """The tools, without the web search ones when the owner turned Web off
-    for the message the chat run answers (``options.web``)."""
+async def _chat_run_options(database: Any, context: Dict[str, Any]) -> Dict[str, Any]:
+    """What the owner chose for the message the chat run answers
+    (``ChatRun.options``: Web, and the model and effort of the agent that
+    answers), or nothing outside a chat run. A run that can't be read fails
+    the step, which is retried: the agent never answers on a model the owner
+    didn't pick."""
+    from services.chat.ledger import get_run
     from services.chat.stream import chat_run_id_of
 
     run_id = chat_run_id_of(context)
-    if not run_id or not tool_data:
-        return tool_data
-    try:
-        from services.chat.ledger import get_run
+    if not run_id:
+        return {}
+    run = await get_run(database, run_id)
+    return dict(run.options or {}) if run is not None else {}
 
-        run = await get_run(database, run_id)
-    except Exception:  # noqa: BLE001 - the run keeps its tools
-        activity.logger.warning("Chat run options could not be read for %s", run_id, exc_info=True)
-        return tool_data
-    if run is None or (run.options or {}).get("web", True) is not False:
+
+def _without_web_tools(options: Dict[str, Any], tool_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The tools, without the web search ones when the owner turned Web off
+    for the message the chat run answers (``options.web``)."""
+    if options.get("web", True) is not False or not tool_data:
         return tool_data
     from services.node_registry import get_node_class
 
@@ -1093,9 +1102,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # worker can register this activity without dragging the whole
     # AI service in for every plugin.
     from core.container import container
+    from services.chat.choice import effort_of, model_of
     from services.llm.config import (
-        get_default_model_async,
-        is_model_valid_for_provider,
+        agent_model,
         resolve_max_tokens,
         resolve_temperature,
     )
@@ -1194,14 +1203,21 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     if context.get("native_workspace_version") == 1 and "workspace_task_prompt" in context:
         prompt = context["workspace_task_prompt"]
 
-    api_key = flattened.get("api_key")
-    provider = parameters.get("provider", "openai")
-    model = parameters.get("model", "")
-    if isinstance(model, str) and model.startswith("[FREE] "):
-        model = model[7:]
+    from services.chat.stream import chat_run_id_of, chat_stream_for
 
-    if not model or not is_model_valid_for_provider(model, provider):
-        model = await get_default_model_async(provider, database)
+    # The chat run this agent works for, and whether this agent answers it.
+    chat_stream = chat_stream_for(context)
+    chat_options = await _chat_run_options(database, context)
+
+    api_key = flattened.get("api_key")
+    provider, model = await agent_model(parameters, database)
+    chosen = model_of(chat_options) if chat_stream else None
+    if chosen is not None:
+        # The model the owner picked in the chat answers them
+        # (services/chat/choice.py). The node's own key is for its own
+        # provider, so the chosen provider's key is checked below.
+        provider, model = chosen
+        api_key = None
 
     if not api_key:
         # Try auth_service one more time (covers chatAgent flow where
@@ -1491,7 +1507,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     tools_payload: List[Dict[str, Any]] = []
     from services.skill_runtime import skill_tool_info
 
-    effective_tool_data = await _without_web_tools(database, context, list(tool_data or []))
+    effective_tool_data = _without_web_tools(chat_options, list(tool_data or []))
     progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
     if progressive_skill_tool:
         effective_tool_data.append(progressive_skill_tool)
@@ -1664,9 +1680,6 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         CONTEXT_PRESSURE_VERSION,
         transcript_budget_bytes,
     )
-    from services.chat.stream import chat_run_id_of, chat_stream_for
-
-    chat_stream = chat_stream_for(context)
     if chat_stream:
         # The agent answering the owner's chat reads the chat's guide after
         # its own system prompt (the same bytes every turn), and what the
@@ -1708,6 +1721,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")),
         "provider": provider,
         "model": model,
+        # The owner's chat choice (Quick / Thorough), for the agent that
+        # answers them; the LLM step sends it (services/chat/choice.py).
+        "effort": effort_of(chat_options) if chat_stream else None,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "system_message": system_message,

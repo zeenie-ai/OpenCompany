@@ -75,6 +75,15 @@ export interface ChatHost {
    *  Canvas tab; Dev: the Canvas dock). Without it the reply's card cannot
    *  open it. */
   openArtifact?: (artifact: ArtifactRef) => void;
+  /** A message went, or a draft the owner approved was sent (Home: the orb
+   *  spikes). */
+  onSent?: (what: 'message' | 'draft') => void;
+  /** The model picker in the box (Home): the owner picks the model and how
+   *  hard it thinks, where the employee takes a choice (data/models.ts). */
+  modelPicker?: boolean;
+  /** The box gained or lost the cursor or its text (Home: the orb's
+   *  energy). */
+  onComposerChange?: (state: { focused: boolean; typed: boolean }) => void;
 }
 
 /** What a host can ask of a mounted chat. */

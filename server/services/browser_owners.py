@@ -263,7 +263,7 @@ async def claim_browser_task(database: Any, binding: dict, principal: str, task_
         session = None
         if isinstance(frozen_policy, dict) and binding.get("workflow_id") and binding.get("node_id"):
             from nodes.browser._session import BrowserSession, SessionKey
-            from nodes.browser._netpolicy import parse_allowed_domains
+            from services.netpolicy import parse_allowed_domains
             policy = runtime.base_policy(allow_private_network=bool(frozen_policy.get("allow_private_network")),
                 allowed_domains=parse_allowed_domains(frozen_policy.get("allowed_domains", "")))
             session = BrowserSession(SessionKey(principal, binding["workflow_id"], binding["node_id"]), profile.id,

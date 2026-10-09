@@ -113,6 +113,7 @@ async def run_native_llm_step(
     explicit_max_retries: int = 2,
     translate_errors: bool = True,
     on_event: Optional[StreamSink] = None,
+    effort: Optional[str] = None,
 ) -> LLMResponse:
     """Execute one native SDK turn and return its lossless response envelope.
 
@@ -120,6 +121,7 @@ async def run_native_llm_step(
     normalized as retryable :class:`LLMError` values are repeated. Temporal
     passes ``explicit_max_retries=0`` and owns activity-level retry itself.
     ``on_event`` receives the response as it is written (ChatUnifier.chat).
+    ``effort`` is the owner's chat choice for the agent that answers them.
     """
 
     if chat_unifier is None:
@@ -148,6 +150,7 @@ async def run_native_llm_step(
                 # Preserve structured metadata until this agent-step boundary.
                 translate_errors=False,
                 on_event=on_event,
+                **({"effort": effort} if effort else {}),
             )
         except LLMError as error:
             if not error.retryable or attempt + 1 >= attempts:

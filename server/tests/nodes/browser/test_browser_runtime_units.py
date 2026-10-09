@@ -60,6 +60,15 @@ def test_a_script_error_is_reported_not_raised():
     assert (result.ok, result.error_type, result.error) == (False, "stale_ref", "gone")
 
 
+def test_where_an_action_happened_rides_beside_its_value():
+    line = f"{MARKER}:n:" + json.dumps({"ok": True, "value": {"selected": 1}, "cursor": {"box": [1, 2, 30, 40]}})
+    result = parse_output(line, "", 0, "n")
+    assert result.value == {"selected": 1}
+    assert result.extra == {"cursor": {"box": [1, 2, 30, 40]}}
+    failed = {"ok": False, "error": {"type": "script", "message": "no"}, "cursor": {"x": 1, "y": 2}}
+    assert parse_output(f"{MARKER}:n:" + json.dumps(failed), "", 0, "n").extra == {}
+
+
 def test_chrome_flags(tmp_path):
     argv = build_chrome_argv(Path("chrome"), user_data_dir=tmp_path, proxy_port=4000, major=154, no_sandbox=False, small_shm=False, platform="linux")
     assert "--headless=new" in argv and "--remote-debugging-port=0" in argv

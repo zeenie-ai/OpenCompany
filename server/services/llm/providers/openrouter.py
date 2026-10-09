@@ -50,6 +50,7 @@ class OpenRouterProvider(OpenAIProvider):
         thinking: Optional[ThinkingConfig] = None,
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         # OpenAI-compatible endpoints must prove support independently; the
         # OpenRouter adapter currently uses portable Context checkpoints.
@@ -64,6 +65,7 @@ class OpenRouterProvider(OpenAIProvider):
             thinking=thinking,
             tools=tools,
             context_management=None,
+            effort=effort,
         )
 
     async def fetch_models(self, api_key: str) -> List[str]:

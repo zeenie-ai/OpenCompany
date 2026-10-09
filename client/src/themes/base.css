@@ -119,7 +119,8 @@
   --motion-style: smooth;
 
   /* ── Home (Normal mode) motion — design handoff
-   * (design_handoff_opencompany_home/tokens/tokens.css). Named curves and
+   * (design_handoff_opencompany_home/README.md, "Motion" and "Interactions &
+   * motion"). Named curves and
    * choreography durations, read by client/src/lib/motion.ts so every
    * Web Animations call goes through a token. Themes may retune any of
    * them in their own scope. ─────────────────────────────────────────── */
@@ -162,6 +163,7 @@
   --radius-composer: calc(var(--radius-lg, 8px) * 2.75); /* 22 — composer */
 
   /* ── Home type steps (the base scale above covers 11/12/13/14/16/18). */
+  --text-micro: 8.5px;      /* a kind mark on a 20px tile (the Canvas strip) */
   --text-meta: 12.5px;
   --text-row: 13.5px;
   --text-lead: 15px;
@@ -199,8 +201,30 @@
   --dur-follow-in: 460ms;          /* approval card and follow-up chips */
   --stagger-follow: 70ms;
   --dur-version-swap: 360ms;       /* switching reply versions or branches */
-  --dur-popover-in: 220ms;         /* slash-command menu */
+  --dur-popover-in: 220ms;         /* slash-command menu, model picker */
   --dur-chip-pop: 360ms;           /* an attachment chip arriving */
+  --dur-pick: 260ms;               /* the model picker's button settling after a pick */
+  --dur-level-drag: 120ms;         /* a level slider's knob while dragged (--dur-slow otherwise) */
+  --w-chat-model-menu: 320px;      /* the model picker */
+  --h-chat-model-menu: 460px;      /* ...at most; less on a short window */
+  --shadow-knob: 0 1px 4px rgb(0 0 0 / 0.25);  /* a level slider's knob */
+  /* The Mobile tab's phone (design handoff "Workspace panel"): a dark bezel
+   * around the live screen, shaped by the screen's own width and height. */
+  --phone-bezel: #0b0c0e;
+  --radius-phone: 34px;
+  --radius-phone-screen: 27px;
+  --h-phone-max: 640px;
+  --shadow-phone: 0 0 0 1px var(--border-strong), var(--shadow-modal);
+  /* The employee's cursor on the live browser picture (components/browser/
+   * AgentCursor.tsx): the same on every theme, since it sits on the page. */
+  --agent-cursor-fill: #1b1b1b;
+  --agent-cursor-edge: #ffffff;
+  --agent-cursor-tag: var(--dracula-purple);  /* name tag, ripple, field ring */
+  --agent-cursor-tag-ink: #0d0f13;
+  --dur-cursor-glide: 720ms;       /* the cursor moving to the next action */
+  --dur-cursor-ripple: 520ms;      /* the ripple where the employee clicked */
+  /* A level slider's stops on its fill (the fill is --primary). */
+  --slider-stop-on: color-mix(in srgb, var(--primary-foreground) 70%, transparent);
   --dur-bar-grow: 900ms;           /* BarChart bars */
   --dur-check-draw: 420ms;         /* the drawn "sent" tick */
   --dur-spinner: 800ms;
@@ -261,6 +285,10 @@
    * unread — .canvas-host consumes only --canvas-grid.) */
   --canvas-grid: none;
   --canvas-grid-opacity: 0.4;
+  /* The editor canvas's dot grid (React Flow <Background>, index.css). Only
+   * the two base themes draw it (light.css, dark.css); every stylized theme
+   * keeps its own --canvas-grid decoration alone. */
+  --grid-dot: transparent;
 
   /* Node execution pulse colour (Wave 30). Independent of `--node-color`
    * (the node's accent) so the executing-node glow stays high-contrast

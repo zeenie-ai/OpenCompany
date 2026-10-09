@@ -35,6 +35,17 @@ export const SPIKE = {
   /** The server answered again (Connecting). */
   connected: 1,
   signedIn: 1,
+  /** A message went to an employee. */
+  message: 0.6,
+  /** An employee started or resumed. */
+  start: 0.9,
+  /** Saved changes were applied. */
+  apply: 1,
+  /** The owner sent a draft an employee held for them. */
+  draftSent: 0.8,
+  skillAdded: 0.8,
+  /** A plugin's hire began. */
+  pluginInstall: 0.7,
 } as const;
 
 /** Read by the engine every frame; the engine decays `spike` itself. */

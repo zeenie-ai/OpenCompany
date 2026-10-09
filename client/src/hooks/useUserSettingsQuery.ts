@@ -48,19 +48,45 @@ export function useSaveUserSettingsMutation() {
   return useSaveUserSettingsMutationCore(sendRequest);
 }
 
-/** The save mutation without a context read (see useUserSettingsQueryCore). */
+/** A save the server refused (`success: false`): `code` is its error, and
+ *  `detail`, when it gave one, says why in the owner's words (a chat model
+ *  the picker no longer offers). */
+export class SettingsSaveError extends Error {
+  readonly code: string;
+  readonly detail: string | null;
+
+  constructor(code: string, detail: string | null = null) {
+    super(detail || code);
+    this.name = 'SettingsSaveError';
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+type SaveReply = { success?: boolean; error?: string; detail?: string };
+
+/** The save mutation without a context read (see useUserSettingsQueryCore).
+ *  The change shows in the cached settings at once and is put back when the
+ *  save fails or the server refuses it (`SettingsSaveError`). */
 export function useSaveUserSettingsMutationCore(sendRequest: SendRequest) {
   const qc = useQueryClient();
-  return useMutation<UserSettings, Error, UserSettings>({
+  return useMutation<UserSettings, Error, UserSettings, { previous: UserSettings | undefined }>({
     mutationFn: async (patch) => {
-      await sendRequest('save_user_settings', { settings: patch });
+      const reply = await sendRequest<SaveReply>('save_user_settings', { settings: patch });
+      if (reply?.success === false) throw new SettingsSaveError(reply.error || 'save_failed', reply.detail ?? null);
       return patch;
     },
-    onSuccess: (patch) => {
-      qc.setQueryData<UserSettings>(USER_SETTINGS_QUERY_KEY, (prev) => ({
-        ...(prev ?? {}),
-        ...patch,
-      }));
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: USER_SETTINGS_QUERY_KEY });
+      const previous = qc.getQueryData<UserSettings>(USER_SETTINGS_QUERY_KEY);
+      qc.setQueryData<UserSettings>(USER_SETTINGS_QUERY_KEY, (prev) => ({ ...(prev ?? {}), ...patch }));
+      return { previous };
+    },
+    onError: (_error, _patch, context) => {
+      qc.setQueryData(USER_SETTINGS_QUERY_KEY, context?.previous);
+      // And read what the server kept (there was nothing to put back when
+      // the settings had not loaded yet).
+      void qc.invalidateQueries({ queryKey: USER_SETTINGS_QUERY_KEY });
     },
   });
 }

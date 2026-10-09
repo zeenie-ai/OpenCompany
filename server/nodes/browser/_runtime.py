@@ -18,7 +18,6 @@ page, or a popup, runs a line of script.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import sys
 import time
 from dataclasses import dataclass, replace
@@ -36,7 +35,7 @@ from ._egress import EgressProxy
 from ._host import sandbox_disabled, shm_small
 from ._install_bu import get_browser_use_installer
 from ._install_chrome import get_chrome_installer
-from ._netpolicy import NetPolicy, own_ports_from_env
+from services.netpolicy import NetPolicy, local_addresses, own_ports_from_env
 from ._profiles import Profile, profile_dir, user_data_dir
 from ._session import BrowserSession, ControlState, ProfileController
 from ._system_browser import version_major
@@ -46,22 +45,6 @@ logger = get_logger(__name__)
 
 _REAPER_SECONDS = 30.0
 _STOP_TIMEOUT = 8.0
-
-
-def _local_addresses() -> FrozenSet[ipaddress._BaseAddress]:
-    found = {ipaddress.ip_address("127.0.0.1"), ipaddress.ip_address("::1")}
-    try:
-        import psutil
-
-        for addrs in psutil.net_if_addrs().values():
-            for addr in addrs:
-                try:
-                    found.add(ipaddress.ip_address(addr.address.split("%", 1)[0]))
-                except ValueError:
-                    continue
-    except Exception:  # noqa: BLE001 - loopback alone still protects the local case
-        pass
-    return frozenset(found)
 
 
 def _ua_metadata(major: int, full_version: str) -> Dict[str, Any]:
@@ -128,7 +111,7 @@ class BrowserRuntime:
         self._sessions: Dict[str, BrowserSession] = {}
         self._reaper: Optional[asyncio.Task] = None
         self._own_ports: FrozenSet[int] = own_ports_from_env()
-        self._local_addresses = _local_addresses()
+        self._local_addresses = local_addresses()
 
     # -- settings --------------------------------------------------------------
 
@@ -144,6 +127,7 @@ class BrowserRuntime:
             blocked_local_ports=self._blocked_ports(),
             local_addresses=self._local_addresses,
             allowed_domains=allowed_domains,
+            private_network_hint="allow local network on the Browser node to use it",
         )
 
     def _blocked_ports(self) -> FrozenSet[int]:

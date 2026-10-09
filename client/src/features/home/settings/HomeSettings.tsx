@@ -24,7 +24,7 @@ import { PluginsTab } from './PluginsTab';
 import { ProfileTab } from './ProfileTab';
 import { SkillsTab } from './SkillsTab';
 import { AccessTab } from './AccessTab';
-import { staggerSettings } from './stagger';
+import { slideSettingsPage, staggerSettings } from './stagger';
 
 interface PageContext {
   close: () => void;
@@ -167,7 +167,10 @@ export function HomeSettings({ onConnect }: { onConnect: (providerId: string, in
       <TabsPrimitive.Root
         orientation="vertical"
         value={tab}
-        onValueChange={(next) => setTab(next as SettingsTab)}
+        onValueChange={(next) => {
+          setTab(next as SettingsTab);
+          slideSettingsPage(bodyRef.current);
+        }}
         className="flex h-full min-h-0"
       >
         <SettingsNav />

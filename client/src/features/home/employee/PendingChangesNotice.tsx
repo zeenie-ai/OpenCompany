@@ -8,6 +8,7 @@
 import { ActionButton } from '@/components/ui/action-button';
 import type { EmployeeSummary } from '../data/schemas';
 import { useApplyChanges, useStopAndApply } from '../data/talk';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
 
 function applyErrorMessage(code: string, name: string): string {
@@ -31,7 +32,10 @@ export function PendingChangesNotice({ employee }: { employee: EmployeeSummary }
 
   const onApply = () =>
     apply.mutate(employee.workflow_id, {
-      onSuccess: () => pillToast(`${name} will use the new abilities after current work finishes.`),
+      onSuccess: () => {
+        pillToast(`${name} will use the new abilities after current work finishes.`);
+        spikeOrb(SPIKE.apply);
+      },
       onError: (error) => pillToast(applyErrorMessage(error.message, name), { tone: 'error' }),
     });
 
@@ -44,7 +48,7 @@ export function PendingChangesNotice({ employee }: { employee: EmployeeSummary }
         {apply.isPending ? 'Applying…' : 'Apply'}
       </ActionButton>
       {(employee.pending_approvals > 0 || employee.job_progress) && <ActionButton intent="config" disabled={apply.isPending || interrupt.isPending}
-        onClick={() => interrupt.mutate(employee.workflow_id, { onSuccess: () => pillToast('Stopping current work and applying the saved abilities.'),
+        onClick={() => interrupt.mutate(employee.workflow_id, { onSuccess: () => { pillToast('Stopping current work and applying the saved abilities.'); spikeOrb(SPIKE.apply); },
           onError: () => pillToast('The change could not finish. Your saved abilities are still here.', { tone: 'error' }) })} className="h-9 rounded-row px-4">
         {interrupt.isPending ? 'Stopping…' : 'Stop work and apply'}
       </ActionButton>}

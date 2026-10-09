@@ -24,6 +24,7 @@ import { parseEmployee } from '../data/schemas';
 import { HomeSidebar } from '../sidebar/HomeSidebar';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
+import { installWaapiStub } from '@/test/waapi';
 
 function mountSidebar() {
   return render(
@@ -91,32 +92,61 @@ describe('HomeSidebar employee deletion', () => {
     expect(screen.getByRole('button', { name: 'Delete Theo' })).toBeInTheDocument();
   });
 
-  it('disables confirmation while pending and sends only one delete', async () => {
+  it('closes the dialog, folds the row away, then deletes and says so', async () => {
+    const waapi = installWaapiStub();
+    try {
+      mountSidebar();
+      confirmDelete();
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      const fold = waapi.calls.find((call) => call.target.contains(screen.getByRole('button', { name: 'Delete Maya' })));
+      expect(fold?.keyframes).toEqual([
+        expect.objectContaining({ opacity: 1, overflow: 'hidden' }),
+        expect.objectContaining({ opacity: 0, height: '0px', transform: 'translateX(-12px)' }),
+      ]);
+      expect(fold?.options).toMatchObject({ duration: 320, fill: 'forwards' });
+      expect(workflowApi.deleteWorkflow).not.toHaveBeenCalled();
+      await act(async () => { fold!.animation.finish(); });
+      await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya was deleted'));
+      expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(1);
+    } finally {
+      waapi.restore();
+    }
+  });
+
+  it('sends only one delete while one is pending', async () => {
     let finish!: (success: boolean) => void;
     vi.mocked(workflowApi.deleteWorkflow).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     mountSidebar();
-    const dialog = confirmDelete();
-    const pendingButton = within(dialog).getByRole('button', { name: 'Deleting…' });
-    expect(pendingButton).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    fireEvent.click(pendingButton);
-    expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(1);
+    confirmDelete();
+    await waitFor(() => expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Delete Maya' })).toBeDisabled();
     await act(async () => { finish(true); });
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(1);
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'b' });
   });
 
-  it('keeps the employee and selection on failure, shows an error, and allows retry', async () => {
-    vi.mocked(workflowApi.deleteWorkflow).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    mountSidebar();
-    confirmDelete();
-    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Couldn’t delete Maya. Try again.', { tone: 'error' }));
-    expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'b' });
-    expect(queryClient.getQueryData<Array<{ workflow_id: string }>>(EMPLOYEES_QUERY_KEY)?.map((employee) => employee.workflow_id)).toEqual(['a', 'b']);
-    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
-    expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(2);
+  it('brings the row back on failure, shows an error, and allows retry', async () => {
+    const waapi = installWaapiStub();
+    try {
+      vi.mocked(workflowApi.deleteWorkflow).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      mountSidebar();
+      confirmDelete();
+      const fold = waapi.calls.find((call) => call.target.contains(screen.getByRole('button', { name: 'Delete Maya' })))!;
+      await act(async () => { fold.animation.finish(); });
+      await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Couldn’t delete Maya. Try again.', { tone: 'error' }));
+      expect(fold.animation.playState).toBe('idle');
+      expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'b' });
+      expect(queryClient.getQueryData<Array<{ workflow_id: string }>>(EMPLOYEES_QUERY_KEY)?.map((employee) => employee.workflow_id)).toEqual(['a', 'b']);
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete Maya' })).toBeEnabled());
+      confirmDelete();
+      const retry = waapi.calls.filter((call) => call.target.contains(screen.getByRole('button', { name: 'Delete Maya' }))).at(-1)!;
+      await act(async () => { retry.animation.finish(); });
+      await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya was deleted'));
+      expect(workflowApi.deleteWorkflow).toHaveBeenCalledTimes(2);
+    } finally {
+      waapi.restore();
+    }
   });
 });
 

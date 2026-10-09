@@ -137,6 +137,33 @@ async def handle_canvas_clear(
 
 
 @ws_response
+async def handle_canvas_add(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Put a file from the workflow's workspace on the board: the owner's own
+    action (Screenshot to Canvas on the phone). ``path`` is workspace-relative;
+    its reference is rebuilt from the file, as the node's ``display`` does,
+    never taken from the client."""
+    from types import SimpleNamespace
+
+    from services.workspace_locator import resolve_workspace_root
+
+    from . import _build_ref
+
+    store, scope = await _resolve_store_and_scope(data, websocket)
+    path = str(data.get("path") or "").strip()
+    if not path:
+        raise NodeUserError("path required")
+    root = await resolve_workspace_root(scope.workflow_id, get_database(), allow_default=False)
+    context = SimpleNamespace(workspace_dir=str(root), workflow_id=scope.workflow_id, node_id=scope.node_id, raw={})
+    item = {"kind": "file", "ref": _build_ref(context, path), "source": "owner"}
+    try:
+        added, revision, total = await store.append(scope, [item], mode="append")
+    except CanvasStoreError as exc:
+        raise NodeUserError(str(exc)) from exc
+    await dispatch_canvas_updated(workflow_id=scope.workflow_id, node_id=scope.node_id, revision=revision)
+    return {"success": True, "item": added[0], "revision": revision, "count": total}
+
+
+@ws_response
 async def handle_canvas_version(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """One version of an item, whole."""
     store, scope = await _resolve_store_and_scope(data, websocket)
@@ -154,6 +181,7 @@ async def handle_canvas_version(data: Dict[str, Any], websocket: WebSocket) -> D
 WSHandler = Callable[[Dict[str, Any], WebSocket], Awaitable[Dict[str, Any]]]
 WS_HANDLERS: Dict[str, WSHandler] = {
     "canvas_list": handle_canvas_list,
+    "canvas_add": handle_canvas_add,
     "canvas_remove": handle_canvas_remove,
     "canvas_clear": handle_canvas_clear,
     "canvas_version": handle_canvas_version,
@@ -162,6 +190,7 @@ WS_HANDLERS: Dict[str, WSHandler] = {
 
 __all__ = [
     "WS_HANDLERS",
+    "handle_canvas_add",
     "handle_canvas_clear",
     "handle_canvas_list",
     "handle_canvas_remove",

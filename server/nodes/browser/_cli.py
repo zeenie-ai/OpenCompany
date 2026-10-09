@@ -89,6 +89,7 @@ def parse_output(stdout: str, stderr: str, exit_code: int, nonce: str) -> CliRes
             data = None
         if isinstance(data, dict) and isinstance(data.get("ok"), bool) and (data["ok"] or isinstance(data.get("error"), dict)):
             error = data.get("error") or {}
+            cursor = data.get("cursor")
             return CliResult(
                 ok=bool(data.get("ok")),
                 value=data.get("value"),
@@ -98,6 +99,8 @@ def parse_output(stdout: str, stderr: str, exit_code: int, nonce: str) -> CliRes
                 output=output,
                 stderr=stderr,
                 exit_code=exit_code,
+                # Where an action happened (_scripts.py), for the live view.
+                extra={"cursor": cursor} if data.get("ok") and isinstance(cursor, dict) else {},
             )
     low = stderr.lower()
     if payload is None and ("unreachable" in low or "fatal:" in low or "connection refused" in low or "devtools" in low):

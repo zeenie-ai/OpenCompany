@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders as render } from '../../../../test/providers';
@@ -308,5 +308,60 @@ describe('CanvasContent notes as documents', () => {
     const blob = (createObjectURL.mock.calls[0] as unknown as [Blob])[0];
     expect(blob.type).toBe('text/markdown;charset=utf-8');
     click.mockRestore();
+  });
+});
+
+describe('CanvasContent library (Home)', () => {
+  const image = (id: string, filename: string): CanvasItem => ({
+    ...htmlItem(id),
+    title: null,
+    ref: {
+      kind: 'image',
+      path: `shots/${filename}`,
+      filename,
+      mime_type: 'image/png',
+      workflow_id: 'wf-1',
+      url: `/api/workspace/wf-1/files/shots/${filename}`,
+      size_bytes: 2048,
+    },
+  });
+  const titled = (item: CanvasItem, title: string): CanvasItem => ({ ...item, title });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    textHookMock.mockReturnValue({ data: { text: '', truncated: false }, isLoading: false, isError: false });
+  });
+
+  it('shows the six newest items on the strip and returns to the newest with Latest', () => {
+    const items = Array.from({ length: 8 }, (_, index) => titled(note(`n${index}`, `body ${index}`), `Note ${index}`));
+    render(<CanvasContent items={items} workflowId="wf-1" library />);
+    const chips = screen.getAllByRole('button', { name: /^Note \d$/ });
+    expect(chips.map((chip) => chip.textContent)).toEqual(['MDNote 7', 'MDNote 6', 'MDNote 5', 'MDNote 4', 'MDNote 3', 'MDNote 2']);
+    expect(chips[0]).toHaveAttribute('aria-current', 'true');
+    expect(screen.queryByRole('button', { name: 'Latest' })).not.toBeInTheDocument();
+    // No prev/next in the library footer.
+    expect(screen.queryByRole('button', { name: 'Previous item' })).not.toBeInTheDocument();
+
+    fireEvent.click(chips[2]);
+    expect(screen.getByText('body 5')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Latest' }));
+    expect(screen.getByText('body 7')).toBeInTheDocument();
+  });
+
+  it('lists artifacts and files in the Library and opens one', () => {
+    const items = [titled(note('n1', 'the plan'), 'Weekly plan'), image('i1', 'booking.png'), urlItem('u1', 'https://example.com/menu')];
+    render(<CanvasContent items={items} workflowId="wf-1" library />);
+    fireEvent.click(screen.getByRole('button', { name: 'Library, 3 items' }));
+    const library = screen.getByRole('region', { name: 'Library' });
+    expect(library).toHaveTextContent('Artifacts · 1');
+    expect(library).toHaveTextContent('Files · 2');
+    expect(within(library).getByRole('button', { name: /Weekly plan/ })).toHaveTextContent('Note · v1');
+    expect(within(library).getByRole('button', { name: /booking\.png/ })).toHaveTextContent('Image · 2.0 KB');
+    expect(within(library).getByRole('button', { name: /example\.com\/menu/ })).toHaveTextContent('Web page · example.com');
+
+    fireEvent.click(within(library).getByRole('button', { name: /Weekly plan/ }));
+    expect(screen.queryByRole('region', { name: 'Library' })).not.toBeInTheDocument();
+    expect(screen.getByText('the plan')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
   });
 });

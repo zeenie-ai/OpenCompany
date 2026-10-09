@@ -25,6 +25,7 @@ vi.mock('../data/employees', () => ({ useEmployeesQuery: () => ({ data: [{}, {},
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { HomeSettings } from '../settings/HomeSettings';
 import { useHomeStore } from '../state/homeStore';
+import { installWaapiStub } from '@/test/waapi';
 
 function renderSettings() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -38,7 +39,7 @@ function renderSettings() {
 }
 
 beforeEach(() => {
-  sendRequest.mockReset().mockResolvedValue({ success: true, tasks_this_month: 12 });
+  sendRequest.mockReset().mockResolvedValue({ success: true, tasks_this_month: 12, since: '2026-10-01' });
   useHomeStore.setState({ settingsOpen: false, settingsTab: 'profile', settingsCategory: 'all' });
 });
 
@@ -68,7 +69,24 @@ describe('HomeSettings', () => {
     renderSettings();
     expect(await screen.findByText('12')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
+    const since = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date('2026-10-01T00:00:00Z'));
+    expect(screen.getByText(`Since ${since}, across your whole team`)).toBeInTheDocument();
+    expect(screen.getByText('In your sidebar now')).toBeInTheDocument();
     expect(sendRequest).toHaveBeenCalledWith('get_employee_usage', {});
+  });
+
+  it('slides a page picked in the nav in from the right', async () => {
+    const waapi = installWaapiStub();
+    try {
+      useHomeStore.getState().openSettings();
+      renderSettings();
+      waapi.calls.length = 0;
+      await userEvent.click(screen.getByRole('tab', { name: 'Billing' }));
+      const slide = waapi.calls.find((call) => JSON.stringify(call.keyframes).includes('translateX(14px)'));
+      expect(slide?.options).toMatchObject({ duration: 320 });
+    } finally {
+      waapi.restore();
+    }
   });
 
   it('shows a dash when this month’s count can’t be read', async () => {

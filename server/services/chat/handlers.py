@@ -23,13 +23,13 @@ it (``editable``) and their rating. ``edit_chat_message``,
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from fastapi import WebSocket
 
 from core.container import container
 from core.logging import get_logger
-from services.chat import branches, ledger, reducer
+from services.chat import branches, choice, ledger, reducer
 from services.chat.access import ChatAccessDenied, authorize_session, session_id_of
 from services.chat.attachments import MAX_ATTACHMENTS, AttachmentRefused, check_attachments
 from services.chat.feedback import FeedbackRefused, feedback_for, set_feedback
@@ -292,6 +292,12 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
         if not _engine_connected():
             return dict(_UNAVAILABLE)
     track = scope.workflow_id is not None and await _answers_session(database, control, session_id)
+    try:
+        options = await _run_options(database, websocket, data.get("options")) if track else {}
+    except choice.ChoiceRefused as exc:
+        return {"success": False, "error": "model_unavailable", "detail": exc.detail}
+    except ValueError as exc:
+        return {"success": False, "error": "invalid_request", "detail": str(exc)}
 
     try:
         admission = await ledger.admit_message(
@@ -306,7 +312,7 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
             message_kind="action" if press is not None else "text",
             client_message_id=data.get("client_message_id"),
             meta=press["meta"] if press is not None else None,
-            options=_options(data.get("options")),
+            options=options,
             attachments=attachments or None,
         )
     except ledger.RunInProgress as exc:
@@ -522,11 +528,12 @@ async def handle_chat_ui_state(data: Dict[str, Any], websocket: WebSocket) -> Di
     return {"success": True, "part_id": part_id, "state_revision": updated["state_revision"]}
 
 
-def _options(raw: Any) -> Dict[str, Any]:
-    """The per-message choices kept on the run: ``web`` (a bool) only."""
-    if isinstance(raw, dict) and isinstance(raw.get("web"), bool):
-        return {"web": raw["web"]}
-    return {}
+async def _run_options(database: Any, websocket: WebSocket, raw: Any) -> Dict[str, Any]:
+    """The per-message choices kept on the run: ``web``, and the model and
+    effort the owner picked (services/chat/choice.py)."""
+    from services.authz.ws_surface import execution_principal
+
+    return await choice.run_options(database, container.auth_service(), raw, principal=execution_principal({}, websocket))
 
 
 @ws_handler()
@@ -584,9 +591,59 @@ async def handle_get_chat_context(data: Dict[str, Any], websocket: WebSocket) ->
         "success": True,
         "session_id": session_id,
         "commands": commands,
-        "capabilities": {"attachments": scope.workflow_id is not None, "web": any(searches(t) for t in node_types)},
+        "capabilities": {
+            "attachments": scope.workflow_id is not None,
+            "web": any(searches(t) for t in node_types),
+            "model_choice": scope.workflow_id is not None and _takes_model_choice(graph),
+        },
         "limits": {"max_attachments": MAX_ATTACHMENTS, "max_upload_bytes": MEDIA_MAX_UPLOAD_BYTES},
     }
+
+
+def _takes_model_choice(graph: Mapping[str, Any]) -> bool:
+    """Whether the agent that answers the owner applies the model picker's
+    choice: it runs as an AgentWorkflow, whose prepare step reads the run's
+    options (``prepare_agent_payload``). A Claude Code or RLM agent, or any
+    agent while the agent workflow is off, never does."""
+    from core.config import Settings
+    from services.employees.talk import talk_state
+    from services.temporal.workflow import AGENT_WORKFLOW_TYPES
+
+    agent = talk_state(graph).agent_node_id
+    if agent is None or not Settings().temporal_agent_workflow_enabled:
+        return False
+    for node in graph.get("nodes") or []:
+        if isinstance(node, dict) and node.get("id") == agent:
+            return str(node.get("type") or "") in AGENT_WORKFLOW_TYPES
+    return False
+
+
+@ws_handler()
+async def handle_get_chat_models(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """The model picker for a workflow's chat (services/chat/choice.py):
+    ``{auto, models, efforts}``. Each row is ``{id, name, short, description,
+    effort, effort_note, available, reason}``; the owner's choice is in their
+    settings. Refused for ``"default"``."""
+    from services.authz.ws_surface import execution_principal
+
+    session_id = session_id_of(data)
+    database = container.database()
+    try:
+        scope = await authorize_session(database, websocket, session_id)
+    except ChatAccessDenied:
+        return dict(_DENIED)
+    if scope.workflow_id is None:
+        return {"success": False, "error": "invalid_request", "detail": "the model picker belongs to a workflow's chat"}
+    saved = await database.get_workflow(scope.workflow_id)
+    graph = (getattr(saved, "data", None) or {}) if saved is not None else {}
+    picker = await choice.list_models(
+        database,
+        container.auth_service(),
+        principal=execution_principal({}, websocket),
+        graph=graph,
+        name=str(getattr(saved, "name", "") or "the employee"),
+    )
+    return {"success": True, "session_id": session_id, **picker}
 
 
 def _expected_revision(data: Dict[str, Any]) -> Optional[int]:
@@ -682,6 +739,12 @@ async def handle_edit_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     refused, context = await _branch_context(database, websocket, data, starts_run=True)
     if refused is not None:
         return refused
+    try:
+        options = await _run_options(database, websocket, data.get("options"))
+    except choice.ChoiceRefused as exc:
+        return {"success": False, "error": "model_unavailable", "detail": exc.detail}
+    except ValueError as exc:
+        return {"success": False, "error": "invalid_request", "detail": str(exc)}
     client_message_id = data.get("client_message_id")
     if client_message_id is not None:
         try:
@@ -703,6 +766,7 @@ async def handle_edit_chat_message(data: Dict[str, Any], websocket: WebSocket) -
             expected_revision=context["expected_revision"],
             state=context["state"],
             client_message_id=client_message_id,
+            options=options,
         )
     except branches.BranchRefused as exc:
         return _branch_refusal(exc)
@@ -726,6 +790,12 @@ async def handle_regenerate_chat_reply(data: Dict[str, Any], websocket: WebSocke
     if refused is not None:
         return refused
     try:
+        options = await _run_options(database, websocket, data.get("options"))
+    except choice.ChoiceRefused as exc:
+        return {"success": False, "error": "model_unavailable", "detail": exc.detail}
+    except ValueError as exc:
+        return {"success": False, "error": "invalid_request", "detail": str(exc)}
+    try:
         moved = await branches.retry_answer(
             database,
             session_id=context["session_id"],
@@ -735,6 +805,7 @@ async def handle_regenerate_chat_reply(data: Dict[str, Any], websocket: WebSocke
             message_uid=str(data["message_id"]),
             expected_revision=context["expected_revision"],
             state=context["state"],
+            options=options,
         )
     except branches.BranchRefused as exc:
         return _branch_refusal(exc)
@@ -841,6 +912,7 @@ WS_HANDLERS = {
     "switch_chat_branch": handle_switch_chat_branch,
     "set_chat_feedback": handle_set_chat_feedback,
     "get_chat_context": handle_get_chat_context,
+    "get_chat_models": handle_get_chat_models,
     "clear_chat_messages": handle_clear_chat_messages,
     "save_chat_message": handle_save_chat_message,
 }

@@ -54,5 +54,15 @@ export function pillToast(message: string, options: { tone?: PillTone } = {}): s
 
 export function PillToaster() {
   // One pill at a time, 44px up from the bottom (design handoff "Toast").
-  return <Toaster id={PILL_TOASTER_ID} position="bottom-center" offset={44} visibleToasts={1} toastOptions={{ unstyled: true }} />;
+  // `pill-toaster` carries its spring in and fade out (index.css).
+  return (
+    <Toaster
+      id={PILL_TOASTER_ID}
+      className="pill-toaster"
+      position="bottom-center"
+      offset={44}
+      visibleToasts={1}
+      toastOptions={{ unstyled: true }}
+    />
+  );
 }

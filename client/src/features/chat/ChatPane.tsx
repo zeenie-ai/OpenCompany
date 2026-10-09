@@ -21,8 +21,11 @@
  * `addAttachments` (composer/attachments.ts). The box also dictates, offers
  * slash commands and, in an empty chat, the host's greetings or else
  * suggestions (data/chatContext.ts), and the Web chip keeps the employee off
- * web search for the next messages. In the host's `wait` the box shows but
- * takes nothing yet.
+ * web search for the next messages. On Home, where the employee takes it,
+ * the model picker chooses the model and how hard it thinks
+ * (composer/ModelPicker.tsx); a message waits until that choice is known.
+ * Every message, edit and retry carries these choices (`sendOptions`). In
+ * the host's `wait` the box shows but takes nothing yet.
  *
  * The owner can change the conversation (data/branches.ts, TurnActions):
  * edit one of their messages in place (ArrowUp in an empty box edits the
@@ -33,6 +36,7 @@
 
 import {
   useCallback,
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -40,6 +44,7 @@ import {
   useState,
   type DragEvent,
   type KeyboardEvent,
+  type ReactElement,
   type Ref,
 } from 'react';
 import { cn } from '@/lib/utils';
@@ -49,6 +54,7 @@ import { AskFirstChip } from './composer/AskFirstChip';
 import { addAttachments } from './composer/attachments';
 import { DropOverlay } from './composer/DropOverlay';
 import { Greetings } from './composer/Greetings';
+import { ModelPicker, ModelPickerButton } from './composer/ModelPicker';
 import { Suggestions } from './composer/Suggestions';
 import { WebChip } from './composer/WebChip';
 import { canRecord, useChatContext, useDictation, type ChatCommand } from './data/chatContext';
@@ -71,8 +77,9 @@ import {
   useSwitchChatBranch,
   type ChatBranchError,
 } from './data/branches';
+import { useChatChoice, useChatModels } from './data/models';
 import { liveApprovalIds, savedApprovalIds } from './data/parts';
-import { useSendChatMessage, type ChatSendError } from './data/send';
+import { sendOptions, useSendChatMessage, type ChatSendError } from './data/send';
 import { useStopChatRun } from './data/stop';
 import { useUiStateSync } from './data/uiState';
 import { Composer } from './composer/Composer';
@@ -85,7 +92,7 @@ import { TurnActionsContext, type TurnActions } from './thread/turnActions';
 import { branchRefusalText, feedbackThanks } from './turns/runCopy';
 
 export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHandle> }) {
-  const { sessionId, scope, persona, composer, notify, onSendRefused, compact = false } = host;
+  const { sessionId, scope, persona, composer, notify, onSendRefused, onSent, onComposerChange, compact = false } = host;
   const { thread, turns, lane } = useConversation(sessionId, scope);
   const workflowId = sessionId === 'default' ? null : sessionId;
   const control = useChatWorkflowControl(workflowId, lane);
@@ -96,14 +103,36 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   const boxRef = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => ({ focusComposer: () => boxRef.current?.focus() }), []);
 
+  // What the box offers here (files, dictation, commands, Web, the model
+  // picker), and what the next message carries: Web off, and the picker's
+  // choice where the employee takes one.
+  const contextQuery = useChatContext(sessionId);
+  const chatContext = contextQuery.data;
+  const pickerHost = Boolean(host.modelPicker && workflowId);
+  const takesChoice = pickerHost && chatContext?.modelChoice === true;
+  const { choice, pending: choicePending, choose } = useChatChoice((message) => notify(message, 'error'));
+  const modelsQuery = useChatModels(sessionId, takesChoice);
+  // Until the choice is known a message waits, so it never goes on a model
+  // the owner didn't pick.
+  const choiceUnknown = pickerHost && (contextQuery.isPending || (takesChoice && choicePending));
+  const web = useComposerStore((state) => state.web[sessionId] !== false);
+  const options = sendOptions(web, takesChoice ? choice : null);
+  const optionsRef = useRef(options);
+  useLayoutEffect(() => {
+    optionsRef.current = options;
+  });
+
   const onRefused = useCallback(
     (error: ChatSendError) => {
-      if (onSendRefused) onSendRefused(error.code);
+      // The model chosen can't answer: the server says why.
+      if (error.code === 'model_unavailable' && error.detail) notify(error.detail, 'error');
+      else if (onSendRefused) onSendRefused(error.code);
       else notify('Your message didn’t send. Try again.', 'error');
     },
     [notify, onSendRefused],
   );
-  const send = useSendChatMessage(sessionId, scope, onRefused);
+  const messageSent = useCallback(() => onSent?.('message'), [onSent]);
+  const send = useSendChatMessage(sessionId, scope, onRefused, messageSent);
   const stop = useStopChatRun(sessionId, () => notify('Couldn’t stop the reply. Try again.', 'error'), control);
 
   // Changing the conversation: edit, try again, another version, a rating.
@@ -115,6 +144,10 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   }
   const branchRefused = useCallback(
     (error: ChatBranchError) => {
+      if (error.code === 'model_unavailable' && error.detail) {
+        notify(error.detail, 'error');
+        return;
+      }
       if (error.code === 'not_running' && onSendRefused) {
         onSendRefused('not_running');
         return;
@@ -145,9 +178,12 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       startEdit: (messageId) => setEditingId(messageId),
       cancelEdit: () => setEditingId(null),
       saveEdit: (messageId, text) =>
-        editMutate({ messageId, text, clientMessageId: newClientMessageId() }, { onSuccess: () => setEditingId(null) }),
+        editMutate(
+          { messageId, text, clientMessageId: newClientMessageId(), options: optionsRef.current },
+          { onSuccess: () => setEditingId(null) },
+        ),
       switchTo: (messageId) => switchMutate({ messageId }),
-      regenerate: (messageId) => regenerateMutate({ messageId }),
+      regenerate: (messageId) => regenerateMutate({ messageId, options: optionsRef.current }),
       rate: (messageId, value) =>
         feedbackMutate(
           { messageId, value },
@@ -166,20 +202,20 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     return true;
   };
 
+  const ready = Boolean(thread.data) && !choiceUnknown;
   const submit = () => {
     const store = useComposerStore.getState();
     const box = useAttachmentStore.getState().boxes[sessionId] ?? [];
     const hasText = Boolean((store.drafts[sessionId]?.text ?? '').trim());
     const hasFiles = box.some((item) => item.state === 'ready');
-    if (busy || !thread.data || box.some((item) => item.state === 'uploading') || !(hasText || hasFiles)) return;
+    if (busy || !ready || box.some((item) => item.state === 'uploading') || !(hasText || hasFiles)) return;
     const draft = store.takeForSend(sessionId);
     const attachments = useAttachmentStore.getState().takeReady(sessionId);
-    const web = store.web[sessionId];
     send.mutate({
       ...draft,
       text: draft.text.trim(),
       ...(attachments.length ? { attachments } : {}),
-      ...(web === false ? { options: { web: false } } : {}),
+      ...(options ? { options } : {}),
     });
   };
 
@@ -190,16 +226,16 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   // What an interface's buttons do. Read through a ref, so the handlers an
   // interface made once keep reaching the current pane.
   const uiState = useUiStateSync(sessionId);
-  const live = useRef({ busy, ready: Boolean(thread.data), send: send.mutate, notify, uiState });
+  const live = useRef({ busy, ready, send: send.mutate, notify, uiState });
   useLayoutEffect(() => {
-    live.current = { busy, ready: Boolean(thread.data), send: send.mutate, notify, uiState };
+    live.current = { busy, ready, send: send.mutate, notify, uiState };
   });
   const uiActions = useMemo<ChatUiActions>(
     () => ({
       ask: (text, label) => {
         const pane = live.current;
         if (asksWhatItSays(text, label) && !pane.busy && pane.ready) {
-          pane.send({ text, clientMessageId: newClientMessageId() });
+          pane.send({ text, clientMessageId: newClientMessageId(), options: optionsRef.current });
           return;
         }
         // Not what the button says (or not now): the owner reads it first.
@@ -217,6 +253,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
           text: event.label || event.action,
           clientMessageId: newClientMessageId(),
           uiEvent: { partId: event.partId, elementId: event.elementId, action: event.action, params: event.params },
+          options: optionsRef.current,
         });
       },
     }),
@@ -229,7 +266,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     (text: string) => {
       const pane = live.current;
       if (!pane.busy && pane.ready) {
-        pane.send({ text, clientMessageId: newClientMessageId() });
+        pane.send({ text, clientMessageId: newClientMessageId(), options: optionsRef.current });
         return;
       }
       useComposerStore.getState().setText(sessionId, text);
@@ -252,6 +289,9 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       const id = input.approval.id;
       setDeciding((current) => new Set(current).add(id));
       decideMutation.mutate(input, {
+        onSuccess: () => {
+          if (input.decision === 'send') onSent?.('draft');
+        },
         onSettled: () =>
           setDeciding((current) => {
             const next = new Set(current);
@@ -260,7 +300,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
           }),
       });
     },
-    [decideMutation],
+    [decideMutation, onSent],
   );
   const linked = useMemo(() => {
     const ids = new Set<string>();
@@ -302,11 +342,14 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     stopAnswer();
   };
 
-  // What the box offers here: files, dictation, commands, Web.
-  const contextQuery = useChatContext(sessionId);
-  const chatContext = contextQuery.data;
+  // The box's cursor and text, for a host that reacts to them (Home's orb).
+  const [focused, setFocused] = useState(false);
+  const typed = useComposerStore((state) => Boolean(state.drafts[sessionId]?.text.trim()));
+  useEffect(() => {
+    onComposerChange?.({ focused, typed });
+  }, [onComposerChange, focused, typed]);
+
   const dictationQuery = useDictation(sessionId, Boolean(workflowId) && composer === 'send' && canRecord());
-  const web = useComposerStore((state) => state.web[sessionId] !== false);
   const addFiles = useCallback(
     (files: File[]) => {
       if (!workflowId) return;
@@ -388,11 +431,34 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
           setAskFirst.mutate(next, {
             onSuccess: (result) => {
               if (result.needsApply) notify(`Apply ${persona.name}’s changes for this to cover everything.`, 'info');
+              else
+                notify(
+                  result.askFirst ? `${persona.name} will ask before sending` : `${persona.name} will send without asking`,
+                  'success',
+                );
             },
           })
         }
       />
     ) : null;
+  // The picker wraps the box wherever the host offers it, from the first
+  // render, so the box isn't mounted again when the rows arrive; its button
+  // shows once they have.
+  const pickerFrame = pickerHost
+    ? (box: ReactElement) => (
+        <ModelPicker
+          name={persona.name}
+          models={takesChoice ? modelsQuery.data : undefined}
+          choice={choice}
+          onModel={(model) => choose({ model })}
+          onEffort={(effort) => choose({ effort })}
+          onOpen={() => void modelsQuery.refetch()}
+          boxRef={boxRef}
+        >
+          {box}
+        </ModelPicker>
+      )
+    : undefined;
   const chips =
     webChip || askFirstChip ? (
       <>
@@ -452,7 +518,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
             <Composer
               sessionId={sessionId}
               name={persona.name}
-              ready={Boolean(thread.data)}
+              ready={ready}
               busy={busy}
               onSend={submit}
               onStop={lane && !suspended && !resuming ? stopAnswer : undefined}
@@ -468,6 +534,9 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
               commands={chatContext?.commands}
               disabled={composer === 'wait'}
               placeholder={host.placeholder}
+              onFocusChange={setFocused}
+              picker={pickerHost ? <ModelPickerButton /> : null}
+              frame={pickerFrame}
             />
           )}
           {host.footnote && <p className="m-0 text-center text-xs text-fg-muted">{host.footnote}</p>}

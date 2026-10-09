@@ -23,6 +23,12 @@ SCRCPY_VERSION = "4.1"
 SCRCPY_SHA256 = "deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae"
 IMAGE = "system-images;android-36;google_apis_playstore;x86_64"
 AVD_NAME = "OpenCompany"
+#: The phone the emulator is (avdmanager's device profile), and its name as
+#: the owner sees it in the Workspace.
+DEVICE_PROFILE = "pixel_7"
+DEVICE_NAME = "Pixel 7"
+#: The live view's frame-rate cap (scrcpy ``max_fps``).
+VIDEO_MAX_FPS = 30
 # Minimum required by the pinned API 36 Google Play image. Newer installed
 # image revisions can raise this through source.properties Pkg.Dependencies.
 MIN_EMULATOR_VERSION = (35, 4, 9)
@@ -325,7 +331,7 @@ async def create_device(*, licenses_accepted: bool, progress: Progress | None = 
         if progress:
             progress("Creating the persistent OpenCompany Android device")
         await command(
-            sdk_command("avdmanager", "create", "avd", "--name", AVD_NAME, "--package", IMAGE, "--device", "pixel_7"),
+            sdk_command("avdmanager", "create", "avd", "--name", AVD_NAME, "--package", IMAGE, "--device", DEVICE_PROFILE),
             timeout=600,
             env=env,
             input_text="no\n",

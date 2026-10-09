@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { skillSummary, skillTitle, useDiscoverSkills, useSkillActions, useSkillLibrary } from '../data/skills';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
 import type { CatalogItem } from './catalog';
 import { CatalogLayout } from './CatalogLayout';
@@ -123,6 +124,7 @@ export function SkillsTab() {
     setAdding((names) => new Set(names).add(item.id));
     try {
       await actions.add(skill);
+      spikeOrb(SPIKE.skillAdded);
     } catch (error) {
       pillToast(errorText(error, `Couldn't add ${item.name}`), { tone: 'error' });
     } finally {
@@ -154,6 +156,7 @@ export function SkillsTab() {
   const create = async (title: string, instructions: string) => {
     await actions.create(title, instructions);
     pillToast(`${title} created`);
+    spikeOrb(SPIKE.skillAdded);
   };
 
   return (

@@ -6,7 +6,8 @@
  * Start / Pause / Resume send the summary's control revision. After one
  * returns, the label stays "Pausing…" until the summary has caught up with
  * the new state (or a few seconds pass and the list is refetched), so the
- * button never flashes the old label in between.
+ * button never flashes the old label in between. A change that went through
+ * says so in a toast, and a start or resume spikes the orb.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +22,7 @@ import { enterDev } from '../../../app/useShellActions';
 import { invalidateEmployees } from '../data/employees';
 import { busyLabelFor, presentEmployee, primaryActionLabel, type EmployeePresentation, type PrimaryAction } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
+import { SPIKE, spikeOrb } from '../orb/orb';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 
@@ -37,12 +39,16 @@ const CONTROL_ERRORS: Record<string, string> = {
   teams_disabled: 'Team hiring is not available on this installation yet. Ask your administrator to enable it.',
 };
 
-function controlErrorMessage(error: unknown): string {
+export function controlErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
   return CONTROL_ERRORS[message] ?? 'That did not work. Try again.';
 }
 
 type ControlKind = Extract<PrimaryAction['kind'], 'pause' | 'resume' | 'start'>;
+
+/** What the toast says once a change went through (the button says Stop
+ *  for `pause`). */
+const CONTROL_DONE: Record<ControlKind, string> = { start: 'started', resume: 'resumed', pause: 'stopped' };
 
 export interface EmployeeControl {
   /** The pill and the primary action, from the summary. */
@@ -85,6 +91,8 @@ export function useEmployeeControl(employee: EmployeeSummary, onConnect: (provid
             ? actions.resumeWorkflow(id, current.revision)
             : actions.startEmployee(id, current.revision);
       setAwaiting({ kind, target: await run });
+      pillToast(`${employee.name} ${CONTROL_DONE[kind]}`);
+      if (kind !== 'pause') spikeOrb(SPIKE.start);
     } catch (error) {
       pillToast(controlErrorMessage(error), { tone: 'error' });
       if (error instanceof Error && error.message === 'control_revision_conflict') invalidateEmployees(queryClient);

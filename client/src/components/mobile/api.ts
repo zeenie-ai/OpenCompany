@@ -4,6 +4,8 @@ export interface Geometry { width: number; height: number; rotation?: number; re
 export interface MobileStatus {
   running: boolean;
   starting?: boolean;
+  /** Which phone this is, in the owner's words ("Pixel 7 · local emulator · up to 30 fps"). */
+  device?: string;
   diagnostics?: { at: string; event: string; level: string; operation?: string; error_type?: string; code?: string; duration_ms?: number }[];
   geometry?: Geometry | null;
   setup?: string | Record<string, unknown> | null;

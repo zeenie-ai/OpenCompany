@@ -66,7 +66,25 @@ async def test_usage_counts_this_months_successes(container, real_database, monk
     monkeypatch.setattr(runs, "_maybe_prune", no_prune)
     await runs.record_run(real_database, workflow_id="1", run_id="r1", status="success", runtime="local")
     await runs.record_run(real_database, workflow_id="1", run_id="r2", status="failed", runtime="local")
-    assert await handlers.handle_get_employee_usage({}, None) == {"success": True, "tasks_this_month": 1}
+    got = await handlers.handle_get_employee_usage({}, None)
+    assert got == {"success": True, "tasks_this_month": 1, "since": got["since"]}
+    assert got["since"].endswith("-01")
+
+
+async def test_usage_month_starts_on_the_first_in_the_owners_zone(real_database, monkeypatch):
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from services.employees import summaries
+
+    async def kolkata(_database):
+        return ZoneInfo("Asia/Kolkata")
+
+    monkeypatch.setattr(summaries, "_owner_zone", kolkata)
+    # 20:00 UTC on 31 Oct is already 1 Nov in Kolkata.
+    now = datetime(2026, 10, 31, 20, 0, tzinfo=timezone.utc)
+    got = await summaries.employee_usage(real_database, now=now)
+    assert got == {"tasks_this_month": 0, "since": "2026-11-01"}
 
 
 async def test_get_errors(container):

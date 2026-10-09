@@ -10,8 +10,10 @@
  * all through `onAddFiles`), shown above the text as they upload; a
  * microphone that dictates into the box (composer/VoiceRecorder.tsx); and
  * slash commands, a list that opens while the box holds one word starting
- * with `/` (composer/SlashMenu.tsx). A message can be files alone; Send
- * waits while one is still uploading.
+ * with `/` (composer/SlashMenu.tsx); and, on Home, the model picker's
+ * button before the microphone (composer/ModelPicker.tsx), with the host's
+ * `frame` wrapping the box in the picker, whose panel opens above it. A
+ * message can be files alone; Send waits while one is still uploading.
  *
  * What is written lives in the composer store per conversation, so it
  * survives switching to another employee and back. While the employee is
@@ -19,7 +21,16 @@
  */
 
 import { ArrowUp, Mic, Play, Plus, Square } from 'lucide-react';
-import { useId, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import {
+  useId,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { isSendKey } from '@/lib/composerKeys';
@@ -69,6 +80,13 @@ export interface ComposerProps {
   disabled?: boolean;
   /** In place of "Message {name}…". */
   placeholder?: string;
+  /** The text box gained or lost the cursor. */
+  onFocusChange?: (focused: boolean) => void;
+  /** The model picker's button, before the microphone. */
+  picker?: ReactNode;
+  /** Wraps the box itself (its border), which holds `picker`: the model
+   *  picker's panel opens against it. */
+  frame?: (box: ReactElement) => ReactNode;
 }
 
 export function Composer({
@@ -90,11 +108,15 @@ export function Composer({
   commands = NO_COMMANDS,
   disabled = false,
   placeholder,
+  onFocusChange,
+  picker,
+  frame,
 }: ComposerProps) {
   const draft = useComposerDraft(sessionId);
   const setText = useComposerStore((state) => state.setText);
   const attachments = useBoxAttachments(sessionId);
   const fileRef = useRef<HTMLInputElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const [recording, setRecording] = useState(false);
   useAutoGrow(boxRef, draft.text);
@@ -254,6 +276,8 @@ export function Composer({
       onChange={(event) => setText(sessionId, event.target.value)}
       onKeyDown={onKeyDown}
       onPaste={onPaste}
+      onFocus={() => onFocusChange?.(true)}
+      onBlur={() => onFocusChange?.(false)}
       aria-label={`Message ${name}`}
       aria-autocomplete={commands.length ? 'list' : undefined}
       placeholder={placeholder ?? (commands.length ? `Message ${name}…  Type / for commands` : `Message ${name}…`)}
@@ -265,46 +289,54 @@ export function Composer({
   );
   const files = <AttachmentChips items={attachments} onRemove={(id) => useAttachmentStore.getState().remove(sessionId, id)} />;
 
-  return (
-    <SlashMenu
-      open={menuOpen}
-      listId={listId}
-      items={items}
-      active={highlighted}
-      boxRef={boxRef}
-      onPick={pick}
-      onActive={setActive}
-      onDismiss={() => setDismissed(draft.text)}
+  const shell = (
+    <div
+      ref={shellRef}
+      className={cn(
+        'chat-composer relative flex border border-border-default bg-bg-panel transition-colors duration-(--dur-slow) focus-within:border-border-strong',
+        compact ? 'flex-col gap-1.5 rounded-lg py-1.5 pr-1.5 pl-3' : 'flex-col gap-2 rounded-card py-2.5 pr-2.5 pb-2 pl-3.5 shadow-modal',
+      )}
     >
-      <div
-        className={cn(
-          'chat-composer relative flex border border-border-default bg-bg-panel transition-colors duration-(--dur-slow) focus-within:border-border-strong',
-          compact ? 'flex-col gap-1.5 rounded-lg py-1.5 pr-1.5 pl-3' : 'flex-col gap-2 rounded-card py-2.5 pr-2.5 pb-2 pl-3.5 shadow-modal',
-        )}
-      >
-        {attachments.length > 0 && <div className="pt-1">{files}</div>}
-        {compact ? (
-          <div className="flex items-end gap-2">
-            <div className="min-w-0 flex-1">{box}</div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {attachButton}
-              {chips}
-              {micButton}
-              {!recording && sendButton}
-            </div>
+      {attachments.length > 0 && <div className="pt-1">{files}</div>}
+      {compact ? (
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">{box}</div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {attachButton}
+            {chips}
+            {micButton}
+            {!recording && sendButton}
           </div>
-        ) : (
-          <>
-            {box}
-            <div className="flex items-center gap-1.5">
-              {attachButton}
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{chips}</div>
-              {micButton}
-              {!recording && sendButton}
-            </div>
-          </>
-        )}
-      </div>
-    </SlashMenu>
+        </div>
+      ) : (
+        <>
+          {box}
+          <div className="flex items-center gap-1.5">
+            {attachButton}
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{chips}</div>
+            {!recording && picker}
+            {micButton}
+            {!recording && sendButton}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      {frame ? frame(shell) : shell}
+      <SlashMenu
+        open={menuOpen}
+        listId={listId}
+        items={items}
+        active={highlighted}
+        boxRef={boxRef}
+        anchorRef={shellRef}
+        onPick={pick}
+        onActive={setActive}
+        onDismiss={() => setDismissed(draft.text)}
+      />
+    </>
   );
 }

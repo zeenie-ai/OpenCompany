@@ -38,6 +38,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { EmployeeView } from '../employee/EmployeeView';
 import { useHomeStore } from '../state/homeStore';
 import { useShellDialogsStore } from '@/stores/shellDialogsStore';
+import { SPIKE, orbState } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
 
 const TALK_ON = { state: 'on', agent_node_id: 'w1:talk' };
@@ -124,6 +125,7 @@ describe('EmployeeView', () => {
     expect(screen.getByRole('button', { name: 'Resuming…' })).toBeDisabled();
 
     await act(async () => done(normalizeWorkflowControlStatus({ state: 'running', revision: 8, generation: 1 }, 'w1')));
+    expect(pillToast).toHaveBeenCalledWith('Maya resumed');
     // The summary still says paused: keep the in-flight label.
     expect(screen.getByRole('button', { name: 'Resuming…' })).toBeInTheDocument();
 
@@ -147,6 +149,15 @@ describe('EmployeeView', () => {
     renderPage(summary({ status: 'attention', talk: TALK_ON }, { state: 'paused', pause_reason: 'failures', pause_detail: why }));
     expect(screen.getByRole('alert')).toHaveTextContent(why);
     expect(screen.getByRole('button', { name: 'Resume' })).toBeEnabled();
+  });
+
+  it('says when a start went through, and spikes the orb', async () => {
+    orbState.spike = 0;
+    actions.startEmployee.mockResolvedValue(normalizeWorkflowControlStatus({ state: 'starting', revision: 2, generation: 1 }, 'w1'));
+    renderPage(summary({ status: 'ready', talk: TALK_ON }, { state: 'never_started' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya started'));
+    expect(orbState.spike).toBe(SPIKE.start);
   });
 
   it('says to connect an AI model, and opens that dialog, when Start is refused for want of one', async () => {

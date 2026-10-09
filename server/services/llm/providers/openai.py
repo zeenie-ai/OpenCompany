@@ -157,6 +157,7 @@ class OpenAIProvider:
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
         on_event: Optional[StreamSink] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         model = self._clean_model(model)
         policy = self._model_policy(model, thinking)
@@ -173,6 +174,7 @@ class OpenAIProvider:
                 tools=tools,
                 context_management=context_management,
                 on_event=on_event,
+                effort=effort,
             )
 
         params: Dict[str, Any] = {
@@ -211,6 +213,10 @@ class OpenAIProvider:
             params.setdefault("extra_body", {})["thinking"] = {
                 "type": "disabled"
             }
+        if effort:
+            # The owner's chat choice (Quick / Thorough), over the agent's own
+            # reasoning effort. Only the effort_models receive one (ChatUnifier).
+            params["reasoning_effort"] = effort
 
         # Tools
         if tools:
@@ -257,6 +263,7 @@ class OpenAIProvider:
         tools: Optional[List[ToolDef]],
         context_management: Optional[Dict[str, Any]],
         on_event: Optional[StreamSink] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         """Run a self-contained Responses API turn for reasoning tool use."""
 
@@ -273,6 +280,9 @@ class OpenAIProvider:
             params["reasoning"] = {
                 "effort": thinking.effort or "medium",
             }
+        if effort:
+            # The owner's chat choice, over the agent's own effort.
+            params["reasoning"] = {**params.get("reasoning", {}), "effort": effort}
         if tools:
             params["tools"] = [
                 self._to_responses_tool(tool) for tool in tools

@@ -16,10 +16,12 @@
  */
 
 import { useBoundProp } from '@json-render/react';
+import { useId } from 'react';
 import { Check, CircleAlert, Info, TriangleAlert } from 'lucide-react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import type { GuardedComponentProps } from '@/lib/jsonRender';
@@ -77,12 +79,12 @@ export function SlotPickerView({ props, bindings, enterRef }: ViewProps<'SlotPic
   const [, setValue] = useBoundProp<string>(props.value, bindings?.value);
   if (props.options.length === 0) return null;
   return (
-    <div ref={enterRef} role="radiogroup" aria-label={props.label} className="flex min-w-0 flex-col gap-2">
+    <div ref={enterRef} role="radiogroup" aria-label={props.label} className={cn(PANEL, 'flex min-w-0 flex-col gap-2.5 p-3.5')}>
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-sm font-semibold text-fg-default">{props.label}</span>
         {props.hint && <span className="text-xs text-fg-muted">{props.hint}</span>}
       </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-2">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2">
         {props.options.map((option) => {
           const picked = option.id === props.value;
           return (
@@ -143,14 +145,29 @@ export function SelectView({ props, bindings, enterRef }: ViewProps<'Select'>) {
 
 export function ToggleView({ props, bindings, enterRef }: ViewProps<'Toggle'>) {
   const [, setChecked] = useBoundProp<boolean>(props.checked, bindings?.checked);
+  const id = useId();
+  const hintId = `${id}-hint`;
+  // The whole row is the switch's label, so a click anywhere on it toggles.
   return (
-    <div ref={enterRef} className="flex items-center gap-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+    <Label ref={enterRef} htmlFor={id} className="flex cursor-pointer items-center gap-3 leading-normal font-normal">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-sm font-medium text-fg-default">{props.label}</span>
-        {props.hint && <span className="text-xs text-fg-muted">{props.hint}</span>}
-      </div>
-      <Switch tone="run" aria-label={props.label} checked={props.checked} onCheckedChange={setChecked} />
-    </div>
+        {props.hint && (
+          <span id={hintId} className="text-xs text-fg-muted">
+            {props.hint}
+          </span>
+        )}
+      </span>
+      <Switch
+        id={id}
+        size="md"
+        tone="run"
+        aria-label={props.label}
+        aria-describedby={props.hint ? hintId : undefined}
+        checked={props.checked}
+        onCheckedChange={setChecked}
+      />
+    </Label>
   );
 }
 

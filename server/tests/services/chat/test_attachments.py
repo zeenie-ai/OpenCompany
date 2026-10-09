@@ -146,16 +146,16 @@ async def test_the_box_offers_commands_attachments_and_web(chat, monkeypatch):
     commands = {item["command"]: item for item in context["commands"]}
     assert commands["/inbox"]["suggest"] is True
     assert commands["/remember"]["description"] == "Teach Maya something"
-    assert context["capabilities"] == {"attachments": True, "web": True}
+    assert context["capabilities"] == {"attachments": True, "web": True, "model_choice": False}
     assert context["limits"]["max_attachments"] == 6
 
     plain = await chat.handlers.handle_get_chat_context({"session_id": "default"}, None)
-    assert plain["commands"] == [] and plain["capabilities"] == {"attachments": False, "web": False}
+    assert plain["commands"] == [] and plain["capabilities"] == {"attachments": False, "web": False, "model_choice": False}
 
 
 async def test_web_off_keeps_the_answering_agent_off_search(database):
     import nodes  # noqa: F401
-    from services.temporal.agent_activities import _without_web_tools
+    from services.temporal.agent_activities import _chat_run_options, _without_web_tools
 
     await talking(database)
     admission = await ledger.admit_message(
@@ -163,7 +163,11 @@ async def test_web_off_keeps_the_answering_agent_off_search(database):
     )
     tools = [{"node_type": "duckduckgoSearch"}, {"node_type": "calculatorTool"}]
     context = {"run_scope": {"run_id": admission.run.run_id, "session_id": "wf"}}
-    kept = await _without_web_tools(database, context, tools)
+    options = await _chat_run_options(database, context)
+    assert options == {"web": False}
+    kept = _without_web_tools(options, tools)
     assert [tool["node_type"] for tool in kept] == ["calculatorTool"]
     # Web on, or no chat run: every tool stays.
-    assert await _without_web_tools(database, {}, tools) == tools
+    assert await _chat_run_options(database, {}) == {}
+    assert _without_web_tools({}, tools) == tools
+    assert _without_web_tools({"web": True}, tools) == tools

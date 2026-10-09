@@ -31,6 +31,7 @@ import { presentEmployee } from '../data/presentation';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { EmployeeChat } from '../employee/EmployeeChat';
 import type { EmployeeControl } from '../employee/useEmployeeControl';
+import { ENERGY, SPIKE, orbState } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
 // Loaded up front so the turns' lazy markdown resolves from the module cache.
 import '@/features/chat/markdown/ReplyMarkdown';
@@ -259,6 +260,42 @@ describe('sending', () => {
     expect(await screen.findByText('Maya isn’t running.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Turn on Talk' })).toBeInTheDocument();
+  });
+});
+
+describe('the orb and Ask first', () => {
+  it('brightens while the owner writes and spikes when a message goes', async () => {
+    orbState.spike = 0;
+    orbState.target = ENERGY.idle;
+    renderChat(employee());
+    const box = await screen.findByRole('textbox', { name: 'Message Maya' });
+    fireEvent.focus(box);
+    await waitFor(() => expect(orbState.target).toBe(ENERGY.focus));
+    await write('Any bookings today?');
+    await waitFor(() => expect(orbState.target).toBe(ENERGY.typing));
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(orbState.spike).toBe(SPIKE.message));
+  });
+
+  it('says what changed when Ask first is turned off or on', async () => {
+    const rule = { askFirst: true, revision: 1 };
+    sendRequest.mockImplementation(async (type: string, data: Wire) => {
+      if (type === 'chat_subscribe') return { success: true, hub_epoch: 'e1', active_runs: [] };
+      if (type === 'get_chat_messages') return { success: true, messages: [] };
+      if (type === 'get_ask_first') return { success: true, ask_first: rule.askFirst, revision: rule.revision };
+      if (type === 'set_ask_first') {
+        rule.askFirst = data.ask_first === true;
+        rule.revision += 1;
+        return { success: true, ask_first: rule.askFirst, revision: rule.revision, needs_apply: false };
+      }
+      return { success: true };
+    });
+    renderChat(employee({ asks_first: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask first', pressed: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn off Ask first' }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya will send without asking', { tone: 'success' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask first', pressed: false }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Maya will ask before sending', { tone: 'success' }));
   });
 });
 

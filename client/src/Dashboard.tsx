@@ -4,6 +4,8 @@ import { toast } from 'sonner';
 import {
   ReactFlow,
   ReactFlowProvider,
+  Background,
+  BackgroundVariant,
   Controls,
   useReactFlow,
   ConnectionMode,
@@ -1265,6 +1267,8 @@ const DashboardContent: React.FC = () => {
                   snapGrid={snapGrid}
                   style={reactFlowStyle}
                 >
+                  {/* Dots in the base themes only: --grid-dot (index.css). */}
+                  <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
                   <Controls />
                 </ReactFlow>
                 </CanvasEditGuardContext.Provider>

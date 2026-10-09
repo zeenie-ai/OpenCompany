@@ -64,3 +64,19 @@ def test_global_lists_only_carry_1m_context_models() -> None:
 def test_ai_service_offline_fallback_uses_explicit_order() -> None:
     expected = _defaults()["providers"]["openrouter"]["popular_models"]
     assert AIService._get_curated_models(None, "openrouter") == expected
+
+
+def test_the_chat_pickers_models_are_curated_1m_models() -> None:
+    """Home's chat model picker (services/chat/choice.py) offers only
+    provider::model ids from a provider's global list (so >= 1M context),
+    each with the words the picker shows."""
+    defaults = _defaults()
+    providers = defaults["providers"]
+    models = defaults["chat_models"]["models"]
+    ids = [entry["id"] for entry in models]
+    assert ids and len(ids) == len(set(ids))
+    for entry in models:
+        provider, _, model = entry["id"].partition("::")
+        assert provider in providers, entry["id"]
+        assert model in providers[provider]["popular_models"], f"{entry['id']} is not in {provider}'s global list"
+        assert all(isinstance(entry.get(key), str) and entry[key] for key in ("name", "short", "description")), entry["id"]

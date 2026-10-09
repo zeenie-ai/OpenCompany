@@ -141,22 +141,38 @@ async def stop(principal: str = Depends(authorize)):
 
 
 @router.post(BASE + "/takeover")
-async def takeover(body: Viewer, request: Request, principal: str = Depends(authorize)):
-    from ._runtime import get_runtime
+async def takeover(body: Viewer, request: Request, workflow_id: str, node_id: str, principal: str = Depends(authorize)):
+    from ._runtime import get_runtime, record_phone_step
 
     lease = await call(get_runtime().takeover(viewer_identity(principal, body.viewer_id, request.cookies)))
+    await record_phone_step(workflow_id, node_id, "You took over the phone")
     return {"owner": lease.owner, "epoch": lease.epoch}
 
 
 @router.post(BASE + "/release")
-async def release(body: Release, request: Request, principal: str = Depends(authorize)):
-    from ._runtime import get_runtime
+async def release(body: Release, request: Request, workflow_id: str, node_id: str, principal: str = Depends(authorize)):
+    from ._runtime import get_runtime, record_phone_step
 
     runtime = get_runtime()
     try:
         if runtime.control.epoch != body.epoch:
             raise MobileError("stale_lease", "Device control changed. Refresh before releasing it.")
         runtime.release(viewer_identity(principal, body.viewer_id, request.cookies), resume=body.resume)
+    except MobileError as exc:
+        raise HTTPException(409, str(exc)) from None
+    await record_phone_step(workflow_id, node_id, "You handed the phone back")
+    return runtime.snapshot()
+
+
+@router.post(BASE + "/resume")
+async def resume(principal: str = Depends(authorize)):
+    """Let the AI task that waits for the owner go on (the Workspace's Hand
+    back), without holding the phone: the view that held it may be gone."""
+    from ._runtime import get_runtime
+
+    runtime = get_runtime()
+    try:
+        runtime.resume_waiting()
     except MobileError as exc:
         raise HTTPException(409, str(exc)) from None
     return runtime.snapshot()
@@ -204,6 +220,31 @@ async def device_input(body: DeviceInput, request: Request, principal: str = Dep
         get_runtime().input(Lease("viewer:" + viewer, body.epoch), body.operation, parameters, str(body.operation_id), body.geometry)
     )
     return {"success": True, "result": result}
+
+
+@router.post(BASE + "/screenshot")
+async def screenshot(workflow_id: str, node_id: str, principal: str = Depends(authorize)):
+    """The phone's screen, saved as a PNG in the workflow's workspace: its
+    file reference (``ref``), which the owner can put on the Canvas
+    (``canvas_add``). Reads the screen, so it needs no control of the phone."""
+    import base64
+    from types import SimpleNamespace
+
+    from core.container import container
+    from services.media.workspace import write_media
+    from services.workspace_locator import resolve_workspace_root
+    from ._runtime import get_runtime
+
+    async def capture():
+        shot = await get_runtime().driver_call("screenshot")
+        root = await resolve_workspace_root(workflow_id, container.database(), allow_default=False)
+        context = SimpleNamespace(workspace_dir=str(root), workflow_id=workflow_id, node_id=node_id)
+        return write_media(
+            base64.b64decode(shot["base64"]), ctx=context, stem="phone", ext="png", kind="image", mime_type="image/png"
+        )
+
+    ref = await call(capture())
+    return {"success": True, "ref": ref.model_dump(mode="json")}
 
 
 @router.post(BASE + "/tasks")

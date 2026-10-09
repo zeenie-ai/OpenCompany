@@ -284,6 +284,7 @@ class CanvasNode(ToolNode):
                 raise NodeUserError(str(exc)) from exc
             await dispatch_canvas_updated(workflow_id=ctx.workflow_id, node_id=ctx.node_id, revision=revision)
             await _show_in_chat(ctx, updated)
+            await _record_step(ctx, f"Updated {_item_label(updated)} on the Canvas")
             return {
                 "message": f"Updated {updated['title'] or 'the item'} to version {updated['version']}.",
                 "revision": revision,
@@ -303,6 +304,9 @@ class CanvasNode(ToolNode):
         )
         for row in added:
             await _show_in_chat(ctx, row)
+        await _record_step(
+            ctx, f"Showed {_item_label(added[0])} on the Canvas" if len(added) == 1 else f"Showed {len(added)} items on the Canvas"
+        )
 
         message = f"Displayed {len(added)} item(s); board holds {total}."
         if params.mode == "replace":
@@ -346,6 +350,26 @@ async def _show_in_chat(ctx: NodeContext, item: Dict[str, Any]) -> None:
         )
     except Exception:  # noqa: BLE001 - the board has the note either way
         logger.warning("Could not show a canvas note in the chat", item_id=item.get("id"), exc_info=True)
+
+
+def _item_label(item: Dict[str, Any]) -> str:
+    """How a step names an item: its title, file name or site, else what it is."""
+    if item.get("title"):
+        return str(item["title"])
+    ref = item.get("ref") if isinstance(item.get("ref"), dict) else None
+    if ref and ref.get("filename"):
+        return str(ref["filename"])
+    if item.get("url"):
+        return urlsplit(str(item["url"])).hostname or "a page"
+    return "a note"
+
+
+async def _record_step(ctx: NodeContext, text: str) -> None:
+    """The Workspace's step log (services/workspace_steps.py). Best effort."""
+    from services.plugin.deps import get_database
+    from services.workspace_steps import record_step
+
+    await record_step(get_database(), workflow_id=ctx.workflow_id, surface="canvas", text=text, node_id=ctx.node_id)
 
 
 def _note_title(content: str) -> str:

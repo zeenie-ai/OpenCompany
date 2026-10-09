@@ -11,15 +11,37 @@ import time
 from pathlib import Path
 from services.process_environment import without_onepassword_environment
 from ._control import DeviceControl, Lease, MobileError
-from ._install import AVD_NAME, install_engine, create_device, engine_ready, sdk_tool, sdk_root
+from ._install import AVD_NAME, DEVICE_NAME, VIDEO_MAX_FPS, install_engine, create_device, engine_ready, sdk_tool, sdk_root
 from ._paths import mobile_root, runtime_python
 from ._process import command, hidden_options
 from ._diagnostics import event, recent
 from ._emulator import DeviceLock, recover_emulator, boot_error, owned_children, stop_children
 from .runtime.progress import plan_summary, summary
 
-READS = frozenset({"geometry", "observe", "date", "packages", "foreground"})
+READS = frozenset({"geometry", "observe", "screenshot", "date", "packages", "foreground"})
+#: What the Workspace says about the phone, above its frame.
+DEVICE_LINE = f"{DEVICE_NAME} · local emulator · up to {VIDEO_MAX_FPS} fps"
 ACTIONS = frozenset({"tap", "swipe", "touch", "text", "erase", "key", "launch", "terminate", "url", "rotate"})
+#: The Workspace's step log (services/workspace_steps.py): what a phone task
+#: did, never what it typed. ``touch`` (a finger's down, move, up) is part of
+#: a gesture, not a step of its own.
+TASK_STEPS = {
+    "tap": "Tapped the screen",
+    "swipe": "Swiped",
+    "text": "Typed on the phone",
+    "erase": "Deleted text",
+    "launch": "Opened an app",
+    "terminate": "Closed an app",
+    "url": "Opened a link",
+    "rotate": "Turned the phone",
+}
+KEY_STEPS = {
+    "home": "Went to the home screen",
+    "back": "Went back",
+    "enter": "Pressed Enter",
+    "recent": "Opened recent apps",
+    "power": "Pressed the power button",
+}
 
 
 class MobileRuntime:
@@ -73,7 +95,7 @@ class MobileRuntime:
                     grant = self.capabilities.get(capability)
                     if not grant:
                         return web.json_response({"success": False, "error": "Task capability expired"}, status=403)
-                    _, lease = grant
+                    run_id, lease = grant
                     data = await request.json()
                     if not isinstance(data, dict) or data.get("epoch") != lease.epoch:
                         raise MobileError("stale_lease", "Task control changed")
@@ -88,6 +110,7 @@ class MobileRuntime:
                         )
                     else:
                         result = await self.input(lease, operation, parameters, data.get("operation_id"), data.get("geometry"))
+                        await self._record_task_step(run_id, operation, parameters)
                     return web.json_response({"success": True, "result": result})
                 except MobileError as exc:
                     return web.json_response({"success": False, "error": str(exc), "code": exc.code}, status=409)
@@ -122,7 +145,7 @@ class MobileRuntime:
             "starting": self.lifecycle_lock.locked() and self.geometry is None and not self.stopping,
             "serial": self.serial,
             "geometry": self.geometry,
-            "device": "Shared Android device",
+            "device": DEVICE_LINE,
             "setup": self.setup_state,
             "setup_error": self.setup_error,
             "start_error": self.start_error,
@@ -479,6 +502,24 @@ class MobileRuntime:
         self.control.revoke("viewer:" + viewer)
         self.viewer = None
         if resume:
+            self.resume_event.set()
+
+    async def _record_task_step(self, run_id: str, operation: str, parameters: dict) -> None:
+        """A phone task's finished action, in its workflow's step log."""
+        entry = self.active
+        if not entry or entry.get("run_id") != run_id:
+            return
+        text = KEY_STEPS.get(str(parameters.get("key"))) if operation == "key" else TASK_STEPS.get(operation)
+        if text:
+            await record_phone_step(entry.get("workflow_id"), entry.get("node_id"), text)
+
+    def resume_waiting(self) -> None:
+        """Let the AI task that waits for the owner go on, without holding the
+        phone: Hand back after the view that held it went away. Refused while
+        someone uses the phone; nothing happens when no task waits."""
+        if self.viewer is not None:
+            raise MobileError("not_controller", "Someone is using the phone. Finish using it first.")
+        if self.active and self.active.get("status") == "awaiting_user":
             self.resume_event.set()
 
     async def cancel(self, workflow_id: str, node_id: str, *, run_id: str | None = None):
@@ -942,3 +983,15 @@ def get_runtime() -> MobileRuntime:
 
 def peek_runtime() -> MobileRuntime | None:
     return _runtime
+
+
+async def record_phone_step(workflow_id: str | None, node_id: str | None, text: str) -> None:
+    """One line in a workflow's Workspace step log (services/workspace_steps.py).
+    Best effort: the phone's work stands whether or not its step is kept."""
+    try:
+        from services.plugin.deps import get_database
+        from services.workspace_steps import record_step
+
+        await record_step(get_database(), workflow_id=workflow_id, surface="mobile", text=text, node_id=node_id)
+    except Exception:
+        event("workspace_step_failed", failed=True)

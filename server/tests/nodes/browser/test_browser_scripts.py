@@ -27,6 +27,7 @@ class Browser:
         self.click_result = {"x": 42.0, "y": 25.0}
         self.released = []
         self.page_text = "Normal page"
+        self.focused_box = [10, 20, 200, 30]
 
     def current_tab(self):
         return {"targetId": self.target, "url": self.url, "title": self.title}
@@ -34,6 +35,10 @@ class Browser:
     def js(self, expression):
         if "return el ? el.innerText : null" in expression:
             return self.page_text
+        if "document.activeElement" in expression:
+            if isinstance(self.focused_box, Exception):
+                raise self.focused_box
+            return self.focused_box
         return {"url": self.url, "title": self.title, **self.markers}
 
     def cdp(self, method, **kwargs):
@@ -202,6 +207,40 @@ def test_ready_target_is_clicked_once_and_budget_is_forwarded():
     assert browser.actions == [("click", (42.0, 25.0), {"button": "left", "clicks": 1})]
     assert browser.load_budgets == [9]
     assert browser.released == ["element"]
+
+
+def test_click_and_hover_say_where_they_happened_beside_their_value():
+    browser = Browser()
+    clicked = browser.execute("click", {"selector": "#submit"})
+    assert clicked["value"] == {"x": 42.0, "y": 25.0}
+    assert clicked["cursor"] == {"x": 42.0, "y": 25.0}
+    hovered = browser.execute("hover", {"x": 7, "y": 9})
+    assert hovered["cursor"] == {"x": 7.0, "y": 9.0}
+    assert "cursor" not in browser.execute("snapshot")
+
+
+def test_type_reports_the_fields_box_never_the_text():
+    browser = Browser()
+    result = browser.execute("type", {"text": "secret words", "clear": False})
+    assert result["value"] == {"typed_chars": 12, "submitted": False}
+    assert result["cursor"] == {"box": [10.0, 20.0, 200.0, 30.0]}
+    assert "secret" not in json.dumps(result["cursor"])
+    # Not finding the field only loses the cursor.
+    browser.focused_box = RuntimeError("cdp gone")
+    result = browser.execute("type", {"text": "hi", "clear": False})
+    assert result["ok"] is True and "cursor" not in result
+
+
+def test_select_reports_the_lists_box_and_keeps_it_out_of_the_value():
+    browser = Browser()
+    browser.click_result = {"selected": 1, "box": [5, 6, 70, 20]}
+    result = browser.execute("select", {"selector": "#size", "values": ["M"]})
+    assert result["value"] == {"selected": 1}
+    assert result["cursor"] == {"box": [5.0, 6.0, 70.0, 20.0]}
+    # A page that makes its box nonsense loses the cursor, not the action.
+    browser.click_result = {"selected": 1, "box": ["a", "b", "c", "d"]}
+    result = browser.execute("select", {"selector": "#size", "values": ["M"]})
+    assert result["ok"] is True and result["value"] == {"selected": 1} and "cursor" not in result
 
 
 def test_adversarial_arguments_and_page_text_remain_data():

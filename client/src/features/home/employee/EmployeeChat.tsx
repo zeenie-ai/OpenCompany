@@ -25,7 +25,7 @@
  */
 
 import { Monitor } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ActionButton } from '@/components/ui/action-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -35,6 +35,7 @@ import { firstDayPhase, stateNoticeText, talkMode, talkNoticeText } from '../dat
 import type { EmployeeSummary } from '../data/schemas';
 import { useRetryNote } from '../data/talk';
 import { HireNotice } from '../hire/HireNotice';
+import { ENERGY, SPIKE, setEnergyTarget, spikeOrb } from '../orb/orb';
 import { OrbSlot } from '../orb/OrbSlot';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
@@ -164,6 +165,14 @@ export function EmployeeChat({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // The orb answers the conversation (design handoff "Orb reactivity"): it
+  // brightens while the owner writes, and spikes when something goes.
+  const onSent = useCallback((what: 'message' | 'draft') => spikeOrb(what === 'draft' ? SPIKE.draftSent : SPIKE.message), []);
+  const onComposerChange = useCallback(({ focused, typed }: { focused: boolean; typed: boolean }) => {
+    setEnergyTarget(typed ? ENERGY.typing : focused ? ENERGY.focus : ENERGY.idle);
+  }, []);
+  useEffect(() => () => setEnergyTarget(ENERGY.idle), []);
+
   const onSendRefused = (code: string) => {
     if (code === 'not_running') {
       invalidateEmployees(queryClient);
@@ -202,6 +211,9 @@ export function EmployeeChat({
         notify: (message, tone) => pillToast(message, { tone }),
         openArtifact: (artifact) => useHomeStore.getState().openCanvasItem(artifact),
         onSendRefused,
+        onSent,
+        onComposerChange,
+        modelPicker: true,
         liveNote,
         onScrolledChange,
       }}

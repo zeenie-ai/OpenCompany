@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { animate } from '@/lib/motion';
+import { animate, finished } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useEmployeesQuery } from '../data/employees';
 import { useAnswering } from '../data/liveTask';
@@ -39,20 +39,38 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
   const pending = useWorkflowControlPending(employee.workflow_id);
   const answering = useAnswering(employee);
   const ref = useRef<HTMLButtonElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const view = presentEmployee(employee, pending, answering);
   const deleteWorkflow = useAppStore((s) => s.deleteWorkflow);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
 
+  // Confirming closes the dialog and folds the row away (design handoff
+  // "Delete"), then deletes. On success the row leaves with the employee;
+  // on failure the fold is cancelled, so the row is back as it was.
   const remove = async () => {
     if (deletingRef.current) return;
     deletingRef.current = true;
     setDeleting(true);
+    setConfirming(false);
+    const row = rowRef.current;
+    const collapse = row
+      ? animate(
+          row,
+          [
+            { opacity: 1, height: `${row.offsetHeight}px`, overflow: 'hidden' },
+            { opacity: 0, height: '0px', transform: 'translateX(-12px)', overflow: 'hidden' },
+          ],
+          { duration: 'slow', fill: 'forwards' },
+        )
+      : null;
     try {
+      await finished(collapse);
       if (!(await deleteWorkflow(employee.workflow_id))) throw new Error('Delete failed');
-      setConfirming(false);
+      pillToast(`${employee.name} was deleted`);
     } catch {
+      collapse?.cancel();
       pillToast(`Couldn’t delete ${employee.name}. Try again.`, { tone: 'error' });
     } finally {
       deletingRef.current = false;
@@ -85,6 +103,7 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
 
   return (
     <div
+      ref={rowRef}
       className={cn(
         'group flex w-full items-center rounded-row text-fg-default transition-colors hover:bg-bg-hover',
         selected && 'bg-bg-hover',
@@ -123,20 +142,19 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
       >
         <X aria-hidden className="size-3.75" />
       </Button>
-      <AlertDialog open={confirming} onOpenChange={(open) => { if (!deletingRef.current) setConfirming(open); }}>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {employee.name}?</AlertDialogTitle>
             <AlertDialogDescription>This removes the employee and their workflow. This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              disabled={deleting}
               onClick={(event) => { event.preventDefault(); void remove(); }}
             >
-              {deleting ? 'Deleting…' : 'Delete'}
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

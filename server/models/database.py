@@ -335,6 +335,11 @@ class UserSettings(SQLModel, table=True):
     getting_started_approved_draft: bool = Field(default=False)  # Latched: sent a draft an employee held for them
     default_llm_provider: Optional[str] = Field(default=None, max_length=50)  # Global default AI provider
     default_llm_model: Optional[str] = Field(default=None, max_length=200)  # Global default AI model
+    # Home's chat model picker (services/chat/choice.py): "auto" or a
+    # provider::model id from llm_defaults.json chat_models, and the effort
+    # ("" for Balanced, "low" for Quick, "high" for Thorough).
+    chat_model: str = Field(default="auto", max_length=300)
+    chat_effort: str = Field(default="", max_length=10)
     auto_add_skill_for_tools: bool = Field(
         default=True
     )  # When a tool node connects to an AI agent's input-tools, auto-enable the matching skill

@@ -86,6 +86,57 @@ async def test_status_poll_does_not_queue_behind_input(runtime, monkeypatch):
     query.assert_not_awaited()
 
 
+def test_hand_back_resumes_a_waiting_task_without_holding_the_phone():
+    from nodes.mobile._control import MobileError
+
+    value = MobileRuntime()
+    # Nothing waits: nothing happens.
+    value.resume_waiting()
+    assert not value.resume_event.is_set()
+    value.active = {"run_id": "run", "status": "awaiting_user"}
+    value.viewer = "someone"
+    with pytest.raises(MobileError, match="using the phone"):
+        value.resume_waiting()
+    assert not value.resume_event.is_set()
+    value.viewer = None
+    value.resume_waiting()
+    assert value.resume_event.is_set()
+
+
+def test_the_snapshot_says_which_phone_it_is():
+    from nodes.mobile._install import DEVICE_NAME, VIDEO_MAX_FPS
+
+    assert MobileRuntime().snapshot()["device"] == f"{DEVICE_NAME} · local emulator · up to {VIDEO_MAX_FPS} fps" == "Pixel 7 · local emulator · up to 30 fps"
+
+
+async def test_a_screenshot_is_saved_to_the_workspace(monkeypatch, tmp_path):
+    import base64
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    import core.container
+    import nodes.mobile._runtime as module
+    from nodes.mobile._router import screenshot
+
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 300
+    value = MobileRuntime()
+    query = AsyncMock(return_value={"base64": base64.b64encode(png).decode()})
+    monkeypatch.setattr(value, "driver_call", query)
+    monkeypatch.setattr(module, "get_runtime", lambda: value)
+    monkeypatch.setattr(core.container, "container", SimpleNamespace(database=lambda: "db"))
+
+    async def root(workflow_id, database, *, allow_default=True):
+        assert (workflow_id, database, allow_default) == ("wf", "db", False)
+        return tmp_path
+
+    monkeypatch.setattr("services.workspace_locator.resolve_workspace_root", root)
+    result = await screenshot(workflow_id="wf", node_id="phone-node", principal="owner")
+    query.assert_awaited_once_with("screenshot")
+    ref = result["ref"]
+    assert (ref["kind"], ref["mime_type"], ref["size_bytes"], ref["workflow_id"]) == ("image", "image/png", len(png), "wf")
+    assert ref["filename"].startswith("phone-") and ref["filename"].endswith(".png")
+    assert (tmp_path / ref["path"]).read_bytes() == png
+
+
 class FakeStdin:
     def __init__(self):
         self.data = b""

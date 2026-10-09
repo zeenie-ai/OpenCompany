@@ -24,7 +24,7 @@ import httpx
 
 from core.encryption import fingerprint_credential
 from core.logging import get_logger
-from services.llm.config import resolve_credential, split_provider_ref
+from services.llm.config import resolve_credential, split_provider_ref, supports_effort
 from services.llm.endpoints import base_url_key, redact_url, unconfigured_endpoint_message
 from services.llm.protocol import (
     LLMError,
@@ -107,6 +107,7 @@ class ChatUnifier:
         sdk_max_retries: int = 2,
         translate_errors: bool = True,
         on_event: Optional[StreamSink] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         """Execute a chat completion against the named provider.
 
@@ -124,6 +125,10 @@ class ChatUnifier:
         other the events come from the finished response, one per kind, so
         a caller handles both the same way. The response is the same either
         way.
+
+        ``effort`` is the owner's chat choice (``low`` / ``high``). It reaches
+        the provider only for a model listed in its ``effort_models``; any
+        other model answers as it would without it.
         """
         provider_id = split_provider_ref(provider)[0]
         spec = get_provider(provider_id)
@@ -144,6 +149,8 @@ class ChatUnifier:
             }
             if streams:
                 kwargs["on_event"] = on_event
+            if effort and supports_effort(provider, model):
+                kwargs["effort"] = effort
             response = await entry.client.chat(messages, **kwargs)
             if on_event is not None and not streams:
                 await _replay_response(response, on_event)

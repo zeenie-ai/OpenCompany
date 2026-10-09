@@ -37,6 +37,7 @@ export default function WorkspaceCanvas({ workflowId, nodeId, name }: { workflow
       workflowId={workflowId}
       nodeId={nodeId}
       focus={ownFocus}
+      library
       emptyHint={`Nothing here yet. When ${name} finishes something you’ll want to see, it shows up here.`}
       onRemove={(itemId) => remove.mutate(itemId, { onError: () => pillToast('Couldn’t remove that. Try again.', { tone: 'error' }) })}
     />

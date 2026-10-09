@@ -33,6 +33,11 @@ def steps_setting(name: str) -> int:
     return int(load_chat_config()["steps"][name])
 
 
+def choice_setting(name: str) -> Any:
+    """``choice.<name>``: the words of the chat's model picker."""
+    return load_chat_config()["choice"][name]
+
+
 def branches_setting(name: str) -> int:
     """``branches.<name>``: how many branch snapshots a session keeps, and
     how large one may be."""
@@ -42,6 +47,7 @@ def branches_setting(name: str) -> int:
 __all__ = [
     "CONFIG_PATH",
     "branches_setting",
+    "choice_setting",
     "hub_setting",
     "load_chat_config",
     "runs_setting",

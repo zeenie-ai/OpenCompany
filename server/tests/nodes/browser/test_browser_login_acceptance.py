@@ -20,7 +20,7 @@ from nodes.browser._chrome import ChromeProcess
 from nodes.browser._cli import BrowserUseCli
 from nodes.browser._credentials import fill_credentials
 from nodes.browser._egress import EgressProxy
-from nodes.browser._netpolicy import NetPolicy
+from services.netpolicy import NetPolicy
 from nodes.browser._runtime import ProfileRuntime
 from nodes.browser._session import ProfileController
 from nodes.browser._stream import ScreencastHub, Viewer

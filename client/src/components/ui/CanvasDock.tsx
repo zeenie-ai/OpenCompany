@@ -38,6 +38,7 @@ import {
 import CanvasContent from '../parameterPanel/canvas/CanvasContent';
 import BrowserWorkspace from '../browser/BrowserWorkspace';
 import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
+import { useSurfaceRunning } from '../workspace/activity';
 import { workspaceNodes } from '../workspace/descriptors';
 import MobileWorkspace from '../mobile/MobileWorkspace';
 import { queryClient } from '../../lib/queryClient';
@@ -91,6 +92,13 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
     [nodes, hintsVersion]);
   const shownWidth = wide ? Math.min(1100, window.innerWidth - 160) : Math.min(widthPx, window.innerWidth - 40);
   const mobileNodes = workspaceNodes(nodes).filter((node) => node.kind === 'mobile');
+  // A dot on the Browser and Mobile tabs while one of their nodes runs.
+  const browserIds = useMemo(() => browserNodes.map((node) => node.node_id), [browserNodes]);
+  const mobileKey = mobileNodes.map((node) => node.node_id).join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the ids, not the array rebuilt each render.
+  const mobileIds = useMemo(() => mobileNodes.map((node) => node.node_id), [mobileKey]);
+  const browserRunning = useSurfaceRunning(workflowId, browserIds);
+  const mobileRunning = useSurfaceRunning(workflowId, mobileIds);
 
   // A stale selection (workflow switch, node deleted) falls back to the
   // first Canvas node rather than a dead board.
@@ -167,8 +175,10 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes }) => {
         {open && <WorkspaceTabs
           tab={tab}
           onTabChange={setTab}
+          activity={{ browser: browserRunning, android: mobileRunning }}
           browser={<BrowserWorkspace key={workflowId ?? 'unsaved'} workflowId={workflowId} nodes={browserNodes} visible={open && tab === 'browser'} />}
-          android={<MobileWorkspace key={workflowId ?? 'unsaved'} workflowId={workflowId} nodes={mobileNodes} visible={open && tab === 'android'} />}
+          android={<MobileWorkspace key={workflowId ?? 'unsaved'} workflowId={workflowId} nodes={mobileNodes} visible={open && tab === 'android'}
+            canvasNodeId={effectiveNodeId ?? null} notify={(message, tone) => (tone === 'error' ? toast.error(message) : toast.success(message))} />}
           board={<>
         <div className="mb-2 flex shrink-0 items-center gap-2">
           {mode === 'ephemeral' ? (

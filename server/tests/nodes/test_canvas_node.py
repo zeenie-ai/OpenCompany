@@ -25,6 +25,7 @@ from nodes.tool.canvas import (
 )
 from nodes.tool.canvas._events import canvas_updated
 from nodes.tool.canvas._handlers import (
+    handle_canvas_add,
     handle_canvas_clear,
     handle_canvas_list,
     handle_canvas_remove,
@@ -726,6 +727,32 @@ async def test_handler_reads_a_version(canvas_database, handler_env, handler_eve
     assert (await handle_canvas_version({**where, "item_id": "", "version": 1}, _FakeSocket()))["success"] is False
     # The same preamble as the other handlers.
     assert (await handle_canvas_version({**where, "version": 1}, _FakeSocket(path="/ws/internal")))["success"] is False
+
+
+async def test_the_owner_adds_a_workspace_file_to_the_board(canvas_database, handler_env, handler_events, tmp_path, monkeypatch):
+    handler_env(_graph())
+
+    async def root(workflow_id, database, *, allow_default=True):
+        assert (workflow_id, allow_default) == ("wf-h", False)
+        return tmp_path
+
+    monkeypatch.setattr("services.workspace_locator.resolve_workspace_root", root)
+    (tmp_path / "media").mkdir()
+    (tmp_path / "media" / "phone-1.png").write_bytes(b"\x89PNG" + b"0" * 200)
+    where = {"workflow_id": "wf-h", "node_id": "canvas-h"}
+
+    added = await handle_canvas_add({**where, "path": "media/phone-1.png"}, _FakeSocket())
+    assert added["success"] is True and added["count"] == 1
+    ref = added["item"]["ref"]
+    # Rebuilt from the file: the client's word is never taken for it.
+    assert (ref["path"], ref["filename"], ref["mime_type"], ref["size_bytes"]) == ("media/phone-1.png", "phone-1.png", "image/png", 204)
+    assert ref["url"] == "/api/workspace/wf-h/files/media/phone-1.png"
+    assert added["item"]["source"] == "owner"
+    assert [event["node_id"] for event in handler_events] == ["canvas-h"]
+
+    for refused in ({**where, "path": ""}, {**where, "path": "../secret.txt"}, {**where, "path": "media/missing.png"}):
+        assert (await handle_canvas_add(refused, _FakeSocket()))["success"] is False
+    assert (await handle_canvas_add({**where, "path": "media/phone-1.png"}, _FakeSocket(path="/ws/internal")))["success"] is False
 
 
 # ---------------------------------------------------------------------------

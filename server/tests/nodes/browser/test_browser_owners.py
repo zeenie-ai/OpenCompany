@@ -248,7 +248,7 @@ async def test_runtime_open_restores_recovered_durable_task_and_capture_gate(dat
 
 
 async def test_claim_applies_frozen_network_policy_before_first_model_turn(database):
-    from nodes.browser._netpolicy import NetPolicy
+    from services.netpolicy import NetPolicy
     db, controller = database
     binding = {**await owners.bind_profile(db, "profile", "owner"), "workflow_id": "wf", "node_id": "browser",
         "browser_policy": {"allowed_domains": "example.test", "allow_private_network": False}}

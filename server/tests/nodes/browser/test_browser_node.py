@@ -16,7 +16,7 @@ import pytest
 
 from nodes.browser._cli import CliResult
 from nodes.browser._controls import ActionGuard
-from nodes.browser._netpolicy import NetPolicy
+from services.netpolicy import NetPolicy
 from nodes.browser._profiles import Profile
 from nodes.browser._session import ControlState, ProfileController
 from nodes.browser.browser import BrowserNode, BrowserToolInput
@@ -98,11 +98,14 @@ class FakeRuntime:
 def runtime(tmp_path):
     fake = FakeRuntime(tmp_path)
     profile = Profile(id="bp_1", owner_id="owner", name="Work", kind="shared", workflow_id=None, chrome_major=None)
+    # The Workspace's step log (services/workspace_steps.py): what each test recorded.
+    fake.steps = AsyncMock()
     with (
         patch("nodes.browser._runtime.get_browser_runtime", return_value=fake),
         patch("nodes.browser.browser._profile_for", AsyncMock(return_value=profile)),
         patch("nodes.browser._events.dispatch_browser_updated", AsyncMock()),
         patch("services.employees.node_signals.node_state_changed", lambda *a, **k: None),
+        patch("services.workspace_steps.record_step", fake.steps),
     ):
         yield fake
 
@@ -124,6 +127,8 @@ async def test_navigate_runs_the_script_and_reports_the_page(runtime):
     assert op == "navigate" and args["url"] == "https://example.com" and args["_target_id"] == "T1"
     assert result["url"] == "https://example.com/" and result["title"] == "Example"
     assert runtime.controller.state == ControlState.IDLE  # the step released control
+    # The Workspace's step log names the site it opened.
+    assert runtime.steps.await_args.kwargs == {"workflow_id": "wf1", "surface": "browser", "text": "Opened example.com", "node_id": "n1"}
 
 
 @pytest.mark.parametrize("url", ["http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000"])
@@ -204,6 +209,38 @@ async def test_task_lifetime_prevents_same_node_interleaving(runtime):
     result = await _run({"operation": "snapshot"})
     assert result.get("success") is False and result["error_type"] == "BrowserBusy"
     assert runtime.cli.calls == []
+
+
+async def test_an_action_tells_the_live_view_where_it_happened(runtime):
+    seen: List[tuple] = []
+
+    async def listen(kind, payload):
+        seen.append((kind, payload))
+
+    runtime.controller.add_listener(listen)
+    runtime.cli.results.append(CliResult(ok=True, value={"x": 40.0, "y": 60.0}, page=dict(PAGE), extra={"cursor": {"x": 40.0, "y": 60.0}}))
+    clicked = await _run({"operation": "click", "x": 40, "y": 60})
+    # The agent's result is the script's value, nothing added.
+    assert clicked["data"] == {"x": 40.0, "y": 60.0} and "cursor" not in clicked
+    assert ("agent_action", {"action": "click", "target_id": "T1", "x": 40.0, "y": 60.0}) in seen
+
+    runtime.cli.results.append(CliResult(ok=True, value={"typed_chars": 2, "submitted": False}, page=dict(PAGE), extra={"cursor": {"box": [1, 2, 30, 10]}}))
+    await _run({"operation": "type", "selector": "#q", "text": "hi"})
+    assert ("agent_action", {"action": "type", "target_id": "T1", "box": [1.0, 2.0, 30.0, 10.0]}) in seen
+
+
+@pytest.mark.parametrize("cursor", [{"x": "1", "y": 2}, {"x": float("nan"), "y": 2}, {"box": [1, 2, -3, 4]}, {"box": [1, 2, 3]}, "1,2"])
+async def test_a_made_up_position_is_not_shown(runtime, cursor):
+    seen: List[str] = []
+
+    async def listen(kind, payload):
+        seen.append(kind)
+
+    runtime.controller.add_listener(listen)
+    runtime.cli.results.append(CliResult(ok=True, value={}, page=dict(PAGE), extra={"cursor": cursor}))
+    result = await _run({"operation": "click", "x": 1, "y": 2})
+    assert result.get("success") is not False
+    assert "agent_action" not in seen
 
 
 async def test_sensitive_login_blocks_browser_observations(runtime):

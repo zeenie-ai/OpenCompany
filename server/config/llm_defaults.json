@@ -12,6 +12,17 @@
     }
   },
 
+  "chat_models": {
+    "_description": "The model picker in Home's employee chat (services/chat/choice.py). Auto comes first; these follow, each a provider::model id that must also be in that provider's popular_models, so >= 1M-token context (tests/llm/test_global_model_catalogue.py). name is the row's, short the picker button's, description what the model is good for. A model takes the picker's Quick/Thorough effort only when its provider block lists it in effort_models.",
+    "models": [
+      {"id": "anthropic::claude-sonnet-5-5", "name": "Claude Sonnet 5.5", "short": "Sonnet 5.5", "description": "Great for everyday work"},
+      {"id": "anthropic::claude-opus-5-5", "name": "Claude Opus 5.5", "short": "Opus 5.5", "description": "Best for tricky, multi-step jobs"},
+      {"id": "openai::gpt-6-sol", "name": "GPT-6 Sol", "short": "GPT-6 Sol", "description": "Good at research and digging deep"},
+      {"id": "gemini::gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro", "short": "Gemini Pro", "description": "Handles long files, photos and video"},
+      {"id": "gemini::gemini-3.8-flash", "name": "Gemini 3.8 Flash", "short": "Gemini Flash", "description": "Quickest answers"}
+    ]
+  },
+
   "providers": {
     "openai": {
       "display_name": "OpenAI",
@@ -69,6 +80,8 @@
       "reasoning_models": ["o4-mini", "o3"],
       "thinking_models": ["gpt-5", "gpt-6"],
       "thinking_type": "effort",
+      "_effort_models_note": "effort_models (prefix-matched): the models that take the chat picker's effort (low / high) as their own request setting, whatever the agent's thinking settings: reasoning_effort here (Chat Completions) or reasoning.effort (Responses). ChatUnifier passes an effort only to these (services/llm/config.py supports_effort).",
+      "effort_models": ["gpt-5", "gpt-6", "o3", "o4"],
       "temperature_range": [0.0, 2.0]
     },
     "anthropic": {
@@ -124,6 +137,15 @@
         "claude-sonnet-5"
       ],
       "sampling_params_removed": [
+        "claude-fable-5",
+        "claude-mythos-5",
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-sonnet-5"
+      ],
+      "_effort_models_note": "effort_models (prefix-matched): the models that take the chat picker's effort as output_config.effort, beside any adaptive thinking. The adaptive generations; the budget-thinking models have no effort setting.",
+      "effort_models": [
         "claude-fable-5",
         "claude-mythos-5",
         "claude-opus-5",
@@ -187,6 +209,8 @@
       "thinking_models": ["gemini-2.5", "gemini-3"],
       "_new_models_note": "gemini-3.8-flash is the default (registry 2026-09-26: 1,048,576 in / 65,536 out, $0.75/$3.75, the same as 3.7 and 3.6 Flash; gemini-3.5-flash is $1.50/$9.00, Flash-Lite $0.30/$2.50). It accepts thinking levels low/medium/high and rejects minimal. The 3.7/3.8 entries are NOT yet live-verified against Vertex / Agent Platform keys like the older entries — drop them into vertex_incompatible_models if a Vertex 404 shows up. The image, Lyria and -customtools models are different endpoints or variants and stay out of the chat list, as do the -preview ids of models that went GA (gemini-2.5-pro-preview, gemini-3.1-flash-lite-preview).",
       "thinking_type": "budget",
+      "_effort_models_note": "effort_models (prefix-matched): the models that take the chat picker's effort as thinking_level (low / high). Gemini 2.5 rejects a thinking level, so it is not listed.",
+      "effort_models": ["gemini-3"],
       "temperature_range": [0.0, 2.0],
       "_incompatible_models_note": "Models that the dropdown should hide because they need a different API endpoint than `generate_content`. antigravity-preview-05-2026 requires the Interactions API; selecting it currently surfaces a `google.genai.errors.APIError`. ChatUnifier reads this list in fetch_models and filters before returning. Drop entries here when the unifier gains routing support for the alternate endpoint.",
       "incompatible_models": ["antigravity-preview-05-2026"]

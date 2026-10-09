@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import time
 import uuid
 from datetime import timedelta
@@ -415,7 +416,7 @@ class BrowserNode(ToolNode):
 
     @Operation("dispatch")
     async def dispatch(self, ctx: NodeContext, params: Any) -> BrowserOutput:
-        from .._netpolicy import parse_allowed_domains, url_block_reason
+        from services.netpolicy import parse_allowed_domains, url_block_reason
         from .._runtime import get_browser_runtime
         from .._session import BrowserSession, SessionKey
 
@@ -571,8 +572,17 @@ class BrowserNode(ToolNode):
                     controller.needs_observation = True
                     raise
                 _fill_page(out, controller)
+                from .._steps import record_browser_step
+
+                await record_browser_step(ctx, op, call, out, controller)
                 return out
-            return await _run_cli_op(ctx, prt, controller, op, call, cfg, out, timeout=min(float(cfg.op_timeout_s), remaining()))
+            result = await _run_cli_op(ctx, prt, controller, op, call, cfg, out, timeout=min(float(cfg.op_timeout_s), remaining()))
+        # The Workspace's step log: site actions and screenshots, never what
+        # was typed (nodes/browser/_steps.py).
+        from .._steps import record_browser_step
+
+        await record_browser_step(ctx, op, call, result, controller)
+        return result
 
 
 def _webmcp_callable(tool: Dict[str, Any], cfg: BrowserParams) -> bool:
@@ -614,6 +624,33 @@ def _action_arguments(op: str, call: BrowserToolInput, cfg: BrowserParams, contr
     if op != "navigate":
         args["page"] = (controller.tabs.get(controller.active_target_id or "") or {}).get("url")
     return args
+
+
+#: The actions the live view shows the agent's cursor for.
+_CURSOR_OPS = frozenset({"click", "hover", "type", "select"})
+
+
+def _numbers(values: Any, count: int) -> bool:
+    return (
+        isinstance(values, (list, tuple))
+        and len(values) == count
+        and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in values)
+    )
+
+
+def _cursor_of(raw: Any) -> Optional[Dict[str, Any]]:
+    """Where an action happened (``_scripts.py``), in the page's viewport CSS
+    pixels: a point, or a field's box ``[left, top, width, height]``. A page
+    can make these up, so anything else is dropped."""
+    if not isinstance(raw, dict):
+        return None
+    box = raw.get("box")
+    if _numbers(box, 4) and box[2] >= 0 and box[3] >= 0:
+        return {"box": [float(v) for v in box]}
+    point = (raw.get("x"), raw.get("y"))
+    if _numbers(point, 2):
+        return {"x": float(point[0]), "y": float(point[1])}
+    return None
 
 
 def _fill_page(out: BrowserOutput, controller: Any) -> None:
@@ -706,6 +743,13 @@ async def _run_cli_op(ctx: NodeContext, prt: Any, controller: Any, op: str, call
             controller.needs_observation = True
             return _failure(out, "outcome_unknown", message + " Inspect a fresh snapshot before another action.", next_action="snapshot")
         return _failure(out, kind, message, next_action="snapshot")
+
+    # The live view's agent cursor (_stream.py `agent_action`): where the
+    # action happened, never in the agent's result, never during a
+    # protected login.
+    cursor = _cursor_of(result.extra.get("cursor")) if op in _CURSOR_OPS else None
+    if cursor is not None and not getattr(controller, "sensitive_login", False):
+        await controller.emit("agent_action", {"action": op, "target_id": controller.active_target_id, **cursor})
 
     if op in ("snapshot", "page_info", "page_text"):
         controller.needs_observation = False

@@ -440,7 +440,17 @@ def _on_path(path: List[ChatMessage], uid: str) -> int:
     raise BranchRefused("not_found", "that message is not in the conversation shown")
 
 
-def _new_run(*, session_id: str, workflow_id: str, live_root: str, kind: str, state: str, message_uid: str, parent_run_id: Optional[str]) -> ChatRun:
+def _new_run(
+    *,
+    session_id: str,
+    workflow_id: str,
+    live_root: str,
+    kind: str,
+    state: str,
+    message_uid: str,
+    parent_run_id: Optional[str],
+    options: Dict[str, Any],
+) -> ChatRun:
     from services.chat.ledger import new_run_id, reply_uid
 
     run_id = new_run_id()
@@ -454,6 +464,7 @@ def _new_run(*, session_id: str, workflow_id: str, live_root: str, kind: str, st
         user_message_uid=message_uid,
         reply_message_uid=reply_uid(run_id),
         parent_run_id=parent_run_id,
+        options=dict(options),
     )
 
 
@@ -467,6 +478,8 @@ class _Edit(_Operation):
     state: str
     uid: Optional[str] = None
     meta: Dict[str, Any] = field(default_factory=dict)
+    #: The choices sent with the edit (``ChatRun.options``).
+    options: Dict[str, Any] = field(default_factory=dict)
 
     async def shape(self, session: Any, rows: List[ChatMessage], path: List[ChatMessage]) -> _Shape:
         index = _on_path(path, self.message_uid)
@@ -481,7 +494,7 @@ class _Edit(_Operation):
         original = path[_on_path(path, self.message_uid)]
         run = _new_run(
             session_id=self.session_id, workflow_id=self.workflow_id, live_root=self.live_root, kind="edit",
-            state=self.state, message_uid="", parent_run_id=original.run_id,
+            state=self.state, message_uid="", parent_run_id=original.run_id, options=self.options,
         )
         row = await database.append_chat_row(
             session,
@@ -509,6 +522,8 @@ class _Retry(_Operation):
     state: str
     question: Optional[ChatMessage] = None
     retried: Optional[ChatRun] = None
+    #: The choices sent with the retry (``ChatRun.options``).
+    options: Dict[str, Any] = field(default_factory=dict)
 
     async def shape(self, session: Any, rows: List[ChatMessage], path: List[ChatMessage]) -> _Shape:
         index = _on_path(path, self.message_uid)
@@ -539,7 +554,7 @@ class _Retry(_Operation):
         assert self.question is not None and self.retried is not None
         run = _new_run(
             session_id=self.session_id, workflow_id=self.workflow_id, live_root=self.live_root, kind="regenerate",
-            state=self.state, message_uid=self.question.uid, parent_run_id=self.retried.run_id,
+            state=self.state, message_uid=self.question.uid, parent_run_id=self.retried.run_id, options=self.options,
         )
         session.add(run)
         thread.active_leaf_uid = self.question.uid
@@ -674,17 +689,18 @@ async def edit_message(
     expected_revision: Optional[int],
     state: str = "pending",
     client_message_id: Optional[str] = None,
+    options: Optional[Dict[str, Any]] = None,
 ) -> Moved:
     """Add ``text`` as a new version of the owner's message ``message_uid``
-    and start the run that answers it (kind ``edit``). ``result`` holds
-    ``message``, ``run`` and ``prompt``."""
+    and start the run that answers it (kind ``edit``), keeping ``options``
+    on the run. ``result`` holds ``message``, ``run`` and ``prompt``."""
     from services.chat.ledger import client_message_uid
 
     uid = client_message_uid(session_id, client_message_id) if client_message_id is not None else None
     meta = {"client_message_id": client_message_id} if client_message_id is not None else {}
     op = _Edit(
         session_id=session_id, workflow_id=workflow_id, live_root=live_root, message_uid=message_uid,
-        text=text, state=state, uid=uid, meta=meta,
+        text=text, state=state, uid=uid, meta=meta, options=dict(options or {}),
     )
     return await _move(database, session_id=session_id, workflow_id=workflow_id, generation=generation, expected_revision=expected_revision, op=op)
 
@@ -699,12 +715,17 @@ async def retry_answer(
     message_uid: str,
     expected_revision: Optional[int],
     state: str = "pending",
+    options: Optional[Dict[str, Any]] = None,
 ) -> Moved:
     """Answer again the message the latest answer (``message_uid``) answered,
     or the owner's latest message when its run gave no answer; the new answer
-    goes beside the old one (kind ``regenerate``). ``result`` holds
-    ``message`` (the owner's message answered), ``run`` and ``prompt``."""
-    op = _Retry(session_id=session_id, workflow_id=workflow_id, live_root=live_root, message_uid=message_uid, state=state)
+    goes beside the old one (kind ``regenerate``), with ``options`` on its
+    run. ``result`` holds ``message`` (the owner's message answered), ``run``
+    and ``prompt``."""
+    op = _Retry(
+        session_id=session_id, workflow_id=workflow_id, live_root=live_root, message_uid=message_uid,
+        state=state, options=dict(options or {}),
+    )
     return await _move(database, session_id=session_id, workflow_id=workflow_id, generation=generation, expected_revision=expected_revision, op=op)
 
 

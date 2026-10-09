@@ -952,10 +952,13 @@ class LLMProvider(Protocol):
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
         on_event: Optional[StreamSink] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse:
         """One turn. A provider that streams (``streaming`` in
         llm_defaults.json) hands each delta to ``on_event`` as it arrives and
-        still returns the same response; the others never receive one."""
+        still returns the same response; the others never receive one.
+        ``effort`` (``low`` / ``high``) is the owner's chat choice, sent only
+        for a model its provider lists in ``effort_models``."""
         ...
 
     async def fetch_models(self, api_key: str) -> List[str]: ...

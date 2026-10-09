@@ -71,7 +71,7 @@ async def resolve_browser_node(owner_id: str, workflow_id: str, node_id: str) ->
 
 async def _session_for_node(owner_id: str, workflow_id: str, node_id: str, *, create: bool) -> Any:
     """The node's browser session, registering it from the saved settings if asked."""
-    from ._netpolicy import parse_allowed_domains
+    from services.netpolicy import parse_allowed_domains
     from ._runtime import get_browser_runtime
     from ._session import BrowserSession, SessionKey
 
@@ -164,7 +164,7 @@ async def handle_browser_session_stop(data: Dict[str, Any], websocket: WebSocket
 
 
 async def _navigate(running: Any, session: Any, url: str) -> None:
-    from ._netpolicy import url_block_reason
+    from services.netpolicy import url_block_reason
 
     reason = url_block_reason(url, session.policy)
     if reason:
@@ -333,7 +333,7 @@ async def handle_browser_profile_clear_site(data: Dict[str, Any], websocket: Web
 async def handle_browser_profile_login_start(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Open a profile for the owner to log in to a site through the live view."""
     _require_external_socket(websocket)
-    from ._netpolicy import url_block_reason
+    from services.netpolicy import url_block_reason
     from ._runtime import get_browser_runtime
     from ._session import BrowserSession, SessionKey
 

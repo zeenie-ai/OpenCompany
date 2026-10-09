@@ -59,6 +59,10 @@ class AndroidDriver:
                 "platform": "android",
                 "geometry": geometry,
             }
+        if op == "screenshot":
+            output = BytesIO()
+            d.screenshot().save(output, "PNG")
+            return {"base64": base64.b64encode(output.getvalue()).decode()}
         if op == "date":
             return d.shell(["date"]).output
         if op == "packages":

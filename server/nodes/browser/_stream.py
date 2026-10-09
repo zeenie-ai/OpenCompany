@@ -55,6 +55,9 @@ _CLIPBOARD_LIMIT = 100_000
 _ATTACH_TIMEOUT = 5.0
 _IDLE_POLL = 2.0
 _SCREENCAST_RETRY_DELAYS = (1.0, 2.0, 4.0)
+#: What a viewer never gets while a protected login is in progress: the
+#: page's metadata, and where the agent acts on it (``agent_action``).
+_PRIVATE_TYPES = frozenset({"page", "tabs", "dialog", "clipboard", "error", "agent_action"})
 # Viewers can outlive a stopped profile and attach to a replacement hub on the
 # same socket. Never reuse sequence IDs while old frame ACKs are in transit.
 _FRAME_SEQUENCES = itertools.count(1)
@@ -117,7 +120,7 @@ class Viewer:
     def send_json(self, message: Dict[str, Any]) -> None:
         if self.closed:
             return
-        if self.privacy_blocked and message.get("type") in {"page", "tabs", "dialog", "clipboard", "error"}:
+        if self.privacy_blocked and message.get("type") in _PRIVATE_TYPES:
             return
         try:
             self.control.put_nowait(message)
@@ -270,7 +273,7 @@ class ScreencastHub:
         if kind == "sensitive":
             await self.sensitive_barrier(bool(payload.get("enabled")))
             return
-        if getattr(self.controller, "sensitive_login", False) and kind in {"tabs", "page"}:
+        if getattr(self.controller, "sensitive_login", False) and kind in _PRIVATE_TYPES:
             return
         if kind in ("tabs", "page"):
             self.commands.target_changed()
@@ -287,6 +290,10 @@ class ScreencastHub:
         elif kind == "page":
             self.broadcast({"type": "page", "target_id": payload.get("target_id"), "url": payload.get("url"), "title": payload.get("title")})
             await self._follow_target()
+        elif kind == "agent_action":
+            # Where the agent just clicked, pointed, typed or chose, for the
+            # viewers' cursor: the point or box only (browser/__init__.py).
+            self.broadcast({"type": "agent_action", **payload})
         elif kind == "closed":
             self.dead = True
             await self.commands.close()
@@ -496,7 +503,7 @@ class ScreencastHub:
                 retained = []
                 while not viewer.control.empty():
                     message = viewer.control.get_nowait()
-                    if message.get("type") not in {"page", "tabs", "dialog", "clipboard", "error"}:
+                    if message.get("type") not in _PRIVATE_TYPES:
                         retained.append(message)
                 for message in retained:
                     viewer.control.put_nowait(message)
@@ -580,7 +587,7 @@ class ScreencastHub:
             pass
 
     async def navigate(self, viewer: Viewer, message: Dict[str, Any], policy: Any) -> None:
-        from ._netpolicy import url_block_reason
+        from services.netpolicy import url_block_reason
 
         session = self.commands.input_session(viewer)
         if not self.controller.can_inject_input(viewer.id) or session is None:

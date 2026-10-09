@@ -213,10 +213,22 @@ class LLMProvider(Protocol):
         thinking: Optional[ThinkingConfig] = None,
         tools: Optional[List[ToolDef]] = None,
         on_event: Optional[StreamSink] = None,
+        effort: Optional[str] = None,
     ) -> LLMResponse: ...
 
     async def fetch_models(self, api_key: str) -> List[str]: ...
 ```
+
+`effort` is the owner's choice in Home's chat model picker (Quick `low` /
+Thorough `high`; see [Chat Protocol](chat_protocol.md#model-and-thinking)).
+`ChatUnifier.chat` passes it only for a model listed (prefix-matched) in its
+provider's `effort_models` in `llm_defaults.json` (`supports_effort` in
+`services/llm/config.py`), so a provider that never declares the list never
+receives it. Anthropic sends it as `output_config.effort`, OpenAI as
+`reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses), and
+Gemini 3 as `thinking_level`, replacing any budget, since a level and a
+budget never go together. It overrides the agent's own effort or level and
+never turns thinking on or off.
 
 All providers return the same `LLMResponse` dataclass, regardless of SDK:
 

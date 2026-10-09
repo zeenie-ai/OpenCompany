@@ -56,7 +56,10 @@ export type DurName =
   | 'follow-in'
   | 'version-swap'
   | 'popover-in'
-  | 'chip-pop';
+  | 'chip-pop'
+  | 'pick'
+  | 'cursor-glide'
+  | 'cursor-ripple';
 
 export type StaggerName = 'intro' | 'settings' | 'follow';
 
@@ -104,6 +107,9 @@ export const DUR_FALLBACK: Record<DurName, number> = {
   'version-swap': 360,
   'popover-in': 220,
   'chip-pop': 360,
+  pick: 260,
+  'cursor-glide': 720,
+  'cursor-ripple': 520,
 };
 
 /** Mirrors the `--stagger-*` values in themes/base.css. */

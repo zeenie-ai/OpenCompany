@@ -91,6 +91,20 @@ describe('BrowserWorkspace session lifecycle', () => {
     expect(socket.sent.at(-1)).toMatchObject({ type: 'key', action: 'down', key: 'Enter', key_code: 13 });
     unmount(); expect(socket.sent.at(-1)).toEqual({ type: 'control_release', outcome: 'control_lost' });
   });
+  it('offers the page the browser shows in a new tab, for web pages only', () => {
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
+    const socket = MockSocket.instances[0];
+    act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); });
+    fireEvent.click(screen.getByRole('button', { name: 'Browser controls' }));
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).not.toBeInTheDocument();
+    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
+    const link = screen.getByRole('link', { name: 'Open in new tab' });
+    expect(link).toHaveAttribute('href', 'https://example.com/book');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    act(() => socket.message({ type: 'page', url: 'chrome://settings' }));
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).not.toBeInTheDocument();
+  });
   it('acknowledges malformed binary frames so a bad frame cannot stall the stream', async () => {
     render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
     const socket = MockSocket.instances[0];
@@ -261,5 +275,52 @@ describe('browser frame and input lifecycle boundaries', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close browser for manual login' }));
     await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledWith('browser_session_stop', { workflow_id: 'wf', node_id: 'browser-1' }, 60_000));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start browser' })).toBeInTheDocument());
+  });
+});
+
+describe('The agent’s cursor', () => {
+  /** A live picture of a 1280x720 page, while the employee browses. */
+  async function livePicture() {
+    const { draw, frame } = mockFrameRenderer();
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} agentName="Maya" />);
+    const socket = MockSocket.instances[0];
+    act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); socket.onmessage?.({ data: frame.buffer }); });
+    await waitFor(() => expect(draw).toHaveBeenCalledOnce());
+    return socket;
+  }
+
+  it('shows where the employee acted, with their name, on the picture', async () => {
+    const socket = await livePicture();
+    expect(screen.queryByText('Maya')).toBeNull();
+    act(() => socket.message({ type: 'agent_action', action: 'click', x: 640, y: 360 }));
+    // The middle of the page is the middle of the picture.
+    const cursor = screen.getByText('Maya').parentElement!;
+    expect([cursor.style.left, cursor.style.top]).toEqual(['50%', '50%']);
+  });
+
+  it('rings the field the employee typed into', async () => {
+    const socket = await livePicture();
+    act(() => socket.message({ type: 'agent_action', action: 'type', box: [320, 180, 640, 180] }));
+    const ring = screen.getByText('Maya').closest('[aria-hidden="true"]')!.querySelector<HTMLElement>('.rounded-sm')!;
+    expect([ring.style.left, ring.style.top, ring.style.width, ring.style.height]).toEqual(['25%', '25%', '50%', '25%']);
+  });
+
+  it('hides while the owner has control, and goes with the picture', async () => {
+    const socket = await livePicture();
+    act(() => socket.message({ type: 'agent_action', action: 'hover', x: 100, y: 100 }));
+    const layer = screen.getByText('Maya').closest('[aria-hidden="true"]')!;
+    expect(layer).not.toHaveClass('invisible');
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    expect(layer).toHaveClass('invisible');
+    act(() => socket.message({ type: 'sensitive', enabled: true }));
+    expect(screen.queryByText('Maya')).toBeNull();
+  });
+
+  it('draws nothing before the first picture', () => {
+    mockFrameRenderer();
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} agentName="Maya" />);
+    const socket = MockSocket.instances[0];
+    act(() => { socket.open(); socket.message({ type: 'agent_action', action: 'click', x: 1, y: 1 }); });
+    expect(screen.queryByText('Maya')).toBeNull();
   });
 });
