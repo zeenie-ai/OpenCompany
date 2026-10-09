@@ -18,30 +18,30 @@ APP_USER=ubuntu
 APP_HOME=/home/$APP_USER
 INSTALL_SH='${install_sh_url}'
 
-echo "[${instance_name}] installing OpenCompany as $APP_USER..."
+echo "[${resource_name}] installing OpenCompany as $APP_USER..."
 sudo -u $APP_USER -H env OPENCOMPANY_VERSION="${version}" \
   bash -c "curl -fsSL $INSTALL_SH | bash"
 
-echo "[${instance_name}] writing login-gate env..."
-mkdir -p /etc/${instance_name}
-cat > /etc/${instance_name}/opencompany.env <<'OPENCOMPANY_ENV_EOF'
+echo "[${resource_name}] writing login-gate env..."
+mkdir -p /etc/${resource_name}
+cat > /etc/${resource_name}/opencompany.env <<'OPENCOMPANY_ENV_EOF'
 %{ for k, v in app_env ~}
 ${k}=${v}
 %{ endfor ~}
 OPENCOMPANY_ENV_EOF
-chmod 600 /etc/${instance_name}/opencompany.env
+chmod 600 /etc/${resource_name}/opencompany.env
 
-# DATA_DIR from app_env (default /var/lib/opencompany) must be writable by
-# the service user.
-mkdir -p /var/lib/${instance_name}
-chown $APP_USER:$APP_USER /var/lib/${instance_name}
+# DATA_DIR from app_env (/var/lib/<resource_name>) must be writable by the
+# service user.
+mkdir -p /var/lib/${resource_name}
+chown $APP_USER:$APP_USER /var/lib/${resource_name}
 
-echo "[${instance_name}] installing systemd service..."
+echo "[${resource_name}] installing systemd service..."
 # The shim lives under the user's bun global bin dir (install.sh installs bun
 # for the login user; BUN_INSTALL defaults to ~/.bun).
 OPENCOMPANY_BIN="$APP_HOME/.bun/bin/company"
 test -x "$OPENCOMPANY_BIN"
-cat > /etc/systemd/system/${instance_name}.service <<SERVICE_EOF
+cat > /etc/systemd/system/${resource_name}.service <<SERVICE_EOF
 [Unit]
 Description=OpenCompany (single login-gated instance)
 After=network-online.target
@@ -52,7 +52,7 @@ Type=simple
 User=$APP_USER
 WorkingDirectory=$APP_HOME
 Environment=PATH=$APP_HOME/.bun/bin:$APP_HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-EnvironmentFile=/etc/${instance_name}/opencompany.env
+EnvironmentFile=/etc/${resource_name}/opencompany.env
 ExecStart=$OPENCOMPANY_BIN serve
 Restart=on-failure
 RestartSec=5
@@ -67,5 +67,5 @@ WantedBy=multi-user.target
 SERVICE_EOF
 
 systemctl daemon-reload
-systemctl enable --now ${instance_name}
-echo "[${instance_name}] OpenCompany is ready."
+systemctl enable --now ${resource_name}
+echo "[${resource_name}] OpenCompany is ready."

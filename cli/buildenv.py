@@ -26,20 +26,20 @@ from cli.platform_ import (
 )
 
 
-def validate_build(root: Path, *, require_client_dist: bool = False) -> None:
+def validate_build(root: Path, *, dev: bool = False) -> None:
     """Refuse to launch if ``company build`` hasn't been run.
 
-    Raises ``typer.Exit(1)`` with a remediation hint. ``dev`` allows a
-    missing ``client/dist`` (Vite serves the source); ``start`` and
-    ``serve`` opt in via ``require_client_dist=True``.
-
-    Requiring ``node_modules`` for every caller is the open registry-install
-    bug in docs-internal/errors.md #25: a ``bun add -g`` install has no
-    ``node_modules`` next to the package, and only ``dev`` (Vite) needs it.
+    Raises ``typer.Exit(1)`` with a remediation hint. Every verb needs the
+    server venv. ``dev`` serves the client source through Vite, so it needs
+    ``node_modules``; ``start`` and ``serve`` need the built client instead.
+    A ``bun add -g`` install has no ``node_modules`` next to the package (bun
+    keeps a global package's dependencies in its own global tree), so asking
+    ``start`` / ``serve`` for it stopped every registry install, VMs included
+    (docs-internal/errors.md #25).
     """
-    if not node_modules_dir(root).exists() or not server_venv(root).exists():
+    if not server_venv(root).exists() or (dev and not node_modules_dir(root).exists()):
         console.print('[red]Error: Project not built. Run "company build" first.[/]')
         raise typer.Exit(code=1)
-    if require_client_dist and not client_dist_entry(root).exists():
+    if not dev and not client_dist_entry(root).exists():
         console.print('[red]Error: Client not built. Run "company build" first.[/]')
         raise typer.Exit(code=1)

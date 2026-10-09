@@ -30,6 +30,8 @@ def _clean(value: str | None) -> str | None:
 
 class GcpCli:
     name = "gcp"
+    default_machine_type = "e2-standard-2"
+    sources = ("local", "release")
 
     def check(self) -> None:
         if capture(["gcloud", "version"]) is None:

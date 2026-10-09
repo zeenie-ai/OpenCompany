@@ -36,7 +36,7 @@ deprecation warning; kept for upgrade compatibility).
 | `company stop` | Stop all services and free configured ports |
 | `company build` | Full production build (bun install → client → sidecar → `uv sync --extra docs` → bytecode → temporal binary). Step [0/6] scaffolds `.env` from `.env.template` when missing, generating fresh random secrets (`secrets.token_hex(24)`) for `SECRET_KEY` / `JWT_SECRET_KEY` / `API_KEY_ENCRYPTION_KEY` instead of the dev placeholders; an existing `.env` is untouched (and `bun install` in a checkout or `company provision` usually creates one first, as a plain template copy: see [Credentials Encryption → Placeholder secrets](./credentials_encryption.md#placeholder-secrets)) |
 | `company clean` | Stop services, then remove build artifacts, node_modules, `.venv`, repo-local state (preserves `.opencompany/{workflows,deploy,packages}`) |
-| `company deploy up/status/destroy` | Self-deploy a login-gated VM (gcloud preflight + Terraform; see `cli/commands/deploy/`) |
+| `company deploy up/status/destroy` | Self-deploy a login-gated VM on GCP or AWS (gcloud / aws CLI preflight + Terraform; `--name` gives each VM its own state; see `cli/commands/deploy/`) |
 | `company daemon start/stop/status/restart` | Detached backend management (PID file under user data dir) |
 | `company version sync [tag]` | Write a git tag's version (default: the latest) into every version file: root / client / desktop `package.json`, `pyproject.toml`, `cli/__init__.py`. Never `server/pyproject.toml`, which `server/uv.lock` records. The release procedure is in [ci_cd.md -> Cutting a release](./ci_cd.md#cutting-a-release) |
 | `company docs nodes [--check]` | Regenerate (or verify) the `docs-internal/node-logic-flows/` index |
@@ -150,7 +150,7 @@ self-hosting image from source (`docker/Dockerfile`,
 `docker-compose.yml`); see [docker.md](./docker.md). No script or CLI
 verb wraps it. The old multi-container topology is preserved in
 [deployment_legacy.md](./deployment_legacy.md). Cloud VM deployment is
-`company deploy` (Terraform → GCP VM → systemd).
+`company deploy` (Terraform → GCP or AWS VM → systemd).
 
 ---
 
@@ -204,6 +204,7 @@ company clean          # Clean everything (keeps workflows/deploy/packages state
 
 # Deploy
 company deploy up --provider gcp --owner-email you@example.com
-company deploy status
-company deploy destroy
+company deploy up --provider aws --name acme-corp --owner-email owner@acme.example
+company deploy status --name acme-corp
+company deploy destroy --name acme-corp
 ```

@@ -14,6 +14,11 @@ class ProviderCli(Protocol):
     """
 
     name: str
+    #: Instance size used when ``--machine-type`` is not given.
+    default_machine_type: str
+    #: Install sources the provider's Terraform module supports; the first is
+    #: the default for ``--source``.
+    sources: tuple[str, ...]
 
     def check(self) -> None:
         """Abort unless the provider CLI binary is on PATH."""

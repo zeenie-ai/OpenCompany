@@ -93,7 +93,7 @@ def dev_command(
     cfg, root = preflight()
     os.environ.setdefault("PYTHONUTF8", "1")
 
-    validate_build(root)
+    validate_build(root, dev=True)
 
     console.print("\n[bold]=== OpenCompany Starting ===[/]\n")
     console.print(f"Platform: {platform_name()}")

@@ -44,7 +44,7 @@ def prepare_workdir(workdir: Path, provider: str) -> None:
     if not src.is_dir():
         error_block(
             f"No Terraform module for provider {provider!r}.",
-            [f"Expected at {src}", "Supported today: gcp (aws is a follow-on)."],
+            [f"Expected at {src}", "Supported: gcp, aws."],
         )
         raise typer.Exit(code=1)
     workdir.mkdir(parents=True, exist_ok=True)

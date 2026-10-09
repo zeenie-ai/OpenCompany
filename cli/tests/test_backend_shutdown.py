@@ -129,8 +129,9 @@ def test_stop_kills_only_this_installations_temporal(tmp_path: Path, monkeypatch
 def test_vm_unit_outwaits_the_backend_shutdown_allowance(rel: str, monkeypatch: pytest.MonkeyPatch):
     """systemd must not SIGKILL the backend before the CLI's own deadline.
 
-    Deployed VMs start with Temporal off, but the runbook documents turning it
-    on, so each unit covers the allowance with Temporal on and the template's
+    ``company deploy`` VMs run with Temporal on (the ``.env.template`` default)
+    and the manual runbook documents turning it on, so each unit covers the
+    allowance with Temporal on and the template's
     ``TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS``. A shorter ``TimeoutStopSec`` kills
     the backend before its shutdown hooks run, and with Temporal on the next
     boot then treats the stop as a crash and pauses running deployments.

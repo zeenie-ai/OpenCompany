@@ -65,33 +65,58 @@ def _poll_health(url: str, *, attempts: int = 40, delay: float = 15.0) -> bool:
 
 def up_command(
     *,
+    name: str,
     provider: str,
     region: str | None,
     zone: str | None,
-    machine_type: str,
+    machine_type: str | None,
     port: int,
     owner_email: str,
     owner_password: str | None,
-    source: str,
+    source: str | None,
     version: str,
     allow_cidr: str,
     project: str | None,
 ) -> None:
     _, root = preflight()
 
+    if not _state.NAME_PATTERN.fullmatch(name):
+        error_block(
+            f"Invalid deployment name {name!r}.",
+            ["Use 6-30 lowercase letters, digits and hyphens, starting with a letter."],
+        )
+        raise typer.Exit(code=1)
+    # One working dir holds one provider's module and state; applying another
+    # provider's module there would destroy the first provider's resources.
+    meta = _state.read_meta(name)
+    if meta and meta.get("provider") != provider:
+        error_block(
+            f"Deployment {name!r} runs on {meta.get('provider')}, not {provider}.",
+            [f"Destroy it first (company deploy destroy --name {name}), or pick another --name."],
+        )
+        raise typer.Exit(code=1)
+
     # --- STAGE 1: cloud CLI (auth + context + APIs) ------------------------
     cli = get_provider(provider)
+    source = source or cli.sources[0]
+    if source not in cli.sources:
+        error_block(
+            f"--source {source} is not available with --provider {provider}.",
+            [f"Supported: {', '.join(cli.sources)}."],
+        )
+        raise typer.Exit(code=1)
+    machine_type = machine_type or cli.default_machine_type
     cli.check()
     _terraform.ensure_terraform()
     ctx = cli.resolve_context(region=region, zone=zone, project=project)
     cli.ensure_terraform_auth()
     cli.enable_apis(ctx)
 
-    resource_name = _state.resource_name()
-    if _state.exists() and (_state.workdir() / "terraform.tfstate").exists():
+    resource_name = _state.resource_name(name)
+    if _state.exists(name) and (_state.workdir(name) / "terraform.tfstate").exists():
         console.print(
-            "[yellow]An OpenCompany deployment already exists. Re-running will "
-            "re-apply Terraform (safe), or run `company deploy destroy` first.[/]"
+            f"[yellow]The OpenCompany deployment {name!r} already exists. Re-running will "
+            f"re-apply Terraform (safe), or run `company deploy destroy --name {name}` first.[/]"
         )
 
     # --- STAGE 2: secrets + source + Terraform -----------------------------
@@ -118,7 +143,7 @@ def up_command(
     }
     tfvars.update(cli.tfvars_extra(ctx))
 
-    wd = _state.workdir()
+    wd = _state.workdir(name)
     _terraform.prepare_workdir(wd, provider)
     _terraform.write_tfvars(wd, tfvars)
     _state.write_meta(
@@ -127,7 +152,8 @@ def up_command(
             "port": port,
             "owner_email": owner_email,
             "resource_name": resource_name,
-        }
+        },
+        name,
     )
 
     console.log("terraform init...")

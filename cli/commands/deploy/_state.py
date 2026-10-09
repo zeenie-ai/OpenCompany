@@ -1,9 +1,13 @@
-"""Working dir + metadata for the (single) ``company deploy`` deployment.
+"""Working dir + metadata for each ``company deploy`` deployment.
 
-New deployments use ``opencompany``. Pre-rebrand deployments used
-``machinaos`` and may live under either ``~/.machina`` or a checkout-local
-``.machina`` root. Those paths are discovered before creating new state so a
-rebrand can never orphan a live VM, firewall, bucket, or Terraform state.
+A deployment is named (``--name``, default ``opencompany``). The name is its
+folder under ``<DATA_DIR>/deploy/`` and its cloud resource id, so one machine
+can drive several VMs, one per name.
+
+Pre-rebrand deployments used ``machinaos`` and may live under either
+``~/.machina`` or a checkout-local ``.machina`` root. For the default name
+those paths are discovered before creating new state so a rebrand can never
+orphan a live VM, firewall, bucket, or Terraform state.
 
 The selected directory is BOTH the Terraform working dir (rendered module +
 ``terraform.tfvars.json`` + local state) and the home of a small
@@ -17,23 +21,25 @@ resolved when a function is called.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from cli.platform_ import project_root, user_data_dir
 
-#: Current deployment/resource name and the pre-rebrand compatibility name.
+#: Default deployment/resource name and the pre-rebrand compatibility name.
 NAME = "opencompany"
 LEGACY_NAME = "machinaos"
+
+#: A deployment name is also a cloud resource id. GCP service-account ids set
+#: the tightest rule: 6-30 lowercase letters, digits and hyphens, starting
+#: with a letter and not ending with a hyphen.
+NAME_PATTERN = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]")
 
 _META_FILENAME = "deploy-meta.json"
 
 
 def deploy_root() -> Path:
     return user_data_dir() / "deploy"
-
-
-def _new_workdir() -> Path:
-    return deploy_root() / NAME
 
 
 def _legacy_workdirs() -> tuple[Path, ...]:
@@ -52,10 +58,10 @@ def _has_state(path: Path) -> bool:
     return (path / _META_FILENAME).exists() or (path / "terraform.tfstate").exists()
 
 
-def workdir() -> Path:
-    """Terraform state location, preferring current state then legacy state."""
-    current = _new_workdir()
-    if _has_state(current):
+def workdir(name: str = NAME) -> Path:
+    """Terraform state location. The default name prefers current state, then legacy state."""
+    current = deploy_root() / name
+    if name != NAME or _has_state(current):
         return current
     for legacy in _legacy_workdirs():
         if _has_state(legacy):
@@ -63,8 +69,10 @@ def workdir() -> Path:
     return current
 
 
-def resource_name() -> str:
+def resource_name(name: str = NAME) -> str:
     """Cloud resource id to render without replacing legacy resources."""
+    if name != NAME:
+        return name
     meta = read_meta() or {}
     configured = meta.get("resource_name")
     if configured in {NAME, LEGACY_NAME}:
@@ -72,18 +80,18 @@ def resource_name() -> str:
     return LEGACY_NAME if workdir().name == LEGACY_NAME else NAME
 
 
-def meta_file() -> Path:
-    return workdir() / _META_FILENAME
+def meta_file(name: str = NAME) -> Path:
+    return workdir(name) / _META_FILENAME
 
 
-def write_meta(meta: dict) -> None:
-    wd = workdir()
+def write_meta(meta: dict, name: str = NAME) -> None:
+    wd = workdir(name)
     wd.mkdir(parents=True, exist_ok=True)
-    meta_file().write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    meta_file(name).write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
-def read_meta() -> dict | None:
-    mf = meta_file()
+def read_meta(name: str = NAME) -> dict | None:
+    mf = meta_file(name)
     if not mf.exists():
         return None
     try:
@@ -92,5 +100,5 @@ def read_meta() -> dict | None:
         return None
 
 
-def exists() -> bool:
-    return meta_file().exists()
+def exists(name: str = NAME) -> bool:
+    return meta_file(name).exists()

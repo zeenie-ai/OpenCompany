@@ -32,7 +32,7 @@ def serve_command(port: int | None = None) -> None:
 
     cfg, root = preflight()
     os.environ.setdefault("PYTHONUTF8", "1")
-    validate_build(root, require_client_dist=True)
+    validate_build(root)
 
     # Public port: --port flag > $PORT (Cloud Run / systemd convention) >
     # PYTHON_BACKEND_PORT from the env files.

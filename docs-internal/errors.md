@@ -536,15 +536,15 @@ bun add -g @zeenie-ai/opencompany
 
 **Fix**: The job writes the scope route and the token into one `~/.npmrc` (`@zeenie-ai:registry=https://npm.pkg.github.com/` plus `//npm.pkg.github.com/:_authToken=<GITHUB_TOKEN>`) and runs a plain `bun publish`; the package.json rewrite is gone. To publish a mirror that failed this way, dispatch the Release workflow with `tag` set to the release and `registries` set to `github-packages`; the job checks out that tag. Locked by `test_github_packages_release_routes_the_scope_through_npmrc` in `cli/tests/test_release_pipeline_config.py`.
 
-## 25. OPEN: `company start` / `company serve` from a `bun add -g` install stops with `Project not built. Run "company build" first.`
+## 25. `company start` / `company serve` from a `bun add -g` install stops with `Project not built. Run "company build" first.`
 
-**Status**: open in 0.2.0 and 0.2.1 (found 2026-09-12 by running the README steps in a clean Ubuntu 24.04 container; the fix is small but has not shipped). Affects every registry install, including the installer scripts and the GCP / AWS VM templates, which end in `company serve`. The desktop app is unaffected.
+**Status**: fixed after 0.2.1 (2026-10-09); 0.2.0 and 0.2.1 are affected (found 2026-09-12 by running the README steps in a clean Ubuntu 24.04 container). Affects every registry install of those releases, including the installer scripts and the GCP / AWS VM templates, which end in `company serve`. The desktop app is unaffected.
 
 **Symptom**: `bun add -g @zeenie-ai/opencompany` (or `install.sh` / `install.ps1`) provisions the Python side fine, then the first `company start` prints `Error: Project not built. Run "company build" first.` and exits.
 
 **Root cause**: `cli/buildenv.py::validate_build` requires a `node_modules/` directory next to the package for every verb. That is an npm-era layout assumption: `npm install -g` nested a package's dependencies under the package, while bun keeps a global package's dependencies in its own global tree, so the directory never exists. Nothing at runtime needs it: `company start` is uvicorn plus the built SPA, and the JS executor sidecar is a self-contained bundle. Only `company dev` (Vite) genuinely needs `node_modules`.
 
-**Workaround**: run `company build` once from the installed package (it runs `bun install` there, which creates the directory), then `company start`. **Fix, when shipped**: require `node_modules` only for `dev`; keep the server venv and the built client as the check for `start` / `serve`.
+**Workaround** (0.2.0 and 0.2.1): run `company build` once from the installed package (it runs `bun install` there, which creates the directory), then `company start`. **Fix**: `validate_build` requires `node_modules` only for `dev`; `start` and `serve` check the server venv and the built client. Locked by `cli/tests/test_buildenv.py`.
 
 ## 26. OPEN: JS / TS executor nodes fail on a registry install because the sidecar bundle is not in the tarball
 

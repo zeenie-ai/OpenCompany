@@ -17,7 +17,7 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_security_group" "app_server" {
-  name        = "${var.instance_name}-app"
+  name        = "${var.resource_name}-app"
   description = "OpenCompany: SSH, web, and the app port"
 
   dynamic "ingress" {
@@ -38,13 +38,13 @@ resource "aws_security_group" "app_server" {
   }
 
   tags = {
-    Name = "${var.instance_name}-app"
+    Name = "${var.resource_name}-app"
   }
 }
 
 resource "aws_instance" "app_server" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type
+  instance_type          = var.machine_type
   key_name               = var.key_name != "" ? var.key_name : null
   vpc_security_group_ids = [aws_security_group.app_server.id]
 
@@ -61,13 +61,22 @@ resource "aws_instance" "app_server" {
   }
 
   user_data = templatefile("${path.module}/startup.sh.tftpl", {
-    instance_name  = var.instance_name
+    resource_name  = var.resource_name
     version        = var.opencompany_version
     install_sh_url = var.install_sh_url
     app_env        = var.app_env
   })
 
   tags = {
-    Name = var.instance_name
+    Name = var.resource_name
+  }
+
+  # A later apply never replaces or restarts a running instance: replacing
+  # deletes the root volume and everything in DATA_DIR. The boot script runs
+  # only on the first boot anyway, so a changed script or app_env (company
+  # deploy mints new keys on every run) can only reach a new instance, and
+  # the newest image the lookup above finds is for new instances too.
+  lifecycle {
+    ignore_changes = [ami, user_data]
   }
 }

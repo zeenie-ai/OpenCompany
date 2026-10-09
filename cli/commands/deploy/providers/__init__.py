@@ -27,7 +27,7 @@ def get_provider(name: str) -> ProviderCli:
 
     from cli._common import error_block
 
-    error_block(f"Unknown provider {name!r}.", ["Supported: gcp (aws is a follow-on)."])
+    error_block(f"Unknown provider {name!r}.", ["Supported: gcp, aws."])
     raise typer.Exit(code=1)
 
 

@@ -187,14 +187,15 @@ deploy_app = typer.Typer(
     help="Create an OpenCompany VM, install OpenCompany behind the login gate, and run it.",
 )
 def _deploy_up(
-    provider: str = typer.Option("gcp", "--provider", help="Cloud provider: gcp (aws is a follow-on)."),
+    name: str = typer.Option("opencompany", "--name", help="Deployment name: its local state folder and cloud resource id. One per VM."),
+    provider: str = typer.Option("gcp", "--provider", help="Cloud provider: gcp or aws."),
     owner_email: str = typer.Option(..., "--owner-email", help="Login email for the owner account."),
     owner_password: str | None = typer.Option(
         None, "--owner-password", help="Login password (>=8 chars). Generated + printed once if omitted."
     ),
-    source: str = typer.Option("local", "--source", help="Install source: local (bun pm pack of this checkout) or release (npm registry)."),
+    source: str | None = typer.Option(None, "--source", help="Install source: local (bun pm pack of this checkout) or release (npm registry). Default: local on gcp; aws supports only release."),
     version: str = typer.Option("latest", "--version", help="opencompany version when --source release."),
-    machine_type: str = typer.Option("e2-standard-2", "--machine-type", help="VM size."),
+    machine_type: str | None = typer.Option(None, "--machine-type", help="VM size (default: e2-standard-2 on gcp, t3.micro on aws)."),
     port: int | None = typer.Option(None, "--port", help="Public port the app binds + the firewall opens (default: PYTHON_BACKEND_PORT from .env.template)."),
     allow_cidr: str = typer.Option("0.0.0.0/0", "--allow-cidr", help="Firewall source range (restrict to your IP/32)."),
     region: str | None = typer.Option(None, "--region", help="Cloud region (provider default if omitted)."),
@@ -208,6 +209,7 @@ def _deploy_up(
 
         port = load_config().backend_port
     up_command(
+        name=name,
         provider=provider,
         region=region,
         zone=zone,
@@ -226,10 +228,12 @@ def _deploy_up(
     "status",
     help="Show the OpenCompany deployment's URL + health.",
 )
-def _deploy_status() -> None:
+def _deploy_status(
+    name: str = typer.Option("opencompany", "--name", help="Deployment name given to `deploy up`."),
+) -> None:
     from cli.commands.deploy.status import status_command
 
-    status_command()
+    status_command(name)
 
 
 @deploy_app.command(
@@ -237,11 +241,12 @@ def _deploy_status() -> None:
     help="Terraform-destroy the OpenCompany deployment and remove its local state.",
 )
 def _deploy_destroy(
+    name: str = typer.Option("opencompany", "--name", help="Deployment name given to `deploy up`."),
     keep_state: bool = typer.Option(False, "--keep-state", help="Keep the local Terraform state dir."),
 ) -> None:
     from cli.commands.deploy.destroy import destroy_command
 
-    destroy_command(keep_state=keep_state)
+    destroy_command(name=name, keep_state=keep_state)
 
 
 app.add_typer(deploy_app, name="deploy")

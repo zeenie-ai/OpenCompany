@@ -130,7 +130,7 @@ def start_command() -> None:
     cfg, root = preflight()
     os.environ.setdefault("PYTHONUTF8", "1")
 
-    validate_build(root, require_client_dist=True)
+    validate_build(root)
     _sqlalchemy_preflight(root)
 
     console.log("Freeing ports...")

@@ -38,11 +38,13 @@ def build_app_env(
 
     JWT/SECRET/ENCRYPTION keys are generated per deploy. ``JWT_COOKIE_SECURE``
     is ``false`` because the VM is reached over plain HTTP on its IP; flip to
-    true once a domain + TLS terminator is in front. Temporal/Redis/event
-    framework are off (local execution).
+    true once a domain + TLS terminator is in front. Temporal, the event
+    framework and ``HOST`` keep their ``.env.template`` values, as in the
+    Docker image: chat, triggers and cron need Temporal, and its workers reach
+    the backend at ``ws://HOST:PORT/ws/internal`` (``company serve`` binds
+    every interface itself).
     """
     return {
-        "HOST": "0.0.0.0",
         "PORT": str(port),
         "DATA_DIR": data_dir,
         "WORKSPACE_BASE_DIR": "workspaces",
@@ -52,8 +54,6 @@ def build_app_env(
         "AUTH_MODE": "single",
         "JWT_COOKIE_SECURE": "false",
         "JWT_COOKIE_SAMESITE": "lax",
-        "TEMPORAL_ENABLED": "false",
-        "EVENT_FRAMEWORK_ENABLED": "false",
         "REDIS_ENABLED": "false",
         "LOG_FORMAT": "text",
         "JWT_SECRET_KEY": new_key(),
