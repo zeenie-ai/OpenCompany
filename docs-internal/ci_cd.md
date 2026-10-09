@@ -243,6 +243,20 @@ Inline `// codeql[...]` / `# codeql[...]` comments do **not** suppress
 anything under default setup — several sat in the sidecar for months while
 the alerts stayed open. Dismiss in the Security tab instead.
 
+The Android port-forward endpoint addresses `py/command-line-injection`
+([alert #167](https://github.com/zeenie-ai/OpenCompany/security/code-scanning/167))
+by passing a literal argv beginning with `adb` directly to `subprocess.run`
+with `shell=False`. CodeQL's
+[subprocess model](https://github.com/github/codeql/blob/main/python/ql/lib/semmle/python/frameworks/Stdlib.qll)
+can identify the fixed executable in an inline sequence; a separately assigned
+argv variable can be treated as an entirely tainted command. FastAPI's
+`Query(pattern=...)` is not a command-injection sanitizer in that model.
+The handler also independently validates serials and integer port bounds before
+starting ADB. See the [Android contract](node-logic-flows/android/_pattern.md#adb-port-forwarding)
+and [security regressions](../server/tests/nodes/test_android_port_forward.py).
+Alert closure must be confirmed by a successful GitHub scan of the pushed fix;
+local test results do not change an alert's server-side state.
+
 ## Dependency update policy (Dependabot disabled)
 
 The policy is **no automatic pull requests**, neither version bumps nor
@@ -322,7 +336,17 @@ untrusted input here:
 
 | Advisory | Package | Reached through | Why it is ignored |
 |---|---|---|---|
-| [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | http-cache-semantics 4.2.0 | `desktop/`: Electron Builder → app-builder-lib → @electron/get 3.1.0 → got → cacheable-request | No patched release as of 2026-10-09. Build-time artifact downloading does not share authenticated user-response caches; this chain is absent from the shipped desktop runtime dependencies. |
+| [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | http-cache-semantics 4.2.0 | `desktop/`: Electron Builder → app-builder-lib → @electron/get 3.1.0 → got → cacheable-request | No verified upstream fix as of 2026-10-09; published 4.3.0 also reproduces the reported behavior. Build-time artifact downloading does not share authenticated user-response caches; this chain is absent from the shipped desktop runtime dependencies. |
+
+The 4.3.0 registry tarball was checked against its published SHA-512 integrity
+and tested with a fixed-clock shared-cache fixture on 2026-10-09. Responses
+containing `Set-Cookie` or `proxy-revalidate` were rejected for ordinary requests
+but reused when the request supplied `max-stale=3600`; the cookie was returned
+in the first case. The `must-revalidate` control prevented reuse. Both installed
+4.2.0 and published 4.3.0 behaved this way. The
+[published 4.3.0 source](https://github.com/kornelski/http-cache-semantics/blob/b1d4bd682fbab0252985de45219f4e7497c0067c/index.js)
+retains this logic. Moving beyond an advisory's current version range alone
+does not establish remediation.
 
 The shadcn CLI was removed from `client/package.json` and the root lockfile on
 2026-10-09, removing `braces` and its advisory entirely. The client used one

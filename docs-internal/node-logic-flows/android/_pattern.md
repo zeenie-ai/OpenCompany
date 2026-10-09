@@ -152,6 +152,25 @@ preserved.
   in relay mode. The relay `connected` state alone is not sufficient.
 - **Environment variables**: none; host/port come from hidden node params.
 
+## ADB port forwarding
+
+`POST /api/android/port-forward` in the [Android router](../../../server/nodes/android/_router.py)
+sets up local device communication outside node execution. It accepts USB,
+emulator, TCP and wireless-debugging serials of up to 64 characters. Serials
+must start with an ASCII letter or digit; subsequent characters may also be
+`.`, `_`, `:`, or `-`. Both ports must be integers between 1024 and 65535.
+
+FastAPI checks the query parameters, and the handler validates them again
+before starting ADB, including when called directly from Python. Invalid input
+returns HTTP 422 without starting a subprocess. The subprocess receives a
+literal argument list beginning with `adb`, uses `shell=False`, has a five-second
+timeout, and excludes the 1Password bootstrap environment. Valid requests retain
+the existing success/error response envelopes and do not add device discovery.
+
+The [port-forward regression tests](../../../server/tests/nodes/test_android_port_forward.py)
+cover valid serials, boundary ports, malicious inputs, direct calls and ADB
+failures.
+
 ## Known inconsistencies & edge cases
 
 1. **Frontend/backend service_id mismatch for four nodes**. The frontend

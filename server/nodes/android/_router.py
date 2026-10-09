@@ -1,6 +1,8 @@
 """Android System Services routes."""
 
-from fastapi import APIRouter, Depends, Query
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 
@@ -11,15 +13,10 @@ from services.plugin.deps import get_android_service
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/android", tags=["android"])
 
-# ADB device IDs: USB serials (alphanumeric), TCP "host:port" (digits + dots
-# + colon), or "emulator-NNNN". All are safe characters but we lock the
-# accepted set explicitly via FastAPI's ``Query(pattern=...)`` so untrusted
-# input can't slip a flag or path separator into the argv list we pass to
-# ``subprocess.run``. Anything outside ``[A-Za-z0-9._:-]`` (or longer than
-# 64 chars) is rejected with a 422 before the handler body runs --
-# CodeQL recognises the Pydantic-pattern constraint as a sanitizer so
-# ``py/command-line-injection`` doesn't fire on the resulting argv.
-_DEVICE_ID_PATTERN = r"^[A-Za-z0-9._:-]{1,64}$"
+# USB, emulator, TCP and wireless-debugging serials. The first character
+# must be alphanumeric so a device ID cannot look like a command-line flag.
+# Also enforce this at the subprocess boundary for callers outside FastAPI.
+_DEVICE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$"
 
 
 class AndroidServiceRequest(BaseModel):
@@ -117,15 +114,31 @@ async def setup_port_forwarding(
     """Setup ADB port forwarding for Android device communication."""
     import subprocess
 
-    try:
-        # Setup port forwarding: adb -s device_id forward tcp:local_port tcp:device_port
-        # device_id is constrained by ``Query(pattern=_DEVICE_ID_PATTERN, max_length=64)``
-        # at the boundary; ``local_port``/``device_port`` are bounded ints. Argv
-        # list is passed to ``subprocess.run`` with ``shell=False`` (the default).
-        cmd = ["adb", "-s", device_id, "forward", f"tcp:{local_port}", f"tcp:{device_port}"]
+    if not isinstance(device_id, str) or re.fullmatch(_DEVICE_ID_PATTERN, device_id) is None:
+        raise HTTPException(status_code=422, detail="Invalid Android device ID")
+    if (
+        type(local_port) is not int
+        or type(device_port) is not int
+        or not 1024 <= local_port <= 65535
+        or not 1024 <= device_port <= 65535
+    ):
+        raise HTTPException(status_code=422, detail="Ports must be integers between 1024 and 65535")
 
+    try:
         from services.process_environment import without_onepassword_environment
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=5, env=without_onepassword_environment())
+
+        # Keep the executable literal at the call site, with validated inputs
+        # confined to individual arguments. No shell interprets these values.
+        result = subprocess.run(
+            ["adb", "-s", device_id, "forward", f"tcp:{int(local_port)}", f"tcp:{int(device_port)}"],
+            shell=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+            env=without_onepassword_environment(),
+        )
 
         if result.returncode == 0:
             logger.info(f"[Android] Port forwarding setup: {device_id} tcp:{local_port} -> tcp:{device_port}")
