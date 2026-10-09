@@ -24,6 +24,7 @@ const PANEL_LOADERS: Record<PanelKind, () => Promise<{ default: React.ComponentT
   qrPairing: () => import('./panels/QrPairingPanel'),
   email: () => import('./panels/EmailPanel'),
   browserProfiles: () => import('./panels/BrowserProfilesPanel'),
+  mcp: () => import('./panels/McpConnectorPanel'),
 };
 
 // Memoize the lazy wrappers at module scope so switching providers of
@@ -36,6 +37,7 @@ const LAZY_PANELS: Record<PanelKind, React.LazyExoticComponent<React.ComponentTy
   qrPairing: React.lazy(PANEL_LOADERS.qrPairing),
   email: React.lazy(PANEL_LOADERS.email),
   browserProfiles: React.lazy(PANEL_LOADERS.browserProfiles),
+  mcp: React.lazy(PANEL_LOADERS.mcp),
 };
 
 export interface CredentialPanelProps {
@@ -43,6 +45,8 @@ export interface CredentialPanelProps {
   visible: boolean;
   /** Set by the shared host from shell mode; connection inputs stay available in both modes. */
   showTechnicalSections?: boolean;
+  /** Leave this provider's page: the panel removed the provider itself. */
+  onLeave?: () => void;
 }
 
 interface Props extends Omit<CredentialPanelProps, 'config'> {
@@ -62,7 +66,7 @@ const EmptyState: React.FC<{ icon: React.ReactNode; message: string }> = ({ icon
   </div>
 );
 
-const PanelRenderer: React.FC<Props> = ({ config, visible, showTechnicalSections = false }) => {
+const PanelRenderer: React.FC<Props> = ({ config, visible, showTechnicalSections = false, onLeave }) => {
   const Lazy = useMemo(() => {
     if (!config) return null;
     return LAZY_PANELS[config.kind] ?? null;
@@ -93,7 +97,7 @@ const PanelRenderer: React.FC<Props> = ({ config, visible, showTechnicalSections
     <Suspense fallback={<PanelFallback />}>
       {/* Provider identity resets transient errors/reveal state. Mode changes
           keep the same panel mounted and preserve the active connection draft. */}
-      <Lazy key={config.id} config={config} visible={visible} showTechnicalSections={showTechnicalSections} />
+      <Lazy key={config.id} config={config} visible={visible} showTechnicalSections={showTechnicalSections} onLeave={onLeave} />
     </Suspense>
   );
 };

@@ -10,6 +10,9 @@
   ``pending`` for the owner, since a server can change what a tool says it
   does; ``{changes}``, null when nothing changed.
 - ``mcp_connector_review`` ``{ref, accept}``: takes or drops that change.
+- ``mcp_connector_set_tool`` ``{ref, tool, enabled?, ask?}``: whether
+  employees may use one of its tools, and whether that tool asks the owner
+  first; ``{tool, enabled, ask}``.
 - ``mcp_connector_remove`` ``{ref}``.
 
 ``@ws_response``: a failure the owner can fix (a wrong URL, a refused
@@ -153,6 +156,27 @@ async def handle_mcp_connector_review(data: Dict[str, Any], websocket: WebSocket
 
 
 @ws_response
+async def handle_mcp_connector_set_tool(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    if refused := _refused(websocket):
+        return refused
+    name = str(data.get("tool") or "")
+    try:
+        connector = await get_connector(str(data.get("ref") or ""), principal=_principal(websocket))
+        tool = next((tool for tool in connector.tools if tool["name"] == name), None)
+        if tool is None:
+            raise ConnectorError("This connector has no such tool.")
+        if not tool["usable"]:
+            raise ConnectorError(f"{name} can't be used. {tool['reason']}")
+        setting = dict(default_settings([tool], kept=connector.settings)[name])
+        setting.update({key: data[key] for key in ("enabled", "ask") if isinstance(data.get(key), bool)})
+        await save_meta(connector, dict(connector.meta, settings={**connector.settings, name: setting}))
+    except ConnectorError as exc:
+        raise NodeUserError(str(exc)) from None
+    await _announce(connector.ref, "saved")
+    return {"success": True, "tool": name, **setting}
+
+
+@ws_response
 async def handle_mcp_connector_remove(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     if refused := _refused(websocket):
         return refused
@@ -169,6 +193,7 @@ WS_HANDLERS = {
     "mcp_connector_test": handle_mcp_connector_test,
     "mcp_connector_refresh": handle_mcp_connector_refresh,
     "mcp_connector_review": handle_mcp_connector_review,
+    "mcp_connector_set_tool": handle_mcp_connector_set_tool,
     "mcp_connector_remove": handle_mcp_connector_remove,
 }
 

@@ -5,14 +5,14 @@
  */
 
 import type { ActionButtonIntent } from '@/components/ui/action-button';
-import type { ServerEndpointSummary } from '@/hooks/useCatalogueQuery';
+import type { ServerEndpointSummary, ServerMcpConnector } from '@/hooks/useCatalogueQuery';
 export type { ActionButtonIntent };
 
 // ============================================================================
 // Panel kinds — one renderer branch per kind
 // ============================================================================
 
-export type PanelKind = 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles';
+export type PanelKind = 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles' | 'mcp';
 
 // ============================================================================
 // Field schema — drives antd Form.Item rendering via FieldRenderer
@@ -132,6 +132,8 @@ export interface ProviderConfig {
    *  endpoints). Present only for such providers; the panel then adds rows
    *  instead of storing one value. */
   endpoints?: ServerEndpointSummary[];
+  /** A custom MCP connector's server and tools (kind `mcp`). */
+  mcp?: ServerMcpConnector;
   /** Server capability, never inferred from a provider name. */
   sourceSupported?: boolean;
   sourceRequired?: boolean;

@@ -103,6 +103,38 @@ export interface ServerEndpointSummary {
   model_count: number;
 }
 
+/** One tool of a custom MCP connector, with the owner's settings for it. */
+export interface ServerMcpTool {
+  name: string;
+  title: string | null;
+  description: string;
+  /** The server says the tool only reads; Ask first starts off for it. */
+  read_only: boolean;
+  /** False when no model could call the tool; `reason` says why. */
+  usable: boolean;
+  reason: string | null;
+  /** Employees may use it. */
+  enabled: boolean;
+  /** A call waits for the owner while they ask first. */
+  ask: boolean;
+}
+
+/** A custom MCP connector on its card (`kind: 'mcp'`, nodes/mcp/_credentials.py). */
+export interface ServerMcpConnector {
+  slug: string;
+  /** The server's URL, without credentials. */
+  address: string;
+  transport: 'streamable_http' | 'sse';
+  /** How it signs in; never the token or header value. */
+  sign_in: { kind: 'none' | 'bearer' | 'header'; header?: string };
+  server: { name?: string; title?: string | null; version?: string };
+  tools: ServerMcpTool[];
+  /** What a refresh found, waiting for the owner to accept or discard. */
+  pending: { added: string[]; removed: string[]; changed: string[]; instructions: boolean; read_at: string } | null;
+  /** When the tools were last read. */
+  read_at: string;
+}
+
 /** One entry as it appears in the `providers` array of the catalogue response. */
 export interface ServerProviderConfig {
   id: string;
@@ -112,7 +144,7 @@ export interface ServerProviderConfig {
   category: string;
   category_label: string;
   color: string;
-  kind: 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles';
+  kind: 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles' | 'mcp';
   icon_ref?: string;
   fields?: ServerFieldDef[];
   ws?: { login: string; logout: string; status: string };
@@ -149,6 +181,8 @@ export interface ServerProviderConfig {
   verified?: boolean;
   /** The provider runs on this computer (Ollama, LM Studio). */
   runs_locally?: boolean;
+  /** A custom MCP connector's server and tools (`kind: 'mcp'`). */
+  mcp?: ServerMcpConnector;
 }
 
 export interface CatalogueResponse {

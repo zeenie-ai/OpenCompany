@@ -112,6 +112,7 @@ client/src/
 │   ├── credentials/         # EXEMPLAR SUBSYSTEM — see "Credentials" section below
 │   │   ├── CredentialsModal.tsx    # Shared app-level browser + provider dialogs
 │   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings and the Welcome guide
+│   │   ├── AddConnectorForm.tsx    # The page's Add form: a custom MCP connector's URL, name and sign-in
 │   │   ├── ProviderPage.tsx        # One provider's page: back, key link, PanelRenderer (dialog + guide)
 │   │   ├── aiProviderLinks.ts      # Where to get each AI provider's key
 │   │   ├── catalogue.ts           # Shared catalogue ordering + category visibility
@@ -126,6 +127,7 @@ client/src/
 │   │   │   ├── QrPairingPanel.tsx        # WhatsApp / Android
 │   │   │   ├── EmailPanel.tsx            # IMAP/SMTP (RHF + zod)
 │   │   │   ├── BrowserProfilesPanel.tsx  # Web browser login profiles: list / add / delete, session-file import
+│   │   │   ├── McpConnectorPanel.tsx     # A custom MCP connector: Test, Refresh (a change waits for Accept), Remove, each tool's Use / Ask first
 │   │   │   └── schemas/email.ts          # Email zod schema w/ superRefine
 │   │   ├── sections/
 │   │   │   ├── ApiUsageSection.tsx       # Per-service usage/cost
@@ -408,7 +410,7 @@ components/credentials/catalogueAdapter.ts  (hydrate JSON -> ProviderConfig)
 components/credentials/CredentialsModal.tsx (one AppShell host)
    ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings and the Welcome guide)
    └─ ProviderPage.tsx         (one provider; the Welcome guide shows it inline)
-      └─ PanelRenderer.tsx     (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles)
+      └─ PanelRenderer.tsx     (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles/McpConnector)
 ```
 
 **State rules:**
@@ -434,6 +436,7 @@ components/credentials/CredentialsModal.tsx (one AppShell host)
 - `PanelRenderer` lazy-loads each panel type so the initial JS payload doesn't grow linearly with provider count.
 - Panels are config-driven: `StatusCard`, `ActionBar`, `FieldRenderer`, `OAuthConnect` consume `ProviderConfig` fields rather than hand-coding per-provider JSX.
 - Exception: EmailPanel has conditional `custom` IMAP/SMTP fields that the simple schema can't express — it gets a dedicated zod schema and RHF form. That's the boundary where config-driven hands off to hand-written.
+- Custom MCP connectors are cards the server builds, one per saved connector (`kind: 'mcp'`, with an `mcp` block: server, address, sign-in kind, tools, pending change). The browser's Add (`CatalogLayout.primaryAction`, off in the Welcome guide via `customConnectors={false}`) opens `AddConnectorForm`; after `mcp_connector_add` it refetches the catalogue, then opens the new card's page. `McpConnectorPanel` sends each command with `CREDENTIAL_PROBE_REQUEST_TIMEOUT` and waits for the refetched catalogue before re-enabling, so it shows only what the server holds; Remove leaves the page through the panel's `onLeave` (ProviderPage's Back). See [MCP Connectors](./mcp_connectors.md).
 
 ## ParameterRenderer (pending Phase 6)
 

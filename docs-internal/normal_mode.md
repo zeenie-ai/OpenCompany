@@ -962,9 +962,10 @@ changing page clears it.
   `tests/test_home_catalog_contract.py` holds the bundles and the Discover
   folder to each other and to the app registry.
 - **Connectors**: every provider in `config/credential_providers.json`, the
-  same set as the editor's Credentials modal. Each declares a
+  same set as the editor's Credentials modal, plus one card for each custom
+  connector the owner added. Each declares a
   `consumer_category` (`messages`, `organize`, `business`, `research`,
-  `language`, `developer`, `devices`, `ai`), a short `description`, a
+  `language`, `developer`, `devices`, `custom`, `ai`), a short `description`, a
   `publisher` (the card's "by …" line) and `verified`, and
   `test_credential_catalogue_consumer_fields.py` fails when one does not, or
   when a plugin credential has no catalogue entry at all, so a new connector
@@ -972,7 +973,14 @@ changing page clears it.
   come before AI models. The catalogue adds `connected`, which differs from
   `stored` for providers with a `connected_check` (WhatsApp's live pairing,
   the IMAP/SMTP account's keys; `builtin`, always connected, for the Web
-  browser, whose panel manages optional login profiles).
+  browser, whose panel manages optional login profiles). **Add** opens the
+  custom connector form (`components/credentials/AddConnectorForm.tsx`): an
+  MCP server's URL, a name, and how it signs in. The server reads the
+  server's tools before it keeps anything, and the new connector's page opens
+  once the catalogue holds it. That page tests the connection, refreshes the
+  tools (a change waits for Accept), sets each tool on or off and to ask
+  first, and removes the connector. See [MCP Connectors](./mcp_connectors.md).
+  The Welcome guide's AI model step has no Add.
 
 **The catalog page** ([settings/CatalogLayout.tsx](../client/src/features/home/settings/CatalogLayout.tsx)).
 The implementation is shared in `components/catalog/`; Home paths are compatibility exports.
@@ -1086,7 +1094,9 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 - Billing has no plans, payment method or invoices: no billing account sits
   behind OpenCompany. A deleted employee's runs leave the month's count,
   because deleting a workflow deletes its run records.
-- Connectors has no custom (MCP) connector.
+- A custom (MCP) connector's tools reach no employee yet: the connector is
+  kept, tested and refreshed, and its tools set, but no hire or agent uses
+  them.
 - Skill library changes reach only new hires: an employee keeps the skills it
   was hired with, and one hired before the library existed has none, until
   the owner asks them in Talk to add one. The library is shared across users

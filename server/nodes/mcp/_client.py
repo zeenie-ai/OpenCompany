@@ -51,8 +51,11 @@ TRANSPORTS: Tuple[Transport, ...] = ("streamable_http", "sse")
 
 #: A connect, the opening handshake, or one listing of tools.
 TIMEOUT_S = 30.0
-#: Reading the server's tools, from connecting to the last page.
-DISCOVER_S = 60.0
+#: Reading the server's tools, from connecting to the last page, with every
+#: transport tried. The app waits 60 s for a credential probe
+#: (CREDENTIAL_PROBE_REQUEST_TIMEOUT in WebSocketContext.tsx), so a slow read
+#: is never still saving after the app gave up on it.
+DISCOVER_S = 45.0
 #: The longest a tool call may take to answer.
 CALL_TIMEOUT_S = 300.0
 #: The most tools one connector reads.
@@ -252,9 +255,8 @@ async def read_server(
     url: str, sign_in: SignIn, transport: Transport, *, http_transport: Optional[httpx.AsyncBaseTransport] = None
 ) -> Discovery:
     """Connect over ``transport`` and read what the server offers."""
-    async with asyncio.timeout(DISCOVER_S):
-        async with open_session(url, sign_in, transport, http_transport=http_transport) as (session, init):
-            tools = await list_tools(session)
+    async with open_session(url, sign_in, transport, http_transport=http_transport) as (session, init):
+        tools = await list_tools(session)
     server = init.serverInfo
     return Discovery(
         transport=transport,
@@ -266,24 +268,31 @@ async def read_server(
 
 async def discover(url: str, sign_in: SignIn, *, http_transport: Optional[httpx.AsyncBaseTransport] = None) -> Discovery:
     """A new connector's first read: streamable HTTP, else the older SSE
-    transport. Raises ``ConnectorError`` with the first transport's failure."""
+    transport, within ``DISCOVER_S`` in all. Raises ``ConnectorError`` with
+    the first transport's failure."""
     host = await check_server(url)
     first: Optional[BaseException] = None
-    for transport in TRANSPORTS:
-        try:
-            return await read_server(url, sign_in, transport, http_transport=http_transport)
-        except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
-            first = first or exc
+    try:
+        async with asyncio.timeout(DISCOVER_S):
+            for transport in TRANSPORTS:
+                try:
+                    return await read_server(url, sign_in, transport, http_transport=http_transport)
+                except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
+                    first = first or exc
+    except TimeoutError as exc:
+        first = first or exc
     raise ConnectorError(describe(first, host))
 
 
 async def read_again(
     url: str, sign_in: SignIn, transport: Transport, *, http_transport: Optional[httpx.AsyncBaseTransport] = None
 ) -> Discovery:
-    """Read a saved connector's server again (Test, Refresh)."""
+    """Read a saved connector's server again (Test, Refresh), within
+    ``DISCOVER_S``."""
     host = await check_server(url)
     try:
-        return await read_server(url, sign_in, transport, http_transport=http_transport)
+        async with asyncio.timeout(DISCOVER_S):
+            return await read_server(url, sign_in, transport, http_transport=http_transport)
     except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
         raise ConnectorError(describe(exc, host)) from None
 

@@ -82,6 +82,8 @@ export const WORKFLOW_CONTROL_REQUEST_TIMEOUT = 5 * 60 * 1000;
 // URL, detects the server's kind and lists its models. The backend bounds
 // each step (nodes/model/_local_validator.py); this stays above their sum, so
 // a slow save is not cut off here and then completes behind the user's back.
+// A custom MCP connector's add, test and refresh read its server within the
+// backend's DISCOVER_S (nodes/mcp/_client.py), also below this.
 export const CREDENTIAL_PROBE_REQUEST_TIMEOUT = 60 * 1000;
 
 // Maximum queued sends before backpressure kicks in (FIFO eviction of oldest)

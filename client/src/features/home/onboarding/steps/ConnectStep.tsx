@@ -69,6 +69,7 @@ export function ConnectStep({ onFinish }: { onFinish: () => void }) {
           variant="embedded"
           discoverLimit={null}
           onItemAdded={onItemAdded}
+          customConnectors={false}
         />
       </div>
       {selection && (

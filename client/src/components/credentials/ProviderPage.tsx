@@ -106,7 +106,7 @@ export function ProviderPage({ view, selection, backLabel, onBack, visible, show
               {provider.runs_locally && <span>Runs on this computer</span>}
             </div>
           </div>
-          <PanelRenderer config={config} visible={visible} showTechnicalSections={showTechnicalSections} />
+          <PanelRenderer config={config} visible={visible} showTechnicalSections={showTechnicalSections} onLeave={onBack} />
         </>
       )}
     </>

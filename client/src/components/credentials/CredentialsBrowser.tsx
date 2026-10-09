@@ -3,12 +3,12 @@
  * visible provider, apps before AI models; Yours lists connected ones.
  *
  * Connect and Manage open the shared host with the corresponding intent.
- * Disconnect removes what the panel would remove for API-key and signed-in
- * providers, after a confirmation; for the rest (a paired phone, an email
- * account) it opens the panel, which owns those steps. A card glows when
- * it turns connected. Connection-success feedback belongs to the host.
- * There is no custom connector:
- * nothing serves one yet, so the page has no Add button.
+ * Disconnect removes what the panel would remove for API-key, signed-in and
+ * custom (MCP) providers, after a confirmation; for the rest (a paired
+ * phone, an email account) it opens the panel, which owns those steps. A
+ * card glows when it turns connected. Connection-success feedback belongs
+ * to the host. Add opens the custom connector form (AddConnectorForm); a
+ * saved connector opens on its own page once the catalogue holds it.
  */
 
 import { useMemo, useState } from 'react';
@@ -26,6 +26,7 @@ import {
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { AddConnectorForm } from './AddConnectorForm';
 import { isConnected, useCredentialsCatalogue, type ConsumerProvider, type CredentialsCatalogue } from './catalogue';
 import type { CatalogItem } from '@/components/catalog/catalog';
 import { CatalogLayout } from '@/components/catalog/CatalogLayout';
@@ -48,6 +49,11 @@ async function disconnect(
   }
   if (provider.kind === 'oauth' && provider.ws?.logout) {
     await sendRequest(provider.ws.logout, {});
+    return true;
+  }
+  if (provider.kind === 'mcp') {
+    const result = await sendRequest<{ success?: boolean; error?: string }>('mcp_connector_remove', { ref: provider.id });
+    if (result.success === false) throw new Error(result.error || `Couldn't remove ${provider.name}`);
     return true;
   }
   return false;
@@ -104,6 +110,9 @@ export interface CredentialsBrowserProps {
   discoverLimit?: number | null;
   /** A provider on screen turned connected (after its card's glow starts). */
   onItemAdded?: (providerId: string) => void;
+  /** Offer Add for a custom connector (default). The Welcome guide's AI
+   *  model step turns it off. */
+  customConnectors?: boolean;
 }
 
 export function CredentialsBrowser(props: CredentialsBrowserProps) {
@@ -125,6 +134,7 @@ function CredentialsBrowserContent({
   variant,
   discoverLimit,
   onItemAdded,
+  customConnectors = true,
 }: CredentialsBrowserProps & { catalogue: CredentialsCatalogue }) {
   const { providers, categories, isLoading, isError, refetch } = catalogue;
   const { sendRequest } = useWebSocketActions();
@@ -144,6 +154,12 @@ function CredentialsBrowserContent({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `Couldn't disconnect ${provider.name}`);
     }
+  };
+
+  // Its page opens once the refetched catalogue holds it.
+  const openAdded = async (ref: string) => {
+    await refetch();
+    onConnect(ref, 'manage');
   };
 
   if (isError && !catalogue.catalogue.data) {
@@ -174,6 +190,11 @@ function CredentialsBrowserContent({
         onManage={(item) => onConnect(item.id, 'manage')}
         onRemove={(item) => setConfirming(byId.get(item.id) ?? null)}
         onItemAdded={onItemAdded && ((item) => onItemAdded(item.id))}
+        primaryAction={
+          customConnectors
+            ? { label: 'Add', form: (close) => <AddConnectorForm close={close} onAdded={(ref) => void openAdded(ref)} /> }
+            : undefined
+        }
       />
 
       <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>

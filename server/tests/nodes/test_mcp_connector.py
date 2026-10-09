@@ -299,6 +299,41 @@ class TestTheConnectorsPage:
         meta = auth.meta("mcp:orders")
         assert meta["instructions"] == "Look an order up before replying." and meta["pending"] is None
 
+    async def test_each_tool_can_be_turned_off_or_set_to_ask_first(self, auth, monkeypatch):
+        async with serving(monkeypatch, orders_server()):
+            await add()
+        set_tool = _handlers.handle_mcp_connector_set_tool
+        assert await set_tool({"ref": "mcp:orders", "tool": "lookup_order", "ask": True}, SOCKET) == {
+            "success": True,
+            "tool": "lookup_order",
+            "enabled": True,
+            "ask": True,
+        }
+        await set_tool({"ref": "mcp:orders", "tool": "send_reply", "enabled": False}, SOCKET)
+        assert auth.meta("mcp:orders")["settings"] == {
+            "lookup_order": {"enabled": True, "ask": True},
+            "send_reply": {"enabled": False, "ask": True},
+        }
+        # A change the owner accepts later keeps what they chose.
+        async with serving(monkeypatch, orders_server(refund=True)):
+            await _handlers.handle_mcp_connector_refresh({"ref": "mcp:orders"}, SOCKET)
+        await _handlers.handle_mcp_connector_review({"ref": "mcp:orders", "accept": True}, SOCKET)
+        assert auth.meta("mcp:orders")["settings"]["send_reply"] == {"enabled": False, "ask": True}
+
+    async def test_a_tool_no_model_could_call_cannot_be_turned_on(self, auth, monkeypatch):
+        async with serving(monkeypatch, orders_server()):
+            await add()
+        auth.meta("mcp:orders")["tools"][0].update(usable=False, reason="Its inputs aren't valid JSON Schema.")
+        set_tool = _handlers.handle_mcp_connector_set_tool
+        assert await set_tool({"ref": "mcp:orders", "tool": "lookup_order", "enabled": True}, SOCKET) == {
+            "success": False,
+            "error": "lookup_order can't be used. Its inputs aren't valid JSON Schema.",
+        }
+        assert await set_tool({"ref": "mcp:orders", "tool": "refund_order"}, SOCKET) == {
+            "success": False,
+            "error": "This connector has no such tool.",
+        }
+
     async def test_remove_forgets_both_rows(self, auth, monkeypatch):
         async with serving(monkeypatch, orders_server()):
             await add()

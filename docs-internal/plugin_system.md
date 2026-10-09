@@ -396,6 +396,16 @@ double-imported. Contract invariant
 `test_credentials_are_registered` ensures every declared credential
 on a plugin resolves to a registered class.
 
+**Cards built from what was saved**: a credential whose cards are the
+owner's own entries, not one fixed provider, overrides the async
+classmethod `catalogue_entries(*, principal=None)` (default `[]`).
+`get_credential_catalogue` appends what every registered class returns,
+after the static providers, and those cards carry their own `stored` /
+`connected`. Shared card fields come from an `_abstract` template in
+`credential_providers.json`, read with `CredentialRegistry.get_template`.
+`nodes/mcp/_credentials.py` is the one user: one card per custom MCP
+connector ([MCP Connectors](./mcp_connectors.md)).
+
 **Shipped credentials** (Wave 11.E → E.1):
 
 | File | Class(es) | Auth | Covers |

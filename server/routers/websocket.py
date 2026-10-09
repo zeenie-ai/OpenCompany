@@ -391,10 +391,12 @@ async def handle_get_node_groups(data: Dict[str, Any], websocket: WebSocket) -> 
 async def handle_get_credential_catalogue(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Return the full credential provider catalogue with live stored-key status.
 
-    Response shape: {providers, categories, version}. Each provider includes
-    a `stored: boolean` field indicating whether a key/token is present in the
-    encrypted credentials database. The frontend renders this directly — no
-    client-side credential checks needed.
+    Response shape: {providers, categories, consumer_categories, version}.
+    Each provider includes a `stored: boolean` field indicating whether a
+    key/token is present in the encrypted credentials database. The frontend
+    renders this directly — no client-side credential checks needed. Cards a
+    plugin builds from what was saved (`Credential.catalogue_entries`, one
+    per custom MCP connector) follow the static providers.
     """
     from services.credential_registry import get_credential_registry, provider_connection_state
 
