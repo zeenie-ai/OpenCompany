@@ -30,10 +30,12 @@ CLIENT_SRC = REPO_ROOT / "client" / "src"
 
 # Types too generic to distinguish from ordinary English or CSS in a regex.
 # Excluded deliberately: a guard that cries wolf gets disabled, and these are
-# the ones that would. Every excluded type is still covered by the
-# executionTimeoutMs invariant below, which needs no source scanning.
+# the ones that would. "browser" and "canvas" are also the names of Workspace
+# surfaces (the Browser and Canvas tabs, a step's surface). Every excluded
+# type is still covered by the executionTimeoutMs invariant below, which needs
+# no source scanning.
 _TOO_GENERIC = frozenset(
-    {"start", "console", "shell", "browser", "timer", "location", "code", "gallery"}
+    {"start", "console", "shell", "browser", "canvas", "timer", "location", "code", "gallery"}
 )
 
 
