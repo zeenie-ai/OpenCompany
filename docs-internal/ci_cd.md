@@ -324,10 +324,13 @@ untrusted input here:
 |---|---|---|---|
 | [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | http-cache-semantics 4.2.0 | `desktop/`: Electron Builder → app-builder-lib → @electron/get 3.1.0 → got → cacheable-request | No patched release as of 2026-10-09. Build-time artifact downloading does not share authenticated user-response caches; this chain is absent from the shipped desktop runtime dependencies. |
 
-The unused installed shadcn CLI was removed from `client/package.json` and the
-root lockfile on 2026-10-09, removing `braces` and its advisory entirely. The
-existing `bun x shadcn@latest add <name>` development command still works with
-the checked-in generated components; it is not part of application execution.
+The shadcn CLI was removed from `client/package.json` and the root lockfile on
+2026-10-09, removing `braces` and its advisory entirely. The client used one
+file from that package, its Tailwind stylesheet (`shadcn/tailwind.css`, the
+Radix-state variants the generated components use), which is now a verbatim
+copy at `client/src/styles/shadcn.css`. The existing
+`bun x shadcn@latest add <name>` development command still works with the
+checked-in generated components; it is not part of application execution.
 
 Electron itself uses `@electron/get` 5.1.0, which uses native fetch. Stable
 Electron Builder 26.17.0 (the `v26` tag; `latest` remains 26.15.3) still requires

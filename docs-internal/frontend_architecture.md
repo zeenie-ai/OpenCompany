@@ -184,6 +184,10 @@ client/src/
 │   ├── useAppStore.ts              # UI state (sidebar, palette, shellMode, pro mode, persisted)
 │
 ├── styles/
+│   ├── shadcn.css                  # shadcn 4.16.1's Tailwind stylesheet, copied
+│   │                               # verbatim: the Radix-state variants
+│   │                               # (data-checked:, data-active:, ...) and
+│   │                               # accordion keyframes; index.css imports it
 │   └── theme.ts                    # `lightColors` / `darkColors` base packs,
 │                                   # `dracula` / `solarized` constants and the
 │                                   # static `theme` object (spacing, sizes such
@@ -248,7 +252,8 @@ The bridge ([src/index.css](../client/src/index.css)) maps each Tailwind colour 
 
 ```css
 @import "tailwindcss";
-@import "shadcn/tailwind.css";
+@import "tw-animate-css";
+@import "./styles/shadcn.css";
 @import "@fontsource-variable/geist";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:is(.dark *));
