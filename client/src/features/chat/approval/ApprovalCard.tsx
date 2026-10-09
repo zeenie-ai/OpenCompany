@@ -107,7 +107,8 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
 
   const edited = text.trim() !== approval.body.trim() || (subject.trim() || null) !== (approval.subject ?? null);
   const tooLong = text.length > approval.maxLength;
-  const canSend = approval.status === 'pending' && !busy && text.trim().length > 0 && !tooLong;
+  // A draft with no message to edit (a tool call) sends as it is.
+  const canSend = approval.status === 'pending' && !busy && !tooLong && (!approval.editable || text.trim().length > 0);
 
   const send = () => {
     if (!canSend) return;

@@ -172,6 +172,7 @@ class MailNode(ActionNode):
     approval = ApprovalSpec(
         channel="Outlook",
         action="Send an email",
+        outcome_labels=("Email sent", "Email not sent"),
         operations=frozenset({"send", "reply"}),
         recipient=("to",),
         recipient_otherwise="the sender",

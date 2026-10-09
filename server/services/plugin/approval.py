@@ -22,6 +22,9 @@ Predicate = Callable[[Mapping[str, Any]], bool]
 
 _MAX_DETAIL = 300
 
+#: What a card says once a message went, and when it did not.
+MESSAGE_OUTCOME = ("Message sent", "Message not sent")
+
 
 def _text(value: Any) -> str:
     if value is None or isinstance(value, bool):
@@ -64,6 +67,8 @@ class ApprovalSpec:
     refuse_while_asking: bool = False
     #: While Ask first is on, runs with these settings instead of being held.
     restrict_while_asking: Mapping[str, Any] = field(default_factory=dict)
+    #: What the card says once the call went, and when it did not.
+    outcome_labels: Tuple[str, str] = MESSAGE_OUTCOME
 
     def sends(self, data: Mapping[str, Any]) -> bool:
         """Whether this call reaches someone (and so waits for the owner)."""
@@ -123,4 +128,4 @@ def approval_spec(node_cls: Any) -> Optional[ApprovalSpec]:
     return spec if isinstance(spec, ApprovalSpec) else None
 
 
-__all__ = ["ApprovalSpec", "approval_spec"]
+__all__ = ["ApprovalSpec", "MESSAGE_OUTCOME", "approval_spec"]

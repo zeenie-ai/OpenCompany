@@ -64,6 +64,7 @@ async def test_asking_first_holds_the_call_once(harness, nodes_loaded):
         "message",
     )
     assert row.tool_call_id == "call_1" and row.agent_node_id == "wf:aiAgent:1" and row.node_type == "whatsappSend"
+    assert store.summary(row)["outcome_labels"] == {"sent": "Message sent", "failed": "Message not sent"}
     # Only calls that send are held, and only an agent's.
     assert await tool_calls.check({**call(), "tool_call_id": None}, node_cls) is tool_calls.RUN
     assert await tool_calls.check(call("googleGmail", {"operation": "search", "query": "x"}), get_node_class("googleGmail")) is tool_calls.RUN
@@ -77,6 +78,21 @@ async def test_the_model_never_chooses_who_sends(harness, nodes_loaded):
     assert "mailbox" not in row.args and "mailbox" not in row.node_data
     assert row.original_args["mailbox"] == "boss@example.com"
     assert (row.subject, row.subject_field) == ("Hi", "subject")
+    # The plugin words what happened.
+    assert store.summary(row)["outcome_labels"] == {"sent": "Email sent", "failed": "Email not sent"}
+
+
+async def test_a_call_is_judged_on_the_settings_it_runs_with(harness, nodes_loaded):
+    # A locked field the model set is put back to the node's own setting
+    # before the call is judged, so it cannot talk a call out of a hold.
+    args = {"operation": "send", "to": "ana@example.com", "body": "Hello", "mailbox": "boss@example.com"}
+    node_cls = get_node_class("msMail")
+    saved = {"wf:msMail:1": {"mailbox": "me@example.com"}}
+    data = await tool_calls.as_it_runs(call("msMail", args, node_data={"mailbox": "me@example.com"}, parameter_snapshot=saved), node_cls)
+    assert data["mailbox"] == "me@example.com"
+    # With nothing saved, the model's value is left out and the default applies.
+    data = await tool_calls.as_it_runs(call("msMail", args, parameter_snapshot={"wf:msMail:1": {}}), node_cls)
+    assert "mailbox" not in data
 
 
 async def test_a_call_in_the_chat_shows_its_card_there(harness, nodes_loaded, monkeypatch):

@@ -58,6 +58,7 @@ class EmailSendNode(ActionNode):
     approval = ApprovalSpec(
         channel="Email",
         action="Send an email",
+        outcome_labels=("Email sent", "Email not sent"),
         recipient=("to",),
         body=("body",),
         subject="subject",

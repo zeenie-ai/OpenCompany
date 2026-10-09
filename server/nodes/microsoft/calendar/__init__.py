@@ -141,6 +141,7 @@ class CalendarNode(ActionNode):
     approval = ApprovalSpec(
         channel="Outlook Calendar",
         action="Send meeting invites",
+        outcome_labels=("Invites sent", "Invites not sent"),
         operations=frozenset({"create", "update"}),
         when=lambda data: bool(str(data.get("attendees") or "").strip()),
         recipient=("attendees",),

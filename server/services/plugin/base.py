@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import time
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, ClassVar, Dict, Optional, Sequence, Type
+from typing import Any, Awaitable, Callable, ClassVar, Dict, Mapping, Optional, Sequence, Type
 
 from opentelemetry import trace
 from pydantic import BaseModel, ValidationError
@@ -92,6 +92,31 @@ def locked_tool_fields(node_cls: Any) -> frozenset:
     if node_cls is None:
         return frozenset()
     return frozenset(getattr(node_cls, "server_controlled_fields", ()) or ())
+
+
+def restore_locked_fields(
+    node_cls: Any,
+    data: Mapping[str, Any],
+    tool_args: Optional[Mapping[str, Any]],
+    saved: Mapping[str, Any],
+) -> Dict[str, Any]:
+    """``data`` with each locked field the model set in ``tool_args`` put back
+    to the node's saved setting, or left out when none is saved so that the
+    field's default applies: the model never chooses a locked field."""
+    out = dict(data)
+    for name in locked_tool_fields(node_cls) & (tool_args or {}).keys():
+        if name in saved:
+            out[name] = saved[name]
+        else:
+            out.pop(name, None)
+    return out
+
+
+async def saved_settings(database: Any, node_id: str, parameter_snapshot: Any = None) -> Dict[str, Any]:
+    """A node's own settings: the run's captured copy, else its saved row."""
+    if isinstance(parameter_snapshot, dict) and node_id in parameter_snapshot:
+        return dict(parameter_snapshot[node_id] or {})
+    return dict(await database.get_node_parameters(node_id) or {})
 
 
 NODE_WAIT_INTERRUPTED = "NodeWaitInterrupted"

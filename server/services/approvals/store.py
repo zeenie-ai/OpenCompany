@@ -343,6 +343,17 @@ def _iso(moment: Optional[datetime]) -> Optional[str]:
     return moment.isoformat() if moment is not None else None
 
 
+def _outcome_labels(row: ApprovalRequest) -> Tuple[str, str]:
+    """What the card says once it went, and when it did not: a held tool
+    call's plugin words it (its ``approval`` spec); a gate's draft is a
+    message."""
+    from services.node_registry import get_node_class
+    from services.plugin.approval import MESSAGE_OUTCOME, approval_spec
+
+    spec = approval_spec(get_node_class(row.node_type)) if row.kind == "tool_call" and row.node_type else None
+    return spec.outcome_labels if spec is not None else MESSAGE_OUTCOME
+
+
 def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now: Optional[datetime] = None) -> Dict[str, Any]:
     """What a card shows for one row (``ApprovalSummary``,
     docs-internal/chat_protocol.md)."""
@@ -367,6 +378,8 @@ def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now
         "editable": row.status == "pending" and (kind == "gate" or bool(row.body_field)),
         "details": [dict(item) for item in (row.details or []) if isinstance(item, dict)],
     }
+    sent, failed = _outcome_labels(row)
+    out["outcome_labels"] = {"sent": sent, "failed": failed}
     if row.action:
         out["action"] = row.action
     subject = row.final_subject if decided and row.final_subject else row.subject

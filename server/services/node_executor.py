@@ -19,7 +19,7 @@ from constants import (
 from pydantic import ValidationError
 from services.node_registry import get_node_class
 from services.parameter_resolver import template_view
-from services.plugin.base import locked_tool_fields
+from services.plugin.base import locked_tool_fields, restore_locked_fields, saved_settings
 # Wave 11.D.13 sunset: every handler that was imported here is now
 # either (a) called lazily from a plugin's execute_op / execute method,
 # or (b) retired entirely. The dispatcher itself only needs the
@@ -253,7 +253,7 @@ class NodeExecutor:
     ) -> Dict:
         """Load from DB, validate, inject API keys."""
         # Merge with DB parameters (DB provides defaults, frontend can override)
-        db_params = dict(parameter_snapshot[node_id] or {}) if isinstance(parameter_snapshot, dict) and node_id in parameter_snapshot else await self.database.get_node_parameters(node_id) or {}
+        db_params = await saved_settings(self.database, node_id, parameter_snapshot)
         merged = {**db_params, **params} if params else db_params
 
         # On an LLM tool call the model never chooses a node's locked fields
@@ -261,14 +261,7 @@ class NodeExecutor:
         # profile, data mounts...). The saved setting wins; with none saved,
         # the field falls back to its default rather than to the model's value.
         if tool_args:
-            locked = locked_tool_fields(get_node_class(node_type))
-            if locked & tool_args.keys():
-                merged = dict(merged)
-                for field_name in locked & tool_args.keys():
-                    if field_name in db_params:
-                        merged[field_name] = db_params[field_name]
-                    else:
-                        merged.pop(field_name, None)
+            merged = restore_locked_fields(get_node_class(node_type), merged, tool_args, db_params)
 
         # Validate via plugin Params (snake_case, plugin-only path).
         node_cls = get_node_class(node_type)

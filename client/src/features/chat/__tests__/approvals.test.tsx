@@ -87,6 +87,12 @@ describe('the card says what happened', () => {
     expect(view({ status: 'cancelled' }).title).toBe('Draft cancelled');
   });
 
+  it('words what happened as the server does', () => {
+    const labels = { outcome_labels: { sent: 'Email sent', failed: 'Email not sent' } };
+    expect(view({ ...labels, status: 'sent' }).title).toBe('Email sent');
+    expect(view({ ...labels, status: 'failed' }).title).toBe('Email not sent');
+  });
+
   it('a discarded draft can come back while its window lasts', () => {
     const gate = view({ kind: 'gate', status: 'discarded', restore_until: '2026-10-04T09:00:03Z' });
     expect(gate.footer).toEqual({ kind: 'discarded', text: 'Discarded. Maya won’t send this.', restoreSeconds: 3, canRestore: true });
@@ -186,6 +192,15 @@ describe('a draft in the chat', () => {
     expect(await within(card).findByRole('button', { name: /^Send$/ })).toBeInTheDocument();
     // Every click carries its own key.
     expect(server.decisions[0].decision_key).not.toBe(server.decisions[1].decision_key);
+  });
+
+  it('sends a call that has no message to edit as it is', async () => {
+    server.approvals = [summary({ channel: 'Custom connector', action: 'Use a connector tool', recipient: '', recipient_label: '', body: '', editable: false })];
+    renderPane();
+    const card = (await screen.findByText('Maya wants to use a connector tool')).closest('[data-approval]') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: /^Send$/ }));
+    await waitFor(() => expect(server.decisions).toHaveLength(1));
+    expect(server.decisions[0]).toMatchObject({ approval_id: 'ap1', decision: 'send' });
   });
 
   it('sends an edit with Ctrl+Enter', async () => {

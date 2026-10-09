@@ -114,6 +114,7 @@ class DriveNode(ActionNode):
     approval = ApprovalSpec(
         channel="Google Drive",
         action="Share a file",
+        outcome_labels=("File shared", "File not shared"),
         operations=frozenset({"share"}),
         recipient=("email",),
         body=("message",),

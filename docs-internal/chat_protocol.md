@@ -173,9 +173,12 @@ broke off), `approval_conflict`, `send_unavailable` (nothing could start the sen
 **ApprovalSummary**: `{approval_id, workflow_id, node_id, kind: "gate" | "tool_call", status, channel,
 channel_label, action?, recipient, recipient_label, body, subject?, context_excerpt?, details: [{label, value}],
 created_at, expires_at, revision, max_length, editable, approved_by?: "owner" | "auto", edited?, undo_until?,
-restore_until?, consumed_at?, outcome?: {certainty: "sent" | "not_sent" | "unknown", error?, at?}, run_id?,
-tool_call_id?, ui_part_id?, agent_node_id?, deployment_state?}`. `status` is `pending`, `approved`, `sending`,
-`sent`, `failed`, `discarded`, `expired` or `cancelled`; see [Approvals](#approvals).
+restore_until?, consumed_at?, outcome?: {certainty: "sent" | "not_sent" | "unknown", error?, at?},
+outcome_labels: {sent, failed}, run_id?, tool_call_id?, ui_part_id?, agent_node_id?, deployment_state?}`. `status`
+is `pending`, `approved`, `sending`, `sent`, `failed`, `discarded`, `expired` or `cancelled`; see
+[Approvals](#approvals). `outcome_labels` is what the card says once it went and when it did not: a held tool
+call's plugin words it (its `ApprovalSpec.outcome_labels`, "Email sent" for the email apps), a gate's draft says
+"Message sent". A draft that is not `editable` has no message to edit, and the card sends it as it is.
 
 ### Plugins
 
@@ -540,9 +543,11 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   who it goes to, the body and subject the owner may edit, the card's other lines). `BaseNode.as_activity` checks
   every agent tool call (`services/approvals/tool_calls.py`): with Ask first on, a call that sends does not run; its
   row keeps what would run (the node's settings with the call's arguments over them, never the identity the node
-  sends as) and the model reads that it waits for the owner. A tool that cannot wait is refused (Stripe) or runs
-  restricted (the browser, read-only). With Ask first off the call runs; one made answering the owner in the chat
-  leaves a row (`approved_by: auto`) with how it went. An approval gate with the rule off lets its draft through at
+  sends as) and the model reads that it waits for the owner. Whether a call sends is judged on what it runs with: a
+  locked field (`server_controlled_fields`) the model set is put back to the node's setting first
+  (`tool_calls.as_it_runs`, NodeExecutor's rule), so a model cannot talk a call out of being held. A tool that cannot
+  wait is refused (Stripe) or runs restricted (the browser, read-only). With Ask first off the call runs; one made
+  answering the owner in the chat leaves a row (`approved_by: auto`) with how it went. An approval gate with the rule off lets its draft through at
   once, recorded the same way.
 - **Agents that are not AgentWorkflows** (Claude Code, Codex, RLM, Vertex; see [Streaming, steps and
   Stop](#streaming-steps-and-stop)) call their tools in process (`services/handlers/tools.py` `execute_tool`), where

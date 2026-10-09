@@ -48,14 +48,6 @@ function lowerFirst(text: string): string {
   return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
-function nouns(approval: ChatApproval): { sent: string; failed: string } {
-  const action = (approval.action ?? '').toLowerCase();
-  if (action.includes('email')) return { sent: 'Email sent', failed: 'Email not sent' };
-  if (action.includes('invite')) return { sent: 'Invites sent', failed: 'Invites not sent' };
-  if (action.includes('share')) return { sent: 'File shared', failed: 'File not shared' };
-  return { sent: 'Message sent', failed: 'Message not sent' };
-}
-
 export interface ViewOptions {
   name: string;
   nowMs: number;
@@ -69,7 +61,7 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
   const channel = approval.channel || 'the app';
   const drafted = timeLabel(approval.createdAt, now);
   const sub = drafted ? `${channel} · drafted ${/\d/.test(drafted.charAt(0)) ? 'at ' : ''}${drafted}` : channel;
-  const noun = nouns(approval);
+  const noun = approval.outcomeLabels;
   const action = approval.action ? lowerFirst(approval.action) : 'send a message';
 
   switch (approval.status) {

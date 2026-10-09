@@ -116,6 +116,7 @@ class CalendarNode(ActionNode):
     approval = ApprovalSpec(
         channel="Google Calendar",
         action="Send calendar invites",
+        outcome_labels=("Invites sent", "Invites not sent"),
         operations=frozenset({"create", "update", "delete"}),
         when=lambda data: (data.get("send_updates") or "all") != "none"
         and (bool(str(data.get("attendees") or "").strip()) or data.get("operation") in ("update", "delete")),

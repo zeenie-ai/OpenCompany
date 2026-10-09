@@ -67,6 +67,7 @@ const summarySchema = z
       })
       .optional()
       .catch(undefined),
+    outcome_labels: z.object({ sent: z.string(), failed: z.string() }).catch({ sent: 'Message sent', failed: 'Message not sent' }),
     run_id: optionalText,
     tool_call_id: optionalText,
     ui_part_id: optionalText,
@@ -96,6 +97,8 @@ const summarySchema = z
     restoreUntil: raw.restore_until,
     consumedAt: raw.consumed_at,
     outcome: raw.outcome ? { certainty: raw.outcome.certainty, error: raw.outcome.error ?? null, at: raw.outcome.at ?? null } : null,
+    /** What the card says once it went, and when it did not (the server's words). */
+    outcomeLabels: raw.outcome_labels,
     runId: raw.run_id,
     toolCallId: raw.tool_call_id,
     uiPartId: raw.ui_part_id,

@@ -37,6 +37,9 @@ attempt resumes a wait the worker cut short (``NodeWaitInterrupted``).
 What a node sends as (its locked ``server_controlled_fields``: the account,
 the mailbox) never comes from the model, so the row keeps the call's
 arguments without them; the node's own settings supply them when it runs.
+For the same reason a call is judged on what it runs with
+(:func:`as_it_runs`): a locked field the model set is put back to the node's
+setting first, so it can never talk a call out of being held.
 """
 
 from __future__ import annotations
@@ -112,6 +115,20 @@ def _clean_args(node_cls: Any, args: Mapping[str, Any]) -> Dict[str, Any]:
     return {key: value for key, value in dict(args or {}).items() if key not in locked}
 
 
+async def as_it_runs(context: Mapping[str, Any], node_cls: Any) -> Dict[str, Any]:
+    """The call's ``node_data`` as the node will run with it: each locked
+    field the model set put back to the node's saved setting (NodeExecutor's
+    rule). :func:`check` judges the call on this."""
+    from services.plugin.base import restore_locked_fields, saved_settings
+
+    node_data = dict(context.get("node_data") or {})
+    tool_args = context.get("tool_args")
+    if not isinstance(tool_args, Mapping) or not (_locked(node_cls) & tool_args.keys()):
+        return node_data
+    saved = await saved_settings(_database(), str(context.get("node_id") or ""), context.get("parameter_snapshot"))
+    return restore_locked_fields(node_cls, node_data, tool_args, saved)
+
+
 def _clean_node_data(node_cls: Any, node_data: Mapping[str, Any], args: Mapping[str, Any]) -> Dict[str, Any]:
     """The node's settings with the call's arguments over them, minus the
     locked fields the model set (the node's own value comes back when it
@@ -178,7 +195,7 @@ async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
         )
     if spec is None or not is_agent_tool_call(context):
         return RUN
-    node_data = dict(context.get("node_data") or {})
+    node_data = await as_it_runs(context, node_cls)
     if not spec.sends(node_data):
         return RUN
     database = _database()
@@ -217,11 +234,13 @@ async def check_in_process(
     process (see the module docstring). ``result`` is the flat answer the
     model reads, as ``execute_as_tool`` gives one."""
     from services.plugin.approval import approval_spec
+    from services.plugin.base import restore_locked_fields
 
     spec = approval_spec(node_cls)
     if spec is None or not context.get("parent_node_id"):
         return RUN
-    if not spec.sends({**dict(params or {}), **dict(tool_args or {})}):
+    # Judged on what runs: a locked field comes from the node's settings.
+    if not spec.sends(restore_locked_fields(node_cls, {**dict(params or {}), **dict(tool_args or {})}, tool_args, params or {})):
         return RUN
     if not await _asks_first(_database(), context.get("workflow_id")):
         return RUN
@@ -369,6 +388,7 @@ __all__ = [
     "HELD_MESSAGE",
     "RESEND_MESSAGE",
     "RUN",
+    "as_it_runs",
     "call_key",
     "check",
     "check_in_process",

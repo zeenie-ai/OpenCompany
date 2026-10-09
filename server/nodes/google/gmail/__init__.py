@@ -117,6 +117,7 @@ class GmailNode(ActionNode):
     approval = ApprovalSpec(
         channel="Gmail",
         action="Send an email",
+        outcome_labels=("Email sent", "Email not sent"),
         operations=frozenset({"send"}),
         recipient=("to",),
         body=("body",),
