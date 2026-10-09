@@ -16,6 +16,7 @@ thing: see [CLI Agent Framework](./cli_agent_framework.md).
 | What is kept (two credential rows) | `server/nodes/mcp/_store.py` |
 | One catalogue card per connector | `server/nodes/mcp/_credentials.py` |
 | The Connectors page's commands | `server/nodes/mcp/_handlers.py` |
+| The node that gives an agent the tools | `server/nodes/mcp/mcp_connector.py` |
 | The outbound address rules, shared with the Browser node | `server/services/netpolicy.py` |
 | The cards' shared fields, and the `custom` categories | `server/config/credential_providers.json` (`_mcp_connector`) |
 | The Add form | `client/src/components/credentials/AddConnectorForm.tsx` |
@@ -51,8 +52,10 @@ is kept.
   (`CREDENTIAL_PROBE_REQUEST_TIMEOUT`), so a slow read never finishes after
   the app gave up on it.
 - **Its name**: the slug comes from the name, or else from the host
-  (python-slugify, at most 20 characters). A second connector needs its own
-  name.
+  (python-slugify, at most 20 characters). It starts with a letter
+  (`mcp-` goes in front otherwise), because its tools' names start with it
+  and some models (Gemini) take only a name that starts with a letter. A
+  second connector needs its own name.
 
 ## What is kept
 
@@ -122,6 +125,33 @@ them with `mcp_connector_review`. Until then, the tools the owner accepted
 stay as they were. Accepting keeps the owner's settings for tools already
 set; new usable tools get the defaults.
 
+## The node
+
+`mcpConnector` (Custom Connector) goes on an agent's Tools and names one
+connector (`mcp_connector`, a dropdown of the saved ones). It gives the agent
+one tool per tool of that connector that can be used and is on, named
+`<connector>__<tool>` with the server's description and input schema
+(`ToolNode.tool_bindings`; see [Agent Architecture](./agent_architecture.md)
+for how every agent path builds them). Each tool runs with its binding's
+settings, which are locked so the model never sets them: `mcp_tool`, `mcp_ask`
+(its Ask first), and the labels its card shows (`mcp_label`, `mcp_title`).
+
+- **A call**: the connector is read again, so a tool the server no longer
+  offers or the owner turned off since the run began is refused. The
+  arguments are checked against the tool's input schema (jsonschema), then
+  the tool is called over the connector's transport within `CALL_TIMEOUT_S`
+  (300 s). The model gets the answer's text (each part that is not text is
+  named) and its structured result; an answer marked as an error comes back
+  as the tool's error.
+- **Ask first**: the node's `approval` spec holds a call while the employee
+  asks first, unless its tool is set not to (`mcp_ask`). A call whose binding
+  says nothing asks first. The card names the connector and the tool, and
+  reads "Done" or "Not done" once it ran.
+- **When settings reach the agent**: the tools are read when an agent's run
+  starts, so a tool turned on, or a change to its Ask first, applies from the
+  next run. A tool turned off is refused at once.
+- CLI agents (Claude Code, Codex) leave the node out; an RLM agent refuses it.
+
 ## The page
 
 - **Add** on the Connectors page (`CatalogLayout.primaryAction`) opens
@@ -142,7 +172,8 @@ set; new usable tools get the defaults.
 
 ## Known gaps
 
-- No employee uses a connector's tools yet.
+- Hiring does not add a connector: an employee uses one only when its
+  workflow gets the Custom Connector node in Dev mode.
 - No OAuth sign-in.
 - A host's addresses are checked when connecting, not pinned for the
   connection.

@@ -46,10 +46,15 @@ def slug_of(ref: str) -> Optional[str]:
 
 
 def new_slug(name: str, url: str) -> str:
-    """A new connector's slug: from its name, else from its server's host."""
+    """A new connector's slug: from its name, else from its server's host.
+    It starts with a letter, since its tools' names start with it and some
+    models (Gemini) take only a name that starts with a letter."""
     from slugify import slugify
 
-    return slugify(name or (urlsplit(url.strip()).hostname or ""), max_length=SLUG_MAX, separator="-")
+    slug = slugify(name or (urlsplit(url.strip()).hostname or ""), max_length=SLUG_MAX, separator="-")
+    if slug and not slug[0].isalpha():
+        slug = slugify(f"mcp-{slug}", max_length=SLUG_MAX, separator="-")
+    return slug
 
 
 def now() -> str:

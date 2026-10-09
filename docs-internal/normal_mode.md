@@ -1094,9 +1094,9 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 - Billing has no plans, payment method or invoices: no billing account sits
   behind OpenCompany. A deleted employee's runs leave the month's count,
   because deleting a workflow deletes its run records.
-- A custom (MCP) connector's tools reach no employee yet: the connector is
-  kept, tested and refreshed, and its tools set, but no hire or agent uses
-  them.
+- Hiring does not add a custom (MCP) connector: an employee uses one only
+  when its workflow gets the Custom Connector node (`mcpConnector`) in Dev
+  mode.
 - Skill library changes reach only new hires: an employee keeps the skills it
   was hired with, and one hired before the library existed has none, until
   the owner asks them in Talk to add one. The library is shared across users

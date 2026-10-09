@@ -8,16 +8,20 @@ something employees can use.
 - ``_credentials.py``: each connector's own card in the credentials
   catalogue.
 - ``_handlers.py``: add, test, refresh, accept or discard what a refresh
-  found, and remove.
+  found, set a tool, and remove.
+- ``mcp_connector.py``: the node that gives an agent a connector's tools,
+  one per tool (``ToolNode.tool_bindings``).
 """
 
 from __future__ import annotations
 
-from services.ws_handler_registry import register_ws_handlers
+from services.ws_handler_registry import register_option_loader, register_ws_handlers
 
 from ._credentials import McpConnectorCredential
 from ._handlers import WS_HANDLERS
+from .mcp_connector import McpConnectorNode, load_connectors
 
 register_ws_handlers(WS_HANDLERS)
+register_option_loader("mcpConnectors", load_connectors)
 
-__all__ = ["McpConnectorCredential", "WS_HANDLERS"]
+__all__ = ["McpConnectorCredential", "McpConnectorNode", "WS_HANDLERS"]

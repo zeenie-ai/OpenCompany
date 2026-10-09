@@ -16,9 +16,12 @@ import pytest
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Tool, ToolAnnotations
 
-from nodes.mcp import _client, _handlers
+from nodes.mcp import _client, _handlers, mcp_connector
 from nodes.mcp._client import ConnectorError, SignIn, check_server, snapshots
 from nodes.mcp._credentials import McpConnectorCredential
+from nodes.mcp._store import new_slug
+from nodes.mcp.mcp_connector import McpConnectorNode
+from services.plugin import NodeContext
 
 URL = "http://127.0.0.1:8931/mcp"
 SOCKET = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id=None))
@@ -178,6 +181,12 @@ class TestSignIn:
         assert sign_in.headers() == {"X-API-Key": "s3cret"}
         assert sign_in.public() == {"kind": "header", "header": "X-API-Key"}
         assert SignIn.load(sign_in.dump()) == sign_in
+
+
+def test_a_slug_starts_with_a_letter_as_a_tool_name_must():
+    assert new_slug("Orders", URL) == "orders"
+    assert new_slug("", URL) == "mcp-127-0-0-1"
+    assert new_slug("3M Orders", URL) == "mcp-3m-orders"
 
 
 def test_a_tool_no_model_could_call_is_kept_with_the_reason():
@@ -344,3 +353,41 @@ class TestTheConnectorsPage:
         internal = SimpleNamespace(scope={"path": "/ws/internal"})
         result = await _handlers.handle_mcp_connector_add({"url": URL}, internal)
         assert result == {"success": False, "error": "Connectors are managed from the app."}
+
+
+LOOKUP = {"mcp_connector": "mcp:orders", "mcp_tool": "lookup_order", "mcp_ask": False, "mcp_label": "Orders", "mcp_title": "Look up an order"}
+
+
+class TestTheNode:
+    async def test_it_gives_an_agent_each_tool_that_is_on(self, auth, monkeypatch):
+        async with serving(monkeypatch, orders_server()):
+            await add()
+        await _handlers.handle_mcp_connector_set_tool({"ref": "mcp:orders", "tool": "send_reply", "enabled": False}, SOCKET)
+        [binding] = await McpConnectorNode.tool_bindings({"mcp_connector": "mcp:orders"})
+        assert binding.name == "orders__lookup_order"
+        assert binding.parameters == {"mcp_tool": "lookup_order", "mcp_ask": False, "mcp_label": "Orders", "mcp_title": "Look up an order"}
+        assert binding.schema["properties"]["order"]["type"] == "string"
+        # No connector chosen, or one that is gone: no tools.
+        assert await McpConnectorNode.tool_bindings({}) == []
+        assert await McpConnectorNode.tool_bindings({"mcp_connector": "mcp:gone"}) == []
+
+    async def test_a_call_reaches_the_server_with_arguments_its_tool_accepts(self, auth, monkeypatch):
+        node = McpConnectorNode()
+        async with serving(monkeypatch, orders_server()) as transport:
+            await add()
+            monkeypatch.setattr(mcp_connector, "call_tool", functools.partial(_client.call_tool, http_transport=transport))
+            result = await node.execute_as_tool({"order": "A1"}, LOOKUP, NodeContext(node_id="n1", node_type="mcpConnector", raw={}))
+            assert result["text"] == "Order A1: 2 books"
+            refused = await node.execute_as_tool({"order": 5}, LOOKUP, NodeContext(node_id="n1", node_type="mcpConnector", raw={}))
+            assert refused == {"error": "The arguments don't fit the tool: 5 is not of type 'string'"}
+            # A tool the owner turned off since the agent got it is not called.
+            await _handlers.handle_mcp_connector_set_tool({"ref": "mcp:orders", "tool": "lookup_order", "enabled": False}, SOCKET)
+            off = await node.execute_as_tool({"order": "A1"}, LOOKUP, NodeContext(node_id="n1", node_type="mcpConnector", raw={}))
+            assert off == {"error": "The owner turned Look up an order off."}
+
+    def test_a_tool_set_to_ask_first_waits_while_the_employee_asks_first(self):
+        spec = McpConnectorNode.approval
+        assert spec.sends({"mcp_ask": True}) and not spec.sends({"mcp_ask": False})
+        # Without its binding's word, a call asks first.
+        assert spec.sends({})
+        assert spec.preview(LOOKUP)["details"] == [{"label": "Connector", "value": "Orders"}, {"label": "Tool", "value": "Look up an order"}]

@@ -91,8 +91,8 @@ class McpConnectorCredential(Credential):
 
     @classmethod
     async def is_configured(cls, auth_service: Any, parameters: Dict[str, Any]) -> bool:
-        """The connector the node names is saved."""
-        ref = str(parameters.get("connector") or "")
+        """The connector the node names (``mcp_connector``) is saved."""
+        ref = str(parameters.get("mcp_connector") or "")
         return slug_of(ref) is not None and bool(await auth_service.has_valid_key(ref))
 
 

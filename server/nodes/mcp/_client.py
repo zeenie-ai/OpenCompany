@@ -44,7 +44,7 @@ from services.netpolicy import (
 
 if TYPE_CHECKING:
     from mcp import ClientSession
-    from mcp.types import InitializeResult, Tool
+    from mcp.types import CallToolResult, InitializeResult, Tool
 
 Transport = Literal["streamable_http", "sse"]
 TRANSPORTS: Tuple[Transport, ...] = ("streamable_http", "sse")
@@ -297,6 +297,63 @@ async def read_again(
         raise ConnectorError(describe(exc, host)) from None
 
 
+@dataclass
+class CallResult:
+    """What a tool answered: its text for the model, its structured result
+    when it gave one, and whether it says the call failed."""
+
+    text: str
+    structured: Optional[Dict[str, Any]]
+    is_error: bool
+
+
+def check_arguments(schema: Dict[str, Any], arguments: Dict[str, Any]) -> None:
+    """Refuse arguments the tool's input schema does not accept."""
+    from jsonschema import ValidationError
+    from jsonschema.validators import validator_for
+
+    try:
+        validator_for(schema)(schema).validate(arguments)
+    except ValidationError as exc:
+        raise ConnectorError(f"The arguments don't fit the tool: {exc.message}") from None
+
+
+def result_text(result: "CallToolResult") -> str:
+    """A tool's answer as text for the model: its text parts, and a line
+    naming each other part."""
+    parts: List[str] = []
+    for block in result.content:
+        if block.type == "text":
+            parts.append(block.text)
+        elif block.type == "resource" and getattr(block.resource, "text", None) is not None:
+            parts.append(block.resource.text)
+        elif block.type == "resource_link":
+            parts.append(f"[{block.name}: {block.uri}]")
+        else:
+            parts.append(f"[{block.type} not shown]")
+    return "\n".join(parts)
+
+
+async def call_tool(
+    url: str,
+    sign_in: SignIn,
+    transport: Transport,
+    name: str,
+    arguments: Dict[str, Any],
+    *,
+    http_transport: Optional[httpx.AsyncBaseTransport] = None,
+) -> CallResult:
+    """Call one of the server's tools, within ``CALL_TIMEOUT_S``."""
+    host = await check_server(url)
+    try:
+        async with asyncio.timeout(CALL_TIMEOUT_S):
+            async with open_session(url, sign_in, transport, http_transport=http_transport) as (session, _init):
+                result = await session.call_tool(name, arguments, read_timeout_seconds=timedelta(seconds=CALL_TIMEOUT_S))
+    except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
+        raise ConnectorError(describe(exc, host)) from None
+    return CallResult(text=result_text(result), structured=result.structuredContent, is_error=bool(result.isError))
+
+
 def describe(exc: Optional[BaseException], host: str) -> str:
     """A failure to reach or read a server, in words for the owner."""
     from mcp.shared.exceptions import McpError
@@ -385,13 +442,16 @@ def changes(before: List[Dict[str, Any]], after: List[Dict[str, Any]]) -> Dict[s
 
 __all__ = [
     "CALL_TIMEOUT_S",
+    "CallResult",
     "ConnectorError",
     "Discovery",
     "SEPARATOR",
     "SignIn",
     "Transport",
     "call_name",
+    "call_tool",
     "changes",
+    "check_arguments",
     "check_server",
     "describe",
     "discover",
