@@ -31,6 +31,9 @@
   "tikhubAction": {
     "skill": "tikhub-skill"
   },
+  "awsAction": {
+    "skill": "aws-skill"
+  },
   "appLauncher": {
     "icon": "🚀",
     "skill": "app-launcher-skill"

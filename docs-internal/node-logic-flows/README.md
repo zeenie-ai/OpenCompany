@@ -125,8 +125,8 @@ that a retired node remains registered.
 
 - [Chat History (`chatHistory`)](./chat_utility/chatHistory.md)
 - [Reply in Chat (`chatReply`)](./chat_utility/chatReply.md)
-- [Show UI (`chatUi`)](./chat_utility/chatUi.md)
 - [Chat Send (`chatSend`)](./chat_utility/chatSend.md)
+- [Show UI (`chatUi`)](./chat_utility/chatUi.md)
 - [Console (`console`)](./chat_utility/console.md)
 - [File Handler (`fileHandler`)](./chat_utility/fileHandler.md)
 - [Create Map (`gmaps_create`)](./chat_utility/gmaps_create.md)
@@ -137,6 +137,7 @@ that a retired node remains registered.
 
 ### cli_integrations
 
+- [AWS (`awsAction`)](./cli_integrations/awsAction.md)
 - [Cloudflare (`cloudflareAction`)](./cli_integrations/cloudflareAction.md)
 - [Google Cloud (`gcloudAction`)](./cli_integrations/gcloudAction.md)
 - [GitHub (`githubAction`)](./cli_integrations/githubAction.md)
@@ -280,6 +281,10 @@ that a retired node remains registered.
 - [WhatsApp Business Receive (`whatsappBusinessReceive`)](./whatsapp_business/whatsappBusinessReceive.md)
 - [WhatsApp Business Send (`whatsappBusinessSend`)](./whatsapp_business/whatsappBusinessSend.md)
 - [WhatsApp Business Status (`whatsappBusinessStatus`)](./whatsapp_business/whatsappBusinessStatus.md)
+
+### workflow
+
+- [Team work (`employeeJob`)](./workflow/employeeJob.md)
 
 ### workflow_triggers
 

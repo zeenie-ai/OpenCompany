@@ -73,6 +73,7 @@
   "githubAction": "github",
   "vercelAction": "vercel",
   "gcloudAction": "gcloud",
+  "awsAction": "aws_action",
   "typescriptExecutor": "typescript_code",
   "apifyActor": "apify_actor",
   "tikhubAction": "tikhub_action",

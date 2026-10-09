@@ -113,6 +113,9 @@ dependencies = [
     # release. Pulls typer for its own `tikhub` CLI (not imported by us).
     "tikhub>=2.1.2,<3",
 
+    # AWS SDK for the awsAction node (nodes/aws/), imported lazily there.
+    "boto3>=1.34.0",
+
     # Crawlee Web Scraping
     "crawlee[beautifulsoup]>=1.4.0",
     # Security floor for beautifulsoup4's selector engine (pulled in by

@@ -58,6 +58,7 @@ from services import ws_handler_registry
 # telegram and stripe are the pre-Wave-11.H references.
 _MIGRATED_PLUGINS = (
     "android",
+    "aws",
     "browser",
     "cloudflare",
     "code",
