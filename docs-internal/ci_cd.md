@@ -328,25 +328,30 @@ the latest checks instead.
 GitHub's dependency graph does not read `bun.lock`; it sees only the ranges
 in each `package.json`, so no Dependabot alert ever covers a resolved JS
 version. `bun run audit:deps` is the check: `predeploy.yml` runs it at the
-root and in `desktop/` (`bun audit` reads the lockfile and needs no install).
-The root audit has no exclusions. The desktop audit fails on any advisory
-except the explicit exception below. An advisory
-is ignored only when it has no patched release and cannot be reached from
-untrusted input here:
+root and in `desktop/` (`bun audit` reads the lockfile). Both audits have no
+exclusions and fail on any advisory.
 
-| Advisory | Package | Reached through | Why it is ignored |
-|---|---|---|---|
-| [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) | http-cache-semantics 4.2.0 | `desktop/`: Electron Builder → app-builder-lib → @electron/get 3.1.0 → got → cacheable-request | No verified upstream fix as of 2026-10-09; published 4.3.0 also reproduces the reported behavior. Build-time artifact downloading does not share authenticated user-response caches; this chain is absent from the shipped desktop runtime dependencies. |
+The desktop chain Electron Builder → app-builder-lib → @electron/get 3.1.0
+→ got → cacheable-request uses `http-cache-semantics`. To address
+[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp),
+`desktop/package.json` pins the compatible 4.3.0 release and applies the
+[security backport](../desktop/patches/http-cache-semantics@4.3.0.patch) through
+Bun's standard `patchedDependencies`. The published 4.3.0 source still reproduces
+the unsafe behavior, so the version floor alone is insufficient. The patch
+requires validation before responses barred from reuse can be served through
+`max-stale`, `stale-while-revalidate` or `stale-if-error`. Error fallback must also
+match the URL, host, method and Vary headers. It preserves ordinary stale reuse,
+private caches and the library's explicit public/immutable cookie opt-ins.
 
-The 4.3.0 registry tarball was checked against its published SHA-512 integrity
-and tested with a fixed-clock shared-cache fixture on 2026-10-09. Responses
-containing `Set-Cookie` or `proxy-revalidate` were rejected for ordinary requests
-but reused when the request supplied `max-stale=3600`; the cookie was returned
-in the first case. The `must-revalidate` control prevented reuse. Both installed
-4.2.0 and published 4.3.0 behaved this way. The
-[published 4.3.0 source](https://github.com/kornelski/http-cache-semantics/blob/b1d4bd682fbab0252985de45219f4e7497c0067c/index.js)
-retains this logic. Moving beyond an advisory's current version range alone
-does not establish remediation.
+`predeploy.yml` runs a frozen desktop install with lifecycle scripts disabled,
+then `bun run test:security`, before its desktop audit. The
+[security canaries](../desktop/tests/unit/http-cache-semantics.test.ts) use the
+actual builder dependency chain, a fixed clock and fake credentials. They cover
+unsafe reuse, serialized policies and compatible caching behavior; they failed
+against unpatched 4.3.0 and pass with the backport. Desktop CI also runs them in
+the full unit suite. All 128 official upstream tests at the published 4.3.0
+commit passed before and after patching. A clean audit is paired with behavioral
+checks because advisory version ranges cannot verify a local security patch.
 
 The shadcn CLI was removed from `client/package.json` and the root lockfile on
 2026-10-09, removing `braces` and its advisory entirely. The client used one
@@ -360,14 +365,14 @@ Electron itself uses `@electron/get` 5.1.0, which uses native fetch. Stable
 Electron Builder 26.17.0 (the `v26` tag; `latest` remains 26.15.3) still requires
 3.x. Do not force a 5.x transitive override: its removed GotDownloader API,
 changed download options and proxy handling are incompatible with that caller.
-The migration is in Electron Builder 27 prereleases; wait for a supported
-stable release and validate packaging before removing the exception. See the
+The migration is in Electron Builder 27 prereleases. Keep the compatible
+security backport until a tested stable upgrade fixes or removes this chain. See the
 [downloader migration notes](https://github.com/electron/get/releases/tag/v5.0.0).
 
-When the affected package gets a patch, drop `--ignore` and pin the fix in
-`overrides`; a compatible parent upgrade that removes the package also resolves
-the advisory. A passing audit with this exception does not mean the raw desktop
-audit is clean.
+When an upstream release fixes the behavior, update the version floor and remove
+the local patch only after the same security tests pass without it. A compatible
+parent upgrade that removes the package also resolves the advisory; validate
+desktop packaging before dropping its obsolete override and tests.
 
 Re-enable updates deliberately, never by just deleting the ignore rules:
 raise `open-pull-requests-limit`, add `groups` with `patterns: ["*"]` +

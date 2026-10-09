@@ -30,12 +30,16 @@ jobs:
       - name: Frontend tests (vitest)
         run: bun run --filter react-flow-client test
       # GitHub's dependency graph cannot read bun.lock, so no Dependabot alert
-      # covers the JS trees and these audits are the only check. The desktop
-      # exception is documented in docs-internal/ci_cd.md ("Dependency update
-      # policy"). desktop/ has its own lockfile,
-      # which bun audits without installing it.
+      # covers the JS trees. Both audits run without exclusions; desktop/
+      # has its own lockfile and a Bun security patch. Test that patch after
+      # a frozen install because the audit cannot inspect its behavior.
       - name: Audit JS dependencies
         run: bun run audit:deps
+      - name: Verify desktop cache security patch
+        working-directory: desktop
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun run test:security
       - name: Audit desktop JS dependencies
         working-directory: desktop
         run: bun run audit:deps
