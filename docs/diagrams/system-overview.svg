@@ -172,8 +172,8 @@
   <text class="sub" x="1540" y="577" text-anchor="middle">Apify actors, Crawlee, TikHub (social data)</text>
 
   <rect class="box p-green" x="1340" y="610" width="400" height="62" rx="8"/>
-  <text class="h2" x="1540" y="633" text-anchor="middle">Dev + cloud CLIs</text>
-  <text class="sub" x="1540" y="653" text-anchor="middle">GitHub gh, Vercel, Cloudflare cf, Google Cloud gcloud</text>
+  <text class="h2" x="1540" y="633" text-anchor="middle">Dev + cloud</text>
+  <text class="sub" x="1540" y="653" text-anchor="middle">GitHub, Vercel, Cloudflare, Google Cloud CLIs; AWS SDK</text>
 
   <rect class="box p-green" x="1340" y="688" width="400" height="62" rx="8"/>
   <text class="h2" x="1540" y="711" text-anchor="middle">Payments</text>

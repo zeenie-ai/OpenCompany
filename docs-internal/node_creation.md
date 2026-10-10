@@ -182,9 +182,9 @@ It is a single folder `server/nodes/<group>/<name>/` whose
 `credentials` / `task_queue` / `usable_as_tool` / `Params` / `Output`
 plus one `@Operation` method. That's the entire node (the folder also
 holds `icon.svg` / `meta.json`, which is why the folder is the canonical
-shape; a bare `.py` inside a domain folder still works and 23 shipped
+shape; a bare `.py` inside a domain folder still works and 20+ shipped
 plugins use it — stripe, telegram, discord, whatsapp, whatsapp_business,
-translate, speech, github, vercel, cloudflare, gcloud; live list:
+translate, speech, github, vercel, cloudflare, gcloud, aws, mcp; live list:
 `find server/nodes -mindepth 2 -maxdepth 2 -name "*.py" ! -name "_*" ! -name "__init__.py"`).
 On server restart it auto-registers, the
 NodeSpec is emitted at `/api/schemas/nodes/<type>/spec.json`, and it

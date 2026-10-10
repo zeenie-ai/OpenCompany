@@ -191,4 +191,5 @@ flowchart TD
 
 - **Skills using this as a tool**: [gcloud-skill](../../../server/skills/gcloud/gcloud-skill/SKILL.md)
 - **Siblings**: [`cloudflareAction`](./cloudflareAction.md), [`githubAction`](./githubAction.md), [`vercelAction`](./vercelAction.md)
+- **Also in the deployment group**: [`awsAction`](./awsAction.md) (boto3 SDK with an IAM access key, no CLI)
 - **Architecture docs**: [Google Cloud Service](../../gcloud_service.md)

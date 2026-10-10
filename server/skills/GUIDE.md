@@ -20,6 +20,7 @@ server/skills/
 ├── autonomous/               # Autonomous agent patterns
 │     code-mode-skill, agentic-loop-skill, progressive-discovery-skill,
 │     error-recovery-skill, multi-tool-orchestration-skill
+├── aws/                      # aws-skill (AWS SDK: EC2, S3, any API operation)
 ├── cloudflare/               # cloudflare-skill (cf CLI)
 ├── coding_agent/             # Code execution skills
 │     python-skill, javascript-skill, monty-skill, file-read-skill,

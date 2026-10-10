@@ -93,7 +93,7 @@
   <!-- Value band 1: integrations -->
   <rect class="panel p-green" x="43" y="304" width="1714" height="78" rx="10"/>
   <text class="h1" x="900" y="336" text-anchor="middle">Connect the apps you already use</text>
-  <text class="sub" x="900" y="364" text-anchor="middle">Gmail &#183; Calendar &#183; Drive &#183; Sheets &#183; Microsoft 365 &#183; Telegram &#183; WhatsApp &#183; Discord &#183; X &#183; Stripe &#183; GitHub &#183; Vercel &#183; Cloudflare &#183; Google Cloud &#183; browser &#183; web search &#183; Python &#183; JavaScript + more</text>
+  <text class="sub" x="900" y="364" text-anchor="middle">Gmail &#183; Calendar &#183; Drive &#183; Sheets &#183; Microsoft 365 &#183; Telegram &#183; WhatsApp &#183; Discord &#183; X &#183; Stripe &#183; GitHub &#183; Vercel &#183; Cloudflare &#183; Google Cloud &#183; AWS &#183; browser &#183; web search &#183; Python &#183; JavaScript + more</text>
 
   <!-- Value band 2: local-first -->
   <rect class="panel p-cyan" x="43" y="407" width="1714" height="92" rx="10"/>

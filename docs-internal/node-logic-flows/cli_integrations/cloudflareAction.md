@@ -243,4 +243,5 @@ flowchart TD
 
 - **Skills using this as a tool**: [cloudflare-skill](../../../server/skills/cloudflare/cloudflare-skill/SKILL.md)
 - **Siblings**: [`gcloudAction`](./gcloudAction.md), [`vercelAction`](./vercelAction.md), [`githubAction`](./githubAction.md) - the same CLI-managed-auth pattern
+- **Also in the deployment group**: [`awsAction`](./awsAction.md) (boto3 SDK with an IAM access key, no CLI)
 - **Architecture docs**: [Cloudflare Service](../../cloudflare_service.md), [Plugin System](../../plugin_system.md)

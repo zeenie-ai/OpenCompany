@@ -97,7 +97,7 @@ flowchart TD
   in-process event waiter, which serves a canvas Run and the deploy path
   without Temporal: the deployment manager arms the in-process collector
   instead of a Temporal listener when no Temporal client is connected
-  (deployed VMs start with `TEMPORAL_ENABLED=false`) or the event framework
+  (`TEMPORAL_ENABLED=false`, or Temporal not up yet) or the event framework
   is off. `StripeWebhookSource.handle` then calls
   `emit_stripe_event`, which reaches deployed listeners on Temporal. The
   envelope carries no `workflow_id`, so every deployment with the trigger
