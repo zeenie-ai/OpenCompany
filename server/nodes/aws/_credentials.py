@@ -62,7 +62,7 @@ class AwsCredential(ApiKeyCredential):
         if not access_key_id:
             return ProbeResult(
                 valid=False,
-                message="Fill the Access Key ID field below, Save Credentials, then validate again.",
+                message="Fill in the Access Key ID below and click Save beside it, then validate again.",
             )
         region = (await auth.get_api_key(REGION_FIELD) or "").strip() or DEFAULT_REGION
         keys = key_pair({"api_key": api_key, ACCESS_KEY_ID_FIELD: access_key_id})
