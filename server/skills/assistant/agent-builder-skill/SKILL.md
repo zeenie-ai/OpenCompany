@@ -120,8 +120,9 @@ No other fields. Returns:
 
 ### `add_tool`
 
-Fields: `node_type`, optional `target_member_id` for a hired employee.
-Wires a private tool instance to that member, defaulting to you. Another
+Fields: `node_type`, `app_id` when its `available_tools` entry has one (each
+custom connector is its own entry), optional `target_member_id` for a hired
+employee. Wires a private tool instance to that member, defaulting to you. Another
 member's same-type node is never reused. An existing private binding is
 reused, so retries do not add duplicates. If an older graph shares your
 binding, Builder separates your connection and preserves its saved settings

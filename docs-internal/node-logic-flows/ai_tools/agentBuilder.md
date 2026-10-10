@@ -62,6 +62,7 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
 |------|------|---------|----------|---------------------|-------------|
 | `operation` | enum | `inspect_canvas` | no | - | `inspect_canvas`, `inspect_node`, `search_docs`, `read_doc`, `plan_update`, `apply_update`, `add_tool`, `add_skill`, `add_subagent`, `create_workflow` |
 | `node_type` | string | `""` | no | `operation == add_tool` | Tool node type, from `available_tools` |
+| `app_id` | string | `""` | no | `operation == add_tool` | The tool's app, when its `available_tools` entry names one: required for a type several apps share (each custom connector is its own app) |
 | `target_member_id` | string | `""` | no | - | Employee member receiving the tool; defaults to the caller. Must belong to this employee, including legacy employees. |
 | `skill_name` | string | `""` | no | `operation == add_skill` | Skill name (SKILL.md frontmatter `name`, or a library skill's name), from `available_skills` |
 | `agent_type` | string | `""` | no | `operation == add_subagent` | Agent node type to add as a teammate (caller must be a team lead) |
@@ -147,9 +148,13 @@ flowchart TD
   caller.
 - **Hired employee**: tools go to one selected member, with no fanout to
   other workers or Talk. `check_tool` decides tools
-  (registry app tools and the tools every hire gets; nothing that sends or
+  (the apps' tools, the registry's and the owner's own through
+  `Connections.apps`, and the tools every hire gets; nothing that sends or
   spends while asking first, the browser read-only then; hire allowlist;
-  connected apps); the Clock gets the owner's `profile_timezone`.
+  connected apps); the Clock gets the owner's `profile_timezone`. A type
+  whose app a parameter names (`app_field`: the Custom Connector) is listed
+  once per app with its `app_id`, needs it in `add_tool`, and counts as the
+  target's tool only on a node naming the same app.
   `check_skill` refuses `skill` and `*-personality`; skills come from the
   library (all of it, on or off for new hires) and the Discover folder
   (`server/skills/employee/`), text copied in. `add_subagent` is refused.

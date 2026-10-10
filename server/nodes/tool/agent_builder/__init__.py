@@ -445,11 +445,40 @@ async def _catalogue_skills(database: Any, *, employee: bool) -> List[Dict[str, 
 
 
 async def _connected_apps() -> List[str]:
-    """The app ids whose credentials are connected (config/employee_apps.json)."""
+    """The app ids that are connected (services/employees/connections.py)."""
     from services.employees.connections import Connections
     from services.plugin.deps import get_auth_service
 
     return await Connections(get_auth_service()).connected_app_ids()
+
+
+async def _owner_apps() -> Mapping[str, Any]:
+    """Every app an employee can use: config/employee_apps.json's, then the
+    owner's own, such as custom connectors (``Connections.apps``)."""
+    from services.employees.connections import Connections
+    from services.plugin.deps import get_auth_service
+
+    return await Connections(get_auth_service()).apps()
+
+
+def _app_field(node_type: str) -> Optional[str]:
+    """The parameter naming a node's app, for a type whose app it does not
+    say by itself (``BaseNode.app_field``: a custom connector)."""
+    return getattr(get_node_class(node_type), "app_field", None)
+
+
+def _existing_tool(
+    canvas: _Canvas, target: str, node_type: str, app: Optional[Tuple[str, str]], parameters: Mapping[str, Mapping[str, Any]]
+) -> Optional[str]:
+    """The ``node_type`` node on ``target``'s Tools. ``app`` (a parameter
+    and the app's id) narrows it to the node naming that app in its saved
+    ``parameters``, for a type several apps share."""
+    for source in canvas.sources(target, TOOLS_INPUT):
+        if (canvas.node(source) or {}).get("type") != node_type:
+            continue
+        if app is None or (parameters.get(source) or {}).get(app[0]) == app[1]:
+            return source
+    return None
 
 
 async def _owner_timezone(database: Any) -> str:
@@ -461,24 +490,30 @@ async def _owner_timezone(database: Any) -> str:
 
 async def _employee_tools(employee: _Employee) -> List[Dict[str, Any]]:
     """What policy lets this employee be given: the tools every hire gets,
-    then the registry's app tools, each in the form it would be added."""
-    from services.employees.apps import get_apps
+    then each app's tools (the registry's, then the owner's own), each in
+    the form it would be added. A type several apps share (a custom
+    connector) is listed once per app, with the ``app_id`` add_tool takes."""
     from services.employees.policy import BASE_TOOLS, check_tool
 
     connected = set(await _connected_apps())
-    candidates = [(base.type, None) for base in BASE_TOOLS] + [(tool.type, app) for app in get_apps().values() for tool in app.tools]
+    apps = await _owner_apps()
+    candidates = [(base.type, None) for base in BASE_TOOLS] + [(tool.type, app) for app in apps.values() for tool in app.tools]
     catalogue: List[Dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: set = set()
     for node_type, app in candidates:
-        if node_type in seen:
+        shared = app is not None and _app_field(node_type) is not None
+        key = (node_type, app.id) if shared else node_type
+        if key in seen:
             continue
         decision = check_tool(node_type, employee=employee.row, connected=None, app=app)
         if not decision.allowed:
             continue
-        seen.add(node_type)
+        seen.add(key)
         entry: Dict[str, Any] = {"type": node_type, "display_name": decision.label, "description": _description(get_node_class(node_type))}
         if app is not None:
             entry["app"] = app.name
+            if shared:
+                entry["app_id"] = app.id
             entry["connected"] = app.id in connected
         if decision.read_only:
             entry["read_only"] = True
@@ -607,6 +642,12 @@ class AgentBuilderParams(BaseModel):
     node_type: str = Field(
         default="",
         description="For add_tool: the tool's node type, from inspect_canvas available_tools (e.g. 'httpRequest').",
+        json_schema_extra={"displayOptions": {"show": {"operation": ["add_tool"]}}},
+    )
+    app_id: str = Field(
+        default="",
+        max_length=256,
+        description="For add_tool: the tool's app_id, when its available_tools entry has one (each custom connector is its own app).",
         json_schema_extra={"displayOptions": {"show": {"operation": ["add_tool"]}}},
     )
 
@@ -919,7 +960,13 @@ class AgentBuilderNode(ToolNode):
                 # Not a node type at all (a display name, say): a hint for
                 # the agent, not a refusal to pass on.
                 return _refused("add_tool", f"add_tool: '{node_type}' is not a node type. Use a type from inspect_canvas available_tools.")
-            decision = check_tool(node_type, employee=employee.row, connected=await _connected_apps())
+            app = None
+            if _app_field(node_type) is not None:
+                # One type, many apps: the agent says which (its app_id).
+                app = (await _owner_apps()).get(params.app_id) if params.app_id else None
+                if app is None:
+                    return _refused("add_tool", f"add_tool: '{node_type}' needs the app_id of its entry in inspect_canvas available_tools.")
+            decision = check_tool(node_type, employee=employee.row, connected=await _connected_apps(), app=app)
             if not decision.allowed:
                 return _refused("add_tool", decision.reason)
             label, tool_params = decision.label, dict(decision.params)
@@ -932,7 +979,17 @@ class AgentBuilderNode(ToolNode):
         problem = _unsaved(canvas, targets)
         if problem:
             return _refused("add_tool", problem)
-        expanded = [target for target in targets if canvas.source_of_type(target, TOOLS_INPUT, node_type) is None]
+        # A type several apps share is the agent's tool only on the node
+        # naming the same app.
+        field_name = _app_field(node_type)
+        named = (field_name, str(tool_params[field_name])) if field_name and tool_params.get(field_name) else None
+        current: Dict[str, Dict[str, Any]] = {}
+        if named is not None:
+            for target in targets:
+                for source in canvas.sources(target, TOOLS_INPUT):
+                    if (canvas.node(source) or {}).get("type") == node_type:
+                        current[source] = await database.get_node_parameters(source) or {}
+        expanded = [target for target in targets if _existing_tool(canvas, target, node_type, named, current) is None]
         grant_ids: List[str] = []
         if employee is not None and expanded:
             permission = await _permission(database, ctx, params, node_type, expanded, {"parameters": tool_params}, grant_ids)
@@ -970,7 +1027,7 @@ class AgentBuilderNode(ToolNode):
             if any(live.node(target) is None for target in targets):
                 raise ValueError("The target agent was removed")
             target = targets[0]
-            existing = live.source_of_type(target, TOOLS_INPUT, node_type)
+            existing = _existing_tool(live, target, node_type, named, saved_tool_parameters)
             owners = {str(edge.get("target")) for edge in live.edges if edge.get("source") == existing and
                       (edge.get("targetHandle") or edge.get("target_handle")) == TOOLS_INPUT} if existing else set()
             if existing and owners == {target}:
@@ -998,9 +1055,11 @@ class AgentBuilderNode(ToolNode):
         changed = bool(result.operations)
         removed = {op.get("edge_id") for op in result.operations if op.get("type") == "delete_edge"}
         run_types = {node.get("id"): node.get("type") for node in ctx.nodes or []}
+        # Another node of a type several apps share names another app: its
+        # tools have other names, so it is not replaced.
         replaces_bound_tool = caller in targets and any(
             edge.get("target") == caller and (edge.get("targetHandle") or edge.get("target_handle")) == TOOLS_INPUT and
-            (edge.get("id") in removed or (edge.get("source") != node_id and run_types.get(edge.get("source")) == node_type))
+            (edge.get("id") in removed or (named is None and edge.get("source") != node_id and run_types.get(edge.get("source")) == node_type))
             for edge in ctx.edges or []
         )
         if replaces_bound_tool:

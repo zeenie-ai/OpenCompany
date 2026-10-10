@@ -850,7 +850,11 @@ asks, within the rule Hire applies
 ([policy.py](../server/services/employees/policy.py)):
 
 - **Tools**: the ones every hire gets (web search, checklist, clock, Memory,
-  Canvas) and the app registry's. A tool that sends or spends comes whole:
+  Canvas) and the apps' (`Connections.apps`: the registry's and the owner's
+  own). A type several apps share, the Custom Connector node, is offered
+  once per app with its `app_id`, which `add_tool` takes; the agent already
+  has it only on a node naming the same app (its `app_field` parameter).
+  A tool that sends or spends comes whole:
   while "Ask me before sending anything" is on, each call waits for the owner
   (or is refused, or reads only), per call. Only one that cannot wait (no
   approval spec) stays off, or comes in its `ask_first_params` form. Every
@@ -1101,9 +1105,6 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 - Billing has no plans, payment method or invoices: no billing account sits
   behind OpenCompany. A deleted employee's runs leave the month's count,
   because deleting a workflow deletes its run records.
-- The Agent Builder does not add a custom (MCP) connector from Talk yet: an
-  employee gets one at hire, or in Dev mode with the Custom Connector node
-  (`mcpConnector`).
 - Skill library changes reach only new hires: an employee keeps the skills it
   was hired with, and one hired before the library existed has none, until
   the owner asks them in Talk to add one. The library is shared across users

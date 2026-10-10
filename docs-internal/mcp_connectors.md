@@ -166,7 +166,11 @@ the connector's, and its one tool the node set to that connector.
   allowlist, `enabled_nodes`);
 - a saved connector counts as connected;
 - under Ask first the node stays, since each call waits for the owner per its
-  tool's setting.
+  tool's setting;
+- from Talk, the Agent Builder offers each connector as its own entry with
+  its `app_id`, and `add_tool` adds the one named. An agent already has a
+  connector only on a node naming it, so a second connector is a second
+  node.
 
 The employee's card lists the connector its node names. The node declares
 `app_field = "mcp_connector"`, so the summaries read that parameter
@@ -193,8 +197,6 @@ connector is no longer listed.
 
 ## Known gaps
 
-- The Agent Builder does not add a connector from Talk yet: an employee gets
-  one at hire, or in Dev mode with the Custom Connector node.
 - No OAuth sign-in.
 - A host's addresses are checked when connecting, not pinned for the
   connection.

@@ -293,6 +293,50 @@ class TestTools:
         assert result.summary == "You already have Web search. Use it directly."
 
 
+class TestConnectors:
+    """Each custom connector is its own app (one node type, many apps): it is
+    offered and added by its app_id."""
+
+    @pytest.fixture
+    def connectors(self, builder, monkeypatch):
+        from nodes.mcp import mcp_connector
+        from nodes.mcp._store import Connector
+
+        saved_connectors = [Connector(ref="mcp:orders", slug="orders", meta={"name": "Orders"}), Connector(ref="mcp:crm", slug="crm", meta={"name": "CRM"})]
+
+        async def list_connectors(**_scope):
+            return saved_connectors
+
+        monkeypatch.setattr(mcp_connector, "list_connectors", list_connectors)
+        monkeypatch.setattr("services.employees.connections.source_apps", mcp_connector.connector_apps)
+        builder.connected = ["mcp:orders", "mcp:crm"]
+
+    async def test_each_is_offered_by_its_app_id(self, builder, database, connectors):
+        await save_graph(database, employee_graph())
+        await hire(database, ask_first=True)
+
+        result = await call("inspect_canvas", talk())
+
+        offered = [(entry["display_name"], entry["app_id"], entry["connected"]) for entry in result.available_tools if entry["type"] == "mcpConnector"]
+        assert offered == [("Orders", "mcp:orders", True), ("CRM", "mcp:crm", True)]
+
+    async def test_add_tool_adds_the_one_named(self, builder, database, connectors):
+        await save_graph(database, employee_graph())
+        await hire(database, ask_first=True)
+
+        unnamed = await call("add_tool", talk(call="c1"), node_type="mcpConnector")
+        assert unnamed.summary == "add_tool: 'mcpConnector' needs the app_id of its entry in inspect_canvas available_tools."
+        orders = await call("add_tool", talk(call="c2"), node_type="mcpConnector", app_id="mcp:orders")
+        assert orders.summary.startswith("Added Orders."), orders.summary
+        # A second connector is a second tool, not the first one again.
+        crm = await call("add_tool", talk(call="c3"), node_type="mcpConnector", app_id="mcp:crm")
+        assert crm.summary.startswith("Added CRM."), crm.summary
+        await call("add_tool", talk(call="c4"), node_type="mcpConnector", app_id="mcp:orders")
+
+        tools = [edge["source"] for edge in edges_into(await saved(database), TALK, "input-tools") if edge["source"].startswith("7:mcpConnector")]
+        assert [await database.get_node_parameters(tool) for tool in tools] == [{"mcp_connector": "mcp:orders"}, {"mcp_connector": "mcp:crm"}]
+
+
 # ============================================================================
 # Skills
 # ============================================================================
