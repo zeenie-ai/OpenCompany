@@ -9,8 +9,7 @@ This is the manual path — it does NOT use `company deploy` / Terraform
 `demo.opencompany.sh` (June 2026, before the scoped-package cutover) and encodes every pitfall hit on the way.
 Re-validated July 2026 against `0.0.95` with an **IP-only variant** (no Cloudflare /
 domain — skip step 4): pitfalls 2 and 3 are fixed in `>= 0.0.95` (annotated below),
-and pitfalls 11-13 were added from that run. Pitfall 14 is an open issue in 0.2.0
-and 0.2.1.
+and pitfalls 11-13 were added from that run. Pitfall 14 affects 0.2.0 and 0.2.1.
 
 The unscoped `opencompany` package belongs to a different publisher. Do not install
 or remove it while following this runbook.
@@ -121,9 +120,9 @@ print('ENC='+secrets.token_hex(24))"
     `sudo` on every command touching it, or chain with `;` and verify state after.
 14. **0.2.0 and 0.2.1: `company start` stops with `Project not built. Run "company build" first.`**
     ([errors.md #25 and #26](./errors.md)). The service then fails and restarts in a
-    loop, and the package also lacks the JS executor sidecar bundle. Until the fix
-    ships, run `sudo company build` once after step 2 (it fixes both), then
-    `sudo systemctl restart opencompany`.
+    loop, and the package also lacks the JS executor sidecar bundle. #25 is fixed
+    after 0.2.1; #26 is still open. On those releases, run `sudo company build` once
+    after step 2 (it fixes both), then `sudo systemctl restart opencompany`.
 
 ## Step 1 — Reserve a static IP
 

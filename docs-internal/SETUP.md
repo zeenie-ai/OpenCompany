@@ -38,12 +38,12 @@ Provisioning also creates `.env` as a plain copy of `.env.template`, including
 its publicly known placeholder secrets. Replace them before you store any
 credentials; see [Environment Configuration](#environment-configuration).
 
-**Known issue in registry installs (open since 0.2.0; the status line of
-[errors.md #25 and #26](./errors.md) says whether your version is fixed)**: a
-registry install provisions but then `company start` (and `company serve`)
-stops with "Project not built", and the package ships without the JS executor
-sidecar bundle; `company build` in the installed package works around both.
-The desktop app is not affected and is the recommended install.
+**Known issues in registry installs ([errors.md #25 and #26](./errors.md); their
+status lines say which versions are affected)**: on 0.2.0 and 0.2.1, `company
+start` (and `company serve`) stops with "Project not built" (#25, fixed after
+0.2.1), and the package ships without the JS executor sidecar bundle (#26,
+still open); `company build` in the installed package works around both. The
+desktop app is not affected and is the recommended install.
 
 Open `http://localhost:$PYTHON_BACKEND_PORT` — `company start` is single-port (API +
 WebSocket + built SPA on the backend port).
