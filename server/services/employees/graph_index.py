@@ -40,14 +40,24 @@ class GraphIndex:
     canvas_ids: Tuple[str, ...] = ()
     browser_ids: Tuple[str, ...] = ()
     gate_ids: Tuple[str, ...] = ()
-    #: Apps the graph's nodes belong to, in first-seen order.
+    #: Apps the graph's nodes belong to by their type, in first-seen order.
     app_ids: Tuple[str, ...] = ()
+    #: Nodes whose app a parameter names (their type's ``app_field``): node
+    #: id -> that parameter. The graph does not hold parameters, so their
+    #: apps come from :meth:`apps_named`.
+    app_params: Mapping[str, str] = field(default_factory=dict)
     #: Whether the owner can talk to it, and through which agent.
     talk: TalkState = field(default_factory=lambda: TalkState("unsupported"))
 
     @property
     def trigger_types(self) -> Tuple[str, ...]:
         return tuple(self.node_types[node_id] for node_id in self.trigger_ids)
+
+    def apps_named(self, parameters: Mapping[str, Mapping[str, Any]]) -> Tuple[str, ...]:
+        """``app_ids``, then the apps the ``app_params`` nodes name in
+        ``parameters`` (node id -> saved parameters)."""
+        named = (str((parameters.get(node_id) or {}).get(param) or "") for node_id, param in self.app_params.items())
+        return tuple(dict.fromkeys([*self.app_ids, *(app_id for app_id in named if app_id)]))
 
     @property
     def has_agent(self) -> bool:
@@ -74,6 +84,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
     browsers: List[str] = []
     gates: List[str] = []
     app_ids: List[str] = []
+    app_params: Dict[str, str] = {}
     for node in nodes:
         if not isinstance(node, Mapping):
             continue
@@ -103,6 +114,9 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
             canvases.append(node_id)
         if node_type == APPROVAL_GATE_TYPE:
             gates.append(node_id)
+        if getattr(cls, "app_field", None):
+            app_params[node_id] = cls.app_field
+            continue
         app = app_for_node_type(node_type)
         if app is not None and app.id not in app_ids:
             app_ids.append(app.id)
@@ -116,6 +130,7 @@ def index_graph(graph: Optional[Mapping[str, Any]]) -> GraphIndex:
         browser_ids=tuple(browsers),
         gate_ids=tuple(gates),
         app_ids=tuple(app_ids),
+        app_params=app_params,
         talk=talk_state(graph),
     )
 

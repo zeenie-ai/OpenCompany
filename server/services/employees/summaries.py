@@ -40,7 +40,7 @@ from services.deployment.control import serialize_control
 from services.deployment.restart import LIVE_STATES, pending_changes
 from services.employees import runs, store
 from services.employees.context import SETTINGS_USER_ID
-from services.employees.apps import get_app
+from services.employees.apps import AppSpec, get_app
 from services.employees.connections import Connections
 from services.employees.graph_index import (
     CHAT_TRIGGER_TYPE,
@@ -247,11 +247,33 @@ def _derived_role(graph: GraphIndex) -> str:
     return "Workflow"
 
 
-def _app_ids(graph: GraphIndex) -> List[str]:
+async def _apps(graph: GraphIndex, parameters: Mapping[str, Mapping[str, Any]], connections: Connections) -> List[AppSpec]:
     """The apps the graph's nodes use, hired or not: an app the hire named
     but the graph left out (a tool that sends while they ask first) is not
-    one to connect, and one added later is."""
-    return [app_id for app_id in graph.app_ids if get_app(app_id) is not None]
+    one to connect, and one added later is. ``parameters`` are the saved
+    parameters of the nodes whose app a parameter names (a custom
+    connector's); one that is no longer saved is not listed."""
+    apps = [await connections.app(app_id) for app_id in graph.apps_named(parameters)]
+    return [app for app in apps if app is not None]
+
+
+async def _node_parameters(database: Any, graphs: Iterable[GraphIndex]) -> Dict[str, Dict[str, Any]]:
+    """The saved parameters of the nodes whose app a parameter names, for
+    every graph in one query."""
+    from sqlmodel import select
+
+    from models.database import NodeParameter
+
+    ids = [node_id for graph in graphs for node_id in graph.app_params]
+    if not ids:
+        return {}
+    try:
+        async with database.get_session() as session:
+            rows = (await session.execute(select(NodeParameter).where(NodeParameter.node_id.in_(ids)))).scalars().all()
+    except Exception:
+        logger.warning("Could not read which apps employees' nodes name", exc_info=True)
+        return {}
+    return {row.node_id: dict(row.parameters or {}) for row in rows}
 
 
 def _talk(graph: GraphIndex, control_row: Any) -> TalkState:
@@ -267,6 +289,8 @@ async def _summary(
     employee: Any,
     control_row: Any,
     *,
+    graph: GraphIndex,
+    parameters: Mapping[str, Mapping[str, Any]],
     connections: Connections,
     needs_ai: bool,
     pending: int,
@@ -275,10 +299,9 @@ async def _summary(
 ) -> Dict[str, Any]:
     from services.workspace_capabilities import workspace_nodes
 
-    graph = index_graph(getattr(workflow, "data", None))
     control = serialize_control(control_row)
     control.setdefault("workflow_id", workflow.id)
-    apps = [await connections.app_ref(get_app(app_id)) for app_id in _app_ids(graph)]
+    apps = [await connections.app_ref(app) for app in await _apps(graph, parameters, connections)]
     missing = [ref for ref in apps if not ref["connected"]]
     status = _status(control)
     roles = getattr(employee, "node_roles", None) or {}
@@ -435,6 +458,8 @@ async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id:
     pending = await _pending_counts(database, ids)
     done = await _done_today(database, ids)
     activations = await _activation_states(database, ids)
+    graphs = {workflow.id: index_graph(getattr(workflow, "data", None)) for workflow in workflows}
+    parameters = await _node_parameters(database, graphs.values())
     connections_by_owner = {}
     summaries = []
     for workflow in workflows:
@@ -447,6 +472,8 @@ async def list_employee_summaries(database: Any, *, auth_service: Any, owner_id:
             workflow,
             employees.get(workflow.id),
             controls.get(workflow.id),
+            graph=graphs[workflow.id],
+            parameters=parameters,
             connections=connections,
             needs_ai=needs_ai,
             pending=pending.get(workflow.id, 0),
@@ -466,10 +493,13 @@ async def _load_one(database: Any, workflow_id: str, *, auth_service: Any) -> Op
     done = await _done_today(database, [workflow_id])
     activations = await _activation_states(database, [workflow_id])
     connections = Connections(auth_service, principal=employee_owner(workflow, employee))
+    graph = index_graph(getattr(workflow, "data", None))
     summary = await _summary(
         workflow,
         employee,
         control,
+        graph=graph,
+        parameters=await _node_parameters(database, [graph]),
         connections=connections,
         needs_ai=not await connections.has_ai(),
         pending=pending.get(workflow_id, 0),

@@ -320,6 +320,12 @@ class BaseNode:
     # (services/approvals/tool_calls.py).
     approval: ClassVar[Optional[Any]] = None
 
+    # ``app_field``: for a node whose app a parameter names rather than its
+    # type (the custom connector node: ``mcp_connector``), that parameter.
+    # It holds the id of an app a plugin's source gives
+    # (services/employees/apps.py, ``register_app_source``).
+    app_field: ClassVar[Optional[str]] = None
+
     # Set by __init_subclass__: {op_name: OperationSpec}
     _operations: ClassVar[Dict[str, OperationSpec]] = {}
     # Flag so concrete subclasses auto-register; abstract kinds don't.

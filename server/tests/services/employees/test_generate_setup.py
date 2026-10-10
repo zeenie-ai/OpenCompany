@@ -18,6 +18,7 @@ import pytest
 import services.employees  # noqa: F401 - registers the handlers
 from services.authz.ws_surface import INTERNAL_SOCKET_HANDLERS
 from services.employees import setup
+from services.employees.apps import get_apps
 from services.employees.llm import LLMChoice
 from services.employees.setup_prompt import RETRY_NUDGE
 from services.llm.protocol import LLMResponse, Usage
@@ -55,6 +56,12 @@ class FakeConnections:
 
     async def connected_app_ids(self):
         return ["whatsapp"]
+
+    async def apps(self):
+        return get_apps()
+
+    async def app_connected(self, app):
+        return await self.is_connected(app.provider_id)
 
     async def app_ref(self, app):
         return {"app_id": app.id, "provider_id": app.provider_id, "name": app.name, "icon_ref": None, "connected": app.provider_id == "whatsapp", "supported": True}

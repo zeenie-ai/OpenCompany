@@ -33,7 +33,7 @@ import asyncio
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from fastapi import WebSocket
 from pydantic import ValidationError
@@ -82,9 +82,12 @@ def payload_hash(request: HireEmployeeRequest) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def _resolve_apps(request: HireEmployeeRequest, connected: List[str]) -> tuple:
+def _resolve_apps(request: HireEmployeeRequest, connected: List[str], apps: Optional[Iterable[AppSpec]] = None) -> tuple:
     """(known apps in the order named, unsupported names). Names come from
-    the hire's apps, the routine's steps, the trigger and the reply app."""
+    the hire's apps, the routine's steps, the trigger and the reply app;
+    ``apps`` are the owner's (``Connections.apps``), the registry's when
+    not given."""
+    apps = list(apps) if apps is not None else None
     names: List[str] = list(request.apps)
     names += [step.app for step in request.steps if step.app]
     if request.trigger is not None and request.trigger.app:
@@ -94,7 +97,7 @@ def _resolve_apps(request: HireEmployeeRequest, connected: List[str]) -> tuple:
     known: List[AppSpec] = []
     unsupported: List[str] = []
     for name in names:
-        app = resolve_app(name, connected)
+        app = resolve_app(name, connected, apps)
         if app is None:
             if name.lower() not in (seen.lower() for seen in unsupported):
                 unsupported.append(name)
@@ -334,7 +337,7 @@ async def handle_hire_employee(data: Dict[str, Any], websocket: WebSocket) -> Di
 
     connections = Connections(auth_service, principal=owner)
     connected = await connections.connected_app_ids()
-    apps, unsupported = _resolve_apps(request, connected)
+    apps, unsupported = _resolve_apps(request, connected, (await connections.apps()).values())
     row, claim_token = await store.claim_hire(
         database,
         owner_id=owner,

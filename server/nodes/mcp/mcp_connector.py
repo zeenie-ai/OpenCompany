@@ -7,20 +7,26 @@ What a call runs with (``mcp_tool``, ``mcp_ask`` and the labels its card
 shows) comes from its binding and is locked: the model never sets it. While
 the employee asks first, a call of a tool set to Ask first waits for the
 owner (``approval``).
+
+Each saved connector is also an app a hire can use (``connector_apps``,
+registered as an app source): its one tool is this node set to it, and its
+id is the node's ``mcp_connector`` value (``app_field``).
 """
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from typing import Any, Dict, List, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from services.employees.apps import AppSpec, ToolTemplate
 from services.plugin import NodeContext, NodeUserError, Operation, TaskQueue, ToolNode
 from services.plugin.approval import ApprovalSpec
 from services.plugin.tool import ToolBinding, inline_schema_refs
 
 from ._client import ConnectorError, call_name, call_tool, check_arguments
-from ._credentials import McpConnectorCredential
+from ._credentials import TEMPLATE, McpConnectorCredential
 from ._store import get_connector, list_connectors, read_access, slug_of
 
 
@@ -71,6 +77,7 @@ class McpConnectorNode(ToolNode):
     ToolInput = McpToolInput
     Output = McpToolOutput
     server_controlled_fields = frozenset({"mcp_connector", "mcp_tool", "mcp_ask", "mcp_label", "mcp_title"})
+    app_field = "mcp_connector"
 
     approval = ApprovalSpec(
         channel="Custom connector",
@@ -136,4 +143,37 @@ class McpConnectorNode(ToolNode):
         return McpToolOutput(text=result.text, structured=result.structured)
 
 
-__all__ = ["McpConnectorNode", "McpConnectorParams", "McpToolInput", "McpToolOutput", "load_connectors"]
+async def connector_apps(principal: Optional[str] = None) -> List[AppSpec]:
+    """Each connector the owner saved, as an app a hire can use. Its tools
+    can do anything the server does, so they count as sending; a call
+    waits for the owner per the tool's Ask first (``approval``)."""
+    from services.credential_registry import get_credential_registry
+
+    icon_ref = (get_credential_registry().get_template(TEMPLATE) or {}).get("icon_ref")
+    scope = {"principal": principal} if principal is not None else {}
+    return [
+        AppSpec(
+            id=connector.ref,
+            name=connector.name,
+            provider_id=connector.ref,
+            aliases=(),
+            trigger=None,
+            reply=None,
+            notify_owner=None,
+            tools=(
+                ToolTemplate(
+                    type=McpConnectorNode.type,
+                    params=MappingProxyType({McpConnectorNode.app_field: connector.ref}),
+                    label=connector.name,
+                    side_effects="send",
+                ),
+            ),
+            side_effects="send",
+            phrases=MappingProxyType({}),
+            icon_ref=icon_ref,
+        )
+        for connector in await list_connectors(**scope)
+    ]
+
+
+__all__ = ["McpConnectorNode", "McpConnectorParams", "McpToolInput", "McpToolOutput", "connector_apps", "load_connectors"]

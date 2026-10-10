@@ -136,9 +136,10 @@ async def _resolve_apps(connections: Connections, reply: str) -> Dict[str, Dict[
     if not names:
         return {}
     connected = await connections.connected_app_ids()
+    apps = (await connections.apps()).values()
     refs: Dict[str, Dict[str, Any]] = {}
     for name in names:
-        app = resolve_app(name, connected)
+        app = resolve_app(name, connected, apps)
         if app is not None:
             refs[name.lower()] = {**await connections.app_ref(app), "can_trigger": app.trigger is not None}
         else:

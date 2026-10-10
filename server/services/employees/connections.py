@@ -2,16 +2,18 @@
 
 Wraps ``services.credential_registry.provider_connection_state`` (the same
 rules the credential catalogue serves) with a per-request cache, so a team
-list that mentions Gmail five times asks the credential store once.
+list that mentions Gmail five times asks the credential store once. The
+owner's apps (the registry's and the ones they saved, such as custom
+connectors; apps.py) are read once per request too.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from core.logging import get_logger
 from services.credential_registry import get_credential_registry, provider_connection_state
-from services.employees.apps import AppSpec, get_apps
+from services.employees.apps import AppSpec, get_apps, source_apps
 
 logger = get_logger(__name__)
 
@@ -24,6 +26,28 @@ class Connections:
         self.principal = principal
         self._registry = get_credential_registry()
         self._states: Dict[str, Dict[str, Any]] = {}
+        self._apps: Optional[Dict[str, AppSpec]] = None
+        self._saved: frozenset = frozenset()
+
+    async def apps(self) -> Mapping[str, AppSpec]:
+        """Every app the owner's employees can use: the registry's, in its
+        order, then the ones the owner saved (apps.source_apps)."""
+        if self._apps is None:
+            apps = dict(get_apps())
+            saved = [app for app in await source_apps(self.principal) if app.id not in apps]
+            apps.update((app.id, app) for app in saved)
+            self._saved = frozenset(app.id for app in saved)
+            self._apps = apps
+        return self._apps
+
+    async def app(self, app_id: str) -> Optional[AppSpec]:
+        return (await self.apps()).get(app_id)
+
+    async def app_connected(self, app: AppSpec) -> bool:
+        """Whether ``app`` can be used now. An app the owner saved exists
+        only while it is saved, so it is connected."""
+        await self.apps()
+        return app.id in self._saved or await self.is_connected(app.provider_id)
 
     def provider(self, provider_id: str) -> Optional[Dict[str, Any]]:
         return self._registry.get_provider(provider_id)
@@ -47,8 +71,8 @@ class Connections:
         return bool((await self.state(provider_id)).get("connected"))
 
     async def connected_app_ids(self) -> List[str]:
-        """Every app whose provider is connected, in registry order."""
-        return [app.id for app in get_apps().values() if await self.is_connected(app.provider_id)]
+        """Every app that is connected, in ``apps`` order."""
+        return [app.id for app in (await self.apps()).values() if await self.app_connected(app)]
 
     async def app_ref(self, app: AppSpec) -> Dict[str, Any]:
         """The ``AppRef`` a summary shows for one app."""
@@ -57,8 +81,8 @@ class Connections:
             "app_id": app.id,
             "provider_id": app.provider_id,
             "name": app.name,
-            "icon_ref": provider.get("icon_ref"),
-            "connected": await self.is_connected(app.provider_id),
+            "icon_ref": provider.get("icon_ref") or app.icon_ref,
+            "connected": await self.app_connected(app),
             "supported": True,
         }
 

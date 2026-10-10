@@ -14,7 +14,6 @@ from typing import Any, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.logging import get_logger
-from services.employees.apps import get_apps
 from services.employees.connections import Connections
 
 logger = get_logger(__name__)
@@ -65,8 +64,8 @@ async def build_setup_prompt_context(
 
     connected: List[str] = []
     available: List[str] = []
-    for app in get_apps().values():
-        (connected if await connections.is_connected(app.provider_id) else available).append(app.name)
+    for app in (await connections.apps()).values():
+        (connected if await connections.app_connected(app) else available).append(app.name)
 
     team: List[str] = []
     try:

@@ -16,6 +16,7 @@ import pytest
 import nodes  # noqa: F401 - registers every plugin for the validator
 import services.employees  # noqa: F401 - registers the handlers
 from services.employees import hire, store
+from services.employees.apps import get_apps
 from services.employees.hire_request import HireEmployeeRequest
 from services.employees.llm import LLMChoice
 from services.ws_handler_registry import get_ws_handlers
@@ -48,6 +49,15 @@ class FakeConnections:
 
     async def connected_app_ids(self):
         return []
+
+    async def apps(self):
+        return get_apps()
+
+    async def app(self, app_id):
+        return get_apps().get(app_id)
+
+    async def app_connected(self, app):
+        return False
 
     async def is_connected(self, provider_id):
         return False

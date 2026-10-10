@@ -13,6 +13,13 @@ exact, then prefix, then word, then substring (3+ characters), preferring
 a connected app within a tier. A name that matches nothing is kept as an
 unsupported app: it never blocks a start and the employee's instructions
 name it.
+
+More apps come from what an owner saved rather than from the file: a
+plugin registers a source (``register_app_source``) that gives one owner's
+apps, such as each custom connector (nodes/mcp). Such an app exists only
+while it is saved, so it is connected. Its tool's node type says which
+parameter names the app (``BaseNode.app_field``), and that parameter holds
+the app's id. ``Connections.apps`` reads both kinds.
 """
 
 from __future__ import annotations
@@ -22,9 +29,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from core.logging import get_logger
+from services.plugin.registry import IdempotentRegistry
 
 logger = get_logger(__name__)
 
@@ -89,6 +97,9 @@ class AppSpec:
     #: Slash commands this app adds to the employee's chat
     #: (``{command, description, fill, suggest}``; get_chat_context).
     commands: Tuple[Mapping[str, Any], ...] = ()
+    #: Its icon, for an app whose provider has no entry of its own in the
+    #: credential registry (an app from a source).
+    icon_ref: Optional[str] = None
 
     @property
     def node_types(self) -> frozenset:
@@ -243,6 +254,31 @@ def app_for_node_type(node_type: str) -> Optional[AppSpec]:
     return _by_node_type.get(node_type)
 
 
+# ----- apps from what an owner saved -----
+
+#: ``source(principal)``: the apps one owner saved (None: the install's).
+AppSource = Callable[[Optional[str]], Awaitable[Iterable[AppSpec]]]
+
+_SOURCES: Dict[str, AppSource] = {}
+_SOURCE_REGISTRY: IdempotentRegistry[str, AppSource] = IdempotentRegistry("app_source", items=_SOURCES)
+
+
+def register_app_source(kind: str, source: AppSource) -> None:
+    """Idempotent on re-import; a different source for a kind raises."""
+    _SOURCE_REGISTRY.register(kind, source)
+
+
+async def source_apps(principal: Optional[str] = None) -> List[AppSpec]:
+    """Every source's apps for one owner. A source that fails gives none."""
+    apps: List[AppSpec] = []
+    for kind, source in _SOURCES.items():
+        try:
+            apps.extend(await source(principal))
+        except Exception:
+            logger.warning("Could not read an app source", kind=kind, exc_info=True)
+    return apps
+
+
 def _keys(app: AppSpec) -> Iterable[Tuple[str, int]]:
     """(normalized key, preference): the id and name first, aliases after."""
     yield normalize_name(app.id.replace("_", " ")), 0
@@ -269,19 +305,20 @@ def _score(query: str, key: str) -> Optional[Tuple[int, int]]:
     return None
 
 
-def resolve_app(name: str, connected: Optional[Sequence[str]] = None) -> Optional[AppSpec]:
+def resolve_app(name: str, connected: Optional[Sequence[str]] = None, apps: Optional[Iterable[AppSpec]] = None) -> Optional[AppSpec]:
     """The app a free-text name refers to, or None when nothing matches.
 
-    Within the best tier a connected app wins, then a name match over an
-    alias match, then declaration order: "email" picks Gmail when Gmail is
-    connected and IMAP is not, and "calendar" picks whichever calendar is
-    connected."""
+    ``apps`` are the apps to choose from (``Connections.apps``); the
+    registry's when not given. Within the best tier a connected app wins,
+    then a name match over an alias match, then declaration order: "email"
+    picks Gmail when Gmail is connected and IMAP is not, and "calendar"
+    picks whichever calendar is connected."""
     query = normalize_name(name)
     if not query:
         return None
     connected_ids = set(connected or ())
     best: Optional[Tuple[Tuple[int, int, int, int, int], AppSpec]] = None
-    for index, app in enumerate(get_apps().values()):
+    for index, app in enumerate(get_apps().values() if apps is None else apps):
         for key, preference in _keys(app):
             score = _score(query, key)
             if score is None:
@@ -295,6 +332,7 @@ def resolve_app(name: str, connected: Optional[Sequence[str]] = None) -> Optiona
 __all__ = [
     "AUDIENCES",
     "AppRegistryError",
+    "AppSource",
     "AppSpec",
     "CONFIG_PATH",
     "NodeTemplate",
@@ -306,7 +344,9 @@ __all__ = [
     "get_app",
     "get_apps",
     "normalize_name",
+    "register_app_source",
     "reload_apps",
     "resolve_app",
     "side_effect_rank",
+    "source_apps",
 ]

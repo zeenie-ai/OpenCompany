@@ -62,6 +62,8 @@
 
     "stripeAction",
 
+    "mcpConnector",
+
     "httpRequest",
     "timer",
     "cronScheduler",

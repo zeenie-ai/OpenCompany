@@ -418,8 +418,15 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    ([config/employee_apps.json](../server/config/employee_apps.json),
    [apps.py](../server/services/employees/apps.py)): each app's provider,
    its trigger / reply / notify-owner / tool nodes with parameter templates,
-   and a `side_effects` class. Apps the registry does not know are recorded as
-   unsupported, named in the instructions, and never block a start;
+   and a `side_effects` class. The owner's own apps join them: a plugin
+   registers a source (`register_app_source`) that gives what the owner saved,
+   such as each custom connector ([MCP Connectors](./mcp_connectors.md#in-hires)),
+   and `Connections.apps` reads both, so the setup screen, Hire and the
+   employee's card see the same apps. A saved app counts as connected. A node
+   whose app a parameter names rather than its type declares that parameter
+   (`BaseNode.app_field`), and the card reads it. Apps nobody knows are
+   recorded as unsupported, named in the instructions, and never block a
+   start;
 3. builds the graph ([builder.py](../server/services/employees/builder.py),
    pure): one trigger (an app event, a schedule on `cronScheduler`, or manual
    chat), one `aiAgent` whose system message comes from
@@ -1094,9 +1101,9 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 - Billing has no plans, payment method or invoices: no billing account sits
   behind OpenCompany. A deleted employee's runs leave the month's count,
   because deleting a workflow deletes its run records.
-- Hiring does not add a custom (MCP) connector: an employee uses one only
-  when its workflow gets the Custom Connector node (`mcpConnector`) in Dev
-  mode.
+- The Agent Builder does not add a custom (MCP) connector from Talk yet: an
+  employee gets one at hire, or in Dev mode with the Custom Connector node
+  (`mcpConnector`).
 - Skill library changes reach only new hires: an employee keeps the skills it
   was hired with, and one hired before the library existed has none, until
   the owner asks them in Talk to add one. The library is shared across users

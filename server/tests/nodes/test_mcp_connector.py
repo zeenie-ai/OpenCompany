@@ -391,3 +391,65 @@ class TestTheNode:
         # Without its binding's word, a call asks first.
         assert spec.sends({})
         assert spec.preview(LOOKUP)["details"] == [{"label": "Connector", "value": "Orders"}, {"label": "Tool", "value": "Look up an order"}]
+
+
+class TestInHires:
+    """Each saved connector is an app a hire can use (services/employees/apps.py)."""
+
+    @pytest.fixture
+    def connections(self, auth, monkeypatch):
+        from services.employees.connections import Connections
+
+        async def no_other_app(self, provider_id):
+            return False
+
+        monkeypatch.setattr(Connections, "is_connected", no_other_app)
+        return Connections(auth)
+
+    async def test_each_connector_is_a_connected_app(self, auth, connections, monkeypatch):
+        from services.employees.apps import resolve_app
+        from services.employees.policy import check_tool
+
+        async with serving(monkeypatch, orders_server()):
+            await add()
+        app = await connections.app("mcp:orders")
+        assert app.name == "Orders" and [tool.type for tool in app.tools] == ["mcpConnector"]
+        connected = await connections.connected_app_ids()
+        assert connected == ["mcp:orders"]
+        assert resolve_app("orders", connected, (await connections.apps()).values()) is app
+        ref = await connections.app_ref(app)
+        assert ref["connected"] and ref["icon_ref"] == "lucide:Plug"
+        # Its calls wait for the owner one by one, so asking first keeps it.
+        decision = check_tool("mcpConnector", employee=SimpleNamespace(rules={"ask_first": True}), connected=connected, app=app)
+        assert decision.allowed and dict(decision.params) == {"mcp_connector": "mcp:orders"}
+
+    async def test_a_hire_gets_it_and_the_card_names_it(self, auth, connections, monkeypatch):
+        from services.employees import hire
+        from services.employees.builder import BuildInputs, build_employee_graph
+        from services.employees.connections import Connections
+        from services.employees.graph_index import index_graph
+        from services.employees.hire_request import HireEmployeeRequest
+        from services.employees.llm import LLMChoice
+        from services.employees.summaries import _apps
+        from services.node_allowlist import is_hire_allowed
+
+        async with serving(monkeypatch, orders_server()):
+            await add()
+        request = HireEmployeeRequest.model_validate({
+            "idempotency_key": "k", "job": "Answer questions about orders", "name": "Ola", "role": "Support",
+            "apps": ["Orders"], "steps": [{"title": "Answer", "role": "agent"}],
+            "rules": {"ask_first": True, "items": []}, "trigger": {"kind": "manual"},
+        })
+        apps, unsupported = hire._resolve_apps(request, await connections.connected_app_ids(), (await connections.apps()).values())
+        assert [app.id for app in apps] == ["mcp:orders"] and unsupported == []
+        built = build_employee_graph(BuildInputs(
+            workflow_id="7", request=request, apps=apps, llm=LLMChoice(provider="openai", model="gpt-x", local=False), allowed=is_hire_allowed,
+        ))
+        [tool] = [node for node in built.nodes if node["type"] == "mcpConnector"]
+        assert built.parameters[tool["id"]] == {"mcp_connector": "mcp:orders"}
+        assert built.app_ids == ["mcp:orders"]
+        graph = index_graph({"nodes": built.nodes, "edges": built.edges})
+        assert [app.id for app in await _apps(graph, built.parameters, connections)] == ["mcp:orders"]
+        # Once it is removed, the card no longer lists it.
+        await _handlers.handle_mcp_connector_remove({"ref": "mcp:orders"}, SOCKET)
+        assert await _apps(graph, built.parameters, Connections(auth)) == []

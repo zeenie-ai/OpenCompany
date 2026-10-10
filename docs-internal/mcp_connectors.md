@@ -16,7 +16,7 @@ thing: see [CLI Agent Framework](./cli_agent_framework.md).
 | What is kept (two credential rows) | `server/nodes/mcp/_store.py` |
 | One catalogue card per connector | `server/nodes/mcp/_credentials.py` |
 | The Connectors page's commands | `server/nodes/mcp/_handlers.py` |
-| The node that gives an agent the tools | `server/nodes/mcp/mcp_connector.py` |
+| The node that gives an agent the tools, and each connector as an app a hire can use | `server/nodes/mcp/mcp_connector.py` |
 | The outbound address rules, shared with the Browser node | `server/services/netpolicy.py` |
 | The cards' shared fields, and the `custom` categories | `server/config/credential_providers.json` (`_mcp_connector`) |
 | The Add form | `client/src/components/credentials/AddConnectorForm.tsx` |
@@ -152,6 +152,27 @@ settings, which are locked so the model never sets them: `mcp_tool`, `mcp_ask`
   next run. A tool turned off is refused at once.
 - CLI agents (Claude Code, Codex) leave the node out; an RLM agent refuses it.
 
+## In hires
+
+Each saved connector is also an app a hire can use. `connector_apps`
+(registered with `register_app_source`, see
+[apps.py](../server/services/employees/apps.py)) gives one app per connector:
+its id and provider id are the connector's reference (`mcp:<slug>`), its name
+the connector's, and its one tool the node set to that connector.
+`Connections.apps` reads them with the registry's apps, so:
+
+- the setup model is told about them with the connected apps, and a hire that
+  names one gets the node on its agent (`mcpConnector` is on the hire
+  allowlist, `enabled_nodes`);
+- a saved connector counts as connected;
+- under Ask first the node stays, since each call waits for the owner per its
+  tool's setting.
+
+The employee's card lists the connector its node names. The node declares
+`app_field = "mcp_connector"`, so the summaries read that parameter
+(`GraphIndex.app_params`, one query for the whole team list). A removed
+connector is no longer listed.
+
 ## The page
 
 - **Add** on the Connectors page (`CatalogLayout.primaryAction`) opens
@@ -172,8 +193,8 @@ settings, which are locked so the model never sets them: `mcp_tool`, `mcp_ask`
 
 ## Known gaps
 
-- Hiring does not add a connector: an employee uses one only when its
-  workflow gets the Custom Connector node in Dev mode.
+- The Agent Builder does not add a connector from Talk yet: an employee gets
+  one at hire, or in Dev mode with the Custom Connector node.
 - No OAuth sign-in.
 - A host's addresses are checked when connecting, not pinned for the
   connection.

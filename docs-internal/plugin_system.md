@@ -406,6 +406,15 @@ after the static providers, and those cards carry their own `stored` /
 `nodes/mcp/_credentials.py` is the one user: one card per custom MCP
 connector ([MCP Connectors](./mcp_connectors.md)).
 
+**Apps from what was saved**: when a node's app is one the owner saved, not
+one of `config/employee_apps.json`'s, the plugin registers a source with
+`services.employees.apps.register_app_source(kind, source)`. `source(principal)`
+returns `AppSpec`s, and `Connections.apps` reads them with the file's, so the
+setup screen, Hire and the employee's card see them. Such a node declares
+`app_field`, the parameter that holds its app's id, so the card can tell two
+nodes of one type apart. `nodes/mcp` is the one user: each custom connector
+is an app.
+
 **Shipped credentials** (Wave 11.E → E.1):
 
 | File | Class(es) | Auth | Covers |
