@@ -2,16 +2,18 @@
 
 Each connection uses our own httpx client with redirects off, so a server
 cannot bounce the owner's sign-in to another host. The sign-in goes as a
-header. The transport is streamable HTTP, or the older SSE transport for a
-server that refuses it (the MCP spec's own fallback), and the one that
-answered when the connector was added is kept.
+header, or, for an OAuth sign-in, through the SDK's ``OAuthClientProvider``
+(``auth``; see ``_oauth.py``). The transport is streamable HTTP, or the
+older SSE transport for a server that refuses it (the MCP spec's own
+fallback), and the one that answered when the connector was added is kept.
 
-Before connecting, the server's host is resolved and every address it gives
-is checked against ``services/netpolicy.py``. Cloud metadata and
-OpenCompany's own ports are never reached. Plain http is allowed only to
-this machine or the owner's own network, because over the internet it would
-carry the sign-in in clear. The addresses are checked when connecting, not
-pinned for the connection.
+Every request is checked against ``services/netpolicy.py`` first: its host
+is resolved and every address it gives is checked (``check_server``), the
+server's and, for an OAuth sign-in, its authorization server's, which the
+server names. Cloud metadata and OpenCompany's own ports are never reached.
+Plain http is allowed only to this machine or the owner's own network,
+because over the internet it would carry the sign-in in clear. The
+addresses are checked per request, not pinned for the connection.
 
 A tool as an employee sees it is ``<connector>__<tool>``. A tool whose name
 or input description no model could use is kept with the reason, never
@@ -25,9 +27,9 @@ import ipaddress
 import re
 import socket
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Literal, Mapping, Optional, Tuple
 from urllib.parse import urlsplit
 
 import httpx
@@ -79,13 +81,16 @@ class ConnectorError(Exception):
 
 @dataclass(frozen=True)
 class SignIn:
-    """How a connector signs in to its server: nothing, a bearer token, or one
-    header of the owner's choosing."""
+    """How a connector signs in to its server: nothing, a bearer token, one
+    header of the owner's choosing, or OAuth on the server's own sign-in
+    page. ``oauth`` is what an OAuth sign-in keeps besides its tokens: the
+    client it registered and the endpoints it found (``_oauth.py``)."""
 
-    kind: Literal["none", "bearer", "header"] = "none"
+    kind: Literal["none", "bearer", "header", "oauth"] = "none"
     token: str = ""
     header: str = ""
     value: str = ""
+    oauth: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_form(cls, raw: Dict[str, Any]) -> "SignIn":
@@ -93,6 +98,8 @@ class SignIn:
         kind = str(raw.get("kind") or "none")
         if kind == "none":
             return cls()
+        if kind == "oauth":
+            return cls(kind="oauth")
         if kind == "bearer":
             token = str(raw.get("token") or "").strip()
             if not token or any(c in token for c in "\r\n"):
@@ -117,10 +124,16 @@ class SignIn:
             return cls(kind="bearer", token=str(stored.get("token") or ""))
         if kind == "header":
             return cls(kind="header", header=str(stored.get("header") or ""), value=str(stored.get("value") or ""))
+        if kind == "oauth":
+            oauth = stored.get("oauth")
+            return cls(kind="oauth", oauth=dict(oauth) if isinstance(oauth, dict) else {})
         return cls()
 
-    def dump(self) -> Dict[str, str]:
-        return {"kind": self.kind, "token": self.token, "header": self.header, "value": self.value}
+    def dump(self) -> Dict[str, Any]:
+        kept: Dict[str, Any] = {"kind": self.kind, "token": self.token, "header": self.header, "value": self.value}
+        if self.kind == "oauth":
+            kept["oauth"] = dict(self.oauth)
+        return kept
 
     def public(self) -> Dict[str, str]:
         """What may be shown or kept in plain text: never the token or value."""
@@ -196,18 +209,37 @@ async def _resolve(host: str, port: int) -> List[Any]:
     return found
 
 
-def _client(headers: Dict[str, str], *, transport: Optional[httpx.AsyncBaseTransport]) -> httpx.AsyncClient:
+async def _check_request(request: httpx.Request) -> None:
+    await check_server(str(request.url))
+
+
+def http_client(
+    headers: Dict[str, str], *, transport: Optional[httpx.AsyncBaseTransport], auth: Optional[httpx.Auth] = None, timeout: Any = None
+) -> httpx.AsyncClient:
+    """A connector's httpx client: redirects off, and every request it sends
+    (the OAuth sign-in's included) checked first. ``transport`` replaces the
+    network (tests)."""
     return httpx.AsyncClient(
-        headers=headers, timeout=httpx.Timeout(TIMEOUT_S, read=CALL_TIMEOUT_S), follow_redirects=False, transport=transport
+        headers=headers,
+        timeout=timeout or httpx.Timeout(TIMEOUT_S, read=CALL_TIMEOUT_S),
+        auth=auth,
+        follow_redirects=False,
+        transport=transport,
+        event_hooks={"request": [_check_request]},
     )
 
 
 @asynccontextmanager
 async def open_session(
-    url: str, sign_in: SignIn, transport: Transport, *, http_transport: Optional[httpx.AsyncBaseTransport] = None
+    url: str,
+    sign_in: SignIn,
+    transport: Transport,
+    *,
+    http_transport: Optional[httpx.AsyncBaseTransport] = None,
+    auth: Optional[httpx.Auth] = None,
 ) -> AsyncIterator[Tuple["ClientSession", "InitializeResult"]]:
-    """An initialized session with the server. ``http_transport`` replaces the
-    network (tests)."""
+    """An initialized session with the server. ``auth`` signs in with OAuth;
+    ``http_transport`` replaces the network (tests)."""
     from mcp import ClientSession
     from mcp.client.sse import sse_client
     from mcp.client.streamable_http import streamable_http_client
@@ -218,7 +250,7 @@ async def open_session(
     info = Implementation(name="OpenCompany", version=app_version())
     limit = timedelta(seconds=TIMEOUT_S)
     if transport == "streamable_http":
-        async with _client(sign_in.headers(), transport=http_transport) as http:
+        async with http_client(sign_in.headers(), transport=http_transport, auth=auth) as http:
             async with streamable_http_client(url, http_client=http) as (read, write, _session_id):
                 async with ClientSession(read, write, read_timeout_seconds=limit, client_info=info) as session:
                     yield session, await session.initialize()
@@ -226,12 +258,11 @@ async def open_session(
 
     def factory(headers=None, timeout=None, auth=None) -> httpx.AsyncClient:
         # The SDK's own factory follows redirects.
-        return httpx.AsyncClient(headers=headers, timeout=timeout, auth=auth, follow_redirects=False, transport=http_transport)
+        return http_client(headers or {}, transport=http_transport, auth=auth, timeout=timeout)
 
-    async with sse_client(url, headers=sign_in.headers(), timeout=TIMEOUT_S, sse_read_timeout=CALL_TIMEOUT_S, httpx_client_factory=factory) as (
-        read,
-        write,
-    ):
+    async with sse_client(
+        url, headers=sign_in.headers(), timeout=TIMEOUT_S, sse_read_timeout=CALL_TIMEOUT_S, httpx_client_factory=factory, auth=auth
+    ) as (read, write):
         async with ClientSession(read, write, read_timeout_seconds=limit, client_info=info) as session:
             yield session, await session.initialize()
 
@@ -252,10 +283,15 @@ async def list_tools(session: "ClientSession") -> List["Tool"]:
 
 
 async def read_server(
-    url: str, sign_in: SignIn, transport: Transport, *, http_transport: Optional[httpx.AsyncBaseTransport] = None
+    url: str,
+    sign_in: SignIn,
+    transport: Transport,
+    *,
+    http_transport: Optional[httpx.AsyncBaseTransport] = None,
+    auth: Optional[httpx.Auth] = None,
 ) -> Discovery:
     """Connect over ``transport`` and read what the server offers."""
-    async with open_session(url, sign_in, transport, http_transport=http_transport) as (session, init):
+    async with open_session(url, sign_in, transport, http_transport=http_transport, auth=auth) as (session, init):
         tools = await list_tools(session)
     server = init.serverInfo
     return Discovery(
@@ -266,7 +302,9 @@ async def read_server(
     )
 
 
-async def discover(url: str, sign_in: SignIn, *, http_transport: Optional[httpx.AsyncBaseTransport] = None) -> Discovery:
+async def discover(
+    url: str, sign_in: SignIn, *, http_transport: Optional[httpx.AsyncBaseTransport] = None, auth: Optional[httpx.Auth] = None
+) -> Discovery:
     """A new connector's first read: streamable HTTP, else the older SSE
     transport, within ``DISCOVER_S`` in all. Raises ``ConnectorError`` with
     the first transport's failure."""
@@ -276,7 +314,7 @@ async def discover(url: str, sign_in: SignIn, *, http_transport: Optional[httpx.
         async with asyncio.timeout(DISCOVER_S):
             for transport in TRANSPORTS:
                 try:
-                    return await read_server(url, sign_in, transport, http_transport=http_transport)
+                    return await read_server(url, sign_in, transport, http_transport=http_transport, auth=auth)
                 except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
                     first = first or exc
     except TimeoutError as exc:
@@ -285,14 +323,19 @@ async def discover(url: str, sign_in: SignIn, *, http_transport: Optional[httpx.
 
 
 async def read_again(
-    url: str, sign_in: SignIn, transport: Transport, *, http_transport: Optional[httpx.AsyncBaseTransport] = None
+    url: str,
+    sign_in: SignIn,
+    transport: Transport,
+    *,
+    http_transport: Optional[httpx.AsyncBaseTransport] = None,
+    auth: Optional[httpx.Auth] = None,
 ) -> Discovery:
     """Read a saved connector's server again (Test, Refresh), within
     ``DISCOVER_S``."""
     host = await check_server(url)
     try:
         async with asyncio.timeout(DISCOVER_S):
-            return await read_server(url, sign_in, transport, http_transport=http_transport)
+            return await read_server(url, sign_in, transport, http_transport=http_transport, auth=auth)
     except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
         raise ConnectorError(describe(exc, host)) from None
 
@@ -342,12 +385,13 @@ async def call_tool(
     arguments: Dict[str, Any],
     *,
     http_transport: Optional[httpx.AsyncBaseTransport] = None,
+    auth: Optional[httpx.Auth] = None,
 ) -> CallResult:
     """Call one of the server's tools, within ``CALL_TIMEOUT_S``."""
     host = await check_server(url)
     try:
         async with asyncio.timeout(CALL_TIMEOUT_S):
-            async with open_session(url, sign_in, transport, http_transport=http_transport) as (session, _init):
+            async with open_session(url, sign_in, transport, http_transport=http_transport, auth=auth) as (session, _init):
                 result = await session.call_tool(name, arguments, read_timeout_seconds=timedelta(seconds=CALL_TIMEOUT_S))
     except Exception as exc:  # noqa: BLE001 - described below, in words for the owner
         raise ConnectorError(describe(exc, host)) from None
@@ -455,6 +499,7 @@ __all__ = [
     "check_server",
     "describe",
     "discover",
+    "http_client",
     "open_session",
     "read_again",
     "snapshots",

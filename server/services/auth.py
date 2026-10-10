@@ -27,6 +27,7 @@ not detected.
 import hashlib
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from core.config import Settings
@@ -469,6 +470,7 @@ class AuthService:
         name: Optional[str] = None,
         scopes: Optional[str] = None,
         customer_id: str = "owner",
+        expiry: Optional[datetime] = None,
     ) -> bool:
         """Store OAuth tokens in encrypted credentials database.
 
@@ -480,6 +482,7 @@ class AuthService:
             name: User display name
             scopes: Comma-separated scopes
             customer_id: Customer identifier (default 'owner' for single-user)
+            expiry: When the access token expires (UTC), when known
 
         Returns:
             True if stored successfully
@@ -495,6 +498,7 @@ class AuthService:
                 refresh_token=refresh_token,
                 email=email,
                 name=name,
+                expiry=expiry,
                 scopes=scopes,
                 customer_id=customer_id,
             )
@@ -597,6 +601,24 @@ class AuthService:
         except Exception as e:
             logger.error("Failed to get OAuth refresh token", provider=provider, error=str(e))
             return None
+
+    async def get_stored_oauth_tokens(self, provider: str, customer_id: str = "owner") -> Optional[Dict[str, Any]]:
+        """The tokens as stored, read from the encrypted DB every time:
+        ``access_token``, ``refresh_token``, ``token_expiry`` and ``scopes``.
+
+        For a caller that refreshes its own tokens (a custom connector's
+        sign-in, nodes/mcp): another process may have refreshed them since
+        this one last read them, so neither copy is cached here.
+        """
+        self.require_local_credentials()
+        try:
+            tokens = await self.credentials_db.get_oauth_tokens(provider, customer_id)
+        except Exception as e:
+            logger.error("Failed to read OAuth tokens", provider=provider, error=str(e))
+            return None
+        if not tokens:
+            return None
+        return {key: tokens.get(key) for key in ("access_token", "refresh_token", "token_expiry", "scopes")}
 
     async def refresh_oauth_tokens_with_breaker(
         self,

@@ -89,6 +89,24 @@ describe('CredentialsBrowser', () => {
     expect(screen.queryByRole('form', { name: 'Custom connector' })).not.toBeInTheDocument();
   });
 
+  it('opens the server sign-in page for an OAuth connector; it shows once the owner signed in', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const onConnect = vi.fn();
+    sendRequest.mockResolvedValue({ success: true, ref: 'mcp:orders', sign_in_url: 'https://auth.example.com/authorize?state=s' });
+    render(<ThemeProvider><CredentialsBrowser catalogue={catalogue()} onConnect={onConnect} /></ThemeProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    const form = within(screen.getByRole('form', { name: 'Custom connector' }));
+    fireEvent.change(form.getByLabelText('Server URL'), { target: { value: 'https://orders.example.com/mcp' } });
+    fireEvent.click(form.getByRole('radio', { name: 'OAuth' }));
+    fireEvent.click(form.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://auth.example.com/authorize?state=s', '_blank'));
+    expect(sendRequest).toHaveBeenCalledWith('mcp_connector_add', { name: '', url: 'https://orders.example.com/mcp', sign_in: { kind: 'oauth' } }, 60_000);
+    expect(toast.info).toHaveBeenCalledWith('Sign in on the page that opened. The connector shows here once you have.');
+    // Nothing is kept yet, so there is no page to open.
+    expect(onConnect).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it('keeps the form and shows the server words when a connector cannot be added', async () => {
     sendRequest.mockResolvedValue({ success: false, error: "Couldn't connect to orders.example.com. Check that the server is running." });
     const onConnect = vi.fn();

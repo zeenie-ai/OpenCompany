@@ -190,3 +190,15 @@ class TestOAuthOps:
 
     async def test_get_oauth_tokens_missing_provider_returns_none(self, auth_service):
         assert await auth_service.get_oauth_tokens("never-stored") is None
+
+    async def test_tokens_keep_their_expiry_and_are_read_from_the_db(self, auth_service):
+        from datetime import datetime, timezone
+
+        expiry = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+        await auth_service.store_oauth_tokens("mcp:orders", "access-1", "refresh-1", scopes="read", expiry=expiry)
+        # Another process refreshed them: the DB changed under this one's cache.
+        await auth_service.credentials_db.save_oauth_tokens("mcp:orders", "access-2", "refresh-2", scopes="read", expiry=expiry)
+        stored = await auth_service.get_stored_oauth_tokens("mcp:orders")
+        assert (stored["access_token"], stored["refresh_token"], stored["scopes"]) == ("access-2", "refresh-2", "read")
+        assert stored["token_expiry"].replace(tzinfo=timezone.utc) == expiry
+        assert await auth_service.get_stored_oauth_tokens("never-stored") is None

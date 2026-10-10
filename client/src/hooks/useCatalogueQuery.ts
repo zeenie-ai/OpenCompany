@@ -126,7 +126,7 @@ export interface ServerMcpConnector {
   address: string;
   transport: 'streamable_http' | 'sse';
   /** How it signs in; never the token or header value. */
-  sign_in: { kind: 'none' | 'bearer' | 'header'; header?: string };
+  sign_in: { kind: 'none' | 'bearer' | 'header' | 'oauth'; header?: string };
   server: { name?: string; title?: string | null; version?: string };
   tools: ServerMcpTool[];
   /** What a refresh found, waiting for the owner to accept or discard. */

@@ -126,8 +126,9 @@ For secrets the user enters manually in the Credentials modal (OpenAI API key, A
 For tokens obtained via OAuth 2.0 flows (Google Workspace, Twitter/X, Claude.ai).
 
 - Model / table: `EncryptedOAuthToken` (`oauth_tokens`)
-- Access: `AuthService.store_oauth_tokens(provider, access_token, refresh_token, ...)` and `AuthService.get_oauth_tokens(provider, customer_id="owner")`
+- Access: `AuthService.store_oauth_tokens(provider, access_token, refresh_token, ..., expiry=None)` and `AuthService.get_oauth_tokens(provider, customer_id="owner")`
 - Cache: `AuthService._oauth_cache: Dict[str, Dict[str, Any]]`
+- A caller that refreshes its own tokens reads them with `AuthService.get_stored_oauth_tokens(provider, customer_id="owner")`: `access_token`, `refresh_token`, `token_expiry` and `scopes`, from the encrypted DB every time, since another process may have refreshed them. Custom MCP connectors keep their OAuth sign-in this way, under `mcp:<slug>` ([MCP Connectors](./mcp_connectors.md#oauth)).
 
 ### The Mistake to Avoid
 

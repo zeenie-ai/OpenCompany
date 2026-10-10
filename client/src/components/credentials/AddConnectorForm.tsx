@@ -1,19 +1,23 @@
 /**
  * The Connectors page's form for a custom connector: an MCP server's URL, a
- * name, and how it signs in (none, a bearer token, or one header). The
- * server reads the server's tools before keeping anything
- * (`mcp_connector_add`, nodes/mcp/_handlers.py), so a wrong URL or a refused
- * sign-in comes back here in the server's words and nothing is saved.
+ * name, and how it signs in (none, a bearer token, one header, or OAuth on
+ * the server's own sign-in page). The server reads the server's tools before
+ * keeping anything (`mcp_connector_add`, nodes/mcp/_handlers.py), so a wrong
+ * URL or a refused sign-in comes back here in the server's words and nothing
+ * is saved. With OAuth it answers with the sign-in page, which opens in a new
+ * tab: the connector is kept, and its card shows, once the owner signed in
+ * there.
  */
 
 import { useId, useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { CREDENTIAL_PROBE_REQUEST_TIMEOUT, useWebSocketActions } from '@/contexts/WebSocketContext';
 
-type SignInKind = 'none' | 'bearer' | 'header';
+type SignInKind = 'none' | 'bearer' | 'header' | 'oauth';
 
 const FIELD = 'h-9.5 rounded-lg bg-bg-app text-row font-normal md:text-row dark:bg-bg-app';
 const FAILED = "Couldn't add that connector. Try again.";
@@ -36,7 +40,8 @@ export function AddConnectorForm({ close, onAdded }: AddConnectorFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const signedIn = signIn === 'none' || (signIn === 'bearer' ? token.trim() !== '' : header.trim() !== '' && value.trim() !== '');
+  const signedIn =
+    signIn === 'none' || signIn === 'oauth' || (signIn === 'bearer' ? token.trim() !== '' : header.trim() !== '' && value.trim() !== '');
   const ready = isReady && !saving && url.trim() !== '' && signedIn;
 
   const submit = async (event: FormEvent) => {
@@ -45,17 +50,23 @@ export function AddConnectorForm({ close, onAdded }: AddConnectorFormProps) {
     setSaving(true);
     setError('');
     try {
-      const result = await sendRequest<{ success?: boolean; error?: string; ref?: string }>(
+      const result = await sendRequest<{ success?: boolean; error?: string; ref?: string; sign_in_url?: string }>(
         'mcp_connector_add',
         {
           name,
           url,
-          sign_in: signIn === 'bearer' ? { kind: 'bearer', token } : signIn === 'header' ? { kind: 'header', header, value } : { kind: 'none' },
+          sign_in:
+            signIn === 'bearer' ? { kind: 'bearer', token } : signIn === 'header' ? { kind: 'header', header, value } : { kind: signIn },
         },
         CREDENTIAL_PROBE_REQUEST_TIMEOUT,
       );
       if (result.success === false || !result.ref) throw new Error(result.error || FAILED);
       close();
+      if (result.sign_in_url) {
+        window.open(result.sign_in_url, '_blank');
+        toast.info('Sign in on the page that opened. The connector shows here once you have.');
+        return;
+      }
       onAdded(result.ref);
     } catch (cause) {
       setError(cause instanceof Error && cause.message ? cause.message : FAILED);
@@ -104,6 +115,9 @@ export function AddConnectorForm({ close, onAdded }: AddConnectorFormProps) {
           <ToggleGroupItem value="header" className="px-3 text-sm">
             Header
           </ToggleGroupItem>
+          <ToggleGroupItem value="oauth" className="px-3 text-sm">
+            OAuth
+          </ToggleGroupItem>
         </ToggleGroup>
       </div>
       {signIn === 'bearer' && (
@@ -149,7 +163,7 @@ export function AddConnectorForm({ close, onAdded }: AddConnectorFormProps) {
           Cancel
         </Button>
         <ActionButton intent="run" type="submit" disabled={!ready} className="h-7.5 rounded-lg px-3.5 text-meta">
-          {saving ? 'Reading its tools…' : 'Add'}
+          {saving ? (signIn === 'oauth' ? 'Opening its sign-in…' : 'Reading its tools…') : 'Add'}
         </ActionButton>
       </div>
     </form>

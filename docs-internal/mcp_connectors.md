@@ -16,6 +16,8 @@ thing: see [CLI Agent Framework](./cli_agent_framework.md).
 | What is kept (two credential rows) | `server/nodes/mcp/_store.py` |
 | One catalogue card per connector | `server/nodes/mcp/_credentials.py` |
 | The Connectors page's commands | `server/nodes/mcp/_handlers.py` |
+| Signing in with OAuth, and the connections such a sign-in makes | `server/nodes/mcp/_oauth.py` |
+| Where an OAuth sign-in comes back to (`/api/mcp/oauth/callback`) | `server/nodes/mcp/_router.py` |
 | The node that gives an agent the tools, and each connector as an app a hire can use | `server/nodes/mcp/mcp_connector.py` |
 | The outbound address rules, shared with the Browser node | `server/services/netpolicy.py` |
 | The cards' shared fields, and the `custom` categories | `server/config/credential_providers.json` (`_mcp_connector`) |
@@ -30,11 +32,14 @@ reads the server first and saves the connector only when it answered, so a
 wrong URL or a refused sign-in comes back in words for the owner and nothing
 is kept.
 
-- **Sign-in**: none, a bearer token, or one header of the owner's choosing.
-  It is sent as a header. A header the transport sets itself (`Host`,
+- **Sign-in**: none, a bearer token, one header of the owner's choosing, or
+  OAuth on the server's own sign-in page ([OAuth](#oauth)). A token or header
+  is sent as a header. A header the transport sets itself (`Host`,
   `Content-Type`, `Mcp-Session-Id`, `Mcp-Protocol-Version` and the like) is
   refused, as is a line break in a value.
-- **Where it may connect** (`check_server`):
+- **Where it may connect** (`check_server`), checked before every request a
+  connector sends (an httpx request hook), so an OAuth sign-in's requests to
+  the authorization server the server names are checked too:
   - The URL must be http or https and carry no user or password.
   - The host and every address it resolves to are checked against
     `services/netpolicy.py`. Cloud metadata, link-local addresses and
@@ -42,7 +47,7 @@ is kept.
     allowed, so a local MCP server works.
   - Plain http is allowed only to this machine or the owner's network: over
     the internet it would carry the sign-in in clear.
-  - The addresses are checked when connecting, not pinned for the connection.
+  - The addresses are checked per request, not pinned for the connection.
 - **The connection**: our own httpx client with redirects off, so a server
   cannot bounce the sign-in to another host. The transport is streamable
   HTTP, then the older SSE transport for a server that refuses it (the MCP
@@ -74,6 +79,9 @@ kept:
   - a refresh waiting to be accepted;
   - when the tools were read.
 - `mcp:<slug>_proxy`: the URL, encrypted, since it may carry a key.
+
+An OAuth sign-in also keeps its tokens in the OAuth token store under
+`mcp:<slug>` ([OAuth](#oauth)). Remove deletes all three.
 
 **Tools.** Up to 500. Each is kept as the server described it: name, title,
 description (up to 4,000 characters), input schema, and the read-only hint.
@@ -111,7 +119,8 @@ page refetches.
 
 | Command | Sends | Returns |
 |---|---|---|
-| `mcp_connector_add` | `{name?, url, sign_in}` | `{ref, tools}` |
+| `mcp_connector_add` | `{name?, url, sign_in}` | `{ref, tools}`; with OAuth `{ref, sign_in_url}`, and the connector is kept once the owner signed in |
+| `mcp_connector_sign_in` | `{ref}` | `{sign_in_url}`, for an OAuth connector |
 | `mcp_connector_test` | `{ref}` | `{ok, message}`; saves nothing |
 | `mcp_connector_refresh` | `{ref}` | `{changes}`, null when nothing changed |
 | `mcp_connector_review` | `{ref, accept}` | `{accepted}` |
@@ -124,6 +133,54 @@ way, or new instructions, wait as `pending` until the owner takes or drops
 them with `mcp_connector_review`. Until then, the tools the owner accepted
 stay as they were. Accepting keeps the owner's settings for tools already
 set; new usable tools get the defaults.
+
+## OAuth
+
+A connector that signs in with OAuth uses the official SDK's
+`OAuthClientProvider` (`_oauth.py`). It finds the server's authorization
+server from the server's metadata, registers a client (dynamic client
+registration), signs in with an authorization code and PKCE, and refreshes
+the token.
+
+**Signing in** (`start_sign_in`, from Add or Sign in again) runs in the
+background, since the owner finishes it in their browser:
+
+1. A first request, an MCP `initialize` sent as a plain POST, is refused
+   with 401. It is not sent inside an MCP session, whose 30 s read timeout
+   would cut the owner off. The provider registers a client and hands over
+   the sign-in page's address. The command answers with it within
+   `DISCOVER_S`, and the app opens it in a new tab. A server that does not
+   answer 401 is refused: "didn't ask to sign in".
+2. The authorization server sends the owner's browser back to
+   `/api/mcp/oauth/callback` (`register_oauth_callback_path("mcp", ...)`;
+   the redirect URI is this app's own address,
+   `services/oauth_utils.get_redirect_uri`). The route sits behind the app's
+   sign-in like the rest of `/api`. It hands the code to the sign-in waiting
+   under that `state`, and the provider exchanges it for tokens. A sign-in
+   waits up to `SIGN_IN_S` (600 s) for the owner.
+3. Add then reads the server's tools and keeps the connector; Sign in again
+   keeps the new sign-in. The callback page says how it went.
+
+**What is kept.** The tokens go to the OAuth token store,
+`AuthService.store_oauth_tokens(provider="mcp:<slug>", ..., expiry=...)`. A
+refresh that sends no refresh token keeps the one it had. The connector's
+encrypted sign-in (`SignIn.oauth`) keeps the client it registered, with its
+secret if it got one, and the endpoints it found: the authorization server's
+metadata, the server's resource metadata, and the scope.
+
+**Connections** (`connection_auth`: Test, Refresh, and every tool call) build
+a provider from those. Before first use they also set the token's expiry,
+read with `AuthService.get_stored_oauth_tokens` (never cached, because
+another process may have refreshed it), and the endpoints. The SDK itself
+loads only the tokens and the client. Without the expiry it would send an
+expired token and answer the 401 with a sign-in no one is there to finish.
+With them, an expired token is refreshed and the new one kept at once.
+
+**Sign in again.** When the refresh is refused, only the owner can sign in
+again. The connection fails with `SignInNeeded`: "{name} needs you to sign in
+again: open it on the Connectors page and press Sign in again." Each
+sign-in registers a new client, so a changed address of this app (another
+host or port) still works.
 
 ## The node
 
@@ -183,10 +240,14 @@ connector is no longer listed.
   `AddConnectorForm`. After a save, the catalogue is refetched, then the new
   connector's page opens. The Welcome guide's AI model step has no Add
   (`customConnectors={false}`).
+- **Add** with Sign-in **OAuth** opens the server's sign-in page in a new
+  tab and closes the form with a note: the connector's card shows once the
+  owner signed in there.
 - **`McpConnectorPanel`** shows:
   - the server, its address, how it signs in (and, in Dev, the transport),
     and when its tools were read;
-  - Test, Refresh tools and Remove;
+  - Test, Refresh tools and Remove, and for an OAuth connector Sign in again,
+    which opens its sign-in page;
   - a waiting change, with Accept and Discard;
   - each tool with its Use and Ask first switches. A tool no model could call
     shows why, and has no switches.
@@ -197,6 +258,10 @@ connector is no longer listed.
 
 ## Known gaps
 
-- No OAuth sign-in.
+- A sign-in page is opened after the command answers, not ahead of it, so
+  a browser may block the new tab.
+- Two connections that refresh the same expired token at once can both use
+  the old refresh token. When the server rotates refresh tokens, the second
+  one fails and says to sign in again, though the first kept a working token.
 - A host's addresses are checked when connecting, not pinned for the
   connection.

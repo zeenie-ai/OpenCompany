@@ -102,6 +102,7 @@ _PLUGINS_WITH_ROUTERS = (
     "browser",
     "discord",
     "google",
+    "mcp",
     "microsoft",
     "twitter",
 )

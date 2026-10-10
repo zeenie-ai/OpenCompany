@@ -8,6 +8,9 @@ OpenAI-compatible endpoints are kept, through ``AuthService``.
   settings for them, and a refresh waiting to be accepted.
 - ``mcp:<slug>_proxy``: the server's URL, encrypted, since it may carry a key.
 
+An OAuth sign-in's tokens are kept in the OAuth token store under
+``mcp:<slug>`` (``_oauth.save_tokens``), and removed with the connector.
+
 A slug is at most 20 characters, so ``<slug>__<tool>`` leaves a tool's own
 name room within the 64 a model accepts.
 """
@@ -189,11 +192,20 @@ async def save_meta(connector: Connector, meta: Dict[str, Any]) -> None:
         raise ConnectorError("Couldn't save the change. Try again.")
 
 
+async def save_sign_in(ref: str, sign_in: SignIn) -> None:
+    """Keep a saved connector's new sign-in; its description, read again
+    now, stays as it is."""
+    connector = await get_connector(ref)
+    if not await _auth().store_api_key(provider=ref, api_key=json.dumps(sign_in.dump()), models=[], model_params={META_KEY: connector.meta}):
+        raise ConnectorError("Couldn't keep the sign-in. Try again.")
+
+
 async def remove(ref: str, *, principal: Optional[str] = None) -> None:
     auth = _auth()
     scope = {"principal": principal} if principal is not None else {}
     await auth.remove_api_key(ref, **scope)
     await auth.remove_api_key(url_key(ref))
+    await auth.remove_oauth_tokens(ref)
 
 
 __all__ = [
@@ -212,6 +224,7 @@ __all__ = [
     "remove",
     "save_meta",
     "save_new",
+    "save_sign_in",
     "slug_of",
     "url_key",
 ]

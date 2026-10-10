@@ -7,16 +7,18 @@ from __future__ import annotations
 import contextlib
 import functools
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock
+from urllib.parse import parse_qs, parse_qsl, urlsplit
 
 import httpx
 import pytest
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Tool, ToolAnnotations
 
-from nodes.mcp import _client, _handlers, mcp_connector
+from nodes.mcp import _client, _handlers, _oauth, mcp_connector
 from nodes.mcp._client import ConnectorError, SignIn, check_server, snapshots
 from nodes.mcp._credentials import McpConnectorCredential
 from nodes.mcp._store import new_slug
@@ -24,16 +26,32 @@ from nodes.mcp.mcp_connector import McpConnectorNode
 from services.plugin import NodeContext
 
 URL = "http://127.0.0.1:8931/mcp"
-SOCKET = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id=None))
+SERVER = "http://127.0.0.1:8931"
+SOCKET = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id=None), base_url="http://localhost:5678/")
 
 
 class FakeAuth:
-    """The credentials store: provider -> (secret, model_params)."""
+    """The credentials store: provider -> (secret, model_params), and the
+    OAuth token store: provider -> tokens."""
 
     distributed_credentials = False
 
     def __init__(self) -> None:
         self.rows: Dict[str, Tuple[str, Dict[str, Any]]] = {}
+        self.oauth: Dict[str, Dict[str, Any]] = {}
+
+    async def store_oauth_tokens(self, provider, access_token, refresh_token, email=None, name=None, scopes=None, customer_id="owner", expiry=None):
+        self.oauth[provider] = {"access_token": access_token, "refresh_token": refresh_token, "token_expiry": expiry, "scopes": scopes}
+        return True
+
+    async def get_stored_oauth_tokens(self, provider, customer_id="owner"):
+        return dict(self.oauth[provider]) if provider in self.oauth else None
+
+    async def get_oauth_refresh_token(self, provider, customer_id="owner"):
+        return (self.oauth.get(provider) or {}).get("refresh_token")
+
+    async def remove_oauth_tokens(self, provider, customer_id="owner"):
+        return self.oauth.pop(provider, None) is not None
 
     def require_local_credentials(self) -> None:
         return None
@@ -124,6 +142,8 @@ class Refusing(httpx.AsyncBaseTransport):
 def connect_through(monkeypatch, transport: httpx.AsyncBaseTransport) -> None:
     monkeypatch.setattr(_handlers, "discover", functools.partial(_client.discover, http_transport=transport))
     monkeypatch.setattr(_handlers, "read_again", functools.partial(_client.read_again, http_transport=transport))
+    monkeypatch.setattr(_handlers, "start_sign_in", functools.partial(_oauth.start_sign_in, http_transport=transport))
+    monkeypatch.setattr(mcp_connector, "call_tool", functools.partial(_client.call_tool, http_transport=transport))
 
 
 @contextlib.asynccontextmanager
@@ -453,3 +473,136 @@ class TestInHires:
         # Once it is removed, the card no longer lists it.
         await _handlers.handle_mcp_connector_remove({"ref": "mcp:orders"}, SOCKET)
         assert await _apps(graph, built.parameters, Connections(auth)) == []
+
+
+class SignsIn(httpx.AsyncBaseTransport):
+    """The MCP server behind OAuth, with an authorization server at
+    ``issuer``: its metadata, client registration, and tokens for the code
+    "the-code" or a refresh token it gave; 401 for a request without an
+    access token it gave."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, *, issuer: str = SERVER) -> None:
+        self.inner, self.issuer = inner, issuer
+        self.access: set = set()
+        self.refresh: set = set()
+        self.issued = self.refreshed = 0
+
+    def _tokens(self, request: httpx.Request) -> httpx.Response:
+        self.issued += 1
+        access, refresh = f"access-{self.issued}", f"refresh-{self.issued}"
+        self.access.add(access)
+        self.refresh.add(refresh)
+        return httpx.Response(200, json={"access_token": access, "token_type": "bearer", "expires_in": 3600, "refresh_token": refresh}, request=request)
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        await request.aread()
+        path = request.url.path
+        if path.startswith("/.well-known/oauth-protected-resource"):
+            return httpx.Response(200, json={"resource": URL, "authorization_servers": [f"{self.issuer}/"]}, request=request)
+        if path == "/.well-known/oauth-authorization-server":
+            endpoints = {"issuer": f"{SERVER}/", "authorization_endpoint": f"{SERVER}/authorize", "token_endpoint": f"{SERVER}/token"}
+            return httpx.Response(200, json={**endpoints, "registration_endpoint": f"{SERVER}/register"}, request=request)
+        if path == "/register":
+            return httpx.Response(201, json={**json.loads(request.content), "client_id": "client-1"}, request=request)
+        if path == "/token":
+            form = dict(parse_qsl(request.content.decode()))
+            if form.get("grant_type") == "authorization_code" and form.get("code") == "the-code":
+                return self._tokens(request)
+            if form.get("grant_type") == "refresh_token" and form.get("refresh_token") in self.refresh:
+                self.refreshed += 1
+                return self._tokens(request)
+            return httpx.Response(400, json={"error": "invalid_grant"}, request=request)
+        if request.headers.get("authorization", "").removeprefix("Bearer ") not in self.access:
+            challenge = f'Bearer resource_metadata="{SERVER}/.well-known/oauth-protected-resource/mcp"'
+            return httpx.Response(401, headers={"WWW-Authenticate": challenge}, request=request)
+        return await self.inner.handle_async_request(request)
+
+
+@contextlib.asynccontextmanager
+async def behind_sign_in(monkeypatch, server: FastMCP, **options):
+    gate = SignsIn(httpx.ASGITransport(app=server.streamable_http_app()), **options)
+    connect_through(monkeypatch, gate)
+    async with server.session_manager.run():
+        yield gate
+
+
+async def comes_back(address: str, **query: str) -> httpx.Response:
+    """The owner's browser, sent back from the server's sign-in page."""
+    from fastapi import FastAPI
+
+    from nodes.mcp._router import router
+
+    app = FastAPI()
+    app.include_router(router)
+    state = parse_qs(urlsplit(address).query)["state"][0]
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost:5678") as browser:
+        return await browser.get("/api/mcp/oauth/callback", params={"code": "the-code", "state": state, **query})
+
+
+class TestOAuth:
+    """Signing in on the server's own page (nodes/mcp/_oauth.py)."""
+
+    async def test_add_signs_in_on_the_servers_page_then_keeps_it(self, auth, monkeypatch):
+        async with behind_sign_in(monkeypatch, orders_server()):
+            started = await add(sign_in={"kind": "oauth"})
+            assert started["success"] and started["ref"] == "mcp:orders"
+            address = started["sign_in_url"]
+            sent_back = parse_qs(urlsplit(address).query)
+            assert address.startswith(f"{SERVER}/authorize?") and sent_back["redirect_uri"] == ["http://localhost:5678/api/mcp/oauth/callback"]
+            assert sent_back["code_challenge_method"] == ["S256"]
+            # Nothing is kept until the owner has signed in.
+            assert auth.rows == {}
+            page = await comes_back(address)
+        assert "Orders is connected, with 2 tools." in page.text
+        assert auth.meta("mcp:orders")["sign_in"] == {"kind": "oauth"}
+        kept = json.loads(auth.rows["mcp:orders"][0])["oauth"]
+        assert kept["client"]["client_id"] == "client-1" and kept["authorization_server"]["token_endpoint"] == f"{SERVER}/token"
+        tokens = auth.oauth["mcp:orders"]
+        assert (tokens["access_token"], tokens["refresh_token"]) == ("access-1", "refresh-1")
+        assert tokens["token_expiry"] > datetime.now(timezone.utc) + timedelta(minutes=50)
+
+    async def test_an_expired_token_is_refreshed_and_kept_then_sign_in_again(self, auth, monkeypatch):
+        context = NodeContext(node_id="n1", node_type="mcpConnector", raw={})
+        async with behind_sign_in(monkeypatch, orders_server()) as gate:
+            await comes_back((await add(sign_in={"kind": "oauth"}))["sign_in_url"])
+
+            async def call() -> Dict[str, Any]:
+                return await McpConnectorNode().execute_as_tool({"order": "A1"}, LOOKUP, context)
+
+            assert (await call())["text"] == "Order A1: 2 books" and gate.refreshed == 0
+            auth.oauth["mcp:orders"]["token_expiry"] = datetime.now(timezone.utc) - timedelta(minutes=1)
+            assert (await call())["text"] == "Order A1: 2 books"
+            assert gate.refreshed == 1 and auth.oauth["mcp:orders"]["access_token"] == "access-2"
+            # A refresh the server refuses leaves only signing in again.
+            gate.refresh.clear()
+            auth.oauth["mcp:orders"]["token_expiry"] = datetime.now(timezone.utc) - timedelta(minutes=1)
+            assert await call() == {"error": "Orders needs you to sign in again: open it on the Connectors page and press Sign in again."}
+            again = await _handlers.handle_mcp_connector_sign_in({"ref": "mcp:orders"}, SOCKET)
+            assert "Orders is signed in again." in (await comes_back(again["sign_in_url"])).text
+            assert (await call())["text"] == "Order A1: 2 books"
+            assert (await _handlers.handle_mcp_connector_test({"ref": "mcp:orders"}, SOCKET))["ok"] is True
+        await _handlers.handle_mcp_connector_remove({"ref": "mcp:orders"}, SOCKET)
+        assert auth.oauth == {}
+
+    async def test_a_refused_sign_in_keeps_nothing(self, auth, monkeypatch):
+        async with behind_sign_in(monkeypatch, orders_server()):
+            address = (await add(sign_in={"kind": "oauth"}))["sign_in_url"]
+            page = await comes_back(address, error="access_denied", code="")
+            assert "The sign-in was refused: access_denied" in page.text
+            # The same sign-in again has ended.
+            assert "This sign-in has ended" in (await comes_back(address)).text
+        assert auth.rows == {} and auth.oauth == {}
+
+    async def test_only_a_server_that_asks_signs_in(self, auth, monkeypatch):
+        async with serving(monkeypatch, orders_server()):
+            assert await add(sign_in={"kind": "oauth"}) == {
+                "success": False,
+                "error": "127.0.0.1 didn't ask to sign in. Choose None, or the sign-in it uses.",
+            }
+
+    async def test_the_authorization_server_must_be_reachable_too(self, auth, monkeypatch):
+        # The server names its authorization server; cloud metadata is never reached.
+        async with behind_sign_in(monkeypatch, orders_server(), issuer="http://169.254.169.254"):
+            result = await add(sign_in={"kind": "oauth"})
+        assert result["success"] is False and result["error"].startswith("169.254.169.254 can't be used")
+        assert auth.rows == {}

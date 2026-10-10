@@ -520,8 +520,10 @@ def render_oauth_callback_html(
     status: str,
     message: str,
     color_hex: str,
+    title: Optional[str] = None,
 ) -> str:
-    """Render the small auto-closing callback page.
+    """Render the small auto-closing callback page. ``title`` replaces the
+    success heading ("<Provider> Connected").
 
     ``status`` MUST be ``"success"`` or ``"error"``. The page posts a
     ``{provider}_oauth_callback`` message to ``window.opener`` (the
@@ -555,7 +557,7 @@ def render_oauth_callback_html(
     #                                   so the JSON literal is also safe inside
     #                                   a ``<script>`` block.
     is_success = status == "success"
-    title = f"{provider.capitalize()} Connected" if is_success else "Connection Failed"
+    title = (title or f"{provider.capitalize()} Connected") if is_success else "Connection Failed"
     return _HTML_TEMPLATE.format(
         title=html.escape(title),
         message=html.escape(message),

@@ -118,4 +118,22 @@ describe('McpConnectorPanel', () => {
     await waitFor(() => expect(onLeave).toHaveBeenCalledTimes(1));
     expect(mocks.sendRequest).toHaveBeenCalledWith('mcp_connector_remove', { ref: 'mcp:orders' }, 60_000);
   });
+
+  it('signs an OAuth connector in again on its sign-in page; only OAuth has the button', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    mocks.sendRequest.mockResolvedValue({ success: true, sign_in_url: 'https://auth.example.com/authorize?state=s' });
+    const user = userEvent.setup();
+    mount({ mcp: { sign_in: { kind: 'oauth' } } });
+    expect(screen.getByText('OAuth')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Sign in again' }));
+    expect(mocks.sendRequest).toHaveBeenCalledWith('mcp_connector_sign_in', { ref: 'mcp:orders' }, 60_000);
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://auth.example.com/authorize?state=s', '_blank'));
+    expect(await screen.findByRole('status')).toHaveTextContent('Sign in on the page that opened.');
+    open.mockRestore();
+  });
+
+  it('has no Sign in again for a connector that signs in with a header', () => {
+    mount();
+    expect(screen.queryByRole('button', { name: 'Sign in again' })).not.toBeInTheDocument();
+  });
 });

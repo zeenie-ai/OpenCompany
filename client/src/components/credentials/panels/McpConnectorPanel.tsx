@@ -2,8 +2,9 @@
  * McpConnectorPanel — a custom MCP connector (kind `mcp`): the server it
  * reaches and how it signs in; Test, which asks the server again; Refresh,
  * which reads its tools again and holds any change for Accept or Discard,
- * since a server can change what a tool says it does; Remove; and its tools,
- * each on or off for employees and set to ask first or not.
+ * since a server can change what a tool says it does; Sign in again, for
+ * one that signs in with OAuth (its sign-in page opens in a new tab); Remove;
+ * and its tools, each on or off for employees and set to ask first or not.
  *
  * Everything shown is the connector's card (`config.mcp`). Every change is
  * the server's (nodes/mcp/_handlers.py): a command waits for the refetched
@@ -47,6 +48,7 @@ const FAILED = "That didn't work. Try again.";
 function signInText(signIn: ServerMcpConnector['sign_in']): string {
   if (signIn.kind === 'bearer') return 'Bearer token';
   if (signIn.kind === 'header') return `Header ${signIn.header ?? ''}`.trim();
+  if (signIn.kind === 'oauth') return 'OAuth';
   return 'None';
 }
 
@@ -100,6 +102,13 @@ export default function McpConnectorPanel({ config, showTechnicalSections = fals
     if (result && !result.changes) setNotice({ ok: true, text: 'Nothing changed: the tools are as you accepted them.' });
   };
 
+  const signIn = async () => {
+    const result = await run<Result & { sign_in_url?: string }>('sign_in', 'mcp_connector_sign_in');
+    if (!result?.sign_in_url) return;
+    window.open(result.sign_in_url, '_blank');
+    setNotice({ ok: true, text: 'Sign in on the page that opened.' });
+  };
+
   const setTool = async (tool: string, change: ToolChange) => {
     setChanging({ tool, ...change });
     await run('tool', 'mcp_connector_set_tool', { tool, ...change });
@@ -147,6 +156,11 @@ export default function McpConnectorPanel({ config, showTechnicalSections = fals
         <ActionButton intent="config" disabled={locked} onClick={() => void refresh()}>
           {busy === 'refresh' ? 'Reading tools…' : 'Refresh tools'}
         </ActionButton>
+        {mcp.sign_in.kind === 'oauth' && (
+          <ActionButton intent="secret" disabled={locked} onClick={() => void signIn()}>
+            {busy === 'sign_in' ? 'Opening sign-in…' : 'Sign in again'}
+          </ActionButton>
+        )}
         <ActionButton intent="stop" disabled={locked} onClick={() => setRemoving(true)} className="ml-auto">
           Remove
         </ActionButton>
