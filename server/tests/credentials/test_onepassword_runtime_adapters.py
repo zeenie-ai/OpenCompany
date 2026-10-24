@@ -23,9 +23,16 @@ def runtime_auth(monkeypatch, key="runtime-key"):
 
 
 async def test_apify_activity_passes_trusted_principal_to_private_resolution(monkeypatch):
+    from datetime import datetime, timezone
+
+    from apify_client._models import Run
     from nodes.scraper.apify_actor import ApifyActorNode, ApifyActorParams
     auth = runtime_auth(monkeypatch)
-    actor = SimpleNamespace(call=AsyncMock(return_value={"id": "run", "status": "SUCCEEDED"}))
+    run = Run.model_construct(
+        id="run", status="SUCCEEDED", status_message=None, default_dataset_id="", usage_total_usd=None,
+        started_at=datetime(2026, 4, 15, tzinfo=timezone.utc), finished_at=None,
+    )
+    actor = SimpleNamespace(call=AsyncMock(return_value=run))
     sdk = MagicMock(return_value=SimpleNamespace(actor=lambda name: actor))
     monkeypatch.setitem(sys.modules, "apify_client", SimpleNamespace(ApifyClientAsync=sdk))
     ctx = NodeContext(node_id="scraper", node_type="apifyActor", raw={"user_id": "alice"})

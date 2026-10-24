@@ -2042,7 +2042,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.14.4" },
     { name = "aiosqlite", specifier = ">=0.20.0" },
     { name = "anthropic", specifier = "==0.96.0" },
-    { name = "apify-client", specifier = ">=1.8.0" },
+    { name = "apify-client", specifier = ">=3.1.0" },
     { name = "asyncpg", specifier = ">=0.30.0,<1" },
     { name = "bcrypt", specifier = ">=4.2.0" },
     { name = "beautifulsoup4", marker = "extra == 'docs'", specifier = ">=4.12.0" },

@@ -9,13 +9,14 @@ these indicates the docs (and the user-visible contract) need to be updated too.
 All external side-effects are mocked:
   - crawleeScraper: patches the crawlee crawler classes the handler imports
     lazily (`BeautifulSoupCrawler`, `PlaywrightCrawler`).
-  - apifyActor: patches the ApifyClientAsync singleton returned from
-    `services.handlers.apify._get_apify_client`.
+  - apifyActor: patches `apify_client.ApifyClientAsync` with a client whose
+    resource clients are autospecs of the installed SDK's.
 """
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
 
@@ -150,26 +151,52 @@ class TestCrawleeScraper:
 # ============================================================================
 
 
+def _run(**fields):
+    """An SDK ``Run`` holding the fields the node reads; the API sends many more."""
+    from apify_client._models import Run
+
+    values = {
+        "id": "run_1",
+        "status": "SUCCEEDED",
+        "status_message": None,
+        "default_dataset_id": "",
+        "usage_total_usd": None,
+        "started_at": datetime(2026, 4, 15, tzinfo=timezone.utc),
+        "finished_at": None,
+    }
+    values.update(fields)
+    return Run.model_construct(**values)
+
+
 def _make_fake_apify_client(
     *,
-    run_info: dict | None = None,
+    run=None,
     items: list | None = None,
     call_exc: Exception | None = None,
 ):
-    """Build a MagicMock that mimics ApifyClientAsync surface used by the handler."""
+    """A client whose resource clients carry the installed SDK's signatures.
+
+    ``create_autospec`` fails a call with a keyword the SDK does not take, as
+    the SDK itself would: apify-client 3.x dropped 1.x's ``timeout_secs``, and
+    every run raised TypeError while these fakes accepted anything.
+    """
+    from apify_client._resource_clients import ActorClientAsync, DatasetClientAsync
+    from apify_client._resource_clients.dataset import DatasetItemsPage
+
     client = MagicMock(name="ApifyClientAsync")
 
-    actor_client = MagicMock(name="ActorClient")
+    actor_client = create_autospec(ActorClientAsync, instance=True)
     if call_exc:
-        actor_client.call = AsyncMock(side_effect=call_exc)
+        actor_client.call.side_effect = call_exc
     else:
-        actor_client.call = AsyncMock(return_value=run_info)
+        actor_client.call.return_value = run
     client.actor = MagicMock(return_value=actor_client)
 
-    list_result = MagicMock()
-    list_result.items = items or []
-    dataset_client = MagicMock(name="DatasetClient")
-    dataset_client.list_items = AsyncMock(return_value=list_result)
+    page_items = items or []
+    dataset_client = create_autospec(DatasetClientAsync, instance=True)
+    dataset_client.list_items.return_value = DatasetItemsPage(
+        items=page_items, total=len(page_items), offset=0, count=len(page_items), limit=len(page_items), desc=False,
+    )
     client.dataset = MagicMock(return_value=dataset_client)
 
     return client
@@ -177,16 +204,15 @@ def _make_fake_apify_client(
 
 class TestApifyActor:
     async def test_happy_path_returns_dataset_items(self, harness):
-        run_info = {
-            "id": "run_123",
-            "status": "SUCCEEDED",
-            "defaultDatasetId": "ds_456",
-            "usageTotalUsd": 0.02,
-            "startedAt": "2026-04-15T00:00:00Z",
-            "finishedAt": "2026-04-15T00:00:05Z",
-        }
+        run = _run(
+            id="run_123",
+            default_dataset_id="ds_456",
+            usage_total_usd=0.02,
+            started_at=datetime(2026, 4, 15, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 4, 15, 0, 0, 5, tzinfo=timezone.utc),
+        )
         items = [{"url": "https://a.example"}, {"url": "https://b.example"}]
-        fake_client = _make_fake_apify_client(run_info=run_info, items=items)
+        fake_client = _make_fake_apify_client(run=run, items=items)
 
         with patched_container(auth_api_keys={"apify": "tk_apify"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute(
@@ -221,6 +247,8 @@ class TestApifyActor:
         assert payload["items"] == items
         assert payload["dataset_id"] == "ds_456"
         assert payload["compute_units"] == 0.02
+        assert payload["started_at"] == "2026-04-15T00:00:00+00:00"
+        assert payload["finished_at"] == "2026-04-15T00:00:05+00:00"
 
         # Quick-helper merge: call_args run_input should contain directUrls
         call_kwargs = fake_client.actor.return_value.call.await_args.kwargs
@@ -230,6 +258,8 @@ class TestApifyActor:
             "https://instagram.com/b",
         ]
         assert call_kwargs["memory_mbytes"] == 1024  # default
+        assert call_kwargs["run_timeout"] == timedelta(seconds=300)  # default
+        assert call_kwargs["logger"] is None  # the actor's log is not streamed into ours
         # dataset list called with the right limit
         fake_client.dataset.return_value.list_items.assert_awaited_once_with(limit=50)
 
@@ -245,7 +275,7 @@ class TestApifyActor:
         assert "apify api token not configured" in result["error"].lower()
 
     async def test_missing_actor_id_returns_validation_error(self, harness):
-        fake_client = _make_fake_apify_client(run_info={})
+        fake_client = _make_fake_apify_client(run=_run())
 
         with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute("apifyActor", {"actor_id": ""})
@@ -254,13 +284,8 @@ class TestApifyActor:
         assert "invalid parameters" in result["error"].lower()
 
     async def test_failed_run_status_returns_error_envelope(self, harness):
-        run_info = {
-            "id": "run_err",
-            "status": "FAILED",
-            "errorMessage": "Actor crashed at step 3",
-            "defaultDatasetId": "",
-        }
-        fake_client = _make_fake_apify_client(run_info=run_info, items=[])
+        run = _run(id="run_err", status="FAILED", status_message="Actor crashed at step 3")
+        fake_client = _make_fake_apify_client(run=run, items=[])
 
         with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute("apifyActor", {"actor_id": "apify/instagram-scraper"})
@@ -278,15 +303,8 @@ class TestApifyActor:
         assert "401" in result["error"].lower() or "unauthorized" in result["error"].lower()
 
     async def test_invalid_actor_input_json_silently_becomes_empty_dict(self, harness):
-        run_info = {
-            "id": "run_ok",
-            "status": "SUCCEEDED",
-            "defaultDatasetId": "ds",
-            "usageTotalUsd": 0,
-            "startedAt": "",
-            "finishedAt": "",
-        }
-        fake_client = _make_fake_apify_client(run_info=run_info, items=[])
+        run = _run(id="run_ok", default_dataset_id="ds", usage_total_usd=0)
+        fake_client = _make_fake_apify_client(run=run, items=[])
 
         with patched_container(auth_api_keys={"apify": "tk"}), patch("apify_client.ApifyClientAsync", return_value=fake_client):
             result = await harness.execute(
@@ -301,3 +319,38 @@ class TestApifyActor:
         call_kwargs = fake_client.actor.return_value.call.await_args.kwargs
         # malformed JSON becomes {} not a parse error
         assert call_kwargs["run_input"] == {}
+
+
+class TestApifyTokenValidation:
+    """The Credentials modal's key check. On apify-client 3.x the SDK
+    returns models, not dicts, so a valid key read as invalid."""
+
+    async def _validate(self, user_info):
+        from apify_client._resource_clients import UserClientAsync
+        from nodes.scraper.apify_actor import validate_apify_token
+
+        user_client = create_autospec(UserClientAsync, instance=True)
+        user_client.get.return_value = user_info
+        client = MagicMock(name="ApifyClientAsync")
+        client.user = MagicMock(return_value=user_client)
+        with patch("apify_client.ApifyClientAsync", return_value=client):
+            return await validate_apify_token("tk")
+
+    async def test_private_info_gives_username_email_and_plan(self):
+        from apify_client._models import Plan, UserPrivateInfo
+
+        info = UserPrivateInfo.model_construct(
+            username="ada", email="ada@example.com", plan=Plan.model_construct(id="PERSONAL"),
+        )
+        assert await self._validate(info) == {
+            "valid": True, "username": "ada", "email": "ada@example.com", "plan": "PERSONAL",
+        }
+
+    async def test_public_info_has_no_email_or_plan(self):
+        from apify_client._models import UserPublicInfo
+
+        info = UserPublicInfo.model_construct(username="ada")
+        assert await self._validate(info) == {"valid": True, "username": "ada", "email": "", "plan": "free"}
+
+    async def test_missing_user_info_is_invalid(self):
+        assert (await self._validate(None))["valid"] is False

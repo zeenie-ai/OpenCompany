@@ -46,7 +46,7 @@ Params model is `ApifyActorParams` (field names are snake_case).
 | `crawler_max_depth` | int (0-20) | `2` | no | `actor_id=apify/website-content-crawler` | -> `maxCrawlDepth` |
 | `crawler_max_pages` | int (1-10000) | `50` | no | `actor_id=apify/website-content-crawler` | -> `maxCrawlPages` |
 | `max_results` | int (1-10000) | `100` | no | - | Forwarded to `dataset.list_items(limit=...)` |
-| `timeout` | int (1-3600) | `300` | no | - | Run timeout in seconds (SDK forwards as `timeout_secs`) |
+| `timeout` | int (1-3600) | `300` | no | - | Run timeout in seconds (passed to the SDK as `run_timeout=timedelta(seconds=...)`) |
 | `memory` | options (Literal: 128/256/512/1024/2048/4096/8192) | `1024` | no | - | Actor memory in MB (`memory_mbytes`) |
 
 Actor presets (`actor_id`): `apify/instagram-scraper`, `clockworks/tiktok-scraper`,
@@ -72,9 +72,9 @@ Actor presets (`actor_id`): `apify/instagram-scraper`, `clockworks/tiktok-scrape
   items: any[];             // dataset items up to maxResults
   item_count: number;
   dataset_id: string;
-  compute_units: number;    // mapped from usageTotalUsd on the run
-  started_at: string;
-  finished_at: string;
+  compute_units: number;    // mapped from usage_total_usd on the run
+  started_at: string;       // ISO 8601 with offset
+  finished_at: string;      // ISO 8601 with offset, or "" while unset
 }
 ```
 
@@ -94,16 +94,16 @@ flowchart TD
   C1 -- yes --> Eaid[raise NodeUserError: Actor ID is required]
   C1 -- no --> D[_build_actor_input params.model_dump<br/>parse actor_input JSON else {}<br/>merge per-actor quick helpers]
   D --> E[Read timeout, max_results, memory_mbytes]
-  E --> F[client.actor id .call<br/>run_input, timeout_secs, memory_mbytes]
-  F -- run_info None --> Enone[raise NodeUserError:<br/>no result returned]
-  F -- ok --> G{run_status?}
-  G -- FAILED --> Gf[raise NodeUserError errorMessage]
+  E --> F[client.actor id .call<br/>run_input, run_timeout, memory_mbytes, logger=None]
+  F -- run None --> Enone[raise NodeUserError:<br/>no result returned]
+  F -- ok --> G{run.status?}
+  G -- FAILED --> Gf[raise NodeUserError status_message]
   G -- TIMED-OUT --> Gt[raise NodeUserError: Actor timed out]
   G -- ABORTED --> Ga[raise NodeUserError: Actor run was aborted]
   G -- other --> H{dataset_id truthy?}
   H -- yes --> H1[client.dataset id .list_items limit=max_results<br/>items = listing.items]
   H -- no --> H2[items = empty list]
-  H1 & H2 --> I[Build ApifyActorOutput:<br/>run_id, actor_id, status, items, item_count,<br/>dataset_id, compute_units=usageTotalUsd,<br/>started_at, finished_at]
+  H1 & H2 --> I[Build ApifyActorOutput:<br/>run_id, actor_id, status, items, item_count,<br/>dataset_id, compute_units=usage_total_usd,<br/>started_at, finished_at]
   I --> J[Return BaseNode success envelope]
 ```
 
@@ -147,20 +147,22 @@ flowchart TD
 - **Credentials**: `auth_service.get_api_key("apify", "default")` -> stored in
   the `EncryptedAPIKey` table under provider `apify`.
 - **Services**: Apify platform (api.apify.com).
-- **Python packages**: `apify-client` (>= async variant `ApifyClientAsync`).
+- **Python packages**: `apify-client` 3.1 or later (`ApifyClientAsync`). Since 3.x, `ActorClientAsync.call` takes `run_timeout` as a `timedelta` (1.x's `timeout_secs` raises `TypeError`). It returns a pydantic `Run`, and `user("me").get()` returns `UserPrivateInfo`, or `UserPublicInfo` when the token may not read private info. The tests build their fakes with `create_autospec` of the SDK's resource clients, so a call the installed SDK would reject fails them too.
 - **Environment variables**: none (token lives in credentials DB).
 
 ## Edge cases & known limits
 
 - **Invalid `actorInput` JSON is silent**: the run is sent with `{}` and may
   succeed unexpectedly (actor uses defaults) or fail with a validation error
-  that surfaces in `errorMessage`.
+  that surfaces in the run's `status_message`.
 - **Quick helpers overwrite raw input**: setting both `actorInput` JSON AND
   the per-actor helper means the helper wins. This is not documented in the
   frontend.
 - **No streaming**: the handler blocks until the actor finishes or the SDK
-  raises. `timeout` is the hard cap.
-- **`compute_units` is misleading**: the value returned is `run.usageTotalUsd`
+  raises, and passes `logger=None` so the SDK does not copy the actor's log
+  into the app's. `timeout` caps only the time the run spends RUNNING; a run
+  queued as READY (the account's concurrent runs are full) can wait longer.
+- **`compute_units` is misleading**: the value returned is `run.usage_total_usd`
   (USD), not compute units. The key name is preserved for backward compat.
 - **Error rewriting is substring-based (validation only)**: `validate_apify_token`
   pattern-matches `401`/`Unauthorized` to a generic message; the runtime `run`

@@ -134,8 +134,9 @@ dependencies = [
     # Twitter/X API
     "xdk>=0.1.0",
 
-    # Apify Web Scraping
-    "apify-client>=1.8.0",
+    # Apify Web Scraping. Floor 3.1: the node uses the 3.x API (run_timeout,
+    # pydantic Run and user models), which 1.x and 2.x do not have.
+    "apify-client>=3.1.0",
 
     # TikHub social scraping SDK. Auto-generated from TikHub's openapi.json;
     # capped below 3 because the resource/method surface regenerates per

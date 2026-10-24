@@ -8,6 +8,7 @@ raw ``actorInput`` JSON for common actors.
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -101,12 +102,14 @@ async def validate_apify_token(api_token: str) -> Dict[str, Any]:
         user_info = await client.user("me").get()
         if not user_info:
             return {"valid": False, "error": "Could not fetch user info"}
-        plan = user_info.get("plan")
+        # A token that may not read private info gets the public model,
+        # which has no email and no plan.
+        plan = getattr(user_info, "plan", None)
         return {
             "valid": True,
-            "username": user_info.get("username", ""),
-            "email": user_info.get("email", ""),
-            "plan": plan.get("id", "free") if isinstance(plan, dict) else "free",
+            "username": user_info.username or "",
+            "email": getattr(user_info, "email", None) or "",
+            "plan": (plan.id if plan is not None else None) or "free",
         }
     except Exception as e:
         logger.error(f"[Apify] Token validation error: {e}")
@@ -284,21 +287,23 @@ class ApifyActorNode(ActionNode):
         logger.info(
             f"[Apify] Running actor {actor_id} " f"timeout={timeout_secs}s memory={memory_mbytes}MB",
         )
-        run_info = await client.actor(actor_id).call(
+        run = await client.actor(actor_id).call(
             run_input=actor_input,
-            timeout_secs=timeout_secs,
+            run_timeout=timedelta(seconds=timeout_secs),
             memory_mbytes=memory_mbytes,
+            # The SDK would otherwise stream the actor's own log into ours.
+            logger=None,
         )
 
-        if run_info is None:
+        if run is None:
             raise NodeUserError("Actor run failed - no result returned")
 
-        status = run_info.get("status", "UNKNOWN")
-        run_id = run_info.get("id", "")
-        dataset_id = run_info.get("defaultDatasetId", "")
+        status = run.status
+        run_id = run.id
+        dataset_id = run.default_dataset_id
 
         if status == "FAILED":
-            raise NodeUserError(run_info.get("errorMessage", "Actor run failed"))
+            raise NodeUserError(run.status_message or "Actor run failed")
         if status == "TIMED-OUT":
             raise NodeUserError("Actor timed out. Try increasing the timeout.")
         if status == "ABORTED":
@@ -317,7 +322,7 @@ class ApifyActorNode(ActionNode):
             items=items,
             item_count=len(items),
             dataset_id=dataset_id,
-            compute_units=run_info.get("usageTotalUsd", 0),
-            started_at=run_info.get("startedAt", ""),
-            finished_at=run_info.get("finishedAt", ""),
+            compute_units=run.usage_total_usd or 0,
+            started_at=run.started_at.isoformat(),
+            finished_at=run.finished_at.isoformat() if run.finished_at else "",
         )
