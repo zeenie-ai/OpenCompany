@@ -1,5 +1,5 @@
 {
-  "_comment": "The release pin for new Temporal installations (services/temporal/_install.py). Asset keys are <os>_<arch> in the CLI release's spellings. Bump the version, server_version and all checksums together from the official checksums.txt. Existing installations retain their installed server/database pair until an explicit migration; older binaries and database files are never automatically deleted.",
+  "_comment": "The Temporal CLI pin (services/temporal/_install.py). Asset keys are <os>_<arch> in the CLI release's spellings. Bump the version, server_version and all checksums together from the official checksums.txt. A new server minor starts every install from an empty Temporal database: at the next start, a database the pinned server minor did not create is deleted with every older CLI file (RFC-0005 E16). A patch bump of the same minor keeps the database.",
   "version": "1.9.1",
   "server_version": "1.32.0",
   "base": "https://github.com/temporalio/cli/releases/download/v{version}/",

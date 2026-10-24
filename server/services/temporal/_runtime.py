@@ -93,12 +93,13 @@ class TemporalServerRuntime(BaseProcessSupervisor):
     async def _pre_spawn(self) -> None:
         from services.temporal._install import ensure_temporal_binaries, prepare_database
 
-        self._binaries = await ensure_temporal_binaries(self.settings)
+        self._binaries = await ensure_temporal_binaries()
         # Ensure the parent dir for the SQLite file exists before
         # ``temporal server start-dev`` opens it.
         self._sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-        # Validate the selected existing pair before opening any SQLite file.
-        await asyncio.to_thread(prepare_database, self._sqlite_path, self._binaries["temporal"])
+        # A database the pinned server minor did not create is deleted
+        # before the server opens it (RFC-0005 E16).
+        await asyncio.to_thread(prepare_database, self._sqlite_path)
 
     def binary_path(self) -> Path:
         # ``_pre_spawn`` (called by ``BaseProcessSupervisor._do_start``

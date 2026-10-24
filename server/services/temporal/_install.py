@@ -7,13 +7,16 @@ same root that holds the Stripe and agent-browser binaries (see
 :func:`core.paths.package_dir`). pooch verifies the archive against the
 pinned hash before extracting it (zip on Windows, tar.gz elsewhere), so
 a re-run is a cache hit and a tampered or truncated download fails.
-Older binaries remain available beside the pin so existing databases keep
-using the server that created them. Upgrading the application never migrates
-or deletes Temporal state; a server minor change requires an explicit move.
 
-A marker beside each database records the selected CLI/server and binary.
-Unmarked pre-pin databases are adopted only with the existing legacy binary;
-missing/ambiguous provenance refuses startup instead of guessing.
+A new Temporal server minor starts from an empty database (RFC-0005 E16).
+``temporal.db.server.json`` beside the database names the server that
+created it, and :func:`prepare_database` runs before every spawn. A
+database with no marker, or with one naming another server minor than the
+pin, is deleted together with its ``-wal`` and ``-shm`` files, and every
+CLI file that is not the pin's goes with it. Nothing is migrated:
+generations whose controller lived in the old database fail with
+``controller_execution_missing``, and owners Reset and Start them. A patch
+release of the same minor keeps the database.
 
 The downloaded ``temporal`` CLI powers ``temporal server start-dev``
 (the SQLite dev server) and ad-hoc workflow / operator commands.
@@ -25,15 +28,14 @@ import asyncio
 import json
 import platform
 import re
-import subprocess
-from datetime import datetime, timezone
+import shutil
 import stat
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import pooch
 
-from core.config import Settings
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -86,26 +88,15 @@ _cached: dict[str, Path] | None = None
 _lock = asyncio.Lock()
 
 
-async def ensure_temporal_binaries(
-    settings: Settings | None = None,
-) -> dict[str, Path]:
+async def ensure_temporal_binaries() -> dict[str, Path]:
     """Return ``{"temporal": Path}`` — the pinned ``temporal`` CLI binary.
 
     Idempotent — first call downloads, subsequent calls hit the pooch
     cache under ``<DATA_DIR>/packages/temporal/<version>/``.
     Async-locked so concurrent callers don't double-download.
-
-    Runtime callers pass settings so an existing database selects its own
-    installed server. Build callers omit it and materialize the release pin
-    alongside older versions, without touching their databases.
     """
     global _cached
     async with _lock:
-        if settings is not None:
-            db = Path(settings._resolve_under_data(settings.temporal_sqlite_path))
-            selected = await asyncio.to_thread(_existing_database_cli, db)
-            if selected is not None:
-                return {"temporal": selected}
         if _cached is not None and _cached["temporal"].is_file() and _cached["temporal"].resolve().is_relative_to(_cache_dir().resolve()):
             return _cached
         cli_path = await asyncio.to_thread(_fetch_cli_sync)
@@ -159,101 +150,56 @@ def _fetch_cli_sync() -> Path:
 
 
 def marker_path(db_path: Path) -> Path:
-    """The file beside the database that names its server and CLI."""
+    """The file beside the database that names the server that created it."""
     return db_path.with_name(db_path.name + ".server.json")
 
 
-def _read_marker(db_path: Path) -> dict | None:
-    marker = marker_path(db_path)
-    if not marker.exists():
-        return None
-    try:
-        value = json.loads(marker.read_text(encoding="utf-8"))
-        if not isinstance(value, dict) or _server_minor(value.get("server_version")) is None:
-            raise ValueError("server version is missing")
-        return value
-    except (OSError, ValueError, TypeError) as exc:
-        raise RuntimeError(f"Cannot verify Temporal server marker {marker}; existing database was preserved") from exc
+def prepare_database(db_path: Path) -> None:
+    """Start from an empty database unless the pin's server minor created it.
 
-
-def _binary_versions(binary: Path) -> dict[str, str]:
-    result = subprocess.run([str(binary), "--version"], capture_output=True, text=True, check=True, timeout=15)
-    match = re.search(r"(?:temporal CLI|temporal version)\s+(\d+\.\d+\.\d+)\s+\(Server\s+(\d+\.\d+\.\d+)", result.stdout, re.I)
-    if match is None:
-        raise RuntimeError(f"Cannot verify Temporal CLI/server version: {binary}")
-    return {"cli_version": match[1], "server_version": match[2]}
-
-
-def _find_binary(directory: Path) -> Path | None:
-    candidates = sorted(directory.rglob(_binary_name())) if directory.is_dir() else []
-    candidates = [path for path in candidates if path.is_file()]
-    if len(candidates) > 1:
-        raise RuntimeError(f"Ambiguous Temporal binaries in {directory}; database was preserved")
-    return candidates[0] if candidates else None
-
-
-def _existing_database_cli(db_path: Path) -> Path | None:
-    """Keep the installed server/database pair; never download a replacement."""
-    if not db_path.exists():
-        return None
-    marker = _read_marker(db_path)
-    root = _cache_dir()
-    if marker is None:
-        os_, arch = _CLI_PLATFORM_MAP[(platform.system(), platform.machine())]
-        archive = f"temporal_cli_latest_{os_}_{arch}." + ("zip.unzip" if os_ == "windows" else "tar.gz.untar")
-        binary = _find_binary(root / archive)
-        if binary is None:
-            raise RuntimeError(f"No original Temporal binary is available for unmarked database {db_path}; "
-                               "restore its binary or explicitly migrate the installation. Database was preserved")
-        _binary_versions(binary)  # Prove it can identify the server before adoption.
-        return binary
-    version = marker.get("cli_version")
-    if not isinstance(version, str) or re.fullmatch(r"\d+\.\d+\.\d+", version) is None:
-        raise RuntimeError(f"Cannot identify the original Temporal CLI for {db_path}; database was preserved")
-    if version == cli_pin()["version"] and _server_minor(marker["server_version"]) == _server_minor(cli_pin()["server_version"]):
-        return None  # Safe to install/reuse the same server minor's pinned binary.
-    relative = marker.get("binary")
-    binary = (root / relative).resolve() if isinstance(relative, str) else None
-    if binary is not None and not binary.is_relative_to(root.resolve()):
-        raise RuntimeError("Temporal binary marker escapes package directory; database was preserved")
-    if binary is None or not binary.is_file():
-        binary = _find_binary(root / str(version)) if version else None
-    if binary is None:
-        raise RuntimeError(f"The original Temporal {version} binary for {db_path} is missing; database was preserved")
-    actual = _binary_versions(binary)
-    if _server_minor(actual["server_version"]) != _server_minor(marker["server_version"]):
-        raise RuntimeError("Temporal binary/server marker mismatch; database was preserved")
-    return binary
-
-
-def prepare_database(db_path: Path, binary: Path | None = None) -> None:
-    """Validate before spawn; no database or WAL file is ever removed here."""
+    Runs before every spawn. A database whose marker names the pin's server
+    minor is kept. Otherwise the database, its ``-wal`` and ``-shm`` files and
+    every CLI file that is not the pin's are deleted, and the pin's marker is
+    written, so ``start-dev`` creates an empty database for the pinned server.
+    A database that cannot be deleted stops the start: the pinned server must
+    never open another minor's schema.
+    """
     pin = cli_pin()
-    actual = _binary_versions(binary) if binary is not None else {
-        "cli_version": pin["version"], "server_version": pin["server_version"],
-    }
-    marker = _read_marker(db_path) if db_path.exists() else None
-    if db_path.exists() and marker is None and binary is None:
-        raise RuntimeError(f"Unmarked Temporal database {db_path} requires its original binary; database was preserved")
-    if marker is not None:
-        if _server_minor(marker["server_version"]) != _server_minor(actual["server_version"]):
-            raise RuntimeError(f"Temporal server minor mismatch for {db_path}; explicit migration required. Database was preserved")
+    marker = marker_path(db_path)
+    if _server_minor(_recorded_server(marker)) == _server_minor(pin["server_version"]):
         return
-    record = {**actual, "created_at": datetime.now(timezone.utc).isoformat()}
-    if binary is not None:
-        try:
-            record["binary"] = str(binary.resolve().relative_to(_cache_dir().resolve()))
-        except ValueError:
-            raise RuntimeError("Temporal binary must be inside its package directory; database was preserved") from None
+    stale = [path for path in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")) if path.exists()]
+    for path in stale:
+        path.unlink()
+    if stale:
+        logger.warning(
+            "[Temporal install] Deleted a Temporal database the pinned server %s did not create (RFC-0005 E16); "
+            "employees whose controller lived in it need Reset and Start: %s",
+            pin["server_version"],
+            db_path,
+        )
+    _remove_unpinned_clis(pin["version"])
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    # Exclusive creation avoids two startup attempts overwriting provenance.
-    try:
-        with marker_path(db_path).open("x", encoding="utf-8") as stream:
-            json.dump(record, stream)
-    except FileExistsError:
-        existing = _read_marker(db_path)
-        if existing is None or _server_minor(existing["server_version"]) != _server_minor(actual["server_version"]):
-            raise RuntimeError("Concurrent Temporal database marker mismatch; database was preserved") from None
+    record = {"cli_version": pin["version"], "server_version": pin["server_version"], "created_at": datetime.now(timezone.utc).isoformat()}
+    marker.write_text(json.dumps(record), encoding="utf-8")
+
+
+def _remove_unpinned_clis(version: str) -> None:
+    """Delete every CLI file in the package root except the pinned version's folder.
+
+    These are unused once the database is reset, so a file that cannot be
+    deleted is logged and left for the next reset rather than stopping the start.
+    """
+    for entry in _cache_dir().iterdir():
+        if entry.name == version:
+            continue
+        try:
+            if entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+        except OSError as exc:
+            logger.warning("[Temporal install] Could not delete an old Temporal CLI file %s: %s", entry, exc)
 
 
 def _recorded_server(marker: Path) -> object:
