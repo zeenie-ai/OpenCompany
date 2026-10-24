@@ -1,6 +1,6 @@
 # RFC-0005 — Event OS: Event-Driven AI Employees on Temporal
 
-- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) is next. RFC-0006 amended this RFC on 2026-10-24 (§30).
+- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) is in progress. RFC-0006 amended this RFC on 2026-10-24 (§30).
 - **Created:** 2026-10-23
 - **Scope:** the path from every event source to every effect:
   - `server/services/events/` and `server/routers/webhook.py`;
@@ -482,7 +482,7 @@ This is the documented consumer pattern: Signal-With-Start, then commit after th
 |---|---|---|
 | EmployeeSupervisorWorkflow | `emp-<workflow_id>-g<gen>` | Start, with `REJECT_DUPLICATE`. A lost supervisor (terminated or failed) is rebuilt in place from the database with `ALLOW_DUPLICATE_FAILED_ONLY`, keeping chat and Context; after 3 rebuilds within an hour, an attention item asks the owner to Reset (T20, RFC-0006 §8.2) |
 | ConversationWorkflow (the entity) | `conv-<workflow_id>-g<gen>-<lane>-<thread>` | the relay, by Signal-With-Start with `ALLOW_DUPLICATE` |
-| Turn (MachinaWorkflow, input `event_os_version=1`) | `turn-<conv id>-<n>`, where admission allocates `<n>` (§13.3) | the entity: a child with `REQUEST_CANCEL` and `WAIT_CANCELLATION_COMPLETED`. The turn's own agent children use the same policies (Phase 1b, 1b.12), and a cancelled turn cancels and drains its running work (§10.2) |
+| Turn (MachinaWorkflow, input `event_os_version=1`) | `turn-<conv id>-<n>`, where admission allocates `<n>` (§13.3) | the entity: a child with `REQUEST_CANCEL` and `WAIT_CANCELLATION_COMPLETED`. The turn's own agent children use the same policies (1b.12, which ships in RFC-0006's cancellation lane), and a cancelled turn cancels and drains its running work (§10.2) |
 | AgentWorkflow (input `merge_version=1`) | existing child ids (`_agent_child_workflow_id`) | the turn |
 | ScheduleFireWorkflow | Schedule actions | Schedules `cron-…` and `alarm-…` (§15) |
 | PollWorkflow | `poll-<workflow_id>-g<gen>-<node_id>` | Start and re-arm, with `USE_EXISTING` (T7, §15) |
@@ -1156,6 +1156,14 @@ Phase 1 ended on 2026-10-24. Commit 49177427 came from another session.
 | 1.5 Golden identity test | 49177427, d3f8e873 | `fixtures/workflow_identities.json` holds the release's commands and ids, handler names and plugin activity names. The test fails on unreviewed command changes, a patched marker that vanishes without a release of `deprecate_patch`, and a renamed or removed handler. |
 | 1.6 temporalio 1.34.0 | 2ea28bdf | The floor is `temporalio>=1.34.0` (RFC-0004 D5), and only temporalio moved in `server/uv.lock`. No code had to change:<br>• nothing used `PayloadSizeWarning`, removed in 1.31 when payload limits moved into the SDK's core;<br>• every `workflow.continue_as_new` call is in a `@workflow.run` method. From 1.33, continuing as new from an Update handler fails the workflow task.<br>On 1.34.0 the 0.3.1 corpus replays, and the full server suite shows no failure caused by the upgrade. From the next release, new patch markers ship dormant for one release (RFC-0006 §18.9). |
 
+**Phase 1b** (RFC-0006 §22.2; started 2026-10-25).
+- The owner's answers of 2026-10-24 and 2026-10-25 and a plan check on 2026-10-25 set its scope and order.
+- 1b.12 moved into RFC-0006's cancellation lane, where it ships with the re-raise that lets a plain agent stop on a cancel (RFC-0006 §6.2 R1, §22.4).
+
+| Item | Commit | Notes |
+|---|---|---|
+| 1b.11 Cancel-path fixtures | this commit | `fixtures/0.3.1-cancel/`: 6 scenarios, 16 histories, recorded from a9ee667 on temporalio 1.30.0 and CLI 1.9.1. They cover:<br>• a root cancelled while its agent child runs, uncontrolled and controlled;<br>• an uncontrolled branch failure;<br>• a cancelled Task Manager runner whose assignee turns the cancel into a tool error;<br>• the same runner cancelled while its generation is stopped;<br>• a stopped team job cancelled before its lead starts.<br>They replay on 1.30 and 1.34. |
+
 ## 25. Defaults chosen and open items
 
 ### 25.1 Defaults (change at review)
@@ -1322,3 +1330,8 @@ RFC-0006 §23 adds gates for Phase 1b and for each phase's new items (§24.2). T
 - §27, §28, §29: the consuming-save exception; fixed class-queue slots; RFC-0006 referenced.
 
 RFC-0006 §20 gives each change with its basis.
+
+**2026-10-25, the Phase 1b plan check** (owner answers of 2026-10-25):
+- Header: Phase 1b in progress.
+- §10.1, the turn row: the turn's agent children get their policies through 1b.12, which the owner moved into RFC-0006's cancellation lane together with the re-raise of a cancelled tool call.
+- §24.4: a Phase 1b progress table.

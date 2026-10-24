@@ -184,7 +184,11 @@ had lapsed or one registry failed.
    `cli/tests/test_release_pipeline_config.py` fails a version without one.
    Then the same command with `--golden-only` rewrites
    `fixtures/workflow_identities.json` from that commit, so the next cycle's
-   identity checks compare against this release.
+   identity checks compare against this release. Scenarios added between
+   releases go into a supplementary folder. It is recorded from the previous
+   release's commit, on that release's SDK
+   ([TEMPORAL_ARCHITECTURE.md -> The replay safety net](./TEMPORAL_ARCHITECTURE.md#the-replay-safety-net-rfc-0005-phase-1)).
+   The release cut records every scenario, so its own folder holds them too.
 3. **Tag.** `git tag -a vX.Y.Z -F notes.md` on that commit, the notes in the
    shape of the previous tags (`git tag -l --format='%(contents)' v0.1.0`).
 4. **Push** the branch, then the tag. The tag starts `release.yml` (predeploy

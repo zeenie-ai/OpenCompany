@@ -133,7 +133,7 @@ One row per entry in §6 to §19. Priority P1 means Phase 1b (the ids are listed
 | § | Pattern | Verdict | P | Action |
 |---|---|---|---|---|
 | 6.1 | Task orchestration (overview) | Adopted with deviations | P1 | Explicit child options, named bounds, named loser cleanup; lint (1b.40) |
-| 6.2 | Child Workflows | Adopted with deviations | P1 | Agent children request cancellation (1b.12); cancel-and-drain and durable Claude Code and RLM delegations (cancellation lane) |
+| 6.2 | Child Workflows | Adopted with deviations | P1 | Agent children request cancellation (1b.12, moved to the cancellation lane with the re-raise); cancel-and-drain and durable Claude Code and RLM delegations (cancellation lane) |
 | 6.3 | Parallel Execution | Adopted with deviations | P2 | One failure policy (running nodes finish, nothing new starts); graph by reference; delegation-window fix |
 | 6.4 | Pick First (race) | Adopted with deviations; RFC-0005 turn-deadline race planned (deviates) | P1 | A chat run past 24 h cancels its workflow (1b.14); for Phase 4, slow-turn alerts (T19) and a 24-hour no-progress backstop (a default, §24.1) |
 | 7.1 | Workflow messaging (overview) | Adopted with deviations | P1 | The handler checklist (§5 rules 12-15) |
@@ -390,7 +390,7 @@ Terms used below:
 **Recommendation:**
 1. **State three orchestration rules and lint them.** §5 adopts them as rules: (a) every child start passes `parent_close_policy`, `cancellation_type` and `id_reuse_policy` explicitly; (b) every fan-out names its bound; (c) every race names who cancels the loser and whether the workflow waits for its cleanup. The checks ship in the determinism lint, 1b.40, which §17.18 specifies. The orchestration part this entry adds to it: a child start without the three explicit options; `asyncio.wait` and `asyncio.as_completed` in workflow modules; a direct `execute_activity` or `start_activity` call inside a `@workflow.signal` handler. (Pi `pause` and `resume` reach an activity indirectly, through `_forward`; §7.3 R6 removes them.) The same commit writes out the current defaults at the child starts that rely on them; passing a default explicitly changes nothing on replay. The retry-policy lint over the same workflow modules is 1b.41 (§11.1).
    - Versioning: none (a test, and explicit defaults).
-   - When: Phase 1b (1b.40), after 1b.12 and 1b.13. Effort S. Risk: none at run time.
+   - When: Phase 1b (1b.40), after 1b.13. Until the cancellation lane ships 1b.12, the agent-child starts state today's policies explicitly. Effort S. Risk: none at run time.
 
 **Remarks:** The overview points to Batch Processing. OpenCompany has no record-batch workload, so those pages map only to the controller's one child per event, its queue paging and the delegation window (§12.2 to §12.4).
 
@@ -411,7 +411,7 @@ Terms used below:
 
 **OpenCompany today:**
 
-Every child start in production code. The 21 recorded scenarios in `server/tests/temporal/fixtures/0.3.1/` record the same values. "Default" is the SDK default. No child start sets an execution or run timeout.
+Every child start in production code. The 27 recorded scenarios in `server/tests/temporal/fixtures/0.3.1/` and `fixtures/0.3.1-cancel/` record the same values. "Default" is the SDK default. No child start sets an execution or run timeout.
 
 | Parent -> child | Start | Parent close | Cancellation type | Id reuse |
 |---|---|---|---|---|
@@ -437,7 +437,7 @@ Every child start in production code. The 21 recorded scenarios in `server/tests
 - **Where a parent closes early, so TERMINATE kills an agent without cleanup:**
   1. *An uncontrolled run fails.* The first failed node ends the loop (`workflow.py:907-908`); the run completes with `success: False` (`:913-929`) and the server terminates its agent children. Manual canvas Runs are uncontrolled: execution-control fields are copied only for an admitted generation (`server/services/temporal/executor.py:152-173`; `server/routers/websocket.py:968-975`).
   2. *Chat Stop outlasts its grace period.* Stop moves the run to `stopping` (`server/services/chat/ledger.py:598-639`). The watchdog cancels the run's MachinaWorkflow 45 to about 75 seconds later (`ledger.py:714-728`; `stop_grace_s` 45 and `watchdog_interval_s` 30 in `server/config/chat_defaults.json`). MachinaWorkflow waits in `workflow.wait_condition` (`workflow.py:1120`) with no `CancelledError` handler, closes Cancelled, and the server terminates its AgentWorkflow. A run that stops cooperatively inside the grace closes normally.
-  3. *Apply with "stop work".* `server/services/employees/safe_apply.py:112-116` cancels running executions found by `EventWorkflowId`. Agent children carry no search attributes (`workflow.py:820-822`), so only the parent's TERMINATE reaches them. Task Manager agents are the exception: their runner carries `EventWorkflowId` (`agent_workflow.py:1882-1891`), is cancelled directly and awaits its agent (`:610`), so that agent gets a real cancel.
+  3. *Apply with "stop work".* `server/services/employees/safe_apply.py:112-116` cancels running executions found by `EventWorkflowId`. Agent children carry no search attributes (`workflow.py:820-822`), so only the parent's TERMINATE reaches them. Task Manager agents are the exception: their runner carries `EventWorkflowId` (`agent_workflow.py:1882-1891`), is cancelled directly and awaits its agent (`:610`), so that agent gets a real cancel. A plain agent in a tool call does not stop on it: it turns the cancelled tool call into a tool error and keeps working (`agent_workflow.py:2574-2582`; only Workspace and browser-runtime agents re-raise). `fixtures/0.3.1-cancel/task_runner_cancel` records this: the assignee answers and completes, and the runner records the delegation as finished.
   4. *A child-start collision.* `WorkflowAlreadyStartedError` at `workflow.py:826` or `:828` is a `FailureError` (`temporalio/exceptions.py:53`) and fails the whole run instead of one node. Any other start failure becomes a `RuntimeError`, which fails the Workflow Task instead (`temporalio/worker/_workflow_instance.py:918-920`).
   5. *An AgentWorkflow cancelled while its delegations run.* asyncio passes the cancel only to the handle being awaited. The other started children in `delegation_handles` (`agent_workflow.py:1467`) are terminated when the agent closes. `_cleanup_cancelled_delegations` (`:1518-1566`) settles the task rows and permits but cancels no handle.
 - **What termination skips.** AgentWorkflow's `fail_job(cancelled=True)` (employee runtime-v2 leads only, `agent_workflow.py:826-836`), its browser-claim release (`:842-857`), its delegation cleanup, and the cleanup of its own children. Consequences:
@@ -456,11 +456,18 @@ Every child start in production code. The 21 recorded scenarios in `server/tests
 **Recommendation:**
 1. **R1. Agent children get REQUEST_CANCEL.** Pass `parent_close_policy=workflow.ParentClosePolicy.REQUEST_CANCEL` and an explicit `cancellation_type=workflow.ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED` at the six call lines: `workflow.py:826` and `:828` (through `child_start_kwargs`, `:820-822`), `agent_workflow.py:595-598` and `:1740-1744`, `employee_job_workflow.py:117` and `:120`. The Workspace agent child already does this (`node_invocation.py:34-39`).
    - Versioning: none. On replay, core compares only a child's id and type (and an activity's id and type); the parent close policy is never compared. The checks are in the core sources shipped in the 1.30.0 wheel, under `temporalio/bridge/sdk-core/crates/sdk-core/src/worker/workflow/machines/`: `child_workflow_state_machine.rs:233-258` and `activity_state_machine.rs:371-394`. The docs agree: changing "The Child Workflow Options in a call to spawn a Child Workflow Execution" is listed among changes "that would not result in non-determinism errors" (https://docs.temporal.io/workflow-definition). The golden identity test is unchanged, because it captures only the `id` and `activity_id` keywords (`server/tests/temporal/workflow_identities.py:36-40`). `test_replay_corpus.py` must stay green.
-   - When: Phase 1b (1b.12). RFC-0004 decided it (D9, RFC-0004 §8.4); RFC-0005 says it implements D9 but schedules no step for it. Effort S.
+   - When: the cancellation lane (§22.4), together with a re-raise of a cancelled tool call and LLM step in AgentWorkflow (`agent_workflow.py:2574-2578`, `:1260-1264`) under `agent-delegation-drain-v1`. The owner moved it out of Phase 1b on 2026-10-25 (1b.12). Without the re-raise, a plain agent that receives the cancel keeps calling the model and tools after its parent closed, where TERMINATE stops it today. RFC-0004 decided R1 (D9, RFC-0004 §8.4). Effort S, plus the re-raise.
    - Risk: a closed parent now leaves its child running its cleanup for a while (see Remarks on id reuse).
 2. **R2. Cancel and drain.** On cancellation, MachinaWorkflow cancels every handle in `running` and waits for them, with a bound (sketch); AgentWorkflow's `_cleanup_cancelled_delegations` does the same for every started handle in `delegation_handles` before its database cleanup. With the same patch, node activities get `cancellation_type=WAIT_CANCELLATION_COMPLETED`, so the drain waits for the activity's own cleanup. §6.3 rec 1 adds the failure half of the same patch.
    - Versioning: `workflow.patched("machina-close-and-drain-v1")` in MachinaWorkflow, read once before the scheduling loop, and `workflow.patched("agent-delegation-drain-v1")` in AgentWorkflow. The cancellation-type change must ship inside the same patch: a cancellation type is not compared on replay, but it decides whether a cancel emits a RequestCancel command and when the workflow sees the outcome, and core raises a nondeterminism error when a non-ABANDON activity or child records a start or completion after its cancel ("Non-Abandon cancel mode activities cannot be completed after being cancelled", `activity_state_machine.rs:779-781`; the child equivalent at `child_workflow_state_machine.rs:146-149`). Here core is stricter than the workflow-definition page, which lists activity and child option changes as safe. The repo already gated the same change for Workspace nodes behind `workspace-node-cancellation-v1` (`workflow.py:856-861`).
-   - When: P2, in a cancellation lane after Phase 1 (which ends with the 1.34.0 upgrade and its 1.31 and 1.33 cancellation fixes) and Phase 1b, and before RFC-0005 Phase 4, whose Interrupt and 24-hour no-progress backstop (a default, §24.1; §6.4 rec 2) cancel a turn and expect its agents to clean up. Record two fixtures first (1b.11): a root cancelled while its agent child runs (the chat Stop grace path), and an uncontrolled branch failure (a manual Run with two branches, one failing). None of the 21 scenarios in `server/tests/temporal/fixtures/0.3.1/manifest.json` contains a cancelled root or a failed node activity. Effort M.
+   - When: P2, in a cancellation lane after Phase 1 (which ends with the 1.34.0 upgrade and its 1.31 and 1.33 cancellation fixes) and Phase 1b, and before RFC-0005 Phase 4, whose Interrupt and 24-hour no-progress backstop (a default, §24.1; §6.4 rec 2) cancel a turn and expect its agents to clean up. 1b.11 recorded six cancel-path scenarios from 0.3.1 into `server/tests/temporal/fixtures/0.3.1-cancel/`:
+     - a root cancelled while its agent child runs, uncontrolled (the chat Stop grace path) and controlled;
+     - an uncontrolled branch failure (a manual Run with two branches, one failing);
+     - a cancelled Task Manager runner, whose assignee swallows the cancel;
+     - the same runner cancelled while its generation is stopped, whose assignee ends cancelled;
+     - a stopped team job cancelled before its lead starts.
+
+     The corpus still has no ActivityTaskFailed, because node failures complete with a failure envelope. Effort M.
    - Risk: a node that never sees the cancel holds the run until the bound. The drain assumes node activities report cancellation; today `NodeExecutor` turns `CancelledError` into a `{success: False, error: "Cancelled"}` result (RFC-0004 H2), which resolves the handle but records the activity as Completed. 1b.2 (§9.3) fixes H2 in Phase 1b, before this lane.
 3. **R3. Durable delegations from Claude Code and RLM** (default chosen; §24 lists the alternative). When Temporal is on, every delegation reached through `_execute_delegated_agent` starts a durable runner instead of an asyncio task: a new workflow type `InlineDelegationWorkflow` that generalizes PiInlineDelegationWorkflow's admission (an admission row with a request digest, a deterministic runner id from root, parent, target and call, `REJECT_DUPLICATE`, `memo` with the digest; `pi_inline_delegation.py:120-230`) to every agent type in `AGENT_WORKFLOW_TYPES`, starts `DelegatedTaskWorkflow` as its child with REQUEST_CANCEL (as `pi_inline_delegation.py:365-369` does), and is started with `EventWorkflowId` so Reset and Apply find it (RFC-0004 H12 notes the Pi inline runner lacks it). It must cover both entry paths: Task Manager's in-process branch and the direct `delegate_to_*` tools; the Claude Code bridge then passes `database` and the trusted scope for those calls too.
    - Versioning: none (a new workflow type; old runs never meet it).
@@ -473,7 +480,7 @@ Every child start in production code. The 21 recorded scenarios in `server/tests
 **Remarks:**
 - R1 and R2 are both needed. REQUEST_CANCEL sends the cancel when the parent closes and does not wait, so the parent's result cannot reflect the child's cleanup. The drain alone does not cover parents that close without running code: termination, or a failure path that skips the handler.
 - Replay never re-sends a recorded command. Children started before R1 ships keep TERMINATE; only children started afterwards get REQUEST_CANCEL; an in-flight run can hold both.
-- AgentWorkflow already runs its cleanup after catching `CancelledError`, shielding the activities (`agent_workflow.py:826-859`). That is Python's form of "cleanup outside the canceled scope", and it runs only when a cancel reaches the workflow, which R1 provides.
+- AgentWorkflow already runs its cleanup after catching `CancelledError`, shielding the activities (`agent_workflow.py:826-859`). That is Python's form of "cleanup outside the canceled scope". It runs only when a cancel reaches the workflow while it is not in a tool call or LLM step that turns the cancel into an error result. R1 sends the cancel; the cancellation lane's re-raise makes it reach the cleanup. In `fixtures/0.3.1-cancel/`, `task_runner_cancel` shows the swallow, and `task_runner_paused_cancel` shows an assignee that waits for Resume ending cancelled.
 - Id reuse after R1. Per-event roots use ALLOW_DUPLICATE_FAILED_ONLY, so a Cancelled or Terminated root id can run again. If its old agent child is still cleaning up, the new start of `<root id>-agent-<node id>` raises `WorkflowAlreadyStartedError` and, until R6, fails the new run. The controller treats a duplicate start as accepted when the accumulator is on (`workflow_control_workflow.py:468-472`), so repeats are rare; R2's drain closes the window.
 - The parent close policy also applies when a parent continues as new. AgentWorkflow's rollover guard refuses to continue while delegations or runner starts are live (`agent_workflow.py:2982-2996`); keep it after R1, or a rollover would cancel live delegations.
 - Pending-child limit: only the controller's count follows the event rate. Whether ABANDON children count as pending while the parent runs was not verified; the docs' "incomplete Child Workflows" suggests they do. At 2,000 the start command fails and the workflow task retries until a child closes, stalling the employee's triggers. Not reachable at today's volumes (unmeasured); RFC-0005's one turn per conversation bounds it by design.
@@ -626,7 +633,7 @@ else:
 **Recommendation:**
 1. **A chat run that hits its 24-hour limit cancels its workflow** (default chosen; §24 lists the alternative). Pass `temporal_cancel` to `_sweep_one` and, in its `timed_out` branch, cancel `run.temporal_workflow_id` and `run.temporal_run_id` as `_sweep_stopping` does (`ledger.py:714-728`). This 24-hour limit covers today's chat runs. RFC-0005 turns are bounded by the 24-hour no-progress backstop (a default, §24.1; recommendation 2), which never counts time parked, paused or waiting for the owner; from RFC-0005 Phase 5 (`scheduler_version=1`) a parked turn waits at most 7 days (§11.8; T18, T19).
    - Versioning: none (client code).
-   - When: Phase 1b (1b.14), after 1b.12, so the agent child receives a cancel rather than termination. Effort S.
+   - When: Phase 1b (1b.14). Until the cancellation lane ships 1b.12, the server terminates the root's agent children when the cancelled root closes. A timed-out run also counts as stopped (`ledger.is_stopping`), so an agent child that swallowed the cancel stops paying for model steps. Effort S.
    - Why this default: T4. A run that keeps going after its run row ended is a second writer on the conversation and an unbounded spend.
    - Risk: an answer that would have arrived after 24 hours is lost; the owner sees `timed_out`, as today.
 2. **Specify the turn's clocks and its cancel race in RFC-0005** (RFC-0005 §10.2, §13.1, §13.4, §18.1, §23; sketch):
@@ -1192,7 +1199,7 @@ class ConversationWorkflow:
 - **`AgentWorkflow`.** Rolls over at an iteration boundary when pressure says so and no delegation is live (`agent_workflow.py:2982-2996`). The durable path waits until resumed, fences handlers and carries `_agent_resume` (iteration, transcript, usage, prepared payload, tools, thinking text, browser artifacts), with a 1.9 MB check that raises `AgentContinuationTooLarge` (`:2997-3031`). The legacy path has no fence and drops the transcript to the opening prompt above 1 MB (`:3032-3069`). Iterations continue across runs (`:1151-1159`), so activity ids stay unique in the chain. Fixture `agent_rollover`.
 - **`WorkspaceTaskControllerWorkflow`.** Rolls over only when idle, after 256 operations, a suggestion or 10,000 events (`workspace_tasks_workflow.py:195-205`). It carries its epoch and the bounded dedupe maps (`:207-215`). It logs nothing and has no rollover fixture.
 - **Others.** `PiCodingAgentWorkflow` defers its rollover while Task Manager children are live (`server/services/temporal/pi_workflow.py:382-387`). The legacy listeners roll over on pressure (fixtures `legacy_trigger_listener`, `legacy_polling_trigger`). `CronTriggerWorkflow` handles one firing, because cron is a Temporal Schedule (`server/services/temporal/schedules.py:139-250`), as the page advises.
-- **Tests.** Fixtures were recorded on a server with `limit.historyCount.suggestContinueAsNew=40`, so four scenarios record a rollover (`server/tests/temporal/record_fixtures.py:57`, `:971-976`): the page's "Test state transfer", done well.
+- **Tests.** Fixtures were recorded on a server with `limit.historyCount.suggestContinueAsNew=40`, so four scenarios record a rollover (`server/tests/temporal/record_fixtures.py:69`, `:1215-1220`): the page's "Test state transfer", done well.
 - **Deviation 1: carry weight.** Each controller trigger embeds the graph (RFC-0004 H10). The agent's durable carry holds the stored seed conversation inside `prepared_payload` (up to 1 MB), the tools twice and unbounded thinking text (`server/services/temporal/agent_activities.py:1825-1830`; `agent_workflow.py:3014-3016`). Over the limit the entity fails, explicitly; a failed v1 controller then fails its generation (§8.2).
 - **Deviation 2: idle controllers never roll over.** A controller with no events, poll cycles, firings or Updates never reaches a suggestion. When a later release adds a patch marker, such a run replays without it and keeps the old branch for its whole life (markers read at run start, like `controller-durable-queue-v2` at `:396` and `controller-event-accumulator-v1` at `:549`, are memoized per run). The old branch can then never be deleted, and RFC-0005 §24.3 cannot deprecate the marker. Busy controllers are fine: a v1 cron firing sends the controller four Updates and Update handlers request a rollover (`:588-593`), so a cron-only controller rolls over after roughly 200 firings.
 - **Deviation 3: a swallowed cancellation can stall the rollover (RFC-0004 H8).**
@@ -1865,7 +1872,9 @@ class ApprovalWorkflow:
 - Not a good fit for "single-service transactions that can use a local database transaction".
 - Python: a list plus `reversed()`. The page catches `Exception`, which does not include `asyncio.CancelledError`; a Python workflow that must clean up after cancellation catches it separately and shields the cleanup.
 
-**SDK:** plain workflow code: `workflow.execute_activity`, and `asyncio.shield` for cleanup after cancellation. Nothing to add in 1.30.0. Release notes for SDK 1.28 and 1.31 list fixes to shielded cancellation (unverified here), so the 1.34.0 upgrade's replay corpus should include a cancelled delegation and a cancelled team job.
+**SDK:** plain workflow code: `workflow.execute_activity`, and `asyncio.shield` for cleanup after cancellation. Nothing to add in 1.30.0. Release notes for SDK 1.28 and 1.31 list fixes to shielded cancellation (unverified here), so the 1.34.0 upgrade's replay corpus should include a cancelled delegation and a cancelled team job. Both are in `fixtures/0.3.1-cancel/` (1b.11), and they replay on 1.30.0 and 1.34.0:
+- `task_runner_paused_cancel`: the runner's cleanup after its assignee ended cancelled;
+- `employee_job_cancel`: the job's shielded `employee.job.failed`.
 
 **OpenCompany today:**
 - **`DelegatedTaskWorkflow` is a textbook saga** (`server/services/temporal/agent_workflow.py:535-728`). Forward steps register the task, acquire a permit, begin, start the agent and finish (`:553-623`). On cancellation it cancels the task whether or not `begin` ran, because "Queue/acquire/begin may have completed even when their result lost the cancellation race" (`:647-651`), and it releases the permit in `finally` (`:703-721`). Deviations:
@@ -3235,7 +3244,7 @@ figures. "You want to start simple: begin with Local Activities."
 
 **OpenCompany today:** the 0.3.1 replay corpus (`server/tests/temporal/fixtures/0.3.1/`) records real event
 timestamps. The recorder used a SQLite database without the production WAL pragmas, workers with
-`max_cached_workflows=0`, stub activities and server 1.31.2 (`server/tests/temporal/record_fixtures.py:1026-1046`;
+`max_cached_workflows=0`, stub activities and CLI 1.9.1 with server 1.32.0 (`server/tests/temporal/record_fixtures.py:1279-1298`;
 `manifest.json`), so these are upper bounds on orchestration cost, not measurements of a live instance.
 
 | Step on the owner-chat path today | Recorded |
@@ -3507,7 +3516,7 @@ supply them at startup rather than constructing them inside each Activity" (§15
     process-bound activities land (§15.2).
 - Seven places build a Worker, each with its own list: the embedded manager (`worker.py:183-316`), the pool
   (`:543-611`), the owner pool (`:693-705`), the Pi driver pool (`:737-749`), the standalone worker (`:758-928`),
-  `create_worker` for tests (`:931-1015`), and the fixture recorder (`server/tests/temporal/record_fixtures.py:1040-1061`).
+  `create_worker` for tests (`:931-1015`), and the fixture recorder (`server/tests/temporal/record_fixtures.py:1292-1311`).
 - Framework worker options: 100 activity slots, 10 workflow-task slots, autoscaling pollers (1-10 activity, 1-20
   workflow), sticky cache 50 (local), 100 (Docker, `self_hosted`) or 500 (VMs, `cloud`) (`worker.py:76-88`,
   `:289-307`), graceful shutdown 10 s on desktop and 30 s elsewhere. The sticky cache keeps recently run workflows in
@@ -3711,7 +3720,7 @@ Pi driver queue (affinity correctly avoided; a capability check is missing).
 - The Python sample (samples-python `worker_specific_task_queues` at 33f7dc29) sets no schedule-to-start timeout,
   unlike the page.
 - The fixture recorder registers fakes on every activity queue and the Pi driver queue
-  (`record_fixtures.py:1040-1056`); no fixture covers an owner queue.
+  (`record_fixtures.py:1292-1307`); no fixture covers an owner queue.
 
 **Sketch:**
 
@@ -5114,7 +5123,7 @@ async def runs_that_cannot_replay(client) -> dict[str, list[str]]:
 **SDK:** all in 1.30.0: `Replayer(..., interceptors=, workflow_runner=, data_converter=)` and `replay_workflows(..., raise_on_replay_failure=)` (`temporalio/worker/_replayer.py:110-142`).
 
 **OpenCompany today:**
-- Replay gate: `server/tests/temporal/test_replay_corpus.py` replays every N-1 fixture (21 scenarios in `fixtures/0.3.1/`) in a fresh process with the production registry, checks fixture provenance against the recorded commit, refuses histories with a failed workflow task (`:65`), requires every production workflow type to be covered (`:69`), and forbids skipping in CI (`:19-21`). CI runs it on ubuntu, windows and macos with the pinned CLI (`.github/workflows/predeploy.yml`, `backend-tests`).
+- Replay gate: `server/tests/temporal/test_replay_corpus.py` replays every N-1 fixture (27 scenarios: 21 in `fixtures/0.3.1/` and 6 in `fixtures/0.3.1-cancel/`) in a fresh process with the production registry, checks fixture provenance against the recorded commit, refuses histories with a failed workflow task (`:65`), requires every production workflow type to be covered (`:69`), and forbids skipping in CI (`:19-21`). CI runs it on ubuntu, windows and macos with the pinned CLI (`.github/workflows/predeploy.yml`, `backend-tests`).
 - Golden identity test: activity names, child ids, patch markers and node activity versions (`server/tests/temporal/test_workflow_identity_golden.py:12-45`); worker and replayer share one registry (`server/services/temporal/workflow_registry.py`).
 - Time skipping in 15 test files, each with its own environment; real-server tests through `start_local` with the pinned `TEMPORAL_TEST_CLI`; `ActivityEnvironment` in 7 files; 128 activity mocks registered by name.
 - The Replayer is built from workflows only (`test_replay_corpus.py:66`), while workers add `ObservabilityWorkerInterceptor`; harmless today, because the interceptor only logs and checks `is_replaying`.
@@ -5152,7 +5161,7 @@ async def runs_that_cannot_replay(client) -> dict[str, list[str]]:
    - The orchestration checks of §6.1: a child start without explicit `parent_close_policy`, `cancellation_type` and `id_reuse_policy`, and an `execute_activity` or `start_activity` call inside a `@workflow.signal` handler. The same commit writes out the current defaults at the child starts that rely on them; passing a default explicitly changes nothing on replay.
    - The blocking-call lint of RFC-0004 §9.1 over plugin operations (17.19).
 
-   Versioning: none. When: Phase 1b (1b.40), after the bug guard (1b.13), without which the exit-cleanup rule fails on today's tree, and after the agent-child policies (1b.12, §6.1). Effort S. Risk: false positives; an explicit allow comment with a reason. Test: `server/tests/temporal/test_workflow_lint.py` passes on the tree (RFC-0004 AG8) and fails on seeded violations: an `asyncio.wait` in a workflow module, a child start without `parent_close_policy`, an `execute_activity` in a `@workflow.signal` handler, and command-issuing cleanup in `finally`.
+   Versioning: none. When: Phase 1b (1b.40), after the bug guard (1b.13), without which the exit-cleanup rule fails on today's tree. Every child start states its policies explicitly: today's for agent children, until the cancellation lane ships 1b.12 (§6.1). Effort S. Risk: false positives; an explicit allow comment with a reason. Test: `server/tests/temporal/test_workflow_lint.py` passes on the tree (RFC-0004 AG8) and fails on seeded violations: an `asyncio.wait` in a workflow module, a child start without `parent_close_policy`, an `execute_activity` in a `@workflow.signal` handler, and command-issuing cleanup in `finally`.
 2. Every new RFC-0005 type (ConversationWorkflow, EmployeeSupervisorWorkflow, ApprovalWorkflow, ScheduleFireWorkflow and PollWorkflow, T7's poll workflow) is sandboxed: no `sandboxed=False`, app modules imported through `imports_passed_through()`, tests run with `RAISE_ON_UNINTENTIONAL_PASSTHROUGH`, production keeps the default warning policy, and a golden test asserts new types are sandboxed. Everything a sandboxed type imports must sit in packages without import side effects; `services.temporal`'s `__init__` registers handlers, so shared contracts live in a leaf package such as RFC-0005's `services/bus/`. Versioning: new types. When: with each new type, from RFC-0005 Phase 3 (PollWorkflow) and Phase 4. Effort S. Risk: a restricted call on a rare path fails that run's workflow task; tests with the RAISE policy find most of them first.
 3. Sandbox the small existing types (ApprovedToolCallWorkflow, NodeInvocationWorkflow, EmployeeJobDeliveryWorkflow, CronTriggerWorkflow) once the corpus replays green under the sandboxed runner; the large types stay unsandboxed until their imports are free of side effects. Turning the sandbox on changes no commands, but replay every fixture under it first. Until then all 14 existing types stay unsandboxed under the determinism lint (1b.40). When: later. Effort M.
 
@@ -5591,7 +5600,7 @@ def activate_patch(inp: PatchActivationInput) -> bool:
 
 **SDK:** all in 1.30.0: `map_histories` (`temporalio/client/_workflow.py:1649`), `Replayer.replay_workflow` and `replay_workflows` (`worker/_replayer.py:110`, `:138`, `raise_on_replay_failure` `:142`), `WorkflowHandle.fetch_history` (`client/_workflow.py:395`), `WorkflowHistory.from_json`.
 
-**OpenCompany today:** `server/tests/temporal/test_replay_corpus.py` replays committed N-1 histories (21 scenarios in `fixtures/0.3.1/`) one at a time in a fresh process, checks source provenance by git archive hash, refuses histories with a failed workflow task (`:65`) and requires every production workflow type to be covered (`:69`). For CI this is stronger than the sample. No replay of the instance's own open runs at upgrade.
+**OpenCompany today:** `server/tests/temporal/test_replay_corpus.py` replays committed N-1 histories (27 scenarios: 21 in `fixtures/0.3.1/` and 6 in `fixtures/0.3.1-cancel/`) one at a time in a fresh process, checks source provenance by git archive hash, refuses histories with a failed workflow task (`:65`) and requires every production workflow type to be covered (`:69`). For CI this is stronger than the sample. No replay of the instance's own open runs at upgrade.
 
 **Verdict:** Adopted with deviations (no upgrade-time replay of live histories, which is what the sample shows).
 
@@ -6138,8 +6147,8 @@ Phase 1b is new to RFC-0005's rollout (§20).
 
 | Id | Fix | § |
 |---|---|---|
-| 1b.11 | Record two replay fixtures before any cancel-path change: cancelling a root while an agent child runs, and an uncontrolled branch failure | 6.2 |
-| 1b.12 | The four agent-child starts (six call lines) use `REQUEST_CANCEL` and `WAIT_CANCELLATION_COMPLETED` | 6.2 |
+| 1b.11 | Record cancel-path replay fixtures before any cancel-path change: cancelling a root while an agent child runs, and an uncontrolled branch failure. Done: six scenarios in `fixtures/0.3.1-cancel/`, recorded from 0.3.1 on its SDK (§6.2 R2) | 6.2 |
+| 1b.12 | Moved to the cancellation lane (§22.4) by the owner on 2026-10-25. The four agent-child starts (six call lines) use `REQUEST_CANCEL` and `WAIT_CANCELLATION_COMPLETED`, together with the re-raise that lets a plain agent stop on the cancel | 6.2 |
 | 1b.13 | The bug guard: exit cleanup in 8 run methods and 4 delegation helpers, and the per-event handlers of 3 types, re-raise a workflow bug first (`is_workflow_bug`) | 18.2 |
 | 1b.14 | A chat run past 24 h cancels its workflow | 6.4 |
 | 1b.15 | Every client Update call is bounded by `asyncio.timeout`, the Workspace Update-with-Start included; a timeout answers "pending" | 7.3 |
@@ -6196,10 +6205,9 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | 1b.46 | Refuse `deploy_workflow` without a generation (no client calls it), and remove the unused client `deployWorkflowAsync` | 8.2 |
 
 **Order and dependencies**
-- 1b.11 comes before 1b.2, 1b.12 and 1b.13, so the cancel paths they change are already in the corpus.
+- 1b.11 comes before 1b.2 and 1b.13, so the cancel paths they change are already in the corpus.
 - 1b.13 comes before 1b.40, whose exit-cleanup rule passes only after the bug guard.
-- 1b.12 comes before 1b.40, whose child-start rule passes only once the agent-child starts state their policies.
-- 1b.12 comes before 1b.14.
+- 1b.40's child-start rule passes once every child start states its policies; until the cancellation lane ships 1b.12, the agent-child starts state today's.
 - 1b.31 and 1b.32 ship in the same release.
 - 1b.1 comes before any answer to RFC-0004 Q9 (graph nodes retrying transient errors).
 - 1b.20 and 1b.16 introduce the constants 1b.41 enforces.
@@ -6230,6 +6238,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
   - once the slim carry and the cancellation fix have shipped, every live controller is asked to roll over at the first boot of each release (§8.3);
   - graph approval gates stop holding Stop, behind the generation flag `approval_wait_version=1` (§9.6).
 - **Cancellation** (new; after Phase 1b, before Phase 4):
+  - 1b.12, moved here by the owner on 2026-10-25. Agent children get REQUEST_CANCEL and WAIT_CANCELLATION_COMPLETED. In the same patch (`agent-delegation-drain-v1`), AgentWorkflow re-raises a cancelled tool call and LLM step (`agent_workflow.py:2574-2578`, `:1260-1264`), so a plain agent stops on the cancel (§6.2 R1);
   - MachinaWorkflow and AgentWorkflow cancel and drain their running work, with a 2-minute bound, behind a patch;
   - one failure policy: running nodes finish and nothing new starts (§6.3);
   - the delegation-window fix (§6.3), and child-start failures as node failures (§6.2).
@@ -6537,4 +6546,4 @@ Each was chosen under T4 (reliability first). The alternative is named where one
 **OpenCompany:**
 - [RFC-0002](./RFC-0002-AGENT-CONTEXT-AND-MEMORY.md), [RFC-0004](./RFC-0004-TEMPORAL-SDK-FEATURE-ADOPTION.md), [RFC-0005](./RFC-0005-EVENT-OS-ON-TEMPORAL.md).
 - [TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md), [temporal-workflow-control.md](./docs-internal/temporal-workflow-control.md), [event_framework.md](./docs-internal/event_framework.md), [chat_protocol.md](./docs-internal/chat_protocol.md), [DESIGN.md](./docs-internal/DESIGN.md).
-- The replay corpus: `server/tests/temporal/fixtures/0.3.1/` and `server/tests/temporal/test_replay_corpus.py`.
+- The replay corpus: `server/tests/temporal/fixtures/0.3.1/`, `server/tests/temporal/fixtures/0.3.1-cancel/` and `server/tests/temporal/test_replay_corpus.py`.

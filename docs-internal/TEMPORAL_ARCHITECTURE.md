@@ -782,7 +782,7 @@ tests' child processes write under it.
 Every change to workflow code must replay the previous release's histories and
 keep that release's command identities:
 - **Recorder.** `server/tests/temporal/record_fixtures.py` drives all 14
-  production workflow types through 21 scenarios on a throwaway dev server
+  production workflow types through 27 scenarios on a throwaway dev server
   running the pinned CLI, with fake activities under the production names. It
   writes `server/tests/temporal/fixtures/<package.json version>/`: one JSON
   file per scenario plus `manifest.json`, which names the origin commit, the
@@ -790,8 +790,14 @@ keep that release's command identities:
   never from the working tree, sets its own `DATA_DIR`, replays each history
   once before writing it, and refuses to overwrite a set. It runs when a
   release is cut ([ci_cd.md -> Cutting a release](./ci_cd.md#cutting-a-release)).
+- **Supplementary sets.** A scenario added after a release goes into a folder
+  beside that release's. It is recorded with `--scenario` from the release's
+  commit, on the SDK and CLI that release locked. For example,
+  `fixtures/0.3.1-cancel/` holds the six cancel-path scenarios of RFC-0006
+  1b.11, recorded on temporalio 1.30.0. No folder is rewritten, and a
+  supplementary folder is retired together with its release's.
 - **Replay gate.** `server/tests/temporal/test_replay_corpus.py` replays every
-  set in a child process with `workflow_registry.replay_workflows()`: the
+  set, supplementary sets included, in a child process with `workflow_registry.replay_workflows()`: the
   framework list the workers register (`workflow_registry.framework_workflows`,
   imported by `worker.py` as `_framework_workflows`) plus the plugin workflows
   from the same plugin registry. It checks each workflow module's source hash
@@ -818,7 +824,8 @@ keep that release's command identities:
 - **Release check.** `test_the_current_version_has_its_replay_histories` in
   `cli/tests/test_release_pipeline_config.py` fails a version that has no
   `fixtures/<version>/`. It also fails a set recorded on another CLI than the
-  one pinned when it was recorded.
+  one pinned when it was recorded. It reads only `fixtures/<version>/`;
+  supplementary sets are replayed but not checked here.
 - **CI.** `backend-tests` runs the gate as its own step before the full suite.
   That step first checks that `TEMPORAL_TEST_CLI` reports the pinned version
   (`_install.binary_versions`). The job sets `TEMPORAL_REQUIRE_NATIVE_REPLAY=1`,

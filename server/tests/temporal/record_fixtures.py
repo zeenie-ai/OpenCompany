@@ -16,6 +16,18 @@ to workflow code must replay them (``test_replay_corpus.py``; RFC-0004
 
 The process sets its own throwaway ``DATA_DIR`` before importing app code,
 so nothing touches an install's data.
+
+A release's folder is never rewritten. Scenarios added after a release
+are recorded from that release's commit, on the SDK that release locked,
+into a supplementary folder beside it, for example ``fixtures/0.3.1-cancel/``
+(0.3.1 locked temporalio 1.30.0). Run it with an interpreter that already
+has that SDK, never ``uv run``, which installs the current lock first::
+
+    TEMPORAL_TEST_CLI=<pinned temporal binary> <venv with the release's SDK>/python -m tests.temporal.record_fixtures \\
+        tests/temporal/fixtures/0.3.1-cancel --source-commit <release commit> --scenario <name> [--scenario <name> ...]
+
+The replay gate reads every folder's manifest, so those histories gate
+every later change the same way.
 """
 
 from __future__ import annotations
@@ -37,8 +49,8 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from temporalio import activity
-from temporalio.api.enums.v1 import EventType
-from temporalio.client import Client, WorkflowHistory
+from temporalio.api.enums.v1 import EventType, PendingActivityState
+from temporalio.client import Client, WorkflowExecutionStatus, WorkflowHistory
 from temporalio.service import RPCError, RPCStatusCode
 
 SERVER_DIR = Path(__file__).resolve().parents[2]
@@ -63,8 +75,8 @@ _PAUSE_TOOL_STARTED = asyncio.Event()
 _PAUSE_TOOL_RELEASE = asyncio.Event()
 
 
-def release() -> str:
-    return json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+def release(root: Path = REPO_ROOT) -> str:
+    return json.loads((root / "package.json").read_text(encoding="utf-8"))["version"]
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +108,11 @@ def _node_activity(node_type: str):
         if context.get("node_id") == "paused-tool":
             _PAUSE_TOOL_STARTED.set()
             await _PAUSE_TOOL_RELEASE.wait()
+        if context.get("node_id") == "failing":
+            # Fails once an agent elsewhere in the run is busy on its tool,
+            # with the envelope a plugin's failure returns.
+            await _PAUSE_TOOL_STARTED.wait()
+            return {"success": False, "error": "Fixture branch failed"}
         if node_type == "taskManager":
             return {"success": True, "delegation_request": dict(DELEGATION_REQUEST)}
         return {"success": True, "result": {"node_id": context.get("node_id"), "answer": 42}}
@@ -446,6 +463,47 @@ class Recorder:
                     await asyncio.sleep(0.05)
 
         await asyncio.wait_for(wait(), timeout=timeout)
+
+    async def wait_ended(self, workflow_id: str, timeout: float = 30) -> None:
+        """Wait until a workflow has closed however it ended; ``result()``
+        raises for a cancelled or terminated one."""
+
+        async def ended() -> bool:
+            try:
+                status = (await self.client.get_workflow_handle(workflow_id).describe()).status
+            except RPCError as exc:
+                if exc.status != RPCStatusCode.NOT_FOUND:
+                    raise
+                return False
+            return status != WorkflowExecutionStatus.RUNNING
+
+        await self.until(ended, timeout)
+
+    async def parked(self, workflow_id: str, timeout: float = 30) -> None:
+        """Wait until a workflow has neither a workflow task nor an activity
+        pending, so it waits on what it awaits and a cancel lands there
+        rather than racing a command still in flight."""
+        handle = self.client.get_workflow_handle(workflow_id)
+
+        async def idle() -> bool:
+            raw = (await handle.describe()).raw_description
+            return not raw.pending_activities and not raw.HasField("pending_workflow_task")
+
+        await self.until(idle, timeout)
+
+    async def wait_cancel_reached(self, workflow_id: str, timeout: float = 30) -> None:
+        """Wait until a workflow has closed or has asked to cancel the
+        activity it waits on, so a held tool can be released without a race
+        under either parent close policy."""
+        handle = self.client.get_workflow_handle(workflow_id)
+
+        async def reached() -> bool:
+            description = await handle.describe()
+            return description.status != WorkflowExecutionStatus.RUNNING or any(
+                item.state == PendingActivityState.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+                for item in description.raw_description.pending_activities)
+
+        await self.until(reached, timeout)
 
 
 def _graph_input(nodes: list[dict], edges: list[dict], **extra: Any) -> dict:
@@ -945,6 +1003,186 @@ async def paused_pi_generation(rec: Recorder) -> list[WorkflowHistory]:
     return await _paused_agent(rec, pi=True)
 
 
+# ---- cancel paths (RFC-0006 1b.11) ---------------------------------------------
+
+# An agent whose one tool call holds its run until the scenario releases it.
+GATED_AGENT = {"prompt": "call:calculator", "tools": [{"node_type": "calculatorTool", "node_id": "paused-tool", "name": "calculator"}]}
+
+
+def _gated_agent_graph(entry: dict) -> tuple[list[dict], list[dict]]:
+    nodes = [entry, {"id": "agent", "type": "aiAgent", "data": {"fixture": GATED_AGENT}},
+             {"id": "paused-tool", "type": "calculatorTool", "data": {}}]
+    return nodes, [_edge(entry["id"], "agent"), _edge("paused-tool", "agent", "input-tools")]
+
+
+async def machina_chat_cancel(rec: Recorder) -> list[WorkflowHistory]:
+    """The chat Stop grace path of a generation without execution control
+    (controlled generations pause instead): the watchdog cancels the chat
+    run's root while its agent child waits on a tool call. The root ends
+    cancelled without finishing its chat run (the watchdog ends it), and the
+    server applies the child's parent close policy."""
+    from services.temporal.workflow import CHAT_MESSAGE_SOURCE, CHAT_MESSAGE_TYPE
+
+    _PAUSE_TOOL_STARTED.clear()
+    _PAUSE_TOOL_RELEASE.clear()
+    envelope = {"id": "r_cancel", "source": CHAT_MESSAGE_SOURCE, "type": CHAT_MESSAGE_TYPE,
+                "data": {"run_id": "r_cancel", "message": "What is 6*7?", "session_id": GRAPH_ID}}
+    nodes, edges = _gated_agent_graph({"id": "chat", "type": "chatTrigger", "data": {}, "_pre_executed": True,
+                                       "_trigger_output": {"message": "What is 6*7?", "_event_envelope": envelope}})
+    nodes.append({"id": "reply", "type": "chatReply", "data": {}})
+    edges.append(_edge("agent", "reply"))
+    workflow_id = "fixture-machina-chat-cancel"
+    root = await rec.start("MachinaWorkflow", _graph_input(nodes, edges, execution_id=workflow_id, graphVersion=2, generation=1,
+                                                         root_execution_id=workflow_id, data_scope_id="fixture-scope"), workflow_id)
+    await asyncio.wait_for(_PAUSE_TOOL_STARTED.wait(), 30)
+    await rec.parked(workflow_id)
+    await root.cancel()
+    await rec.wait_ended(workflow_id)
+    await rec.wait_ended(f"{workflow_id}-agent-agent")
+    _PAUSE_TOOL_RELEASE.set()
+    return [await rec.history(workflow_id), await rec.history(f"{workflow_id}-agent-agent")]
+
+
+async def machina_controlled_cancel(rec: Recorder) -> list[WorkflowHistory]:
+    """A trigger run of a controlled generation is cancelled while its agent
+    child waits on a tool call, as Apply's stop-work cancels it. The root
+    unregisters from its controller on its way out, and the server applies
+    the child's parent close policy."""
+    _PAUSE_TOOL_STARTED.clear()
+    _PAUSE_TOOL_RELEASE.clear()
+    controller_id = "workflow-control-fixture-cancel-g1"
+    controller = await rec.start("WorkflowControlWorkflow", _controller_input(controller_id), controller_id)
+    nodes, edges = _gated_agent_graph({"id": "hook", "type": "webhookTrigger", "data": {}, "_pre_executed": True,
+                                       "_trigger_output": {"method": "POST", "path": "fixture", "body": "{}", "json": {}}})
+    workflow_id = "fixture-machina-controlled-cancel"
+    root = await rec.start("MachinaWorkflow", _graph_input(
+        nodes, edges, execution_id=workflow_id, graphVersion=2, generation=1, root_execution_id=workflow_id,
+        data_scope_id="fixture-scope", execution_control_version=1, controller_workflow_id=controller_id), workflow_id)
+    await asyncio.wait_for(_PAUSE_TOOL_STARTED.wait(), 30)
+    await rec.parked(workflow_id)
+    await root.cancel()
+    # Under TERMINATE this returns once the server has ended the child; a
+    # child that receives the cancel waits for its held tool to answer.
+    await rec.wait_cancel_reached(f"{workflow_id}-agent-agent")
+    _PAUSE_TOOL_RELEASE.set()
+    await rec.wait_ended(workflow_id)
+    await rec.wait_ended(f"{workflow_id}-agent-agent")
+    await controller.signal("reset")
+    await controller.result()
+    return [await rec.history(workflow_id), await rec.history(f"{workflow_id}-agent-agent"),
+            *await rec.chain(controller_id, controller.first_execution_run_id)]
+
+
+async def machina_branch_failure(rec: Recorder) -> list[WorkflowHistory]:
+    """A canvas Run with two branches: one node returns a failure while an
+    agent child still works on the other. The run completes at once with
+    ``success`` false, and the server applies the child's parent close policy."""
+    _PAUSE_TOOL_STARTED.clear()
+    _PAUSE_TOOL_RELEASE.clear()
+    nodes, edges = _gated_agent_graph({"id": "start", "type": "start", "data": {}})
+    nodes.append({"id": "failing", "type": "console", "data": {}})
+    edges.append(_edge("start", "failing"))
+    workflow_id = "fixture-machina-branch-failure"
+    root = await rec.start("MachinaWorkflow", _graph_input(nodes, edges, execution_id=workflow_id), workflow_id)
+    assert (await asyncio.wait_for(root.result(), 30))["success"] is False
+    await rec.wait_ended(f"{workflow_id}-agent-agent")
+    _PAUSE_TOOL_RELEASE.set()
+    return [await rec.history(workflow_id), await rec.history(f"{workflow_id}-agent-agent")]
+
+
+# A team lead that hands the gated agent's work to its ``helper`` through
+# Task Manager. The delegate binding's parameters become the assignee's
+# node data.
+GATED_TEAM_LEAD = {
+    "prompt": 'call:tasks {"operation": "assign_task", "assignee_node_id": "helper", "task": "Draft the weekly summary"}',
+    "payload": {"team_id": "fixture-team"},
+    "tools": [
+        {"node_type": "taskManager", "node_id": "tasks", "name": "tasks"},
+        {"node_type": "aiAgent", "node_id": "helper", "name": "delegate_to_helper",
+         "extra": {"llm_hidden": True, "parameters": {"fixture": GATED_AGENT}}},
+    ],
+}
+
+
+def _assignee_id(lead_id: str) -> str:
+    return f"{lead_id}-delegate-helper-1-1-{DELEGATION_REQUEST['team_task_id']}"
+
+
+async def task_runner_cancel(rec: Recorder) -> list[WorkflowHistory]:
+    """A team lead's Task Manager runner is cancelled while the assignee
+    agent waits on a tool call. The cancel reaches the agent child, which
+    treats its cancelled tool call as a failed one and answers, so the
+    runner, waiting for that answer, records the delegation as finished and
+    completes: the cancel is swallowed at both levels."""
+    _PAUSE_TOOL_STARTED.clear()
+    _PAUSE_TOOL_RELEASE.clear()
+    workflow_id = "fixture-agent-runner-cancel"
+    await rec.run("AgentWorkflow", _agent_context(workflow_id, GATED_TEAM_LEAD, node_type="ai_employee"), workflow_id)
+    child_id = _assignee_id(workflow_id)
+    await asyncio.wait_for(_PAUSE_TOOL_STARTED.wait(), 30)
+    await rec.parked(f"{child_id}-runner")
+    await rec.client.get_workflow_handle(f"{child_id}-runner").cancel()
+    await rec.wait_ended(f"{child_id}-runner")
+    await rec.wait_ended(child_id)
+    _PAUSE_TOOL_RELEASE.set()
+    return [await rec.history(workflow_id), await rec.history(f"{child_id}-runner"), await rec.history(child_id)]
+
+
+async def task_runner_paused_cancel(rec: Recorder) -> list[WorkflowHistory]:
+    """A stopped generation's team task is cancelled, as Apply's stop-work
+    cancels it: the assignee has finished its tool call and waits for
+    Resume. The cancel reaches the waiting assignee, which ends cancelled;
+    the runner records the delegation as failed, releases its permit and
+    ends cancelled."""
+    _PAUSE_TOOL_STARTED.clear()
+    _PAUSE_TOOL_RELEASE.clear()
+    controller_id = "workflow-control-fixture-runner-g1"
+    controller = await rec.start("WorkflowControlWorkflow", _controller_input(controller_id), controller_id)
+    workflow_id = "fixture-agent-runner-paused"
+    context = _agent_context(workflow_id, GATED_TEAM_LEAD, node_type="ai_employee")
+    context.update(execution_control_version=1, controller_workflow_id=controller_id, generation=1)
+    await rec.run("AgentWorkflow", context, workflow_id)
+    child_id = _assignee_id(workflow_id)
+    runner = rec.client.get_workflow_handle(f"{child_id}-runner")
+    assignee = rec.client.get_workflow_handle(child_id)
+    await asyncio.wait_for(_PAUSE_TOOL_STARTED.wait(), 30)
+    await rec.parked(runner.id)
+    paused = {"state": "paused", "revision": 2, "generation": 1}
+    for handle in (controller, runner, assignee):
+        await handle.execute_update("set_control_state", paused)
+    _PAUSE_TOOL_RELEASE.set()
+    assert (await asyncio.wait_for(assignee.execute_update("wait_for_checkpoint", paused), 30))["checkpoint"]
+    await rec.parked(child_id)
+    await runner.cancel()
+    await rec.wait_ended(runner.id)
+    await rec.wait_ended(child_id)
+    await _settle_and_reset(rec, controller)
+    return [await rec.history(workflow_id), await rec.history(runner.id), await rec.history(child_id),
+            *await rec.chain(controller_id, controller.first_execution_run_id)]
+
+
+async def employee_job_cancel(rec: Recorder) -> list[WorkflowHistory]:
+    """A team job admitted while its generation is stopped waits to start
+    its lead and is cancelled, as Apply's stop-work cancels it. The job
+    records itself cancelled under a shield and unregisters; no lead starts."""
+    controller_id = "workflow-control-fixture-job-cancel-g1"
+    stopped = {"state": "paused", "participant_state": "paused", "participant_revision": 1}
+    controller = await rec.start("WorkflowControlWorkflow", _controller_input(controller_id, **stopped), controller_id)
+    job_id = "employee-job:fixture-cancel"
+    context = {
+        **_agent_context(job_id, {}), "node_id": "lead", "node_type": "ai_employee", "employee_job_id": "fixture-job-cancel",
+        "generation": 1, "graphVersion": 2, "root_execution_id": job_id, "data_scope_id": "fixture-scope",
+        "execution_control_version": 1, "controller_workflow_id": controller_id,
+    }
+    job = await rec.start("EmployeeJobWorkflow", context, job_id)
+    await rec.parked(job_id)
+    assert (await job.query("execution_control_status"))["state"] == "paused"
+    await job.cancel()
+    await rec.wait_ended(job_id)
+    await _settle_and_reset(rec, controller)
+    return [await rec.history(job_id), *await rec.chain(controller_id, controller.first_execution_run_id)]
+
+
 Scenario = Callable[[Recorder], Awaitable[list[WorkflowHistory]]]
 
 SCENARIOS: dict[str, Scenario] = {
@@ -965,6 +1203,12 @@ SCENARIOS: dict[str, Scenario] = {
     "workspace_task": workspace_task,
     "pi_coding_agent": pi_coding_agent,
     "pi_inline_delegation": pi_inline_delegation,
+    "machina_chat_cancel": machina_chat_cancel,
+    "machina_controlled_cancel": machina_controlled_cancel,
+    "machina_branch_failure": machina_branch_failure,
+    "task_runner_cancel": task_runner_cancel,
+    "task_runner_paused_cancel": task_runner_paused_cancel,
+    "employee_job_cancel": employee_job_cancel,
 }
 # Run on a server that suggests continue-as-new from ROLLOVER_HISTORY_COUNT
 # events on, so each one records its rollover.
@@ -999,7 +1243,8 @@ def _search_attributes() -> list:
     return [key[spec.indexed_type](spec.name) for spec in EVENT_SEARCH_ATTRIBUTES]
 
 
-async def record(cli: str, out: Path, *, source_commit: str | None = None, source_root: Path | None = None) -> None:
+async def record(cli: str, out: Path, *, source_commit: str | None = None, source_root: Path | None = None,
+                 only: list[str] | None = None) -> None:
     import nodes  # noqa: F401 -- the plugin registry names the node activities
     import temporalio
     from temporalio.testing import WorkflowEnvironment
@@ -1016,6 +1261,10 @@ async def record(cli: str, out: Path, *, source_commit: str | None = None, sourc
 
     polling_trigger_workflow._MIN_POLL_INTERVAL_S = POLL_INTERVAL_FLOOR_S
     workflow_control_workflow._MIN_POLL_INTERVAL_S = POLL_INTERVAL_FLOOR_S
+    selected = set(only or ())
+    unknown = selected - {*SCENARIOS, *ROLLOVER_SCENARIOS}
+    if unknown:
+        raise ValueError(f"Unknown fixture scenarios: {sorted(unknown)}")
     fakes = fake_activities()
     recorded: dict[str, list[WorkflowHistory]] = {}
     servers = (
@@ -1023,6 +1272,9 @@ async def record(cli: str, out: Path, *, source_commit: str | None = None, sourc
         (ROLLOVER_SCENARIOS, ["--dynamic-config-value", f"limit.historyCount.suggestContinueAsNew={ROLLOVER_HISTORY_COUNT}"]),
     )
     for scenarios, server_args in servers:
+        scenarios = {name: scenario for name, scenario in scenarios.items() if not selected or name in selected}
+        if not scenarios:
+            continue
         with tempfile.TemporaryDirectory(prefix="opencompany-fixture-server-") as scratch:
             async with await WorkflowEnvironment.start_local(
                 dev_server_existing_path=cli,
@@ -1079,7 +1331,8 @@ async def record(cli: str, out: Path, *, source_commit: str | None = None, sourc
         }
         (out / f"{name}.json").write_text(json.dumps(document), encoding="utf-8")
     manifest = {
-        "release": release(),
+        # The archive carries the source commit's package.json at its root.
+        "release": release(source_root.parent if source_root else REPO_ROOT),
         "origin_commit": source_commit or _git("rev-parse", "HEAD"),
         "origin_dirty": False if source_commit else bool(_git("status", "--porcelain")),
         "source_mode": "git-archive" if source_commit else "working-tree",
@@ -1162,7 +1415,11 @@ def main() -> int:
     parser.add_argument("out", nargs="?", type=Path, default=FIXTURES_DIR / release())
     parser.add_argument("--source-commit", help="Record the exact app source at this commit, isolated from uncommitted changes")
     parser.add_argument("--golden-only", action="store_true", help="Write only the command identity inventory from the selected commit")
+    parser.add_argument("--scenario", action="append", dest="scenarios", metavar="NAME",
+                        help="Record only this scenario (repeatable), for a supplementary set beside a release's own")
     options = parser.parse_args()
+    if options.scenarios and options.out.resolve() == (FIXTURES_DIR / release()).resolve():
+        parser.error("--scenario records a supplementary set: give it its own folder, e.g. fixtures/<release>-<topic>")
     os.environ["DEBUG"] = "false"
     os.environ.setdefault("LOG_LEVEL", "WARNING")
     with tempfile.TemporaryDirectory(prefix="opencompany-fixtures-") as data_dir:
@@ -1171,7 +1428,7 @@ def main() -> int:
             if options.golden_only:
                 write_golden(source_root or SERVER_DIR, commit or _git("rev-parse", "HEAD"))
             else:
-                asyncio.run(record(cli, options.out, source_commit=commit, source_root=source_root))
+                asyncio.run(record(cli, options.out, source_commit=commit, source_root=source_root, only=options.scenarios))
     return 0
 
 
