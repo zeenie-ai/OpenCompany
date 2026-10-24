@@ -95,7 +95,7 @@ jobs:
         working-directory: server
         shell: bash
         run: |
-          uv run python -c "import os; from pathlib import Path; from services.temporal._install import cli_pin, _binary_versions; cli = Path(os.environ['TEMPORAL_TEST_CLI']); assert cli.is_file(); assert _binary_versions(cli)['cli_version'] == cli_pin()['version']"
+          uv run python -c "import os; from pathlib import Path; from services.temporal._install import cli_pin, binary_versions; cli = Path(os.environ['TEMPORAL_TEST_CLI']); assert cli.is_file(); assert binary_versions(cli)['cli_version'] == cli_pin()['version']"
           uv run pytest tests/temporal/test_replay_corpus.py tests/temporal/test_workflow_identity_golden.py tests/temporal/test_run_graph_replay.py -v -p no:cacheprovider
       - name: pytest
         working-directory: server

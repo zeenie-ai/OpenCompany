@@ -32,6 +32,7 @@ import platform
 import re
 import shutil
 import stat
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -84,6 +85,15 @@ def binary_installed() -> bool:
     """True when the pinned CLI is already on disk, so starting needs no download."""
     root = _cache_dir() / cli_pin()["version"]
     return root.is_dir() and any(p.is_file() for p in root.rglob(_binary_name()))
+
+
+def binary_versions(binary: Path) -> dict[str, str]:
+    """The CLI and server versions a ``temporal`` binary reports (CI checks its test CLI with it)."""
+    output = subprocess.run([str(binary), "--version"], capture_output=True, text=True, check=True, timeout=15).stdout
+    match = re.search(r"(?:temporal CLI|temporal version)\s+(\d+\.\d+\.\d+)\s+\(Server\s+(\d+\.\d+\.\d+)", output, re.I)
+    if match is None:
+        raise RuntimeError(f"Cannot read the Temporal CLI and server versions of {binary}: {output.strip()!r}")
+    return {"cli_version": match[1], "server_version": match[2]}
 
 
 _cached: dict[str, Path] | None = None
@@ -238,7 +248,7 @@ def _server_minor(version: object) -> str | None:
     return ".".join(version.split(".")[:2]) if re.fullmatch(r"\d+\.\d+\.\d+", version) else None
 
 
-__all__ = ["binary_installed", "cli_pin", "ensure_temporal_binaries", "marker_path", "prepare_database"]
+__all__ = ["binary_installed", "binary_versions", "cli_pin", "ensure_temporal_binaries", "marker_path", "prepare_database"]
 
 
 def _main() -> int:

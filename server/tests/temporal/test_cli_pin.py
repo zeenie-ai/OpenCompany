@@ -15,6 +15,8 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from services.temporal import _install, _runtime
 
 
@@ -134,6 +136,20 @@ def test_fetch_verifies_the_pinned_archive_into_its_versioned_folder(tmp_path, m
     assert Path(calls[0]["path"]) == tmp_path / pin["version"]
     assert calls[0]["fname"] == asset["file"]
     assert binary == tmp_path / pin["version"] / f"{asset['file']}.untar" / "temporal"
+
+
+def test_binary_versions_reads_the_cli_and_server_it_reports(monkeypatch):
+    outputs = iter(["temporal version 1.9.1 (Server 1.32.0, UI 2.54.1)\n", "unexpected\n"])
+
+    def fake_run(argv, **kwargs):
+        assert argv[1:] == ["--version"]
+        return SimpleNamespace(stdout=next(outputs))
+
+    monkeypatch.setattr(_install.subprocess, "run", fake_run)
+
+    assert _install.binary_versions(Path("temporal")) == {"cli_version": "1.9.1", "server_version": "1.32.0"}
+    with pytest.raises(RuntimeError, match="Cannot read"):
+        _install.binary_versions(Path("temporal"))
 
 
 def test_only_the_pinned_cli_counts_as_installed(tmp_path, monkeypatch):
