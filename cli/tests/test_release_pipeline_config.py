@@ -450,7 +450,9 @@ def test_the_current_version_has_its_replay_histories(root: Path, root_pkg: dict
     (``server/tests/temporal/record_fixtures.py``) runs when a release is cut,
     and its set goes into the ``chore(release)`` commit
     (``docs-internal/ci_cd.md`` -> Cutting a release). A version without
-    ``fixtures/<version>/`` fails here.
+    ``fixtures/<version>/`` fails here, and so does a set recorded on another
+    CLI than the one pinned when it was recorded: installs run the pinned
+    server, so its histories are the ones open runs have.
     """
     version = root_pkg["version"]
     fixtures = root / "server" / "tests" / "temporal" / "fixtures" / version
@@ -459,7 +461,11 @@ def test_the_current_version_has_its_replay_histories(root: Path, root_pkg: dict
         f"No replay histories for {version}: run tests.temporal.record_fixtures (see ci_cd.md, Cutting a release) "
         f"and commit {fixtures.relative_to(root).as_posix()}/ with the version bump"
     )
-    assert json.loads(manifest.read_text(encoding="utf-8"))["release"] == version
+    recorded = json.loads(manifest.read_text(encoding="utf-8"))
+    assert recorded["release"] == version
+    assert recorded["temporal_cli"] == recorded["release_cli_pin"], (
+        f"{version}'s histories were recorded on CLI {recorded['temporal_cli']}, not the pinned {recorded['release_cli_pin']}"
+    )
 
 
 # ---------------------------------------------------------------------------
