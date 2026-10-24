@@ -277,6 +277,66 @@ async def test_failed_deploy_validation_does_not_rekey_parameters(recording_db, 
 
 
 @pytest.mark.asyncio
+async def test_restart_rearm_keeps_saved_node_secrets(recording_db, monkeypatch):
+    """The boot re-arm deploys a generation from its sanitized snapshot.
+
+    That deploy wrote the snapshot over every saved node row, so after the
+    first restart a header-authenticated webhook had lost its header value and
+    answered 401 to every request, and an edit saved while paused went back to
+    its Start value.
+    """
+    import core.container
+    from services.deployment import handlers as deployment_handlers
+
+    workflow_service = SimpleNamespace(
+        is_workflow_deployed=lambda _workflow_id: False,
+        deploy_workflow=AsyncMock(return_value={"success": True, "triggers_setup": [], "deployment_id": "deployment"}),
+    )
+    container_stub = MagicMock()
+    container_stub.database.return_value = recording_db
+    container_stub.workflow_service.return_value = workflow_service
+    monkeypatch.setattr(core.container, "container", container_stub)
+
+    broadcaster = SimpleNamespace(
+        lock_workflow=AsyncMock(return_value=True), unlock_workflow=AsyncMock(), update_node_status=AsyncMock(),
+        update_workflow_status=AsyncMock(), update_deployment_status=AsyncMock(),
+    )
+    broadcaster_stub = types.ModuleType("services.status_broadcaster")
+    broadcaster_stub.get_status_broadcaster = lambda: broadcaster
+    monkeypatch.setitem(sys.modules, "services.status_broadcaster", broadcaster_stub)
+
+    import services.workflow_validator as validator_module
+
+    monkeypatch.setattr(
+        validator_module,
+        "validate_workflow",
+        AsyncMock(return_value={"errors": [], "warnings": []}),
+    )
+    monkeypatch.setattr(deployment_handlers, "_deployment_tasks", {})
+
+    node_id = "1:webhookTrigger:1"
+    saved = {"path": "orders", "header_name": "X-Token", "header_value": "kept-secret"}
+    await recording_db.save_node_parameters(node_id, saved)
+
+    result = await deployment_handlers.handle_deploy_workflow(
+        {
+            "workflow_id": "1",
+            "nodes": [{"id": node_id, "type": "webhookTrigger", "position": {"x": 0, "y": 0}, "data": {}}],
+            "edges": [],
+            # The generation's snapshot, as the re-arm passes it: no secrets.
+            "parameters_by_id": {node_id: {"path": "orders", "header_name": "X-Token"}},
+            "generation": 1,
+        },
+        None,
+    )
+    await deployment_handlers._deployment_tasks["1"]
+
+    assert result["success"] is True
+    assert await recording_db.get_node_parameters(node_id) == saved
+    assert recording_db.deleted_parameter_ids == []
+
+
+@pytest.mark.asyncio
 async def test_save_preserves_description(patched_handlers):
     """Saving nulled the description because the kwarg was never passed."""
     handlers = patched_handlers.handlers

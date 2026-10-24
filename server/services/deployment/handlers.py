@@ -263,11 +263,16 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     # Running this before the gate orphaned configuration on a failed deploy:
     # the rows were renamed and the originals deleted, while the stored graph
     # kept its old ids, so the next read looked up ids that no longer existed.
-    await persist_parameter_aliases(
-        container.database(),
-        aliases=graph_aliases,
-        parameters=normalized_parameters,
-    )
+    # A generation's deploy writes no rows. Start saved them before it created
+    # the generation, and the restart re-arm passes the generation's sanitized
+    # snapshot, which would replace each saved row and erase its secrets (a
+    # webhook's header value among them) and any edit saved while paused.
+    if int(data.get("generation") or 0) <= 0:
+        await persist_parameter_aliases(
+            container.database(),
+            aliases=graph_aliases,
+            parameters=normalized_parameters,
+        )
 
     if workflow_service.is_workflow_deployed(workflow_id):
         status = workflow_service.get_deployment_status(workflow_id)
