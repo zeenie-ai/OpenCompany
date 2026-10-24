@@ -114,18 +114,19 @@ async def _enrich_messages_with_media(messages: List[Dict[str, Any]], rpc_call, 
     return messages
 
 
-async def handle_whatsapp_send(node_id: str, node_type: str, parameters: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_whatsapp_send(node_id: str, node_type: str, parameters: Dict[str, Any], context: Dict[str, Any], *, ctx: Any = None) -> Dict[str, Any]:
     """Handle WhatsApp send message node via Go RPC service.
 
     Supports all message types: text, image, video, audio, document, sticker, location, contact
     Recipients: phone number, group_id, or channel_jid (newsletter)
-    Media sources: base64, file path, or URL
+    Media sources: base64, a file in the workflow's workspace, or URL
 
     Args:
         node_id: The node ID
         node_type: The node type (whatsappSend)
         parameters: Resolved parameters
         context: Execution context
+        ctx: The node's context, which names the workspace a file is read from
 
     Returns:
         Execution result dict
@@ -171,7 +172,7 @@ async def handle_whatsapp_send(node_id: str, node_type: str, parameters: Dict[st
             parameters["message"] = to_whatsapp(parameters["message"])
 
         # Call WhatsApp Go RPC service via handler - pass full params
-        data = await whatsapp_send_handler(parameters)
+        data = await whatsapp_send_handler(parameters, ctx=ctx)
 
         success = data.get("success", False)
         if not success:

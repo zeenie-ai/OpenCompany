@@ -119,7 +119,7 @@ class WhatsAppSendParams(BaseModel):
     )
     file_path: str = Field(
         default="",
-        description="Server file path or uploaded filename",
+        description="A file in this workflow's workspace, or an uploaded file",
         json_schema_extra={
             "widget": "file",
             "accept": "*/*",
@@ -303,6 +303,7 @@ class WhatsAppSendNode(ActionNode):
             node_type=self.type,
             parameters=params.model_dump(by_alias=False),
             context=ctx.raw,
+            ctx=ctx,
         )
         if response.get("success"):
             return response.get("result") or response

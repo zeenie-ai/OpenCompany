@@ -482,6 +482,19 @@ class TestDrive:
         harness.assert_envelope(result, success=False)
         assert "file_url" in result["error"].lower() or "file_content" in result["error"].lower()
 
+    async def test_upload_refuses_a_metadata_url_without_downloading(self, harness):
+        service = MagicMock(name="DriveService")
+        with _patch_creds("googleDrive"), _patch_build("googleDrive", service), patch("httpx.AsyncClient") as http:
+            result = await harness.execute(
+                "googleDrive",
+                {"operation": "upload", "filename": "keys.json", "file_url": "http://169.254.169.254/latest/meta-data/"},
+            )
+
+        harness.assert_envelope(result, success=False)
+        assert "metadata" in result["error"]
+        http.assert_not_called()
+        service.files.return_value.create.assert_not_called()
+
     async def test_unknown_operation_returns_error(self, harness):
         with _patch_creds("googleDrive"), _patch_build("googleDrive", MagicMock()):
             result = await harness.execute(

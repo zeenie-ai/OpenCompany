@@ -38,8 +38,8 @@ Key parameters (see frontend definition for the full list and `displayOptions.sh
 | `format_markdown` | boolean | `true` | no | When true and text message, convert GFM to WhatsApp syntax via `markdown_formatter.to_whatsapp` |
 | `media_source` | options | `base64` | conditional | `base64`, `file`, or `url` for media types |
 | `media_data` | string | `""` | conditional | Base64 data when `media_source == 'base64'` |
-| `file_path` | string/object | `""` | conditional | Either a path string or upload dict `{type: 'upload', filename, mimeType}` |
-| `media_url` | string | `""` | conditional | URL when `media_source == 'url'` |
+| `file_path` | string/object | `""` | conditional | A file in this workflow's workspace (a path or a file reference, read through `coerce_file_param`), or an upload dict `{type: 'upload', filename, mimeType}`. A path outside the workspace is refused |
+| `media_url` | string | `""` | conditional | URL when `media_source == 'url'`. Checked with `services/netpolicy.py` on every address it resolves to before the download: cloud metadata and OpenCompany's own ports are refused |
 | `mime_type` | string | `""` | no | Optional override |
 | `caption` | string | `""` | no | Caption for media messages |
 | `filename` | string | `""` | no | Filename for document messages |
@@ -119,12 +119,13 @@ flowchart TD
 - **Markdown transform**: only runs when `message_type == 'text'` AND `format_markdown` truthy. Overwrites `parameters['message']` in place before RPC call.
 - **Type-specific result fields**: `match message_type` adds `preview`, `media_source`, `caption`, `filename`, `mime_type`, `uploaded_file`, `location`, or `contact_name` based on message type.
 - **File upload detection**: if `file_path` is a dict with `type == 'upload'`, the `_service.py` send handler uploads bytes and the result includes `uploaded_file` and `mime_type` from the upload dict.
+- **File containment**: any other `file_path` is read with `coerce_file_param` from the workflow's workspace (the node passes its `NodeContext`). A path outside it, or a caller with no workspace (the `whatsapp_send` WebSocket command), gets a `success=false` envelope; nothing is read.
 
 ## Side Effects
 
 - **Database writes**: none directly from this handler. (API-usage cost is recorded by the `@Operation` `cost` metadata via `BaseNode.execute()`.)
 - **Broadcasts**: none directly - standard node_status transitions come from `BaseNode.execute()`.
-- **External calls**: WebSocket RPC to the Go `whatsapp-rpc` service via [`nodes/whatsapp/_service.py::whatsapp_rpc_call`](../../../server/nodes/whatsapp/_service.py). Default URL `ws://localhost:5683/ws/rpc` (overridable via `WHATSAPP_RPC_URL`). For media URLs, `_service.py` additionally downloads via `httpx`.
+- **External calls**: WebSocket RPC to the Go `whatsapp-rpc` service via [`nodes/whatsapp/_service.py::whatsapp_rpc_call`](../../../server/nodes/whatsapp/_service.py). Default URL `ws://localhost:5683/ws/rpc` (overridable via `WHATSAPP_RPC_URL`). For media URLs, `_service.py` additionally downloads via `httpx`, after `netpolicy.resolved_url_block_reason` accepts the URL (`fetch_policy`: the owner's network is allowed, cloud metadata and OpenCompany's own ports never).
 - **File I/O**: none in this handler - file uploads are handled in `_service.py`.
 - **Subprocess**: none.
 

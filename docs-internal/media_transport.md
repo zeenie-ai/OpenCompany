@@ -137,6 +137,11 @@ user-supplied path onto the workspace root with no check at all, so
 uploaded it to a third-party provider. `coerce_file_param` closes that by
 construction for every node that adopts it.
 
+`whatsappSend` (and `socialSend` to WhatsApp) had the same hole until
+2026-10-25: a `file_path` went to plain `open()`, so an agent could send any
+readable host file to any number. It now reads through `coerce_file_param`
+with the sending node's context.
+
 ---
 
 ## 4. The API

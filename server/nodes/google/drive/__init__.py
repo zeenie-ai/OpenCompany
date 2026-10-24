@@ -10,7 +10,7 @@ import httpx
 from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
+from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 from services.plugin.approval import ApprovalSpec
 
 from .._credentials import GoogleCredential
@@ -144,6 +144,11 @@ class DriveNode(ActionNode):
 
             mime_type = params.mime_type
             if params.file_url:
+                from services.netpolicy import fetch_policy, resolved_url_block_reason
+
+                reason = await resolved_url_block_reason(params.file_url, fetch_policy())
+                if reason:
+                    raise NodeUserError(f"Cannot download {params.file_url}: {reason}.")
                 async with httpx.AsyncClient() as client:
                     resp = await client.get(params.file_url, timeout=60.0)
                     resp.raise_for_status()

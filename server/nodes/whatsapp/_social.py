@@ -94,7 +94,7 @@ async def social_send_adapter(payload: Dict[str, Any], ctx: Any) -> Dict[str, An
         params["is_reply"] = True
         params["reply_message_id"] = payload.get("reply_message_id", "")
 
-    return await handle_whatsapp_send(params)
+    return await handle_whatsapp_send(params, ctx=ctx)
 
 
 __all__ = ["social_send_adapter"]

@@ -129,7 +129,7 @@ flowchart TD
 
 - **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_drive'`.
 - **Broadcasts**: none from the operation; executor emits standard `node_status`.
-- **External API calls**: Drive API v3 - `files().create/get/list`, `permissions().create`, `files().get_media`. Plus `httpx.AsyncClient.get(file_url)` on upload-from-URL.
+- **External API calls**: Drive API v3 - `files().create/get/list`, `permissions().create`, `files().get_media`. Plus `httpx.AsyncClient.get(file_url)` on upload-from-URL, after `netpolicy.resolved_url_block_reason` accepts the URL on every address it resolves to (`fetch_policy`); a refused URL raises `NodeUserError`.
 - **File I/O**: in-memory `io.BytesIO` buffers only; no disk writes.
 - **Subprocess**: none.
 

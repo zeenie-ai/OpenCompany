@@ -473,8 +473,11 @@ async def handle_whatsapp_qr() -> dict:
         return {"success": False, "connected": False, "error": str(e)}
 
 
-async def handle_whatsapp_send(params: dict) -> dict:
+async def handle_whatsapp_send(params: dict, *, ctx: Any = None) -> dict:
     """Send a WhatsApp message via direct RPC - supports all message types.
+
+    ``ctx`` is the sending node's context. A file is read only from its
+    workflow's workspace, so a caller without one cannot send a file by path.
 
     Uses _send_lock to serialize sends - Go service processes sequentially.
 
@@ -556,23 +559,31 @@ async def handle_whatsapp_send(params: dict) -> dict:
                         mime_type = mime_type or file_param.get("mimeType")
                         filename = filename or file_param.get("filename")
                     elif file_param:
-                        import base64 as b64
+                        from services.media.workspace import coerce_file_param
+                        from services.plugin import NodeUserError
 
+                        # The model can choose this path, so it is read only
+                        # from the workflow's workspace, never anywhere on the host.
                         try:
-                            with open(file_param, "rb") as f:
-                                media_data = b64.b64encode(f.read()).decode("utf-8")
-                        except Exception as e:
-                            return {"success": False, "error": f"Failed to read file: {e}"}
+                            name, blob = coerce_file_param(file_param, ctx=ctx)
+                        except NodeUserError as e:
+                            return {"success": False, "error": str(e)}
+                        media_data = base64.b64encode(blob).decode("utf-8")
+                        filename = filename or name
                 elif media_source == "url":
                     media_url = params.get("media_url")
                     if media_url:
                         import httpx
-                        import base64 as b64
 
+                        from services.netpolicy import fetch_policy, resolved_url_block_reason
+
+                        reason = await resolved_url_block_reason(media_url, fetch_policy())
+                        if reason:
+                            return {"success": False, "error": f"Cannot download media from {media_url}: {reason}."}
                         try:
                             async with httpx.AsyncClient() as http:
                                 resp = await http.get(media_url, timeout=30)
-                                media_data = b64.b64encode(resp.content).decode("utf-8")
+                                media_data = base64.b64encode(resp.content).decode("utf-8")
                         except Exception as e:
                             return {"success": False, "error": f"Failed to download media: {e}"}
 

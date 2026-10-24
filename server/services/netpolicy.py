@@ -1,11 +1,15 @@
 """Where an outbound connection made for an agent may go.
 
-Two callers: the agent's browser (``nodes/browser``: each navigation, and the
-egress proxy on the addresses it resolved itself), and the custom MCP
-connectors (``nodes/mcp_connector``: the server the owner added, on every
-address its host resolves to). What they reach is untrusted, and an agent
-follows untrusted instructions (prompt injection), so these stay out of
-reach:
+Callers:
+- the agent's browser (``nodes/browser``): each navigation, and the egress
+  proxy on the addresses it resolved itself;
+- the custom MCP connectors (``nodes/mcp_connector``): the server the owner
+  added, on every address its host resolves to;
+- nodes that download a URL they were given, such as a WhatsApp media URL
+  or a Google Drive upload's source (:func:`resolved_url_block_reason`).
+
+What they reach is untrusted, and an agent follows untrusted instructions
+(prompt injection), so these stay out of reach:
 
 - **OpenCompany itself**: its ports on this machine (the app, the code
   sidecar, the WhatsApp bridge, Temporal) and the managed Chromes' debugging
@@ -18,15 +22,17 @@ reach:
   protected ports above.
 
 Pure functions, except :func:`local_addresses`, which reads this machine's
-interface addresses (no network).
+interface addresses (no network), and :func:`resolve_addresses`, a DNS lookup.
 """
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import os
+import socket
 from dataclasses import dataclass, field
-from typing import FrozenSet, Iterable, Optional, Tuple, Union
+from typing import FrozenSet, Iterable, List, Optional, Tuple, Union
 from urllib.parse import urlsplit
 
 IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
@@ -197,16 +203,69 @@ def url_block_reason(url: str, policy: NetPolicy) -> Optional[str]:
     return None
 
 
+def fetch_policy() -> NetPolicy:
+    """The policy for a URL a node downloads itself: the owner's own network
+    is allowed, OpenCompany's own ports and cloud metadata never are."""
+    return NetPolicy(allow_private_network=True, blocked_local_ports=own_ports_from_env(), local_addresses=local_addresses())
+
+
+async def resolve_addresses(host: str, port: int) -> List[IPAddress]:
+    """Every address ``host`` resolves to; empty when it does not resolve."""
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except (socket.gaierror, UnicodeError):
+        return []
+    found = []
+    for info in infos:
+        try:
+            found.append(ipaddress.ip_address(str(info[4][0]).split("%", 1)[0]))
+        except ValueError:
+            continue
+    return found
+
+
+async def resolved_url_block_reason(url: str, policy: NetPolicy) -> Optional[str]:
+    """Why a node may not download ``url``, or ``None``.
+
+    :func:`url_block_reason`, plus a check of every address the host resolves
+    to, because the node connects itself and nothing else checks it.
+    """
+    reason = url_block_reason(url, policy)
+    if reason:
+        return reason
+    parts = urlsplit(url.strip())
+    host = parts.hostname or ""
+    if not host:
+        return "no host"
+    if literal_ip(host) is not None:
+        return None
+    try:
+        port = parts.port or (443 if parts.scheme.lower() == "https" else 80)
+    except ValueError:
+        return "not a valid port"
+    addresses = await resolve_addresses(host, port)
+    if not addresses:
+        return f"{host} could not be found"
+    for address in addresses:
+        reason = address_block_reason(address, port, policy)
+        if reason:
+            return reason
+    return None
+
+
 __all__ = [
     "NAVIGABLE_SCHEMES",
     "NetPolicy",
     "address_block_reason",
     "domain_allowed",
+    "fetch_policy",
     "host_block_reason",
     "is_local_network",
     "literal_ip",
     "local_addresses",
     "own_ports_from_env",
     "parse_allowed_domains",
+    "resolve_addresses",
+    "resolved_url_block_reason",
     "url_block_reason",
 ]

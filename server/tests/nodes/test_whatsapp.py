@@ -90,7 +90,7 @@ class TestWhatsappSend:
         """When format_markdown=true, parameters.message is rewritten before RPC call."""
         captured = {}
 
-        async def fake_send(params):
+        async def fake_send(params, *, ctx=None):
             captured["message"] = params.get("message")
             return {"success": True}
 
