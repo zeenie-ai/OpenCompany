@@ -97,6 +97,7 @@ Reusable `workflow_call` workflow with four independent jobs (no plan/change-det
 - `backend-tests` — cross-OS matrix (`ubuntu-latest`, `windows-latest`, `macos-latest`, `fail-fast: false`; RFC-0005 Phase 1). On Linux only, `uv lock --check` (the committed `server/uv.lock` must match `pyproject.toml`; the desktop app installs from it with `--frozen`) and a pinned `pip-audit` check of the locked Python dependencies including all extras. Then, on every OS:
   - **Pinned Temporal CLI.** The app's own installer (`services.temporal._install.ensure_temporal_binaries`) puts the CLI pinned in `server/config/temporal_cli.json` into a throwaway `DATA_DIR`, and the step writes its path to `$GITHUB_ENV` as `TEMPORAL_TEST_CLI`. The real-server tests that skip without it then run.
   - **Full history.** The checkout uses `fetch-depth: 0`, because two replay tests `git show` older commits.
+  - **N-1 replay and identity gate.** Before the full suite, a step checks that `TEMPORAL_TEST_CLI` reports the pinned version (`_install.binary_versions`), then runs `test_replay_corpus.py`, `test_workflow_identity_golden.py` and `test_run_graph_replay.py`. The job sets `TEMPORAL_REQUIRE_NATIVE_REPLAY=1` (a missing CLI fails the gate instead of skipping it) and `DEBUG=false`. What the gate checks is in [TEMPORAL_ARCHITECTURE.md -> The replay safety net](./TEMPORAL_ARCHITECTURE.md#the-replay-safety-net-rfc-0005-phase-1).
   - **Tests.** `uv sync` + `uv run pytest tests/ -v` in `server/`, the whole suite, unsharded, under `shell: bash` on every OS.
   - **Lock.** `test_backend_tests_run_on_every_os_with_the_pinned_temporal_cli` locks this.
 - `cli-tests` — `uv pip install --system pytest pytest-asyncio pyyaml` + `python -m pytest cli/tests/ -v`. Runs on `ubuntu-latest`.
@@ -181,6 +182,9 @@ had lapsed or one registry failed.
    `server/tests/temporal/fixtures/X.Y.Z/` and refuses to overwrite an
    existing set. `test_the_current_version_has_its_replay_histories` in
    `cli/tests/test_release_pipeline_config.py` fails a version without one.
+   Then the same command with `--golden-only` rewrites
+   `fixtures/workflow_identities.json` from that commit, so the next cycle's
+   identity checks compare against this release.
 3. **Tag.** `git tag -a vX.Y.Z -F notes.md` on that commit, the notes in the
    shape of the previous tags (`git tag -l --format='%(contents)' v0.1.0`).
 4. **Push** the branch, then the tag. The tag starts `release.yml` (predeploy

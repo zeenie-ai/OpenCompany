@@ -777,6 +777,53 @@ scratch data directory, never your own:
 `TEMPORAL_TEST_CLI=<the printed path>` and the same `DATA_DIR`, because the
 tests' child processes write under it.
 
+### The replay safety net (RFC-0005 Phase 1)
+
+Every change to workflow code must replay the previous release's histories and
+keep that release's command identities:
+- **Recorder.** `server/tests/temporal/record_fixtures.py` drives all 14
+  production workflow types through 21 scenarios on a throwaway dev server
+  running the pinned CLI, with fake activities under the production names. It
+  writes `server/tests/temporal/fixtures/<package.json version>/`: one JSON
+  file per scenario plus `manifest.json`, which names the origin commit, the
+  SDK and the CLI. It loads the app from a git archive of `--source-commit`,
+  never from the working tree, sets its own `DATA_DIR`, replays each history
+  once before writing it, and refuses to overwrite a set. It runs when a
+  release is cut ([ci_cd.md -> Cutting a release](./ci_cd.md#cutting-a-release)).
+- **Replay gate.** `server/tests/temporal/test_replay_corpus.py` replays every
+  set in a child process with `workflow_registry.replay_workflows()`: the
+  framework list the workers register (`workflow_registry.framework_workflows`,
+  imported by `worker.py` as `_framework_workflows`) plus the plugin workflows
+  from the same plugin registry. It checks each workflow module's source hash
+  against the set's origin commit, and fails when a production type has no
+  history.
+- **Golden identities.** `server/tests/temporal/fixtures/workflow_identities.json`
+  holds the release's:
+  - workflow types;
+  - activity, child-workflow and patch commands with their ids
+    (`workflow_identities.identity_snapshot`);
+  - Signal, Update and Query handler names (`handler_snapshot`);
+  - plugin activity names.
+
+  `test_workflow_identity_golden.py` fails when:
+  - commands change without a reviewed patch entry;
+  - a patched marker vanishes before a release has shipped it as
+    `deprecate_patch` (RFC-0005 §24.3);
+  - a handler is renamed or removed;
+  - a plugin activity name changes.
+
+  New handlers and node types are fine.
+  `record_fixtures --golden-only --source-commit <commit>` refreshes the file
+  at each release.
+- **Release check.** `test_the_current_version_has_its_replay_histories` in
+  `cli/tests/test_release_pipeline_config.py` fails a version that has no
+  `fixtures/<version>/`. It also fails a set recorded on another CLI than the
+  one pinned when it was recorded.
+- **CI.** `backend-tests` runs the gate as its own step before the full suite.
+  That step first checks that `TEMPORAL_TEST_CLI` reports the pinned version
+  (`_install.binary_versions`). The job sets `TEMPORAL_REQUIRE_NATIVE_REPLAY=1`,
+  so a missing CLI fails the gate instead of skipping it.
+
 What the user sees is documented in [Mobile workspace](../docs/mobile-workspace.md#resetting-phone-tasks)
 and [Browser workspace](browser_workspace.md#direct-browser-tasks).
 

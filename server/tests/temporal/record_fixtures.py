@@ -1107,7 +1107,7 @@ def write_golden(source_root: Path, commit: str) -> None:
     from services.node_registry import registered_node_classes
     from services.temporal.worker import _framework_workflows
     from services.temporal.plugin_registry import temporal_plugins
-    from tests.temporal.workflow_identities import identity_snapshot
+    from tests.temporal.workflow_identities import handler_snapshot, identity_snapshot
 
     registrations = {"workflows": _framework_workflows()}
     for plugin in temporal_plugins():
@@ -1116,6 +1116,7 @@ def write_golden(source_root: Path, commit: str) -> None:
         "origin_commit": commit,
         "workflow_types": sorted(item.__temporal_workflow_definition.name for item in registrations["workflows"]),
         "identities": identity_snapshot(source_root), "patch_entries": [],
+        "handlers": handler_snapshot(source_root),
         "plugin_activity_types": {name: f"node.{cls.type}.v{cls.version}" for name, cls in registered_node_classes().items()},
     }, indent=2) + "\n", encoding="utf-8")
 

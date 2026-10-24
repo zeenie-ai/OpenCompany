@@ -940,6 +940,90 @@
     }
   },
   "patch_entries": [],
+  "handlers": {
+    "DelegatedTaskWorkflow": [
+      "query:execution_control_status",
+      "signal:pause",
+      "signal:resume",
+      "update:set_control_state",
+      "update:wait_for_checkpoint"
+    ],
+    "AgentWorkflow": [
+      "query:execution_control_status",
+      "signal:pause",
+      "signal:resume",
+      "update:set_control_state",
+      "update:wait_for_checkpoint"
+    ],
+    "ApprovedToolCallWorkflow": [],
+    "EmployeeJobWorkflow": [
+      "query:execution_control_status",
+      "update:set_control_state",
+      "update:wait_for_checkpoint"
+    ],
+    "EmployeeJobDeliveryWorkflow": [],
+    "NodeInvocationWorkflow": [
+      "query:describe"
+    ],
+    "PiInlineDelegationWorkflow": [
+      "query:execution_control_status",
+      "update:set_control_state",
+      "update:wait_for_checkpoint"
+    ],
+    "PiCodingAgentWorkflow": [
+      "query:operation_status",
+      "signal:pause",
+      "signal:resume",
+      "update:assistant_ready",
+      "update:register_driver",
+      "update:submit_operation",
+      "update:wait_for_checkpoint"
+    ],
+    "PollingTriggerWorkflow": [
+      "signal:pause",
+      "signal:resume"
+    ],
+    "TriggerListenerWorkflow": [
+      "signal:on_event",
+      "signal:pause",
+      "signal:resume"
+    ],
+    "MachinaWorkflow": [
+      "query:execution_control_status",
+      "signal:on_event",
+      "signal:pause",
+      "signal:resume",
+      "update:set_control_state",
+      "update:wait_for_checkpoint"
+    ],
+    "WorkflowControlWorkflow": [
+      "query:execution_control_status",
+      "query:status",
+      "signal:on_event",
+      "signal:pause",
+      "signal:register_trigger",
+      "signal:reset",
+      "signal:resume",
+      "update:pause_admissions",
+      "update:register_execution",
+      "update:replace_graph",
+      "update:set_control_state",
+      "update:unregister_execution",
+      "update:wait_for_checkpoint"
+    ],
+    "WorkspaceTaskControllerWorkflow": [
+      "query:describe",
+      "update:reset",
+      "update:submit"
+    ],
+    "CronTriggerWorkflow": [
+      "query:execution_control_status",
+      "signal:pause",
+      "signal:resume",
+      "update:set_control_state",
+      "update:wait_for_checkpoint"
+    ]
+  },
   "plugin_activity_types": {
     "aiAgent": "node.aiAgent.v1",
     "ai_employee": "node.ai_employee.v1",
