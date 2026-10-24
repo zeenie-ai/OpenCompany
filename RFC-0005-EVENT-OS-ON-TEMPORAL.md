@@ -1,6 +1,6 @@
 # RFC-0005 — Event OS: Event-Driven AI Employees on Temporal
 
-- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 (§24.4); Phase 1 is next.
+- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 (§24.4); Phase 1 is in progress. RFC-0006 amended this RFC on 2026-10-24 (§30).
 - **Created:** 2026-10-23
 - **Scope:** the path from every event source to every effect:
   - `server/services/events/` and `server/routers/webhook.py`;
@@ -12,8 +12,9 @@
 - **Relationship:**
   - Implements, for the event path, RFC-0004 decisions D7 (bounded events), D8 (routing by known ids), D9 (cancellation), D10 (upgrade contract), D13 (human waits) and D18 (security fixes).
   - Keeps RFC-0002's conversation store and adds a thread to its key.
+  - Amended on 2026-10-24 by [RFC-0006](./RFC-0006-TEMPORAL-DESIGN-PATTERNS.md) (Temporal design patterns), wherever a pattern or an owner decision (T1-T20, RFC-0006 §3.1) changed a phase's design. §30 lists the changes.
   - Until a phase lands, [event_framework.md](./docs-internal/event_framework.md), [chat_protocol.md](./docs-internal/chat_protocol.md), [temporal-workflow-control.md](./docs-internal/temporal-workflow-control.md) and [TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md) stay normative for what it covers.
-- **Baseline:** HEAD a8e390ca (2026-10-23), temporalio 1.30.0, Temporal CLI unpinned. Line numbers are as of that date and drift. Figures marked *est.* are unmeasured and are confirmed by the gates in §26.
+- **Baseline:** HEAD a8e390ca (2026-10-23), temporalio 1.30.0, Temporal CLI unpinned. Line numbers are as of that date and drift; those changed on 2026-10-24 follow RFC-0006's baseline, HEAD 4f73cb10. Figures marked *est.* are unmeasured and are confirmed by the gates in §26.
 
 ## How to read this
 
@@ -22,7 +23,8 @@
   - §4: what is broken today and where;
   - §6: the architecture and its invariants;
   - §9.5: the delivery protocol;
-  - §23: failure modes.
+  - §23: failure modes;
+  - §30: what RFC-0006 changed on 2026-10-24.
 - **Implementer:** §7 to §21 by layer, §22 (scenarios), §24 (phases), §26 (acceptance gates).
 
 ## 1. Summary
@@ -46,7 +48,7 @@ OpenCompany's AI employees should run like the processes of an operating system 
 4. **Each conversation is one entity.** An entity workflow (`ConversationWorkflow`) debounces bursts, starts one turn at a time, and offers new messages to the running turn at its next step.
 5. **An employee supervisor workflow holds control and time.** It owns control state, alarms and the daily budget.
 6. **Classes and budgets decide who runs.** Four scheduling classes with reserved shares (owner, customer, internal, background) and a daily budget per employee decide who runs when capacity or money is short.
-7. **Timers live in Temporal.** Cron jobs and polls are Temporal Schedules addressed by immutable ids. Reminders are timers in the supervisor.
+7. **Timers live in Temporal.** Cron jobs are Temporal Schedules addressed by immutable ids. Each polling trigger is one small workflow that runs a single retried activity (T7, RFC-0006 §3.1). Reminders are timers in the supervisor.
 8. **Employees talk through the inbox.** Messages between employees are inbox rows carrying causal ids, a hop limit and a breaker.
 9. **Sends go through an outbox.** Each send has an idempotency key, and its token buckets slow the producing turn instead of dropping. A send whose outcome is uncertain is shown as `unknown`, never resent on its own.
 10. **Temporal is rebuildable.** Everything needed to resume lives in the app database, so Temporal can be rebuilt from it (I10). An instance can therefore move from the free dev server to the free open-source server, or recover a lost Temporal database, without losing an acknowledged event.
@@ -57,7 +59,7 @@ OpenCompany's AI employees should run like the processes of an operating system 
 - Releases reach the hosted fleet together in a weekly window.
 - Instances report metrics and errors, never content.
 
-**Rollout.** Phase 0 ships nine fixes for verified defects without changing any workflow command. Phase 1 builds the replay safety net. Phases 2 to 8 introduce the inbox, drivers, entities, scheduler, timers, messaging, egress and supervision, each versioned per generation. Phase 9 covers instance tiers and fleet operations. Phase 10 retires the old path. (§24)
+**Rollout.** Phase 0 ships nine fixes for verified defects without changing any workflow command. Phase 1 builds the replay safety net. Phase 1b ships 46 pattern fixes that need no workflow versioning (RFC-0006 §22.2). Phases 2 to 8 introduce the inbox, drivers, entities, scheduler, timers, messaging, egress and supervision, each versioned per generation. Phase 9 covers instance tiers and fleet operations. Phase 10 retires the old path. (§24)
 
 ## 2. Method and sources
 
@@ -87,18 +89,18 @@ OpenCompany's AI employees should run like the processes of an operating system 
 | E2 | **Instance tiers.** The desktop and hosted instances up to about 100 employees run the Temporal CLI dev server. A hosted instance past about 100 employees (up to about 1,000) moves to the free open-source Temporal server on its own PostgreSQL. (§20) |
 | E3 | **Databases.** Hosted instances run PostgreSQL for the app database and the inbox. The desktop app stays on SQLite. |
 | E4 | **Bus.** The inbox in the instance's database is the only durable store for events. gRPC carries events where a transport is needed: the protocol for out-of-process drivers (the WhatsApp bridge first), with acks and resume, and the relay's calls into Temporal. No message broker. (§7.3, §9) |
-| E5 | **Timers.** Cron jobs, polling triggers and reminders run on Temporal Schedules and timers. (§15) |
+| E5 | **Timers.** Cron jobs and reminders run on Temporal Schedules and timers. Each polling trigger runs as one retried activity in a small workflow of its own (amended on 2026-10-24 by T7, RFC-0006 §3.1). (§15) |
 | E6 | **Merging.** A new message for an employee that is still working is merged into the running work at its next step. Quick bursts are batched into one input. (§11) |
 | E7 | **Internal wake sources:** messages from other employees, self-scheduled wake-ups, task results and delegations, and changes to watched shared data. (§16) |
 | E8 | **Employee messaging.** Any employee may message, delegate to and wake any other employee of the same owner without linking. Loop limits apply. Owners live in separate instances, so traffic between owners cannot happen. |
 | E9 | **Customer histories.** Each customer conversation keeps its own history. Owner chat stays one conversation. Shared facts go through the Memory tool. (§12) |
 | E10 | **Priority.** When capacity is short the order is: owner chat and approvals, then customer conversations, then internal events, then background work. Every class keeps a reserved share. (§13) |
 | E11 | **Daily budget per employee.** Past 80%, only owner and customer conversations run. At 100% the employee pauses and the owner gets a notice with Resume. It resumes on its own at midnight in the owner's time zone. (§14) |
-| E12 | **Uncertain sends.** A send whose outcome is unknown, to a provider without idempotency keys (WhatsApp bridge, Telegram), is never resent automatically. It shows `unknown` with a Retry button. (§17) |
+| E12 | **Uncertain sends and other side effects.** A send whose outcome is unknown, to a provider without idempotency keys (WhatsApp bridge, Telegram), is never resent automatically. It shows `unknown` with a Retry button. Extended on 2026-10-24 to every side-effecting call (T13, RFC-0006 §3.1): a call that broke off is redone only when its plugin is idempotent or uses a provider idempotency key; otherwise it is recorded `unknown` and the employee is told. (§17) |
 | E13 | **Fleet upgrades.** Releases reach all hosted instances together in a fixed weekly maintenance window. (§21) |
 | E14 | **Telemetry.** Hosted instances report metrics and errors centrally, never content. (§18.5) |
 | E15 | **The Linux model** draws on all three diagrams: the kernel map, the network stack and the storage stack. |
-| E16 | **A new Temporal server starts from new.** The Temporal CLI is pinned (RFC-0004 D1). A database the pinned server minor did not create is deleted with the old CLI, and the install starts on an empty Temporal database. No migration code: generations whose controller is gone fail (`controller_execution_missing`), and owners Reset and Start their employees. The first pinned release does this on every install. (Decided 2026-10-23; §24.4) |
+| E16 | **A new Temporal server starts from new.** The Temporal CLI is pinned (RFC-0004 D1). A database the pinned server minor did not create is deleted with the old CLI, and the install starts on an empty Temporal database. No migration code: generations whose controller is gone fail (`controller_execution_missing`), and owners Reset and Start their employees. The first pinned release does this on every install. (Decided 2026-10-23 and confirmed on 2026-10-24 by T5, RFC-0006 §3.1; §24.4) |
 
 ### 3.2 RFC-0004 decisions this RFC implements
 
@@ -136,7 +138,7 @@ RFC-0004 Q2 (which server durable installs run on) is answered by E1 to E3.
 - **One run per chat session.** Owner chat allows one live run per session, and a second message is refused with `run_in_progress` (`server/services/chat/ledger.py:286-293`). WhatsApp and Telegram messages each start their own run, so replies in one conversation can race.
 - **No priority and no per-employee cap.**
   - LLM steps run on `machina-tasks`, not the rate-limited `ai-heavy` queue (RFC-0004 M9).
-  - Provider rate limits are per worker (`server/services/temporal/worker.py:618`).
+  - Provider rate limits are per worker (`server/services/temporal/worker.py:584`).
   - One deterministic spawn failure retries the head of a generation's queue every 5 s and blocks everything behind it (`workflow_control_workflow.py:477-480`).
 - **Internal events.** Only `agent.task.completed` can wake work, and it is unscoped (H11). An employee cannot schedule its own wake-up or message another employee.
 
@@ -148,6 +150,7 @@ RFC-0004 Q2 (which server durable installs run on) is answered by E1 to E3.
 | C3 (RFC-0004) | Webhook header authentication is never enforced, and an empty path matches every webhook | `server/routers/webhook.py`; `nodes/trigger/webhook_trigger` filter | 0.1 |
 | C4 (RFC-0004) | A deployment's Start node fires again on every backend restart | `server/services/deployment/handlers.py:1612-1617`; `manager.py:282` | 0.4 |
 | H1 (RFC-0004) | Routing through Visibility drops events silently | `dispatch.py:109-206` | P2 |
+| H2 (RFC-0004) | Node activities swallow cancellation: `NodeExecutor` turns a cancel into a failed result, so the activity completes normally after a cancel request | `server/services/node_executor.py:231-239` | 1b.2 |
 | H6 (RFC-0004) | Cron overlap is not prevented: the Schedule's policy covers only the short workflow it starts | `server/services/temporal/schedules.py` | P6 |
 | H8 (RFC-0004) | Workflow loops swallow cancellation | RFC-0004 §5 | controller lane |
 | H11 (RFC-0004) | Task events reach every workflow and every socket | `server/nodes/agent/_events.py:109-134` | 0.2, P6 |
@@ -189,10 +192,10 @@ RFC-0004 Q2 (which server durable installs run on) is answered by E1 to E3.
 | hard IRQ / bottom half | ingress / conversation turn | durable append and ack (§8), then router and relay (§9) |
 | NAPI | doorbell and batch drain | at most one delivery in flight per stream, a bounded window, backlog left in the database (§9.4) |
 | signal delivery on return to user space | merging new messages | the agent loop's step boundary (§11) |
-| scheduling classes, cgroups, HTB | owner, customer, internal, background | Priority keys, class queues, a slot pool with floors, admission (§13) |
+| scheduling classes, cgroups, HTB | owner, customer, internal, background | Priority keys, class queues with fixed slots, admission with floors (§13) |
 | `memory.high` / `memory.max` | spend throttle and pause | daily budget ledger (§14) |
 | epoll interest lists, D-Bus match rules, netlink groups | subscriptions | `bus_subscriptions` compiled at Start (§9.3) |
-| timer wheel, hrtimers, systemd timers | cron, polls, reminders | Schedules and durable timers (§15) |
+| timer wheel, hrtimers, systemd timers | cron, polls, reminders | Schedules, durable timers and retried poll activities (§15) |
 | pipes, signals, D-Bus | employees messaging each other | inbox rows with causal ids (§16) |
 | qdisc (TBF, HTB, fq_codel), BQL, writeback throttling | the outbound path | outbox, token buckets, the producer slows down (§17) |
 | RCU | a running generation keeps its version | `resource_manifest` flags frozen per generation (§10.4) |
@@ -222,7 +225,7 @@ WhatsApp bridge  ->   verify, cap, normalize, ->  router: subscriptions,     -> 
 (gRPC), Telegram,     dedupe, INSERT              storm guards, stream seq,       gates (generation, budget),     debounce, admit, turn child,                 send activity
 Discord, webhooks,    bus_ingress, commit, ack    bus_deliveries                  window, Signal-With-Start       merge at step boundaries                     (token bucket,
 polls, schedules,     (no Temporal, no LLM)                                       "deliver" with the batch        EmployeeSupervisorWorkflow per employee:     priority,
-IPC, owner chat                                                                                                   control, alarms, budget, upkeep              idempotency key)
+IPC, owner chat                                                                                                   control, alarms, budget                      idempotency key)
 ```
 
 ### 6.2 Invariants
@@ -230,12 +233,12 @@ IPC, owner chat                                                                 
 | # | Invariant | Principle |
 |---|---|---|
 | I1 | A Signal is a hint. The inbox and its cursors are the truth; every consumer reconciles from them. | 1 |
-| I2 | No request path calls Temporal or a model. Every request path ends at a durable commit. | 2 |
+| I2 | No request path calls Temporal or a model. Every request path ends at a durable commit. Owner actions that need Temporal (Start, Stop, Resume, Apply, approval decisions, Interrupt) write an intent row and answer at once. A background deliverer sends the Update by workflow id, with a stable id, until it is applied, and the UI shows "applying" (T10, RFC-0006 §7.3). | 2 |
 | I3 | Every queue is bounded and names its overflow policy. Every drop is a row with a reason. | 3 |
 | I4 | One relay per stream at a time and one consumer per stream. An entity runs at most one turn, and an input belongs to exactly one turn. | — |
 | I5 | Serialize only where state is shared (an agent's conversation key). Everything else runs in parallel under class floors. | 5 |
 | I6 | Routing goes from the app database to known workflow ids. Visibility is for operations only. | — |
-| I7 | Nothing over 64 KB enters Temporal; larger bodies travel by reference. An entity holds at most 32 inputs or 512 KB, and any backlog stays in the database. | 4 |
+| I7 | Nothing over 64 KB enters Temporal; larger bodies travel by reference. An entity holds at most 32 inputs or 512 KB, and any backlog stays in the database. One exception (T6): an agent loop's transcript travels in its LLM-step inputs and its continue-as-new carry, within bounds: at most 393,216 bytes of messages before every step, each step input under 1 MiB, the carry under 1.9 MB and the stored conversation under 1 MB (RFC-0006 §16.8). | 4 |
 | I8 | Every event carries `chainid`, `hop` and `causationid`. Internal wakes are checked for hops, cycles and rate. | 7 |
 | I9 | Every effect is idempotent, or at-most-once with an explicit `unknown`. Never a silent duplicate. | — |
 | I10 | Temporal is rebuildable from the app database: generation snapshots, conversation histories, inbox cursors, alarms, budgets and Schedule definitions all live there. | 6 |
@@ -374,7 +377,7 @@ class Bus(Protocol):
     async def claim_stream(self, relay_id: str, classes: list[int]) -> StreamLease | None  # (top class, oldest pending) first
     async def pending(self, lease: StreamLease, max_items: int, max_bytes: int) -> list[Delivery]  # seq order, not held
     async def delivered(self, lease: StreamLease, through_seq: int) -> None  # after Temporal accepted
-    async def hold(self, scope: Scope, reason: HoldReason) -> int  # budget | paused | window
+    async def hold(self, scope: Scope, reason: HoldReason) -> int  # budget | paused | window | starting
     async def release(self, scope: Scope, reason: HoldReason) -> int
     async def settle(self, stream: StreamKey, through_seq: int, outcome: Outcome) -> None
     async def dead_letter(self, delivery_id: int, reason: str) -> None
@@ -407,7 +410,7 @@ There are two drivers, `SqliteBus` and `PostgresBus` (`server/services/bus/sql.p
 
 ### 9.3 Router
 
-Subscriptions are compiled from the generation snapshot in the same transaction that moves the generation to `running`. They replace the `register_trigger` Signals and the `ControlEventTypes` search attribute.
+Subscriptions are compiled from the generation snapshot in the transaction that creates the `starting` generation. They replace the `register_trigger` Signals and the `ControlEventTypes` search attribute. The new generation's streams are held with reason `starting` until the move to `running` releases them, so an event accepted just after the Start commit is delivered once the generation runs (RFC-0006 §7.2).
 
 For each `accepted` ingress row, in per-source order, one transaction:
 1. **Match.** Match subscriptions by type and scope, then by the plugin's `build_filter`. A filter that raises makes a `dead(filter_error)` row; it neither admits nor drops silently.
@@ -420,10 +423,10 @@ Fan-out is capped at 50 subscriptions per event. Re-running the router after a c
 ### 9.4 Relay
 
 The relay claims streams ordered by (highest pending class, oldest pending). When Temporal pushes back, it shares the Signal rate among classes by deficit round-robin with the floors of §13.1. For each claimed stream it checks, in order:
-1. **The generation is active.** Otherwise the deliveries become `dead(reset)`.
+1. **The generation is active.** Otherwise the deliveries become `dead(reset)`. Admission checks the generation again (§13.3), because a Reset can land between this check and the call.
 2. **Budget and pause holds** (§14). `high` holds C3 and C4; `max` or a paused employee holds every class.
 3. **The window.** If `delivered_seq - consumed_seq` has reached 32 inputs or 512 KB, the stream is held with reason `window`, and the backlog stays in the database (principle 4).
-4. **Send.** It reads at most 16 pending deliveries or 256 KB and calls `client.start_workflow("ConversationWorkflow", id=<entity id>, start_signal="deliver", start_signal_args=[batch], id_reuse_policy=ALLOW_DUPLICATE, priority=Priority(priority_key=<class>, fairness_key=<employee id>))`.
+4. **Send.** It reads at most 16 pending deliveries or 256 KB and calls `client.start_workflow("ConversationWorkflow", <cursor>, id=<entity id>, start_signal="deliver", start_signal_args=[batch], id_reuse_policy=ALLOW_DUPLICATE, priority=Priority(priority_key=<lane key>, fairness_key=<employee id>))`. The workflow argument is the stream cursor (`consumed_seq`): the entity seeds `applied_seq` from it on every start, a restart after passivation included (RFC-0006 §7.2). The priority key is the lane's (§13.2).
 5. **Commit.** It commits `delivered_seq` only after Temporal accepts.
 
 **Limits:** at most one Signal-With-Start in flight per stream, and at most 4 per entity per second.
@@ -438,8 +441,8 @@ The relay claims streams ordered by (highest pending class, oldest pending). Whe
 1. **Ingress or driver:** append, commit, acknowledge.
 2. **Router:** writes the delivery with its stream `seq`.
 3. **Relay:** sends `deliver(rows, upto_seq)` and commits `delivered_seq` after Temporal accepts.
-4. **Entity:** drops any row with `seq <= applied_seq`. That counter is carried across continue-as-new, so a relay crash between the accept and the commit makes only a harmless duplicate.
-5. **Consumption.** For agent turns, `save_conversation` writes the transcript and advances the stream's `consumed_seq` in one transaction, so an input counts as consumed exactly when its text is in the agent's history. Graph turns without an agent settle at turn end with `settle`.
+4. **Entity:** drops any row with `seq <= applied_seq`. That counter is carried across continue-as-new and seeded from the relay's cursor on every start (§9.4), so a relay crash between the accept and the commit makes only a harmless duplicate.
+5. **Consumption.** For agent turns, `save_conversation` writes the transcript and advances the stream's `consumed_seq` in one transaction, so an input counts as consumed exactly when its text is in the agent's history. Under `event_os_version=1` this save raises on failure and the step retries; today's save is best effort and swallows errors (RFC-0006 §16.8). Graph turns without an agent settle at turn end with `settle`.
 6. **Effects.** Effects carry idempotency keys (§17). The `run_runtime_mutation` ledger (`server/core/database.py:731`) covers the database effects.
 
 ### 9.6 Why the relay pushes rather than having entities pull
@@ -469,7 +472,7 @@ This is the documented consumer pattern: Signal-With-Start, then commit after th
 - hold and release order;
 - the window;
 - replay;
-- 10,000 messages to one conversation cost fewer than 1,000 Signals per entity run.
+- a burst of 10,000 messages to one conversation, appended before the relay runs, costs fewer than 1,000 Signals per entity run (EG7).
 
 ## 10. Processes (the workflow types)
 
@@ -477,40 +480,51 @@ This is the documented consumer pattern: Signal-With-Start, then commit after th
 
 | Workflow | Id | Started by |
 |---|---|---|
-| EmployeeSupervisorWorkflow | `emp-<workflow_id>-g<gen>` | Start, with `REJECT_DUPLICATE` |
+| EmployeeSupervisorWorkflow | `emp-<workflow_id>-g<gen>` | Start, with `REJECT_DUPLICATE`. A lost supervisor (terminated or failed) is rebuilt in place from the database with `ALLOW_DUPLICATE_FAILED_ONLY`, keeping chat and Context; after 3 rebuilds within an hour, an attention item asks the owner to Reset (T20, RFC-0006 §8.2) |
 | ConversationWorkflow (the entity) | `conv-<workflow_id>-g<gen>-<lane>-<thread>` | the relay, by Signal-With-Start with `ALLOW_DUPLICATE` |
-| Turn (MachinaWorkflow, input `event_os_version=1`) | `turn-<conv id>-<n>` | the entity: a child with `REQUEST_CANCEL` and `WAIT_CANCELLATION_COMPLETED` |
+| Turn (MachinaWorkflow, input `event_os_version=1`) | `turn-<conv id>-<n>`, where admission allocates `<n>` (§13.3) | the entity: a child with `REQUEST_CANCEL` and `WAIT_CANCELLATION_COMPLETED`. The turn's own agent children use the same policies (Phase 1b, 1b.12), and a cancelled turn cancels and drains its running work (§10.2) |
 | AgentWorkflow (input `merge_version=1`) | existing child ids (`_agent_child_workflow_id`) | the turn |
-| ScheduleFireWorkflow and the poll cycle | Schedule actions | Schedules `cron-…`, `poll-…`, `alarm-…` (§15) |
-| ApprovalWorkflow | `approval-<id>` | approval creation |
+| ScheduleFireWorkflow | Schedule actions | Schedules `cron-…` and `alarm-…` (§15) |
+| PollWorkflow | `poll-<workflow_id>-g<gen>-<node_id>` | Start and re-arm, with `USE_EXISTING` (T7, §15) |
+| ApprovalWorkflow | `approval-<id>` | approval creation; for an approvalGate node, a child of the turn (§17.5) |
 
 Ids use the immutable workflow id, never the slug. Every new type:
 - uses `@workflow.init`;
 - has signal handlers that only buffer;
-- continues as new only from the main loop, after `workflow.all_handlers_finished()`.
+- continues as new only from the main loop, after `workflow.all_handlers_finished()`;
+- runs in the sandbox, passing through only side-effect-free leaf modules (RFC-0006 §17.18);
+- cleans up only on exit exceptions, never on a bug in workflow code (RFC-0006 §18.2);
+- keeps one live timer over named absolute deadlines, and never waits with a timeout of zero or less (RFC-0006 §8.4);
+- schedules no UI-only activities: progress broadcasts become best-effort local activities (RFC-0006 §14.2);
+- rolls over when the server suggests it or at 1,800 Updates, whichever comes first (2,000 is the limit per run);
+- makes every activity id that feeds an idempotency or spend key explicit and unique across the continue-as-new chain, because the SDK's default id is a per-run counter (RFC-0006 §17.11).
 
 ### 10.2 Per-type specification
 
 | Type | State | Messages | Timers | Continue-as-new |
 |---|---|---|---|---|
-| Supervisor | control state and revision; alarm `next_due` and version; budget state and version; health window | **Updates** with validators:<br>• `set_control_state` (fans Stop/Resume out to the live turns in `sched_leases`; a durable Stop barrier that fixes H9);<br>• `wait_for_checkpoint`;<br>• `set_limits`;<br>• `resume_after_budget`.<br>**Signals:** `alarms_changed`, `budget_changed`, `turn_failed`.<br>**Query:** `status`. | updatable alarm timer; budget period end (midnight in the owner's time zone); 5-minute upkeep | when suggested, or daily; carries about 2 KB |
-| Entity | pending window per class; `applied_seq`; offered set for the running turn; running turn handle; `turn_no`; debounce anchors; failure window | **Signals:** `deliver`, `inputs_consumed`, `turn_suspended`, `wake`.<br>**Update:** `interrupt_turn` (validator: that turn is running).<br>**Query:** `status`. | debounce (sliding plus cap); admission retry every 60 s; turn deadline per class; idle passivation; restart backoff | only between turns, when suggested or past 4,000 events or 4,000 Signals. Carries `applied_seq`, `turn_no` and at most 256 KB of pending inputs; any excess goes back to the database as `hold(window)`. |
-| Turn | today's MachinaWorkflow state, plus the offered inputs | **Signal:** `offer_inputs`, forwarded to the intake agent. If that agent has already finished, the turn answers `inputs_returned`. | none new | none. Loads the graph by reference (generation plus trigger node), which fixes H10 and M6. Its result adds the consumed inputs and usage. |
-| AgentWorkflow | plus offered inputs, consumed ids, merges, current class | **Signals:** `offer_inputs`, `budget_released` | none new; a turn suspended for budget waits without a timer, and an upkeep sweep fails one suspended for more than 7 days | its existing continue-as-new; the resume marker adds consumed ids, class and merges, and already carries `usage_total` (`agent_workflow.py:2997`) |
-| ScheduleFire / poll cycle | none | none | none | one activity: append a tick, or poll (fetch, append and save the cursor in one transaction, then `post_emit`) |
-| Approval | decision, revision, expiry | **Update:** `decide{decision, revision, key}`.<br>**Query:** `status`. | expiry, then the Undo window | one send activity, then `approval.decided` (C1) appended to the origin thread |
+| Supervisor | control state and revision; alarm `next_due` and version; budget state and version; health window | **Updates** with validators. Each carries absolute values and the row revision, and its validator rejects a stale revision. The T10 deliverer sends them with a stable id (§6.2 I2):<br>• `set_control_state` (fans Stop/Resume out to the live turns in `sched_leases`; a durable Stop barrier that fixes H9);<br>• `wait_for_checkpoint`;<br>• `set_limits`;<br>• `resume_after_budget`.<br>**Signals:** `alarms_changed`, `budget_changed`, `turn_failed`.<br>**Query:** `status`. | one timer over named absolute deadlines: the earliest alarm and the budget period end. The period ends at midnight in the owner's time zone plus a stable per-employee offset of 0-10 minutes, computed outside workflow code and carried as a UTC instant. No upkeep timer: an instance-wide sweep every 5 minutes signals only employees with overdue work (RFC-0006 §8.4) | when suggested, daily, or at 1,800 Updates; carries about 2 KB |
+| Entity | pending window per class; `applied_seq`; offered set for the running turn; running turn handle; `turn_no` (allocated by admission, §13.3); debounce anchors; failure window | **Signals:** `deliver`, `inputs_consumed`, `turn_suspended`, `wake`.<br>**Update:** `interrupt_turn` (validator: that turn is running; sent by the T10 deliverer).<br>**Query:** `status`. | customer debounce on an absolute deadline (§11); admission retry every 60 s; slow-turn alert per class and the 24-hour no-progress cancel (§13.1); idle passivation; restart backoff | only between turns, when suggested, past 4,000 events or 4,000 Signals (every Signal type counted), or at 1,800 Updates. Carries cursors, not payloads: `consumed_seq`, `turn_no` and the debounce anchors. `applied_seq` equals the consumed cursor, and one activity before the close rewinds the stream's `delivered_seq` to it, so the relay delivers pending inputs again. Close sequence, for continue-as-new and for passivation: `wait_condition(all_handlers_finished)`, a final check for pending inputs, then the close with no `await` between (RFC-0006 §7.4). |
+| Turn | today's MachinaWorkflow state, plus the offered inputs | **Signal:** `offer_inputs`, forwarded to the intake agent. If that agent has already finished, the turn answers `inputs_returned`. | none new | none. Loads the graph by reference (generation plus trigger node), which fixes H10 and M6. Its result adds the consumed inputs and usage. When cancelled, it cancels its running agent children and node activities and waits for them, at most 2 minutes (RFC-0006 §6.2). |
+| AgentWorkflow | plus offered inputs, consumed ids, merges, current class, park reason | **Signals:** `offer_inputs`, `released{reason}` | From Phase 5, for generations with `scheduler_version=1` (§10.4, T18), budget suspension generalizes to parks (T11, RFC-0006 §11.8). A turn parks for its budget, provider billing or quota, a provider account problem, or a provider outage past the step budget. An outage park probes every 15 minutes on a durable timer; the others wait for `released` without a timer. Each park sets the lease `suspended` and raises an attention item. A turn parked for 7 days fails, and its input is dead-lettered with an attention item (T19) | its existing continue-as-new; the resume marker adds consumed ids, class and merges, and already carries `usage_total` (`agent_workflow.py:2997`) |
+| ScheduleFire | none | none | none | one activity: append a tick |
+| PollWorkflow | none | none | none: the activity's retry delay is the interval | one activity that never completes. Each attempt polls once, then raises a BENIGN error with `next_retry_delay`, so Temporal retries it after the interval and the history stays near zero (T7, §15) |
+| Approval | decision, revision, expiry | **Update:** `decide{decision, revision, key}`, sent by the T10 deliverer with a stable id; its validator rejects a stale revision. Undo is an Update too.<br>**Query:** `status`. | one timer over absolute deadlines: a reminder 24 h before expiry, the expiry, then the Undo window | one send activity, then `approval.decided` (C1) appended to the origin thread. A gate's run is a child of the turn and returns its outcome instead of sending (§17.5) |
 
 ### 10.3 Failure semantics
 
-- A turn that fails ends as a Failed workflow (RFC-0004 D12).
-- The entity retries its inputs once, then dead-letters them with an attention item. Restart intensity is described in §18.2.
-- A bug in workflow code leaves that entity or supervisor stuck and visible (`TemporalReportedProblems`). The inbox keeps accepting, and nothing acknowledged is lost (I10).
+- A turn that fails ends as a Failed workflow (RFC-0004 D12). A parked turn (§10.2) has not failed and spends no retry (T11).
+- The entity retries its inputs once, then dead-letters them with an attention item. A retried turn resumes from the saved conversation, and a graph-only turn from its failed node, so completed side effects do not repeat (RFC-0006 §11.8). Restart intensity is described in §18.2.
+- A bug in workflow code leaves that entity or supervisor stuck and visible (`TemporalReportedProblems`). This holds only with the bug guard of Phase 1b (1b.13, RFC-0006 §18.2): cleanup that runs on any exception re-raises a workflow bug first. The inbox keeps accepting, and nothing acknowledged is lost (I10).
 
 ### 10.4 Versioning
 
 - **Generation flags.** New generations get `resource_manifest.event_os_version=1` from `begin_generation` (`server/services/deployment/control.py:112`, `:160`). Older generations keep `WorkflowControlWorkflow` until they are Reset.
+- **The Phase 5 flag.** Phase 5's behaviour (class queues, the LLM step budget, parking) gets its own generation flag, `resource_manifest.scheduler_version=1`, frozen at Start, so Phase 4 runs recorded without it replay unchanged (T18, RFC-0006 §11.3). Generations without it keep today's unlimited LLM-step retries and today's fail-and-pause.
+- **Per-run versions.** `context_pressure_version=2` is recorded per run in `agent.prepare_payload`'s result, as version 1 is today, and chosen only for generations with `event_os_version=1` (RFC-0006 §16.8).
 - **Patches.** New types need no patches. Shared types (MachinaWorkflow, AgentWorkflow) branch only on input flags frozen at admission, which no history from an older release contains.
-- **Preview features** stay unused (RFC-0004 Q12): Workflow Streams, External Storage, Worker Versioning, Workflow Pause and eager start.
+- **Preview features** stay unused (RFC-0004 Q12): Workflow Streams, External Storage, Workflow Pause and eager start.
+- **Worker Versioning** is declined because of topology, not maturity: the desktop runs one process and every instance upgrades in place in the weekly window, so old builds cannot keep polling until their runs drain. Temporal's worker page now calls Worker Versioning the default and patching the fallback (RFC-0006 §18.13).
 
 ## 11. Merging and batching (E6)
 
@@ -518,13 +532,13 @@ Ids use the immutable workflow id, never the slug. Every new type:
 
    | Class | Sliding window | Cap |
    |---|---|---|
-   | Owner chat | 0.4 s | 1.5 s |
+   | Owner chat | none: the turn starts at once (T9) | none |
    | Customer chats | 2 s | 8 s |
    | Customer groups | 3 s | 10 s |
    | Other classes | none | none |
 
-   `workflow.wait_condition` with a timeout drives this.
-2. **Admit.** `admission.acquire(class)` (§13.3) answers granted, queued (the entity waits for `wake`), or denied by budget or pause (it also waits for `wake`).
+   The debounce runs on an absolute deadline, `min(last + window, first + cap)`, re-armed in a loop with `workflow.wait_condition`. When the deadline has passed, the entity starts the turn without waiting. Owner chat has no debounce (T9, RFC-0006 §7.4): a new owner message starts its turn at once, and messages sent while it runs merge at B1. Temporal timers are accurate only from one second up (https://docs.temporal.io/workflow-execution/timers-delays).
+2. **Admit.** `admission.acquire(class)` (§13.3) answers granted, queued (the entity waits for `wake`), or denied by budget or pause (it also waits for `wake`). An entity whose generation Reset retired completes without a turn.
 3. **Start.** The entity takes the longest pending prefix that shares one reply route (at most 50 inputs or 256 KB) and starts turn n with references to those inputs.
 4. **Offer.** When `deliver` arrives during turn n on the same route, the entity sends `offer_inputs` to the turn, which forwards it to the intake agent. The agent merges at two points:
    - **B1.** At the top of each iteration, after `_wait_until_resumed` (`server/services/temporal/agent_workflow.py:1152-1172`), it appends offered inputs as user messages before the model call.
@@ -536,7 +550,7 @@ Ids use the immutable workflow id, never the slug. Every new type:
 
 **Graph runs** whose first node after the trigger is not an agent take one input per turn; `on_busy` controls overlap (`queue` by default, `skip` for cron). In a batch, the trigger output is the last input's data plus `batch: [...]`, so existing templates keep working. Subgraphs without an agent that has Context are stateless and get a stream per event, so they run in parallel.
 
-**Passivation.** After an idle period (owner 24 h, customer 30 min, others 10 min), the entity completes. A `deliver` that lands while it is closing is not lost: the server rejects completion while new Signals are unhandled, and the relay's re-ring of an undelivered window covers the rest.
+**Passivation.** After an idle period (owner 24 h, customer 30 min, others 10 min), the entity completes. A `deliver` that lands while it is closing is not lost: the server rejects a completion while new Signals are unhandled (the Unhandled Command rule, https://docs.temporal.io/references/workflow-task-errors), and the relay's re-ring of an undelivered window covers the rest. This needs the close sequence of §10.2: wait for all handlers to finish, check for pending inputs a last time, then complete with no `await` between.
 
 **Chat changes** (`server/services/chat/`, `docs-internal/chat_protocol.md`):
 - `send_chat_message` no longer answers `run_in_progress` or `engine_unavailable`. A message sent while Temporal is down is stored and shown as queued.
@@ -572,14 +586,16 @@ Ids use the immutable workflow id, never the slug. Every new type:
 **Unchanged.** RFC-0002's rules stay in force:
 - requests are built from messages;
 - the store records what was sent;
-- loads are loud and saves are best effort;
+- loads are loud and saves are best effort, except the consuming save of §9.5 under `event_os_version=1`;
 - a carried rollover transcript beats the stored one.
+
+**Changed** (T6, RFC-0006 §16.8). Transcript relief runs before every LLM step (`context_pressure_version=2`), a firing's first step and turns without tool calls included. With compaction off, the oldest whole turns are dropped with a note. Transcripts stay in Temporal history within the bounds of I7.
 
 ## 13. Scheduler (E10)
 
 ### 13.1 Classes
 
-| Class | Sources | Priority key | LLM queue | Floor | Turn deadline |
+| Class | Sources | Priority key | LLM queue | Floor (share of admitted turns) | Slow-turn alert |
 |---|---|---|---|---|---|
 | C1 owner | owner chat, approval decisions | 1 | `llm-c1` | 30%, plus one reserved slot per employee | 15 min |
 | C2 customer | WhatsApp, WhatsApp Business, Telegram, Discord, email replies | 2 | `llm-c2` | 40% | 15 min |
@@ -587,47 +603,47 @@ Ids use the immutable workflow id, never the slug. Every new type:
 | C4 background | alarms, cron, polls, watched data, generic webhooks, Start ticks | 4 | `llm-c4` | 15% | 60 min |
 | C5 upkeep | digests, sweeps | 5 | `machina-tasks` | none | n/a |
 
-A trigger may override its class. A class's unused share flows down the order.
+A trigger may override its class. A class's unused share flows down the order. Floors are shares of admitted turns, enforced only by admission (§13.3); worker slots have none.
+
+A turn past its class's slow-turn time raises a "slow turn" attention item and metric, and keeps running. Time spent parked or paused does not count (T19). As a backstop, the entity cancels a turn that has completed no step for 24 hours, not counting time parked, paused or waiting for the owner (an approval draft, the owner's browser); each completed step restarts that clock. It cancels the turn, waits up to 2 minutes, then terminates the turn and its agent children by id. Turn n+1 starts only after turn n has closed, and consumption checks the turn's lease, so a cancelled turn's late save advances nothing. The backstop is a default (RFC-0006 §24.1, §6.4), not part of T19.
 
 ### 13.2 Temporal mapping
 
-- **Priority keys** are set on entity starts, turn children and every activity (inherited), and on sends.
+- **Priority keys.** Every top-level workflow start sets an explicit priority key, and an AST test fails a start without one: an unkeyed start runs at 3, and unkeyed children and activities inherit their parent's key. Entities are keyed by lane (talk 1, customer 2, worker 3). The supervisor, ApprovalWorkflow, manual canvas Runs and Workspace tasks run at 1; cron, polls and Start-node runs at 4. Turn children carry the class of their inputs (§11), and sends carry theirs (RFC-0006 §13.3).
 - **Fairness key = employee id**, with weight 1. Each instance has one owner, so there are no tenant keys.
-- **The dev server** gets `--dynamic-config-value matching.enableFairness=true`. Priority is on by default (`matching.useNewMatcher`).
-- **Both need the pinned server** at version 1.31 or later (RFC-0004 D1). Without them behaviour stays correct, only unfair.
+- **The dev server** gets three `--dynamic-config-value` flags from Phase 1 (T17, RFC-0006 §3.1): `matching.enableFairness=true`, `matching.numTaskqueueReadPartitions=1` and `matching.numTaskqueueWritePartitions=1`. Read partitions can be lowered safely only on a database created with the lower value, and Phase 1 creates every Temporal database empty (E16). Priority is on by default (`matching.useNewMatcher`).
+- **No per-install gating.** Every install runs server 1.32 from the first pinned release (E16, T5), so priority and fairness work everywhere.
 - **Task queues.**
-  - Workflow tasks share `machina-tasks`.
-  - LLM steps run on the four class queues and leave `machina-tasks` (RFC-0004 M9). Each run freezes its queue in its input.
-  - Tools stay on their plugin queues with Priority keys; sends go to `messaging`.
-- **Slot pool.** Each worker process runs one Worker per class queue. They share one `ClassSlotPool` built on `temporalio.worker.CustomSlotSupplier` (stable in SDK 1.30, `temporalio/worker/_tuning.py:160`). The pool:
-  - guarantees each class its floor;
-  - grants freed slots in strict class order;
-  - limits idle poller reservations to 1-2 per class, because `reserve_slot` runs before polling.
-
-  Fallback: fixed pool sizes. The existing `WorkerTuner.create_composite` usage in `worker.py` shows where it plugs in.
-- **Starvation shows.** Background queues get `schedule_to_start` timeouts.
+  - Workflow tasks share `machina-tasks`. It is never capped, because a queue-wide rate cap turns off eager activity dispatch.
+  - LLM and compaction steps (`agent.execute_llm_step`, `agent.compact_context`) run on the four class queues and leave `machina-tasks` (RFC-0004 M9), the Pi override included. Each run freezes its route, recorded in `agent.prepare_payload`'s result, and a queue stays polled while any open run can target it.
+  - Tools stay on their plugin queues with Priority keys; sends run on their own `egress` queue.
+- **No shared slot pool.** Each class queue has a fixed-size slot supplier, sized at least to admission's grant for its class. Class floors live only in admission (§13.3). A shared pool on `CustomSlotSupplier` was dropped, because `reserve_slot` runs before polling (RFC-0006 §13.3).
+- **Starvation shows without timeouts.** No queue gets a `schedule_to_start` timeout. Schedule-to-start and backlog are measured per queue, from the SDK metrics (Phase 1b, 1b.38) and the dev server's metrics on a pinned loopback port (1b.33), and a long wait raises an attention item. Metric labels carry no employee or thread ids.
 
 ### 13.3 Admission
 
 Tables:
-- `sched_leases`: turn, employee, class, state `running` or `suspended`, control revision. It is also the live-turn registry used by Stop and Reset.
-- `sched_waiters`.
+- `sched_leases`: turn, employee, class, state `running` or `suspended`, control revision. It is also the live-turn registry used by Stop and Reset. A `suspended` lease (a budget hold or a parked turn, §10.2) counts toward no floor and no shared capacity, and re-acquires under the same turn id when released.
+- `sched_waiters`: entities waiting for a turn, and delegations waiting for a permit.
 
 `acquire` is one transaction:
-1. Budget and pause gate.
+1. Generation, budget and pause gate. An entity started for a generation that Reset retired (a Reset between the relay's check and its call) completes without a turn.
 2. Per-employee cap: 4 by default, plus the reserved owner slot.
-3. Grant if the class is below its floor. Grant from shared capacity only if no higher class is waiting. Otherwise queue the request.
+3. Grant if the class is below its floor. Grant from shared capacity only if no higher class is waiting. Otherwise queue the request. A grant allocates the turn number in the same transaction, so turn ids, agent child ids and spend keys stay unique after passivation (RFC-0006 §8.2).
 
 `release` serves waiters in this order:
 - classes below their floor;
 - strict class order;
 - round-robin by employee within a class.
 
-It then wakes the waiting entity with `wake`. The supervisor's upkeep reaps leases whose turn is confirmed closed.
+It then wakes the waiting entity with `wake`. The upkeep sweep reaps leases whose turn is confirmed closed.
+
+**Delegation permits** move into admission (RFC-0006 §12.4). A delegation that needs a permit waits in `sched_waiters` instead of in an activity retry loop, and a grant wakes it with a `permit_granted` Signal by workflow id. Leases are reaped by liveness, not by age, and Reset releases the generation's permits.
 
 ### 13.4 Provider depth and priority inversion
 
-- **Concurrency.** Worker slots cap concurrent LLM activities. Per-credential token buckets cap requests and tokens per minute for each class. Retry-After responses become BENIGN retries with `next_retry_delay`.
+- **Concurrency.** Worker slots cap concurrent LLM activities. Per-credential token buckets cap requests and tokens per minute for each class. Bucket values come from 429 and Retry-After responses and from the Gateway's own limits; a shipped table only seeds them, and a 429 with Retry-After pauses that credential for every class.
+- **Retry-After.** Responses that carry it become BENIGN retries with `next_retry_delay`. Honoured values are capped at 5 minutes, with the raw hint kept for the UI. `x-should-retry` is read, and 409 is retried for OpenAI and Anthropic (RFC-0006 §16.5). From Phase 5, a wait longer than the step's remaining time budget parks the turn, with the hinted time as its first probe (T11, RFC-0006 §11.5).
 - **Priority inversion is avoided by:**
   - floors;
   - priority inheritance on merge (§11);
@@ -639,7 +655,7 @@ It then wakes the waiting entity with `wake`. The supervisor's upkeep reaps leas
 **Ledger:**
 - `employee_budgets`: daily limit, soft ratio 0.8, the owner's time zone, revision.
 - `employee_spend`: day, reserved, settled, state (`normal` / `high` / `max`), version.
-- `spend_events`: key `{workflow_id}:{activity_id}`, UNIQUE.
+- `spend_events`: a UNIQUE key. Gateway calls use `{workflow_id}:{activity_id}`, because the Gateway replays a retried call at no cost. Own-key calls use `{workflow_id}:{activity_id}:{attempt}`, because every attempt may bill. The activity id is explicit and unique across the continue-as-new chain (§10.1).
 
 The OpenCompany Gateway already records spend per call and replays retried calls at no cost. The ledger also covers calls made with the owner's own keys.
 
@@ -647,16 +663,17 @@ The OpenCompany Gateway already records spend per call and replays retried calls
 |---|---|
 | Relay, before delivery | Reads the cached state (refreshed by transition events, 30 s TTL). `high` holds C3 and C4; `max` or paused holds every class. |
 | Entity, before each turn | `admission.acquire` reads the ledger, which is authoritative. |
-| LLM step (`agent.execute_llm_step`) | `budget.reserve(key, upper_estimate)` (input tokens times price, plus `max_tokens` times output price), then `settle(key, actual)` after the call. If the reservation would pass 100%, it raises `BudgetExceeded`: non-retryable and BENIGN. The agent suspends, it does not fail. A C3 or C4 turn that sees `high` suspends at its next step and holds no slot. |
+| LLM step (`agent.execute_llm_step`) | `budget.reserve(key, upper_estimate)` (input tokens times price, plus `max_tokens` times output price), then `settle(key, actual)` after the call. If the reservation would pass 100%, it raises `BudgetExceeded`: non-retryable and BENIGN. The agent suspends, it does not fail. A C3 or C4 turn that sees `high` suspends at its next step and holds no slot. Own-key calls reserve per attempt: a clean rejection settles 0, and an ambiguous loss settles the reservation. Provider billing, quota (the Gateway's `budget_exceeded` included), authentication and permission failures take the same suspend path, as a park (§10.2, Phase 5). |
 
 **Transitions:**
 - The transaction that crosses a threshold appends `employee.budget.changed` to the supervisor.
 - At `max`, the supervisor runs Stop with `pause_reason="budget"`, through the existing automatic-pause path (`_automatic_pause_values`, `server/services/deployment/handlers.py:1030`). The owner gets an attention item and a notice with **Resume**.
-- At midnight in the owner's time zone, the supervisor's period timer resets the day and resumes, with a notice.
+- At midnight in the owner's time zone plus the employee's stable offset of 0-10 minutes (so supervisors do not all wake at once), the supervisor's period timer resets the day and resumes, with a notice.
 - `resume_after_budget` (raise or top up the limit) does the same at once.
-- Held inputs are released in (class, seq) order, and suspended turns get `budget_released`.
+- Held inputs are released in (class, seq) order, and suspended turns get `released{reason=budget}`.
+- Account and billing parks (§10.2) also pause the employee. Resume, a top-up or a key change sends `released`.
 
-**Continue-as-new and retries.** Enforcement uses only the ledger. Reservation keys are activity ids, and iteration numbers continue across continue-as-new, so retries never double-count.
+**Continue-as-new and retries.** Enforcement uses only the ledger. Reservation keys are explicit activity ids, plus the attempt for own-key calls, and iteration numbers continue across continue-as-new, so no key repeats and each billed attempt counts once.
 
 **Overshoot** is bounded by price-table error, because reservations use the upper estimate.
 
@@ -668,16 +685,19 @@ The OpenCompany Gateway already records spend per call and replays retried calls
   - Overlap `BUFFER_ONE` covers the tiny fire workflow. Jitter is 60 s, and catch-up is one interval, at most 1 hour.
   - The business overlap rule is the entity's `on_busy`, default `skip` (fixes H6).
   - Stop pauses Schedules by id and Reset deletes them by id. Re-arm recreates them from the snapshot (I10).
-- **Polls.**
-  - Schedule `poll-<workflow_id>-g<gen>-<node_id>` with overlap `SKIP`.
-  - The poll cycle fetches, appends new items and saves the cursor in one transaction, then runs `post_emit` (fixes M3).
+- **Polls** (T7, RFC-0006 §9.2).
+  - Each polling trigger is one PollWorkflow, `poll-<workflow_id>-g<gen>-<node_id>`, started at Start and on re-arm. It runs one activity that never completes, under `RetryPolicy(backoff_coefficient=1, maximum_attempts=0)`.
+  - Each attempt polls once. It appends at most one page (50 items or 512 KB) and its cursor in one transaction, advancing the cursor only over appended items, then runs `post_emit` (fixes M3).
+  - The attempt then raises a BENIGN error with `next_retry_delay`: the interval plus jitter of up to 10% (at most 30 s). Temporal retries it after that delay, so the history stays near zero. BENIGN retries log at DEBUG and never count toward retry alerts.
+  - Failures double the interval, up to 1 hour. 5 consecutive failures raise "driver down" (§18.3).
+  - While the employee is stopped or budget-held, an attempt skips the fetch. When the generation ends, the activity retires with a non-retryable error.
 - **Alarms (self-scheduled wake-ups).**
   - Tools `set_alarm`, `cancel_alarm` and `list_alarms` write `alarms`:
     - `id = hash(turn, tool_call_id)`, thread, `due_at` (UTC);
     - `if_late`: fire with a note, or `skip_after:<duration>`;
     - `cancel_on: inbound`, repeat, status.
   - They then signal `alarms_changed`.
-  - The supervisor keeps one updatable timer for the earliest due alarm. `alarms.fire_due` moves the alarm to `fired` by compare-and-swap and appends an input stamped with `scheduled_for`, `fired_at` and its lateness.
+  - The supervisor's single timer covers the earliest due alarm, alongside the budget period end (§10.2). `alarms.fire_due` moves the alarm to `fired` by compare-and-swap and appends an input stamped with `scheduled_for`, `fired_at` and its lateness.
   - Recurring alarms become Schedules `alarm-<id>`. Limit: 500 per employee.
 - **Follow-ups** are alarms with `cancel_on=inbound`; the router cancels them in the same transaction as the inbound message.
 - **The Start node** fires once per generation (dedupe key `start:<gen>`; Phase 0.4).
@@ -717,20 +737,24 @@ The OpenCompany Gateway already records spend per call and replays retried calls
 - the idempotency key (UNIQUE), employee, thread, turn, account, recipient (encrypted), kind, class;
 - body or ref;
 - status: `held`, `queued`, `sending`, `sent`, `failed`, `unknown` or `expired`;
-- approval id, `not_before`, claim token, provider message id, receipt.
+- approval id, `held_reason` (§17.7), `not_before`, claim token, `provider_called_at` (§17.2), provider message id, receipt.
 
 The reply key is a hash of (thread, route, consumed input set, node). A retried turn that answers the same inputs is therefore deduplicated even when its text differs.
 
 ### 17.2 Sending
 
-`egress.send` runs on `messaging` with Priority = class and fairness key = channel account:
-1. Claim the row by compare-and-swap.
-2. Take a token from the per-account and per-recipient bucket. If none is free, raise a retryable error with `next_retry_delay`, so no worker slot is held while waiting.
+`egress.send` runs on its own `egress` queue with Priority = class and fairness key = channel account:
+1. Take a token from the per-account and per-recipient bucket. If none is free, raise a retryable error with `next_retry_delay`, so no worker slot is held while waiting.
+2. Claim the row by compare-and-swap.
 3. Call the provider with its idempotency key where it has one.
+
+Taking the token before the claim means a bucket wait longer than the claim lease can never mark an uncalled send `unknown`. A send that claims first must instead mark `provider_called_at` just before the call, and only rows with that mark can become `unknown` (§17.3). The activity's retry policy is unlimited: the claim already makes the call at-most-once, and `next_retry_delay` waits still count toward attempts (RFC-0006 §11.5).
 
 ### 17.3 Uncertain outcomes (E12)
 
 For a provider without idempotency keys, a retry that finds an expired `sending` claim marks the row `unknown`. That raises an attention item and offers a Retry button. It never resends on its own.
+
+This covers every side-effecting plugin, not only sends (E12 as extended by T13). Each operation that changes something outside OpenCompany declares an effect class: `read_only`, `idempotent` (a provider key or a natural key) or `unsafe`, with `unsafe` the default. A later attempt of an `unsafe` call that broke off records `unknown` and tells the employee instead of calling again. Until the outbox exists, the redo guard of Phase 1b (1b.1, RFC-0006 §11.2) covers graph-node sends too, including the reply after the approval gate.
 
 ### 17.4 Order and backpressure
 
@@ -742,6 +766,10 @@ For a provider without idempotency keys, a retry that finds an expired `sending`
 
 - A send that needs approval is `held`.
 - ApprovalWorkflow (an Update `decide` plus a durable timer, RFC-0004 D13) sets `not_before` to the end of the Undo window and sends once. It replaces `ApprovedToolCallWorkflow`.
+- It covers four waits: the approvalGate node, the reviewed-delivery gate in `EmployeeJobWorkflow` and `AgentWorkflow`, the resolution in `EmployeeJobDeliveryWorkflow`, and held tool calls. A gate's ApprovalWorkflow is a child of the turn and returns its outcome instead of sending (RFC-0006 §9.6).
+- Decisions are written to the database first and arrive from the T10 deliverer (§6.2 I2).
+- Stop completes while a draft waits (T12, RFC-0006 §3.1). A decision taken while the employee is stopped is recorded at once, and its send waits for Resume.
+- One reminder goes out 24 h before expiry, as an attention item. Drafts whose whole life is 24 h or less get none.
 - Approved sends go out in the order the owner decides them.
 
 ### 17.6 Receipts and UI
@@ -750,12 +778,20 @@ For a provider without idempotency keys, a retry that finds an expired `sending`
 - `StatusBroadcaster.broadcast` requires an audience: owner, workflow or system. Frames that carry content need an owner or workflow audience, so content never reaches every socket.
 - Chat streaming through the chat hub is unchanged.
 
+### 17.7 Content rules (T15)
+
+Every outgoing message passes content rules before it is sent, even with Ask first off (T15, RFC-0006 §3.1). A match holds the message for the owner. Rules only ever add a hold; they never let a held message through.
+- **Built-in rules:** the message contains a saved credential, contains a secret-shaped token, or goes to a recipient outside the conversation. The recipient rule never applies to owner chat.
+- **Owner rules:** the owner can add and edit their own rules.
+- **Records.** The outbox row records `held_reason`: the rule id, never the matched secret. The model is not told which rule fired, so a prompt-injected model cannot learn to split a secret across messages.
+- **Rollout.** The credential and token rules ship in Phase 1b at today's hold points (1b.7). The recipient rule and owner rules ship in Phase 7: the recipient rule needs per-thread histories (Phase 4b), and owner rules need the outbox to cover every send (RFC-0006 §16.9).
+
 ## 18. Supervision, observability and telemetry
 
 ### 18.1 Watchdogs
 
-- Turn deadlines per class, owned by the entity.
-- A stuck-turn alarm when there has been no progress for 10 minutes.
+- Slow-turn alerts per class, owned by the entity; parked and paused time does not count (T19). A turn with no completed step for 24 hours, not counting time parked, paused or waiting for the owner, is cancelled (§13.1; a default, RFC-0006 §24.1).
+- A stuck-turn alarm when there has been no progress for 10 minutes, not counting parked time.
 - Router stalled: the oldest `accepted` row is older than 30 s.
 - A window full while its entity is idle (a credit leak).
 - `TemporalReportedProblems`.
@@ -772,7 +808,8 @@ For a provider without idempotency keys, a retry that finds an expired `sending`
 - quarantined thread, dead input, unknown or failed send;
 - budget high, budget max;
 - driver down, Temporal problem, stuck turn;
-- loop suppressed or breaker open, missed alarm, expired approval.
+- loop suppressed or breaker open, missed alarm, expired approval;
+- parked turn (with its reason), stuck retry, slow turn, approval expiring (RFC-0006 §11.7, §11.8).
 
 ### 18.4 Metrics (measure waiting)
 
@@ -780,20 +817,25 @@ For a provider without idempotency keys, a retry that finds an expired `sending`
 |---|---|
 | Ingress | append latency |
 | Bus | relay lag; oldest pending age and held count per class |
-| Scheduling | admission wait and slot wait per class; `schedule_to_start` per queue |
+| Scheduling | admission wait and slot wait per class; `schedule_to_start` and backlog per queue, from the SDK metrics and the dev server's metrics on a pinned loopback port |
 | Temporal | Signals and history size per run |
+| Retries | activity attempts above threshold, by activity type (8 for LLM steps and compaction, 10 elsewhere; planned BENIGN retries excluded) |
 | Turns | duration and outcome |
+| LLM | token usage and call duration under the OpenTelemetry gen_ai names (`gen_ai.client.token.usage`, `gen_ai.client.operation.duration`), with no content attributes |
 | Egress | depth and latency |
 | Health | dead letters by reason, open breakers, budget transitions, event-loop lag |
+
+The event-loop lag watchdog, the SDK metrics runtime and five starter alerts (as attention items) ship earlier, in Phase 1b (1b.38, 1b.39), as does the retry alert's attention item (1b.30); the rest of this section ships in Phase 8.
 
 A per-employee `employee_timeline` view joins ingress, deliveries, turns, outbox, alarms, messages and attention on `chainid`.
 
 ### 18.5 Fleet telemetry (E14)
 
 - **Hosted instances export** metrics and error reports over OpenTelemetry (OTLP) to a central collector. Error reports carry the exception type, version, count and traceback frames without local values.
+- **Tags.** Global tags are an opaque instance id, the tier and the release; never employee or workflow ids.
 - **Never exported:** message text, prompts, customer data and credentials.
 - **Enforcement.** A content-filter test checks every exported attribute name and value type.
-- **Desktop.** The desktop app exports nothing unless the owner opts in.
+- **Desktop.** The desktop app exports nothing unless the owner opts in. It keeps a local metric buffer instead, drained into its health view and attention items (RFC-0006 §17.10).
 
 ## 19. Delivery semantics, ordering and overflow
 
@@ -826,6 +868,7 @@ A per-employee `employee_timeline` view joins ingress, deliveries, turns, outbox
 | Polls | 1,000 unrouted | cycle skipped; cursor stays | n/a |
 | Cron | 1 pending tick per Schedule | the newest wins; `on_busy` | older than one interval: `expired` |
 | Alarms, open tasks | 500 alarms, 200 open tasks per employee | creation refused | `if_late`; task deadline |
+| Team tasks | 50 open per team, 200 per employee | `assign_task` refused with a tool error that names the limit | n/a |
 | Employee messages | 10 per minute per edge; 500 pending per target | breaker, then digest | 24 h TTL, then `expired` |
 | Watched data | 1 per (subscription, record); 200 subjects | coalesce, then `resync` | level-triggered |
 | Receipts, typing, presence | 1,000 in memory per account | drop oldest | 30 s |
@@ -837,18 +880,19 @@ A per-employee `employee_timeline` view joins ingress, deliveries, turns, outbox
 | Employees | any, warning above about 100 | up to about 100 | up to about 1,000 |
 | App database and inbox | SQLite | PostgreSQL 16 | PostgreSQL 16 |
 | Temporal | CLI dev server on SQLite | CLI dev server on SQLite | open-source `temporal-server` on the instance's PostgreSQL (databases `temporal` and `temporal_visibility`), 64 history shards fixed at creation |
-| Processes | one | API with relay and workers | API with relay; a workflow worker; activity workers per class |
-| Peak load (est.) | below tier S | about 5 events/s, 50 Temporal actions/s, 65 LLM calls in flight | about 50 events/s, 500 actions/s, 650 LLM calls in flight |
+| Processes | one | API with relay, polling an instance queue for the activities bound to it; the Temporal workers in a second process (T8) | API with relay; a workflow worker; activity workers per class |
+| Peak load (est., about 2x low) | below tier S | about 5 events/s, 50 Temporal actions/s, 65 LLM calls in flight | about 50 events/s, 500 actions/s, 650 LLM calls in flight |
 | Limit | dev server est. 100-500 actions/s on one shard | same | 64 shards; app database after the advisory-lock fix (N8) |
 
-The peaks are scaled from a 20-employee model: 2,600 turns/day, about 35k Temporal actions/day and 8-10 actions/s at peak. At tier L the owner's LLM provider limits bind before Temporal does, and the class floors decide who waits.
+The peaks are scaled from a 20-employee model: 2,600 turns/day, about 35k Temporal actions/day and 8-10 actions/s at peak. The replay corpus (0.3.1) puts a deployed chat turn at about 185 events, 22 activities and 27 actions, about twice the 13.5 actions per turn behind "35k actions a day", so the peaks are about 2x low (est.) until EG14 measures them (RFC-0006 §17.4). At tier L the owner's LLM provider limits bind before Temporal does, and the class floors decide who waits.
 
 **Tier S hardening.** The CLI documentation warns that the dev server "is not intended for production use" and skips some HTTP security checks. Tier S therefore:
 - pins the CLI version and checksum (RFC-0004 D1), and deletes a database from another server minor rather than migrating it (E16);
 - persists to `--db-filename` with the WAL pragmas already set (`_runtime.py:153-158`);
 - binds to 127.0.0.1 only;
+- names every dev-server listener with a `*_PORT` variable (`--http-port`, `--metrics-port`), so `services/netpolicy.py` keeps agent tools away from them (1b.33, RFC-0006 §17.8);
 - sets the namespace retention to 7 days;
-- passes the dynamic config for priority and fairness;
+- passes the dynamic config for priority and fairness, and one task-queue partition (T17, §13.2);
 - keeps its database in the instance backups.
 
 If its database is lost, the inbox and I10 bring the instance back without losing an acknowledged event.
@@ -862,7 +906,7 @@ If its database is lost, the inbox and I10 bring the instance back without losin
 
 **Moving from S to L** runs in the maintenance window, and only once every generation runs on the new path (Phase 4 or later):
 1. Stop every generation at its checkpoint. Inputs keep arriving in the inbox.
-2. Wait for running turns. Turns past their deadline are cancelled and their inputs return to pending.
+2. Wait for running turns. Turns that outlast the wait are cancelled, and their inputs return to pending.
 3. Start the full server, and create the namespace and search attributes.
 4. Re-arm from the app database: supervisors, Schedules and alarms come back. Then Resume, and the inbox drains.
 
@@ -892,8 +936,11 @@ All hosted instances upgrade together in one fixed weekly UTC window (default: S
 1. snapshots its databases;
 2. applies forward-only migrations;
 3. restarts;
-4. checks `/health/ready`;
-5. if the check fails, rolls back to the previous version and snapshot on its own, and reports the outcome through telemetry.
+4. before workers poll, replays every open run with the new code. Generations whose runs cannot replay are marked "needs Reset", and the upgrade continues (T14, RFC-0006 §17.12);
+5. checks `/health/ready`;
+6. if the check fails, rolls back to the previous version and snapshot on its own, and reports the outcome through telemetry.
+
+A rollback is replay-safe only before the new release has completed a workflow task, unless its patches shipped dormant (§24.3).
 
 **Temporal** moves at most one minor version per window. Inputs arriving during the restart wait at their providers (webhook retries, the Telegram backlog, the bridge's outbox) and land in the inbox afterwards.
 
@@ -904,7 +951,7 @@ All hosted instances upgrade together in one fixed weekly UTC window (default: S
   - deliveries `delivered` but not consumed return to pending;
   - Schedules and alarms are re-armed;
   - orphaned chat runs fail.
-- **No duplicate sends.** Send keys come from workflow and activity ids, so in-flight activities that run again send nothing twice.
+- **No duplicate sends.** Send keys come from workflow ids and explicit activity ids unique across the continue-as-new chain (§10.1), so in-flight activities that run again send nothing twice.
 
 ### 21.4 Schema migrations
 
@@ -939,7 +986,7 @@ If the crash came before the append, Stripe never saw a 2xx, and its retry becom
 **(c) The owner chats while the same employee's cron job runs**
 1. The 08:00 Schedule appends a tick (C4, thread `main` of the worker lane), which runs on `llm-c4` with priority 4.
 2. At 08:03 the owner's message (message plus ingress row in one transaction) goes to the talk lane as C1.
-3. After the 0.4 s debounce, admission grants the employee's reserved owner slot, and the turn runs on `llm-c1`. The slot pool serves C1 first.
+3. At once, admission grants the employee's reserved owner slot, and the turn runs on `llm-c1`. That queue has its own slots, so the cron turn's steps do not delay it.
 4. The two turns use different conversation keys and run side by side.
 
 If an editor graph wires both triggers into one agent and one thread, the owner's message waits as "next", and the owner can press Interrupt.
@@ -987,7 +1034,7 @@ No Temporal payload can exceed a limit (C1), and the body is never broadcast.
 2. The relay holds the employee's C3 and C4 inputs, and the admission for a cron turn is denied. A running C4 turn suspends at its next step. C1 and C2 continue.
 3. A reservation that would pass $20 raises `BudgetExceeded`, and that turn suspends.
 4. The ledger moves to `max`. The supervisor stops the employee with `pause_reason=budget`, and the owner gets a notice with Resume.
-5. The owner adds $10, or midnight arrives. The state returns to `normal`, held inputs are released in (class, seq) order, and suspended turns get `budget_released`.
+5. The owner adds $10, or midnight arrives. The state returns to `normal`, held inputs are released in (class, seq) order, and suspended turns get `released{reason=budget}`.
 
 ## 23. Failure modes
 
@@ -1004,7 +1051,7 @@ No Temporal payload can exceed a limit (C1), and the body is never broadcast.
 | Window leak | window full while the entity is idle | stream held | the entity reports consumption when idle; upkeep resets |
 | Entity or supervisor bug | `TemporalReportedProblems` | that thread or employee stuck | fix, then replay; attention item |
 | Turn fails | child failure | inputs `failed` | retried once, then dead-lettered; restart intensity |
-| Turn hangs | deadline timer; progress watchdog | slot held | the turn is cancelled, then the retry policy |
+| Turn hangs | slow-turn alert; progress watchdog | slot held | a slow-turn attention item (T19); after 24 hours with no completed step, not counting time parked, paused or waiting for the owner, the turn is cancelled (a default, RFC-0006 §24.1), then the retry policy |
 | Poison input | repeated failures | thread quarantined | input dead-lettered; the thread continues |
 | Continue-as-new carry too large | size check before continue-as-new | none | excess returned to the database |
 | Signal or Update limits near | counters | none | earlier continue-as-new; relay batching |
@@ -1012,8 +1059,8 @@ No Temporal payload can exceed a limit (C1), and the body is never broadcast.
 | Loop between employees | path, hop, bucket | suppressed or digest | breaker half-opens after 1 hour |
 | Budget overshoot | ledger | bounded by price error | pause |
 | Missed Schedule while asleep | lateness metrics | late or coalesced ticks | catch-up window, `on_busy`, `if_late` |
-| Provider outage or 429 | step retries (BENIGN) | slower turns | Retry-After; spend is not double-counted |
-| Unknown send outcome | expired claim | `unknown` | the owner's Retry (E12) |
+| Provider outage or 429 | step retries (BENIGN) | slower turns | Retry-After; spend is not double-counted; past the step budget the turn parks (Phase 5) |
+| Unknown outcome of a send or other side effect | expired claim; a later attempt of an `unsafe` call | `unknown`; the employee is told | the owner's Retry (E12, T13) |
 | Reset while work is in flight | generation fence | old entities cancelled; inputs `dead(reset)` | none needed |
 | A weekly upgrade fails on an instance | readiness check | instance down briefly | automatic rollback to the previous version and snapshot |
 
@@ -1032,31 +1079,48 @@ No Temporal payload can exceed a limit (C1), and the body is never broadcast.
 | Phase | Content |
 |---|---|
 | 0 | Nine independent fixes without workflow-command changes:<br>• 0.1 webhook route table, 401/404/405 and empty path (C3);<br>• 0.2 scoped task events (H11);<br>• 0.3 body cap and the undrained queue (C1, N11);<br>• 0.4 Start once per generation (C4);<br>• 0.5 Telegram backlog (N1);<br>• 0.6 PostgreSQL chat lane (N6);<br>• 0.7 Discord public ingress (N4);<br>• 0.8 Twitter receive (N5);<br>• 0.9 broadcast audience (N7). |
-| 1 | Safety net:<br>• fixture recorder and replay gate;<br>• golden identity test;<br>• pinned Temporal CLI (RFC-0004 D1);<br>• `TEMPORAL_TEST_CLI` in CI. |
+| 1 | Safety net:<br>• fixture recorder and replay gate;<br>• golden identity test;<br>• pinned Temporal CLI (RFC-0004 D1);<br>• `TEMPORAL_TEST_CLI` in CI;<br>• fairness and one task-queue partition on the dev server, in the fresh-start release (T17). |
+| 1b | Pattern fixes that need no workflow versioning, before Phase 2 (RFC-0006 §22.2). 46 items, one commit each, in seven tracks in priority order:<br>• side effects never happen twice: effect classes and the redo guard (1b.1), cancellation re-raised (H2), approved sends wait while stopped, built-in content rules;<br>• waits survive restarts: the Timer node, reviewed delivery, gate expiry;<br>• lifecycle and cancellation: agent children with `REQUEST_CANCEL`, the bug guard, bounded Update calls, poll activity options and page bounds, a slim agent carry;<br>• compensation and Reset;<br>• errors and retries: LLM attempt deadlines, non-retryable step bugs, BENIGN retries;<br>• platform and workers: the Start-snapshot secret fix, named dev-server ports, one worker builder, SDK metrics, the loop-lag watchdog;<br>• lints, tests and docs. |
 | 2 | Durable ingress and router delivering to today's controllers by known id (H1, N3, N9):<br>• WAL on `workflow.db`;<br>• bus tables and both drivers;<br>• rollout per source behind `EVENT_INGRESS_MODE`, after a shadow soak that compares Visibility targets with registry targets. |
-| 3 | Drivers with durable acks (N1, N2, M3):<br>• registry and leases;<br>• Telegram offsets;<br>• the edgymeow gRPC protocol with outbox and `SynchronousAck` (cross-repo);<br>• Discord catch-up;<br>• polls as Schedules;<br>• send idempotency keys. |
-| 4 | Entities for new generations (`event_os_version=1`):<br>• supervisor, conversation entity, turn mode, merge points;<br>• chat as the entity's single writer;<br>• 4b: customer channels and per-thread histories. |
-| 5 | Scheduler and budgets:<br>• class queues, slot pool, Priority and fairness;<br>• admission;<br>• daily ledger, holds, pause, midnight resume. |
-| 6 | Timers and messaging:<br>• cron Schedules by immutable ids with `on_busy` (H6, M2);<br>• alarms and follow-ups;<br>• employee messaging;<br>• watched data;<br>• storm guards. |
-| 7 | Egress and approvals:<br>• outbox, buckets, `unknown`;<br>• ApprovalWorkflow;<br>• audience-scoped broadcasts. |
-| 8 | Supervision:<br>• restart intensity, quarantine, degraded mode;<br>• attention items;<br>• metrics, timeline. |
-| 9 | Instance tiers and fleet:<br>• 9a: pinned versions, the weekly-window upgrader with rollback, telemetry, staging, backups;<br>• 9b: PostgreSQL in hosted instances, Alembic, the advisory-lock replacement (N8, N10);<br>• 9c: tier L server, the S-to-L move, load tests. |
+| 3 | Drivers with durable acks (N1, N2, M3):<br>• registry and leases;<br>• Telegram offsets;<br>• the edgymeow gRPC protocol with outbox and `SynchronousAck` (cross-repo);<br>• Discord catch-up;<br>• polls as retried activities (T7) in a sandboxed PollWorkflow, with BENIGN retries logged at DEBUG;<br>• send idempotency keys, and provider idempotency keys for other writes where providers offer them (RFC-0006 §11.2). |
+| 4 | Entities for new generations (`event_os_version=1`):<br>• supervisor, conversation entity, turn mode, merge points;<br>• chat as the entity's single writer;<br>• 4b: customer channels and per-thread histories;<br>• RFC-0006 additions (§22.3): the stream cursor as start input, turn numbers from admission and the close sequence; no owner-chat debounce (T9); the T10 deliverer; priority keys at every start site; `placement_version=1` routing and the frozen dispatch map; relief before every LLM step and the consuming save that raises; sandboxed types with progress as local activities; Apply for new generations; slow-turn alerts (T19) and the 24-hour no-progress backstop (a default); one timer over absolute deadlines in each new type, and the instance-wide upkeep sweep. |
+| 5 | Scheduler and budgets:<br>• class queues with fixed slots and explicit routes for LLM and compaction steps, Priority and fairness;<br>• admission as the only floor; per-credential buckets;<br>• daily ledger, holds, pause, midnight resume;<br>• RFC-0006 additions (§22.3): the LLM step budget and parking for new generations, under `scheduler_version=1` (T11, T18, T19); HTTP retry details; own-key spend per attempt; budget timers spread over 10 minutes; namespace retention and search attributes at creation. |
+| 6 | Timers and messaging:<br>• cron Schedules by immutable ids with `on_busy` (H6, M2);<br>• alarms and follow-ups;<br>• employee messaging;<br>• watched data;<br>• storm guards;<br>• RFC-0006 additions (§22.3): alarms join the supervisor's one timer; the durable Timer node behind a flag; delegation permits in admission and the team-task cap; versioned `alarms_changed`. |
+| 7 | Egress and approvals:<br>• outbox, buckets, `unknown`;<br>• ApprovalWorkflow;<br>• audience-scoped broadcasts;<br>• RFC-0006 additions (§22.3): ApprovalWorkflow for all four waits, with the T10 deliverer, Stop not waiting for drafts (T12) and one reminder; owner and recipient content rules (T15); sends on their own `egress` queue, with the token before the claim; checkpointed external job ids. |
+| 8 | Supervision:<br>• restart intensity, quarantine, degraded mode;<br>• attention items;<br>• metrics, timeline;<br>• RFC-0006 additions (§22.3): attention items in the employee summary for parked turns, slow turns, expiring approvals and stuck retries (which 1b.30 already raises on the instance); the attempt-threshold metric; gen_ai metric names; core logs at WARN; activity summaries without user text. |
+| 9 | Instance tiers and fleet:<br>• 9a: pinned versions, the weekly-window upgrader with rollback, telemetry, staging, backups;<br>• 9b: PostgreSQL in hosted instances, Alembic, the advisory-lock replacement (N8, N10);<br>• 9c: tier L server, the S-to-L move, load tests;<br>• RFC-0006 additions (§22.3): the upgrade replays open runs before workers poll and marks failures "needs Reset" (T14); the EG14 capacity driver; the rollback check that relies on dormant patches (§24.3); opt-in spans with the telemetry content filter; T8's worker split on hosted tier S, per instance once every live generation carries `placement_version=1`. |
 | 10 | Retirement:<br>• R_k: new generations default to the new path;<br>• R_k+1: old generations are upgraded at boot (drain at the Stop checkpoint, then Reset and Start with the same snapshot and conversation store, with a notice);<br>• R_k+2: remove Visibility emit, the poll-coroutine registry and the legacy listener registrations once none is open. |
 
-**Critical path:** 0, then 1, 2, 4, 5, 6 and 10.
+RFC-0006 §22.3 lists what each phase gains in full, with the owning sections, Phases 2 and 10 included.
+
+**Critical path:** 0, then 1, 1b, 2, 4, 5, 6 and 10.
 
 **Parallel lanes:**
 - Phase 3 after Phase 2.
 - Controller hardening for old generations after Phase 1, serialized with any other controller edit:
   - a size guard on child input (C1);
   - poll loops re-raise cancellation (H8);
-  - a slim continue-as-new carry (H10).
+  - a slim continue-as-new carry (H10);
+  - from RFC-0006 §22.4: poison events dead-lettered after 5 spawn attempts, with spawn backoff; stable execution-control Update ids and slim Update results; `register_trigger` hardening and triggers in the start input; seen keys carried as digests; the trigger filter and status broadcasts as local activities behind a patch; the rollover request to every live controller at the first boot of each release, once the slim carry and the cancellation fix have shipped; graph approval gates that stop holding Stop, behind the generation flag `approval_wait_version=1`.
+- Cancellation, after Phase 1b and before Phase 4 (RFC-0006 §22.4):
+  - MachinaWorkflow and AgentWorkflow cancel and drain their running work, with a 2-minute bound, behind a patch;
+  - one failure policy: running nodes finish and nothing new starts;
+  - the delegation-window fix, and child-start failures as node failures.
+- Durable delegations, before T8's worker split (RFC-0006 §22.4): Claude Code and RLM delegations run as durable child workflows instead of asyncio tasks.
 - Phases 7 and 8 after Phase 4.
 - 9a after Phase 1; 9b before the first hosted PostgreSQL instance; 9c after Phase 5.
 
 ### 24.3 Patch markers
 
-A marker becomes `deprecate_patch` one release after no open history can lack it. That only becomes true through Phase 10's upgrade or a periodic rollover. It is removed one release later. No marker is ever deleted in one step.
+Markers retire in four stages, as in Temporal's patching sample (RFC-0006 §18.9):
+1. the original code;
+2. `workflow.patched` keeps both branches;
+3. `deprecate_patch`, one release after no open history can lack the marker;
+4. removal, one release later.
+
+No marker is ever deleted in one step. Open histories move past a marker through Phase 10's upgrade or a rollover. To help, every live controller is asked to roll over (`request_rollover`) at the first boot of each release, once the slim carry and the cancellation fix have shipped, so idle controllers pick up new code too (RFC-0006 §8.3).
+
+After the upgrade to SDK 1.34.0, new patch ids ship dormant for one release (`patch_activation_callback`), and per-generation flags are read one release before any release writes them, so a rollback in the weekly window still replays (§21.2). Fixes for sends, money and approvals may activate at once.
 
 ### 24.4 Progress
 
@@ -1064,7 +1128,7 @@ A marker becomes `deprecate_patch` one release after no open history can lack it
 
 | Item | Commit | Notes |
 |---|---|---|
-| 0.1 Webhook routing and auth | db55d4e9 | Route table in `nodes/trigger/webhook_trigger/_routes.py`. The expected header value is read from the saved node parameters. It is blocked from snapshots, Temporal input and workflow export. |
+| 0.1 Webhook routing and auth | db55d4e9 | Route table in `nodes/trigger/webhook_trigger/_routes.py`. The expected header value is read from the saved node parameters. It is blocked from snapshots, Temporal input and workflow export, except the Start-path parameter snapshot, which still carries it until Phase 1b (1b.31, 1b.32; RFC-0006 §17.8). |
 | 0.2 Scoped task events | daddf460 | The broadcast frame is an identity-only envelope. |
 | 0.3 Body cap | 1ebfd5d9 | `WEBHOOK_MAX_BODY_BYTES` lives in `.env.template` and is read through `core.env_defaults`. Poll events are not capped yet; that moves to Phase 3. |
 | 0.4 Start once per generation | b4656c22 | A runtime-mutation ledger claim alone; no `rearm` flag, no deterministic run id. |
@@ -1074,9 +1138,10 @@ A marker becomes `deprecate_patch` one release after no open history can lack it
 | 0.8 Twitter receive | edf29a76 | Refused at Start and on a canvas Run rather than ported. A port needs paid X API access to test. |
 | 0.9 Broadcast audience | 7745ca14 | `emit`'s `broadcast` has no default. No client read any channel or provider frame, so those are no longer broadcast, and no audience-scoped broadcast was needed. |
 
-**Phase 1** (started 2026-10-24). The owner's decisions of 2026-10-23 set its order and scope:
+**Phase 1** (started 2026-10-24). The owner's decisions of 2026-10-23 and 2026-10-24 set its order and scope:
 - **Order:** pinned CLI, CI, fixture recorder, replay gate, golden identity test, then the temporalio upgrade from 1.30.0 to 1.34.0 (RFC-0004 D5).
-- **Fresh start:** E16, with no migration code.
+- **Fresh start:** E16, with no migration code. T5 (RFC-0006 §3.1) confirmed it on 2026-10-24: Phase 1 reverts the code that keeps an install's old Temporal database and server (commit 49177427), so every install runs server 1.32.
+- **Fairness and one partition (T17):** the fresh-start release passes the dev server `matching.enableFairness=true`, `matching.numTaskqueueReadPartitions=1` and `matching.numTaskqueueWritePartitions=1`, because read partitions can be lowered safely only on a database created with the lower value. Namespace retention and search attributes at creation stay deferred to Phase 5 (RFC-0004 D4).
 - **CI:** the whole server suite runs on Linux, Windows and macOS with the pinned CLI.
 - **Fixtures:** a release-pipeline check fails a release that has no `fixtures/<version>/`.
 
@@ -1092,7 +1157,7 @@ Commit hashes are filled in when the phase ends.
 ### 25.1 Defaults (change at review)
 
 - **B2 late merge** applies to customer channels only. In owner chat, a new message starts the next turn right away, so no streamed draft is ever replaced.
-- **Class floors** are 30/40/15/15, plus one reserved owner slot per employee.
+- **Class floors** are 30/40/15/15 shares of admitted turns, enforced only by admission, plus one reserved owner slot per employee.
 - **Webhook classes.** Signed provider webhooks are C3; generic webhooks and polls are C4; any trigger can override.
 - **Debounce windows, passivation times, overflow bounds and storm limits** are as given above.
 - **Retention:**
@@ -1105,13 +1170,31 @@ Commit hashes are filled in when the phase ends.
 - **Generic webhook dedupe** uses a configured header, otherwise a body hash within 10 minutes.
 - **The maintenance window** is Sunday 03:00 UTC; staging instances upgrade 3 days earlier.
 - **Tier L** uses 64 history shards, confirmed by its load test.
+- **From RFC-0006 §24.1** (2026-10-24; that list gives each reason and alternative):
+  - owner chat has no debounce (T9);
+  - one instance-wide upkeep sweep every 5 minutes replaces a timer per supervisor;
+  - budget periods end at midnight plus a stable per-employee offset of 0-10 minutes;
+  - every live controller is asked to roll over at the first boot of each release;
+  - polls: jitter up to 10% of the interval (at most 30 s), failures doubling the interval to 1 hour, "driver down" after 5 failures, pages of 50 items or 512 KB;
+  - one approval reminder, 24 h before expiry;
+  - LLM steps (Phase 5, new generations): attempts of 10 min for cloud and 30 min for local endpoints, budgets of 15 and 45 min, a park probe every 15 min, a park limit of 7 days;
+  - park reasons: the employee's daily budget, provider billing, quota, authentication, permission and the step budget's expiry; account and billing parks also pause the employee;
+  - priority keys: owner-started work at 1, cron, polls and Start-node runs at 4, entities by lane;
+  - no schedule-to-start timeouts; fixed slots per class queue; sends on their own `egress` queue;
+  - team tasks: at most 50 open per team and 200 per employee; long-lived types roll over at 1,800 Updates;
+  - after SDK 1.34.0, new patch ids ship dormant for one release.
 
 ### 25.2 Still open
 
-- **History encryption** with a payload codec on hosted instances (RFC-0004 Q13).
-- **Temporal retries for graph nodes** marked safe (RFC-0004 Q9).
-- **Startup verification of open runs**: refuse, or start and mark "needs Reset" (RFC-0004 Q15).
+- **History encryption** with a payload codec on hosted instances (RFC-0004 Q13). RFC-0006 §24.1 proposes no codec, 7-day retention and encrypted backups.
+- **Temporal retries for graph nodes** marked safe (RFC-0004 Q9). This depends on Phase 1b's redo guard (1b.1). RFC-0006 §24.2 proposes retries for `read_only` and `idempotent` plugins, and for `unsafe` ones only when the failure came before the provider was contacted.
 - **When old generations are upgraded automatically** (§24.2, Phase 10), and what the owner is told.
+
+**Settled on 2026-10-24** (RFC-0006 §3.1):
+- **Startup verification of open runs** (RFC-0004 Q15): the release starts, and generations whose runs cannot replay are marked "needs Reset" (T14, §21.2).
+- **A lost supervisor** is rebuilt in place (T20, §10.1).
+
+RFC-0006 §24.2 lists the further questions still open for the owner.
 
 ## 26. Acceptance gates
 
@@ -1121,27 +1204,29 @@ Commit hashes are filled in when the phase ends.
 | EG2 | Turning a flag back off drains the inbox; nothing already appended is dropped |
 | EG3 | One user's socket never receives another user's content; webhook and provider payloads are never broadcast |
 | EG4 | A second chat run in one session succeeds on PostgreSQL |
-| EG5 | Five messages within the debounce window produce one turn; a message sent mid-turn appears in the next step's model input; tool batches are never split |
+| EG5 | Five customer messages within the debounce window produce one turn. An owner message starts its turn with no timer; owner messages sent during it merge at the next step (B1), or start one more turn when there is no next step (T9). A message sent mid-turn appears in the next step's model input; tool batches are never split |
 | EG6 | A generation paused on the previous release resumes after every phase (pinned CLI, end to end) |
-| EG7 | 10,000 messages to one conversation cost fewer than 1,000 Signals per entity run, and its history stays under 10 MB |
+| EG7 | A burst of 10,000 messages to one conversation, all appended before the relay runs, costs fewer than 1,000 Signals per entity run (full batches of 16 make about 625), and its history stays under 10 MB |
 | EG8 | SQLite append p99 is under 25 ms at 50 events/s |
 | EG9 | Webhooks answer 401, 404, 405 and 413 as specified; 2xx only after commit; 503 when the append fails |
 | EG10 | Restarting the backend twice starts no second Start-node run (RFC-0004 AG17) |
 | EG11 | Budget: past 80% background inputs are held while chats run; at 100% the employee pauses with a notice; at midnight it resumes |
-| EG12 | An event for a generation that started 10 ms earlier is delivered (RFC-0004 AG12) |
+| EG12 | An event accepted 10 ms after Start committed is delivered once the generation runs (RFC-0004 AG12, where "started" means the Start commit) |
 | EG13 | A Temporal database replaced by an empty one loses no acknowledged event; re-arm restores generations, Schedules and alarms |
-| EG14 | Tier S sustains 100 employees on the dev server; tier L sustains 1,000 employees at about 500 actions/s |
+| EG14 | Tier S sustains 100 employees on the dev server; tier L sustains 1,000 employees at about 500 actions/s. Measured with a repeatable driver that reports events and workflow tasks per second (RFC-0006 §17.4) |
 | EG15 | The telemetry export contains no message text, prompts, customer data or credentials |
 | EG16 | A weekly-window upgrade with a forced readiness failure rolls the instance back by itself |
 | EG17 | Two customers' conversations never share an agent history |
 | EG18 | An employee-to-employee loop is cut at 8 hops, and a hot edge becomes a digest with an attention item |
+
+RFC-0006 §23 adds gates for Phase 1b and for each phase's new items (§24.2). They apply with these.
 
 ## 27. What this RFC does not change
 
 - The plugin model (`BaseNode`, the registries, NodeSpec as the source of truth).
 - The WebSocket protocol envelope and the CloudEvents `WorkflowEvent`.
 - The chat wire contract, except the additions in §11.
-- RFC-0002's store semantics, except the thread in its key.
+- RFC-0002's store semantics, except the thread in its key and the consuming save of §9.5, which raises under `event_os_version=1`.
 - Canvas Runs: `event_waiter` stays for manual Runs, and the relay notifies local waiters.
 - The cooperative pause design (Temporal's native Workflow Pause stays unused).
 - The decision to leave workflow execution and run timeouts unset.
@@ -1154,7 +1239,7 @@ Commit hashes are filled in when the phase ends.
 | `docs-internal/event_framework.md` | Inbox, router and relay replace Visibility routing; drivers; subscriptions; storm guards |
 | `docs-internal/chat_protocol.md` | Merged messages, no `run_in_progress` or `engine_unavailable`, `run.input_merged`, queued while Temporal is down |
 | `docs-internal/temporal-workflow-control.md` | Supervisor, entities, Start once per generation, re-arm and I10 |
-| `docs-internal/TEMPORAL_ARCHITECTURE.md` | New workflow types, class queues, slot pool, Priority and fairness, tiers |
+| `docs-internal/TEMPORAL_ARCHITECTURE.md` | New workflow types, class queues with fixed slots, Priority and fairness, tiers |
 | `docs-internal/discord_service.md` | Public ingress prefix; append before the deferred reply |
 | `docs-internal/docker.md`, deploy runbooks | PostgreSQL per hosted instance, tiers, weekly window, telemetry, backups |
 | `CLAUDE.md` | The rows on the event framework, chat protocol, Temporal architecture and Docker |
@@ -1186,4 +1271,50 @@ Commit hashes are filled in when the phase ends.
 - **Peer platforms:** Inngest (debounce, batch, throttle), Restate (virtual objects), Hatchet (concurrency strategies), LangGraph (double-texting), DBOS (queues).
 - **Drivers:** whatsmeow, https://pkg.go.dev/go.mau.fi/whatsmeow (`Client.SynchronousAck`).
 - **PostgreSQL:** "Postgres LISTEN/NOTIFY does not scale" (Recall.ai), https://recall.ai/blog/postgres-listen-notify-does-not-scale
-- **Related RFCs:** RFC-0002 (agent context and memory), RFC-0004 (Temporal SDK adoption).
+- **Related RFCs:** RFC-0002 (agent context and memory), RFC-0004 (Temporal SDK adoption), RFC-0006 (Temporal design patterns).
+
+## 30. Amendment log
+
+**2026-10-24, RFC-0006** ([RFC-0006](./RFC-0006-TEMPORAL-DESIGN-PATTERNS.md); owner decisions T1-T20 in its §3.1):
+- Header and How to read this: Phase 1 in progress; RFC-0006 named; line references from HEAD 4f73cb10; §30 listed.
+- §1, §3.1 E5, §5.2, §6.1: polls are retried activities, one small workflow each (T7); the supervisor has no upkeep; Phase 1b in the rollout summary.
+- §3.1 E12: extended from sends to every side-effecting call (T13).
+- §3.1 E16: confirmed (T5).
+- §4.2, §4.3: `worker.py:584`; RFC-0004 H2 added, fixed in Phase 1b (1b.2).
+- §5.2: class queues with fixed slots instead of a slot pool.
+- §6.2 I2: owner actions write an intent and a background deliverer applies them (T10).
+- §6.2 I7: an exception for agent transcripts, with byte bounds (T6).
+- §9.1, §9.3: subscriptions compiled with the `starting` generation; streams held with reason `starting`.
+- §9.4: admission re-checks the generation; the stream cursor is the start argument; entities keyed by lane.
+- §9.5: `applied_seq` seeded on every start; the consuming save raises under `event_os_version=1`.
+- §9.8: the 10,000-message test is a burst.
+- §10.1: supervisor rebuilt in place (T20); turn cancellation; PollWorkflow split out; ApprovalWorkflow as a gate's child; six new rules for every new type.
+- §10.2: supervisor with revisioned Updates, an offset period end and no upkeep; entity carrying cursors with a close sequence; turn cancel and drain; parks (T11, T18); PollWorkflow; ApprovalWorkflow via the deliverer.
+- §10.3: a parked turn has not failed; retries resume; "stuck and visible" needs the bug guard (1b.13).
+- §10.4: Worker Versioning declined for topology, not maturity; the Phase 5 flag `scheduler_version=1` (T18); `context_pressure_version=2` per run, for Phase 4 generations.
+- §11: no owner-chat debounce (T9); an absolute debounce deadline; admission's generation check; passivation needs the close sequence.
+- §12: relief before every LLM step (`context_pressure_version=2`); the consuming-save exception.
+- §13.1: slow-turn alerts (T19); a default 24-hour no-progress cancel that skips time parked, paused or waiting for the owner; floors are shares of admitted turns.
+- §13.2: explicit priority keys; fairness and one partition from Phase 1 (T17); no gating (T5); frozen LLM and compaction routes; no shared slot pool; no schedule-to-start timeouts, with queue waits measured from the SDK metrics (1b.38) and the dev server's metrics (1b.33); the `egress` queue.
+- §13.3: the generation gate; turn numbers from admission; suspended leases count toward no capacity; delegation permits.
+- §13.4: bucket sources; the Retry-After cap, `x-should-retry` and 409; a wait past the step budget parks.
+- §14: per-attempt own-key reservations; the provider suspend path; the midnight offset; `released{reason}`.
+- §15: the PollWorkflow design; the supervisor's single timer.
+- §17.1, §17.2: `held_reason` and `provider_called_at`; token before claim; an unlimited policy; the `egress` queue.
+- §17.3: `unknown` for every side-effecting plugin (T13).
+- §17.5: ApprovalWorkflow's four waits, the deliverer, Stop not waiting for drafts (T12), one reminder.
+- §17.7 (new): content rules (T15).
+- §18.1, §18.3, §18.4, §18.5: slow-turn alerts; new attention kinds and metrics; Phase 1b observability; telemetry tags; the desktop metric buffer.
+- §19: the team-task cap.
+- §20: per-turn cost from the replay corpus; peaks about 2x low; tier S worker split (T8); named dev-server ports and one partition; no turn deadline in the S-to-L move.
+- §21.2, §21.3: replay before workers poll, "needs Reset" (T14) and the rollback rule; chain-unique activity ids.
+- §22 (c), (i): no owner debounce; fixed class-queue slots; `released{reason=budget}`.
+- §23: slow-turn handling (T19); parking past the step budget; `unknown` for every side effect.
+- §24.2: Phase 1b; fairness and one partition in Phase 1; Phases 3-9 additions; the critical path; controller-hardening additions and two new lanes.
+- §24.3: four-stage retirement, the rollover request at first boot, dormant patches.
+- §24.4: the Start-snapshot exception to 0.1; T5 and T17 recorded for Phase 1.
+- §25.1, §25.2: RFC-0006 defaults; Q9 depends on 1b.1; Q15 (T14) and the supervisor rebuild (T20) settled.
+- §26: EG5, EG7, EG12 and EG14 reworded; RFC-0006 §23 gates apply.
+- §27, §28, §29: the consuming-save exception; fixed class-queue slots; RFC-0006 referenced.
+
+RFC-0006 §20 gives each change with its basis.
