@@ -16,6 +16,7 @@ Uses the singleton accessor pattern (``Class.get_instance()``) from
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -125,6 +126,15 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         #   --metrics-port   0 disables the Prometheus endpoint
         #   --log-level      warn keeps the supervisor log readable
         #   --namespace      default namespace bootstrapped at start
+        #   --dynamic-config-value  the pin's dynamic_config
+        #                    (server/config/temporal_cli.json), on every boot,
+        #                    because start-dev reads dynamic config only from
+        #                    its flags: fairness on and one task-queue
+        #                    partition (RFC-0006 T17).
+        #                    The database marker records the partitions,
+        #                    which can be lowered safely only on a new
+        #                    database, so ``_pre_spawn`` resets one created
+        #                    with other values.
         #   --sqlite-pragma  SQLite tuning, repeatable PRAGMA=VALUE.
         #                    journal_mode=WAL + synchronous=NORMAL +
         #                    busy_timeout let the single-writer SQLite
@@ -141,6 +151,11 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         #                    WAL is durable and synchronous=NORMAL is
         #                    WAL-safe (no corruption). See SQLite WAL
         #                    docs + https://docs.temporal.io/cli/server.
+        from services.temporal._install import cli_pin
+
+        dynamic_config: list[str] = []
+        for key, value in cli_pin()["dynamic_config"].items():
+            dynamic_config += ["--dynamic-config-value", f"{key}={json.dumps(value)}"]
         return [
             str(self.binary_path()),
             "server",
@@ -157,6 +172,7 @@ class TemporalServerRuntime(BaseProcessSupervisor):
             "warn",
             "--namespace",
             self.settings.temporal_namespace,
+            *dynamic_config,
             "--sqlite-pragma",
             "journal_mode=WAL",
             "--sqlite-pragma",

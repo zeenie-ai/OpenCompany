@@ -2,7 +2,9 @@
 
 RFC-0004 D1 and RFC-0005 E16: the CLI is a checksum pin, and a database
 the pinned server minor did not create is deleted with every older CLI
-file, so the pinned server starts from an empty database.
+file, so the pinned server starts from an empty database. RFC-0006 T17:
+the dev server runs with fairness and one task-queue partition, and a
+database created with other partition values starts from new too.
 """
 
 from __future__ import annotations
@@ -25,8 +27,14 @@ def _write_db(db: Path) -> None:
         path.write_bytes(b"temporal state")
 
 
-def _write_marker(db: Path, server_version: str) -> None:
-    _install.marker_path(db).write_text(json.dumps({"server_version": server_version}), encoding="utf-8")
+ONE_PARTITION = {"matching.numTaskqueueReadPartitions": 1, "matching.numTaskqueueWritePartitions": 1}
+
+
+def _write_marker(db: Path, server_version: str, partitions: dict | None = ONE_PARTITION) -> None:
+    record = {"server_version": server_version}
+    if partitions is not None:
+        record["partitions"] = partitions
+    _install.marker_path(db).write_text(json.dumps(record), encoding="utf-8")
 
 
 def _read_marker(db: Path) -> dict:
@@ -71,6 +79,32 @@ def test_pin_names_one_exact_release_with_a_hash_for_every_platform():
         extension = "zip" if key.startswith("windows_") else "tar.gz"
         assert asset["file"] == f"temporal_cli_{pin['version']}_{key}.{extension}"
         assert re.fullmatch(r"[0-9a-f]{64}", asset["sha256"])
+
+
+def test_pin_turns_on_fairness_with_one_task_queue_partition():
+    assert _install.cli_pin()["dynamic_config"] == {"matching.enableFairness": True, **ONE_PARTITION}
+
+
+def test_the_dev_server_passes_the_pin_dynamic_config_on_every_start(tmp_path):
+    settings = SimpleNamespace(
+        temporal_graceful_shutdown_seconds=5,
+        temporal_sqlite_path="temporal.db",
+        temporal_frontend_grpc_port=7233,
+        temporal_ui_port=8233,
+        temporal_namespace="default",
+        _resolve_under_data=lambda path: str(tmp_path / path),
+    )
+    runtime = _runtime.TemporalServerRuntime(settings=settings)
+    runtime._binaries = {"temporal": tmp_path / "temporal"}
+
+    argv = runtime.argv()
+
+    values = [argv[index + 1] for index, arg in enumerate(argv) if arg == "--dynamic-config-value"]
+    assert values == [
+        "matching.enableFairness=true",
+        "matching.numTaskqueueReadPartitions=1",
+        "matching.numTaskqueueWritePartitions=1",
+    ]
 
 
 def test_fetch_verifies_the_pinned_archive_into_its_versioned_folder(tmp_path, monkeypatch):
@@ -129,6 +163,7 @@ def test_a_new_install_records_the_pinned_server_beside_its_database(tmp_path, m
     marker = _read_marker(db)
     assert marker["cli_version"] == pin["version"]
     assert marker["server_version"] == pin["server_version"]
+    assert marker["partitions"] == ONE_PARTITION
     assert marker["created_at"]
 
 
@@ -160,6 +195,22 @@ def test_another_server_minor_starts_from_new(tmp_path, monkeypatch):
 
     assert not any(path.exists() for path in _db_files(db))
     assert _read_marker(db)["server_version"] == _install.cli_pin()["server_version"]
+
+
+def test_a_database_created_with_other_partitions_starts_from_new(tmp_path, monkeypatch):
+    root = tmp_path / "packages"
+    root.mkdir()
+    monkeypatch.setattr(_install, "_cache_dir", lambda: root)
+    pinned_server = _install.cli_pin()["server_version"]
+    for partitions in (None, {"matching.numTaskqueueReadPartitions": 4, "matching.numTaskqueueWritePartitions": 4}):
+        db = tmp_path / "temporal.db"
+        _write_db(db)
+        _write_marker(db, pinned_server, partitions)
+
+        _install.prepare_database(db)
+
+        assert not any(path.exists() for path in _db_files(db))
+        assert _read_marker(db)["partitions"] == ONE_PARTITION
 
 
 def test_an_unreadable_marker_starts_from_new(tmp_path, monkeypatch):

@@ -10,13 +10,15 @@ a re-run is a cache hit and a tampered or truncated download fails.
 
 A new Temporal server minor starts from an empty database (RFC-0005 E16).
 ``temporal.db.server.json`` beside the database names the server that
-created it, and :func:`prepare_database` runs before every spawn. A
-database with no marker, or with one naming another server minor than the
-pin, is deleted together with its ``-wal`` and ``-shm`` files, and every
-CLI file that is not the pin's goes with it. Nothing is migrated:
-generations whose controller lived in the old database fail with
-``controller_execution_missing``, and owners Reset and Start them. A patch
-release of the same minor keeps the database.
+created it and the task-queue partitions it was created with, and
+:func:`prepare_database` runs before every spawn. A database with no
+marker, with one naming another server minor than the pin, or with other
+partition values than the pin's ``dynamic_config`` (partitions can be
+lowered safely only on a new database, RFC-0006 T17), is deleted together
+with its ``-wal`` and ``-shm`` files, and every CLI file that is not the
+pin's goes with it. Nothing is migrated: generations whose controller lived
+in the old database fail with ``controller_execution_missing``, and owners
+Reset and Start them. A patch release of the same minor keeps the database.
 
 The downloaded ``temporal`` CLI powers ``temporal server start-dev``
 (the SQLite dev server) and ad-hoc workflow / operator commands.
@@ -154,19 +156,33 @@ def marker_path(db_path: Path) -> Path:
     return db_path.with_name(db_path.name + ".server.json")
 
 
+# The dynamic-config values a database keeps from its creation: lowering read
+# partitions on an existing database strands the tasks in the removed ones.
+_CREATION_KEYS = ("matching.numTaskqueueReadPartitions", "matching.numTaskqueueWritePartitions")
+
+
+def _partitions(pin: dict[str, Any]) -> dict[str, Any]:
+    return {key: pin["dynamic_config"][key] for key in _CREATION_KEYS}
+
+
 def prepare_database(db_path: Path) -> None:
     """Start from an empty database unless the pin's server minor created it.
 
     Runs before every spawn. A database whose marker names the pin's server
-    minor is kept. Otherwise the database, its ``-wal`` and ``-shm`` files and
-    every CLI file that is not the pin's are deleted, and the pin's marker is
-    written, so ``start-dev`` creates an empty database for the pinned server.
-    A database that cannot be deleted stops the start: the pinned server must
-    never open another minor's schema.
+    minor and partition values is kept. Otherwise the database, its ``-wal``
+    and ``-shm`` files and every CLI file that is not the pin's are deleted,
+    and the pin's marker is written, so ``start-dev`` creates an empty
+    database for the pinned server. A database that cannot be deleted stops
+    the start: the pinned server must never open another minor's schema.
     """
     pin = cli_pin()
     marker = marker_path(db_path)
-    if _server_minor(_recorded_server(marker)) == _server_minor(pin["server_version"]):
+    recorded = _read_marker(marker)
+    if (
+        recorded is not None
+        and _server_minor(recorded.get("server_version")) == _server_minor(pin["server_version"])
+        and recorded.get("partitions") == _partitions(pin)
+    ):
         return
     stale = [path for path in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")) if path.exists()]
     for path in stale:
@@ -180,7 +196,12 @@ def prepare_database(db_path: Path) -> None:
         )
     _remove_unpinned_clis(pin["version"])
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    record = {"cli_version": pin["version"], "server_version": pin["server_version"], "created_at": datetime.now(timezone.utc).isoformat()}
+    record = {
+        "cli_version": pin["version"],
+        "server_version": pin["server_version"],
+        "partitions": _partitions(pin),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
     marker.write_text(json.dumps(record), encoding="utf-8")
 
 
@@ -202,11 +223,13 @@ def _remove_unpinned_clis(version: str) -> None:
             logger.warning("[Temporal install] Could not delete an old Temporal CLI file %s: %s", entry, exc)
 
 
-def _recorded_server(marker: Path) -> object:
+def _read_marker(marker: Path) -> dict[str, Any] | None:
+    """The marker's record, or ``None`` when it is missing or unreadable."""
     try:
-        return json.loads(marker.read_text(encoding="utf-8"))["server_version"]
-    except (OSError, ValueError, KeyError, TypeError):
+        record = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
         return None
+    return record if isinstance(record, dict) else None
 
 
 def _server_minor(version: object) -> str | None:
