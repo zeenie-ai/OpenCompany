@@ -94,9 +94,11 @@ def create_runtime() -> Runtime:
     Disables the runtime-level worker heartbeating feature to avoid
     the warning on older Temporal server versions that don't support it.
     """
+    from services.temporal.client import CORE_LOG_FILTER
+
     return Runtime(
         telemetry=TelemetryConfig(
-            logging=LoggingConfig(filter="ERROR"),
+            logging=LoggingConfig(filter=CORE_LOG_FILTER),
         ),
         worker_heartbeat_interval=None,  # Disable runtime heartbeating
     )

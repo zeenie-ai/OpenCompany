@@ -16,6 +16,12 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Core (the SDK's Rust side) writes its own logs to stderr: errors only, plus
+# the [TMPRL1104] warning for a workflow task over 5 s, which blocks every
+# workflow on the worker. SDK 1.34 moved that warning from Python into Core,
+# so an ERROR-only filter would hide it.
+CORE_LOG_FILTER = "ERROR,temporalio_sdk_core::worker::workflow::managed_run=WARN"
+
 
 def _is_transient_visibility_error(exc: Exception) -> bool:
     """True if ``exc`` is a transient server-warmup/visibility error a
@@ -77,7 +83,7 @@ class TemporalClientWrapper:
         if self._runtime is None:
             self._runtime = Runtime(
                 telemetry=TelemetryConfig(
-                    logging=LoggingConfig(filter="ERROR"),
+                    logging=LoggingConfig(filter=CORE_LOG_FILTER),
                 ),
                 worker_heartbeat_interval=None,
             )

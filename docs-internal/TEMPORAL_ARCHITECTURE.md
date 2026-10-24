@@ -991,11 +991,11 @@ workflow.start_activity("execute_node_activity", args=[context])
 
 ### Runtime Configuration
 
-Worker heartbeating is disabled to avoid warnings on older Temporal server versions:
+Worker heartbeating is disabled to avoid warnings on older Temporal server versions. Core, the SDK's Rust side, writes its own logs to stderr through `CORE_LOG_FILTER` (`services/temporal/client.py`, also used by `worker.create_runtime`). The filter passes errors, plus the `[TMPRL1104]` warning for a workflow task over 5 s, which blocks every workflow on the worker. SDK 1.34 moved that warning from Python logging into Core, so an ERROR-only filter would hide it (`tests/temporal/test_core_log_filter.py`):
 
 ```python
 runtime = Runtime(
-    telemetry=TelemetryConfig(),
+    telemetry=TelemetryConfig(logging=LoggingConfig(filter=CORE_LOG_FILTER)),
     worker_heartbeat_interval=None,  # Disable runtime heartbeating
 )
 client = await Client.connect(server_address, namespace=namespace, runtime=runtime)
