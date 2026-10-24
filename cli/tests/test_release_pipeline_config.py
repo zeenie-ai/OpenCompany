@@ -444,6 +444,24 @@ def test_backend_tests_run_on_every_os_with_the_pinned_temporal_cli(predeploy_ym
     assert names.index("Pinned Temporal CLI") < names.index("pytest")
 
 
+def test_the_current_version_has_its_replay_histories(root: Path, root_pkg: dict):
+    """RFC-0005 Phase 1: every release records the Temporal histories that the
+    next release's replay gate replays (RFC-0004 AG6). The recorder
+    (``server/tests/temporal/record_fixtures.py``) runs when a release is cut,
+    and its set goes into the ``chore(release)`` commit
+    (``docs-internal/ci_cd.md`` -> Cutting a release). A version without
+    ``fixtures/<version>/`` fails here.
+    """
+    version = root_pkg["version"]
+    fixtures = root / "server" / "tests" / "temporal" / "fixtures" / version
+    manifest = fixtures / "manifest.json"
+    assert manifest.is_file(), (
+        f"No replay histories for {version}: run tests.temporal.record_fixtures (see ci_cd.md, Cutting a release) "
+        f"and commit {fixtures.relative_to(root).as_posix()}/ with the version bump"
+    )
+    assert json.loads(manifest.read_text(encoding="utf-8"))["release"] == version
+
+
 # ---------------------------------------------------------------------------
 # Release publication — package.json, release.yml, preinstall.js
 # ---------------------------------------------------------------------------

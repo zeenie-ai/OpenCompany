@@ -171,6 +171,16 @@ had lapsed or one registry failed.
    build when it differs from the tag, while the registry jobs re-run
    `version sync` from the tag themselves. `cli/tests/test_version.py`
    fails when the checked-in files disagree.
+
+   The same commit carries the release's replay histories (RFC-0005 Phase 1),
+   which the next release's replay gate replays. After `version sync`, from
+   `server/`, with the pinned CLI (installed by `ensure_temporal_binaries`
+   into a throwaway `DATA_DIR`, never an installed one):
+   `TEMPORAL_TEST_CLI=<pinned temporal binary> uv run python -m tests.temporal.record_fixtures --source-commit HEAD`.
+   It records the code at the commit the bump sits on into
+   `server/tests/temporal/fixtures/X.Y.Z/` and refuses to overwrite an
+   existing set. `test_the_current_version_has_its_replay_histories` in
+   `cli/tests/test_release_pipeline_config.py` fails a version without one.
 3. **Tag.** `git tag -a vX.Y.Z -F notes.md` on that commit, the notes in the
    shape of the previous tags (`git tag -l --format='%(contents)' v0.1.0`).
 4. **Push** the branch, then the tag. The tag starts `release.yml` (predeploy
