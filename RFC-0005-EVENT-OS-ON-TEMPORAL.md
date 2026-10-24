@@ -1154,7 +1154,7 @@ Commit hashes are filled in when the phase ends.
 | 1.3 Fixture recorder | — | `server/tests/temporal/record_fixtures.py` records all 14 production types along 21 scenarios on a throwaway dev server, from a git archive of `--source-commit`. The 0.3.1 set, first recorded on CLI 1.8.0, was recorded again on the pinned 1.9.1 from the same commit: 51 histories. |
 | 1.4 Replay gate | — | `test_replay_corpus.py` replays every set with `workflow_registry.replay_workflows()`, checking source provenance and coverage of all 14 types. A release-pipeline check fails a version without `fixtures/<version>/` or with a set recorded on another CLI than its pin. |
 | 1.5 Golden identity test | — | `fixtures/workflow_identities.json` holds the release's commands and ids, handler names and plugin activity names. The test fails on unreviewed command changes, a patched marker that vanishes without a release of `deprecate_patch`, and a renamed or removed handler. |
-| 1.6 temporalio 1.34.0 | — | Not started. |
+| 1.6 temporalio 1.34.0 | — | The floor is `temporalio>=1.34.0` (RFC-0004 D5), and only temporalio moved in `server/uv.lock`. No code had to change:<br>• nothing used `PayloadSizeWarning`, removed in 1.31 when payload limits moved into the SDK's core;<br>• every `workflow.continue_as_new` call is in a `@workflow.run` method. From 1.33, continuing as new from an Update handler fails the workflow task.<br>On 1.34.0 the 0.3.1 corpus replays, and the full server suite shows no failure caused by the upgrade. From the next release, new patch markers ship dormant for one release (RFC-0006 §18.9). |
 
 ## 25. Defaults chosen and open items
 

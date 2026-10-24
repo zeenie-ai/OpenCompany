@@ -8,12 +8,13 @@ returns. One payload is copied at least six ways: ``_serialize_result``
 and, for a ``usable_as_tool`` node, verbatim into an LLM message.
 
 Temporal's blob limits are the binding constraint. They are server
-defaults; nothing in this repo configures a ``DataConverter`` or a
-payload codec, so they apply as-is:
+defaults; nothing in this repo configures a payload codec or the client's
+``payload_limits``, so they apply as-is:
 
-    warning   524_288 B   -> PayloadSizeWarning (not filtered, so visible)
-    error   2_097_152 B   -> _PayloadSizeError, and the activity RETRIES
-                             three times before reporting a generic failure
+    warning   524_288 B   -> logged by the SDK (``PayloadLimitsConfig``,
+                             checked in its core since temporalio 1.31)
+    error   2_097_152 B   -> the payload is refused, so the attempt that
+                             produced it fails
 
 That is why :class:`services.media.AudioRef` carries no bytes at all.
 """

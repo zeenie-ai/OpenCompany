@@ -193,10 +193,9 @@ dependencies = [
     "google-auth>=2.27.0",
     "google-auth-oauthlib>=1.2.0",
 
-    # Temporal (durable workflow execution). Floor 1.25: Wave 18 uses
-    # PollerBehaviorAutoscaling + max_activities_per_second +
-    # max_cached_workflows on Worker(...).
-    "temporalio>=1.25.0",
+    # Temporal (durable workflow execution). Floor 1.34 (RFC-0004 D5): the
+    # SDK the replay gate checks every change against (RFC-0005 Phase 1).
+    "temporalio>=1.34.0",
 
     # RLM (Recursive Language Models) agent
     "rlms>=0.1.1",
