@@ -1,6 +1,6 @@
 # RFC-0005 — Event OS: Event-Driven AI Employees on Temporal
 
-- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) is in progress. RFC-0006 amended this RFC on 2026-10-24 (§30).
+- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) is in progress. RFC-0006 amended this RFC on 2026-10-24, and RFC-0007 on 2026-10-25 (§30).
 - **Created:** 2026-10-23
 - **Scope:** the path from every event source to every effect:
   - `server/services/events/` and `server/routers/webhook.py`;
@@ -13,6 +13,7 @@
   - Implements, for the event path, RFC-0004 decisions D7 (bounded events), D8 (routing by known ids), D9 (cancellation), D10 (upgrade contract), D13 (human waits) and D18 (security fixes).
   - Keeps RFC-0002's conversation store and adds a thread to its key.
   - Amended on 2026-10-24 by [RFC-0006](./RFC-0006-TEMPORAL-DESIGN-PATTERNS.md) (Temporal design patterns), wherever a pattern or an owner decision (T1-T20, RFC-0006 §3.1) changed a phase's design. §30 lists the changes.
+  - Amended on 2026-10-25 by [RFC-0007](./RFC-0007-APPROVALS-ON-TEMPORAL.md) (approvals): §6.2 I2, §10.1, §10.2, §17.5, §17.7, §24.2 and §24.4. §30 lists the changes.
   - Until a phase lands, [event_framework.md](./docs-internal/event_framework.md), [chat_protocol.md](./docs-internal/chat_protocol.md), [temporal-workflow-control.md](./docs-internal/temporal-workflow-control.md) and [TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md) stay normative for what it covers.
 - **Baseline:** HEAD a8e390ca (2026-10-23), temporalio 1.30.0, Temporal CLI unpinned. Line numbers are as of that date and drift; those changed on 2026-10-24 follow RFC-0006's baseline, HEAD 4f73cb10. Figures marked *est.* are unmeasured and are confirmed by the gates in §26.
 
@@ -59,7 +60,7 @@ OpenCompany's AI employees should run like the processes of an operating system 
 - Releases reach the hosted fleet together in a weekly window.
 - Instances report metrics and errors, never content.
 
-**Rollout.** Phase 0 ships nine fixes for verified defects without changing any workflow command. Phase 1 builds the replay safety net. Phase 1b ships 46 pattern fixes that need no workflow versioning (RFC-0006 §22.2). Phases 2 to 8 introduce the inbox, drivers, entities, scheduler, timers, messaging, egress and supervision, each versioned per generation. Phase 9 covers instance tiers and fleet operations. Phase 10 retires the old path. (§24)
+**Rollout.** Phase 0 ships nine fixes for verified defects without changing any workflow command. Phase 1 builds the replay safety net. Phase 1b ships the pattern fixes that need no workflow versioning (RFC-0006 §22.2), with RFC-0007's approvals track inside it. Phases 2 to 8 introduce the inbox, drivers, entities, scheduler, timers, messaging, egress and supervision, each versioned per generation. Phase 9 covers instance tiers and fleet operations. Phase 10 retires the old path. (§24)
 
 ## 2. Method and sources
 
@@ -233,7 +234,7 @@ IPC, owner chat                                                                 
 | # | Invariant | Principle |
 |---|---|---|
 | I1 | A Signal is a hint. The inbox and its cursors are the truth; every consumer reconciles from them. | 1 |
-| I2 | No request path calls Temporal or a model. Every request path ends at a durable commit. Owner actions that need Temporal (Start, Stop, Resume, Apply, approval decisions, Interrupt) write an intent row and answer at once. A background deliverer sends the Update by workflow id, with a stable id, until it is applied, and the UI shows "applying" (T10, RFC-0006 §7.3). | 2 |
+| I2 | No request path calls Temporal or a model. Every request path ends at a durable commit. Owner actions that need Temporal (Start, Stop, Resume, Apply, approval decisions, Interrupt) write an intent row and answer at once. A background deliverer sends the Update by workflow id, with a stable id, until it is applied, and the UI shows "applying" (T10, RFC-0006 §7.3). An approval decision is its own intent: after the commit its workflow is nudged, and the approvals watchdog nudges it again until it takes the decision (RFC-0007 §4.6). | 2 |
 | I3 | Every queue is bounded and names its overflow policy. Every drop is a row with a reason. | 3 |
 | I4 | One relay per stream at a time and one consumer per stream. An entity runs at most one turn, and an input belongs to exactly one turn. | — |
 | I5 | Serialize only where state is shared (an agent's conversation key). Everything else runs in parallel under class floors. | 5 |
@@ -486,7 +487,7 @@ This is the documented consumer pattern: Signal-With-Start, then commit after th
 | AgentWorkflow (input `merge_version=1`) | existing child ids (`_agent_child_workflow_id`) | the turn |
 | ScheduleFireWorkflow | Schedule actions | Schedules `cron-…` and `alarm-…` (§15) |
 | PollWorkflow | `poll-<workflow_id>-g<gen>-<node_id>` | Start and re-arm, with `USE_EXISTING` (T7, §15) |
-| ApprovalWorkflow | `approval-<id>` | approval creation; for an approvalGate node, a child of the turn (§17.5) |
+| ApprovalWorkflow | `approval-<id>` | the agent's turn, as a child, when the agent answering a chat run holds a tool call (generations with `approval_wait_version=1`, RFC-0007 §4.6); from Phase 7 also the turn, for an approvalGate node (§17.5) |
 
 Ids use the immutable workflow id, never the slug. Every new type:
 - uses `@workflow.init`;
@@ -509,7 +510,7 @@ Ids use the immutable workflow id, never the slug. Every new type:
 | AgentWorkflow | plus offered inputs, consumed ids, merges, current class, park reason | **Signals:** `offer_inputs`, `released{reason}` | From Phase 5, for generations with `scheduler_version=1` (§10.4, T18), budget suspension generalizes to parks (T11, RFC-0006 §11.8). A turn parks for its budget, provider billing or quota, a provider account problem, or a provider outage past the step budget. An outage park probes every 15 minutes on a durable timer; the others wait for `released` without a timer. Each park sets the lease `suspended` and raises an attention item. A turn parked for 7 days fails, and its input is dead-lettered with an attention item (T19) | its existing continue-as-new; the resume marker adds consumed ids, class and merges, and already carries `usage_total` (`agent_workflow.py:2997`) |
 | ScheduleFire | none | none | none | one activity: append a tick |
 | PollWorkflow | none | none | none: the activity's retry delay is the interval | one activity that never completes. Each attempt polls once, then raises a BENIGN error with `next_retry_delay`, so Temporal retries it after the interval and the history stays near zero (T7, §15) |
-| Approval | decision, revision, expiry | **Update:** `decide{decision, revision, key}`, sent by the T10 deliverer with a stable id; its validator rejects a stale revision. Undo is an Update too.<br>**Query:** `status`. | one timer over absolute deadlines: a reminder 24 h before expiry, the expiry, then the Undo window | one send activity, then `approval.decided` (C1) appended to the origin thread. A gate's run is a child of the turn and returns its outcome instead of sending (§17.5) |
+| Approval | none: the approval row is the record | **Signal:** `nudge()`, with no payload; duplicates are harmless (RFC-0007 §4.6). | one wait until the expiry, with a re-read after each nudge; from Phase 7 also a reminder 24 h before expiry | none. It returns approved, declined, expired or cancelled, and its parent runs the send. A gate's run is a child of the turn and returns its outcome (§17.5) |
 
 ### 10.3 Failure semantics
 
@@ -765,9 +766,15 @@ This covers every side-effecting plugin, not only sends (E12 as extended by T13)
 ### 17.5 Approvals
 
 - A send that needs approval is `held`.
-- ApprovalWorkflow (an Update `decide` plus a durable timer, RFC-0004 D13) sets `not_before` to the end of the Undo window and sends once. It replaces `ApprovedToolCallWorkflow`.
-- It covers four waits: the approvalGate node, the reviewed-delivery gate in `EmployeeJobWorkflow` and `AgentWorkflow`, the resolution in `EmployeeJobDeliveryWorkflow`, and held tool calls. A gate's ApprovalWorkflow is a child of the turn and returns its outcome instead of sending (RFC-0006 §9.6).
-- Decisions are written to the database first and arrive from the T10 deliverer (§6.2 I2).
+- **What it is.** ApprovalWorkflow (RFC-0007 §4.6; RFC-0004 D13) waits on the approval row. A nudge Signal or the expiry wakes it; it re-reads the row and returns approved, declined, expired or cancelled. Its parent runs the send once.
+- **When it arrives.** Before Phase 7, for held tool calls: those of the agent answering a chat run, in generations with `approval_wait_version=1`. `ApprovedToolCallWorkflow` stays for drafts and for Retry. Drafts are older generations, runs that answer no chat run, and CLI and in-process calls.
+- **Phase 7** moves three more waits onto it (`approval_wait_version=2`):
+  - the approvalGate node;
+  - the reviewed-delivery gate in `EmployeeJobWorkflow` and `AgentWorkflow`;
+  - the resolution in `EmployeeJobDeliveryWorkflow`.
+
+  A gate's ApprovalWorkflow is a child of the turn and returns its outcome instead of sending (RFC-0006 §9.6). Phase 7 keeps the outbox.
+- **Decisions** are written to the database first; the workflow is then nudged. The approvals watchdog nudges again any decided row still not consumed after 10 s. For approval decisions this is all of T10's deliverer (RFC-0007 §5).
 - Stop completes while a draft waits (T12, RFC-0006 §3.1). A decision taken while the employee is stopped is recorded at once, and its send waits for Resume.
 - One reminder goes out 24 h before expiry, as an attention item. Drafts whose whole life is 24 h or less get none.
 - Approved sends go out in the order the owner decides them.
@@ -781,10 +788,10 @@ This covers every side-effecting plugin, not only sends (E12 as extended by T13)
 ### 17.7 Content rules (T15)
 
 Every outgoing message passes content rules before it is sent, even with Ask first off (T15, RFC-0006 §3.1). A match holds the message for the owner. Rules only ever add a hold; they never let a held message through.
-- **Built-in rules:** the message contains a saved credential, contains a secret-shaped token, or goes to a recipient outside the conversation. The recipient rule never applies to owner chat.
+- **Built-in rules:** the message goes to a recipient outside the conversation. The recipient rule never applies to owner chat. The saved-credential and secret-token rules were dropped by the owner on 2026-10-25 (RFC-0007 §3).
 - **Owner rules:** the owner can add and edit their own rules.
 - **Records.** The outbox row records `held_reason`: the rule id, never the matched secret. The model is not told which rule fired, so a prompt-injected model cannot learn to split a secret across messages.
-- **Rollout.** The credential and token rules ship in Phase 1b at today's hold points (1b.7). The recipient rule and owner rules ship in Phase 7: the recipient rule needs per-thread histories (Phase 4b), and owner rules need the outbox to cover every send (RFC-0006 §16.9).
+- **Rollout.** The recipient rule and owner rules ship in Phase 7: the recipient rule needs per-thread histories (Phase 4b), and owner rules need the outbox to cover every send (RFC-0006 §16.9). The approval gate reaches them through the approvals service in one line.
 
 ## 18. Supervision, observability and telemetry
 
@@ -1080,14 +1087,14 @@ No Temporal payload can exceed a limit (C1), and the body is never broadcast.
 |---|---|
 | 0 | Nine independent fixes without workflow-command changes:<br>• 0.1 webhook route table, 401/404/405 and empty path (C3);<br>• 0.2 scoped task events (H11);<br>• 0.3 body cap and the undrained queue (C1, N11);<br>• 0.4 Start once per generation (C4);<br>• 0.5 Telegram backlog (N1);<br>• 0.6 PostgreSQL chat lane (N6);<br>• 0.7 Discord public ingress (N4);<br>• 0.8 Twitter receive (N5);<br>• 0.9 broadcast audience (N7). |
 | 1 | Safety net:<br>• fixture recorder and replay gate;<br>• golden identity test;<br>• pinned Temporal CLI (RFC-0004 D1);<br>• `TEMPORAL_TEST_CLI` in CI;<br>• fairness and one task-queue partition on the dev server, in the fresh-start release (T17). |
-| 1b | Pattern fixes that need no workflow versioning, before Phase 2 (RFC-0006 §22.2). 46 items, one commit each, in seven tracks in priority order:<br>• side effects never happen twice: effect classes and the redo guard (1b.1), cancellation re-raised (H2), approved sends wait while stopped, built-in content rules;<br>• waits survive restarts: the Timer node, reviewed delivery, gate expiry;<br>• lifecycle and cancellation: agent children with `REQUEST_CANCEL`, the bug guard, bounded Update calls, poll activity options and page bounds, a slim agent carry;<br>• compensation and Reset;<br>• errors and retries: LLM attempt deadlines, non-retryable step bugs, BENIGN retries;<br>• platform and workers: the Start-snapshot secret fix, named dev-server ports, one worker builder, SDK metrics, the loop-lag watchdog;<br>• lints, tests and docs. |
+| 1b | Pattern fixes that need no workflow versioning, before Phase 2 (RFC-0006 §22.2), one commit each, simplified on 2026-10-25 (safeguards stay in their services; plugins change only to self-register or to fix their own bug), plus RFC-0007's approvals track, versioned per generation:<br>• side effects never happen twice: the repeat table and the redo guard (1b.1), cancellation re-raised (H2), approved drafts wait while stopped;<br>• approvals (RFC-0007, in batch A after 1b.2): for generations with `approval_wait_version=1`, the held tool calls of chat runs wait in the turn on ApprovalWorkflow, with modes, classes and always-allow rules, and graph gates stop holding Stop;<br>• waits survive restarts: the Timer node's text, reviewed delivery, gate expiry;<br>• lifecycle and cancellation: the bug guard, bounded Update calls, poll deadlines and a byte cap, a slim agent carry;<br>• compensation and Reset;<br>• errors and retries: LLM-step fixes, non-retryable step bugs, BENIGN retries, the retry alert with attention items;<br>• platform and workers: the Start-snapshot secret fix, named dev-server ports and netpolicy, one main-queue registration, a stuck-runs item, a loop-lag watchdog that logs;<br>• tests and docs. |
 | 2 | Durable ingress and router delivering to today's controllers by known id (H1, N3, N9):<br>• WAL on `workflow.db`;<br>• bus tables and both drivers;<br>• rollout per source behind `EVENT_INGRESS_MODE`, after a shadow soak that compares Visibility targets with registry targets. |
 | 3 | Drivers with durable acks (N1, N2, M3):<br>• registry and leases;<br>• Telegram offsets;<br>• the edgymeow gRPC protocol with outbox and `SynchronousAck` (cross-repo);<br>• Discord catch-up;<br>• polls as retried activities (T7) in a sandboxed PollWorkflow, with BENIGN retries logged at DEBUG;<br>• send idempotency keys, and provider idempotency keys for other writes where providers offer them (RFC-0006 §11.2). |
 | 4 | Entities for new generations (`event_os_version=1`):<br>• supervisor, conversation entity, turn mode, merge points;<br>• chat as the entity's single writer;<br>• 4b: customer channels and per-thread histories;<br>• RFC-0006 additions (§22.3): the stream cursor as start input, turn numbers from admission and the close sequence; no owner-chat debounce (T9); the T10 deliverer; priority keys at every start site; `placement_version=1` routing and the frozen dispatch map; relief before every LLM step and the consuming save that raises; sandboxed types with progress as local activities; Apply for new generations; slow-turn alerts (T19) and the 24-hour no-progress backstop (a default); one timer over absolute deadlines in each new type, and the instance-wide upkeep sweep. |
 | 5 | Scheduler and budgets:<br>• class queues with fixed slots and explicit routes for LLM and compaction steps, Priority and fairness;<br>• admission as the only floor; per-credential buckets;<br>• daily ledger, holds, pause, midnight resume;<br>• RFC-0006 additions (§22.3): the LLM step budget and parking for new generations, under `scheduler_version=1` (T11, T18, T19); HTTP retry details; own-key spend per attempt; budget timers spread over 10 minutes; namespace retention and search attributes at creation. |
 | 6 | Timers and messaging:<br>• cron Schedules by immutable ids with `on_busy` (H6, M2);<br>• alarms and follow-ups;<br>• employee messaging;<br>• watched data;<br>• storm guards;<br>• RFC-0006 additions (§22.3): alarms join the supervisor's one timer; the durable Timer node behind a flag; delegation permits in admission and the team-task cap; versioned `alarms_changed`. |
-| 7 | Egress and approvals:<br>• outbox, buckets, `unknown`;<br>• ApprovalWorkflow;<br>• audience-scoped broadcasts;<br>• RFC-0006 additions (§22.3): ApprovalWorkflow for all four waits, with the T10 deliverer, Stop not waiting for drafts (T12) and one reminder; owner and recipient content rules (T15); sends on their own `egress` queue, with the token before the claim; checkpointed external job ids. |
-| 8 | Supervision:<br>• restart intensity, quarantine, degraded mode;<br>• attention items;<br>• metrics, timeline;<br>• RFC-0006 additions (§22.3): attention items in the employee summary for parked turns, slow turns, expiring approvals and stuck retries (which 1b.30 already raises on the instance); the attempt-threshold metric; gen_ai metric names; core logs at WARN; activity summaries without user text. |
+| 7 | Egress and approvals:<br>• outbox, buckets, `unknown`;<br>• ApprovalWorkflow, which held tool calls use from RFC-0007 on, for the approvalGate node and reviewed delivery (`approval_wait_version=2`);<br>• audience-scoped broadcasts;<br>• RFC-0006 additions (§22.3): Stop not waiting for drafts (T12) and one reminder; owner and recipient content rules (T15), which the approval gate reaches through the approvals service; sends on their own `egress` queue, with the token before the claim; checkpointed external job ids. |
+| 8 | Supervision:<br>• restart intensity, quarantine, degraded mode;<br>• attention items;<br>• metrics, timeline;<br>• RFC-0006 additions (§22.3): attention items in the employee summary for parked turns, slow turns, expiring approvals and stuck retries (which 1b.30 already raises on the instance); the attempt-threshold metric; gen_ai metric names; core logs at WARN; activity summaries without user text; the SDK metrics runtime and its four alerts, moved from 1b.38. |
 | 9 | Instance tiers and fleet:<br>• 9a: pinned versions, the weekly-window upgrader with rollback, telemetry, staging, backups;<br>• 9b: PostgreSQL in hosted instances, Alembic, the advisory-lock replacement (N8, N10);<br>• 9c: tier L server, the S-to-L move, load tests;<br>• RFC-0006 additions (§22.3): the upgrade replays open runs before workers poll and marks failures "needs Reset" (T14); the EG14 capacity driver; the rollback check that relies on dormant patches (§24.3); opt-in spans with the telemetry content filter; T8's worker split on hosted tier S, per instance once every live generation carries `placement_version=1`. |
 | 10 | Retirement:<br>• R_k: new generations default to the new path;<br>• R_k+1: old generations are upgraded at boot (drain at the Stop checkpoint, then Reset and Start with the same snapshot and conversation store, with a notice);<br>• R_k+2: remove Visibility emit, the poll-coroutine registry and the legacy listener registrations once none is open. |
 
@@ -1101,8 +1108,9 @@ RFC-0006 §22.3 lists what each phase gains in full, with the owning sections, P
   - a size guard on child input (C1);
   - poll loops re-raise cancellation (H8);
   - a slim continue-as-new carry (H10);
-  - from RFC-0006 §22.4: poison events dead-lettered after 5 spawn attempts, with spawn backoff; stable execution-control Update ids and slim Update results; `register_trigger` hardening and triggers in the start input; seen keys carried as digests; the trigger filter and status broadcasts as local activities behind a patch; the rollover request to every live controller at the first boot of each release, once the slim carry and the cancellation fix have shipped; graph approval gates that stop holding Stop, behind the generation flag `approval_wait_version=1`.
+  - from RFC-0006 §22.4: poison events dead-lettered after 5 spawn attempts, with spawn backoff; stable execution-control Update ids and slim Update results; `register_trigger` hardening and triggers in the start input; seen keys carried as digests; the trigger filter and status broadcasts as local activities behind a patch; the rollover request to every live controller at the first boot of each release, once the slim carry and the cancellation fix have shipped. Graph approval gates that stop holding Stop moved into Phase 1b with RFC-0007.
 - Cancellation, after Phase 1b and before Phase 4 (RFC-0006 §22.4):
+  - 1b.12: agent children request cancellation (`REQUEST_CANCEL`, `WAIT_CANCELLATION_COMPLETED`), with the re-raise that stops a plain agent on the cancel (`agent-delegation-drain-v1`);
   - MachinaWorkflow and AgentWorkflow cancel and drain their running work, with a 2-minute bound, behind a patch;
   - one failure policy: running nodes finish and nothing new starts;
   - the delegation-window fix, and child-start failures as node failures.
@@ -1159,10 +1167,23 @@ Phase 1 ended on 2026-10-24. Commit 49177427 came from another session.
 **Phase 1b** (RFC-0006 §22.2; started 2026-10-25).
 - The owner's answers of 2026-10-24 and 2026-10-25 and a plan check on 2026-10-25 set its scope and order.
 - 1b.12 moved into RFC-0006's cancellation lane, where it ships with the re-raise that lets a plain agent stop on a cancel (RFC-0006 §6.2 R1, §22.4).
+- **The owner's direction of 2026-10-25 simplified it:** safeguards stay in their services; plugins change only to self-register or to fix their own bug; each item takes the simplest change. As a result:
+  - 1b.4, 1b.7, 1b.40, 1b.41 and 1b.44 are dropped;
+  - 1b.6 merges into 1b.5, and 1b.38a into 1b.30;
+  - 1b.8 keeps only its text.
+
+  RFC-0006 §22.2 gives each item's scope.
+- **RFC-0007 (approvals)** was written as b3b7cdf3, then checked against the code and revised as 554cf308, both on 2026-10-25.
+  - Its steps AP.1-AP.6 run in batch A, after 1b.2. AP.7 starts writing its flag one release later.
+  - It shrinks 1b.5 to drafts and Retry, and 1b.14 does not count time spent waiting on an approval (RFC-0007 §6).
+  - The Codex launch fix left it: Codex never starts, so making it run is its own item.
 
 | Item | Commit | Notes |
 |---|---|---|
-| 1b.11 Cancel-path fixtures | this commit | `fixtures/0.3.1-cancel/`: 6 scenarios, 16 histories, recorded from a9ee667 on temporalio 1.30.0 and CLI 1.9.1. They cover:<br>• a root cancelled while its agent child runs, uncontrolled and controlled;<br>• an uncontrolled branch failure;<br>• a cancelled Task Manager runner whose assignee turns the cancel into a tool error;<br>• the same runner cancelled while its generation is stopped;<br>• a stopped team job cancelled before its lead starts.<br>They replay on 1.30 and 1.34. |
+| 1b.11 Cancel-path fixtures | 0194d836 | `fixtures/0.3.1-cancel/`: 6 scenarios, 16 histories, recorded from a9ee667 on temporalio 1.30.0 and CLI 1.9.1. They cover:<br>• a root cancelled while its agent child runs, uncontrolled and controlled;<br>• an uncontrolled branch failure;<br>• a cancelled Task Manager runner whose assignee turns the cancel into a tool error;<br>• the same runner cancelled while its generation is stopped;<br>• a stopped team job cancelled before its lead starts.<br>They replay on 1.30 and 1.34. |
+| WhatsApp and Drive downloads | 276d833b | A security fix outside the numbered items. WhatsApp media files stay inside the workspace, and the WhatsApp and Drive downloads check their URLs through `services/netpolicy.py` (`fetch_policy`, `resolved_url_block_reason`), which 1b.33 reuses for the HTTP request node. |
+| 1b.45a The patch rule in CLAUDE.md | 24c2907f | CLAUDE.md's durability contract says option and retry-policy changes need no patch (RFC-0006 §5 rule 6). The rest of 1b.45 runs last. |
+| 1b.1a The repeat table | f76b1dc3 | `services/approvals/repeats.py`: `REPEATABLE`, `REPEATABLE_WHEN` and `repeatable(node_cls, data, *, tool_call)`. An unlisted node type is unsafe to repeat, and no plugin declares anything; this replaces RFC-0006's per-plugin effect classes. 1b.1b calls it. |
 
 ## 25. Defaults chosen and open items
 
@@ -1335,3 +1356,17 @@ RFC-0006 §20 gives each change with its basis.
 - Header: Phase 1b in progress.
 - §10.1, the turn row: the turn's agent children get their policies through 1b.12, which the owner moved into RFC-0006's cancellation lane together with the re-raise of a cancelled tool call.
 - §24.4: a Phase 1b progress table.
+
+**2026-10-25, RFC-0007 and the Phase 1b simplification** ([RFC-0007](./RFC-0007-APPROVALS-ON-TEMPORAL.md); owner decisions D1-D19 in its §3):
+- **Header:** RFC-0007 named.
+- **§1:** Phase 1b without a fixed count, with RFC-0007's track inside it.
+- **§6.2 I2:** an approval decision is delivered by a nudge after its database write.
+- **§10.1, §10.2:** ApprovalWorkflow in its nudge-and-re-read form, as the child of a chat run's turn for held tool calls.
+- **§17.5:** ApprovalWorkflow arrives before Phase 7, for tool calls; Phase 7 moves the gate and reviewed delivery onto it.
+- **§17.7:** no built-in key checks (owner, 2026-10-25).
+- **§24.2:**
+  - Phase 1b's simplified scope and the approvals track;
+  - graph gates leave the controller lane;
+  - 1b.12 joins the cancellation lane;
+  - Phases 7 and 8.
+- **§24.4:** the simplification, RFC-0007 and its check, and rows for 276d833b, 24c2907f and f76b1dc3.
