@@ -113,6 +113,15 @@ def test_every_worker_registers_the_workflow_and_its_activities() -> None:
     assert names == ["approvals.claim_send", "approvals.record_outcome"]
 
 
+def test_an_approved_send_has_one_attempt() -> None:
+    # The redo guard (services/approvals/tool_calls.py) leaves an approved
+    # send to the workflow that claimed it: a second attempt would read as
+    # not sent when it may have gone out.
+    from services.temporal.approved_tool_call_workflow import SEND_ONCE
+
+    assert SEND_ONCE.maximum_attempts == 1
+
+
 def test_the_send_workflow_on_temporal() -> None:
     completed = subprocess.run(
         [sys.executable, "-m", "tests.temporal.test_approved_tool_call_workflow"],

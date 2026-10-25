@@ -10,7 +10,7 @@ on its way) or ``recent`` (everything, newest first); default ``pending``.
 
 ``decide_approval {approval_id, decision, decision_key, text?, subject?,
 confirm?}`` -> ``{approval, idempotent?, will_send_on_resume}``. Decisions:
-``send``, ``undo``, ``discard``, ``restore``, ``retry``
+``send``, ``undo``, ``discard``, ``restore``, ``retry``, ``dismiss``
 (services/approvals/decisions.py). Sending a held tool call starts its send
 (services/approvals/execution.py). Errors: ``already_decided``,
 ``expired``, ``cancelled``, ``too_late``, ``confirm_required``,
@@ -35,6 +35,7 @@ from fastapi import WebSocket
 
 from core.logging import get_logger
 from services.approvals import decisions, execution, rules, store, waiter
+from services.approvals.contract import APPROVAL_KINDS
 from services.approvals.listeners import change_of, notify_approval_changed
 from services.approvals.reconcile import reconcile_once
 from services.authz.ws_surface import execution_principal
@@ -45,7 +46,7 @@ logger = get_logger(__name__)
 MAX_LIST = 100
 _ROW_STATUSES = ("pending", "approved", "sending", "sent", "failed", "discarded", "expired", "cancelled")
 #: The lifecycle stage each decision announces.
-_STAGES = {"send": "decided", "discard": "decided", "undo": "undone", "restore": "restored", "retry": "decided"}
+_STAGES = {"send": "decided", "discard": "decided", "undo": "undone", "restore": "restored", "retry": "decided", "dismiss": "cancelled"}
 
 
 def _now() -> str:
@@ -86,7 +87,7 @@ async def handle_list_approvals(data: Dict[str, Any], websocket: WebSocket) -> D
     owner = execution_principal(data, websocket)
     workflow_id = str(data.get("workflow_id") or "").strip() or None
     run_id = str(data.get("run_id") or "").strip() or None
-    kind = data.get("kind") if data.get("kind") in ("gate", "tool_call") else None
+    kind = data.get("kind") if data.get("kind") in APPROVAL_KINDS else None
     status = data.get("status")
     limit = _limit(data)
     if status == "open":

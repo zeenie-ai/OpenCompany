@@ -80,15 +80,19 @@ def node_activity_name(node_type: str) -> Optional[str]:
 
 
 def node_context(row: Any, token: str) -> Dict[str, Any]:
-    """What the node's activity runs with."""
+    """What the node's activity runs with. A graph node's card (no agent)
+    keeps what it sent with its templates already resolved: it runs with no
+    graph, so nothing resolves again and blanks it, and with no tool
+    arguments, so a tool node keeps the saved operation."""
+    graph = not row.agent_node_id
     return {
         "node_id": row.tool_node_id or row.node_id,
         "node_type": row.node_type,
         "node_data": dict(row.node_data or {}),
-        "tool_args": dict(row.args or {}),
+        **({} if graph else {"tool_args": dict(row.args or {})}),
         "inputs": {},
-        "nodes": [],
-        "edges": [],
+        "nodes": None if graph else [],
+        "edges": None if graph else [],
         "workflow_id": row.workflow_id,
         "session_id": row.workflow_id,
         "execution_id": row.execution_id,
@@ -184,9 +188,10 @@ async def record_outcome(database: Any, approval_id: str, token: str, outcome: s
 
 def update_note(row: Any) -> Optional[str]:
     """The ``[update]`` line the employee reads about one of its drafts."""
+    maybe = "may or may not have happened" if row.kind == "effect" else "may or may not have gone out"
     result = {
         "sent": "sent",
-        "failed": "not sent" if row.outcome == "not_sent" else "may or may not have gone out",
+        "failed": "not sent" if row.outcome == "not_sent" else maybe,
         "discarded": "discarded by the owner",
         "expired": "expired unsent",
         "cancelled": "cancelled unsent",

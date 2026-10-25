@@ -12,6 +12,9 @@
 - **retry** (failed -> approved): a held call whose send failed goes again
   after a new grace. When it broke off mid-way it may have gone out already,
   so a retry then needs ``confirm``.
+- **dismiss** (failed -> cancelled): an ``effect`` row, a call that broke
+  off midway and may have happened, once the owner has checked it. Nothing
+  runs.
 
 Each decision is a compare-and-swap on the row's revision, recorded with its
 ``decision_key`` in the same transaction (``approval_decisions``): the same
@@ -32,7 +35,7 @@ from services.approvals import store
 from services.approvals.contract import DEFAULT_TIMEOUT_HOURS, RESTORE_SECONDS, UNDO_SECONDS
 from services.approvals.listeners import change_of, notify_approval_changed
 
-DECISIONS = ("send", "undo", "discard", "restore", "retry")
+DECISIONS = ("send", "undo", "discard", "restore", "retry", "dismiss")
 #: Why a decision on a row that already moved on was refused.
 SETTLED_ERRORS = {
     "approved": "already_decided",
@@ -161,6 +164,10 @@ async def decide(
         if row.status != "discarded" or restore is None or restore <= now:
             raise DecisionRefused("too_late", "It can no longer be restored.")
         moved = await _move(database, row, ("discarded",), "pending", {"restore_until": None, "decided_at": None}, record)
+    elif decision == "dismiss":
+        if kind != "effect" or row.status != "failed":
+            raise DecisionRefused("invalid_request", "Only a call that may have happened can be dismissed.")
+        moved = await _move(database, row, ("failed",), "cancelled", {"decided_at": now, "decision_key": decision_key}, record)
     else:  # retry
         if kind != "tool_call" or row.status != "failed":
             raise DecisionRefused("invalid_request", "Only a send that failed can be tried again.")

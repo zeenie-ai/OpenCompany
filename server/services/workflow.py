@@ -221,24 +221,10 @@ class WorkflowService:
         fields like ``auto_rebind_tools`` through without adding a
         dedicated parameter per flag.
         """
-        # Resolve slug from DB if caller passed only workflow_id.
-        if workflow_slug is None:
-            workflow_slug = await self._resolve_workflow_slug(workflow_id)
-        workspace_dir = self._get_workspace_dir(workflow_slug)
-        context = {
-            "nodes": nodes,
-            "edges": edges,
-            "session_id": session_id,
-            "execution_id": execution_id,
-            "workflow_id": workflow_id,  # UUID — stable system identity, FK target
-            "workflow_slug": workflow_slug,  # Human-readable, mutable on rename
-            "user_id": str(user_id or "owner"),
-            "workspace_dir": workspace_dir,  # Per-workflow filesystem for nodes and agents
-            "get_output_fn": self.get_node_output,
-            "outputs": outputs or {},  # Upstream node outputs for data flow (e.g., taskTrigger -> chatAgent)
-        }
-        if extras:
-            context.update(extras)
+        context = await self._node_run_context(
+            nodes=nodes, edges=edges, session_id=session_id, execution_id=execution_id, workflow_id=workflow_id,
+            workflow_slug=workflow_slug, outputs=outputs, extras=extras, user_id=user_id,
+        )
         recorded_pi_admission = context.get("pi_harness_version") == 1
         from temporalio import activity
         if not activity.in_activity() and context.get("coding_native_version") != 1:
@@ -296,6 +282,68 @@ class WorkflowService:
             context=context,
             resolve_params_fn=self._param_resolver.resolve,
         )
+
+    async def _node_run_context(
+        self,
+        *,
+        nodes: Optional[List[Dict]],
+        edges: Optional[List[Dict]],
+        session_id: str,
+        execution_id: Optional[str],
+        workflow_id: Optional[str],
+        workflow_slug: Optional[str],
+        outputs: Optional[Dict[str, Any]],
+        extras: Optional[Dict[str, Any]],
+        user_id: str,
+    ) -> Dict[str, Any]:
+        """The context a node runs in (:meth:`execute_node`)."""
+        # Resolve slug from DB if caller passed only workflow_id.
+        if workflow_slug is None:
+            workflow_slug = await self._resolve_workflow_slug(workflow_id)
+        workspace_dir = self._get_workspace_dir(workflow_slug)
+        context = {
+            "nodes": nodes,
+            "edges": edges,
+            "session_id": session_id,
+            "execution_id": execution_id,
+            "workflow_id": workflow_id,  # UUID — stable system identity, FK target
+            "workflow_slug": workflow_slug,  # Human-readable, mutable on rename
+            "user_id": str(user_id or "owner"),
+            "workspace_dir": workspace_dir,  # Per-workflow filesystem for nodes and agents
+            "get_output_fn": self.get_node_output,
+            "outputs": outputs or {},  # Upstream node outputs for data flow (e.g., taskTrigger -> chatAgent)
+        }
+        if extras:
+            context.update(extras)
+        return context
+
+    async def prepare_node_parameters(
+        self,
+        node_id: str,
+        node_type: str,
+        parameters: Dict[str, Any],
+        nodes: List[Dict] = None,
+        edges: List[Dict] = None,
+        session_id: str = "default",
+        execution_id: str = None,
+        workflow_id: str = None,
+        workflow_slug: str = None,
+        outputs: Dict[str, Any] = None,
+        extras: Optional[Dict[str, Any]] = None,
+        user_id: str = "owner",
+    ) -> Dict[str, Any]:
+        """The parameters :meth:`execute_node` would run a node with, its
+        templates resolved but no API keys added, without running it. A card
+        that keeps what a graph node sent rebuilds it here
+        (services/approvals/tool_calls.py)."""
+        context = await self._node_run_context(
+            nodes=nodes, edges=edges, session_id=session_id, execution_id=execution_id, workflow_id=workflow_id,
+            workflow_slug=workflow_slug, outputs=outputs, extras=extras, user_id=user_id,
+        )
+        params, _ = await self._node_executor.prepare_parameters(
+            node_id, node_type, parameters, context, resolve_params_fn=self._param_resolver.resolve, inject_keys=False,
+        )
+        return params
 
     async def _execute_pi_coding_node(self, node_id: str, parameters: dict, context: dict, *, check_admission: bool = True) -> dict:
         """Admit an isolated manual Coding Agent invocation into Temporal."""

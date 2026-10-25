@@ -91,7 +91,7 @@ def workspace_runtime(monkeypatch):
     check_access = AsyncMock()
     monkeypatch.setattr(permissions, "assert_runtime_access", check_access)
     monkeypatch.setattr(tool_calls, "check", AsyncMock(return_value=tool_calls.Checked()))
-    monkeypatch.setattr(tool_calls, "resend_refusal", lambda *args: None)
+    monkeypatch.setattr(tool_calls, "redo_refusal", AsyncMock(return_value=None))
     monkeypatch.setattr(steps, "run_stopped", AsyncMock(return_value=False))
     monkeypatch.setattr(steps, "begin", lambda *args: None)
     monkeypatch.setattr(steps, "end", AsyncMock())

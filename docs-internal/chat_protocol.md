@@ -157,9 +157,9 @@ chat reducer remain terminal even when a control snapshot is present.
 
 | Handler | Request | Response |
 |---|---|---|
-| `list_approvals` | `{workflow_id?, status?: <row status> \| "open" \| "recent", run_id?, kind?: "gate" \| "tool_call", limit? (at most 100)}`; `status` defaults to `pending` | `{success, approvals, counts: {workflow_id: pending}, server_time}` |
+| `list_approvals` | `{workflow_id?, status?: <row status> \| "open" \| "recent", run_id?, kind?: "gate" \| "tool_call" \| "effect", limit? (at most 100)}`; `status` defaults to `pending` | `{success, approvals, counts: {workflow_id: pending}, server_time}` |
 | `get_approvals` | `{approval_ids}` (at most 100) | `{success, approvals, server_time}` |
-| `decide_approval` | `{approval_id, decision: "send" \| "undo" \| "discard" \| "restore" \| "retry", decision_key, text?, subject?, confirm?}` | `{success, approval, idempotent?, will_send_on_resume}` |
+| `decide_approval` | `{approval_id, decision: "send" \| "undo" \| "discard" \| "restore" \| "retry" \| "dismiss", decision_key, text?, subject?, confirm?}` | `{success, approval, idempotent?, will_send_on_resume}` |
 | `get_ask_first` | `{workflow_id}` | `{success, workflow_id, ask_first: bool \| null, revision}` (null: the workflow has no rule) |
 | `set_ask_first` | `{workflow_id, ask_first, expected_revision?}` | `{success, workflow_id, ask_first, revision, replies_gated, needs_apply}`; `rule_conflict` (with the current value) when it moved |
 
@@ -170,7 +170,7 @@ and workflows answer; any other id reads as `not_found`. `decide_approval` error
 broke off), `approval_conflict`, `send_unavailable` (nothing could start the send; the draft is back as it was),
 `not_found`, `invalid_request`. The same `decision_key` again answers `idempotent` with the row as it is.
 
-**ApprovalSummary**: `{approval_id, workflow_id, node_id, kind: "gate" | "tool_call", status, channel,
+**ApprovalSummary**: `{approval_id, workflow_id, node_id, kind: "gate" | "tool_call" | "effect", status, channel,
 channel_label, action?, recipient, recipient_label, body, subject?, context_excerpt?, details: [{label, value}],
 created_at, expires_at, revision, max_length, editable, approved_by?: "owner" | "auto", edited?, undo_until?,
 restore_until?, consumed_at?, outcome?: {certainty: "sent" | "not_sent" | "unknown", error?, at?},
@@ -538,7 +538,9 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   first time anything asks (a seeder the employees package registers), and a change is mirrored back into those
   rules and the employee's card. A workflow with no row (one built in the editor) has no rule: its tool calls run
   as before, and its approval gates wait for the owner as they always did.
-- **Two kinds of draft.** A `gate` row is an approvalGate node holding its run (an app reply). A `tool_call` row is
+- **Two kinds of draft, and one card for what may have happened.** A `gate` row is an approvalGate node holding its
+  run (an app reply). An `effect` row is a call that broke off midway and may have happened (see "At most once"
+  below); the owner checks it and dismisses it. A `tool_call` row is
   a call to a tool whose plugin declares an `approval` spec (`services/plugin/approval.py`: which operations send,
   who it goes to, the body and subject the owner may edit, the card's other lines). `BaseNode.as_activity` checks
   every agent tool call (`services/approvals/tool_calls.py`): with Ask first on, a call that sends does not run; its
@@ -556,8 +558,8 @@ What an employee sends to someone waits for the owner's OK while its workflow as
 - **Decisions** (`services/approvals/decisions.py`), each a compare-and-swap on the row's revision recorded in
   `approval_decisions`: `send` (pending -> approved; it goes after `UNDO_SECONDS`, 5, and Undo works until then),
   `undo` (approved -> pending), `discard` (pending -> discarded; Restore works for `RESTORE_SECONDS` on a gate's draft,
-  whose run waits that long, and until expiry for a held call), `restore` and `retry` (failed -> approved; when the
-  send broke off it may have gone, so the owner confirms). A gate waits through the Undo and Restore windows before
+  whose run waits that long, and until expiry for a held call), `restore`, `retry` (failed -> approved; when the
+  send broke off it may have gone, so the owner confirms) and `dismiss` (an `effect` row: failed -> cancelled). A gate waits through the Undo and Restore windows before
   it lets the draft through or not.
 - **Sending a held call.** Send starts `ApprovedToolCallWorkflow` (`approval-send-<id>-r<revision>`): it sleeps until
   the Undo window closes, claims the row at that revision (`approvals.claim_send`: approved -> sending; an Undo, a
@@ -565,14 +567,21 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   the outcome (`approvals.record_outcome`): `sent`, `not_sent`, or `unknown` when the activity broke off. The node's
   activity runs only under that claim. The first time the drafts are listed after a start, sends that never started
   are started again and sends that never reported end `failed` with an unknown outcome.
-- **At most once.** Temporal runs a tool activity again only when an attempt broke off (the worker stopped, a
-  timeout); a failure the node reports comes back as a result and is not retried. A later attempt of an agent's call
-  that sends (Ask first off, or no rule) therefore does not send again (`tool_calls.resend_refusal`, checked in
-  `BaseNode.as_activity` after the gate): the model reads `SendOutcomeUnknown` (it may have gone out), and a call
-  answering the owner in the chat is recorded with outcome `unknown`, so the card offers Try again behind a
-  confirmation. Held calls are drafts, made once per call, and still retry.
+- **At most once.** Temporal runs an activity again only when an attempt broke off (the worker stopped, a timeout);
+  a failure the node reports comes back as a result and is not retried. A later attempt runs only a call that is
+  safe to repeat (`services/approvals/repeats.py`: reads, waits, keyed calls, operations that do the same thing
+  twice); any other call is not run again (`tool_calls.redo_refusal`, checked in `BaseNode.as_activity` after the
+  approvals check, in the Coding Agent's workspace tools and in the legacy node activity). It answers
+  `SendOutcomeUnknown` (a send the card can show: it may have gone out) or `OutcomeUnknown` (it may have happened),
+  and `tool_calls.record_unknown` leaves the owner a card with outcome `unknown`: a `tool_call` row for such a send,
+  with Send again behind a confirmation, else an `effect` row with Dismiss (`dismiss`: failed -> cancelled), which
+  shows what the call ran with, without secrets. A graph node's answer carries `requires_user_action` and a `hint`,
+  so its employee pauses at once, and its employee reads an `[update]` note; a graph node's send keeps what it sent,
+  its templates resolved and its secrets left out, so Send again resends it and the node's settings put the secrets
+  back. Held calls are drafts, made once per call, and still retry.
 - **The employee hears how it went**: an `[update]{...}[/update]` note (`approval:<id>`) at the start of its next
-  turn in the chat, for a send that went, failed, was discarded or expired.
+  turn in the chat, for a send that went, failed, was discarded or expired, and for a graph node's call that may
+  have happened.
 - **In the chat.** A draft made answering the owner is recorded on the run (`parts.approvals`) and shown at once (an
   `activity.snapshot` with `activity_type: "approval"`); its card sits on that reply. A draft made in a run a button
   press started (its owner message carries `meta.ui_event`) records that interface (`ui_part_id`,
@@ -580,8 +589,9 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   gate's, from the employee's own work) show after the conversation. The card (`features/chat/approval/`): Discard /
   Edit / Send while it waits, "Sends in Ns" with Undo, Sending, Sent (and when, and whether Ask first was off),
   Restore while it can, Try again (asking first when it may have gone), and "Sends when you resume" for a gate's
-  draft whose employee is paused. Countdowns use the server's clock (`server_time`). Ctrl/Cmd+Enter sends the newest
-  waiting draft; in the edit box it sends that one.
+  draft whose employee is paused. An `effect` card has no recipient and no message: "{name} tried to …", May have
+  happened, and Dismiss only (Dismissed afterwards). Countdowns use the server's clock (`server_time`).
+  Ctrl/Cmd+Enter sends the newest waiting draft; in the edit box it sends that one.
 - **Ends.** Clearing or resetting the chat cancels the drafts its runs made that still wait, and their failed sends,
   whose Try again would send from a conversation that is gone; a Reset cancels the waiting gates too
   (`approvalGate.reset_execution_state`); deleting the workflow deletes its drafts and its rule. Leaving a branch

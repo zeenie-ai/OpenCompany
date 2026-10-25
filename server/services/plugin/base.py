@@ -1215,24 +1215,26 @@ class BaseNode:
                 node_data = checked.node_data
             if checked.tool_args is not None:
                 context = {**context, "tool_args": checked.tool_args}
-            # A send runs at most once: a later attempt (the one before broke
-            # off) answers that it may have gone out instead of sending again.
-            resend = approval_calls.resend_refusal(context, cls, node_data)
-            if resend is not None:
+            # A call runs at most once unless it is safe to repeat: a later
+            # attempt (the one before broke off) answers that it may already
+            # have happened, and the owner gets a card.
+            redo = await approval_calls.redo_refusal(context, cls, node_data)
+            if redo is not None:
                 result = {
                     "node_id": node_id,
                     "node_type": cls.type,
                     "execution_id": execution_id,
                     "timestamp": datetime.now().isoformat(),
-                    **resend,
+                    **redo,
                 }
-                if checked.record is not None:
-                    await checked.record(result, unknown=True)
-                await chat_steps.end(chat_step, state="failed", detail="It may already have gone out")
+                await approval_calls.record_unknown(context, cls, node_data, result, checked=checked)
+                sent = redo["error_type"] == "SendOutcomeUnknown"
+                await chat_steps.end(chat_step, state="failed", detail="It may already have gone out" if sent else "It may already have happened")
                 await broadcaster.update_node_status(
                     node_id,
                     "error",
-                    {"error": resend["error"], "execution_id": execution_id},
+                    {"error": redo["error"], "execution_id": execution_id,
+                     **{key: redo[key] for key in ("hint", "requires_user_action", "error_type") if key in redo}},
                     workflow_id=workflow_id,
                 )
                 return result

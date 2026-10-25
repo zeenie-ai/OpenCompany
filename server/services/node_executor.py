@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any, Optional, Callable, TYPE_CHECKING
+from typing import Dict, Any, Optional, Callable, Tuple, TYPE_CHECKING
 
 from core.logging import get_logger
 from constants import (
@@ -143,49 +143,7 @@ class NodeExecutor:
             if context.get("workflow_id"):
                 from services.employees.permissions import assert_runtime_access
                 await assert_runtime_access(self.database, str(context["workflow_id"]), node_id, node_type, context)
-            # An LLM tool call carries the model's own arguments in
-            # ``tool_args``; ``parameters`` already has them merged on top of
-            # the node's settings (the agent workflow builds
-            # ``{**tool params, **call args}``).
-            tool_args = context.get("tool_args")
-            if isinstance(tool_args, dict):
-                locked = locked_tool_fields(get_node_class(node_type))
-                if locked:
-                    context = {
-                        **context,
-                        "tool_args": {k: v for k, v in tool_args.items() if k not in locked},
-                    }
-            else:
-                tool_args = None
-
-            # Load, validate, enhance parameters
-            params = await self._prepare_parameters(node_id, node_type, parameters, session_id, tool_args=tool_args,
-                parameter_snapshot=context.get("parameter_snapshot"), principal=str(context.get("user_id") or "owner"),
-                context=context, resolve_params_fn=resolve_params_fn)
-            email_templates_resolved = context.pop("_employee_email_templates_resolved", None) == node_id
-
-            # Resolve templates if resolver provided
-            nodes = context.get("nodes")
-            edges = context.get("edges")
-            logger.debug(
-                f"[NodeExecutor] Template resolution check: resolve_fn={resolve_params_fn is not None}, nodes={len(nodes) if nodes else 'None'}, edges={len(edges) if edges else 'None'}"
-            )
-
-            if resolve_params_fn and nodes is not None and edges is not None and not email_templates_resolved:
-                logger.debug(f"[NodeExecutor] Before resolution: params={list(params.keys())}")
-                # ``context["outputs"]`` holds what this run's upstream nodes
-                # produced. Resolving from it rather than only from the shared
-                # session store keeps concurrent firings from reading each
-                # other's trigger data.
-                params = await resolve_params_fn(
-                    params,
-                    node_id,
-                    nodes,
-                    edges,
-                    session_id,
-                    run_outputs=context.get("outputs") or None,
-                )
-                logger.debug(f"[NodeExecutor] After resolution: params keys={list(params.keys())}")
+            params, context = await self.prepare_parameters(node_id, node_type, parameters, context, resolve_params_fn)
 
             # Build handler context
             handler_ctx = {
@@ -243,6 +201,68 @@ class NodeExecutor:
                 False, node_id, node_type, error=str(e), execution_id=execution_id, execution_time=time.time() - start_time
             ).to_dict()
 
+    async def prepare_parameters(
+        self,
+        node_id: str,
+        node_type: str,
+        parameters: Dict[str, Any],
+        context: Dict[str, Any],
+        resolve_params_fn: Optional[Callable] = None,
+        *,
+        inject_keys: bool = True,
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """What a node runs with, and the context its handler sees: its saved
+        settings with ``parameters`` over them, locked fields put back,
+        validated, API keys added (unless ``inject_keys`` is off), then its
+        templates resolved. :meth:`execute` starts with it; a card that keeps
+        what a graph node sent rebuilds it here
+        (services/approvals/tool_calls.py)."""
+        session_id = context.get("session_id", "default")
+        # An LLM tool call carries the model's own arguments in
+        # ``tool_args``; ``parameters`` already has them merged on top of
+        # the node's settings (the agent workflow builds
+        # ``{**tool params, **call args}``).
+        tool_args = context.get("tool_args")
+        if isinstance(tool_args, dict):
+            locked = locked_tool_fields(get_node_class(node_type))
+            if locked:
+                context = {
+                    **context,
+                    "tool_args": {k: v for k, v in tool_args.items() if k not in locked},
+                }
+        else:
+            tool_args = None
+
+        # Load, validate, enhance parameters
+        params = await self._prepare_parameters(node_id, node_type, parameters, session_id, tool_args=tool_args,
+            parameter_snapshot=context.get("parameter_snapshot"), principal=str(context.get("user_id") or "owner"),
+            context=context, resolve_params_fn=resolve_params_fn, inject_keys=inject_keys)
+        email_templates_resolved = context.pop("_employee_email_templates_resolved", None) == node_id
+
+        # Resolve templates if resolver provided
+        nodes = context.get("nodes")
+        edges = context.get("edges")
+        logger.debug(
+            f"[NodeExecutor] Template resolution check: resolve_fn={resolve_params_fn is not None}, nodes={len(nodes) if nodes else 'None'}, edges={len(edges) if edges else 'None'}"
+        )
+
+        if resolve_params_fn and nodes is not None and edges is not None and not email_templates_resolved:
+            logger.debug(f"[NodeExecutor] Before resolution: params={list(params.keys())}")
+            # ``context["outputs"]`` holds what this run's upstream nodes
+            # produced. Resolving from it rather than only from the shared
+            # session store keeps concurrent firings from reading each
+            # other's trigger data.
+            params = await resolve_params_fn(
+                params,
+                node_id,
+                nodes,
+                edges,
+                session_id,
+                run_outputs=context.get("outputs") or None,
+            )
+            logger.debug(f"[NodeExecutor] After resolution: params keys={list(params.keys())}")
+        return params, context
+
     async def _prepare_parameters(
         self,
         node_id: str,
@@ -254,8 +274,10 @@ class NodeExecutor:
         principal: str = "owner",
         context: Optional[Dict[str, Any]] = None,
         resolve_params_fn: Optional[Callable] = None,
+        *,
+        inject_keys: bool = True,
     ) -> Dict:
-        """Load from DB, validate, inject API keys."""
+        """Load from DB, validate, inject API keys (``inject_keys``)."""
         # Merge with DB parameters (DB provides defaults, frontend can override)
         db_params = await saved_settings(self.database, node_id, parameter_snapshot)
         merged = {**db_params, **params} if params else db_params
@@ -289,6 +311,8 @@ class NodeExecutor:
                 logger.warning("Validation warning", node_type=node_type, errors=str(e))
 
         # Inject API keys
+        if not inject_keys:
+            return merged
         return await self._inject_api_keys(node_type, merged, principal=principal)
 
     async def _inject_api_keys(self, node_type: str, params: Dict, *, principal: str = "owner") -> Dict:

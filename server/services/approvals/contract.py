@@ -9,7 +9,9 @@ The gate's output fails closed: ``text``, ``subject`` and ``recipient`` are
 empty unless the draft was approved, so a mis-wired graph sends nothing.
 
 A tool call that sends is held the same way (``services/approvals/
-tool_calls.py``), as a row of kind ``tool_call``.
+tool_calls.py``), as a row of kind ``tool_call``. A call that broke off
+midway and may have happened leaves a card: a ``tool_call`` row for a send
+the card can show, else an ``effect`` row, which the owner dismisses.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ NO_REPLY = "NO_REPLY"
 #: How long a draft waits for the owner before it expires.
 DEFAULT_TIMEOUT_HOURS = 168
 
-APPROVAL_KINDS = ("gate", "tool_call")
+APPROVAL_KINDS = ("gate", "tool_call", "effect")
 APPROVAL_STATUSES = ("pending", "approved", "sending", "sent", "failed", "discarded", "expired", "cancelled")
 #: Nothing moves a row out of these.
 FINAL_STATUSES = frozenset({"sent", "expired", "cancelled"})

@@ -23,16 +23,20 @@ which calls :func:`check_in_process`. Such a call cannot wait as a draft, so
 while the workflow asks first a call that sends is refused (a restricted
 tool runs restricted); no row is written.
 
-**At most once.** Temporal runs a tool activity again only when an attempt
+**At most once.** Temporal runs an activity again only when an attempt
 broke off (the worker stopped, a timeout): a failure the node reports comes
-back as a result and is not retried. The attempt that broke off may have
-sent the message, so a later attempt of a call that sends does not send it
-again (:func:`resend_refusal`): the model reads that it may have gone out,
-and with Ask first off the chat's record says so (``outcome: unknown``). The
-owner's approved sends already run with no retry
-(services/temporal/approved_tool_call_workflow.py). A tool that Ask first
-restricts instead of holding (the browser) keeps its own retries: its later
-attempt resumes a wait the worker cut short (``NodeWaitInterrupted``).
+back as a result and is not retried. The attempt that broke off may have done
+what it was asked, so a later attempt runs only a call that is safe to repeat
+(services/approvals/repeats.py); any other call answers that it may already
+have happened (:func:`redo_refusal`), and the owner gets a card
+(:func:`record_unknown`, ``outcome: unknown``): "May have sent" for a send
+the card can show, with Send again behind a confirmation, else "May have
+happened" (an ``effect`` row) with Dismiss. A graph node's answer needs the
+owner (``requires_user_action``), so its employee pauses at once; a graph
+node's send keeps what it sent, without secrets, for Send again. The owner's
+approved sends run with no retry
+(services/temporal/approved_tool_call_workflow.py), and the workflow that
+claimed one records how it went.
 
 What a node sends as (its locked ``server_controlled_fields``: the account,
 the mailbox) never comes from the model, so the row keeps the call's
@@ -44,10 +48,11 @@ setting first, so it can never talk a call out of being held.
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
 
 from core.logging import get_logger
 from services.approvals import rules, store
@@ -70,6 +75,14 @@ RESEND_MESSAGE = (
     "Not sent again: the first try at this broke off, and it may already have gone out. "
     "Do not send it again unless the owner asks; tell them it may or may not have gone out."
 )
+REDO_MESSAGE = (
+    "Not run again: the first try at this broke off midway, and it may already have happened. "
+    "Do not run it again unless the owner asks; tell them it may or may not have happened."
+)
+#: What a graph node's answer adds: no model reads it, the owner does.
+REDO_HINT = "The first try broke off midway, so it may already have happened. Check before you resume the employee."
+#: The most of a graph node's send a card keeps for Send again.
+MAX_KEPT_SEND = 64 * 1024
 
 
 @dataclass
@@ -329,7 +342,8 @@ async def _show_in_chat(database: Any, context: Mapping[str, Any], row: Any) -> 
 def _auto_recorder(database: Any, context: Mapping[str, Any], node_cls: Any, spec: Any, node_data: Mapping[str, Any]):
     async def record(result: Dict[str, Any], *, unknown: bool = False) -> None:
         """Record how the call went; ``unknown``: it may have gone out
-        (an attempt broke off, see :func:`resend_refusal`)."""
+        (an attempt broke off, see :func:`redo_refusal`). The card words
+        that itself, so it keeps no error then."""
         try:
             success = not unknown and bool(isinstance(result, dict) and result.get("success", True) is not False)
             now = _utcnow()
@@ -340,7 +354,7 @@ def _auto_recorder(database: Any, context: Mapping[str, Any], node_cls: Any, spe
                 decided_at=now,
                 consumed_at=now,
                 outcome="sent" if success else ("unknown" if unknown else "not_sent"),
-                outcome_error=None if success else str((result or {}).get("error") or "It did not go out.")[:1000],
+                outcome_error=None if success or unknown else str((result or {}).get("error") or "It did not go out.")[:1000],
                 outcome_at=now,
                 final_text=fields.get("draft_text"),
             )
@@ -364,19 +378,210 @@ def _attempt() -> int:
         return 1
 
 
-def resend_refusal(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
-    """What a later attempt of an agent's call that sends answers instead
-    of sending (see the module docstring), or None to run it."""
+def _sends(spec: Any, data: Mapping[str, Any]) -> bool:
+    """A send the card can show, and send again. The browser restricts
+    instead of holding, and a page action is not one."""
+    return spec is not None and not spec.restrict_while_asking and spec.sends(data)
+
+
+async def repeatable_call(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> bool:
+    """Whether a call may run again after an attempt broke off
+    (services/approvals/repeats.py), judged on what it runs with: the node's
+    settings with the call's data over them, locked fields put back. Not
+    safe when the settings cannot be read."""
+    from services.approvals.repeats import REPEATABLE, REPEATABLE_WHEN, repeatable
+    from services.plugin.base import restore_locked_fields, saved_settings
+
+    node_type = getattr(node_cls, "type", "")
+    if node_type in REPEATABLE or node_type not in REPEATABLE_WHEN:
+        return node_type in REPEATABLE
+    try:
+        saved = await saved_settings(_database(), str(context.get("node_id") or ""), context.get("parameter_snapshot"))
+    except Exception:
+        logger.warning("Could not read a node's settings; the call will not run again", node_id=context.get("node_id"), exc_info=True)
+        return False
+    data = restore_locked_fields(node_cls, {**saved, **dict(node_data or {})}, context.get("tool_args"), saved)
+    return repeatable(node_cls, data, tool_call=is_agent_tool_call(context))
+
+
+def unknown_answer(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
+    """What a call that may already have happened answers instead of
+    running. A graph node's answer needs the owner, so its employee pauses
+    (MachinaWorkflow reads ``requires_user_action``)."""
     from services.plugin.approval import approval_spec
 
-    spec = approval_spec(node_cls)
-    if spec is None or _attempt() <= 1:
-        return None
+    sends = _sends(approval_spec(node_cls), node_data)
+    answer: Dict[str, Any] = {
+        "success": False,
+        "error": RESEND_MESSAGE if sends else REDO_MESSAGE,
+        "error_type": "SendOutcomeUnknown" if sends else "OutcomeUnknown",
+    }
     if context.get("approval_execution") is None and not is_agent_tool_call(context):
+        answer.update(hint=REDO_HINT, requires_user_action=True, retryable=False)
+    return answer
+
+
+async def redo_refusal(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """What a later attempt answers instead of running a call that is not
+    safe to repeat (see the module docstring), or None to run it."""
+    if _attempt() <= 1 or await repeatable_call(context, node_cls, node_data):
         return None
-    if spec.restrict_while_asking or not spec.sends(node_data):
+    return unknown_answer(context, node_cls, node_data)
+
+
+async def record_unknown(
+    context: Mapping[str, Any],
+    node_cls: Any,
+    node_data: Mapping[str, Any],
+    result: Mapping[str, Any],
+    *,
+    checked: Optional[Checked] = None,
+) -> None:
+    """Leave the owner a card for a call that may already have happened,
+    best-effort (see the module docstring). A send the owner approved is
+    recorded by the workflow that claimed it."""
+    if context.get("approval_execution") is not None:
+        return
+    try:
+        if checked is not None and checked.record is not None:
+            await checked.record(dict(result), unknown=True)
+            return
+        await _record_unknown(context, node_cls, node_data)
+    except Exception:  # noqa: BLE001 - the answer stands without its card
+        logger.warning("Could not record a call that may have happened", node_id=context.get("node_id"), exc_info=True)
+
+
+async def _record_unknown(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> None:
+    from services.plugin.approval import approval_spec
+
+    database = _database()
+    spec = approval_spec(node_cls)
+    fields: Optional[Dict[str, Any]] = None
+    key = ""
+    if _sends(spec, node_data):
+        if is_agent_tool_call(context):
+            fields, key = _row_fields(context, node_cls, spec, node_data), call_key(context)
+        else:
+            sent = await _graph_send(context, node_cls, node_data)
+            if sent is not None:
+                fields, key = _row_fields(context, node_cls, spec, sent), _unknown_key("u", context)
+    if fields is None:
+        fields, key = _effect_fields(context, node_cls, node_data), _unknown_key("e", context)
+    now = _utcnow()
+    fields.update(
+        status="failed",
+        approved_by="auto",
+        decided_at=now,
+        consumed_at=now,
+        outcome="unknown",
+        outcome_at=now,
+        final_text=fields.get("draft_text"),
+    )
+    row, created = await store.get_or_create(database, idempotency_key=key, fields=fields)
+    if created:
+        logger.info("A call may have happened", approval_id=row.id, workflow_id=row.workflow_id, kind=row.kind)
+        await notify_approval_changed(change_of(row, "failed"))
+        if not row.tool_call_id:
+            # No model read the answer: a graph node's employee hears it.
+            from services.approvals.execution import tell_employee
+
+            await tell_employee(database, row)
+    await _show_in_chat(database, context, row)
+
+
+def _unknown_key(prefix: str, context: Mapping[str, Any]) -> str:
+    """One card per call: an agent's call by its id, a graph node's by its
+    activity, which every attempt shares."""
+    if is_agent_tool_call(context):
+        return f"{prefix}:{context.get('workflow_id') or ''}:{context.get('execution_id') or ''}:{context.get('tool_call_id')}"
+    try:
+        from temporalio import activity
+
+        info = activity.info()
+        return f"{prefix}:{info.workflow_id}:{info.workflow_run_id}:{info.activity_id}"
+    except Exception:  # noqa: BLE001 - not in an activity
+        return f"{prefix}:{context.get('workflow_id') or ''}:{context.get('execution_id') or ''}:{context.get('node_id') or ''}"
+
+
+async def _graph_send(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """A graph node's send as it ran, its templates resolved (NodeExecutor's
+    own steps), without secrets or locked fields: Send again resends it, and
+    the node's settings put those back. None when it cannot be rebuilt or is
+    too big to keep."""
+    from core.container import container
+    from services.workflow_sanitizer import sanitize_runtime_payload
+
+    try:
+        resolved = await container.workflow_service().prepare_node_parameters(
+            node_id=str(context.get("node_id") or ""),
+            node_type=node_cls.type,
+            parameters=dict(node_data or {}),
+            nodes=context.get("nodes", []),
+            edges=context.get("edges", []),
+            session_id=context.get("session_id", "default"),
+            execution_id=context.get("execution_id"),
+            workflow_id=context.get("workflow_id"),
+            outputs=context.get("inputs", {}),
+            user_id=str(context.get("user_id") or "owner"),
+        )
+    except Exception:  # noqa: BLE001 - the card shows what was tried instead
+        logger.warning("Could not rebuild what a node sent", node_id=context.get("node_id"), exc_info=True)
         return None
-    return {"success": False, "error": RESEND_MESSAGE, "error_type": "SendOutcomeUnknown"}
+    locked = _locked(node_cls)
+    kept = {key: value for key, value in sanitize_runtime_payload(dict(resolved or {})).items() if key not in locked}
+    try:
+        size = len(json.dumps(kept, default=str))
+    except (TypeError, ValueError):
+        return None
+    return kept if size <= MAX_KEPT_SEND else None
+
+
+def _effect_fields(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
+    """An ``effect`` row: what was tried and what it ran with (no secrets),
+    for a card the owner checks and dismisses."""
+    from services.approvals.repeats import REPEATABLE_WHEN
+
+    node_type = getattr(node_cls, "type", None) or str(context.get("node_type") or "")
+    name = str(getattr(node_cls, "display_name", None) or node_type or "a tool")
+    field = REPEATABLE_WHEN.get(node_type, ("", frozenset()))[0]
+    operation = node_data.get(field) if field else None
+    tool_args = context.get("tool_args")
+    stream = context.get("chat_stream") if isinstance(context.get("chat_stream"), Mapping) else {}
+    run_id = context.get("chat_run_id") or (stream or {}).get("run_id")
+    return {
+        "owner_id": str(context.get("user_id") or "owner"),
+        "workflow_id": str(context.get("workflow_id") or ""),
+        "node_id": str(context.get("node_id") or ""),
+        "generation": int(context.get("generation") or 0),
+        "execution_id": context.get("execution_id"),
+        "runtime": "temporal",
+        "kind": "effect",
+        "channel": name[:60],
+        "action": (f"Use {name} ({operation})" if isinstance(operation, str) and operation else f"Use {name}")[:200],
+        "details": _argument_lines(node_cls, tool_args if isinstance(tool_args, Mapping) else node_data),
+        "node_type": node_type or None,
+        "tool_node_id": str(context.get("node_id") or ""),
+        "tool_call_id": str(context.get("tool_call_id") or ""),
+        "agent_node_id": str(context.get("parent_node_id") or ""),
+        "run_id": run_id if isinstance(run_id, str) and run_id else None,
+    }
+
+
+def _argument_lines(node_cls: Any, values: Mapping[str, Any]) -> List[Dict[str, str]]:
+    """Up to six of what a call ran with, each cut at 300 characters, with
+    secrets and locked fields left out."""
+    from services.workflow_sanitizer import sanitize_runtime_payload
+
+    locked = _locked(node_cls)
+    lines: List[Dict[str, str]] = []
+    for key, value in sanitize_runtime_payload(dict(values or {})).items():
+        if key in locked or value in (None, "", [], {}):
+            continue
+        text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+        lines.append({"label": str(key)[:60], "value": text[:300]})
+        if len(lines) == 6:
+            break
+    return lines
 
 
 def claim_token() -> str:
@@ -386,6 +591,8 @@ def claim_token() -> str:
 __all__ = [
     "Checked",
     "HELD_MESSAGE",
+    "REDO_HINT",
+    "REDO_MESSAGE",
     "RESEND_MESSAGE",
     "RUN",
     "as_it_runs",
@@ -395,5 +602,8 @@ __all__ = [
     "claim_token",
     "hold",
     "is_agent_tool_call",
-    "resend_refusal",
+    "record_unknown",
+    "redo_refusal",
+    "repeatable_call",
+    "unknown_answer",
 ]

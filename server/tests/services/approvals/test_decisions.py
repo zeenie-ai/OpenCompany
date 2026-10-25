@@ -59,6 +59,36 @@ async def test_restore_brings_a_discarded_draft_back_while_it_can(harness):
     assert late == {**late, "success": False, "error": "too_late"}
 
 
+async def unknown_row(harness, kind="effect", key="e:wf:run:act"):
+    """A call that broke off midway: it may have happened."""
+    row, _ = await store.get_or_create(
+        harness.database,
+        idempotency_key=key,
+        fields={"owner_id": "owner", "workflow_id": "wf", "node_id": "wf:shell:1", "kind": kind, "status": "failed",
+                "channel": "Shell", "action": "Use Shell", "approved_by": "auto", "outcome": "unknown"},
+    )
+    return row
+
+
+async def test_dismiss_closes_a_call_that_may_have_happened(harness):
+    row = await unknown_row(harness)
+    dismissed = await decide(harness, row.id, "dismiss", key="x1")
+    assert dismissed["success"] is True and dismissed["approval"]["status"] == "cancelled"
+    assert (await decide(harness, row.id, "dismiss", key="x1"))["idempotent"] is True
+    again = await decide(harness, row.id, "dismiss", key="x2")
+    assert again == {**again, "success": False, "error": "invalid_request"}
+
+
+async def test_only_an_effect_card_is_dismissed_and_it_is_never_sent(harness):
+    effect = await unknown_row(harness)
+    retried = await decide(harness, effect.id, "retry", key="r1", confirm=True)
+    assert retried == {**retried, "success": False, "error": "invalid_request"}
+    send = await unknown_row(harness, kind="tool_call", key="c:wf:run:call_1")
+    refused = await decide(harness, send.id, "dismiss", key="x1")
+    assert refused == {**refused, "success": False, "error": "invalid_request"}
+    assert (await store.get(harness.database, send.id)).status == "failed"
+
+
 async def test_a_repeated_decision_key_changes_nothing(harness):
     task = asyncio.ensure_future(run_gate(harness))
     (row,) = await pending(harness)

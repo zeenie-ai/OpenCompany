@@ -850,6 +850,11 @@ unsandboxed like the other framework workflows):
 - `approvals.record_outcome` records `sent`, `not_sent` (the node said it did not go) or `unknown` (the activity
   broke off, so it may have gone), and leaves the employee an `[update]` note for its next chat turn.
 
+A send that broke off midway outside this workflow leaves a card the same way (`outcome: unknown`, see "Worker crashes
+mid-execution" below). A graph node's card keeps what the node sent, its templates resolved and its secrets left out;
+its Send again runs the node with no graph and no tool arguments (`approvals.execution.node_context`), so nothing
+resolves again and the node's saved settings put the secrets back.
+
 The bookkeeping activities retry until they land. Both are in every framework worker's activity list
 (`services/approvals/activities.py::APPROVAL_ACTIVITIES`), and the workflow class is in `_framework_workflows`. A
 send that never started (the server stopped between the decision and the start) is started again by the approvals
@@ -922,7 +927,7 @@ Trigger nodes that aren't the firing trigger are:
 |----------|----------|
 | Ordinary node or agent-support Activity fails transiently | The shared ordinary default is 3 attempts with backoff; declared plugin policies and specialized support policies take precedence. |
 | `AgentWorkflow` LLM-step activity fails | `LLM_STEP_RETRY` retries without limit (`maximum_attempts=0`, 5 s → 5 min backoff; `services/temporal/_retry_policies.py`) unless the provider error category is non-retryable (invalid_request, authentication, ...). Provider SDK retries stay disabled so Temporal owns the retry schedule and `retry_after` hints. |
-| Worker crashes mid-execution | Workflow state replays from history; an unfinished Activity retries according to its timeout/retry policy on an eligible worker. Completed recorded work is not explicitly rescheduled by Resume. |
+| Worker crashes mid-execution | Workflow state replays from history; an unfinished Activity retries according to its timeout/retry policy on an eligible worker. Completed recorded work is not explicitly rescheduled by Resume. A node or tool call that is not safe to repeat (`services/approvals/repeats.py`) is not run again: its later attempt answers that it may have happened, and the owner gets a card (`tool_calls.redo_refusal` and `record_unknown`); a graph node's answer carries `requires_user_action`, so its employee pauses at once. |
 | A node/tool Activity times out | Temporal applies the scheduled retry policy. Graph timeout/heartbeat defaults and version 1 agent-tool/plugin options differ as described above. |
 | All retries exhausted | Workflow receives failure, stops execution |
 

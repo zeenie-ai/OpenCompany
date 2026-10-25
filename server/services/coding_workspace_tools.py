@@ -108,8 +108,9 @@ async def execute_workspace_tool(payload: dict) -> dict:
         return held.get("result", held)
     if checked.tool_args is not None:
         args = checked.tool_args
-    refusal = approvals.resend_refusal(context, cls, checked.node_data or {})
+    refusal = await approvals.redo_refusal(context, cls, context["node_data"])
     if refusal is not None:
+        await approvals.record_unknown(context, cls, context["node_data"], refusal, checked=checked)
         return refusal.get("result", refusal)
     step = steps.begin(context, cls)
     broadcaster = get_status_broadcaster()

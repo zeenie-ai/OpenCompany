@@ -142,6 +142,32 @@ class NodeExecutionActivities:
             )
             return result
 
+        # A call runs at most once unless it is safe to repeat
+        # (services/approvals/tool_calls.py): a later attempt answers that it
+        # may already have happened, and the owner gets a card.
+        from services.approvals import tool_calls as approval_calls
+        from services.node_registry import get_node_class
+
+        node_cls = get_node_class(node_type)
+        redo = await approval_calls.redo_refusal(context, node_cls, node_data)
+        if redo is not None:
+            result = {
+                "node_id": node_id,
+                "node_type": node_type,
+                "execution_id": execution_id,
+                "timestamp": datetime.now().isoformat(),
+                **redo,
+            }
+            await approval_calls.record_unknown(context, node_cls, node_data, result)
+            await self._broadcast_status(
+                node_id=node_id,
+                status="error",
+                data={"error": redo["error"], "execution_id": execution_id,
+                      **{key: redo[key] for key in ("hint", "requires_user_action", "error_type") if key in redo}},
+                workflow_id=workflow_id,
+            )
+            return result
+
         # Broadcast "executing" status for UI updates
         await self._broadcast_status(
             node_id=node_id,

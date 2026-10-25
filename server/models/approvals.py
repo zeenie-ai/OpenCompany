@@ -1,6 +1,7 @@
 """What waits for the owner's OK, and what the owner decided.
 
-``ApprovalRequest`` is one thing to send, of one of two kinds (``kind``):
+``ApprovalRequest`` is one thing to send, or one that may have happened, of
+one of three kinds (``kind``):
 
 - ``gate``: an approvalGate node holds its run until the owner decides. It
   creates its row the first time it runs and finds the same row on every
@@ -13,7 +14,13 @@
   later (``ApprovedToolCallWorkflow``), once. Its key is
   ``c:<workflow>:<execution>:<tool call id>``. With Ask first off the call
   runs at once, and a Talk call still leaves a row (``approved_by: auto``) so
-  the owner sees what went out.
+  the owner sees what went out. A send that broke off midway leaves one too
+  (``failed``, ``outcome: unknown``); a graph node's (key ``u:<temporal
+  workflow>:<run>:<activity>``) keeps what it sent, without secrets.
+- ``effect``: any other call that broke off midway and may have happened
+  (services/approvals/tool_calls.py ``record_unknown``), keyed ``e:`` plus
+  the call's or the activity's identity. It starts ``failed`` with
+  ``outcome: unknown``; the owner checks it and dismisses it.
 
 ``status``::
 
@@ -23,6 +30,7 @@
     pending -> discarded          Discard
     discarded -> pending          Restore, before restore_until
     failed -> approved            Retry (asks to confirm when the outcome is unknown)
+    failed -> cancelled           Dismiss (an effect row)
     pending | approved | discarded -> expired | cancelled
 
 Every move is a compare-and-swap on ``revision``. ``ApprovalDecision`` keeps
@@ -60,7 +68,7 @@ class ApprovalRequest(SQLModel, table=True):
     #: ``temporal`` or ``local``: a local wait cannot outlive its process.
     runtime: str = Field(default="local", max_length=20)
     status: str = Field(default="pending", index=True, max_length=20)
-    #: ``gate`` or ``tool_call`` (see the module docstring).
+    #: ``gate``, ``tool_call`` or ``effect`` (see the module docstring).
     kind: str = Field(default="gate", max_length=20)
 
     #: The app it goes out through ("WhatsApp").
@@ -135,7 +143,7 @@ class ApprovalDecision(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     approval_id: str = Field(index=True, max_length=64)
-    #: send | undo | discard | restore | retry
+    #: send | undo | discard | restore | retry | dismiss
     decision: str = Field(max_length=20)
     decision_key: str = Field(max_length=128)
     actor: str = Field(default="owner", max_length=255)
