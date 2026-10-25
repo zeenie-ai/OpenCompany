@@ -3,7 +3,8 @@
  * the reply that made it (and the employee's own drafts after the
  * conversation), Send with Undo while it can, an edit sent with Ctrl+Enter,
  * Ctrl+Enter anywhere for the newest draft, and the Ask first chip, which
- * asks before turning off. The card's copy says what really happened.
+ * asks before turning off. The card's copy says what really happened; a
+ * call that broke off midway offers Dismiss, never Send again.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -93,6 +94,22 @@ describe('the card says what happened', () => {
     expect(view({ ...labels, status: 'failed' }).title).toBe('Email not sent');
   });
 
+  it('a call that broke off says it may have happened, until dismissed', () => {
+    const effect: Wire = { kind: 'effect', status: 'failed', channel: 'Shell', action: 'Run command', recipient: '', recipient_label: '', body: '', editable: false };
+    expect(approval(effect).kind).toBe('effect');
+    const broke = view({ ...effect, outcome: { certainty: 'unknown', error: 'WorkerShutdown' } });
+    expect(broke.title).toBe('Maya tried to run command');
+    expect(broke.sub).toMatch(/^Shell · at .+$/);
+    expect(broke.pill).toEqual({ label: 'May have happened', tone: 'failed', pulse: false });
+    expect(broke.footer).toEqual({ kind: 'effect', text: 'It broke off midway (WorkerShutdown), so it may have happened.' });
+    expect(view({ ...effect, outcome: { certainty: 'unknown' } }).footer).toEqual({ kind: 'effect', text: 'It broke off midway, so it may have happened.' });
+    const dismissed = view({ ...effect, status: 'cancelled' });
+    expect(dismissed.title).toBe('Maya tried to run command');
+    expect(dismissed.pill.label).toBe('Dismissed');
+    expect(dismissed.footer).toEqual({ kind: 'ended', text: 'Dismissed.' });
+    expect(optimistic(approval(effect), 'dismiss', NOW, 0)).toMatchObject({ status: 'cancelled' });
+  });
+
   it('a discarded draft can come back while its window lasts', () => {
     const gate = view({ kind: 'gate', status: 'discarded', restore_until: '2026-10-04T09:00:03Z' });
     expect(gate.footer).toEqual({ kind: 'discarded', text: 'Discarded. Maya won’t send this.', restoreSeconds: 3, canRestore: true });
@@ -164,7 +181,9 @@ beforeEach(() => {
             ? { ...current, status: 'approved', undo_until: new Date(Date.now() + 5000).toISOString(), revision: 1, ...(data.text ? { body: data.text } : {}) }
             : data.decision === 'undo'
               ? { ...current, status: 'pending', revision: 2 }
-              : current;
+              : data.decision === 'dismiss'
+                ? { ...current, status: 'cancelled', revision: 3 }
+                : current;
         server.approvals = [next];
         return { success: true, approval: next };
       }
@@ -244,6 +263,32 @@ describe('a draft in the chat', () => {
     renderPane();
     const card = (await screen.findByText('I drafted a WhatsApp to Ana.')).closest('[data-turn="assistant"]') as HTMLElement;
     expect(await within(card).findByText('It didn’t go out.')).toHaveAttribute('role', 'status');
+  });
+
+  it('a call that broke off offers Dismiss, never Send again', async () => {
+    server.approvals = [
+      summary({
+        kind: 'effect',
+        status: 'failed',
+        channel: 'Shell',
+        action: 'Run command',
+        recipient: '',
+        recipient_label: '',
+        body: '',
+        editable: false,
+        outcome: { certainty: 'unknown' },
+      }),
+    ];
+    renderPane();
+    const card = (await screen.findByText('Maya tried to run command')).closest('[data-approval]') as HTMLElement;
+    expect(card).not.toHaveTextContent('To them');
+    expect(card).not.toHaveTextContent('(no message)');
+    expect(within(card).queryByRole('button', { name: /again/ })).not.toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(server.decisions).toHaveLength(1));
+    expect(server.decisions[0]).toMatchObject({ approval_id: 'ap1', decision: 'dismiss' });
+    expect(await within(card).findByText('Dismissed')).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
   });
 
   it('asks before turning Ask first off', async () => {

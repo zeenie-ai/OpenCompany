@@ -7,7 +7,8 @@
  * - `useChatApprovals(workflowId)`: the session's recent drafts by id, open
  *   and settled (a reply's cards read theirs here), and how far the server's
  *   clock is from this one, so countdowns end when the server's windows do.
- * - `useDecideApproval(workflowId)`: send, undo, discard, restore, retry.
+ * - `useDecideApproval(workflowId)`: send, undo, discard, restore, retry,
+ *   dismiss.
  *   The card moves at once and comes back if the server refuses; every click
  *   carries a fresh `decision_key`, so a replayed request acts once. Errors
  *   reach the owner through the hook (`onError`), never the click.
@@ -39,7 +40,9 @@ const summarySchema = z
   .object({
     approval_id: z.string().min(1),
     workflow_id: z.string().catch(''),
-    kind: z.enum(['gate', 'tool_call']).catch('gate'),
+    // gate: an app reply an Approval node holds; tool_call: an employee's
+    // held call; effect: a call that broke off midway and may have happened.
+    kind: z.enum(['gate', 'tool_call', 'effect']).catch('gate'),
     status: z.enum(STATUSES as [ApprovalStatus, ...ApprovalStatus[]]).catch('pending'),
     channel: z.string().catch(''),
     action: optionalText,
@@ -180,7 +183,7 @@ export function useChatApprovals(workflowId: string | null) {
   });
 }
 
-export type Decision = 'send' | 'undo' | 'discard' | 'restore' | 'retry';
+export type Decision = 'send' | 'undo' | 'discard' | 'restore' | 'retry' | 'dismiss';
 
 export interface DecideInput {
   approval: ChatApproval;
@@ -232,6 +235,8 @@ export function optimistic(approval: ChatApproval, decision: Decision, nowMs: nu
       return { ...approval, status: 'pending', undoUntil: null, restoreUntil: null };
     case 'discard':
       return { ...approval, status: 'discarded', restoreUntil: approval.kind === 'gate' ? soon(5) : approval.expiresAt };
+    case 'dismiss':
+      return { ...approval, status: 'cancelled' };
   }
 }
 

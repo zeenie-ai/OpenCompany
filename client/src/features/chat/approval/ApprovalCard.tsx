@@ -4,13 +4,14 @@
  * will go, and Discard / Edit / Send. After Send it says when it goes, with
  * Undo while it can; then that it went (or did not, with Try again). A
  * discarded draft can be restored while its window lasts. Ctrl/Cmd+Enter in
- * the edit box sends it.
+ * the edit box sends it. A call that broke off midway (an `effect` row) has
+ * no message: it says what was tried, and offers Dismiss only.
  *
  * The draft itself lives on the server (data/approvals.ts); the card holds
  * only the edit in progress. `chat-approval` is the theme hook.
  */
 
-import { Check, Link2, Loader2, MessageCircle, Pause, Pencil, RotateCcw, Send, Undo2 } from 'lucide-react';
+import { Check, Link2, Loader2, MessageCircle, Pause, Pencil, RotateCcw, Send, Undo2, X } from 'lucide-react';
 import { useContext, useEffect, useId, useLayoutEffect, useState, type KeyboardEvent } from 'react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
@@ -130,6 +131,8 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
 
   const to = approval.recipientLabel || approval.recipient || 'them';
   const linked = approval.uiPartId !== null && approval.status === 'pending' && !edited;
+  // A call that broke off midway has no recipient and no message to show.
+  const message = approval.kind !== 'effect';
 
   return (
     <div
@@ -158,79 +161,85 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
         </span>
       </div>
 
-      <div className={cn('flex flex-col gap-2.5', compact ? 'p-3' : 'p-3.5')}>
-        <div className="flex items-center gap-2 text-xs text-fg-muted">
-          <span aria-hidden className="grid size-5.5 flex-none place-items-center rounded-full bg-action-stop-soft text-2xs font-semibold text-action-stop-ink">
-            {(to.charAt(0) || '?').toUpperCase()}
-          </span>
-          <span className="min-w-0 truncate">
-            To <span className="font-medium text-fg-default">{to}</span>
-            <span className="text-fg-faint"> · {approval.channel}</span>
-          </span>
-          {linked && (
-            <span className="ml-auto flex items-center gap-1.25 font-mono text-2xs font-medium text-action-tools-ink">
-              <Link2 aria-hidden className="size-2.75" strokeWidth={2.2} />
-              Linked to the form above
-            </span>
+      {(message || approval.details.length > 0) && (
+        <div className={cn('flex flex-col gap-2.5', compact ? 'p-3' : 'p-3.5')}>
+          {message && (
+            <>
+              <div className="flex items-center gap-2 text-xs text-fg-muted">
+                <span aria-hidden className="grid size-5.5 flex-none place-items-center rounded-full bg-action-stop-soft text-2xs font-semibold text-action-stop-ink">
+                  {(to.charAt(0) || '?').toUpperCase()}
+                </span>
+                <span className="min-w-0 truncate">
+                  To <span className="font-medium text-fg-default">{to}</span>
+                  <span className="text-fg-faint"> · {approval.channel}</span>
+                </span>
+                {linked && (
+                  <span className="ml-auto flex items-center gap-1.25 font-mono text-2xs font-medium text-action-tools-ink">
+                    <Link2 aria-hidden className="size-2.75" strokeWidth={2.2} />
+                    Linked to the form above
+                  </span>
+                )}
+              </div>
+
+              {editing ? (
+                <div className="flex flex-col gap-1.5">
+                  {approval.subject !== null && (
+                    <input
+                      value={subject}
+                      onChange={(event) => setSubject(event.target.value)}
+                      aria-label="Subject"
+                      className="h-8 rounded-lg border border-action-tools-border bg-bg-input px-3 text-sm text-fg-default outline-none"
+                    />
+                  )}
+                  <Textarea
+                    id={boxId}
+                    value={text}
+                    onChange={(event) => setText(event.target.value)}
+                    onKeyDown={onBoxKeyDown}
+                    rows={3}
+                    aria-label="Edit the draft"
+                    autoFocus
+                    className="min-h-21 resize-y border-action-tools-border bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft"
+                  />
+                  <span className={cn('self-end font-mono text-2xs font-medium', tooLong ? 'text-action-stop-ink' : 'text-fg-faint')}>
+                    {text.length} / {approval.maxLength}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex justify-end">
+                  <div
+                    className={cn(
+                      'flex max-w-[92%] flex-col gap-1 rounded-[14px_4px_14px_14px] border px-3 pt-2.25 pb-1.5 transition-[background-color,border-color,opacity] duration-(--dur-slow)',
+                      view.bubble === 'sent' ? 'border-action-run-border bg-action-run-soft' : 'border-border-default bg-bg-elevated',
+                      view.bubble === 'struck' && 'opacity-55',
+                    )}
+                  >
+                    {approval.subject && <span className="text-xs font-semibold text-fg-default">{approval.subject}</span>}
+                    <span className={cn('text-base leading-normal whitespace-pre-wrap text-fg-default', view.bubble === 'struck' && 'line-through')}>
+                      {approval.body || '(no message)'}
+                    </span>
+                    <span className="flex items-center gap-1 self-end text-2xs text-fg-faint">
+                      {view.when}
+                      {view.bubble === 'sent' && <Check aria-hidden className="size-3 text-action-save-ink" strokeWidth={2.4} />}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {approval.details.length > 0 && (
+            <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+              {approval.details.map((row) => (
+                <div key={row.label} className="contents">
+                  <dt className="text-fg-faint">{row.label}</dt>
+                  <dd className="m-0 min-w-0 truncate text-fg-default">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
           )}
         </div>
-
-        {editing ? (
-          <div className="flex flex-col gap-1.5">
-            {approval.subject !== null && (
-              <input
-                value={subject}
-                onChange={(event) => setSubject(event.target.value)}
-                aria-label="Subject"
-                className="h-8 rounded-lg border border-action-tools-border bg-bg-input px-3 text-sm text-fg-default outline-none"
-              />
-            )}
-            <Textarea
-              id={boxId}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={onBoxKeyDown}
-              rows={3}
-              aria-label="Edit the draft"
-              autoFocus
-              className="min-h-21 resize-y border-action-tools-border bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft"
-            />
-            <span className={cn('self-end font-mono text-2xs font-medium', tooLong ? 'text-action-stop-ink' : 'text-fg-faint')}>
-              {text.length} / {approval.maxLength}
-            </span>
-          </div>
-        ) : (
-          <div className="flex justify-end">
-            <div
-              className={cn(
-                'flex max-w-[92%] flex-col gap-1 rounded-[14px_4px_14px_14px] border px-3 pt-2.25 pb-1.5 transition-[background-color,border-color,opacity] duration-(--dur-slow)',
-                view.bubble === 'sent' ? 'border-action-run-border bg-action-run-soft' : 'border-border-default bg-bg-elevated',
-                view.bubble === 'struck' && 'opacity-55',
-              )}
-            >
-              {approval.subject && <span className="text-xs font-semibold text-fg-default">{approval.subject}</span>}
-              <span className={cn('text-base leading-normal whitespace-pre-wrap text-fg-default', view.bubble === 'struck' && 'line-through')}>
-                {approval.body || '(no message)'}
-              </span>
-              <span className="flex items-center gap-1 self-end text-2xs text-fg-faint">
-                {view.when}
-                {view.bubble === 'sent' && <Check aria-hidden className="size-3 text-action-save-ink" strokeWidth={2.4} />}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {approval.details.length > 0 && (
-          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-            {approval.details.map((row) => (
-              <div key={row.label} className="contents">
-                <dt className="text-fg-faint">{row.label}</dt>
-                <dd className="m-0 min-w-0 truncate text-fg-default">{row.value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </div>
+      )}
 
       <Footer view={view} approval={approval} busy={busy} editing={editing} canSend={canSend} onSend={send} onToggleEdit={() => setEditing((on) => !on)} />
     </div>
@@ -356,6 +365,19 @@ function Footer({
   }
   if (footer.kind === 'failed') {
     return <FailedFooter className={bar} text={footer.text} unknown={footer.unknown} busy={busy} onRetry={(confirm) => decide({ approval, decision: 'retry', confirm })} />;
+  }
+  if (footer.kind === 'effect') {
+    return (
+      <div className={cn(bar, 'bg-action-stop-soft')}>
+        <span className="min-w-0 flex-1 text-xs text-fg-default" role="status">
+          {footer.text}
+        </span>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'dismiss' })} className="gap-1.5 font-semibold">
+          <X aria-hidden className="size-3.25" />
+          Dismiss
+        </Button>
+      </div>
+    );
   }
   return (
     <div className={cn(bar, 'bg-bg-app')}>

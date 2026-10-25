@@ -10,7 +10,10 @@
  *   whom, and whether Ask first was off;
  * - discarded: Discarded, with Restore while it can;
  * - failed: not sent, or may have gone (the call broke off), with Try again;
- * - expired, cancelled: why it never went.
+ * - expired, cancelled: why it never went;
+ * - an `effect` row (a call that broke off midway, not a send): "{name}
+ *   tried to …", May have happened, with Dismiss only; Dismissed once
+ *   dismissed.
  *
  * Copy says what really happens: a draft is "sent" only once it went.
  */
@@ -29,6 +32,8 @@ export type CardFooter =
   | { kind: 'sent'; text: string }
   | { kind: 'discarded'; text: string; restoreSeconds: number | null; canRestore: boolean }
   | { kind: 'failed'; text: string; unknown: boolean }
+  /** It broke off midway: the owner checks, then dismisses it. */
+  | { kind: 'effect'; text: string }
   | { kind: 'ended'; text: string };
 
 export interface CardView {
@@ -59,6 +64,7 @@ export interface ViewOptions {
 export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, editing = false, now = new Date(nowMs) }: ViewOptions): CardView {
   const to = approval.recipientLabel || approval.recipient || 'them';
   const channel = approval.channel || 'the app';
+  if (approval.kind === 'effect') return effectView(approval, name, channel, now);
   const drafted = timeLabel(approval.createdAt, now);
   const sub = drafted ? `${channel} · drafted ${/\d/.test(drafted.charAt(0)) ? 'at ' : ''}${drafted}` : channel;
   const noun = approval.outcomeLabels;
@@ -150,6 +156,25 @@ function sentView(approval: ChatApproval, title: string, sub: string, to: string
     bubble: 'sent',
     when: at || 'Sent',
     footer: { kind: 'sent', text: `Sent to ${to} on ${channel}${when}${auto}.` },
+  };
+}
+
+/** A call that broke off midway, so it may have happened. Nothing runs it
+ *  again from here: the owner checks, then dismisses the card. */
+function effectView(approval: ChatApproval, name: string, channel: string, now: Date): CardView {
+  const at = timeLabel(approval.createdAt, now);
+  const sub = at ? `${channel} · ${/\d/.test(at.charAt(0)) ? 'at ' : ''}${at}` : channel;
+  const title = `${name} tried to ${approval.action ? lowerFirst(approval.action) : `use ${channel}`}`;
+  if (approval.status === 'cancelled') return endedView(title, 'Dismissed', sub, 'Dismissed.');
+  const error = approval.outcome?.error;
+  return {
+    title,
+    sub,
+    pill: { label: 'May have happened', tone: 'failed', pulse: false },
+    tone: 'failed',
+    bubble: 'draft',
+    when: '',
+    footer: { kind: 'effect', text: `It broke off midway${error ? ` (${error})` : ''}, so it may have happened.` },
   };
 }
 
