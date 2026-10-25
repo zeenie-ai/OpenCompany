@@ -6,6 +6,7 @@
 - ``decisions``: the owner's send, undo, discard, restore and retry.
 - ``rules``: a workflow's live Ask first rule.
 - ``tool_calls``: holding a tool call that sends (``BaseNode.as_activity``).
+- ``repeats``: which node calls may run again after an attempt broke off.
 - ``execution`` / ``activities``: sending a held call once the owner
   pressed Send (``ApprovedToolCallWorkflow``).
 - ``waiter``: wakes a waiting approval gate at once.
@@ -45,6 +46,7 @@ __all__ = [
     "listeners",
     "queries",
     "reconcile",
+    "repeats",
     "rules",
     "store",
     "tool_calls",
