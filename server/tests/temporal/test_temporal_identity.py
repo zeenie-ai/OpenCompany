@@ -195,7 +195,7 @@ class TestAgentCallIdentity:
             raise AssertionError(f"Unexpected activity {name}")
 
         monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)
-        monkeypatch.setattr(agent_module, "get_node_class", lambda _node_type: SimpleNamespace(needs_canvas=False))
+        monkeypatch.setattr(agent_module, "get_node_class", lambda _node_type: None)
 
         result = await AgentWorkflow().run({"node_id": "agent-1", "execution_id": "root-run-1"})
 
@@ -279,7 +279,7 @@ class TestAgentCallIdentity:
             raise AssertionError(f"Unexpected activity {name}")
 
         monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)
-        monkeypatch.setattr(agent_module, "get_node_class", lambda _node_type: SimpleNamespace(needs_canvas=False))
+        monkeypatch.setattr(agent_module, "get_node_class", lambda _node_type: None)
 
         result = await AgentWorkflow().run({"node_id": "agent-1", "execution_id": "root-run-1"})
 

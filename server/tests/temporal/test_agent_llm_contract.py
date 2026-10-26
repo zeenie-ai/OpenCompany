@@ -81,7 +81,7 @@ def patched_workflow(monkeypatch):
     monkeypatch.setattr(
         workflow_module,
         "get_node_class",
-        lambda _node_type: SimpleNamespace(needs_canvas=False),
+        lambda _node_type: None,
     )
     return temporal_workflow
 

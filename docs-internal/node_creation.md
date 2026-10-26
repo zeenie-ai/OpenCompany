@@ -97,7 +97,8 @@ Declare the operation's Temporal policy on the node class:
 | `retry_policy` | Attempts, intervals, and non-retryable error types for the operation. |
 
 Ordinary per-type agent-tool dispatch applies all four declarations for new
-controlled generations. Graph node dispatch currently applies plugin retry
+controlled generations, and every declaration but the queue for a tool call
+outside one (a manual Run). Graph node dispatch currently applies plugin retry
 and queue declarations but uses generic 24-hour attempt / 2-minute heartbeat
 defaults; the existing Workspace-task override uses that plugin's timeout and
 heartbeat values. Do not assume a graph node's timeout declaration is enforced

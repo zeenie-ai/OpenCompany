@@ -43,8 +43,21 @@ async def test_workspace_task_honors_plugin_policy_and_authenticated_principal(m
     assert tool_payload["user_id"] == "untrusted"  # caller input is not mutated
 
 
-async def test_prepatch_workspace_history_emits_identical_legacy_command(monkeypatch):
-    monkeypatch.setattr(module, "get_node_class", lambda _: SimpleNamespace(workspace_task=True))
+def declared(**attributes):
+    """A plugin class as the registry holds one: it declares its options."""
+    return SimpleNamespace(
+        start_to_close_timeout=timedelta(minutes=4),
+        heartbeat_timeout=timedelta(seconds=40),
+        retry_policy=RetryPolicy(maximum_attempts=2),
+        **attributes,
+    )
+
+
+async def test_prepatch_workspace_history_keeps_the_legacy_command(monkeypatch):
+    # Before the patch, no workspace policy: the default cancellation, the
+    # default queue and the payload as it was.
+    plugin = declared(workspace_task=True)
+    monkeypatch.setattr(module, "get_node_class", lambda _: plugin)
     monkeypatch.setattr(module.workflow, "patched", Mock(return_value=False))
     execute = AsyncMock()
     monkeypatch.setattr(module.workflow, "execute_activity", execute)
@@ -56,14 +69,18 @@ async def test_prepatch_workspace_history_emits_identical_legacy_command(monkeyp
         "node.embedded_task.v1",
         args=[payload],
         activity_id="old-id",
-        start_to_close_timeout=module.TOOL_STEP_TIMEOUT,
-        heartbeat_timeout=module.TOOL_HEARTBEAT_TIMEOUT,
+        start_to_close_timeout=timedelta(minutes=4),
+        heartbeat_timeout=timedelta(seconds=40),
+        retry_policy=plugin.retry_policy.to_temporal(),
     )
     assert "user_id" not in payload
 
 
-async def test_ordinary_tools_do_not_add_patch_markers_or_change_policy(monkeypatch):
-    monkeypatch.setattr(module, "get_node_class", lambda _: SimpleNamespace(workspace_task=False))
+async def test_ordinary_tools_retry_as_declared_without_a_patch_marker(monkeypatch):
+    # A manual run's tool call never retries without limit (1b.3). Options
+    # only, so nothing in history changes.
+    plugin = declared(workspace_task=False)
+    monkeypatch.setattr(module, "get_node_class", lambda _: plugin)
     patched = Mock(side_effect=AssertionError("Ordinary tool must not change history"))
     monkeypatch.setattr(module.workflow, "patched", patched)
     execute = AsyncMock()
@@ -75,6 +92,18 @@ async def test_ordinary_tools_do_not_add_patch_markers_or_change_policy(monkeypa
         "node.ordinary_tool.v1",
         args=[payload],
         activity_id="ordinary-id",
-        start_to_close_timeout=module.TOOL_STEP_TIMEOUT,
-        heartbeat_timeout=module.TOOL_HEARTBEAT_TIMEOUT,
+        start_to_close_timeout=timedelta(minutes=4),
+        heartbeat_timeout=timedelta(seconds=40),
+        retry_policy=plugin.retry_policy.to_temporal(),
     )
+
+
+def test_a_type_no_plugin_registers_takes_the_base_node_options(monkeypatch):
+    from services.plugin.base import BaseNode
+
+    monkeypatch.setattr(module, "get_node_class", lambda _: None)
+    assert module._declared_tool_options("_builtin_skill") == {
+        "start_to_close_timeout": BaseNode.start_to_close_timeout,
+        "heartbeat_timeout": BaseNode.heartbeat_timeout,
+        "retry_policy": BaseNode.retry_policy.to_temporal(),
+    }

@@ -129,7 +129,9 @@ tool bindings and these policies during agent preparation. Ordinary per-type
 agent tools use that recorded policy, including attempt limits and
 non-retryable error types. Continue-As-New carries the prepared bindings and
 policy rather than reloading a pending tool from edited configuration. Old
-histories retain their previous dispatch decisions.
+histories retain their previous dispatch decisions. A tool call outside a
+controlled generation (a manual Run) uses the declared timeout, heartbeat
+and retry policy as well, never Temporal's unlimited default retries.
 
 Graph node dispatch has a narrower policy contract: plugin retry and queue
 declarations apply, but its ordinary Activity starts retain generic 24-hour

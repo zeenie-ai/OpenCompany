@@ -371,7 +371,7 @@ async def test_agent_rechecks_pause_before_tool_command_batch(monkeypatch):
     monkeypatch.setattr(
         agent_module,
         "get_node_class",
-        lambda _node_type: SimpleNamespace(needs_canvas=False),
+        lambda _node_type: None,
     )
 
     instance = AgentWorkflow()
@@ -452,7 +452,7 @@ async def test_agent_rechecks_pause_after_tool_phase_before_activity(monkeypatch
     monkeypatch.setattr(
         agent_module,
         "get_node_class",
-        lambda _node_type: SimpleNamespace(needs_canvas=False),
+        lambda _node_type: None,
     )
 
     instance = AgentWorkflow()
@@ -1195,7 +1195,7 @@ async def test_agent_rechecks_pause_before_task_manager_child_start(monkeypatch)
     monkeypatch.setattr(
         agent_module,
         "get_node_class",
-        lambda _node_type: SimpleNamespace(needs_canvas=False),
+        lambda _node_type: None,
     )
 
     instance = AgentWorkflow()

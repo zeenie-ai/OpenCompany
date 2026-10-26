@@ -492,6 +492,8 @@ does not redirect an already-running workflow. New controlled generations
 the plugin's timeout, heartbeat, retry, and queue declarations during payload
 preparation. Ordinary per-type tools use these policies and carry them through
 Continue-As-New. Existing histories retain their recorded policy decisions.
+A tool call outside a controlled generation (a manual Run) applies the
+declared timeout, heartbeat and retry too, but not the queue.
 The in-process executor does not enforce Temporal Activity policies.
 
 Graph Activity starts currently honor plugin retry and queue declarations,

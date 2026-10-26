@@ -59,6 +59,7 @@ from temporalio.workflow import ActivityCancellationType, ChildWorkflowCancellat
 from services.agent_bindings import unique_node_bindings
 from services.coding_agent_runtime import agent_workflow_name, uses_pi
 from services.node_registry import get_node_class
+from services.plugin.base import BaseNode
 from services.tool_output import bound_tool_output, tool_output_is_capped
 
 from ._retry_policies import (
@@ -91,12 +92,19 @@ from .execution_control import ExecutionControl
 LLM_STEP_TIMEOUT = timedelta(minutes=10)
 PERSIST_TURN_TIMEOUT = timedelta(seconds=30)
 COMPACT_MEMORY_TIMEOUT = timedelta(minutes=5)
-
-# Tool activity defaults — plugin classes can override via
-# ``cls.start_to_close_timeout`` (F4.A); these are floor values.
-TOOL_STEP_TIMEOUT = timedelta(minutes=10)
-TOOL_HEARTBEAT_TIMEOUT = timedelta(minutes=2)
 LLM_STEP_HEARTBEAT_TIMEOUT = timedelta(minutes=1)
+
+
+def _declared_tool_options(node_type: str) -> Dict[str, Any]:
+    """A tool activity's timeouts and retry policy as its plugin declares
+    them (BaseNode's for a type no plugin registers). Options only: on
+    replay Temporal compares no option (RFC-0006 §5 rule 6)."""
+    cls = get_node_class(node_type) or BaseNode
+    return {
+        "start_to_close_timeout": cls.start_to_close_timeout,
+        "heartbeat_timeout": cls.heartbeat_timeout,
+        "retry_policy": cls.retry_policy.to_temporal(),
+    }
 
 
 async def _execute_plugin_tool_activity(
@@ -109,13 +117,10 @@ async def _execute_plugin_tool_activity(
     """Preserve legacy commands; use frozen plugin policy for new generations.
 
     These plugins can perform irreversible device actions. Temporal's implicit
-    retry defaults must not override their explicitly declared attempt limit.
-    Routing comes from frozen workflow input, never live process settings.
+    retry defaults must not override their explicitly declared attempt limit,
+    on either path. Routing comes from frozen workflow input, never live
+    process settings.
     """
-    options: Dict[str, Any] = {
-        "start_to_close_timeout": TOOL_STEP_TIMEOUT,
-        "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT,
-    }
     policy = (tool_info or {}).get("activity_policy")
     if (context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
             or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1
@@ -123,14 +128,10 @@ async def _execute_plugin_tool_activity(
         options = _frozen_tool_activity_options(policy, context)
         tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
     else:
+        options = _declared_tool_options(tool_payload["node_type"])
         cls = get_node_class(tool_payload["node_type"])
         if getattr(cls, "workspace_task", False) and workflow.patched("workspace-task-activity-policy-v1"):
-            options.update(
-                start_to_close_timeout=cls.start_to_close_timeout,
-                heartbeat_timeout=cls.heartbeat_timeout,
-                retry_policy=cls.retry_policy.to_temporal(),
-                cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-            )
+            options["cancellation_type"] = ActivityCancellationType.WAIT_CANCELLATION_COMPLETED
             if context.get("temporal_worker_pool_enabled") is True:
                 options["task_queue"] = cls.task_queue
             tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
@@ -867,7 +868,7 @@ class AgentWorkflow:
         if policy:
             options = {**_frozen_tool_activity_options(policy, context), "retry_policy": SEND_ONCE}
         else:
-            options = {"start_to_close_timeout": TOOL_STEP_TIMEOUT, "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT, "retry_policy": SEND_ONCE}
+            options = {**_declared_tool_options(tool_payload["node_type"]), "retry_policy": SEND_ONCE}
         base = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
 
         def as_allowed(claimed: Dict[str, Any]) -> Dict[str, Any]:
@@ -2054,10 +2055,7 @@ class AgentWorkflow:
                         await self._wait_until_resumed()
                         await self._execution_control.begin_action()
                         preflight_action_active = self._execution_control.enabled
-                    preflight_options = {
-                        "start_to_close_timeout": TOOL_STEP_TIMEOUT,
-                        "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT,
-                    }
+                    preflight_options = _declared_tool_options("taskManager")
                     if (self._execution_control.enabled or pi_runtime) and preflight_tool.get("activity_policy"):
                         preflight_options = _frozen_tool_activity_options(preflight_tool["activity_policy"], context)
                     task_manager_preflight_handles.append(

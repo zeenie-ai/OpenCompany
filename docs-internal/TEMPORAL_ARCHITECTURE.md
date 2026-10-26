@@ -127,7 +127,7 @@ This invokes `run_standalone_worker()` from `services/temporal/worker.py`. It al
 Ordinary nodes and the external steps of agent child Workflows run as Activities with:
 - **Own context** - No shared mutable state between nodes
 - **Own retry policy** - Plugin declarations take precedence over ordinary defaults. Agent LLM steps use unlimited transient retries; a declared one-attempt tool keeps that policy.
-- **Own timeout** - Ordinary graph dispatch uses a 24 h ceiling and 2-minute heartbeat; Workspace-task nodes and version 1 agent-tool dispatch consume plugin values. Different Activities can progress independently.
+- **Own timeout** - Ordinary graph dispatch uses a 24 h ceiling and 2-minute heartbeat; Workspace-task nodes and agent-tool dispatch consume plugin values. Different Activities can progress independently.
 - **Own worker** - Can execute on any available worker in the cluster
 
 ### 2. Workflow = Pure Orchestrator
@@ -635,8 +635,13 @@ explicit refresh produce these bindings; continue-as-new carries the resolved
 set. Scheduling uses those recorded declarations, with specialized queue
 routing only when the frozen worker-pool flag is on. A plugin update during
 Stop or worker restart does not implicitly replace an already-bound policy.
-Legacy histories keep their prior scheduling options, including the existing
-Workspace-task policy patch.
+A tool call outside such a generation (a manual Run, or a history from before
+version 1) uses the plugin's declared timeout, heartbeat and retry too, read
+from the registered class (`agent_workflow._declared_tool_options`; BaseNode's
+for a type no plugin registers), with the default cancellation and queue. That
+is an options change, so it needs no marker, and those histories keep their
+commands; the Workspace-task policy patch still adds its cancellation and
+queue.
 
 `collect_agent_activities()` registers the agent activities — read the live set
 from that function rather than trusting a count here, which drifts on every
@@ -752,7 +757,7 @@ cleanup.
 - **Browser history.** `WorkspaceTaskRecord` is a projection, not the execution authority. Admission and lifecycle writes are idempotent and terminal states cannot regress. Recent tasks contain prompt, timestamps, bounded safe result/error and authorized relative artifact links, excluding tool transcripts and credentials. Pages default to 20 (maximum 100); terminal records expire after 35 days, while active records and history survive Reset. Workflow authorization protects historical records after node deletion. Retained terminal records also prevent resubmission after controller dedup or Temporal history expiration.
 - **Reset.** The controller's `reset` Update first fences new submissions by advancing the epoch. It then cancels every admitted child and waits for each to close, and runs the `workspace_tasks.reset_runtime` activity (`services/temporal/workspace_task_activities.py::reset_workspace_task_runtime`). That activity cancels invocations started before the controller existed and calls each Workspace-task node's `reset_execution_state`. The Update returns only after that cleanup. If cleanup fails, the fence stays in place, and retrying Reset resumes the same request. The workflow toolbar's Reset reaches the controller through `services/deployment/handlers.py::_reset_workspace_tasks`, even for a workflow that was never started; see [temporal-workflow-control.md](./temporal-workflow-control.md#workspace-tasks).
 - **Registration and rollover.** Both workflow classes are in `worker.py::_framework_workflows`, and every framework worker registers `reset_workspace_task_runtime`. The controller continues-as-new under history pressure, carrying its epoch and its bounded submission and reset records.
-- **Inside graph and agent runs.** Two patch markers give Workspace-task nodes their own activity options. `workspace-node-cancellation-v1` (`MachinaWorkflow`) uses the node class's `start_to_close_timeout` and `heartbeat_timeout`, and makes cancellation wait until the activity has finished cleaning up. `workspace-task-activity-policy-v1` (tool calls in `AgentWorkflow`) does the same and also applies the class's `retry_policy` and, with the worker pool on, its `task_queue`.
+- **Inside graph and agent runs.** Two patch markers give Workspace-task nodes their own activity options. `workspace-node-cancellation-v1` (`MachinaWorkflow`) uses the node class's `start_to_close_timeout` and `heartbeat_timeout`, and makes cancellation wait until the activity has finished cleaning up. `workspace-task-activity-policy-v1` (tool calls in `AgentWorkflow`, which already run with the class's declared timeout, heartbeat and `retry_policy`) makes cancellation wait the same way and, with the worker pool on, uses its `task_queue`.
 
 Browser tasks hold the profile claim during reasoning, tools and human help.
 Finalization waits for matching-token owner cleanup; stale cancellation cannot
