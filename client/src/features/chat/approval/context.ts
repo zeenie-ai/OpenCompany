@@ -15,6 +15,9 @@ export interface ApprovalsValue {
   decide: (input: DecideInput) => void;
   /** Drafts with a decision on its way to the server. */
   deciding: ReadonlySet<string>;
+  /** The employee asks by mode (RFC-0007 §4.2): its Ask first menu lists
+   *  what it does without asking. */
+  byMode: boolean;
 }
 
 export const ApprovalsContext = createContext<ApprovalsValue | null>(null);

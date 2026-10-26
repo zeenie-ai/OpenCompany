@@ -14,7 +14,9 @@
  * What the employee wants to send waits for the owner on a card: on the
  * reply that made it, or after the conversation for the employee's own work
  * (data/approvals.ts). Ctrl/Cmd+Enter sends the newest one; the Ask first
- * chip beside the box changes the rule for everything they send.
+ * chip beside the box changes the rule for everything they send, or, where
+ * the employee's generation asks by mode (RFC-0007 §4.2), the Ask first
+ * menu picks the mode (composer/AskModeMenu.tsx).
  *
  * Files go with a message where the chat allows them: Attach, a paste, or
  * a drop anywhere on the chat (DropOverlay), all through one
@@ -51,6 +53,7 @@ import { cn } from '@/lib/utils';
 import { ApprovalsContext, type ApprovalsValue } from './approval/context';
 import { StandaloneApprovals } from './approval/StandaloneApprovals';
 import { AskFirstChip } from './composer/AskFirstChip';
+import { AskModeMenu } from './composer/AskModeMenu';
 import { addAttachments } from './composer/attachments';
 import { DropOverlay } from './composer/DropOverlay';
 import { Greetings } from './composer/Greetings';
@@ -66,7 +69,9 @@ import {
   useChatApprovals,
   useDecideApproval,
   useSetAskFirst,
+  type AskMode,
   type DecideInput,
+  type SetAskFirstResult,
 } from './data/approvals';
 import { useConversation } from './data/conversation';
 import { useChatWorkflowControl, useResumeChatGeneration } from './data/control';
@@ -91,12 +96,22 @@ import { ChatThread } from './thread/ChatThread';
 import { TurnActionsContext, type TurnActions } from './thread/turnActions';
 import { branchRefusalText, feedbackThanks } from './turns/runCopy';
 
+/** What a mode change tells the owner. */
+const MODE_SET: Record<AskMode, string> = {
+  outside: 'will ask before anything outside',
+  everything: 'will ask before everything',
+  money_only: 'will ask only before money and deletes',
+};
+
 export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHandle> }) {
   const { sessionId, scope, persona, composer, notify, onSendRefused, onSent, onComposerChange, compact = false } = host;
   const { thread, turns, lane } = useConversation(sessionId, scope);
   const workflowId = sessionId === 'default' ? null : sessionId;
   const control = useChatWorkflowControl(workflowId, lane);
   const controlled = control?.execution_control_version === 1;
+  // What asks is the mode and the call's class (RFC-0007): the Ask first
+  // menu in place of the chip, and Allowed without asking.
+  const byMode = control?.approval_wait_version === 1;
   const suspended = controlled && control.state === 'paused';
   const resuming = controlled && control.state === 'resuming';
   const resume = useResumeChatGeneration(control, () => notify('Couldn’t resume. Try again.', 'error'));
@@ -319,8 +334,8 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       .filter((id) => !linked.has(id) && isOpenApproval(approvals.byId.get(id)!, now));
   }, [approvals, linked]);
   const approvalsValue = useMemo<ApprovalsValue>(
-    () => ({ approvals, name: persona.name, compact, decide, deciding }),
-    [approvals, persona.name, compact, decide, deciding],
+    () => ({ approvals, name: persona.name, compact, decide, deciding, byMode }),
+    [approvals, persona.name, compact, decide, deciding, byMode],
   );
 
   // Ctrl/Cmd+Enter sends the newest draft still waiting for the owner, never
@@ -422,27 +437,32 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     workflowId && chatContext?.web ? (
       <WebChip on={web} name={persona.name} compact={compact} onChange={(next) => useComposerStore.getState().setWeb(sessionId, next)} />
     ) : null;
+  const ruleChanged = (result: SetAskFirstResult) => {
+    if (result.needsApply) notify(`Apply ${persona.name}’s changes for this to cover everything.`, 'info');
+    else if (byMode && result.mode) notify(`${persona.name} ${MODE_SET[result.mode]}`, 'success');
+    else notify(result.askFirst ? `${persona.name} will ask before sending` : `${persona.name} will send without asking`, 'success');
+  };
   const askFirstChip =
-    workflowId && askFirstQuery.data ? (
+    !workflowId || !askFirstQuery.data ? null
+    : byMode ? (
+      <AskModeMenu
+        workflowId={workflowId}
+        mode={askFirstQuery.data.mode}
+        name={persona.name}
+        compact={compact}
+        disabled={setAskFirst.isPending}
+        onChange={(next) => setAskFirst.mutate(next, { onSuccess: ruleChanged })}
+        onError={(message) => notify(message, 'error')}
+      />
+    ) : (
       <AskFirstChip
         on={askFirst === true}
         name={persona.name}
         compact={compact}
         disabled={setAskFirst.isPending}
-        onChange={(next) =>
-          setAskFirst.mutate(next, {
-            onSuccess: (result) => {
-              if (result.needsApply) notify(`Apply ${persona.name}’s changes for this to cover everything.`, 'info');
-              else
-                notify(
-                  result.askFirst ? `${persona.name} will ask before sending` : `${persona.name} will send without asking`,
-                  'success',
-                );
-            },
-          })
-        }
+        onChange={(next) => setAskFirst.mutate(next, { onSuccess: ruleChanged })}
       />
-    ) : null;
+    );
   // The picker wraps the box wherever the host offers it, from the first
   // render, so the box isn't mounted again when the rows arrive; its button
   // shows once they have.

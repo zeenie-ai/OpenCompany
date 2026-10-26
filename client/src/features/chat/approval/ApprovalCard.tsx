@@ -397,7 +397,7 @@ function DecideFooter({
   onSend: (always?: boolean) => void;
   onToggleEdit: () => void;
 }) {
-  const { decide, name } = useContext(ApprovalsContext)!;
+  const { decide, name, byMode } = useContext(ApprovalsContext)!;
   const [declining, setDeclining] = useState(false);
   const [note, setNote] = useState('');
   const decline = () => decide({ approval, decision: 'discard', ...(note.trim() ? { note: note.trim() } : {}) });
@@ -478,7 +478,7 @@ function DecideFooter({
         {view.preview === 'message' ? <Send aria-hidden className="size-3.25" /> : <Check aria-hidden className="size-3.25" />}
         {view.preview === 'message' ? 'Send' : 'Allow'}
       </ActionButton>
-      {approval.approvalClass === 'money' && (
+      {approval.approvalClass === 'money' && byMode && (
         <span className="w-full text-xs text-fg-muted">Money and deletes always ask unless you allow them under Allowed without asking.</span>
       )}
     </div>

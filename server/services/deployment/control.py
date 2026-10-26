@@ -53,6 +53,9 @@ def serialize_control(control: Optional[WorkflowControlExecution]) -> Dict[str, 
         "controller_workflow_id": control.controller_workflow_id,
         "controller_run_id": control.controller_run_id,
         "execution_control_version": int(manifest.get("execution_control_version", 0)),
+        # 1: what asks is the mode and the class, and a chat run's held call
+        # waits in its turn (RFC-0007); the chat shows the mode menu.
+        "approval_wait_version": int(manifest.get("approval_wait_version", 0)),
         "last_resumed_at": manifest.get("last_resumed_at"),
         "state": state,
         "revision": control.revision,

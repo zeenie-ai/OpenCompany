@@ -166,6 +166,8 @@ export interface WorkflowControlStatus {
   controller_workflow_id?: string | null;
   controller_run_id?: string | null;
   execution_control_version?: number;
+  /** 1: what asks is the workflow's mode and the call's class (RFC-0007). */
+  approval_wait_version?: number;
   last_resumed_at?: string | null;
   state: WorkflowControlState;
   revision: number;

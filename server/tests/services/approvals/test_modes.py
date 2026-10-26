@@ -181,6 +181,30 @@ async def test_a_graph_node_is_never_held(harness):
     assert await check("whatsappSend", WHATSAPP, parent_node_id=None) is tool_calls.RUN
 
 
+async def test_the_control_status_says_whether_a_generation_asks_by_mode():
+    # The chat shows the mode menu only where modes apply.
+    from services.deployment.control import serialize_control
+
+    control = SimpleNamespace(
+        workflow_id="wf",
+        generation=1,
+        execution_id="e",
+        root_execution_id="e",
+        data_scope_id=None,
+        controller_workflow_id=None,
+        controller_run_id=None,
+        status="running",
+        revision=1,
+        created_at=None,
+        updated_at=None,
+        terminal_reason=None,
+        resource_manifest={"execution_control_version": 1, "approval_wait_version": 1},
+    )
+    assert serialize_control(control)["approval_wait_version"] == 1
+    control.resource_manifest = {"execution_control_version": 1}
+    assert serialize_control(control)["approval_wait_version"] == 0
+
+
 async def test_the_ask_first_commands_read_and_set_the_mode(harness, monkeypatch):
     from services.approvals.handlers import handle_get_ask_first, handle_set_ask_first
 

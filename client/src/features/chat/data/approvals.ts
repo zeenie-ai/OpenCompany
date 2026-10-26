@@ -12,7 +12,8 @@
  *   The card moves at once and comes back if the server refuses; every click
  *   carries a fresh `decision_key`, so a replayed request acts once. Errors
  *   reach the owner through the hook (`onError`), never the click.
- * - `useAskFirst` / `useSetAskFirst`: the workflow's live rule.
+ * - `useAskFirst` / `useSetAskFirst`: the workflow's live rule, Ask first
+ *   on or off, or the mode it asks in (RFC-0007 §4.2).
  * - `applyApprovalEvent`: an `approval_lifecycle` broadcast (identity only)
  *   refetches the session's drafts.
  */
@@ -324,9 +325,21 @@ export function useDecideApproval(workflowId: string, onError?: (error: DecideEr
   });
 }
 
+/** What the employee asks first about (RFC-0007 §4.2): anything outside
+ *  (sends and money), everything (its own changes too), or only money and
+ *  deletes. */
+export type AskMode = 'outside' | 'everything' | 'money_only';
+
+const ASK_MODES: readonly AskMode[] = ['outside', 'everything', 'money_only'];
+
+const askModeOf = (value: unknown): AskMode | null => ((ASK_MODES as readonly unknown[]).includes(value) ? (value as AskMode) : null);
+
 export interface AskFirst {
   /** null: the workflow has no rule (its tool calls are never held). */
   askFirst: boolean | null;
+  /** The mode, or Ask first's meaning while the owner has chosen none;
+   *  null with no rule. */
+  mode: AskMode | null;
   revision: number;
 }
 
@@ -335,12 +348,14 @@ export function useAskFirst(workflowId: string | null) {
   return useQuery<AskFirst, Error>({
     queryKey: askFirstKey(workflowId ?? ''),
     queryFn: async () => {
-      const reply = await sendRequest<{ success?: boolean; ask_first?: unknown; revision?: unknown; error?: string }>('get_ask_first', {
-        workflow_id: workflowId,
-      });
+      const reply = await sendRequest<{ success?: boolean; ask_first?: unknown; mode?: unknown; revision?: unknown; error?: string }>(
+        'get_ask_first',
+        { workflow_id: workflowId },
+      );
       if (reply?.success === false) throw new Error(reply.error || 'Could not read Ask first');
       return {
         askFirst: typeof reply?.ask_first === 'boolean' ? reply.ask_first : null,
+        mode: askModeOf(reply?.mode),
         revision: typeof reply?.revision === 'number' ? reply.revision : 0,
       };
     },
@@ -355,43 +370,56 @@ export interface SetAskFirstResult extends AskFirst {
   needsApply: boolean;
 }
 
+/** Ask first on or off (the chip), or a mode (the mode menu). */
+export type AskFirstChange = boolean | AskMode;
+
+/** The rule a change makes: a mode also writes the Ask first it means, so a
+ *  generation that reads only Ask first keeps reading it. */
+function changed(change: AskFirstChange): Pick<AskFirst, 'askFirst' | 'mode'> {
+  if (typeof change === 'boolean') return { askFirst: change, mode: change ? 'outside' : 'money_only' };
+  return { askFirst: change !== 'money_only', mode: change };
+}
+
 export function useSetAskFirst(workflowId: string, onError?: (message: string) => void) {
   const { sendRequest } = useWebSocketActions();
   const queryClient = useQueryClient();
   const key = askFirstKey(workflowId);
-  return useMutation<SetAskFirstResult, Error, boolean, { previous: AskFirst | undefined }>({
-    mutationFn: async (askFirst) => {
+  return useMutation<SetAskFirstResult, Error, AskFirstChange, { previous: AskFirst | undefined }>({
+    mutationFn: async (change) => {
       const current = queryClient.getQueryData<AskFirst>(key);
       const reply = await sendRequest<{
         success?: boolean;
         error?: string;
         ask_first?: unknown;
+        mode?: unknown;
         revision?: unknown;
         replies_gated?: unknown;
         needs_apply?: unknown;
       }>('set_ask_first', {
         workflow_id: workflowId,
-        ask_first: askFirst,
+        ...(typeof change === 'boolean' ? { ask_first: change } : { mode: change }),
         ...(current ? { expected_revision: current.revision } : {}),
       });
       if (reply?.success === false) {
         throw new Error(reply.error === 'rule_conflict' ? 'Ask first changed meanwhile. Look again.' : 'Couldn’t change Ask first. Try again.');
       }
+      const expected = changed(change);
       return {
-        askFirst: typeof reply?.ask_first === 'boolean' ? reply.ask_first : askFirst,
+        askFirst: typeof reply?.ask_first === 'boolean' ? reply.ask_first : expected.askFirst,
+        mode: askModeOf(reply?.mode) ?? expected.mode,
         revision: typeof reply?.revision === 'number' ? reply.revision : 0,
         repliesGated: reply?.replies_gated === true,
         needsApply: reply?.needs_apply === true,
       };
     },
-    onMutate: async (askFirst) => {
+    onMutate: async (change) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<AskFirst>(key);
-      queryClient.setQueryData<AskFirst>(key, { askFirst, revision: previous?.revision ?? 0 });
+      queryClient.setQueryData<AskFirst>(key, { ...changed(change), revision: previous?.revision ?? 0 });
       return { previous };
     },
     onSuccess: (result) => {
-      queryClient.setQueryData<AskFirst>(key, { askFirst: result.askFirst, revision: result.revision });
+      queryClient.setQueryData<AskFirst>(key, { askFirst: result.askFirst, mode: result.mode, revision: result.revision });
     },
     onError: (error, _value, context) => {
       if (context) queryClient.setQueryData(key, context.previous);

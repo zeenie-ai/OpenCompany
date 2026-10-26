@@ -3,12 +3,15 @@
  * the reply that made it (and the employee's own drafts after the
  * conversation), Send with Undo while it can, an edit sent with Ctrl+Enter,
  * Ctrl+Enter anywhere for the newest draft, and the Ask first chip, which
- * asks before turning off. The card's copy says what really happened; a
- * call that broke off midway offers Dismiss, never Send again.
+ * asks before turning off; where the employee asks by mode, the Ask first
+ * menu and its list of what is allowed without asking. The card's copy
+ * says what really happened; a call that broke off midway offers Dismiss,
+ * never Send again.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const sendRequest = vi.fn();
@@ -18,7 +21,9 @@ vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
   useWebSocketActions: () => ({ sendRequest, isReady: true, addEventListener: () => () => {} }),
 }));
 
+import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { resetChatRunStore } from '@/stores/chatRunStore';
+import { useWorkflowControlStore } from '@/stores/workflowControlStore';
 import { approvalView } from '../approval/view';
 import { ChatPane } from '../ChatPane';
 import { isOpenApproval, optimistic, parseApproval, readApprovals, secondsLeft, type ChatApproval } from '../data/approvals';
@@ -155,8 +160,23 @@ describe('the card says what happened', () => {
 
 // ----- in the chat -----
 
-let server: { approvals: Wire[]; askFirst: boolean | null; decisions: Wire[]; rule: Wire[] };
+let server: {
+  approvals: Wire[];
+  askFirst: boolean | null;
+  mode: string | null;
+  revision: number;
+  decisions: Wire[];
+  rule: Wire[];
+  allows: Wire[];
+  money: Wire[];
+};
 let client: QueryClient;
+
+/** The employee's generation asks by mode (RFC-0007). */
+function asksByMode() {
+  const control = { state: 'running', revision: 1, generation: 1, execution_control_version: 1, approval_wait_version: 1, root_execution_id: 'g1' };
+  useWorkflowControlStore.getState().replaceStatuses({ w1: normalizeWorkflowControlStatus(control, 'w1') });
+}
 
 function row(id: string, role: 'user' | 'assistant', text: string, patch: Wire = {}): Wire {
   return { id, role, text, message: text, timestamp: '2026-10-04T09:00:00Z', run_key: 'g1', ...patch };
@@ -183,7 +203,8 @@ function renderPane() {
 beforeEach(() => {
   resetChatRunStore();
   useComposerStore.setState({ drafts: {} });
-  server = { approvals: [summary()], askFirst: true, decisions: [], rule: [] };
+  useWorkflowControlStore.setState({ statuses: {}, pending: {} });
+  server = { approvals: [summary()], askFirst: true, mode: 'outside', revision: 0, decisions: [], rule: [], allows: [], money: [] };
   sendRequest.mockReset().mockImplementation(async (kind: string, data: Wire) => {
     switch (kind) {
       case 'chat_subscribe':
@@ -193,10 +214,27 @@ beforeEach(() => {
       case 'list_approvals':
         return { success: true, approvals: server.approvals, server_time: new Date().toISOString() };
       case 'get_ask_first':
-        return { success: true, ask_first: server.askFirst, revision: 0 };
+        return { success: true, ask_first: server.askFirst, mode: server.mode, revision: server.revision };
       case 'set_ask_first':
         server.rule.push(data);
-        return { success: true, ask_first: data.ask_first, revision: 1, replies_gated: true, needs_apply: false };
+        server.mode = typeof data.mode === 'string' ? data.mode : data.ask_first ? 'outside' : 'money_only';
+        server.askFirst = server.mode !== 'money_only';
+        server.revision += 1;
+        return { success: true, ask_first: server.askFirst, mode: server.mode, revision: server.revision, replies_gated: true, needs_apply: false };
+      case 'list_approval_allows':
+        return { success: true, workflow_id: 'w1', allows: server.allows, money: server.money };
+      case 'add_approval_allow': {
+        const added = { id: `a${server.allows.length + 10}`, label: 'Money switch', created_at: '2026-10-04T09:00:00Z' };
+        server.allows = [...server.allows, added];
+        server.money = server.money.map((option) =>
+          option.node_type === data.node_type && option.operation === data.operation ? { ...option, allow_id: added.id } : option,
+        );
+        return { success: true, allow: added };
+      }
+      case 'remove_approval_allow':
+        server.allows = server.allows.filter((rule) => rule.id !== data.allow_id);
+        server.money = server.money.map((option) => (option.allow_id === data.allow_id ? { ...option, allow_id: null } : option));
+        return { success: true };
       case 'decide_approval': {
         server.decisions.push(data);
         const current = server.approvals[0];
@@ -291,6 +329,7 @@ describe('a draft in the chat', () => {
 
   it('a money request names itself, and Ctrl+Enter never allows it', async () => {
     server.approvals = [summary({ channel: 'Stripe', action: 'Run a Stripe command', body: '', editable: false, approval_class: 'money' })];
+    asksByMode();
     renderPane();
     const card = (await screen.findByText('Maya wants to run a Stripe command')).closest('[data-approval]') as HTMLElement;
     expect(within(card).getByText('Money or deletes')).toBeInTheDocument();
@@ -298,6 +337,14 @@ describe('a draft in the chat', () => {
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message Maya' }), { key: 'Enter', ctrlKey: true });
     await act(async () => {});
     expect(server.decisions).toEqual([]);
+  });
+
+  it('names no list of allowed calls where the employee has none', async () => {
+    server.approvals = [summary({ channel: 'Google Calendar', action: 'Delete an event', body: '', editable: false, approval_class: 'money' })];
+    renderPane();
+    const card = (await screen.findByText('Maya wants to delete an event')).closest('[data-approval]') as HTMLElement;
+    expect(within(card).getByText('Money or deletes')).toBeInTheDocument();
+    expect(within(card).queryByText(/Allowed without asking/)).not.toBeInTheDocument();
   });
 
   it('sends an edit with Ctrl+Enter', async () => {
@@ -380,5 +427,91 @@ describe('a draft in the chat', () => {
       fireEvent.click(confirm);
     });
     await waitFor(() => expect(server.rule).toEqual([{ workflow_id: 'w1', ask_first: false, expected_revision: 0 }]));
+  });
+});
+
+describe('Ask first by mode', () => {
+  function renderByMode() {
+    asksByMode();
+    const pane = host();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ChatPane host={pane} />
+      </QueryClientProvider>,
+    );
+    return pane;
+  }
+
+  it('picks the mode from a menu, and asks before asking less', async () => {
+    const user = userEvent.setup();
+    const pane = renderByMode();
+    const menu = await screen.findByRole('button', { name: 'Ask first' });
+    expect(menu).not.toHaveAttribute('aria-pressed');
+    expect(menu).toHaveAttribute('title', 'Maya asks before anything outside');
+
+    await user.click(menu);
+    expect(await screen.findByRole('menuitemradio', { name: /^Before anything outside/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: /^Before anything outside/ })).toHaveTextContent(
+      'Maya asks before it messages, posts, books, deploys or changes things in your apps.',
+    );
+    await user.click(screen.getByRole('menuitemradio', { name: /^Before everything/ }));
+    await waitFor(() => expect(server.rule).toEqual([{ workflow_id: 'w1', mode: 'everything', expected_revision: 0 }]));
+    await waitFor(() => expect(pane.notify).toHaveBeenCalledWith('Maya will ask before everything', 'success'));
+
+    // Asking less asks first.
+    await user.click(screen.getByRole('button', { name: 'Ask first' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: /^Only for money and deletes/ }));
+    const confirm = await screen.findByRole('button', { name: 'Ask only for money and deletes' });
+    expect(screen.getByText('Let Maya work without asking?')).toBeInTheDocument();
+    expect(server.rule).toHaveLength(1);
+    await user.click(confirm);
+    await waitFor(() => expect(server.rule[1]).toEqual({ workflow_id: 'w1', mode: 'money_only', expected_revision: 1 }));
+    await waitFor(() => expect(pane.notify).toHaveBeenCalledWith('Maya will ask only before money and deletes', 'success'));
+  });
+
+  it('keeps asking when the owner thinks again', async () => {
+    const user = userEvent.setup();
+    renderByMode();
+    await user.click(await screen.findByRole('button', { name: 'Ask first' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: /^Only for money and deletes/ }));
+    await user.click(await screen.findByRole('button', { name: 'Keep asking' }));
+    await act(async () => {});
+    expect(server.rule).toEqual([]);
+  });
+
+  it('lists what the employee does without asking, and switches money on and off', async () => {
+    server.allows = [
+      { id: 'a1', label: 'Shell', created_at: '2026-10-02T10:00:00Z' },
+      { id: 'a2', label: 'Stripe', created_at: '2026-10-03T10:00:00Z' },
+    ];
+    server.money = [
+      { node_type: 'stripeAction', operation: '', label: 'Stripe', allow_id: 'a2' },
+      { node_type: 'googleCalendar', operation: 'delete', label: 'Google Calendar: delete', allow_id: null },
+    ];
+    const user = userEvent.setup();
+    renderByMode();
+    await user.click(await screen.findByRole('button', { name: 'Ask first' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Allowed without asking…' }));
+    const list = await screen.findByRole('dialog', { name: 'Allowed without asking' });
+    // A money switch's own rule shows as its switch, not as a line.
+    expect(await within(list).findByText('Shell')).toBeInTheDocument();
+    expect(within(list).getByText(/added/)).toBeInTheDocument();
+    expect(within(list).queryByRole('button', { name: 'Remove Stripe' })).not.toBeInTheDocument();
+    expect(within(list).getByRole('switch', { name: 'Allow Stripe without asking' })).toBeChecked();
+    expect(within(list).getByRole('switch', { name: 'Allow Google Calendar: delete without asking' })).not.toBeChecked();
+
+    await user.click(within(list).getByRole('button', { name: 'Remove Shell' }));
+    expect(await within(list).findByText('Nothing yet. When Maya asks, choose Always allow to add it here.')).toBeInTheDocument();
+    expect(sendRequest).toHaveBeenCalledWith('remove_approval_allow', { workflow_id: 'w1', allow_id: 'a1' });
+
+    await user.click(within(list).getByRole('switch', { name: 'Allow Google Calendar: delete without asking' }));
+    await waitFor(() =>
+      expect(sendRequest).toHaveBeenCalledWith('add_approval_allow', { workflow_id: 'w1', node_type: 'googleCalendar', operation: 'delete' }),
+    );
+    await waitFor(() => expect(within(list).getByRole('switch', { name: 'Allow Google Calendar: delete without asking' })).toBeChecked());
+
+    await user.click(within(list).getByRole('switch', { name: 'Allow Stripe without asking' }));
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('remove_approval_allow', { workflow_id: 'w1', allow_id: 'a2' }));
   });
 });
