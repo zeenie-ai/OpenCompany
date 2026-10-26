@@ -110,7 +110,7 @@ def test_every_worker_registers_the_workflow_and_its_activities() -> None:
     source = (Path(__file__).parents[2] / "services" / "temporal" / "worker.py").read_text(encoding="utf-8")
     assert source.count("*APPROVAL_ACTIVITIES") == 3
     names = sorted(getattr(fn, "__temporal_activity_definition").name for fn in APPROVAL_ACTIVITIES)
-    assert names == ["approvals.claim_send", "approvals.record_outcome"]
+    assert names == ["approvals.claim_send", "approvals.read", "approvals.record_outcome"]
 
 
 def test_an_approved_send_has_one_attempt() -> None:

@@ -320,6 +320,20 @@ async def list_pending(database: Any) -> List[ApprovalRequest]:
         return list(result.scalars().all())
 
 
+async def list_unread_waits(database: Any) -> List[ApprovalRequest]:
+    """Decided rows a turn waits on whose wait has not taken the answer yet
+    (services/approvals/waiting.py)."""
+    async with database.get_session() as session:
+        result = await session.execute(
+            select(ApprovalRequest).where(
+                ApprovalRequest.runtime == "turn",
+                ApprovalRequest.status != "pending",
+                ApprovalRequest.consumed_at.is_(None),
+            )
+        )
+        return list(result.scalars().all())
+
+
 async def list_unfinished_sends(database: Any) -> List[ApprovalRequest]:
     """Approved held calls not handed on, and sends that never reported."""
     async with database.get_session() as session:

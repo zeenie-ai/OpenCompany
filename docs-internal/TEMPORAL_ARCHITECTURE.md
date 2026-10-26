@@ -802,7 +802,7 @@ keep that release's command identities:
   imported by `worker.py` as `_framework_workflows`) plus the plugin workflows
   from the same plugin registry. It checks each workflow module's source hash
   against the set's origin commit, and fails when a production type has no
-  history.
+  history, unless the golden names it as new since the release (below).
 - **Golden identities.** `server/tests/temporal/fixtures/workflow_identities.json`
   holds the release's:
   - workflow types;
@@ -813,7 +813,10 @@ keep that release's command identities:
   - plugin task queues.
 
   `test_workflow_identity_golden.py` fails when:
-  - commands change without a reviewed patch entry;
+  - commands change without a reviewed patch entry: one in `patch_entries`
+    whose `before` and `after` digests match, with a `reason`, naming either
+    the live `patch` marker that guards the change or the `new_types` it
+    adds (a new type has no recorded history to break);
   - a patched marker vanishes before a release has shipped it as
     `deprecate_patch` (RFC-0005 §24.3);
   - a handler is renamed or removed;
@@ -853,8 +856,17 @@ unsandboxed like the other framework workflows):
 - `approvals.record_outcome` records `sent`, `not_sent` (the node said it did not go) or `unknown` (the activity
   broke off, so it may have gone), and leaves the employee an `[update]` note for its next chat turn.
 
-A send that broke off midway outside this workflow leaves a card the same way (`outcome: unknown`, see "Worker crashes
-mid-execution" below). A graph node's card keeps what the node sent, its templates resolved and its secrets left out;
+A held call its agent's turn waits on (`runtime: turn`, RFC-0007 §4.6) waits instead in `ApprovalWorkflow`
+(`services/temporal/approval_workflow.py`, id `approval-<approval id>`, unsandboxed): it reads the row
+(`approvals.read`, which ends it `expired` past its expiry) and, while it is pending, waits for a `nudge` Signal or the
+row's expiry, then reads again, and returns the owner's answer. Every change to such a row nudges it
+(`services/approvals/waiting.py`, an approval listener), and the chat watchdog's round nudges again a decided row its
+wait has not read while the generation runs (`reconcile.renudge_turns`). A cancelled wait ends a pending row
+`cancelled`. It takes no part in generation control, so Stop's tree walk leaves it out
+(`execution_control.NON_PARTICIPANTS`).
+
+A send that broke off midway outside `ApprovedToolCallWorkflow` leaves a card the same way (`outcome: unknown`, see
+"Worker crashes mid-execution" below). A graph node's card keeps what the node sent, its templates resolved and its secrets left out;
 its Send again runs the node with no graph and no tool arguments (`approvals.execution.node_context`), so nothing
 resolves again and the node's saved settings put the secrets back.
 
@@ -959,6 +971,7 @@ server/services/temporal/
 ├── workspace_tasks_workflow.py   # WorkspaceTaskControllerWorkflow (per-workflow admission + Reset for direct Workspace tasks)
 ├── node_invocation.py            # NodeInvocationWorkflow (one direct Workspace task)
 ├── approved_tool_call_workflow.py # ApprovedToolCallWorkflow (sends a held tool call once the owner approved it)
+├── approval_workflow.py          # ApprovalWorkflow (a turn waits here for the owner's answer to a held call)
 ├── workspace_task_activities.py  # reset_workspace_task_runtime (activity workspace_tasks.reset_runtime)
 ├── schedules.py         # Temporal Schedule creation for cronScheduler
 ├── search_attributes.py # EVENT_SEARCH_ATTRIBUTES (7 custom SAs, incl. ControlEventTypes)

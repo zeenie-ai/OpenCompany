@@ -15,14 +15,15 @@ def framework_workflows() -> list:
     from services.temporal.node_invocation import NodeInvocationWorkflow
     from services.temporal.workspace_tasks_workflow import WorkspaceTaskControllerWorkflow
     from services.temporal.approved_tool_call_workflow import ApprovedToolCallWorkflow
+    from services.temporal.approval_workflow import ApprovalWorkflow
     from services.temporal.employee_job_workflow import EmployeeJobWorkflow, EmployeeJobDeliveryWorkflow
 
     return [
         EmployeeJobWorkflow, EmployeeJobDeliveryWorkflow, ApprovedToolCallWorkflow,
-        NodeInvocationWorkflow, WorkspaceTaskControllerWorkflow, MachinaWorkflow,
-        AgentWorkflow, PiCodingAgentWorkflow, PiInlineDelegationWorkflow,
-        DelegatedTaskWorkflow, TriggerListenerWorkflow, PollingTriggerWorkflow,
-        WorkflowControlWorkflow,
+        ApprovalWorkflow, NodeInvocationWorkflow, WorkspaceTaskControllerWorkflow,
+        MachinaWorkflow, AgentWorkflow, PiCodingAgentWorkflow,
+        PiInlineDelegationWorkflow, DelegatedTaskWorkflow, TriggerListenerWorkflow,
+        PollingTriggerWorkflow, WorkflowControlWorkflow,
     ]
 
 

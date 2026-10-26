@@ -1,9 +1,11 @@
 """The Temporal activities ``ApprovedToolCallWorkflow`` sends a held tool call
-through (services/approvals/execution.py).
+through (services/approvals/execution.py), and the one ``ApprovalWorkflow``
+reads the row a turn waits on with (services/approvals/waiting.py).
 
-Both are safe to retry: a claim retried by the same workflow run finds its
-own claim (the token is the run's), and an outcome is recorded once (only a
-row still ``sending`` under that claim moves).
+All are safe to retry: a claim retried by the same workflow run finds its
+own claim (the token is the run's), an outcome is recorded once (only a
+row still ``sending`` under that claim moves), and a read moves a row only
+from pending.
 """
 
 from __future__ import annotations
@@ -49,6 +51,16 @@ async def record_outcome_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"recorded": settled is not None, "status": getattr(settled, "status", None), "outcome": outcome["outcome"]}
 
 
-APPROVAL_ACTIVITIES = [claim_send_activity, record_outcome_activity]
+@activity.defn(name="approvals.read")
+async def read_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Payload ``{approval_id, cancel?}``. Returns ``{status, revision,
+    expires_at?, note?}`` (``waiting.read``)."""
+    from core.container import container
+    from services.approvals.waiting import read
 
-__all__ = ["APPROVAL_ACTIVITIES", "claim_send_activity", "record_outcome_activity"]
+    return await read(container.database(), str(payload.get("approval_id") or ""), cancel=payload.get("cancel") is True)
+
+
+APPROVAL_ACTIVITIES = [claim_send_activity, record_outcome_activity, read_activity]
+
+__all__ = ["APPROVAL_ACTIVITIES", "claim_send_activity", "read_activity", "record_outcome_activity"]

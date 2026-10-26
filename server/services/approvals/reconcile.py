@@ -23,6 +23,10 @@ created by this process are never touched.
 Expiry: a held call waits on nothing, so the chat watchdog ends one past
 its expiry every round (:func:`expire_due`). Rows are kept until their
 workflow is deleted.
+
+Waits: a decided row a turn waits on is nudged again from the same round
+when its wait has not read it (:func:`renudge_turns`), in case the nudge
+the decision sent was lost (services/approvals/waiting.py).
 """
 
 from __future__ import annotations
@@ -42,7 +46,11 @@ _LIVE_STATUSES = frozenset({"starting", "running", "pausing", "paused", "resumin
 _START_GRACE = timedelta(seconds=60)
 #: How long a claimed send may run before it counts as broken off.
 _SEND_DEADLINE = timedelta(minutes=30)
+#: How long a decision's own nudge may take before the round nudges again.
+_RENUDGE_AFTER = timedelta(seconds=10)
 _done = False
+#: Approved rows whose wait had ended: their turn takes them on itself.
+_ended: set = set()
 
 
 def _aware(moment: datetime) -> datetime:
@@ -141,9 +149,45 @@ async def reconcile_once(database: Any) -> None:
         logger.warning("Could not reconcile waiting drafts", exc_info=True)
 
 
+async def renudge_turns(database: Any, *, now: datetime | None = None) -> List[str]:
+    """Nudge again the waits whose decided rows they have not read, while
+    the row's generation runs (a stopped employee's turns go on after
+    Resume). A row whose wait has ended is left: one nothing will read is
+    marked read, an approved one is its turn's to take on."""
+    from services.approvals import waiting
+
+    client = waiting.engine()
+    if client is None:
+        return []
+    now = now or datetime.now(timezone.utc)
+    nudged: List[str] = []
+    for row in await store.list_unread_waits(database):
+        decided = store.aware(row.decided_at) or store.aware(row.updated_at)
+        if row.id in _ended or decided is None or now - decided < _RENUDGE_AFTER:
+            continue
+        control = await database.get_latest_workflow_control(row.workflow_id)
+        if control is None or control.generation != row.generation or control.status != "running":
+            continue
+        try:
+            reached = await waiting.nudge(row.id, client)
+        except Exception:
+            logger.warning("Could not nudge an approval wait", approval_id=row.id, exc_info=True)
+            continue
+        if reached:
+            nudged.append(row.id)
+        elif row.status == "approved":
+            _ended.add(row.id)
+        else:
+            await waiting.mark_read(database, row.id)
+    if nudged:
+        logger.info("Nudged approval waits again", count=len(nudged))
+    return nudged
+
+
 def reset_for_tests() -> None:
     global _done
     _done = False
+    _ended.clear()
 
 
-__all__ = ["PROCESS_STARTED", "cancel_orphaned_pending", "expire_due", "reconcile_once", "recover_sends"]
+__all__ = ["PROCESS_STARTED", "cancel_orphaned_pending", "expire_due", "reconcile_once", "recover_sends", "renudge_turns"]

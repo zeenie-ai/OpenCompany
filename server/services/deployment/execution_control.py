@@ -22,6 +22,17 @@ class GenerationTransitionSuperseded(RuntimeError):
     """A newer durable control intent owns this generation."""
 
 
+#: Children that take no part in generation control: they admit no actions
+#: and answer no control Updates or Queries. An approval wait
+#: (services/temporal/approval_workflow.py) waits for the owner, so Stop
+#: completes around it.
+NON_PARTICIPANTS = frozenset({"ApprovalWorkflow"})
+
+
+def _participants(desc: Any) -> list:
+    return [child for child in desc.raw_description.pending_children if child.workflow_type_name not in NON_PARTICIPANTS]
+
+
 async def count_generation_actions(client: Any, controller_id: str, status: dict) -> int:
     """A read-only UI count; transition verification uses acknowledgements."""
     queue = [controller_id, *(status.get("live_roots") or {})]
@@ -38,7 +49,7 @@ async def count_generation_actions(client: Any, controller_id: str, status: dict
             continue
         participant = await handle.query("execution_control_status")
         count += int(participant.get("active_actions", 0))
-        queue.extend(child.workflow_id for child in desc.raw_description.pending_children)
+        queue.extend(child.workflow_id for child in _participants(desc))
     return count
 
 
@@ -132,8 +143,7 @@ async def transition_generation(client: Any, control: Any, *, paused: bool, on_a
             # describe, so pending_children is a complete direct-child fence.
             desc = await describe(workflow_id, current_chain)
             if desc is not None:
-                queue.extend((child.workflow_id, child.run_id)
-                             for child in desc.raw_description.pending_children)
+                queue.extend((child.workflow_id, child.run_id) for child in _participants(desc))
 
         logger.info("Generation admission acknowledged", workflow_id=control.workflow_id,
                     revision=revision, latency_seconds=time.monotonic() - started,

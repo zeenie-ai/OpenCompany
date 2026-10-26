@@ -23,6 +23,18 @@ def _missing_handlers(release: dict, current: dict) -> dict[str, list[str]]:
     return {name: handlers for name, handlers in missing.items() if handlers}
 
 
+def _registered_types() -> list[str]:
+    from services.temporal.workflow_registry import replay_workflows
+
+    return [item.__temporal_workflow_definition.name for item in replay_workflows()]
+
+
+def _new_types(golden: dict) -> set[str]:
+    """Workflow types added since the release, named in reviewed entries:
+    no recorded history runs them, so they need no patch marker."""
+    return {name for entry in golden.get("patch_entries", []) for name in entry.get("new_types", [])}
+
+
 def test_workflow_command_identities_match_release_or_explicit_patch_entry():
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     current = identity_snapshot()
@@ -32,7 +44,13 @@ def test_workflow_command_identities_match_release_or_explicit_patch_entry():
     entries = [entry for entry in golden.get("patch_entries", []) if entry["before"] == before and entry["after"] == after]
     assert entries, "Temporal activity names/child IDs/markers changed: add a reviewed versioning patch entry and replay N-1 histories"
     markers = _markers(current, "patched") | _markers(current, "deprecate_patch")
-    assert all(entry.get("patch") in markers and entry.get("reason") for entry in entries)
+    registered = set(_registered_types())
+    for entry in entries:
+        assert entry.get("reason"), entry
+        added = set(entry.get("new_types", []))
+        # A new type must be registered and absent from the release.
+        assert added <= registered and not added & set(golden["workflow_types"]), entry
+        assert entry.get("patch") in markers or (added and "patch" not in entry), entry
 
 
 def test_patch_markers_move_to_deprecated_before_they_vanish():
@@ -101,12 +119,12 @@ def test_the_handler_inventory_reads_names_from_the_decorators(tmp_path):
 
 def test_worker_and_replayer_use_the_shared_production_registry():
     from services.temporal.worker import _framework_workflows
-    from services.temporal.workflow_registry import framework_workflows, replay_workflows
+    from services.temporal.workflow_registry import framework_workflows
 
     assert _framework_workflows is framework_workflows
-    names = [item.__temporal_workflow_definition.name for item in replay_workflows()]
+    names = _registered_types()
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
-    assert sorted(names) == golden["workflow_types"]
+    assert sorted(names) == sorted([*golden["workflow_types"], *_new_types(golden)])
     assert len(names) == len(set(names)), "Duplicate workflow registrations"
 
 

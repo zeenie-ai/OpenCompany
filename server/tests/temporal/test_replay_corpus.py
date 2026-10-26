@@ -66,7 +66,11 @@ async def replay() -> None:
                 result = await Replayer(workflows=workflows).replay_workflow(history)
                 assert result.replay_failure is None, (scenario, result.replay_failure)
                 count += 1
-    assert names <= covered, f"Production workflow types missing N-1 histories: {sorted(names - covered)}"
+    # A type added since the release has no release history yet; the golden
+    # names it in a reviewed entry (test_workflow_identity_golden.py).
+    golden = json.loads((FIXTURES / "workflow_identities.json").read_text(encoding="utf-8"))
+    added = {name for entry in golden.get("patch_entries", []) for name in entry.get("new_types", [])}
+    assert names - added <= covered, f"Production workflow types missing N-1 histories: {sorted(names - added - covered)}"
     print(f"Replayed {count} real N-1 histories covering {len(covered)} production workflow types")
 
 

@@ -61,7 +61,8 @@ def harness(monkeypatch, real_database):
     import nodes.workflow.approval_gate as gate
 
     broadcaster = FakeBroadcaster()
-    monkeypatch.setattr(container_module, "container", SimpleNamespace(database=lambda: real_database))
+    # No workflow engine: nudges to a turn's wait go nowhere.
+    monkeypatch.setattr(container_module, "container", SimpleNamespace(database=lambda: real_database, temporal_client=lambda: None))
     monkeypatch.setattr(status_broadcaster, "get_status_broadcaster", lambda: broadcaster)
     monkeypatch.setattr(gate, "POLL_SECONDS", 0.02)
     # Undo and Restore windows short enough for a test to wait them out.

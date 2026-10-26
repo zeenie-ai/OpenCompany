@@ -28,6 +28,9 @@ class ApprovalChange:
     revision: int
     #: The chat run a held tool call was made in.
     run_id: Optional[str] = None
+    #: ``turn`` when its agent's turn waits on it (services/approvals/
+    #: waiting.py).
+    runtime: Optional[str] = None
 
 
 ApprovalListener = Callable[[ApprovalChange], Any]
@@ -57,6 +60,7 @@ def change_of(row: Any, stage: str) -> ApprovalChange:
         status=row.status,
         revision=row.revision,
         run_id=getattr(row, "run_id", None) or None,
+        runtime=getattr(row, "runtime", None) or None,
     )
 
 
