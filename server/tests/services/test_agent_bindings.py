@@ -169,8 +169,11 @@ async def test_native_tool_dispatch_preserves_server_execution_scope(monkeypatch
         return SimpleNamespace(result=None, node_data=None, tool_args=None)
     monkeypatch.setattr(node_registry, "get_node_class", lambda name: Tool)
     monkeypatch.setattr(tool_calls, "check_in_process", check)
+    async def no_saved_row(_node_id):
+        return {}
     config = {"node_type": "snapshotTest", "node_id": "tool", "run_scope": "owner_chat",
-              "generation": 4, "employee_job_id": "job", "parameter_snapshot": {"tool": {"recipient": "original"}}}
+              "generation": 4, "employee_job_id": "job", "parameter_snapshot": {"tool": {"recipient": "original"}},
+              "database": SimpleNamespace(get_node_parameters=no_saved_row)}
     await _dispatch_tool("run", {"run_scope": "forged", "parameter_snapshot": {}}, config)
     for key in ("run_scope", "generation", "employee_job_id", "parameter_snapshot"):
         assert captured[key] == config[key]

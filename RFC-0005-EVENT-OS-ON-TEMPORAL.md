@@ -1136,7 +1136,7 @@ After the upgrade to SDK 1.34.0, new patch ids ship dormant for one release (`pa
 
 | Item | Commit | Notes |
 |---|---|---|
-| 0.1 Webhook routing and auth | db55d4e9 | Route table in `nodes/trigger/webhook_trigger/_routes.py`. The expected header value is read from the saved node parameters. It is blocked from snapshots, Temporal input and workflow export, except the Start-path parameter snapshot, which still carries it until Phase 1b (1b.31, 1b.32; RFC-0006 §17.8). |
+| 0.1 Webhook routing and auth | db55d4e9 | Route table in `nodes/trigger/webhook_trigger/_routes.py`. The expected header value is read from the saved node parameters. It is blocked from snapshots, Temporal input and workflow export. The Start-path parameter snapshot carried it until 1b.31; a controller started before 1b.31 keeps its copy until 1b.32 (RFC-0006 §17.8). |
 | 0.2 Scoped task events | daddf460 | The broadcast frame is an identity-only envelope. |
 | 0.3 Body cap | 1ebfd5d9 | `WEBHOOK_MAX_BODY_BYTES` lives in `.env.template` and is read through `core.env_defaults`. Poll events are not capped yet; that moves to Phase 3. |
 | 0.4 Start once per generation | b4656c22 | A runtime-mutation ledger claim alone; no `rearm` flag, no deterministic run id. |

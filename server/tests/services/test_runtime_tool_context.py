@@ -59,8 +59,8 @@ async def test_captured_legacy_target_ignores_live_upgrade():
     database = SimpleNamespace(get_node_parameters=AsyncMock(return_value={"runtime_behavior_version": 1}))
     _, context, _, _ = await prepare_native_runtime(database, "old", {},
         {"parameter_snapshot": {"old": {}}}, [], [])
+    # Only secrets come back from the saved row, never a later upgrade.
     assert "runtime_behavior_version" not in context
-    database.get_node_parameters.assert_not_awaited()
 
 
 @pytest.mark.asyncio

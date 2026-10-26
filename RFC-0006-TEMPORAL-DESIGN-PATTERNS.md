@@ -6192,7 +6192,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 
 | Id | Fix | § |
 |---|---|---|
-| 1b.31 | The Start-path parameter snapshot is sanitized; activities restore secrets from the saved row; the sanitizer drops `Authorization`, `Proxy-Authorization` and `Cookie` values. RFC-0007 AP.2a makes the sanitizer change first, for its generic approval card | 17.8 |
+| 1b.31 | The Start-path parameter snapshot is sanitized; activities restore secrets from the saved row; the sanitizer drops `Authorization`, `Proxy-Authorization` and `Cookie` values. It lands whole before RFC-0007 AP.2a, whose generic approval card needs the sanitizer change; that change alone would drop a saved `Authorization` header from the settings a generation's runs read | 17.8 |
 | 1b.32 | Live controllers refresh a known listener's snapshot on re-registration, which clears raw copies held since Start | 17.8 |
 | 1b.33 | Named dev-server ports (`TEMPORAL_HTTP_PORT`, `TEMPORAL_METRICS_PORT`, passed as `--http-port` and `--metrics-port`) and `services/netpolicy.py` on the HTTP request node, the node's own bug fix. `own_ports_from_env` skips the AI proxy. A small netpolicy port registry takes the live Browser DevTools, egress-proxy and ADB ports, one line each in the Browser runtime and the Android router. The wrong `--metrics-port` comment in `_runtime.py` is fixed here | 17.8 |
 | 1b.34 | The worker pool always polls; the flag only sets the routing of new runs | 15.2 |
@@ -6222,10 +6222,10 @@ Phase 1b is new to RFC-0005's rollout (§20).
    - the WhatsApp and Drive download fix (276d833b).
 2. **Batch A:**
    - 1b.1c, 1b.1b, 1b.2;
-   - then RFC-0007 AP.1, AP.2a, AP.2b, AP.2c, AP.3, 1b.42, AP.4a, AP.4b, AP.4c, AP.5, AP.6;
+   - then RFC-0007 AP.1, 1b.31 (from batch C), AP.2a, AP.2b, AP.2c, AP.3, 1b.42, AP.4a, AP.4b, AP.4c, AP.5, AP.6;
    - then 1b.3, 1b.8, 1b.5, 1b.10, 1b.28, 1b.26, 1b.25, 1b.27, 1b.29, 1b.30, 1b.9.
 3. **Batch B:** 1b.13, 1b.14, 1b.15, 1b.16, 1b.17, 1b.18, 1b.19, 1b.21, 1b.20, 1b.22, 1b.23, 1b.24.
-4. **Batch C:** 1b.46, 1b.31, 1b.32, 1b.33, 1b.34, 1b.35, 1b.37, 1b.36, 1b.38b, 1b.39.
+4. **Batch C:** 1b.46, 1b.32, 1b.33, 1b.34, 1b.35, 1b.37, 1b.36, 1b.38b, 1b.39.
 5. **Batch D:** 1b.43, 1b.45.
 
 RFC-0007 AP.7, which starts writing `approval_wait_version=1`, lands after the release that ships AP.1-AP.6: a release reads a flag one release before any release writes it (RFC-0005 §24.3).
@@ -6237,7 +6237,7 @@ Rules:
   - 1b.1 before 1b.2;
   - 1b.2 before 1b.8, 1b.9 and RFC-0007 AP.4b.
 - **Approvals:**
-  - RFC-0007 AP.2a takes 1b.31's sanitizer change;
+  - 1b.31 lands whole before RFC-0007 AP.2a;
   - AP.4c comes before 1b.14.
 - **Retries:**
   - 1b.30 before every new unlimited policy (1b.9, 1b.16, 1b.20);
@@ -6247,8 +6247,7 @@ Rules:
   - 1b.15 before 1b.23;
   - 1b.17 before 1b.18.
 - **Batch C:**
-  - 1b.46 before 1b.31;
-  - 1b.31 and 1b.32 in one release;
+  - 1b.31 and 1b.32 in one release, so 1b.32 lands before the next release; 1b.46 then drops the `generation > 0` condition at the deploy funnel;
   - 1b.33 before 1b.38b;
   - 1b.35 before 1b.36.
 - **Golden and docs:** 1b.42 comes before the first reviewed golden entry (RFC-0007 AP.4a), and 1b.45 comes last.

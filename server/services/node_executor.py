@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from services.node_registry import get_node_class
 from services.parameter_resolver import template_view
 from services.plugin.base import NodeUserError, locked_tool_fields, restore_locked_fields, saved_settings
+from services.workflow_sanitizer import restore_dropped
 # Wave 11.D.13 sunset: every handler that was imported here is now
 # either (a) called lazily from a plugin's execute_op / execute method,
 # or (b) retired entirely. The dispatcher itself only needs the
@@ -285,7 +286,9 @@ class NodeExecutor:
         """Load from DB, validate, inject API keys (``inject_keys``)."""
         # Merge with DB parameters (DB provides defaults, frontend can override)
         db_params = await saved_settings(self.database, node_id, parameter_snapshot)
-        merged = {**db_params, **params} if params else db_params
+        # A map the run carries (its headers, without secrets) gets the saved
+        # secrets back, unless the model supplied that map itself.
+        merged = restore_dropped({**db_params, **params}, db_params, keep=tool_args or ()) if params else db_params
 
         # On an LLM tool call the model never chooses a node's locked fields
         # (``server_controlled_fields``: the sending account, the browser

@@ -190,7 +190,7 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     )
     from services.employees.team_runtime import admit_team_plan
     from services.workflow_migrations import normalize_workflow_graph
-    from services.workflow_sanitizer import sanitize_workflow_graph
+    from services.workflow_sanitizer import sanitize_runtime_payload, sanitize_workflow_graph
 
     parameters_by_id = data.get("parameters_by_id")
     if not isinstance(parameters_by_id, dict):
@@ -340,7 +340,13 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
                 workflow_id=workflow_id,
                 graph_version=graph_version,
                 generation=int(data.get("generation") or 0),
-                **({"parameter_snapshot": data.get("parameters_by_id") or {}} if int(data.get("generation") or 0) > 0 else {}),
+                # No secret rides the snapshot into Temporal: a node gets its
+                # saved ones back when it runs (plugin.base.saved_settings).
+                **(
+                    {"parameter_snapshot": sanitize_runtime_payload(data.get("parameters_by_id") or {})}
+                    if int(data.get("generation") or 0) > 0
+                    else {}
+                ),
                 user_id=str(
                     (
                         getattr(

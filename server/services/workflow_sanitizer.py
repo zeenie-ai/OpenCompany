@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 
 def _key(value: Any) -> str:
@@ -75,6 +75,10 @@ _SENSITIVE_EXACT = frozenset(
         "encryptionkey",
         "oauthtoken",
         "authtoken",
+        # Header maps (httpRequest, proxyRequest, webhookResponse).
+        "authorization",
+        "proxyauthorization",
+        "cookie",
     }
 )
 
@@ -188,6 +192,25 @@ def sanitize_runtime_payload(value: Any) -> Any:
     return deepcopy(value)
 
 
+def restore_dropped(target: Mapping[str, Any], saved: Mapping[str, Any], *, keep: Iterable[str] = ()) -> dict[str, Any]:
+    """``target`` with what :func:`sanitize_runtime_payload` drops put back
+    from ``saved``: a node's settings captured for a run carry no secrets,
+    and its saved row has them. Only keys ``target`` lacks are copied, at any
+    depth of nested maps (lists are left as they are); top-level keys in
+    ``keep`` are left alone. Changes neither input."""
+    restored = dict(target)
+    keep = frozenset(keep)
+    for key, value in dict(saved or {}).items():
+        if key in keep:
+            continue
+        if key not in restored:
+            if _blocked_key(_key(key)):
+                restored[key] = deepcopy(value)
+        elif isinstance(restored[key], Mapping) and isinstance(value, Mapping):
+            restored[key] = restore_dropped(restored[key], value)
+    return restored
+
+
 def _sanitize_node(node: Mapping[str, Any]) -> dict[str, Any]:
     cleaned = {key: sanitize_runtime_payload(node[key]) for key in sorted(_NODE_FIELDS) if key in node}
     position = node.get("position")
@@ -240,4 +263,4 @@ def sanitize_workflow_graph(data: Mapping[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
-__all__ = ["sanitize_runtime_payload", "sanitize_workflow_graph"]
+__all__ = ["restore_dropped", "sanitize_runtime_payload", "sanitize_workflow_graph"]

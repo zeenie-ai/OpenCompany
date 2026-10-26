@@ -237,7 +237,16 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
     plugin_cls = None if is_registered_agent(node_type) else get_node_class(node_type)
     if plugin_cls is not None:
         from services.approvals.tool_calls import check_in_process
-        from services.plugin import NodeContext
+        from services.plugin import NodeContext, ToolNode
+
+        if config.get("node_id") and isinstance(config.get("parameter_snapshot"), dict) and not issubclass(plugin_cls, ToolNode):
+            from core.container import container
+            from services.workflow_sanitizer import restore_dropped
+
+            # The run's copy of an action node's settings carries no secrets;
+            # its saved row has them. A ToolNode reads only the run's copy.
+            database = config.get("database") or container.database()
+            node_params = restore_dropped(node_params, await database.get_node_parameters(config["node_id"]) or {})
 
         # Ask first: a call that sends is refused while the workflow asks
         # first (it cannot wait as a draft here); a restricted tool runs

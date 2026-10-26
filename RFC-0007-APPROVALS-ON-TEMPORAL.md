@@ -530,7 +530,7 @@ Team jobs, Workspace tasks and manual Runs do not carry it, so their calls stay 
 - **1b.5 (sends wait while stopped):** shrinks to v0 rows and Retry, and leaves turn rows to their turn.
 - **1b.9, 1b.10:** unchanged.
 - **1b.14 (cancel a chat run past 24 h):** after AP.4c, inside the restarted window (§4.7).
-- **1b.31:** its sanitizer change (`authorization`, `proxyauthorization`, `cookie`) moves to AP.2a.
+- **1b.31** lands whole before AP.2a, so the generic card's lines show no `Authorization`, `Proxy-Authorization` or `Cookie`. Its sanitizer change alone would drop a saved `Authorization` header from the settings a generation's runs read, so it comes with the restore from the saved row.
 - **1b.42:** moves to just before AP.4a (§4.6 item 7).
 - **The plan's open Ask-first gaps:** the gap of specless tools closes for v1 (D7). Dev-graph sends without an Approval node stay unheld (D12).
 
@@ -541,7 +541,7 @@ One commit per step, each with its tests. After every commit, run the replay cor
 | Step | What | Main files | Replay |
 |---|---|---|---|
 | AP.1 | The class table (§4.1) and its test: names, values, completeness, the cross-check with `repeats.py`, `class_of` cases | `services/approvals/classes.py`, `tests/services/approvals/test_classes.py` | none |
-| AP.2a | Modes and the class-based check, v1 only: the mode column and `set_mode`; `check` is mode × class, with the Browser rule; generic rows for specless tools; Stripe held; the sanitizer keys | `models/approvals.py`, `services/approvals/rules.py`, `tool_calls.py`, `handlers.py`, `services/workflow_sanitizer.py`, `core/database.py` | none (activity code) |
+| AP.2a | Modes and the class-based check, v1 only: the mode column and `set_mode`; `check` is mode × class, with the Browser rule; generic rows for specless tools; Stripe held | `models/approvals.py`, `services/approvals/rules.py`, `tool_calls.py`, `handlers.py`, `core/database.py` | none (activity code) |
 | AP.2b | Rules, turn rows and the decline note: the `approval_allows` table, the note column, `send{always}`, `discard{note}`, the turn rows' decision rules (§4.6 item 4), WS commands to list and remove rules, rules deleted with the employee | `models/approvals.py`, `services/approvals/*`, `core/database.py` | none |
 | AP.2c | CLI and in-process drafts (D9): a call id for every MCP call, the node id, notes claimed by the context bridge | `services/approvals/tool_calls.py`, `services/handlers/tools.py`, `services/cli_agent/workflow_tools.py`, `context_bridge.py` | none |
 | AP.3 | Client: the mode menu and its "Allowed without asking…" list; Allow / Always allow / Decline with a note; the generic card; the pills; Reply while a call waits; cards linked by run; the waiting turn; the wording | `client/src/features/chat/*` (approval, composer, thread, data), Home | none |

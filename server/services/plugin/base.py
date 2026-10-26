@@ -116,10 +116,15 @@ def restore_locked_fields(
 
 
 async def saved_settings(database: Any, node_id: str, parameter_snapshot: Any = None) -> Dict[str, Any]:
-    """A node's own settings: the run's captured copy, else its saved row."""
+    """A node's own settings: the run's captured copy, else its saved row.
+    The captured copy carries no secrets (services/workflow_sanitizer.py),
+    so they come back from the saved row."""
+    from services.workflow_sanitizer import restore_dropped
+
+    saved = dict(await database.get_node_parameters(node_id) or {})
     if isinstance(parameter_snapshot, dict) and node_id in parameter_snapshot:
-        return dict(parameter_snapshot[node_id] or {})
-    return dict(await database.get_node_parameters(node_id) or {})
+        return restore_dropped(dict(parameter_snapshot[node_id] or {}), saved)
+    return saved
 
 
 NODE_WAIT_INTERRUPTED = "NodeWaitInterrupted"
