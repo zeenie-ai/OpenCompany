@@ -16,7 +16,8 @@
  * (data/approvals.ts). Ctrl/Cmd+Enter sends the newest one; the Ask first
  * chip beside the box changes the rule for everything they send, or, where
  * the employee's generation asks by mode (RFC-0007 §4.2), the Ask first
- * menu picks the mode (composer/AskModeMenu.tsx).
+ * menu picks the mode (composer/AskModeMenu.tsx). While the answer waits on
+ * a card, a message goes as the owner's answer to it instead (D3).
  *
  * Files go with a message where the chat allows them: Attach, a paste, or
  * a drop anywhere on the chat (DropOverlay), all through one
@@ -70,6 +71,7 @@ import {
   useChatApprovals,
   useDecideApproval,
   useSetAskFirst,
+  waitsOnOwner,
   type AskMode,
   type DecideInput,
   type SetAskFirstResult,
@@ -178,8 +180,18 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   const feedback = useSetChatFeedback(sessionId, scope, () => notify('Your rating didn’t save. Try again.', 'error'));
   const changing = edit.isPending || regenerate.isPending || switchBranch.isPending;
 
+  // What the employee wants to do and waits for the owner's OK on (cards).
+  useApprovalEvents();
+  const approvalsQuery = useChatApprovals(workflowId);
+  const approvals = approvalsQuery.data ?? NO_APPROVALS;
+
   const busy = send.isPending || lane !== null || changing;
   const stopping = lane?.state === 'stopping' || stop.isPending || (controlled && control.state === 'pausing');
+  // The lane's run waits for the owner's OK on a call: a message goes as
+  // the owner's answer instead, declining the call with its text as the
+  // note (RFC-0007 D3; the server decides). Nothing else goes meanwhile.
+  const replying = lane !== null && waitsOnOwner(approvals, lane.runId);
+  const sendBusy = replying ? send.isPending || changing : busy;
 
   const editMutate = edit.mutate;
   const regenerateMutate = regenerate.mutate;
@@ -220,17 +232,19 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   const ready = Boolean(thread.data) && !choiceUnknown;
   const submit = () => {
     const store = useComposerStore.getState();
-    const box = useAttachmentStore.getState().boxes[sessionId] ?? [];
+    // An answer to a waiting call goes alone: files wait in the box.
+    const box = replying ? [] : (useAttachmentStore.getState().boxes[sessionId] ?? []);
     const hasText = Boolean((store.drafts[sessionId]?.text ?? '').trim());
     const hasFiles = box.some((item) => item.state === 'ready');
-    if (busy || !ready || box.some((item) => item.state === 'uploading') || !(hasText || hasFiles)) return;
+    if (sendBusy || !ready || box.some((item) => item.state === 'uploading') || !(hasText || hasFiles)) return;
     const draft = store.takeForSend(sessionId);
-    const attachments = useAttachmentStore.getState().takeReady(sessionId);
+    const attachments = replying ? [] : useAttachmentStore.getState().takeReady(sessionId);
     send.mutate({
       ...draft,
       text: draft.text.trim(),
       ...(attachments.length ? { attachments } : {}),
       ...(options ? { options } : {}),
+      ...(replying ? { declines: true } : {}),
     });
   };
 
@@ -292,9 +306,6 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
 
   // Drafts waiting for the owner: on the replies that made them, and the
   // rest (the employee's own work) after the conversation.
-  useApprovalEvents();
-  const approvalsQuery = useChatApprovals(workflowId);
-  const approvals = approvalsQuery.data ?? NO_APPROVALS;
   const askFirstQuery = useAskFirst(workflowId);
   const setAskFirst = useSetAskFirst(workflowId ?? '', (message) => notify(message, 'error'));
   const [deciding, setDeciding] = useState<ReadonlySet<string>>(() => new Set());
@@ -540,7 +551,8 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
               sessionId={sessionId}
               name={persona.name}
               ready={ready}
-              busy={busy}
+              busy={sendBusy}
+              replying={replying}
               onSend={submit}
               onStop={lane && !suspended && !resuming ? stopAnswer : undefined}
               onResume={suspended || resuming ? () => resume.mutate() : undefined}

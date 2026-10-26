@@ -240,6 +240,9 @@ beforeEach(() => {
         server.askFirst = server.mode !== 'money_only';
         server.revision += 1;
         return { success: true, ask_first: server.askFirst, mode: server.mode, revision: server.revision, replies_gated: true, needs_apply: false };
+      case 'send_chat_message':
+        // While the run waits on a card, a message answers it (RFC-0007 D3).
+        return { success: true, message_id: null, run_id: null, declined: { run_id: 'r1', approval_ids: ['ap1'] }, delivery: 'now' };
       case 'list_approval_allows':
         return { success: true, workflow_id: 'w1', allows: server.allows, money: server.money };
       case 'add_approval_allow': {
@@ -479,6 +482,27 @@ describe('a call its turn waits on', () => {
     expect(step).toHaveTextContent('Waiting for your OK');
   });
 
+  it('a message meanwhile answers the call instead, on its card', async () => {
+    server.messages = [row('m1', 'user', 'Tell Ana I’m late', { run_id: 'r1' })];
+    server.activeRuns = [waitingRun];
+    server.approvals = [summary({ waits: true })];
+    renderPane();
+    await screen.findByText('Maya wants to send a WhatsApp message');
+    const box = screen.getByRole('textbox', { name: 'Message Maya' });
+    expect(box).toHaveAttribute('placeholder', 'Tell Maya what to do instead…');
+    // Stop while the box is empty, Send once something is written.
+    const composer = box.closest('.chat-composer') as HTMLElement;
+    expect(within(composer).getByRole('button', { name: 'Stop reply' })).toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'Call her instead.' } });
+    const send = within(composer).getByRole('button', { name: 'Send' });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('send_chat_message', expect.objectContaining({ message: 'Call her instead.' })));
+    await act(async () => {});
+    expect(screen.queryByText('Call her instead.')).not.toBeInTheDocument();
+    expect(box).toHaveValue('');
+  });
+
   it('a draft the turn does not wait on leaves the turn as it was', async () => {
     server.messages = [row('m1', 'user', 'Tell Ana I’m late', { run_id: 'r1' })];
     server.activeRuns = [waitingRun];
@@ -487,6 +511,12 @@ describe('a call its turn waits on', () => {
     const turn = card.closest('[data-turn="assistant"]') as HTMLElement;
     expect(within(turn).getAllByRole('status').some((node) => node.textContent === 'Thinking')).toBe(true);
     expect(turn.querySelector('[data-step="call_1"]')).toHaveAttribute('data-state', 'done');
+    // Nothing goes while it answers.
+    const box = screen.getByRole('textbox', { name: 'Message Maya' });
+    const composer = box.closest('.chat-composer') as HTMLElement;
+    fireEvent.change(box, { target: { value: 'Hello?' } });
+    expect(within(composer).queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
+    expect(within(composer).getByRole('button', { name: 'Stop reply' })).toBeInTheDocument();
   });
 
   it('is read however many newer cards there are', async () => {

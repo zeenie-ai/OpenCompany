@@ -17,7 +17,9 @@
  *
  * What is written lives in the composer store per conversation, so it
  * survives switching to another employee and back. While the employee is
- * still answering the last message the box takes text but Send waits.
+ * still answering the last message the box takes text but Send waits;
+ * while it waits for the owner's OK on a call, a message goes as the
+ * owner's answer instead (`replying`, RFC-0007 D3).
  */
 
 import { ArrowUp, Mic, Play, Plus, Square } from 'lucide-react';
@@ -62,6 +64,10 @@ export interface ComposerProps {
   resuming?: boolean;
   /** The answer is already stopping. */
   stopping?: boolean;
+  /** The employee waits for the owner's OK on a call: a message declines
+   *  it, with its text as the note. Send shows while the box has text, and
+   *  files wait in the box. */
+  replying?: boolean;
   compact: boolean;
   /** The text box, for the host's focus requests. */
   boxRef: RefObject<HTMLTextAreaElement | null>;
@@ -99,6 +105,7 @@ export function Composer({
   onResume,
   resuming = false,
   stopping = false,
+  replying = false,
   compact,
   boxRef,
   chips,
@@ -123,7 +130,8 @@ export function Composer({
 
   const uploading = attachments.some((item) => item.state === 'uploading');
   const finished = attachments.some((item) => item.state === 'ready');
-  const canSend = ready && !disabled && !busy && !uploading && (draft.text.trim().length > 0 || finished);
+  const typed = draft.text.trim().length > 0;
+  const canSend = ready && !disabled && !busy && (replying ? typed : !uploading && (typed || finished));
 
   // The slash list: open while the box is one word starting with `/` that
   // begins a command, until Esc (for that text) or a pick.
@@ -188,7 +196,20 @@ export function Composer({
 
   const iconSize = compact ? 'size-3.5' : 'size-4';
   const round = cn('shrink-0 rounded-full', compact ? 'size-7' : 'size-8.5');
-  const sendButton = onResume ? (
+  const send = (
+    <Button
+      variant="invert"
+      size="icon"
+      disabled={!canSend}
+      onClick={onSend}
+      aria-label="Send"
+      title={busy ? `${name} is still answering` : uploading && !replying ? 'Waiting for the files to upload' : 'Send (Enter)'}
+      className={round}
+    >
+      <ArrowUp aria-hidden strokeWidth={2.25} className={iconSize} />
+    </Button>
+  );
+  const sendButton = replying && typed ? send : onResume ? (
     <Button variant="invert" size="icon" disabled={resuming} onClick={onResume}
       aria-label={resuming ? 'Resuming' : 'Resume'} title="Resume from the next pending action" className={round}>
       <Play aria-hidden fill="currentColor" className={iconSize} />
@@ -206,17 +227,7 @@ export function Composer({
       <Square aria-hidden fill="currentColor" strokeWidth={0} className={compact ? 'size-2.75' : 'size-3'} />
     </Button>
   ) : (
-    <Button
-      variant="invert"
-      size="icon"
-      disabled={!canSend}
-      onClick={onSend}
-      aria-label="Send"
-      title={busy ? `${name} is still answering` : uploading ? 'Waiting for the files to upload' : 'Send (Enter)'}
-      className={round}
-    >
-      <ArrowUp aria-hidden strokeWidth={2.25} className={iconSize} />
-    </Button>
+    send
   );
   const attachButton = onAddFiles ? (
     <>
@@ -280,7 +291,10 @@ export function Composer({
       onBlur={() => onFocusChange?.(false)}
       aria-label={`Message ${name}`}
       aria-autocomplete={commands.length ? 'list' : undefined}
-      placeholder={placeholder ?? (commands.length ? `Message ${name}…  Type / for commands` : `Message ${name}…`)}
+      placeholder={
+        placeholder ??
+        (replying ? `Tell ${name} what to do instead…` : commands.length ? `Message ${name}…  Type / for commands` : `Message ${name}…`)
+      }
       className={cn(
         'max-h-(--h-chat-composer-max) overflow-hidden text-fg-default field-sizing-fixed',
         compact ? 'py-1 text-sm leading-normal' : 'py-1.5 text-md leading-normal',

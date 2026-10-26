@@ -23,6 +23,11 @@
  * off web search, and Home's model picker adds the model and the effort
  * (data/models.ts). A model that can't answer is refused with
  * `model_unavailable`, whose `detail` the owner reads.
+ *
+ * A message sent while the employee waits for the owner's OK on a call
+ * (`declines`) may be taken as the owner's answer: the server declines the
+ * call with the text as its note and saves no message (`declined`, RFC-0007
+ * D3), so it shows on the call's card, never in the thread.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -38,7 +43,8 @@ import { chatThreadKey, type ThreadScope } from './thread';
 export type Delivery = 'now' | 'queued';
 
 export interface SendResult {
-  messageId: string;
+  /** Null when the message answered a call the employee waited on. */
+  messageId: string | null;
   runId: string | null;
   /** Null for the editor's chat with no workflow open. */
   delivery: Delivery | null;
@@ -71,8 +77,10 @@ type SendReply = {
   error?: string;
   detail?: string;
   run_id?: string | null;
-  message_id?: string;
+  message_id?: string | null;
   delivery?: string;
+  /** It answered the calls a run waited on: `{run_id, approval_ids}`. */
+  declined?: unknown;
 };
 
 /** What a message, an edit or a retry carries as `options`. */
@@ -111,6 +119,9 @@ export type SendDraft = TakenDraft & {
   /** Finished uploads from the box. */
   attachments?: BoxAttachment[];
   options?: SendOptions;
+  /** Sent while the employee waits for the owner's OK on a call: shown on
+   *  its card, not in the thread. */
+  declines?: boolean;
 };
 
 function refsOf(attachments: readonly BoxAttachment[] | undefined) {
@@ -160,17 +171,18 @@ export function useSendChatMessage(
       } catch {
         throw new ChatSendError('transport', { transport: true });
       }
-      if (reply?.success === false || !reply?.message_id) {
+      if (reply?.success === false || !(reply?.message_id || reply?.declined)) {
         throw new ChatSendError(reply?.error || 'send_failed', { runId: reply?.run_id ?? null, detail: reply?.detail ?? null });
       }
       return {
-        messageId: reply.message_id,
+        messageId: reply.message_id || null,
         runId: reply.run_id ?? null,
         delivery: reply.delivery === 'queued' ? 'queued' : reply.delivery === 'now' ? 'now' : null,
       };
     },
-    onMutate: async ({ text, clientMessageId, uiEvent, attachments }) => {
+    onMutate: async ({ text, clientMessageId, uiEvent, attachments, declines }) => {
       await queryClient.cancelQueries({ queryKey: key });
+      if (declines) return;
       const pending: ChatMessage = {
         id: localId(clientMessageId),
         legacyId: null,
@@ -196,21 +208,26 @@ export function useSendChatMessage(
     onSuccess: (result, { clientMessageId, attachments }) => {
       // The files are on the server now: the box's thumbnails can go.
       for (const item of attachments ?? []) if (item.preview) URL.revokeObjectURL(item.preview);
+      const { messageId, runId } = result;
+      // It answered a waiting call: its card shows it, not the thread.
+      if (messageId === null) {
+        replace((messages) => messages.filter((message) => message.id !== localId(clientMessageId)));
+        onSent?.();
+        return;
+      }
       replace((messages) =>
         // A resent message the server already had is in the thread as that
         // row: the local copy goes rather than show it twice.
-        messages.some((message) => message.id === result.messageId && !message.pending)
+        messages.some((message) => message.id === messageId && !message.pending)
           ? messages.filter((message) => message.id !== localId(clientMessageId))
           : messages.map((message) =>
-              message.id === localId(clientMessageId)
-                ? { ...message, id: result.messageId, runId: result.runId, pending: false }
-                : message,
+              message.id === localId(clientMessageId) ? { ...message, id: messageId, runId, pending: false } : message,
             ),
       );
-      if (result.runId) {
+      if (runId) {
         useChatRunStore.getState().admit(sessionId, {
-          runId: result.runId,
-          userMessageId: result.messageId,
+          runId,
+          userMessageId: messageId,
           state: result.delivery === 'queued' ? 'queued' : 'pending',
         });
       }
