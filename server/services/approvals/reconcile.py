@@ -23,8 +23,9 @@ outcome, since it may have gone out.
 Orphaned gate rows are ended once per process, the first time the drafts
 are listed; local rows created by this process are never touched.
 
-Expiry: a held call waits on nothing, so the chat watchdog ends one past
-its expiry every round (:func:`expire_due`). Rows are kept until their
+Expiry: the chat watchdog ends every draft past its expiry each round
+(:func:`expire_due`): a held call waits on nothing, and a gate's draft ends
+even when its gate no longer waits on it. Rows are kept until their
 workflow is deleted.
 
 Waits: a decided row a turn waits on is nudged again from the same round
@@ -133,20 +134,20 @@ async def recover_sends(database: Any, *, now: datetime | None = None) -> List[s
 
 
 async def expire_due(database: Any, *, now: datetime | None = None) -> List[str]:
-    """End the held calls past their expiry (``decisions.expire_if_due``,
-    which announces each). A gate's row is its own node's to end."""
+    """End the drafts past their expiry (``decisions.expire_if_due``, which
+    announces each and tells the employee about a held call): a gate's
+    too, so one no gate waits on any more does not wait forever. A gate
+    that still waits reads it expired and lets nothing through."""
     from services.approvals.decisions import expire_if_due
 
     now = now or datetime.now(timezone.utc)
     expired: List[str] = []
     for row in await store.list_pending(database):
-        if row.kind != "tool_call":
-            continue
         settled = await expire_if_due(database, row, now)
         if settled.status == "expired":
             expired.append(settled.id)
     if expired:
-        logger.info("Ended held drafts past their expiry", count=len(expired))
+        logger.info("Ended drafts past their expiry", count=len(expired))
     return expired
 
 

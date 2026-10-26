@@ -617,9 +617,10 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   cancels only the drafts that still wait (see [Branches](#branches)), so a failure shows again on the way back.
 - **Expiry.** A gate's draft expires after the node's `timeout_hours` (168 by default), and the waiting gate ends it
   `expired` and lets nothing through. A held call's draft expires 168 hours after it was made
-  (`DEFAULT_TIMEOUT_HOURS`); the chat watchdog ends it on its next round (`reconcile.expire_due`), announces it and
-  tells the employee. A decision that reaches a draft past its expiry ends it the same way and answers `expired`.
-  Rows are kept until their workflow is deleted.
+  (`DEFAULT_TIMEOUT_HOURS`). The chat watchdog ends every draft past its expiry on its next round
+  (`reconcile.expire_due`) and announces it: a held call's, telling the employee, and a gate's, so one no gate waits
+  on any more does not stay waiting. A decision that reaches a draft past its expiry ends it the same way and answers
+  `expired`. Rows are kept until their workflow is deleted.
 - **Generations that wait for the owner** (RFC-0007, `approval_wait_version` 1, frozen per generation). Start does
   not write it yet, so every generation works as above until it does. In such a generation:
   - **What asks** is the workflow's mode (`workflow_rules.mode`), applied to the call's class

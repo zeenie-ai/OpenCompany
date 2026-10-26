@@ -165,6 +165,17 @@ async def test_an_expired_draft_lets_nothing_through(harness):
     assert result["status"] == "expired" and result["approved"] is False
 
 
+async def test_the_round_expires_a_gate_draft_and_the_gate_lets_nothing_through(harness):
+    # 1b.10: the chat watchdog's round ends a gate's draft past its expiry;
+    # a gate still waiting on it reads it expired.
+    task = asyncio.ensure_future(run_gate(harness))
+    (row,) = await pending(harness)
+    later = store.aware(row.expires_at) + timedelta(minutes=1)
+    assert await reconcile.expire_due(harness.database, now=later) == [row.id]
+    result = (await asyncio.wait_for(task, 5))["result"]
+    assert result["status"] == "expired" and result["approved"] is False
+
+
 async def test_a_shutting_down_worker_hands_the_wait_back(harness, monkeypatch):
     monkeypatch.setattr(harness.gate, "_worker_shutting_down", lambda: True)
     result = await run_gate(harness)

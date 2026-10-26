@@ -149,7 +149,7 @@ async def test_a_held_call_past_its_expiry_ends_on_its_own(harness, nodes_loaded
     await rules.set_ask_first(harness.database, "wf", True)
     await tool_calls.check(call(), get_node_class("whatsappSend"))
     (held,) = await store.list_approvals(harness.database, status="pending")
-    # A gate's draft past its expiry is its own node's to end.
+    # A gate's draft no gate waits on any more ends too (1b.10).
     gate, _ = await store.get_or_create(
         harness.database,
         idempotency_key="g:due",
@@ -158,11 +158,12 @@ async def test_a_held_call_past_its_expiry_ends_on_its_own(harness, nodes_loaded
     later = store.aware(held.expires_at) + timedelta(hours=1)
     harness.broadcaster.frames.clear()
 
-    assert await reconcile.expire_due(harness.database, now=later) == [held.id]
+    assert set(await reconcile.expire_due(harness.database, now=later)) == {held.id, gate.id}
     assert (await store.get(harness.database, held.id)).status == "expired"
-    assert (await store.get(harness.database, gate.id)).status == "pending"
+    assert (await store.get(harness.database, gate.id)).status == "expired"
     lifecycle = [frame["data"]["type"] for frame in harness.broadcaster.frames if frame["type"] == "approval_lifecycle"]
-    assert lifecycle == ["com.opencompany.approval.expired"]
+    assert lifecycle == ["com.opencompany.approval.expired"] * 2
+    # Only a held call's employee is told; a gate's run reads its own row.
     (note,) = await notes.claim_notes(harness.database, session_id="wf", run_id="r_next")
     assert note.kind == "update" and "expired unsent" in note.text
     # Ended once.
