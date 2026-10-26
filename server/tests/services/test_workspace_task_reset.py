@@ -145,6 +145,7 @@ async def test_generation_reset_waits_for_workspace_before_archive_and_final_res
     monkeypatch.setattr(handlers, "_delete_cron_schedules", AsyncMock(return_value=1))
     monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(side_effect=terminate))
+    monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", workspace)
     monkeypatch.setattr(runtime_state, "archive_and_reset_node_state", archive)
     notices = broadcaster(monkeypatch, order)

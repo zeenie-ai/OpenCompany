@@ -1069,6 +1069,9 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
         "_terminate_generation_workflows",
         terminate,
     )
+    # The calls the reset turns waited on end cancelled (RFC-0007 §4.6).
+    cancel_waits = AsyncMock(return_value=0)
+    monkeypatch.setattr("services.approvals.waiting.cancel_waits", cancel_waits)
     monkeypatch.setattr(
         handlers,
         "_delete_cron_schedules",
@@ -1098,6 +1101,8 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     assert result["success"] is True
     assert result["state"] == "ready"
     assert result["revision"] == 4
+    cancel_waits.assert_awaited_once()
+    assert cancel_waits.await_args.args[1:] == ("wf", resetting.generation)
     assert result["terminated_executions"] == 2
     assert result["deleted_schedules"] == 3
     assert result["local_cleanup_completed"] is False

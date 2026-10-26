@@ -1175,11 +1175,13 @@ class BaseNode:
                 return result
 
             # Chat (services/chat/steps.py): a tool call of a run the owner
-            # stopped is answered without running; a tool call of the agent
-            # answering a chat run shows as a working step.
+            # stopped is answered without running, unless the owner allowed
+            # it and it is claimed (it must run or be recorded as not run);
+            # a tool call of the agent answering a chat run shows as a
+            # working step.
             from services.chat import steps as chat_steps
 
-            if await chat_steps.run_stopped(context):
+            if context.get("approval_execution") is None and await chat_steps.run_stopped(context):
                 result = {
                     "success": True,
                     "node_id": node_id,

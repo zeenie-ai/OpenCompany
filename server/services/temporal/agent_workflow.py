@@ -53,8 +53,8 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 from temporalio import workflow
-from temporalio.common import RetryPolicy  # kept for type hints
-from temporalio.workflow import ActivityCancellationType, ParentClosePolicy
+from temporalio.common import RetryPolicy, WorkflowIDReusePolicy  # RetryPolicy kept for type hints
+from temporalio.workflow import ActivityCancellationType, ChildWorkflowCancellationType, ParentClosePolicy
 
 from services.agent_bindings import unique_node_bindings
 from services.coding_agent_runtime import agent_workflow_name, uses_pi
@@ -322,6 +322,9 @@ _INHERITED_SCOPE_KEYS = (
     "browser_runtime_version",
     "browser_bindings",
     "_browser_task_id",
+    # What asks is the mode and the class, and the agent answering a chat
+    # run waits for the owner (RFC-0007): frozen per generation.
+    "approval_wait_version",
 )
 
 
@@ -410,6 +413,39 @@ def _child_control_scope(control: ExecutionControl) -> Dict[str, Any]:
 
 def _trusted_tool_scope(context: Dict[str, Any]) -> Dict[str, Any]:
     return {**_inherited_scope(context), "outputs": context.get("outputs") or context.get("inputs") or {}}
+
+
+def _held_for_owner(result: Any) -> Optional[str]:
+    """The approval a call was held for (services/approvals/tool_calls.py),
+    else None."""
+    held = result.get("result") if isinstance(result, dict) else None
+    if not isinstance(held, dict) or held.get("status") != "waiting_for_owner":
+        return None
+    approval_id = result.get("approval_id") or held.get("approval_id")
+    return str(approval_id) if approval_id else None
+
+
+def _owner_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
+    """What the model reads when the owner's answer ran nothing (RFC-0007
+    §4.5). Never ``requires_user_action``: the turn goes on."""
+    status = answer.get("status")
+    if status == "discarded":
+        note = answer.get("note")
+        tail = f" Their note: {note}" if note else " Don't try to get the same outcome another way."
+        return {"success": False, "status": "declined", "error": "The owner declined this; nothing happened." + tail}
+    if status == "expired":
+        return {"success": False, "status": "expired", "error": "The owner did not answer in time; nothing happened."}
+    return {"success": False, "status": "not_run", "error": "It was cancelled before it ran; nothing happened."}
+
+
+def _allowed_call_result(sent: Dict[str, Any]) -> Dict[str, Any]:
+    """What the model reads once the owner allowed a call: its own result,
+    or why it did not run, or that it broke off midway."""
+    if not sent.get("claimed"):
+        return {"success": False, "status": "not_run", "error": "It changed before it could run; nothing happened."}
+    if sent.get("error"):
+        return {"success": False, "status": "unknown", "error": f"It broke off midway, so it may or may not have happened: {sent['error']}"}
+    return sent.get("result") or {"success": True}
 
 
 def _tool_call_metadata(
@@ -790,6 +826,66 @@ class AgentWorkflow:
             return
         if self._control_paused:
             await workflow.wait_condition(lambda: not self._control_paused)
+
+    async def _await_owner(self, approval_id: str) -> Dict[str, Any]:
+        """Wait in ``ApprovalWorkflow`` for the owner's answer to a held call
+        (RFC-0007 §4.6): ``{status, revision, note?}``. The caller holds no
+        admitted action meanwhile, so Stop completes while the owner decides;
+        only the child's start is fenced."""
+        async with self._execution_control.child_start():
+            waiter = await workflow.start_child_workflow(
+                "ApprovalWorkflow",
+                {"approval_id": approval_id},
+                id=f"approval-{approval_id}",
+                parent_close_policy=ParentClosePolicy.TERMINATE,
+                cancellation_type=ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED,
+                id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+            )
+        return await waiter
+
+    async def _run_allowed_call(
+        self,
+        approval_id: str,
+        revision: int,
+        tool_activity_name: str,
+        tool_payload: Dict[str, Any],
+        context: Dict[str, Any],
+        tool_info: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run a call the owner allowed, once, under its claim, with the
+        owner's edits (``run_approved_call``), and return what the model
+        reads. A cancel that broke it off is recorded, then goes on."""
+        from .approved_tool_call_workflow import SEND_ONCE, run_approved_call
+
+        policy = tool_info.get("activity_policy")
+        if policy:
+            options = {**_frozen_tool_activity_options(policy, context), "retry_policy": SEND_ONCE}
+        else:
+            options = {"start_to_close_timeout": TOOL_STEP_TIMEOUT, "heartbeat_timeout": TOOL_HEARTBEAT_TIMEOUT, "retry_policy": SEND_ONCE}
+        base = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
+
+        def as_allowed(claimed: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                **base,
+                "node_data": claimed.get("node_data") or {},
+                "tool_args": claimed.get("tool_args") or {},
+                "approval_execution": claimed["approval_execution"],
+            }
+
+        info = workflow.info()
+        token = hashlib.sha256(f"{info.workflow_id}:{info.run_id}:{approval_id}".encode()).hexdigest()[:32]
+        sent = await run_approved_call(
+            approval_id,
+            revision,
+            token,
+            activity=tool_activity_name,
+            overlay=as_allowed,
+            options=options,
+            ids=(f"approval-claim-{approval_id}", f"approval-send-{approval_id}", f"approval-record-{approval_id}"),
+        )
+        if sent.get("cancelled"):
+            raise asyncio.CancelledError()
+        return _allowed_call_result(sent)
 
     async def _claim_browser_tools(self, context: dict, tools: list[dict]) -> None:
         context.setdefault("_browser_task_id", workflow.info().workflow_id)
@@ -2225,6 +2321,16 @@ class AgentWorkflow:
                     tool_payload.update(_browser_owner=binding, _browser_task_id=context["_browser_task_id"])
                 if workflow.patched("employee-task-manager-tool-scope-v2"):
                     tool_payload = {**_trusted_tool_scope(context), **tool_payload}
+                # The agent answering a chat run, in a generation that waits,
+                # waits in its turn for a call held for the owner (RFC-0007
+                # §4.6); every other held call is a draft. Activity input only.
+                waits_for_owner = (
+                    context.get("approval_wait_version") == 1
+                    and self._execution_control.enabled
+                    and bool(payload.get("chat_stream"))
+                )
+                if waits_for_owner:
+                    tool_payload["approval_wait"] = True
 
                 tool_activity_name = (
                     tool_info["activity_name"] if tool_info.get("virtual_workspace") else "agent.skill.invoke"
@@ -2367,6 +2473,29 @@ class AgentWorkflow:
                                     context,
                                     tool_info,
                                 )
+                                held_for = _held_for_owner(tool_result) if waits_for_owner else None
+                                if held_for:
+                                    # Outside any admitted action, so Stop
+                                    # completes while the owner decides.
+                                    if tool_action_active:
+                                        self._execution_control.end_action()
+                                        tool_action_active = False
+                                    answer = await self._await_owner(held_for)
+                                    if answer.get("status") == "approved":
+                                        # Allowed while stopped: it runs after Resume.
+                                        await self._wait_until_resumed()
+                                        await self._execution_control.begin_action()
+                                        tool_action_active = self._execution_control.enabled
+                                        tool_result = await self._run_allowed_call(
+                                            held_for,
+                                            int(answer.get("revision") or 0),
+                                            tool_activity_name,
+                                            tool_payload,
+                                            context,
+                                            tool_info,
+                                        )
+                                    else:
+                                        tool_result = _owner_answer(answer)
                             if (
                                 tool_info["node_type"] == "taskManager"
                                 and isinstance(tool_result, dict)

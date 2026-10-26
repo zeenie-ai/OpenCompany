@@ -216,10 +216,12 @@ async def cancel_open(
     generation: Optional[int] = None,
     run_ids: Optional[Iterable[str]] = None,
     failed: bool = False,
+    runtime: Optional[str] = None,
 ) -> List[ApprovalRequest]:
     """Cancel a workflow's drafts that still wait (all generations, one, or
-    those of some chat runs): waiting, approved but not handed on yet, or
-    discarded and restorable; with ``failed``, failed sends as well."""
+    those of some chat runs; only those of one ``runtime``, when given):
+    waiting, approved but not handed on yet, or discarded and restorable;
+    with ``failed``, failed sends as well."""
     statuses = ("pending", "approved", "discarded", "failed") if failed else ("pending", "approved", "discarded")
     async with database.get_session() as session:
         query = select(ApprovalRequest).where(
@@ -228,6 +230,8 @@ async def cancel_open(
         )
         if generation is not None:
             query = query.where(ApprovalRequest.generation == generation)
+        if runtime is not None:
+            query = query.where(ApprovalRequest.runtime == runtime)
         if run_ids is not None:
             ids = [run_id for run_id in run_ids if run_id]
             if not ids:

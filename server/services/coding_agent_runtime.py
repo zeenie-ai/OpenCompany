@@ -3,6 +3,10 @@
 Absence of the marker is intentional: histories and generations admitted before
 Pi was installed keep the native v1 implementation, including later firings.
 This module contains no settings reads or IO and is safe in workflow code.
+
+:func:`freeze_generation_harness` also freezes whether held calls wait for
+the owner (``approval_wait_version``, RFC-0007), a generation flag the same
+way.
 """
 
 from typing import Any, Mapping
@@ -11,6 +15,7 @@ PI_HARNESS_VERSION = 1
 PI_PACKAGE_VERSION = "1.1.0"
 PI_HARNESS_KEY = "pi_harness_version"
 PI_WORKFLOW_NAME = "PiCodingAgentWorkflow"
+APPROVAL_WAIT_KEY = "approval_wait_version"
 
 
 def uses_pi(node_type: str, context: Mapping[str, Any]) -> bool:
@@ -37,23 +42,28 @@ def freeze_pi_local_control(payload: dict) -> None:
     payload["pi_local_control_version"] = 1
 
 
+def _freeze(payload: dict, key: str, value: Any) -> None:
+    """Set ``key`` to ``value`` (None: absent) on the payload and its routing."""
+    routing = payload.get("_temporal_routing_v1")
+    routing = dict(routing) if isinstance(routing, dict) else None
+    for target in (payload, routing):
+        if target is None:
+            continue
+        if value is None:
+            target.pop(key, None)
+        else:
+            target[key] = value
+    if routing is not None:
+        payload["_temporal_routing_v1"] = routing
+
+
 def freeze_generation_harness(payload: dict, manifest: Mapping[str, Any] | None) -> None:
     """Replace a starter's defaults with the admitted generation's selection."""
     version = (manifest or {}).get(PI_HARNESS_KEY)
     if version not in {None, PI_HARNESS_VERSION}:
         raise ValueError("Unsupported recorded Coding Agent harness version")
-    if version == PI_HARNESS_VERSION:
-        payload[PI_HARNESS_KEY] = version
-    else:
-        payload.pop(PI_HARNESS_KEY, None)
-    routing = payload.get("_temporal_routing_v1")
-    if isinstance(routing, dict):
-        routing = dict(routing)
-        if version == PI_HARNESS_VERSION:
-            routing[PI_HARNESS_KEY] = version
-        else:
-            routing.pop(PI_HARNESS_KEY, None)
-        payload["_temporal_routing_v1"] = routing
+    _freeze(payload, PI_HARNESS_KEY, version)
+    _freeze(payload, APPROVAL_WAIT_KEY, 1 if (manifest or {}).get(APPROVAL_WAIT_KEY) == 1 else None)
 
 
 def enabled_coding_agents(nodes: list[dict]) -> bool:

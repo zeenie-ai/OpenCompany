@@ -814,9 +814,11 @@ keep that release's command identities:
 
   `test_workflow_identity_golden.py` fails when:
   - commands change without a reviewed patch entry: one in `patch_entries`
-    whose `before` and `after` digests match, with a `reason`, naming either
-    the live `patch` marker that guards the change or the `new_types` it
-    adds (a new type has no recorded history to break);
+    whose `before` and `after` digests match, with a `reason`, naming the
+    live `patch` marker that guards the change, or the `new_types` it adds
+    (a new type has no recorded history to break), or the generation
+    `flags` (`workflow.GENERATION_FLAGS`) that gate it for new generations
+    only;
   - a patched marker vanishes before a release has shipped it as
     `deprecate_patch` (RFC-0005 §24.3);
   - a handler is renamed or removed;
@@ -856,13 +858,21 @@ unsandboxed like the other framework workflows):
 - `approvals.record_outcome` records `sent`, `not_sent` (the node said it did not go) or `unknown` (the activity
   broke off, so it may have gone), and leaves the employee an `[update]` note for its next chat turn.
 
-A held call its agent's turn waits on (`runtime: turn`, RFC-0007 §4.6) waits instead in `ApprovalWorkflow`
-(`services/temporal/approval_workflow.py`, id `approval-<approval id>`, unsandboxed): it reads the row
-(`approvals.read`, which ends it `expired` past its expiry) and, while it is pending, waits for a `nudge` Signal or the
-row's expiry, then reads again, and returns the owner's answer. Every change to such a row nudges it
+In a generation admitted with `approval_wait_version` 1 (a generation flag: frozen at Start through
+`freeze_generation_harness`, kept by `_frozen_routing_from_input`, put on node and agent contexts by MachinaWorkflow and
+carried to tool calls by `_INHERITED_SCOPE_KEYS`), the agent answering a chat run marks its tool calls
+`approval_wait`, and a held one becomes a row its turn waits on (`runtime: turn`, RFC-0007 §4.6). AgentWorkflow ends
+the call's admitted action and waits in `ApprovalWorkflow` (`services/temporal/approval_workflow.py`, id
+`approval-<approval id>`, unsandboxed, TERMINATE with its parent): it reads the row (`approvals.read`, which ends it
+`expired` past its expiry) and, while it is pending, waits for a `nudge` Signal or the row's expiry, then reads again,
+and returns the owner's answer. Allowed, the turn waits for Resume, then claims, runs and records the call itself with
+`run_approved_call` (the helper `ApprovedToolCallWorkflow` uses too), under the tool's own activity with one attempt
+and ids `approval-claim-<id>`, `approval-send-<id>` and `approval-record-<id>`; the model reads the call's real result.
+Declined, expired or cancelled, it reads why nothing ran. Every change to such a row nudges it
 (`services/approvals/waiting.py`, an approval listener), and the chat watchdog's round nudges again a decided row its
 wait has not read while the generation runs (`reconcile.renudge_turns`). A cancelled wait ends a pending row
-`cancelled`. It takes no part in generation control, so Stop's tree walk leaves it out
+`cancelled`; a Reset terminates the waits with their turns and cancels the rows they waited on
+(`waiting.cancel_waits`). It takes no part in generation control, so Stop's tree walk leaves it out
 (`execution_control.NON_PARTICIPANTS`).
 
 A send that broke off midway outside `ApprovedToolCallWorkflow` leaves a card the same way (`outcome: unknown`, see

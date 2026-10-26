@@ -75,6 +75,18 @@ async def nudge_on_change(change: ApprovalChange) -> None:
         await nudge(change.approval_id, client)
 
 
+async def cancel_waits(database: Any, workflow_id: str, generation: int) -> int:
+    """End the open rows a generation's turns wait on: a Reset terminated
+    those turns, and their waits with them (the approval gate's own rows
+    are its node's to end)."""
+    cancelled = await store.cancel_open(database, workflow_id=workflow_id, generation=generation, runtime=TURN)
+    for row in cancelled:
+        await notify_approval_changed(change_of(row, "cancelled"))
+    if cancelled:
+        logger.info("Cancelled the calls a reset turn waited on", workflow_id=workflow_id, count=len(cancelled))
+    return len(cancelled)
+
+
 async def mark_read(database: Any, approval_id: str) -> None:
     """The wait took the row's answer, or nothing waits for it any more:
     nothing nudges it again."""
@@ -115,4 +127,4 @@ async def read(database: Any, approval_id: str, *, cancel: bool = False) -> Dict
     return {"status": row.status, "revision": row.revision, **({"note": row.note} if row.note else {})}
 
 
-__all__ = ["TURN", "WORKFLOW_NAME", "engine", "mark_read", "nudge", "nudge_on_change", "read", "wait_workflow_id"]
+__all__ = ["TURN", "WORKFLOW_NAME", "cancel_waits", "engine", "mark_read", "nudge", "nudge_on_change", "read", "wait_workflow_id"]

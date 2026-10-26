@@ -2600,6 +2600,8 @@ async def handle_reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
     # Controller, cron, and legacy local admission paths are now closed. This
     # final strict sweep therefore observes a fixed set of generation runs.
     terminated = await _terminate_generation_workflows(current, strict=True)
+    from services.approvals.waiting import cancel_waits
+    await cancel_waits(service.database, workflow_id, current.generation)
     from core.container import container
     from services.browser_reset import cleanup_generation_browser_tasks
     wrapper = container.temporal_client()

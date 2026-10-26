@@ -942,11 +942,14 @@
   "patch_entries": [
     {
       "before": "b00b963e489ffe4822ef7d2386562dc99f0d611b07c482c7f10d8539872f15c8",
-      "after": "721e9e1f3b778a6b30da3fb69ca5b2738de7699ac5fc24e35712cb4527cef6b2",
+      "after": "d294a50b9a99c1837d7af5ad7ecbce1e8a4ead39117ec12af35596df4ff36ab5",
       "new_types": [
         "ApprovalWorkflow"
       ],
-      "reason": "RFC-0007 AP.4a: ApprovalWorkflow is a new type (services/temporal/approval_workflow.py), so no recorded history runs it."
+      "flags": [
+        "approval_wait_version"
+      ],
+      "reason": "RFC-0007 AP.4a/AP.4b: ApprovalWorkflow is a new type, so no recorded history runs it; AgentWorkflow starts it, and claims, runs and records an allowed call, only in generations admitted with approval_wait_version 1; ApprovedToolCallWorkflow's commands moved into run_approved_call with no ids, so they replay as recorded (the approved_tool_call fixture)."
     }
   ],
   "handlers": {

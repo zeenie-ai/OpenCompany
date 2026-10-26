@@ -43,6 +43,8 @@ def test_workflow_command_identities_match_release_or_explicit_patch_entry():
     before, after = digest(golden["identities"]), digest(current)
     entries = [entry for entry in golden.get("patch_entries", []) if entry["before"] == before and entry["after"] == after]
     assert entries, "Temporal activity names/child IDs/markers changed: add a reviewed versioning patch entry and replay N-1 histories"
+    from services.temporal.workflow import GENERATION_FLAGS
+
     markers = _markers(current, "patched") | _markers(current, "deprecate_patch")
     registered = set(_registered_types())
     for entry in entries:
@@ -50,7 +52,11 @@ def test_workflow_command_identities_match_release_or_explicit_patch_entry():
         added = set(entry.get("new_types", []))
         # A new type must be registered and absent from the release.
         assert added <= registered and not added & set(golden["workflow_types"]), entry
-        assert entry.get("patch") in markers or (added and "patch" not in entry), entry
+        # A flag frozen per generation gates the change for new generations
+        # only (RFC-0005 §24.1 rule 2).
+        flags = set(entry.get("flags", []))
+        assert flags <= set(GENERATION_FLAGS), entry
+        assert entry.get("patch") in markers or ((added or flags) and "patch" not in entry), entry
 
 
 def test_patch_markers_move_to_deprecated_before_they_vanish():

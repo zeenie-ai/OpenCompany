@@ -19,7 +19,7 @@ def scope():
             "execution_id": "run", "workflow_slug": "saved", "generation": 2, "graphVersion": 3,
             "parameter_snapshot": {"coding": {"model": "model"}}, "execution_control_version": 1,
             "controller_workflow_id": "controller", "execution_control_revision": 8,
-            "nodes": [{"id": "coding", "type": "coding_agent"}], "edges": []}
+            "nodes": [{"id": "coding", "type": "coding_agent"}], "edges": [], "approval_wait_version": 1}
 
 
 @pytest.mark.asyncio
@@ -46,6 +46,9 @@ async def test_claude_mcp_uses_authenticated_request_identity_and_trusted_princi
     assert config["tool_call_id"] == "mcp:" + canonical_digest({"session": "session-1", "request": "rpc-23"})
     assert config["user_id"] == "alice" and config["root_execution_id"] == "root"
     assert config["execution_control_revision"] == 8
+    # What asks rides the same scope (RFC-0007 §4.9): Start admits every
+    # generation with the Pi flag, so a generation that waits forwards it.
+    assert config["approval_wait_version"] == 1
     assert execute.await_args.args[1] == {"task": "edit"}
 
     # Independent clients can both call request 1 in the same admitted batch.
@@ -89,4 +92,5 @@ async def test_rlm_exposes_only_marked_coding_and_records_source_position(monkey
     config = execute.await_args.args[2]
     assert config["tool_call_id"].startswith("rlm:")
     assert config["root_execution_id"] == "root" and config["controller_workflow_id"] == "controller"
+    assert config["approval_wait_version"] == 1
     assert execute.await_args.args[1] == {"task": "edit"}

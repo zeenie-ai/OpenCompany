@@ -96,6 +96,27 @@ async def test_an_approved_send_runs_only_under_its_claim(harness, service):
     service.execute_node.assert_awaited_once()
 
 
+async def test_a_claimed_call_runs_though_its_chat_run_reads_as_stopped(harness, service, monkeypatch):
+    # A turn that waited runs the allowed call with its chat run's scope
+    # (RFC-0007 §4.6): the claim is the owner's, so it runs or is recorded
+    # as not run, never answered "stopped" and recorded as sent.
+    from services.approvals.execution import node_context
+    from services.chat import steps
+
+    await rules.set_ask_first(harness.database, "wf", True)
+    activity_fn = get_node_class("whatsappSend").as_activity()
+    await ActivityEnvironment().run(activity_fn, context())
+    monkeypatch.setattr(steps, "run_stopped", AsyncMock(return_value=True))
+    (row,) = await store.list_approvals(harness.database, status="pending")
+    approved = await store.transition(harness.database, row.id, expected_revision=row.revision, from_statuses=("pending",), status="approved")
+    sending = await store.transition(
+        harness.database, row.id, expected_revision=approved.revision, from_statuses=("approved",), status="sending", values={"claim_token": "t1"}
+    )
+    result = await ActivityEnvironment().run(activity_fn, {**node_context(sending, "t1"), "chat_run_id": "r_1"})
+    service.execute_node.assert_awaited_once()
+    assert result["success"] is True
+
+
 def attempt(number: int) -> ActivityEnvironment:
     env = ActivityEnvironment()
     env.info = dataclasses.replace(env.info, attempt=number)

@@ -172,6 +172,15 @@ def _agent_child_workflow_id(root_workflow_id: str, agent_node_id: str) -> str:
     return f"{root_workflow_id}-agent-{agent_node_id}"
 
 
+#: Selections frozen per generation at Start (RFC-0005 §24.1 rule 2): the
+#: workflow code branches on these, never on live settings, so a change
+#: behind one replays older histories without a patch marker
+#: (tests/temporal/test_workflow_identity_golden.py). ``approval_wait_version``:
+#: what asks is the mode and the class, and the agent answering a chat run
+#: waits for the owner (RFC-0007).
+GENERATION_FLAGS = ("pi_harness_version", "approval_wait_version")
+
+
 def _frozen_routing_from_input(
     workflow_data: Dict[str, Any],
 ) -> Dict[str, Any]:
@@ -191,7 +200,7 @@ def _frozen_routing_from_input(
             raw.get("per_type_dispatch_enabled") is True
         ),
         "worker_pool_enabled": raw.get("worker_pool_enabled") is True,
-        **({"pi_harness_version": 1} if raw.get("pi_harness_version") == 1 else {}),
+        **{flag: 1 for flag in GENERATION_FLAGS if raw.get(flag) == 1},
     }
 
 
@@ -764,6 +773,8 @@ class MachinaWorkflow:
                     for key in ("pi_local_control_version", "pi_local_control_state", "pi_local_control_revision"):
                         if key in workflow_data:
                             context[key] = workflow_data[key]
+                if frozen_routing.get("approval_wait_version") == 1:
+                    context["approval_wait_version"] = 1
                 if workflow_data.get("browser_routing_version") == 1:
                     context.update(browser_routing_version=1, browser_bindings=workflow_data.get("browser_bindings") or {})
                     binding = context["browser_bindings"].get(node_id)

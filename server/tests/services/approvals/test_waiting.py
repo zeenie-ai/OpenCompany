@@ -109,6 +109,32 @@ async def test_a_cancelled_wait_cancels_its_pending_row(harness):
     assert await waiting.read(harness.database, "gone") == {"status": "cancelled", "revision": 0}
 
 
+async def test_a_reset_cancels_what_its_turns_waited_on(harness):
+    waited, allowed = await held(harness), await held(harness, "call_2")
+    await decide(allowed, "send", "s1")
+    await rules.set_mode(harness.database, "wf", "outside")
+    draft_context = {
+        "node_id": "wf:whatsappSend:1",
+        "workflow_id": "wf",
+        "execution_id": "wf:execution:1",
+        "generation": 1,
+        "user_id": "owner",
+        "parent_node_id": "wf:aiAgent:1",
+        "tool_call_id": "call_3",
+        "node_data": {"message_type": "text", **WHATSAPP},
+        "tool_args": WHATSAPP,
+        "approval_wait_version": 1,
+    }
+    await tool_calls.check(draft_context, get_node_class("whatsappSend"))
+    assert await waiting.cancel_waits(harness.database, "wf", 2) == 0
+    assert await waiting.cancel_waits(harness.database, "wf", 1) == 2
+    assert (await store.get(harness.database, waited.id)).status == "cancelled"
+    assert (await store.get(harness.database, allowed.id)).status == "cancelled"
+    # A draft is not a turn's: the Reset leaves it to the rest of its cleanup.
+    draft = next(row for row in await store.list_approvals(harness.database, status="pending") if row.tool_call_id == "call_3")
+    assert draft.runtime != waiting.TURN
+
+
 async def test_a_decision_nudges_the_wait(harness, monkeypatch):
     row = await held(harness)
     client = FakeClient([row.id])
