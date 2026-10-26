@@ -58,6 +58,25 @@ DEFAULT_MAX_PARALLEL = 5
 BatchKey = Tuple[str, str]  # (workflow_id, node_id)
 
 
+async def with_chat_notes(database: Any, tasks: List[BaseAICliTaskSpec], chat_stream: Dict[str, Any]) -> List[BaseAICliTaskSpec]:
+    """The tasks of a CLI agent answering the owner's chat, each with the
+    session's untold notes ahead of its prompt, claimed for the run as the
+    native agent's turn claims them (services/chat/guide.py ``chat_turn``):
+    the owner's ratings and the outcomes of its held calls. Notes that cannot
+    be read are left for the next turn."""
+    from services.chat.notes import claim_notes, notes_prompt
+
+    try:
+        claimed = await claim_notes(database, session_id=str(chat_stream["session_id"]), run_id=str(chat_stream["run_id"]))
+    except Exception:  # noqa: BLE001 - the turn goes on without them
+        logger.warning("Chat notes could not be read for a CLI turn", run_id=chat_stream.get("run_id"), exc_info=True)
+        return tasks
+    if not claimed:
+        return tasks
+    lines = notes_prompt(claimed)
+    return [task.model_copy(update={"prompt": f"{lines}\n\n{task.prompt}"}) for task in tasks]
+
+
 class AICliService:
     """Singleton service. Use `get_ai_cli_service()` to access."""
 
@@ -90,8 +109,11 @@ class AICliService:
         max_parallel: int = DEFAULT_MAX_PARALLEL,
         mcp_port: Optional[int] = None,
         ai_service: Any = None,
+        chat_stream: Optional[Dict[str, Any]] = None,
     ) -> BatchResult:
-        """Run a list of CLI tasks under one batch.
+        """Run a list of CLI tasks under one batch. ``chat_stream``: the chat
+        run the agent answers (services/chat/stream.py ``chat_stream_for``),
+        whose untold notes go ahead of each task's prompt.
 
         Returns:
             `BatchResult` aggregating per-task `SessionResult`s.
@@ -101,6 +123,10 @@ class AICliService:
         """
         provider = create_cli_provider(provider_name)
         task_list: List[BaseAICliTaskSpec] = list(tasks)
+        if chat_stream:
+            from services.plugin.deps import get_database
+
+            task_list = await with_chat_notes(get_database(), task_list, chat_stream)
         connected_tools = list(connected_tools or [])
         context_bridge: Optional[SpecializedAgentContextBridge] = None
         context_original_prompts: List[str] = []

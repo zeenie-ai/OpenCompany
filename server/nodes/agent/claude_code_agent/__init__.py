@@ -405,6 +405,8 @@ class ClaudeCodeAgentNode(ActionNode):
 
         repo_root = Path(params.working_directory) if params.working_directory else None
 
+        from services.chat.stream import chat_stream_for
+
         svc = get_ai_cli_service()
         result = await svc.run_batch(
             "claude",
@@ -423,6 +425,8 @@ class ClaudeCodeAgentNode(ActionNode):
             allowed_credentials=params.allowed_credentials,
             max_parallel=params.max_parallel,
             ai_service=get_ai_service(),
+            # Answering the owner's chat, it reads the owner's notes first.
+            chat_stream=chat_stream_for({**ctx.raw, "node_id": node_id}),
         )
 
         elapsed = time.time() - start_time

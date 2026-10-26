@@ -482,7 +482,7 @@ Team jobs, Workspace tasks and manual Runs do not carry it, so their calls stay 
     - A held call without a call id is refused.
     - A retried call is a new request and gets a new row. O4 is settled.
   - **The answer:** "waiting for the owner". The owner's Allow starts `ApprovedToolCallWorkflow`, which runs the node's own activity; the CLI is not involved.
-  - **The outcome:** the CLI agent hears it on its next turn. The context bridge (`services/cli_agent/context_bridge.py`) claims the `[update]` notes, which only `agent_activities.py:1762-1771` claims today.
+  - **The outcome:** the CLI agent hears it on its next turn. When it answers the owner's chat, `AICliService.run_batch` claims the session's `[update]` notes for the run and puts them ahead of its prompt (`with_chat_notes`), as the native turn does (`chat/guide.py` `chat_turn`). The Claude Code node passes its chat stream; the Context bridge exists only with a Context node, so it is not the place.
 - **v0 generations keep the refusal.**
 - **Claude Code's built-in tools keep `dontAsk`.** Answering Claude Code's own permission prompts through cards (stdio `can_use_tool`) is not adopted: it blocks the CLI session, and a restart loses it.
 - **Codex is out of this RFC** (D17; §9, O8).
