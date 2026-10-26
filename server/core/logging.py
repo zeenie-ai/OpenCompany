@@ -254,11 +254,13 @@ class WebSocketLogHandler(logging.Handler):
 
 
 class ExpectedLLMRetryFilter(logging.Filter):
-    """Keep planned provider retries visible without an exception traceback.
+    """Keep planned provider retries readable, without an exception traceback.
 
-    Temporal raises an ApplicationError to schedule the next attempt. That
-    expected control flow should be a warning with activity context; terminal
-    rejections and unexpected runtime errors retain their complete tracebacks.
+    The LLM step raises a benign ApplicationError to schedule the next
+    attempt, which the SDK logs at DEBUG ("Completing activity as failed")
+    and counts as no failure. Where that record is shown, it reads as a
+    one-line retry notice; terminal rejections and unexpected runtime errors
+    keep their complete tracebacks at WARNING.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:

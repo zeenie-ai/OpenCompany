@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from google.genai.errors import ClientError, ServerError
-from temporalio.exceptions import ApplicationError
+from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 from temporalio.testing import ActivityEnvironment
 
 from services.llm.protocol import LLMError, LLMErrorCategory, LLMResponse, Message, StreamEvent, message_to_wire
@@ -49,6 +49,7 @@ async def test_internal_error_announces_backoff_then_clears_on_success(step, att
     failure = raised.value
     assert failure.type == "LLMError.server"
     assert not failure.non_retryable
+    assert failure.category == ApplicationErrorCategory.BENIGN
     assert failure.next_retry_delay == timedelta(seconds=delay)
     assert failure.__suppress_context__
     assert "secret" not in str(failure.details)
@@ -87,6 +88,8 @@ async def test_google_retry_info_paces_throttles_but_cannot_override_a_daily_blo
         await env.run(execute_llm_step, payload)
     failure = raised.value
     assert failure.non_retryable is daily
+    # Only a planned retry is benign; the daily block fails for real.
+    assert failure.category == (ApplicationErrorCategory.UNSPECIFIED if daily else ApplicationErrorCategory.BENIGN)
     if daily:
         assert failure.next_retry_delay is None
         assert failure.type == "LLMError.quota"

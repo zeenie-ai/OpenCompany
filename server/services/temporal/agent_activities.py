@@ -252,7 +252,7 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
     and therefore in Temporal history for operators.
     """
 
-    from temporalio.exceptions import ApplicationError
+    from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
     from services.llm.protocol import valid_retry_delay
 
     category_value = getattr(getattr(error, "category", None), "value", None)
@@ -300,6 +300,9 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
         type=f"LLMError.{category}",
         non_retryable=not details["retryable"],
         next_retry_delay=next_retry_delay,
+        # A planned retry is no failure: the SDK logs it at DEBUG and counts
+        # no failure metric for it.
+        category=ApplicationErrorCategory.BENIGN if details["retryable"] else ApplicationErrorCategory.UNSPECIFIED,
     )
 
 

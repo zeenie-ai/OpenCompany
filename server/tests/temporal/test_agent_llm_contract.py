@@ -418,9 +418,13 @@ class TestLlmStepActivity:
         )
         temporal_error = _as_temporal_llm_error(provider_error)
 
+        from temporalio.exceptions import ApplicationErrorCategory
+
         assert "raw body" not in str(temporal_error)
         assert temporal_error.type == "LLMError.rate_limit"
         assert temporal_error.non_retryable is False
+        # A planned retry is no failure (1b.28).
+        assert temporal_error.category == ApplicationErrorCategory.BENIGN
         # The provider's Retry-After hint paces the next Temporal attempt.
         assert temporal_error.next_retry_delay == timedelta(seconds=1.5)
         assert temporal_error.details == (

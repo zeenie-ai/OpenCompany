@@ -369,9 +369,12 @@ SDK HTTP transport errors use this same boundary. OpenAI Responses failures
 in a successful HTTP body or `response.failed` event are classified before
 recording any output; valid max-token incomplete responses remain supported.
 Failed streamed attempts are withdrawn immediately, while an owner's Stop
-keeps the intentionally saved partial reply. Planned Temporal retries log
-a warning with activity context instead of a runtime traceback; terminal
-quota, credential, and unexpected programming failures keep their tracebacks.
+keeps the intentionally saved partial reply. A planned Temporal retry is a
+benign `ApplicationError` (`category=BENIGN`): the SDK logs it at DEBUG,
+without a traceback (`core/logging.ExpectedLLMRetryFilter`), and counts no
+failure metric; the retry itself shows at WARNING when the next attempt
+starts (the `activity_retry` interceptor). Terminal quota, credential, and
+unexpected programming failures keep their tracebacks.
 
 The legacy `factory.py` (`create_provider` / `is_native_provider` /
 `NATIVE_PROVIDERS`) was **removed** — `ChatUnifier` + `registry.py` is the
