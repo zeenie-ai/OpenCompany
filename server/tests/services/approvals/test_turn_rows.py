@@ -23,7 +23,7 @@ SOCKET = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(use
 WHATSAPP = {"recipient_type": "phone", "phone": "447700900123", "message": "On my way."}
 
 
-async def held(harness, *, waits=True):
+async def held(harness, *, waits=True, generation=0):
     await rules.set_mode(harness.database, "wf", "outside")
     context = {
         "node_id": "wf:whatsappSend:1",
@@ -36,6 +36,7 @@ async def held(harness, *, waits=True):
         "tool_args": WHATSAPP,
         "approval_wait_version": 1,
         **({"approval_wait": True} if waits else {}),
+        **({"generation": generation} if generation else {}),
     }
     await tool_calls.check(context, get_node_class("whatsappSend"))
     (row,) = await store.list_approvals(harness.database, status="pending")
@@ -75,7 +76,7 @@ async def test_a_turn_row_approved_while_paused_runs_on_resume(harness, sends, m
         return "paused"
 
     monkeypatch.setattr(handlers, "_deployment_state", paused)
-    row = await held(harness)
+    row = await held(harness, generation=1)
     assert (await decide(row, "send", "s1"))["will_send_on_resume"] is True
 
 

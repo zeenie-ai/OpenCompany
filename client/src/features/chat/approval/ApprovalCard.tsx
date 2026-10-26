@@ -305,7 +305,13 @@ function Footer({
     return (
       <div className={cn(bar, 'bg-bg-app text-xs text-fg-muted')} role="status">
         <Pause aria-hidden className="size-3.5" />
-        {footer.text}
+        <span className="flex-1">{footer.text}</span>
+        {footer.undo && (
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'undo' })} className="gap-1.5 font-semibold">
+            <Undo2 aria-hidden className="size-3.25" />
+            Undo
+          </Button>
+        )}
       </div>
     );
   }

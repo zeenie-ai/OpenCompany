@@ -913,6 +913,9 @@ of running; both show as cards in the employee's chat, on the reply that made
 them or after the conversation. Send goes after a 5-second Undo window, a
 discarded draft can be restored, and a held call is sent once by its own
 Temporal workflow, which tells the employee how it went on its next turn.
+Nothing goes while the employee is stopped: an approved draft waits for
+Resume (a held call can be undone until then), and one whose generation
+ended is cancelled.
 With it off, replies and calls go at once and the chat still shows what went.
 The gate stores the draft in `approval_requests`, wakes the moment it is
 decided, survives restarts (its idempotency key finds the same row on every

@@ -11,14 +11,17 @@ so a Temporal gate row is kept while its generation is live. A held tool
 call waits on nothing (its run already went on), so only expiry or a cancel
 ends it.
 
-Sends: an approved held call whose send never started (the server stopped
-between the decision and the workflow) is started again; the claim at its
-revision makes a second start harmless. A send claimed long ago that never
-reported broke off somewhere: it ends ``failed`` with an unknown outcome,
-since it may have gone out.
+Sends, every round of the chat watchdog (:func:`recover_sends`): an
+approved held call whose send never started (the server stopped between the
+decision and the workflow), or whose claim refused because its employee was
+stopped, is started again once its employee runs; the claim at its revision
+makes a second start harmless. One whose generation ended is cancelled, and
+the employee told (``execution.send_state``). A send claimed long ago that
+never reported broke off somewhere: it ends ``failed`` with an unknown
+outcome, since it may have gone out.
 
-Runs once per process, the first time the drafts are listed; local rows
-created by this process are never touched.
+Orphaned gate rows are ended once per process, the first time the drafts
+are listed; local rows created by this process are never touched.
 
 Expiry: a held call waits on nothing, so the chat watchdog ends one past
 its expiry every round (:func:`expire_due`). Rows are kept until their
@@ -32,16 +35,15 @@ the decision sent was lost (services/approvals/waiting.py).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, List
+from typing import Any, Dict, List
 
 from core.logging import get_logger
-from services.approvals import store
+from services.approvals import execution, store
 from services.approvals.listeners import change_of, notify_approval_changed
 
 logger = get_logger(__name__)
 
 PROCESS_STARTED = datetime.now(timezone.utc)
-_LIVE_STATUSES = frozenset({"starting", "running", "pausing", "paused", "resuming"})
 #: How long after its grace an approved send may still be on its way.
 _START_GRACE = timedelta(seconds=60)
 #: How long a claimed send may run before it counts as broken off.
@@ -67,7 +69,7 @@ async def cancel_orphaned_pending(database: Any, *, started_at: datetime = PROCE
             orphaned = _aware(row.created_at) < started_at
         else:
             control = await database.get_latest_workflow_control(row.workflow_id)
-            orphaned = control is None or control.generation != row.generation or control.status not in _LIVE_STATUSES
+            orphaned = control is None or control.generation != row.generation or control.status not in execution.LIVE_STATES
         if not orphaned:
             continue
         try:
@@ -82,19 +84,31 @@ async def cancel_orphaned_pending(database: Any, *, started_at: datetime = PROCE
 
 
 async def recover_sends(database: Any, *, now: datetime | None = None) -> List[str]:
-    """Restart sends that never started; end sends that never reported."""
-    from services.approvals import execution
-
+    """Start sends that never started, or that waited for Resume, once their
+    employee runs; cancel those of a generation that ended; end sends that
+    never reported."""
     now = now or datetime.now(timezone.utc)
     touched: List[str] = []
+    controls: Dict[str, Any] = {}
     for row in await store.list_unfinished_sends(database):
         if row.status == "approved" and row.consumed_at is None:
             grace = store.aware(row.grace_until)
             if grace is None or now - grace < _START_GRACE:
                 continue
+            if row.workflow_id not in controls:
+                controls[row.workflow_id] = await database.get_latest_workflow_control(row.workflow_id)
+            state = execution.send_state(row, controls[row.workflow_id])
+            if state == "wait":
+                continue
+            if state == "ended":
+                if await execution.cancel_ended(database, row) is not None:
+                    touched.append(row.id)
+                continue
             try:
                 await execution.start_send(row)
                 touched.append(row.id)
+            except execution.SendUnavailable:
+                pass  # no workflow engine: the next round tries again
             except Exception:
                 logger.warning("Could not restart a send", approval_id=row.id, exc_info=True)
         elif row.status == "sending":
@@ -143,7 +157,6 @@ async def reconcile_once(database: Any) -> None:
     _done = True
     try:
         await cancel_orphaned_pending(database)
-        await recover_sends(database)
     except Exception:
         _done = False
         logger.warning("Could not reconcile waiting drafts", exc_info=True)

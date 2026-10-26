@@ -32,8 +32,8 @@ export type CardFooter =
   | { kind: 'decide' }
   | { kind: 'undo'; seconds: number }
   | { kind: 'sending' }
-  /** Approved, and its run waits for Resume before it goes. */
-  | { kind: 'waiting'; text: string }
+  /** Approved, and it waits for Resume before it goes; a draft can still be undone. */
+  | { kind: 'waiting'; text: string; undo: boolean }
   | { kind: 'sent'; text: string }
   /** Declined, with what the owner said, if anything. */
   | { kind: 'discarded'; text: string; note: string | null; restoreSeconds: number | null; canRestore: boolean }
@@ -96,12 +96,14 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
     case 'approved': {
       if (approval.consumedAt === null) {
         const seconds = secondsLeft(approval.undoUntil, offsetMs, nowMs);
-        // Its run waits for Resume: a gate's draft, or a call its turn waits on.
+        // Nothing goes while its employee is stopped: it waits for Resume. A
+        // draft can be undone until its send starts; a call its turn waits
+        // on cannot.
         const paused =
-          (approval.kind === 'gate' || approval.waits) && (approval.deploymentState === 'paused' || approval.deploymentState === 'pausing');
+          approval.deploymentState === 'paused' || approval.deploymentState === 'pausing' || approval.deploymentState === 'resuming';
         const footer: CardFooter =
           seconds > 0 ? { kind: 'undo', seconds }
-          : paused ? { kind: 'waiting', text: `${message ? 'Sends' : 'Runs'} when you resume ${name}.` }
+          : paused ? { kind: 'waiting', text: `${message ? 'Sends' : 'Runs'} when you resume ${name}.`, undo: approval.kind === 'tool_call' && !approval.waits }
           : { kind: 'sending' };
         return {
           title: `${name} is ${message ? 'sending' : 'doing'} it`,

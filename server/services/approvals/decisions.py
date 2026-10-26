@@ -174,7 +174,12 @@ async def decide(
             await _save_rule(database, moved, scope, actor)
     elif decision == "undo":
         grace = store.aware(row.grace_until)
-        if row.status != "approved" or row.consumed_at is not None or row.claim_token or grace is None or grace <= now:
+        # A draft can be undone until its send is claimed, as while it waits
+        # for Resume; a gate's draft only within its grace, and a call its
+        # turn waits on (no grace) never. The claim's compare-and-swap settles
+        # a race with Undo.
+        draft = kind == "tool_call" and not turn
+        if row.status != "approved" or row.consumed_at is not None or row.claim_token or grace is None or (grace <= now and not draft):
             raise DecisionRefused("too_late", "It has already gone.")
         values = {"grace_until": None, "decided_at": None, "approved_by": None, "final_text": None, "final_subject": None, "edited": False}
         moved = await _move(database, row, ("approved",), "pending", values, record)

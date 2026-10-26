@@ -79,7 +79,15 @@ describe('the card says what happened', () => {
 
   it('a gate’s draft for a paused employee goes on Resume', () => {
     const paused = view({ kind: 'gate', status: 'approved', undo_until: '2026-10-04T08:59:59Z', deployment_state: 'paused' });
-    expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.' });
+    expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.', undo: false });
+  });
+
+  it('a held draft waits for Resume too, and can still be undone', () => {
+    for (const state of ['paused', 'pausing', 'resuming']) {
+      const paused = view({ status: 'approved', undo_until: '2026-10-04T08:59:59Z', deployment_state: state });
+      expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.', undo: true });
+    }
+    expect(view({ status: 'approved', undo_until: '2026-10-04T08:59:59Z', deployment_state: 'running' }).footer).toEqual({ kind: 'sending' });
   });
 
   it('says it went only once it went', () => {
@@ -144,7 +152,7 @@ describe('the card says what happened', () => {
     // A retry makes it a draft again.
     expect(optimistic(approval({ waits: true, status: 'failed' }), 'retry', NOW, 0)).toMatchObject({ waits: false, undoUntil: '2026-10-04T09:00:05.000Z' });
     const paused = view({ waits: true, status: 'approved', deployment_state: 'paused' });
-    expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.' });
+    expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.', undo: false });
   });
 
   it('reads the list with the server’s clock, and moves at once on a decision', () => {
@@ -295,6 +303,15 @@ describe('a draft in the chat', () => {
     expect(await within(card).findByRole('button', { name: /^Send$/ })).toBeInTheDocument();
     // Every click carries its own key.
     expect(server.decisions[0].decision_key).not.toBe(server.decisions[1].decision_key);
+  });
+
+  it('a draft waiting for Resume can be undone', async () => {
+    server.approvals = [summary({ status: 'approved', undo_until: '2026-01-01T00:00:00Z', deployment_state: 'paused', revision: 1 })];
+    renderPane();
+    const card = (await screen.findByText('Sends when you resume Maya.')).closest('[data-approval]') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: /^Undo$/ }));
+    await waitFor(() => expect(server.decisions[0]).toMatchObject({ approval_id: 'ap1', decision: 'undo' }));
+    expect(await within(card).findByRole('button', { name: /^Send$/ })).toBeInTheDocument();
   });
 
   it('allows a call that has no message as it is, showing what it runs with', async () => {

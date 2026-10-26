@@ -113,18 +113,19 @@ class ChatRunWatchdog:
                 raise
             except Exception:  # noqa: BLE001 - the next sweep tries again
                 logger.warning("Chat run sweep failed", exc_info=True)
-            try:
-                # Drafts held for the owner end here once past their expiry,
-                # and a turn's wait whose nudge was lost is nudged again
-                # (services/approvals/reconcile.py).
-                from services.approvals.reconcile import expire_due, renudge_turns
+            # Drafts held for the owner end here once past their expiry, an
+            # approved send that never started (or waited for Resume) starts
+            # once its employee runs, and a turn's wait whose nudge was lost
+            # is nudged again (services/approvals/reconcile.py).
+            from services.approvals.reconcile import expire_due, recover_sends, renudge_turns
 
-                await expire_due(self.database)
-                await renudge_turns(self.database)
-            except asyncio.CancelledError:
-                raise
-            except Exception:  # noqa: BLE001 - the next round tries again
-                logger.warning("Held draft expiry or nudge failed", exc_info=True)
+            for step in (expire_due, recover_sends, renudge_turns):
+                try:
+                    await step(self.database)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 - the next round tries again
+                    logger.warning("Approvals housekeeping failed", step=step.__name__, exc_info=True)
             await asyncio.sleep(self.interval)
 
 

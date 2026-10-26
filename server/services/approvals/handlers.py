@@ -227,10 +227,9 @@ async def handle_decide_approval(data: Dict[str, Any], websocket: WebSocket) -> 
     return {
         "success": True,
         "approval": store.summary(decided, deployment_state=state),
-        # A paused employee's run holds the approved draft until Resume.
-        "will_send_on_resume": ((decided.kind or "gate") == "gate" or decided.runtime == "turn")
-        and decided.status == "approved"
-        and state in ("paused", "pausing"),
+        # Nothing a stopped employee approved goes before Resume
+        # (execution.send_state); a manual run's draft is not held.
+        "will_send_on_resume": decided.status == "approved" and (decided.generation or 0) > 0 and state in execution.STOPPED_STATES,
     }
 
 

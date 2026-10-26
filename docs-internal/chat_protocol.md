@@ -173,7 +173,8 @@ and workflows answer; any other id reads as `not_found`. `decide_approval` error
 broke off), `approval_conflict`, `send_unavailable` (nothing could start the send; the draft is back as it was),
 `not_found`, `invalid_request` (also for `always` on a card that offers no rule, and a `note` over 50,000
 characters). The same `decision_key` again answers `idempotent` with the row as it is. `note` goes with `discard`;
-`always` with `send` saves the rule the card offers (`always` in its summary).
+`always` with `send` saves the rule the card offers (`always` in its summary). `will_send_on_resume` is true for an
+approved row whose employee is stopped (generation above 0): it goes after Resume.
 
 **ApprovalSummary**: `{approval_id, workflow_id, node_id, kind: "gate" | "tool_call" | "effect", status, channel,
 channel_label, action?, recipient, recipient_label, body, subject?, context_excerpt?, details: [{label, value}],
@@ -564,8 +565,9 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   `tool_calls.check_in_process` applies the same rule without drafts: with Ask first on, a call that sends is not run
   and the model reads why, the browser runs read-only, and nothing is recorded.
 - **Decisions** (`services/approvals/decisions.py`), each a compare-and-swap on the row's revision recorded in
-  `approval_decisions`: `send` (pending -> approved; it goes after `UNDO_SECONDS`, 5, and Undo works until then),
-  `undo` (approved -> pending), `discard` (pending -> discarded; Restore works for `RESTORE_SECONDS` on a gate's draft,
+  `approval_decisions`: `send` (pending -> approved; it goes after `UNDO_SECONDS`, 5, and Undo works until then; a
+  held call's Undo also works past that while its send is not claimed, as while it waits for Resume), `undo`
+  (approved -> pending), `discard` (pending -> discarded; Restore works for `RESTORE_SECONDS` on a gate's draft,
   whose run waits that long, and until expiry for a held call), `restore`, `retry` (failed -> approved; when the
   send broke off it may have gone, so the owner confirms) and `dismiss` (an `effect` row: failed -> cancelled). A gate waits through the Undo and Restore windows before
   it lets the draft through or not.
@@ -573,8 +575,14 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   the Undo window closes, claims the row at that revision (`approvals.claim_send`: approved -> sending; an Undo, a
   newer Send or a cancel moved it, and nothing runs), runs the node's own activity once with no retry, and records
   the outcome (`approvals.record_outcome`): `sent`, `not_sent`, or `unknown` when the activity broke off. The node's
-  activity runs only under that claim. The first time the drafts are listed after a start, sends that never started
-  are started again and sends that never reported end `failed` with an unknown outcome.
+  activity runs only under that claim.
+  - **Nothing goes while its employee is stopped** (`execution.send_state`). The claim refuses (`stopped`) while the
+    generation is pausing, paused or resuming, and the row stays approved.
+  - **The chat watchdog's round** (`reconcile.recover_sends`, every round) starts such a send again once its
+    employee runs, and so a send that never started.
+  - **A send whose generation ended** (a Reset, a failure, a newer generation) is cancelled, and the employee told.
+    A manual run's send (generation 0) is not held.
+  - **A send that never reported** ends `failed` with an unknown outcome.
 - **At most once.** Temporal runs an activity again only when an attempt broke off (the worker stopped, a timeout);
   a failure the node reports comes back as a result and is not retried. A later attempt runs only a call that is
   safe to repeat (`services/approvals/repeats.py`: reads, waits, keyed calls, operations that do the same thing
@@ -599,8 +607,8 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   `ledger.ui_part_of_run`), and the card says "Linked to the form above". Drafts no reply in view made (a
   gate's, from the employee's own work) show after the conversation. The card (`features/chat/approval/`): Discard /
   Edit / Send while it waits, "Sends in Ns" with Undo, Sending, Sent (and when, and whether Ask first was off),
-  Restore while it can, Try again (asking first when it may have gone), and "Sends when you resume" for a gate's
-  draft whose employee is paused. An `effect` card has no recipient and no message: "{name} tried to …", May have
+  Restore while it can, Try again (asking first when it may have gone), and "Sends when you resume" for an
+  approved draft whose employee is stopped (with Undo on a held call's). An `effect` card has no recipient and no message: "{name} tried to …", May have
   happened, and Dismiss only (Dismissed afterwards). Countdowns use the server's clock (`server_time`).
   Ctrl/Cmd+Enter sends the newest waiting draft; in the edit box it sends that one.
 - **Ends.** Clearing or resetting the chat cancels the drafts its runs made that still wait, and their failed sends,

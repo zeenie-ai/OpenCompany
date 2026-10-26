@@ -11,6 +11,13 @@ when the call broke off and may have gone out. The employee learns it at the
 start of its next turn in the chat (an ``[update]`` note), the card through
 ``approval_lifecycle``.
 
+Nothing goes while its employee is stopped (:func:`send_state`): the claim
+refuses, the row stays approved (Undo still works), and the chat watchdog's
+round starts the send again after Resume (``reconcile.recover_sends``). A
+send whose generation ended is cancelled, and the employee told
+(:func:`cancel_ended`). A call its turn waits on is its turn's: the turn
+waited for Resume before it claims.
+
 The node runs with the call's arguments over its own settings, as the
 employee made it (with the owner's edits); what it sends as (its locked
 fields) comes from its settings. Its activity checks that the row it
@@ -31,6 +38,10 @@ logger = get_logger(__name__)
 
 WORKFLOW_NAME = "ApprovedToolCallWorkflow"
 PAYLOAD_VERSION = 1
+#: A generation's control states while it lives, and those in which its
+#: employee is stopped.
+LIVE_STATES = frozenset({"starting", "running", "pausing", "paused", "resuming"})
+STOPPED_STATES = frozenset({"pausing", "paused", "resuming"})
 
 
 class SendUnavailable(RuntimeError):
@@ -113,6 +124,13 @@ async def claim_send(database: Any, approval_id: str, revision: int, token: str)
         return {"claimed": True, "activity": activity_name, "context": node_context(row, token)}
     if (row.kind or "gate") != "tool_call" or row.status != "approved" or row.revision != revision:
         return {"claimed": False, "reason": "changed"}
+    if row.runtime != "turn":
+        state = send_state(row, await database.get_latest_workflow_control(row.workflow_id))
+        if state == "wait":
+            return {"claimed": False, "reason": "stopped"}
+        if state == "ended":
+            await cancel_ended(database, row)
+            return {"claimed": False, "reason": "cancelled"}
     activity_name = node_activity_name(row.node_type or "")
     if activity_name is None:
         failed = await _fail_unclaimed(database, row, "The tool it uses is no longer installed.")
@@ -130,6 +148,38 @@ async def claim_send(database: Any, approval_id: str, revision: int, token: str)
         return {"claimed": False, "reason": "changed"}
     await notify_approval_changed(change_of(claimed, "sending"))
     return {"claimed": True, "activity": activity_name, "context": node_context(claimed, token)}
+
+
+def send_state(row: Any, control: Any) -> str:
+    """Whether an approved draft may go now, given its workflow's latest
+    control row: ``send``; ``wait`` while its employee is stopped; ``ended``
+    when its generation is over (no control, a newer generation, or one
+    that no longer lives). A manual run's draft (generation 0) always goes."""
+    if not row.generation:
+        return "send"
+    if control is None or control.generation != row.generation or control.status not in LIVE_STATES:
+        return "ended"
+    return "wait" if control.status in STOPPED_STATES else "send"
+
+
+async def cancel_ended(database: Any, row: Any) -> Optional[Any]:
+    """Cancel an approved draft whose generation ended: it never goes, and
+    the employee hears so. None when the row moved meanwhile."""
+    try:
+        cancelled = await store.transition(
+            database,
+            row.id,
+            expected_revision=row.revision,
+            from_statuses=("approved",),
+            status="cancelled",
+            values={"decided_at": _utcnow(), "grace_until": None},
+        )
+    except store.ApprovalConflict:
+        return None
+    logger.info("Cancelled a send whose generation ended", approval_id=row.id, workflow_id=row.workflow_id)
+    await notify_approval_changed(change_of(cancelled, "cancelled"))
+    await tell_employee(database, cancelled)
+    return cancelled
 
 
 async def _fail_unclaimed(database: Any, row: Any, error: str) -> Any:
@@ -228,15 +278,19 @@ async def tell_employee(database: Any, row: Any) -> None:
 
 
 __all__ = [
+    "LIVE_STATES",
     "PAYLOAD_VERSION",
+    "STOPPED_STATES",
     "SendUnavailable",
     "WORKFLOW_NAME",
+    "cancel_ended",
     "claim_send",
     "node_activity_name",
     "node_context",
     "outcome_of",
     "record_outcome",
     "send_payload",
+    "send_state",
     "send_workflow_id",
     "start_send",
     "tell_employee",
