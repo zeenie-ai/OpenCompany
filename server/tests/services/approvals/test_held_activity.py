@@ -8,6 +8,7 @@ secrets) or an ``effect`` card to dismiss."""
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -238,6 +239,55 @@ async def test_a_graph_card_sends_again_as_it_was(harness):
                 "node_type": "whatsappSend", "agent_node_id": "wf:aiAgent:1", "args": {"message": "Hi"}},
     )
     assert node_context(agent, "t1")["tool_args"] == {"message": "Hi"}
+
+
+async def cut(service, node_type, call, **details):
+    """Run a call that waits until its activity is cancelled with ``details``."""
+    from temporalio.activity import ActivityCancellationDetails
+
+    started = asyncio.Event()
+
+    async def execute_node(**_):
+        started.set()
+        await asyncio.sleep(3600)
+
+    service.execute_node = execute_node
+    env = ActivityEnvironment()
+    task = asyncio.ensure_future(env.run(get_node_class(node_type).as_activity(), call))
+    await asyncio.wait_for(started.wait(), 5)
+    env.cancel(cancellation_details=ActivityCancellationDetails(**details))
+    return task
+
+
+async def test_a_call_cut_by_a_worker_shutdown_answers_at_once(harness, service):
+    # A later attempt could only refuse it, so the model hears it now.
+    command = {"command": "git push origin main"}
+    call = context(node_id="wf:shell:1", node_data=dict(command), tool_args=dict(command))
+    result = await (await cut(service, "shell", call, worker_shutdown=True))
+    assert result["success"] is False and result["error_type"] == "OutcomeUnknown"
+    (row,) = await store.list_approvals(harness.database, status="failed")
+    assert (row.kind, row.outcome) == ("effect", "unknown")
+
+
+async def test_a_graph_call_cut_by_a_cancel_leaves_a_card_and_stays_cancelled(harness, service):
+    command = {"command": "git push origin main"}
+    task = await cut(service, "shell", graph_context(node_id="wf:shell:1", node_data=dict(command)), cancel_requested=True)
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    (row,) = await store.list_approvals(harness.database, status="failed")
+    assert (row.kind, row.tool_call_id, row.idempotency_key[:2]) == ("effect", "", "e:")
+
+
+async def test_an_approved_send_cut_midway_is_left_to_its_workflow(harness, service, monkeypatch):
+    # ApprovedToolCallWorkflow records how its own send went.
+    from services.approvals import tool_calls
+
+    monkeypatch.setattr(tool_calls, "check", AsyncMock(return_value=tool_calls.RUN))
+    approved = context(approval_execution={"approval_id": "a1", "claim_token": "t1"})
+    task = await cut(service, "whatsappSend", approved, cancel_requested=True)
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert await store.list_approvals(harness.database) == []
 
 
 async def test_the_legacy_activity_refuses_a_later_attempt_too(harness):

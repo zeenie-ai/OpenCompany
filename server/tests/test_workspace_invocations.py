@@ -148,6 +148,21 @@ async def test_legacy_reset_cancels_only_matching_roots(monkeypatch):
     cancel.assert_awaited_once_with(matching)
 
 
+async def test_node_executor_lets_an_activity_see_a_cancel(monkeypatch):
+    # The activity wrapper reports a call that may have happened, and
+    # Temporal must see a cancel, not a completed failure.
+    from temporalio.testing import ActivityEnvironment
+
+    from services import node_executor as module
+
+    executor = module.NodeExecutor.__new__(module.NodeExecutor)
+    executor._prepare_parameters = AsyncMock(return_value={})
+    executor._dispatch = AsyncMock(side_effect=asyncio.CancelledError())
+    monkeypatch.setattr(module, "get_node_class", lambda _: SimpleNamespace(workspace_task=False))
+    with pytest.raises(asyncio.CancelledError):
+        await ActivityEnvironment().run(executor.execute, "node", "ordinary", {}, {})
+
+
 @pytest.mark.parametrize("workspace", [True, False])
 async def test_node_executor_preserves_workspace_cancellation(monkeypatch, workspace):
     from services import node_executor as module

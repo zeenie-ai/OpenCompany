@@ -578,7 +578,10 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   shows what the call ran with, without secrets. A graph node's answer carries `requires_user_action` and a `hint`,
   so its employee pauses at once, and its employee reads an `[update]` note; a graph node's send keeps what it sent,
   its templates resolved and its secrets left out, so Send again resends it and the node's settings put the secrets
-  back. Held calls are drafts, made once per call, and still retry.
+  back. A call cut midway (the run cancelled it, its heartbeat lapsed, or the worker shut down) leaves the same card
+  at once. A cancel stays a cancel. A worker shutdown retries a call safe to repeat; any other answers at once with
+  the same envelope, since a later attempt could only refuse it. Held calls are drafts, made once per call, and still
+  retry.
 - **The employee hears how it went**: an `[update]{...}[/update]` note (`approval:<id>`) at the start of its next
   turn in the chat, for a send that went, failed, was discarded or expired, and for a graph node's call that may
   have happened.

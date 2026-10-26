@@ -309,10 +309,8 @@ class CronSchedulerNode(ActionNode):
             trigger_time=trigger_time.isoformat(),
         )
 
-        try:
-            await asyncio.sleep(wait_seconds)
-        except asyncio.CancelledError:
-            raise RuntimeError("Scheduler cancelled")
+        # A cancel stays a cancel, so Temporal sees it as one.
+        await asyncio.sleep(wait_seconds)
 
         triggered_at = datetime.now()
         output = CronSchedulerOutput(

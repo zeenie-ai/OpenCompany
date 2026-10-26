@@ -137,6 +137,12 @@ class NodeWaitInterrupted(Exception):
     re-attaches to whatever durable state the wait was keyed on. Returning
     normally instead would record the attempt as completed and fail the run.
 
+    The wrapper raises the same retryable error when a worker shutdown
+    cancels a call that is safe to repeat (services/approvals/repeats.py);
+    a call that is not answers at once that it may have happened. The next
+    attempt of such a call is refused anyway, so a body that raises this
+    must be listed as safe to repeat.
+
     Only raise it from a body that is idempotent across attempts. On the
     in-process path there is no retry, and the run fails as it would for any
     other error.
@@ -1348,8 +1354,6 @@ class BaseNode:
                 success, payload, error = cls.interpret_result(result)
                 if success:
                     await chat_steps.number_sources(context, cls, result)
-                if checked.record is not None:
-                    await checked.record(result)
                 if chat_step is not None and not (
                     not success and result.get("error_type") == NODE_WAIT_INTERRUPTED
                 ):
@@ -1366,6 +1370,10 @@ class BaseNode:
                         type=NODE_WAIT_INTERRUPTED,
                         non_retryable=False,
                     )
+                # Recorded once the attempt is over: an interrupted wait
+                # (above) runs again and is recorded then.
+                if checked.record is not None:
+                    await checked.record(result)
                 if success:
                     correlated_payload = (
                         {**payload, "execution_id": execution_id}
@@ -1397,6 +1405,42 @@ class BaseNode:
                 activity.heartbeat(f"Node {node_id} completed")
                 return result
 
+            except asyncio.CancelledError:
+                # Cancelled mid-call: the run stopped it, its heartbeat lapsed,
+                # or the worker is shutting down. A call that is not safe to
+                # repeat may have happened, so the owner gets a card at once.
+                # On a worker shutdown a call safe to repeat runs again
+                # (retryable); any other answers now, since a later attempt
+                # could only refuse it. Anything else stays a cancel.
+                details = activity.cancellation_details()
+                shutdown = bool(details is not None and details.worker_shutdown and not details.cancel_requested)
+                answer: Optional[Dict[str, Any]] = None
+                if context.get("approval_execution") is None and not await approval_calls.repeatable_call(context, cls, node_data):
+                    answer = {
+                        "node_id": node_id,
+                        "node_type": cls.type,
+                        "execution_id": execution_id,
+                        "timestamp": datetime.now().isoformat(),
+                        **approval_calls.unknown_answer(context, cls, node_data),
+                    }
+                    await approval_calls.record_unknown(context, cls, node_data, answer, checked=checked)
+                elif shutdown:
+                    activity.logger.info(f"Node {node_id} interrupted by a worker shutdown; failing the attempt retryably")
+                    raise ApplicationError("Wait interrupted", type=NODE_WAIT_INTERRUPTED, non_retryable=False)
+                maybe = None
+                if answer:
+                    maybe = "It may already have gone out" if answer["error_type"] == "SendOutcomeUnknown" else "It may already have happened"
+                await chat_steps.end(chat_step, state="failed", detail=maybe)
+                await broadcaster.update_node_status(
+                    node_id,
+                    "error",
+                    {"error": answer["error"] if answer else "Cancelled", "execution_id": execution_id,
+                     **{key: answer[key] for key in ("hint", "requires_user_action", "error_type") if answer and key in answer}},
+                    workflow_id=workflow_id,
+                )
+                if shutdown:
+                    return answer
+                raise
             except Exception as e:
                 if isinstance(e, ApplicationError) and e.type == NODE_WAIT_INTERRUPTED:
                     raise

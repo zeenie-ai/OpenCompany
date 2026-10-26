@@ -187,10 +187,15 @@ class NodeExecutor:
             return result
 
         except asyncio.CancelledError:
-            # Workspace engines own subprocesses/device leases. Temporal must
-            # observe cancellation after their finally blocks finish, not an
-            # ordinary failure envelope that can be mistaken for completion.
-            if getattr(get_node_class(node_type), "workspace_task", False):
+            # Inside an activity Temporal must observe the cancellation, not
+            # an ordinary failure envelope that can be mistaken for
+            # completion: the activity wrapper reports a call that may have
+            # happened (BaseNode.as_activity). Workspace engines own
+            # subprocesses/device leases, so they re-raise after their
+            # finally blocks wherever they run.
+            from temporalio import activity
+
+            if activity.in_activity() or getattr(get_node_class(node_type), "workspace_task", False):
                 raise
             return ExecutionResult(
                 False, node_id, node_type, error="Cancelled", execution_id=execution_id, execution_time=time.time() - start_time

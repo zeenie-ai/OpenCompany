@@ -66,7 +66,7 @@ flowchart TD
   S3 --> D
   S4 --> D
   D --> E[await asyncio.sleep wait_seconds]
-  E -- CancelledError --> F[Raise RuntimeError: Timer cancelled<br/>BaseNode returns failed envelope]
+  E -- CancelledError --> F[The cancel propagates<br/>a Temporal activity reports a cancel; in process NodeExecutor answers Cancelled]
   E -- ok --> H[elapsed_ms = now - start]
   H --> I[Return success envelope<br/>with timestamp / elapsed_ms / duration / unit / message]
 ```
@@ -76,9 +76,10 @@ flowchart TD
 - **Unit mapping**: `seconds` / `minutes` / `hours` multiply duration by
   1 / 60 / 3600. Any other value falls through to the `_` match case and is
   treated as raw seconds.
-- **Explicit cancellation**: `asyncio.CancelledError` becomes
-  `RuntimeError("Timer cancelled")`; the node execution wrapper surfaces the
-  failed envelope. Cooperative generation Stop does not cancel this sleep.
+- **Explicit cancellation**: `asyncio.CancelledError` propagates. In a
+  Temporal activity it stays a cancel (a worker shutdown retries the wait,
+  which is safe to repeat); in process `NodeExecutor` answers `Cancelled`.
+  Cooperative generation Stop does not cancel this sleep.
 
 ## Stop/Resume boundary
 
@@ -116,9 +117,8 @@ count; this user-requested delay is admitted node work. See
 - `duration` is Pydantic-validated `ge=1, le=86400`; for `hours` that is up
   to 86400 hours, so a large value with `unit=hours` can sleep effectively
   indefinitely.
-- Cancellation (`asyncio.CancelledError`) is re-raised as `RuntimeError("Timer
-  cancelled")`, surfaced as a failed envelope. Downstream nodes that key off
-  `success` will not execute when the timer is cancelled.
+- Cancellation (`asyncio.CancelledError`) propagates as a cancel, so
+  downstream nodes do not execute when the timer is cancelled.
 
 ## Related
 

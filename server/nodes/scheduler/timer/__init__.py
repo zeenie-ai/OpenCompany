@@ -78,10 +78,8 @@ class TimerNode(ActionNode):
             workflow_id=ctx.workflow_id,
         )
 
-        try:
-            await asyncio.sleep(wait_seconds)
-        except asyncio.CancelledError:
-            raise RuntimeError("Timer cancelled")
+        # A cancel stays a cancel, so Temporal sees it as one.
+        await asyncio.sleep(wait_seconds)
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         return {

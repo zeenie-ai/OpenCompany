@@ -82,7 +82,7 @@ flowchart TD
   C --> D[_calculate_wait_seconds<br/>maps frequency to seconds]
   D --> E[get_status_broadcaster.update_node_status 'waiting']
   E --> F[await asyncio.sleep wait_seconds]
-  F -- CancelledError --> G[Raise RuntimeError: Scheduler cancelled<br/>BaseNode returns failed envelope]
+  F -- CancelledError --> G[The cancel propagates<br/>a Temporal activity reports a cancel; in process NodeExecutor answers Cancelled]
   F -- ok --> I[Build result_data: timestamp / iteration=1 / frequency / schedule / waited_seconds]
   I --> J{frequency == 'once'?}
   J -- yes --> K[message: 'Triggered after waiting ...']
@@ -105,9 +105,10 @@ flowchart TD
 - **Once vs recurring**: determines whether `next_run` is added to the
   payload and which `message` template is used. Both branches still return
   `success=True`.
-- **Explicit cancellation**: the operation raises `RuntimeError("Scheduler
-  cancelled")`; `BaseNode.execute` turns that failure into its standard
-  envelope. Cooperative generation Stop does not enter this branch.
+- **Explicit cancellation**: the cancel propagates. In a Temporal activity it
+  stays a cancel (a worker shutdown retries the wait, which is safe to
+  repeat); in process `NodeExecutor` answers `Cancelled`. Cooperative
+  generation Stop does not enter this branch.
 
 ## Deployed Stop/Resume boundary
 
