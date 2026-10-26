@@ -873,7 +873,9 @@ Declined, expired or cancelled, it reads why nothing ran. Every change to such a
 wait has not read while the generation runs (`reconcile.renudge_turns`). A cancelled wait ends a pending row
 `cancelled`; a Reset terminates the waits with their turns and cancels the rows they waited on
 (`waiting.cancel_waits`). It takes no part in generation control, so Stop's tree walk leaves it out
-(`execution_control.NON_PARTICIPANTS`).
+(`execution_control.NON_PARTICIPANTS`). In such a generation the Approval node's activity is no admitted action
+either (`workflow.APPROVAL_GATE_TYPE`, RFC-0007 §4.8): Stop completes while it waits for the owner, and the node after
+it is admitted after Resume like any other. In older generations it still holds Stop until the owner decides.
 
 A send that broke off midway outside `ApprovedToolCallWorkflow` leaves a card the same way (`outcome: unknown`, see
 "Worker crashes mid-execution" below). A graph node's card keeps what the node sent, its templates resolved and its secrets left out;

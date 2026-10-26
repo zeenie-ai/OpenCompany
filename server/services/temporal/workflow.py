@@ -97,6 +97,11 @@ SKILL_NODE_TYPES = {
     "masterSkill",
 }
 
+# The Approval node (services/approvals/contract.py). In a generation that
+# waits for the owner (approval_wait_version 1) it waits outside Stop's
+# checkpoint, so Stop completes while it waits (RFC-0007 §4.8).
+APPROVAL_GATE_TYPE = "approvalGate"
+
 # F4.B: agent types that migrate to AgentWorkflow (Temporal child workflow).
 # When ``temporal_agent_workflow_enabled`` is True the orchestrator schedules
 # AgentWorkflow for these node types instead of an activity. Tool calls
@@ -873,7 +878,11 @@ class MachinaWorkflow:
                     if dispatch.get("queue") is not None:
                         start_kwargs["task_queue"] = dispatch["queue"]
 
-                    if self._execution_control.enabled:
+                    # The Approval node of a generation that waits for the
+                    # owner is no admitted action; the node after it is
+                    # admitted after Resume like any other.
+                    waits_outside_stop = node_type == APPROVAL_GATE_TYPE and frozen_routing.get("approval_wait_version") == 1
+                    if self._execution_control.enabled and not waits_outside_stop:
                         admission = self._execution_control.action()
                         await admission.__aenter__()
                         self._action_contexts[node_id] = admission
