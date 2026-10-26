@@ -67,6 +67,39 @@ async def test_handler_forwards_execution_workspace_and_parent_identity():
     assert started.kwargs["execution_id"] == "execution-1"
 
 
+async def test_every_call_carries_its_request_identity(monkeypatch):
+    # A held call's draft is keyed by it (RFC-0007 §4.9), not only a delegation.
+    from services.temporal.pi_protocol import canonical_digest
+
+    request_context = SimpleNamespace(request_id=7, request=SimpleNamespace(headers={"mcp-session-id": "session-1"}))
+    monkeypatch.setattr(workflow_tools, "_get_mcp", lambda: SimpleNamespace(get_context=lambda: SimpleNamespace(request_context=request_context)))
+    context = BatchContext(
+        workflow_id="workflow-3",
+        node_id="cli-parent-3",
+        execution_id="execution-3",
+        workspace_dir=Path("workspace-3").resolve(),
+        broadcaster=SimpleNamespace(update_node_status=AsyncMock(), broadcast_agent_capability=AsyncMock()),
+        connected_tools=[
+            {
+                "node_id": "tool-3",
+                "node_type": "contextTestTool",
+                "_agent_tool_name": "contextTestTool",
+                "_agent_tool_input_model": _Params,
+                "parameters": {},
+            }
+        ],
+    )
+    context_token = mcp_server._current_batch.set(context)
+    execute = AsyncMock(return_value={"ok": True})
+    try:
+        with patch("services.handlers.tools.execute_tool", new=execute):
+            await workflow_tools._build_handler("contextTestTool", _Params)(value="hello")
+    finally:
+        mcp_server._current_batch.reset(context_token)
+
+    assert execute.await_args.args[2]["tool_call_id"] == "mcp:" + canonical_digest({"session": "session-1", "request": 7})
+
+
 async def test_handler_validates_the_authenticated_batch_schema():
     context = BatchContext(
         workflow_id="workflow-2",

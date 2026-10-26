@@ -241,6 +241,41 @@ async def test_an_unreadable_rule_refuses_rather_than_sends(harness, nodes_loade
     assert refused["status"] == "not_run" and ran.calls == []
 
 
+async def test_in_a_v1_generation_an_agent_outside_agentworkflow_leaves_a_draft(harness, nodes_loaded, monkeypatch):
+    # RFC-0007 §4.9: the draft carries the call's id, its node and its chat
+    # run, so Send can run it through the node's own activity.
+    whatsapp, gmail = get_node_class("whatsappSend"), get_node_class("googleGmail")
+    ran = Ran()
+    monkeypatch.setattr(whatsapp, "execute_as_tool", ran)
+    monkeypatch.setattr(gmail, "execute_as_tool", ran)
+    await rules.set_mode(harness.database, "wf", "outside")
+    args = {"recipient_type": "phone", "phone": "447700900123", "message": "On my way."}
+    v1 = {"approval_wait_version": 1, "run_scope": {"run_id": "r_1"}}
+    answer = await dispatch("whatsappSend", args, {"message_type": "text"}, tool_call_id="mcp:abc", **v1)
+    assert answer["status"] == "waiting_for_owner" and "allow" in answer["message"] and ran.calls == []
+    (row,) = await store.list_approvals(harness.database, status="pending")
+    assert (row.tool_node_id, row.tool_call_id, row.run_id, row.runtime) == ("wf:whatsappSend:1", "mcp:abc", "r_1", "temporal")
+    # The same request again finds its draft; a call with no id cannot have one.
+    again = await dispatch("whatsappSend", args, {"message_type": "text"}, tool_call_id="mcp:abc", **v1)
+    assert again["approval_id"] == answer["approval_id"]
+    assert (await dispatch("whatsappSend", args, {"message_type": "text"}, **v1))["status"] == "not_run"
+    # A read runs.
+    assert await dispatch("googleGmail", {"operation": "search", "query": "invoice"}, tool_call_id="mcp:def", **v1) == {"sent": True}
+
+
+async def test_in_a_v1_generation_the_browser_outside_agentworkflow_is_held_only_when_it_navigates(harness, nodes_loaded, monkeypatch):
+    browser = get_node_class("browser")
+    ran = Ran()
+    monkeypatch.setattr(browser, "execute_as_tool", ran)
+    await rules.set_mode(harness.database, "wf", "outside")
+    v1 = {"approval_wait_version": 1, "tool_call_id": "mcp:abc"}
+    await dispatch("browser", {"operation": "click", "ref": "e3", "interaction": "full"}, {"interaction": "full"}, **v1)
+    [(args, params)] = ran.calls
+    assert params["interaction"] == "read_only" and "interaction" not in args
+    held = await dispatch("browser", {"operation": "navigate", "url": "https://shop.example"}, **{**v1, "tool_call_id": "mcp:def"})
+    assert held["status"] == "waiting_for_owner" and len(ran.calls) == 1
+
+
 async def test_send_starts_the_send_and_puts_it_back_when_nothing_can(harness, nodes_loaded, monkeypatch):
     await rules.set_ask_first(harness.database, "wf", True)
     await tool_calls.check(call(), get_node_class("whatsappSend"))

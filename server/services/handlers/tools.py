@@ -197,7 +197,7 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
     for key in ("run_scope", "generation", "parameter_snapshot", "employee_job_id", "team_task_id",
                 "root_execution_id", "team_id", "team_execution_id", "data_scope_id", "context_execution_id",
                 "context_session_id", "session_id", "graphVersion", "outputs", "credential_customer_id",
-                "ai_service", "database"):
+                "ai_service", "database", "approval_wait_version"):
         if key in config:
             context[key] = config[key]
     if config.get("pi_harness_version") == 1:
@@ -248,10 +248,11 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
             database = config.get("database") or container.database()
             node_params = restore_dropped(node_params, await database.get_node_parameters(config["node_id"]) or {})
 
-        # Ask first: a call that sends is refused while the workflow asks
-        # first (it cannot wait as a draft here); a restricted tool runs
-        # restricted. Temporal tool calls are checked in BaseNode.as_activity.
-        checked = await check_in_process(context, plugin_cls, node_params, tool_args)
+        # Ask first: in a v0 generation a call that sends is refused while
+        # the workflow asks first; in v1 a held call is a draft its node's
+        # own activity sends later. A restricted tool runs restricted.
+        # Temporal tool calls are checked in BaseNode.as_activity.
+        checked = await check_in_process({**context, "node_id": config.get("node_id")}, plugin_cls, node_params, tool_args)
         if checked.result is not None:
             return checked.result
         if checked.node_data is not None:

@@ -33,9 +33,12 @@ for every tool an agent calls, spec or not:
 
 **Agents outside AgentWorkflow** (rlm, claude_code, or every agent
 with AgentWorkflow off) reach plugins through ``services/handlers/tools.py``,
-which calls :func:`check_in_process`. Such a call cannot wait as a draft, so
-while the workflow asks first a call that sends is refused (a restricted
-tool runs restricted); no row is written.
+which calls :func:`check_in_process`. In a v0 generation such a call cannot
+wait as a draft, so while the workflow asks first a call that sends is
+refused (a restricted tool runs restricted); no row is written. In a v1
+generation it asks as :func:`check` decides, and a held call is a draft
+keyed by its call id (an MCP call's request digest); a call with no id is
+refused.
 
 **At most once.** Temporal runs an activity again only when an attempt
 broke off (the worker stopped, a timeout): a failure the node reports comes
@@ -325,6 +328,8 @@ async def check_in_process(
     from services.plugin.base import restore_locked_fields
 
     spec = approval_spec(node_cls)
+    if context.get("approval_wait_version") == 1:
+        return await _check_in_process_by_class(context, node_cls, spec, params, tool_args)
     if spec is None or not context.get("parent_node_id"):
         return RUN
     # Judged on what runs: a locked field comes from the node's settings.
@@ -337,6 +342,38 @@ async def check_in_process(
         args = {k: v for k, v in dict(tool_args or {}).items() if k not in spec.restrict_while_asking}
         return Checked(node_data=restricted, tool_args=args)
     return Checked(result={"status": "not_run", "message": REFUSED_MESSAGE.format(channel=spec.channel)})
+
+
+async def _check_in_process_by_class(
+    context: Mapping[str, Any], node_cls: Any, spec: Any, params: Mapping[str, Any], tool_args: Mapping[str, Any]
+) -> Checked:
+    """:func:`check_in_process` in a v1 generation (RFC-0007 §4.9): the order
+    of :func:`check`, and a held call is a draft keyed by its call id, which
+    the owner's Send runs through the node's own activity. A call with no
+    id is refused: a retry could not find its draft."""
+    from services.approvals.classes import READ, call_data, class_of, fetched_url
+    from services.plugin.base import restore_locked_fields
+
+    if not context.get("parent_node_id"):
+        return RUN
+    # Judged on what runs: a locked field comes from the node's settings.
+    node_data = restore_locked_fields(node_cls, {**dict(params or {}), **dict(tool_args or {})}, tool_args, params or {})
+    judged = call_data(node_cls, node_data, tool_args)
+    klass = class_of(node_cls, judged, tool_call=True)
+    if klass == READ:
+        return RUN
+    database = _database()
+    mode = await _ask_mode(database, context.get("workflow_id"))
+    held = {**context, "node_data": node_data, "tool_args": dict(tool_args or {})}
+    if mode is None or klass not in rules.ASKS[mode] or await _allowed(database, held, node_cls, node_data):
+        return RUN
+    if spec is not None and spec.restrict_while_asking and not fetched_url(node_cls, judged):
+        return _restricted(spec, params or {}, held)
+    if not context.get("tool_call_id"):
+        channel = spec.channel if spec is not None else _tool_name(node_cls, getattr(node_cls, "type", ""))
+        return Checked(result={"status": "not_run", "message": REFUSED_MESSAGE.format(channel=channel)})
+    row = await hold(database, held, node_cls, spec, node_data)
+    return Checked(result=_held(row, node_cls, held, WAITING_MESSAGE)["result"])
 
 
 def _preview(node_cls: Any, spec: Any, data: Mapping[str, Any], args: Mapping[str, Any]) -> Dict[str, Any]:
@@ -373,12 +410,21 @@ def _action(name: str, node_type: str, data: Mapping[str, Any]) -> str:
     return f"Use {name} ({operation})" if isinstance(operation, str) and operation else f"Use {name}"
 
 
+def _run_id(context: Mapping[str, Any]) -> Optional[str]:
+    """The chat run the call was made in: its stream's, else its run scope's
+    (a CLI or in-process agent's call has no stream)."""
+    from services.chat.stream import chat_run_id_of
+
+    stream = context.get("chat_stream") if isinstance(context.get("chat_stream"), Mapping) else {}
+    run_id = context.get("chat_run_id") or (stream or {}).get("run_id") or chat_run_id_of(context)
+    return run_id if isinstance(run_id, str) and run_id else None
+
+
 def _row_fields(context: Mapping[str, Any], node_cls: Any, spec: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
     args = _clean_args(node_cls, context.get("tool_args") or {})
     data = _clean_node_data(node_cls, node_data, context.get("tool_args") or {})
     preview = _preview(node_cls, spec, data, args)
-    stream = context.get("chat_stream") if isinstance(context.get("chat_stream"), Mapping) else {}
-    run_id = context.get("chat_run_id") or (stream or {}).get("run_id")
+    run_id = _run_id(context)
     return {
         "owner_id": str(context.get("user_id") or "owner"),
         "workflow_id": str(context.get("workflow_id") or ""),
@@ -399,7 +445,7 @@ def _row_fields(context: Mapping[str, Any], node_cls: Any, spec: Any, node_data:
         "tool_node_id": str(context.get("node_id") or ""),
         "tool_call_id": str(context.get("tool_call_id") or ""),
         "agent_node_id": str(context.get("parent_node_id") or ""),
-        "run_id": run_id if isinstance(run_id, str) and run_id else None,
+        "run_id": run_id,
         "node_data": data,
         "args": args,
         "original_args": dict(context.get("tool_args") or {}),
@@ -655,8 +701,6 @@ def _effect_fields(context: Mapping[str, Any], node_cls: Any, node_data: Mapping
     node_type = getattr(node_cls, "type", None) or str(context.get("node_type") or "")
     name = _tool_name(node_cls, node_type)
     tool_args = context.get("tool_args")
-    stream = context.get("chat_stream") if isinstance(context.get("chat_stream"), Mapping) else {}
-    run_id = context.get("chat_run_id") or (stream or {}).get("run_id")
     return {
         "owner_id": str(context.get("user_id") or "owner"),
         "workflow_id": str(context.get("workflow_id") or ""),
@@ -672,7 +716,7 @@ def _effect_fields(context: Mapping[str, Any], node_cls: Any, node_data: Mapping
         "tool_node_id": str(context.get("node_id") or ""),
         "tool_call_id": str(context.get("tool_call_id") or ""),
         "agent_node_id": str(context.get("parent_node_id") or ""),
-        "run_id": run_id if isinstance(run_id, str) and run_id else None,
+        "run_id": _run_id(context),
     }
 
 

@@ -35,6 +35,8 @@ INLINE_SCOPE_KEYS = (
     "execution_control_version", "controller_workflow_id", "execution_control_state",
     "execution_control_revision", "execution_control_producers_held",
     "execution_control_root_run_id", "execution_control_released_revision",
+    # What asks, for a CLI or in-process agent's tool calls (RFC-0007 §4.9).
+    "approval_wait_version",
 )
 
 
