@@ -30,6 +30,11 @@ was saved, ``interrupted`` otherwise.
 and its lane alive. The watchdog excludes intentionally suspended generations
 and uses their successful Resume time for a fresh timeout window.
 
+**A turn waiting for the owner's answer** to a call it holds (RFC-0007 D2,
+``services/approvals/waiting.py``) is not timed out, and the answer starts a
+fresh window. When the run's workflow closes, the calls it waited on are
+cancelled.
+
 **Legacy Stop** (``request_stop``) ends a run nothing has picked up at once
 (``stopped``, no reply) and moves a running run to ``stopping``. A running
 run stops itself: its agent's next model step returns what it has written so
@@ -764,7 +769,10 @@ async def _sweep_one(
     if resumed is not None:
         started = max(started, resumed)
     if now - started > longest:
-        return await fail_run(database, run, code="timed_out", message="The employee took too long to answer.")
+        from services.approvals.waiting import run_waited
+
+        if not await run_waited(database, run.run_id, since=now - longest):
+            return await fail_run(database, run, code="timed_out", message="The employee took too long to answer.")
     if temporal_status is None or not run.temporal_workflow_id or now - started < _CLOSED_GRACE:
         return None
     if await temporal_status(run.temporal_workflow_id, run.temporal_run_id) is not True:
@@ -772,6 +780,10 @@ async def _sweep_one(
     current = await get_run(database, run.run_id)
     if current is None or current.state not in ("running", "stopping"):
         return None
+    if current.workflow_id:
+        from services.approvals.waiting import cancel_waits
+
+        await cancel_waits(database, current.workflow_id, run_ids=[current.run_id])
     await _seal(database, current)
     if await _message_exists(database, current.reply_message_uid):
         return await _settle(database, current, await _success_values(database, current, "stopped" if current.state == "stopping" else "success"))

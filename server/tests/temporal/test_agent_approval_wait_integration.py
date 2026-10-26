@@ -291,6 +291,15 @@ def test_the_flag_rides_a_generation_from_start_to_its_tool_calls() -> None:
     assert "approval_wait_version" in _INHERITED_SCOPE_KEYS
 
 
+def test_the_turn_reads_a_message_the_owner_sent_instead_of_answering() -> None:
+    # RFC-0007 D3: it may ask for something else, so nothing says don't retry.
+    from services.temporal.agent_workflow import _owner_answer
+
+    answer = _owner_answer({"status": "discarded", "note": "Call her instead.", "by_message": True})
+    assert answer["error"] == "The owner sent a message instead of answering; nothing happened. Their message: Call her instead."
+    assert answer["status"] == "declined" and answer["success"] is False
+
+
 def test_a_turn_waits_for_the_owner_and_runs_the_allowed_call() -> None:
     result = subprocess.run(
         [sys.executable, "-m", "tests.temporal.test_agent_approval_wait_integration"],

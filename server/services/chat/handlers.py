@@ -228,6 +228,33 @@ async def _dispatch(
     logger.info("Chat message dispatched", session_id=session_id, run_id=run_id)
 
 
+def _decline_key(session_id: str, client_message_id: Any) -> str:
+    """The decision key a message declines waiting calls under: its message
+    id, so the same message sent again finds what it declined."""
+    from uuid import uuid4
+
+    from services.approvals.waiting import message_key
+
+    try:
+        return message_key(ledger.client_message_uid(session_id, client_message_id))
+    except ValueError:
+        return message_key(f"m_{uuid4().hex}")
+
+
+def _declined(rows: List[Any], timestamp: str, delivery: Optional[str]) -> Dict[str, Any]:
+    """The answer to a message that declined the calls its run waited on."""
+    response: Dict[str, Any] = {
+        "success": True,
+        "timestamp": timestamp,
+        "message_id": None,
+        "run_id": None,
+        "declined": {"run_id": rows[0].run_id, "approval_ids": [row.id for row in rows]},
+    }
+    if delivery is not None:
+        response["delivery"] = delivery
+    return response
+
+
 # ``message`` is checked below: a message may be only files.
 @ws_handler()
 async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
@@ -246,7 +273,14 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     ``uploads/`` (``services/chat/attachments.py``: rebuilt from the files,
     at most six; refused with ``attachment_rejected``); a message may be
     only files. ``options.web: false`` keeps the employee off web search for
-    this message."""
+    this message.
+
+    While the session's run waits on the owner's answer to a call its turn
+    holds, a plain message (no ``ui_event``, no files) answers that call:
+    it declines it, the message its note (RFC-0007 D3,
+    ``services/approvals/waiting.py``), saves no message, starts no run and
+    answers ``{message_id: null, run_id: null, declined: {run_id,
+    approval_ids}, delivery}``. Sent again, it answers the same."""
     message = data.get("message")
     raw_attachments = data.get("attachments")
     if not isinstance(message, str) or not (message.strip() or raw_attachments):
@@ -299,6 +333,14 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
     except ValueError as exc:
         return {"success": False, "error": "invalid_request", "detail": str(exc)}
 
+    decline_key = None
+    if scope.workflow_id is not None and press is None and not attachments:
+        from services.approvals.waiting import declined_with
+
+        decline_key = _decline_key(session_id, data.get("client_message_id"))
+        earlier = await declined_with(database, decline_key)
+        if earlier:
+            return _declined(earlier, timestamp, delivery)
     try:
         admission = await ledger.admit_message(
             database,
@@ -316,6 +358,15 @@ async def handle_send_chat_message(data: Dict[str, Any], websocket: WebSocket) -
             attachments=attachments or None,
         )
     except ledger.RunInProgress as exc:
+        if decline_key is not None:
+            from services.approvals.waiting import decline_with_message
+            from services.authz.ws_surface import execution_principal
+
+            declined = await decline_with_message(
+                database, run_id=exc.run.run_id, owner=execution_principal({}, websocket), message=message, decision_key=decline_key
+            )
+            if declined:
+                return _declined(declined, timestamp, delivery)
         return {"success": False, "error": "run_in_progress", "run_id": exc.run.run_id}
     except ValueError as exc:
         return {"success": False, "error": "invalid_request", "detail": str(exc)}

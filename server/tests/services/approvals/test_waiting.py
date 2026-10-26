@@ -40,7 +40,7 @@ class FakeClient:
         return Handle()
 
 
-async def held(harness, call_id="call_1"):
+async def held(harness, call_id="call_1", run_id=None):
     await rules.set_mode(harness.database, "wf", "outside")
     context = {
         "node_id": "wf:whatsappSend:1",
@@ -54,6 +54,7 @@ async def held(harness, call_id="call_1"):
         "tool_args": WHATSAPP,
         "approval_wait_version": 1,
         "approval_wait": True,
+        **({"chat_run_id": run_id} if run_id else {}),
     }
     await tool_calls.check(context, get_node_class("whatsappSend"))
     return next(row for row in await store.list_approvals(harness.database, status="pending") if row.tool_call_id == call_id)
@@ -80,6 +81,24 @@ async def test_a_wait_reads_a_pending_row_until_it_is_decided(harness):
     }
     # Read: nothing nudges it again.
     assert (await store.get(harness.database, row.id)).consumed_at is not None
+
+
+async def test_a_message_the_owner_sent_instead_declines_what_its_turn_waits_on(harness):
+    # RFC-0007 D3: the wait reads that a message, not the card, declined it.
+    waited, elsewhere = await held(harness, run_id="r_1"), await held(harness, "call_2", run_id="r_2")
+    key = waiting.message_key("m_1")
+    declined = await waiting.decline_with_message(
+        harness.database, run_id="r_1", owner="owner", message="Call her instead.", decision_key=key
+    )
+    assert [row.id for row in declined] == [waited.id]
+    assert await waiting.read(harness.database, waited.id) == {
+        "status": "discarded",
+        "revision": waited.revision + 1,
+        "note": "Call her instead.",
+        "by_message": True,
+    }
+    assert [row.id for row in await waiting.declined_with(harness.database, key)] == [waited.id]
+    assert (await store.get(harness.database, elsewhere.id)).status == "pending"
 
 
 async def test_an_approved_row_is_left_for_its_claim(harness):

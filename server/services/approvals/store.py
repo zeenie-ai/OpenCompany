@@ -274,9 +274,10 @@ async def list_approvals(
     run_id: Optional[str] = None,
     kind: Optional[str] = None,
     ids: Optional[Sequence[str]] = None,
+    decision_key: Optional[str] = None,
     limit: int = 50,
 ) -> List[ApprovalRequest]:
-    """Newest first."""
+    """Newest first. ``decision_key``: the rows whose latest decision had it."""
     query = select(ApprovalRequest)
     if owner_id is not None:
         query = query.where(ApprovalRequest.owner_id == owner_id)
@@ -292,6 +293,8 @@ async def list_approvals(
         query = query.where(or_(ApprovalRequest.kind == kind, ApprovalRequest.kind.is_(None)) if kind == "gate" else ApprovalRequest.kind == kind)
     if ids is not None:
         query = query.where(ApprovalRequest.id.in_(tuple(ids)))
+    if decision_key is not None:
+        query = query.where(ApprovalRequest.decision_key == decision_key)
     query = query.order_by(ApprovalRequest.created_at.desc()).limit(max(1, min(int(limit), 100)))
     async with database.get_session() as session:
         return list((await session.execute(query)).scalars().all())

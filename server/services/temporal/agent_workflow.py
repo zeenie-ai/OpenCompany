@@ -427,8 +427,14 @@ def _held_for_owner(result: Any) -> Optional[str]:
 
 def _owner_answer(answer: Dict[str, Any]) -> Dict[str, Any]:
     """What the model reads when the owner's answer ran nothing (RFC-0007
-    §4.5). Never ``requires_user_action``: the turn goes on."""
+    §4.5). Never ``requires_user_action``: the turn goes on. A message the
+    owner sent instead of answering (D3) may ask for something else, so it
+    says nothing about trying again."""
     status = answer.get("status")
+    if status == "discarded" and answer.get("by_message"):
+        message = answer.get("note")
+        tail = f" Their message: {message}" if message else ""
+        return {"success": False, "status": "declined", "error": "The owner sent a message instead of answering; nothing happened." + tail}
     if status == "discarded":
         note = answer.get("note")
         tail = f" Their note: {note}" if note else " Don't try to get the same outcome another way."

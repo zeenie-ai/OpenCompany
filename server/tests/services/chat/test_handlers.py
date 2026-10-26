@@ -15,6 +15,7 @@ from tests.services.chat._helpers import (
     add_control,
     chat_trigger,
     chat_updates,
+    held_call,
     saved_workflow,
     talking,
     updates_at_dispatch,
@@ -95,6 +96,44 @@ async def test_a_resent_message_returns_the_first_send_and_dispatches_once(chat)
     assert len(chat.dispatched) == 1
     bad = await send(chat, client_message_id="not ok")
     assert bad["error"] == "invalid_request"
+
+
+async def test_a_message_while_the_turn_waits_on_a_call_declines_it(chat):
+    # RFC-0007 D3: the message answers the call, as its note, on the card;
+    # nothing is saved in the thread and no run starts.
+    from services.approvals import store
+
+    await talking(chat.database)
+    first = await send(chat)
+    await held_call(chat.database, "ap_1", first["run_id"])
+    declined = await send(chat, "No, call her instead.", client_message_id="c-2")
+    assert declined == {
+        "success": True,
+        "timestamp": "t",
+        "message_id": None,
+        "run_id": None,
+        "delivery": "now",
+        "declined": {"run_id": first["run_id"], "approval_ids": ["ap_1"]},
+    }
+    row = await store.get(chat.database, "ap_1")
+    assert (row.status, row.note) == ("discarded", "No, call her instead.")
+    assert [saved["message"] for saved in await chat.database.read_chat_messages("wf")] == ["Book Saturday"]
+    assert len(chat.dispatched) == 1
+    # Sent again, it answers the same, even once the run has ended.
+    await ledger.fail_run(chat.database, await ledger.get_run(chat.database, first["run_id"]), code="interrupted", message="Ended.")
+    assert await send(chat, "No, call her instead.", client_message_id="c-2") == declined
+    assert len(chat.dispatched) == 1
+
+
+async def test_a_draft_is_no_call_a_message_answers(chat):
+    # Only a call the turn waits on: a draft leaves the lane busy.
+    from services.approvals import store
+
+    await talking(chat.database)
+    first = await send(chat)
+    await held_call(chat.database, "ap_1", first["run_id"], runtime="temporal")
+    assert await send(chat, "No.", client_message_id="c-2") == {"success": False, "error": "run_in_progress", "run_id": first["run_id"]}
+    assert (await store.get(chat.database, "ap_1")).status == "pending"
 
 
 async def test_no_run_when_no_deployed_chat_trigger_answers_the_session(chat):

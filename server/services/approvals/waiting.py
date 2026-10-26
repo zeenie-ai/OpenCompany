@@ -11,6 +11,13 @@ pending, waits for a ``nudge`` Signal or the row's expiry, then reads again.
 - ``reconcile.renudge_turns``, from the chat watchdog's round: a decided
   row its wait has not read yet is nudged again, in case the first nudge
   was lost.
+- :func:`decline_with_message`: a message the owner sends while the turn
+  waits declines its calls, the message their note (RFC-0007 D3), and the
+  turn reads that the owner wrote instead of answering.
+- :func:`run_waited`: the chat watchdog does not count the wait toward the
+  run's time, and the owner's answer starts the run's window again (D2).
+- :func:`cancel_waits`: a Reset, or a run whose workflow closed, ends the
+  rows nothing waits on any more.
 
 A nudge to a wait that has ended, or with no workflow engine, is dropped:
 the wait reads the row at its expiry in any case. Never imports ``nodes/``.
@@ -19,7 +26,7 @@ the wait reads the row at its expiry in any case. Never imports ``nodes/``.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import update
 
@@ -34,6 +41,8 @@ logger = get_logger(__name__)
 WORKFLOW_NAME = "ApprovalWorkflow"
 #: The row's ``runtime`` when its turn waits on it.
 TURN = "turn"
+#: The decision key prefix of a message that declined a waiting call.
+MESSAGE_KEY = "chat:"
 
 
 def _utcnow() -> datetime:
@@ -75,16 +84,60 @@ async def nudge_on_change(change: ApprovalChange) -> None:
         await nudge(change.approval_id, client)
 
 
-async def cancel_waits(database: Any, workflow_id: str, generation: int) -> int:
-    """End the open rows a generation's turns wait on: a Reset terminated
-    those turns, and their waits with them (the approval gate's own rows
-    are its node's to end)."""
-    cancelled = await store.cancel_open(database, workflow_id=workflow_id, generation=generation, runtime=TURN)
+async def cancel_waits(
+    database: Any, workflow_id: str, generation: Optional[int] = None, *, run_ids: Optional[Sequence[str]] = None
+) -> int:
+    """End the open rows turns waited on when nothing waits on them any
+    more: a Reset's generation (it terminated those turns, and their waits
+    with them), or chat runs whose workflow closed (``run_ids``). The
+    approval gate's own rows are its node's to end."""
+    cancelled = await store.cancel_open(database, workflow_id=workflow_id, generation=generation, run_ids=run_ids, runtime=TURN)
     for row in cancelled:
         await notify_approval_changed(change_of(row, "cancelled"))
     if cancelled:
-        logger.info("Cancelled the calls a reset turn waited on", workflow_id=workflow_id, count=len(cancelled))
+        logger.info("Cancelled the calls ended turns waited on", workflow_id=workflow_id, count=len(cancelled))
     return len(cancelled)
+
+
+async def run_waited(database: Any, run_id: str, *, since: datetime) -> bool:
+    """Whether a chat run's turn waits on the owner's answer to a call, or
+    has had their answer since ``since``."""
+    for row in await store.list_approvals(database, run_id=run_id, kind="tool_call", limit=100):
+        decided = store.aware(row.decided_at)
+        if row.runtime == TURN and (row.status == "pending" or (decided is not None and decided > since)):
+            return True
+    return False
+
+
+def message_key(message_uid: str) -> str:
+    """The decision key a message declines waiting calls under: its id, so
+    the same message sent again finds them (:func:`declined_with`)."""
+    return f"{MESSAGE_KEY}{message_uid}"
+
+
+async def decline_with_message(database: Any, *, run_id: str, owner: str, message: str, decision_key: str) -> List[ApprovalRequest]:
+    """Decline the calls a chat run's turn waits on, because the owner sent
+    a message instead of answering: the message is their note, on the card
+    and in what the turn reads. A row another decision settled first is left
+    as it is."""
+    from services.approvals.decisions import DecisionRefused, apply
+
+    declined: List[ApprovalRequest] = []
+    for row in await store.list_approvals(database, owner_id=owner, run_id=run_id, status="pending", kind="tool_call", limit=100):
+        if row.runtime != TURN:
+            continue
+        try:
+            moved, _ = await apply(database, row, decision="discard", decision_key=decision_key, actor=owner, note=message)
+        except DecisionRefused:
+            continue
+        await notify_approval_changed(change_of(moved, "decided"))
+        declined.append(moved)
+    return declined
+
+
+async def declined_with(database: Any, decision_key: str) -> List[ApprovalRequest]:
+    """The calls a message declined (:func:`decline_with_message`)."""
+    return await store.list_approvals(database, decision_key=decision_key, status="discarded")
 
 
 async def mark_read(database: Any, approval_id: str) -> None:
@@ -101,9 +154,10 @@ async def mark_read(database: Any, approval_id: str) -> None:
 
 async def read(database: Any, approval_id: str, *, cancel: bool = False) -> Dict[str, Any]:
     """The answer a wait gets: ``{status, revision, expires_at}`` while the
-    row is pending, else ``{status, revision, note?}``. A row past its expiry
-    ends ``expired`` first; with ``cancel`` (the wait was cancelled) a
-    pending row ends ``cancelled``. A row that is gone reads as cancelled.
+    row is pending, else ``{status, revision, note?, by_message?}``
+    (``by_message``: a message the owner sent declined it). A row past its
+    expiry ends ``expired`` first; with ``cancel`` (the wait was cancelled)
+    a pending row ends ``cancelled``. A row that is gone reads as cancelled.
     An answer other than ``approved`` marks the row read; a claim marks an
     approved one when its call runs."""
     from services.approvals.decisions import expire_if_due
@@ -124,7 +178,25 @@ async def read(database: Any, approval_id: str, *, cancel: bool = False) -> Dict
         return {"status": "pending", "revision": row.revision, "expires_at": expires.isoformat()}
     if row.status != "approved":
         await mark_read(database, row.id)
-    return {"status": row.status, "revision": row.revision, **({"note": row.note} if row.note else {})}
+    answer = {"status": row.status, "revision": row.revision, **({"note": row.note} if row.note else {})}
+    if row.status == "discarded" and (row.decision_key or "").startswith(MESSAGE_KEY):
+        answer["by_message"] = True
+    return answer
 
 
-__all__ = ["TURN", "WORKFLOW_NAME", "cancel_waits", "engine", "mark_read", "nudge", "nudge_on_change", "read", "wait_workflow_id"]
+__all__ = [
+    "MESSAGE_KEY",
+    "TURN",
+    "WORKFLOW_NAME",
+    "cancel_waits",
+    "decline_with_message",
+    "declined_with",
+    "engine",
+    "mark_read",
+    "message_key",
+    "nudge",
+    "nudge_on_change",
+    "read",
+    "run_waited",
+    "wait_workflow_id",
+]

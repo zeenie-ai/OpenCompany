@@ -72,6 +72,31 @@ async def talking(database, workflow_id: str = "wf", status: str = "running", ge
     await add_control(database, workflow_id, status, generation=generation, nodes=[chat_trigger(workflow_id)])
 
 
+async def held_call(database, approval_id: str, run_id: str, *, runtime: str = "turn") -> None:
+    """A call the run's agent made, held for the owner: one its turn waits
+    on (``turn``, RFC-0007), or a draft."""
+    from models.approvals import ApprovalRequest
+
+    async with database.get_session() as session:
+        session.add(
+            ApprovalRequest(
+                id=approval_id,
+                idempotency_key=f"k-{approval_id}",
+                owner_id="owner",
+                workflow_id="wf",
+                node_id="wf:whatsappSend:1",
+                kind="tool_call",
+                channel="WhatsApp",
+                action="WhatsApp message",
+                recipient="447700900123",
+                runtime=runtime,
+                run_id=run_id,
+                draft_text="On my way",
+            )
+        )
+        await session.commit()
+
+
 def chat_updates(frames) -> List[Dict[str, Any]]:
     return [frame["data"]["data"] for frame in frames if frame["type"] == "chat.updated"]
 

@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from models.chat import ChatRun
 from services.chat import ledger
-from tests.services.chat._helpers import add_control, chat_updates
+from tests.services.chat._helpers import add_control, chat_updates, held_call
 
 
 async def admit(database, session_id="wf", *, text_="Book Saturday", track=True, state="pending", client_message_id=None):
@@ -354,6 +354,57 @@ async def test_a_run_past_its_longest_ends_as_timed_out(database, hub):
     await age(database, admission.run.run_id, started_at=LONG_AGO)
     assert await sweep(database) == [admission.run.run_id]
     assert (await ledger.get_run(database, admission.run.run_id)).error_code == "timed_out"
+
+
+async def answered(database, approval_id, at):
+    """The owner answered a held call at ``at``."""
+    from sqlalchemy import update
+
+    from models.approvals import ApprovalRequest
+
+    async with database.get_session() as session:
+        await session.execute(update(ApprovalRequest).where(ApprovalRequest.id == approval_id).values(status="discarded", decided_at=at))
+        await session.commit()
+
+
+async def test_a_turn_waiting_for_the_owner_is_not_timed_out(database, hub):
+    # RFC-0007 D2: the wait does not count, and the answer starts a fresh window.
+    admission = await admit(database)
+    run = await started(database, admission)
+    await age(database, run.run_id, started_at=LONG_AGO)
+    await held_call(database, "ap_1", run.run_id)
+    assert await sweep(database) == []
+    await answered(database, "ap_1", NOW - timedelta(hours=1))
+    assert await sweep(database) == []
+    await answered(database, "ap_1", LONG_AGO)
+    assert await sweep(database) == [run.run_id]
+    assert (await ledger.get_run(database, run.run_id)).error_code == "timed_out"
+
+
+async def test_a_draft_does_not_hold_a_run_past_its_longest(database, hub):
+    admission = await admit(database)
+    run = await started(database, admission)
+    await age(database, run.run_id, started_at=LONG_AGO)
+    await held_call(database, "ap_1", run.run_id, runtime="temporal")
+    assert await sweep(database) == [run.run_id]
+
+
+async def test_a_run_whose_workflow_closed_cancels_the_calls_its_turn_waited_on(database, hub):
+    from services.approvals import store
+
+    admission = await admit(database)
+    run = await started(database, admission)
+    await age(database, run.run_id, started_at=NOW - timedelta(minutes=5))
+    await held_call(database, "ap_wait", run.run_id)
+    await held_call(database, "ap_draft", run.run_id, runtime="temporal")
+
+    async def closed(*_):
+        return True
+
+    assert await sweep(database, temporal_status=closed) == [run.run_id]
+    assert (await store.get(database, "ap_wait")).status == "cancelled"
+    # A draft outlives its run: the owner can still send it.
+    assert (await store.get(database, "ap_draft")).status == "pending"
 
 
 @pytest.mark.parametrize(("replied", "state", "code"), [(True, "finished", None), (False, "error", "interrupted")])
