@@ -809,18 +809,21 @@ keep that release's command identities:
   - activity, child-workflow and patch commands with their ids
     (`workflow_identities.identity_snapshot`);
   - Signal, Update and Query handler names (`handler_snapshot`);
-  - plugin activity names.
+  - plugin activity names;
+  - plugin task queues.
 
   `test_workflow_identity_golden.py` fails when:
   - commands change without a reviewed patch entry;
   - a patched marker vanishes before a release has shipped it as
     `deprecate_patch` (RFC-0005 §24.3);
   - a handler is renamed or removed;
-  - a plugin activity name changes.
+  - a plugin activity name changes;
+  - a plugin moves to another task queue, since an open agent run's frozen
+    tool policy names the old one and would wait on it forever.
 
   New handlers and node types are fine.
   `record_fixtures --golden-only --source-commit <commit>` refreshes the file
-  at each release.
+  at each release; it starts no server, so it needs no `TEMPORAL_TEST_CLI`.
 - **Release check.** `test_the_current_version_has_its_replay_histories` in
   `cli/tests/test_release_pipeline_config.py` fails a version that has no
   `fixtures/<version>/`. It also fails a set recorded on another CLI than the

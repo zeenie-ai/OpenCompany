@@ -1371,6 +1371,8 @@ def write_golden(source_root: Path, commit: str) -> None:
         "identities": identity_snapshot(source_root), "patch_entries": [],
         "handlers": handler_snapshot(source_root),
         "plugin_activity_types": {name: f"node.{cls.type}.v{cls.version}" for name, cls in registered_node_classes().items()},
+        # An open agent run's frozen tool policy names each tool's queue.
+        "plugin_task_queues": {name: cls.task_queue for name, cls in registered_node_classes().items()},
     }, indent=2) + "\n", encoding="utf-8")
 
 
@@ -1407,10 +1409,6 @@ def committed_source(commit: str | None):
 
 
 def main() -> int:
-    cli = os.environ.get("TEMPORAL_TEST_CLI")
-    if not cli or not Path(cli).is_file():
-        print("Set TEMPORAL_TEST_CLI to the pinned Temporal CLI binary (see TEMPORAL_ARCHITECTURE.md).", file=sys.stderr)
-        return 2
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("out", nargs="?", type=Path, default=FIXTURES_DIR / release())
     parser.add_argument("--source-commit", help="Record the exact app source at this commit, isolated from uncommitted changes")
@@ -1420,6 +1418,11 @@ def main() -> int:
     options = parser.parse_args()
     if options.scenarios and options.out.resolve() == (FIXTURES_DIR / release()).resolve():
         parser.error("--scenario records a supplementary set: give it its own folder, e.g. fixtures/<release>-<topic>")
+    # The identity inventory starts no server.
+    cli = os.environ.get("TEMPORAL_TEST_CLI")
+    if not options.golden_only and (not cli or not Path(cli).is_file()):
+        print("Set TEMPORAL_TEST_CLI to the pinned Temporal CLI binary (see TEMPORAL_ARCHITECTURE.md).", file=sys.stderr)
+        return 2
     os.environ["DEBUG"] = "false"
     os.environ.setdefault("LOG_LEVEL", "WARNING")
     with tempfile.TemporaryDirectory(prefix="opencompany-fixtures-") as data_dir:

@@ -120,3 +120,16 @@ def test_plugin_activity_type_versions_retain_the_release_names():
     # their N-1 workflows have drained or a reviewed migration is supplied.
     changed = {name: expected for name, expected in golden["plugin_activity_types"].items() if current.get(name) != expected}
     assert not changed, f"Historical plugin activity names changed without compatibility registration: {changed}"
+
+
+def test_plugin_task_queues_retain_the_release_queues():
+    """An open agent run's frozen tool policy names each tool's queue, so a
+    released plugin that moves queue strands those runs. New plugins are
+    additive."""
+    import nodes  # noqa: F401 -- discover the production node classes
+    from services.node_registry import registered_node_classes
+
+    golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+    current = {name: cls.task_queue for name, cls in registered_node_classes().items()}
+    changed = {name: expected for name, expected in golden["plugin_task_queues"].items() if current.get(name) != expected}
+    assert not changed, f"Released plugins changed task queue; open runs would wait on the old one: {changed}"
