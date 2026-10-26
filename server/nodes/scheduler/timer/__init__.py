@@ -35,7 +35,10 @@ class TimerNode(ActionNode):
     description = "Timer-based trigger with configurable delay"
     component_kind = "square"  # has input handle
     tool_name = "timer"
-    tool_description = "Wait/sleep for a specified duration. Specify duration (1-3600) and unit (seconds, minutes, or hours). Returns timestamp and elapsed time after waiting."
+    tool_description = (
+        "Wait/sleep for a specified duration, then return the timestamp and elapsed time. Specify duration and unit "
+        "(seconds, minutes, or hours). The call blocks while it waits, and a wait longer than about 9 minutes times out."
+    )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
         {"name": "output-main", "kind": "output", "position": "right", "label": "Output", "role": "main"},

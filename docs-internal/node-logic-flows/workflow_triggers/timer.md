@@ -5,7 +5,7 @@
 | **Category** | workflow / utility / tool (dual-purpose) |
 | **Backend handler** | Plugin [`server/nodes/scheduler/timer/__init__.py`](../../../server/nodes/scheduler/timer/__init__.py) (`TimerNode`); dispatch via `BaseNode.execute()` + the `@Operation("wait")` method. |
 | **Tests** | [`server/tests/nodes/test_workflow_triggers.py`](../../../server/tests/nodes/test_workflow_triggers.py) |
-| **Skill (if any)** | none |
+| **Skill (if any)** | [`timer-skill`](../../../server/skills/task_agent/timer-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - exposed on the `tool` output handle so AI agents can invoke it |
 
 ## Purpose
@@ -27,7 +27,7 @@ of next-run; it simply pauses the branch of the workflow it is on for
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `duration` | number | `1` | yes | - | How long to wait. Pydantic-validated `ge=1, le=86400`. |
-| `unit` | options | `seconds` | no | - | One of `seconds` / `minutes` / `hours`. Unknown values are treated as `seconds`. |
+| `unit` | options | `seconds` | no | - | One of `seconds` / `minutes` / `hours`; validation refuses any other value. |
 
 ## Outputs (handles)
 
@@ -74,8 +74,8 @@ flowchart TD
 ## Decision Logic
 
 - **Unit mapping**: `seconds` / `minutes` / `hours` multiply duration by
-  1 / 60 / 3600. Any other value falls through to the `_` match case and is
-  treated as raw seconds.
+  1 / 60 / 3600. The `_` match case (raw seconds) is unreachable, since
+  `Params` validation refuses any other unit.
 - **Explicit cancellation**: `asyncio.CancelledError` propagates. In a
   Temporal activity it stays a cancel (a worker shutdown retries the wait,
   which is safe to repeat); in process `NodeExecutor` answers `Cancelled`.
@@ -112,18 +112,23 @@ count; this user-requested delay is admitted node work. See
 
 ## Edge cases & known limits
 
-- Only three unit strings are supported - anything else is silently treated
-  as raw seconds. There is no surfaced validation error.
-- `duration` is Pydantic-validated `ge=1, le=86400`; for `hours` that is up
-  to 86400 hours, so a large value with `unit=hours` can sleep effectively
-  indefinitely.
+- Only three unit strings are accepted: `unit` is a `Literal`, so `Params`
+  validation refuses any other (there is no `days`).
+- `duration` is Pydantic-validated `ge=1, le=86400`, but the Activity's
+  timeouts bound a wait first:
+  - **As a tool call**, one attempt lasts at most the Timer's declared
+    `start_to_close_timeout`, the 10-minute action default, so a wait longer
+    than about 9 minutes times out. The tool description says so.
+  - **As a graph node**, one attempt can last up to the 24-hour graph ceiling.
+  - Either way, there are three attempts, and each waits the full duration
+    again: a worker restart starts the wait from the beginning.
+- The call blocks: an agent waiting on it does nothing else meanwhile.
 - Cancellation (`asyncio.CancelledError`) propagates as a cancel, so
   downstream nodes do not execute when the timer is cancelled.
 
 ## Related
 
-- **Skills using this as a tool**: `timer` is exposed on the `tool` handle
-  but there is no dedicated SKILL.md file.
+- **Skills using this as a tool**: [`timer-skill`](../../../server/skills/task_agent/timer-skill/SKILL.md).
 - **Sibling triggers**: [`cronScheduler`](./cronScheduler.md) for recurring
   schedules; [`start`](./start.md) for manual entry.
 - **Architecture docs**: [Execution Engine Design](../../DESIGN.md)
