@@ -6,7 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import { emptyRun, type RunSnapshot, type RunStep } from '@/lib/agui/reduceRun';
 import { timeLabel } from '../thread/timeLabel';
-import { failureLines, liveLabel, liveText, stepDetail, workLabel, writingRate } from '../turns/runCopy';
+import { parseApproval } from '../data/approvals';
+import { approvalStep, failureLines, liveLabel, liveText, stepDetail, workLabel, writingRate } from '../turns/runCopy';
 
 describe('timeLabel', () => {
   const now = new Date(2026, 8, 28, 15, 30);
@@ -61,6 +62,7 @@ describe('a working run', () => {
     expect(liveLabel(working, false)).toBe('Thinking');
     expect(liveLabel(working, true)).toBe('Writing');
     expect(liveLabel({ ...working, state: 'stopping' }, true)).toBe('Stopping…');
+    expect(liveLabel(working, false, true)).toBe('Waiting for your OK');
   });
 
   it('says how fast the answer comes, once a second has passed', () => {
@@ -104,6 +106,22 @@ describe('working steps', () => {
     expect(stepDetail(step('a', 'done', '3 events on Saturday'))).toBe('3 events on Saturday');
     expect(stepDetail(step('a', 'done'))).toBeNull();
     expect(stepDetail(step('a', 'failed', 'quota'))).toBe('Failed · quota');
-    expect(stepDetail(step('a', 'skipped', 'x'))).toBe('Skipped');
+    expect(stepDetail(step('a', 'skipped'))).toBe('Skipped');
+    expect(stepDetail(step('a', 'skipped', 'You declined'))).toBe('You declined');
+  });
+
+  it('a call its turn waits on follows its card', () => {
+    const held = step('call_1', 'done', 'Waiting for your OK');
+    const card = (patch: Record<string, unknown>) =>
+      parseApproval({ approval_id: 'ap1', status: 'pending', waits: true, outcome_labels: { sent: 'Done', failed: 'Not done' }, ...patch })!;
+    expect(approvalStep(held, card({}))).toMatchObject({ state: 'running', detail: 'Waiting for your OK' });
+    expect(approvalStep(held, card({ status: 'approved' }))).toMatchObject({ state: 'running', detail: 'Allowed' });
+    expect(approvalStep(held, card({ status: 'sent' }))).toMatchObject({ state: 'done', detail: 'Done' });
+    expect(approvalStep(held, card({ status: 'failed', outcome: { certainty: 'not_sent', error: 'quota' } }))).toMatchObject({
+      state: 'failed',
+      detail: 'quota',
+    });
+    expect(approvalStep(held, card({ status: 'discarded' }))).toMatchObject({ state: 'skipped', detail: 'You declined' });
+    expect(approvalStep(held, card({ status: 'expired' }))).toMatchObject({ state: 'skipped', detail: 'No answer in time' });
   });
 });

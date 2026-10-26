@@ -6,6 +6,7 @@
 
 import type { RunError } from '@/lib/agui/events';
 import type { RunSnapshot, RunStep } from '@/lib/agui/reduceRun';
+import type { ChatApproval } from '../data/approvals';
 
 /** The text a run that has not posted its answer shows. */
 export interface LiveText {
@@ -52,10 +53,35 @@ export function failureLines(error: RunError | null, name: string): { headline: 
 }
 
 /** The status line's label while a run works (design handoff: "Thinking"
- *  until text comes, then "Writing"). */
-export function liveLabel(run: RunSnapshot, writing: boolean): string {
+ *  until text comes, then "Writing"; "Waiting for your OK" while it waits on
+ *  a call, RFC-0007 §4.7). */
+export function liveLabel(run: RunSnapshot, writing: boolean, waiting = false): string {
   if (run.state === 'stopping') return 'Stopping…';
+  if (waiting) return 'Waiting for your OK';
   return writing ? 'Writing' : 'Thinking';
+}
+
+/** The step of a call its turn waits on, as the call stands now: the
+ *  server ends the step when it holds the call and never reports it again
+ *  (RFC-0007 §4.7). */
+export function approvalStep(step: RunStep, approval: ChatApproval): RunStep {
+  switch (approval.status) {
+    case 'pending':
+      return { ...step, state: 'running', detail: 'Waiting for your OK' };
+    case 'approved':
+    case 'sending':
+      return { ...step, state: 'running', detail: 'Allowed' };
+    case 'sent':
+      return { ...step, state: 'done', detail: approval.outcomeLabels.sent };
+    case 'failed':
+      return { ...step, state: 'failed', detail: approval.outcome?.error ?? undefined };
+    case 'discarded':
+      return { ...step, state: 'skipped', detail: 'You declined' };
+    case 'expired':
+      return { ...step, state: 'skipped', detail: 'No answer in time' };
+    case 'cancelled':
+      return { ...step, state: 'skipped', detail: 'Cancelled' };
+  }
 }
 
 /** "· 42 tok/s": how fast the answer is coming, a token counted as four
@@ -83,7 +109,7 @@ export function workLabel(steps: readonly RunStep[], live: boolean, durationMs: 
 
 /** What a step says under its name. */
 export function stepDetail(step: RunStep): string | null {
-  if (step.state === 'skipped') return 'Skipped';
+  if (step.state === 'skipped') return step.detail || 'Skipped';
   if (step.state === 'failed') return step.detail ? `Failed · ${step.detail}` : 'Failed';
   return step.detail ?? null;
 }

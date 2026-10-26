@@ -10,24 +10,26 @@
  * it; and a status line says "Thinking" or "Writing · N tok/s" and that Esc
  * stops it. Text written beside tool calls shows muted until the answer
  * replaces it. A run that waits for Resume, failed or was stopped says so
- * where its answer would be.
+ * where its answer would be. While the run waits for the owner's OK on a
+ * call, the status line says so, and that call's step follows its card
+ * (RFC-0007 §4.7).
  *
  * `chat-msg chat-msg-bot` (on the text only) is the theme hook Atomic
  * paints as a bubble.
  */
 
 import { CircleAlert, Pause, RotateCcw, Square } from 'lucide-react';
-import { Suspense, lazy, useMemo, type ReactNode } from 'react';
+import { Suspense, lazy, useContext, useMemo, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { isLiveRun, type RunSnapshot } from '@/lib/agui/reduceRun';
 import type { UiStateChange } from '@/lib/jsonRender/uiState';
 import { cn } from '@/lib/utils';
 import { ApprovalCard } from '../approval/ApprovalCard';
+import { ApprovalsContext } from '../approval/context';
+import { NO_APPROVALS, turnApprovalIds, waitsOnOwner, type ChatApproval } from '../data/approvals';
 import {
-  liveApprovalIds,
   liveArtifacts,
   mergeArtifacts,
-  savedApprovalIds,
   savedArtifacts,
   savedFollowups,
   savedSources,
@@ -50,7 +52,7 @@ import { ArtifactCard } from './ArtifactCard';
 import { GeneratedUiBlock } from './GeneratedUiBlock';
 import { FollowUps } from './FollowUps';
 import { ReplyActions } from './ReplyActions';
-import { failureLines, liveLabel, liveText } from './runCopy';
+import { approvalStep, failureLines, liveLabel, liveText } from './runCopy';
 import { SourceChips } from './SourceChips';
 import { StatusLine } from './StatusLine';
 import { StepsDisclosure } from './StepsDisclosure';
@@ -168,11 +170,28 @@ export function AssistantTurn({
     () => mergeArtifacts(savedArtifacts(message?.parts), liveArtifacts(run?.activities)),
     [message?.parts, run?.activities],
   );
-  // The drafts it made: named on the saved reply, or arriving with the run.
-  const approvals = useMemo(
-    () => [...new Set([...savedApprovalIds(message?.parts), ...liveApprovalIds(run?.activities)])],
-    [message?.parts, run?.activities],
-  );
+  // The drafts it made: named on the saved reply, arriving with the run, or
+  // made by the run it holds.
+  const known = useContext(ApprovalsContext)?.approvals ?? NO_APPROVALS;
+  const approvals = useMemo(() => turnApprovalIds(message, run, known), [message, run, known]);
+  const waiting = live && waitsOnOwner(known, run?.runId);
+  // A call its turn waits on: its step follows its card.
+  const steps = useMemo(() => {
+    if (!work) return null;
+    const byCall = new Map<string, ChatApproval>();
+    for (const id of approvals) {
+      const approval = known.byId.get(id);
+      if (approval?.waits && approval.toolCallId) byCall.set(approval.toolCallId, approval);
+    }
+    if (byCall.size === 0) return work;
+    return {
+      ...work,
+      steps: work.steps.map((step) => {
+        const approval = byCall.get(step.stepId);
+        return approval ? approvalStep(step, approval) : step;
+      }),
+    };
+  }, [work, approvals, known]);
   // Only under the latest answer, once it is done, not stopped, and while
   // the owner is not writing something else.
   const drafting = useDrafting();
@@ -197,8 +216,8 @@ export function AssistantTurn({
     >
       <ChatAvatar persona={persona} live={live} compact={compact} />
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-        {work && <StepsDisclosure work={suspended ? { ...work, live: false } : work} compact={compact} />}
-        {live && !text && <Thinking />}
+        {steps && <StepsDisclosure work={suspended ? { ...steps, live: false } : steps} compact={compact} />}
+        {live && !text && !waiting && <Thinking />}
         {text && (
           <div
             data-narration={narration || undefined}
@@ -234,7 +253,7 @@ export function AssistantTurn({
         {live && run && (
           <StatusLine
             label={controlled && control.state === 'pausing' ? 'Stopping…'
-              : controlled && control.state === 'resuming' ? 'Resuming…' : liveLabel(run, streaming)}
+              : controlled && control.state === 'resuming' ? 'Resuming…' : liveLabel(run, streaming, waiting)}
             rate={rate}
             note={liveNote}
             stopHint={canStop && run.state !== 'stopping' && !(controlled && control.state !== 'running')}

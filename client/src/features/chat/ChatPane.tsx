@@ -64,6 +64,7 @@ import { canRecord, useChatContext, useDictation, type ChatCommand } from './dat
 import {
   NO_APPROVALS,
   isOpenApproval,
+  turnApprovalIds,
   useApprovalEvents,
   useAskFirst,
   useChatApprovals,
@@ -83,7 +84,6 @@ import {
   type ChatBranchError,
 } from './data/branches';
 import { useChatChoice, useChatModels } from './data/models';
-import { liveApprovalIds, savedApprovalIds } from './data/parts';
 import { sendOptions, useSendChatMessage, type ChatSendError } from './data/send';
 import { useStopChatRun } from './data/stop';
 import { useUiStateSync } from './data/uiState';
@@ -322,11 +322,10 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     const ids = new Set<string>();
     for (const turn of turns) {
       if (turn.kind !== 'assistant') continue;
-      for (const id of savedApprovalIds(turn.message?.parts)) ids.add(id);
-      for (const id of liveApprovalIds(turn.run?.activities)) ids.add(id);
+      for (const id of turnApprovalIds(turn.message, turn.run, approvals)) ids.add(id);
     }
     return ids;
-  }, [turns]);
+  }, [turns, approvals]);
   const standalone = useMemo(() => {
     const now = approvals.receivedAt + approvals.offsetMs;
     return [...approvals.order]

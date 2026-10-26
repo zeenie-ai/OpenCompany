@@ -5,8 +5,10 @@
  * `set_ask_first`.
  *
  * - `useChatApprovals(workflowId)`: the session's recent drafts by id, open
- *   and settled (a reply's cards read theirs here), and how far the server's
- *   clock is from this one, so countdowns end when the server's windows do.
+ *   and settled, and every open one however old (a reply's cards read theirs
+ *   here), and how far the server's clock is from this one, so countdowns
+ *   end when the server's windows do. `turnApprovalIds` says which cards a
+ *   turn shows, and `waitsOnOwner` whether a run waits for the owner's OK.
  * - `useDecideApproval(workflowId)`: send, undo, discard, restore, retry,
  *   dismiss.
  *   The card moves at once and comes back if the server refuses; every click
@@ -22,6 +24,9 @@ import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
+import type { RunSnapshot } from '@/lib/agui/reduceRun';
+import { liveApprovalIds, savedApprovalIds } from './parts';
+import type { ChatMessage } from './schemas';
 
 export const chatApprovalsKey = (workflowId: string) => ['chatApprovals', workflowId] as const;
 export const askFirstKey = (workflowId: string) => ['askFirst', workflowId] as const;
@@ -160,6 +165,24 @@ export function isOpenApproval(approval: ChatApproval, nowMs: number): boolean {
   }
 }
 
+/** The cards a turn shows: those its saved reply names and its run
+ *  announced, then, while the turn holds its run, any other the run made,
+ *  oldest first. A call can wait for days, longer than the server keeps a
+ *  run's activities, so the run keeps its cards (RFC-0007 §4.7). */
+export function turnApprovalIds(message: ChatMessage | null, run: RunSnapshot | null, approvals: ChatApprovals): string[] {
+  const ids = new Set([...savedApprovalIds(message?.parts), ...liveApprovalIds(run?.activities)]);
+  if (run) for (const id of [...approvals.order].reverse()) if (approvals.byId.get(id)?.runId === run.runId) ids.add(id);
+  return [...ids];
+}
+
+/** Whether a run waits for the owner's OK on one of its calls (RFC-0007
+ *  §4.6). */
+export function waitsOnOwner(approvals: ChatApprovals, runId: string | null | undefined): boolean {
+  if (!runId) return false;
+  for (const approval of approvals.byId.values()) if (approval.runId === runId && approval.waits && approval.status === 'pending') return true;
+  return false;
+}
+
 /** Seconds left until `until` on the server's clock, never below 0. */
 export function secondsLeft(until: string | null, offsetMs: number, nowMs = Date.now()): number {
   if (!until) return 0;
@@ -189,9 +212,16 @@ export function useChatApprovals(workflowId: string | null) {
   return useQuery<ChatApprovals, Error>({
     queryKey: chatApprovalsKey(workflowId ?? ''),
     queryFn: async () => {
-      const reply = await sendRequest<ListReply>('list_approvals', { workflow_id: workflowId, status: 'recent', limit: 100 });
-      if (reply?.success === false) throw new Error(reply.error || 'Could not load the drafts');
-      return readApprovals(reply, Date.now());
+      // The newest 100, and every one still open: a call can wait for days
+      // behind newer ones (RFC-0007 §4.7). An open one not among the newest
+      // is older than all of them, so it goes last.
+      const [recent, open] = await Promise.all(
+        (['recent', 'open'] as const).map((status) => sendRequest<ListReply>('list_approvals', { workflow_id: workflowId, status, limit: 100 })),
+      );
+      const failed = [recent, open].find((reply) => reply?.success === false);
+      if (failed) throw new Error(failed.error || 'Could not load the drafts');
+      const rows = (reply: ListReply | undefined) => (Array.isArray(reply?.approvals) ? reply.approvals : []);
+      return readApprovals({ ...recent, approvals: [...rows(recent), ...rows(open)] }, Date.now());
     },
     enabled: isReady && Boolean(workflowId),
     // Runs make drafts while no chat is open: always look again on open.

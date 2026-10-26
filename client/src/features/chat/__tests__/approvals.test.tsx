@@ -161,7 +161,11 @@ describe('the card says what happened', () => {
 // ----- in the chat -----
 
 let server: {
+  messages: Wire[];
+  activeRuns: Wire[];
   approvals: Wire[];
+  /** Open rows older than the newest 100. */
+  older: Wire[];
   askFirst: boolean | null;
   mode: string | null;
   revision: number;
@@ -204,15 +208,30 @@ beforeEach(() => {
   resetChatRunStore();
   useComposerStore.setState({ drafts: {} });
   useWorkflowControlStore.setState({ statuses: {}, pending: {} });
-  server = { approvals: [summary()], askFirst: true, mode: 'outside', revision: 0, decisions: [], rule: [], allows: [], money: [] };
+  server = {
+    messages: MESSAGES,
+    activeRuns: [],
+    approvals: [summary()],
+    older: [],
+    askFirst: true,
+    mode: 'outside',
+    revision: 0,
+    decisions: [],
+    rule: [],
+    allows: [],
+    money: [],
+  };
   sendRequest.mockReset().mockImplementation(async (kind: string, data: Wire) => {
     switch (kind) {
       case 'chat_subscribe':
-        return { success: true, session_id: data.session_id, hub_epoch: 'e1', active_runs: [] };
+        return { success: true, session_id: data.session_id, hub_epoch: 'e1', active_runs: server.activeRuns };
       case 'get_chat_messages':
-        return { success: true, messages: MESSAGES, thread: { active_leaf_id: null, revision: 1 }, active_runs: [] };
-      case 'list_approvals':
-        return { success: true, approvals: server.approvals, server_time: new Date().toISOString() };
+        return { success: true, messages: server.messages, thread: { active_leaf_id: null, revision: 1 }, active_runs: server.activeRuns };
+      case 'list_approvals': {
+        const open = server.approvals.filter((approval) => ['pending', 'approved', 'sending', 'failed'].includes(String(approval.status)));
+        const approvals = data.status === 'open' ? [...open, ...server.older] : server.approvals;
+        return { success: true, approvals, server_time: new Date().toISOString() };
+      }
       case 'get_ask_first':
         return { success: true, ask_first: server.askFirst, mode: server.mode, revision: server.revision };
       case 'set_ask_first':
@@ -427,6 +446,56 @@ describe('a draft in the chat', () => {
       fireEvent.click(confirm);
     });
     await waitFor(() => expect(server.rule).toEqual([{ workflow_id: 'w1', ask_first: false, expected_revision: 0 }]));
+  });
+});
+
+describe('a call its turn waits on', () => {
+  // The run waits on the owner; a restart lost what it announced live, so
+  // only the card's run links them.
+  const waitingRun: Wire = {
+    run_id: 'r1',
+    workflow_id: 'w1',
+    session_id: 'w1',
+    state: 'running',
+    seq: 3,
+    hub_epoch: 'e1',
+    steps: [{ step_id: 'call_1', name: 'Send a WhatsApp message', state: 'done', detail: 'Waiting for your OK' }],
+  };
+
+  it('stays on its turn, which says it waits for the owner', async () => {
+    server.messages = [row('m1', 'user', 'Tell Ana I’m late', { run_id: 'r1' })];
+    server.activeRuns = [waitingRun];
+    server.approvals = [summary({ waits: true })];
+    renderPane();
+    const card = (await screen.findByText('Maya wants to send a WhatsApp message')).closest('[data-approval]') as HTMLElement;
+    const turn = card.closest('[data-turn="assistant"]') as HTMLElement;
+    expect(turn).toHaveAttribute('data-run', 'r1');
+    expect(screen.queryByRole('region', { name: 'Drafts waiting for you' })).not.toBeInTheDocument();
+    expect(within(turn).getAllByRole('status').some((node) => node.textContent === 'Waiting for your OK')).toBe(true);
+    expect(turn.querySelector('[data-thinking]')).toBeNull();
+    // Its step waits too, until the card is decided.
+    const step = turn.querySelector('[data-step="call_1"]') as HTMLElement;
+    expect(step).toHaveAttribute('data-state', 'running');
+    expect(step).toHaveTextContent('Waiting for your OK');
+  });
+
+  it('a draft the turn does not wait on leaves the turn as it was', async () => {
+    server.messages = [row('m1', 'user', 'Tell Ana I’m late', { run_id: 'r1' })];
+    server.activeRuns = [waitingRun];
+    renderPane();
+    const card = (await screen.findByText('Maya wants to send a WhatsApp message')).closest('[data-approval]') as HTMLElement;
+    const turn = card.closest('[data-turn="assistant"]') as HTMLElement;
+    expect(within(turn).getAllByRole('status').some((node) => node.textContent === 'Thinking')).toBe(true);
+    expect(turn.querySelector('[data-step="call_1"]')).toHaveAttribute('data-state', 'done');
+  });
+
+  it('is read however many newer cards there are', async () => {
+    server.approvals = [];
+    server.older = [summary({ approval_id: 'g1', kind: 'gate', run_id: null, tool_call_id: null, action: null, body: 'Yes, Saturday at 10 works.' })];
+    renderPane();
+    const own = await screen.findByRole('region', { name: 'Drafts waiting for you' });
+    expect(within(own).getByText('Yes, Saturday at 10 works.')).toBeInTheDocument();
+    expect(sendRequest).toHaveBeenCalledWith('list_approvals', { workflow_id: 'w1', status: 'open', limit: 100 });
   });
 });
 
