@@ -168,9 +168,12 @@ The table has the same shape as `repeats.py`:
 
 **The rules of the table:**
 - **The safe default.** An unlisted node type is `send`, and so is a value that a mapped field does not list. A new plugin then asks under the default mode and needs no edit. A test checks that every Literal value of a mapped field is listed.
-- **Which data it reads.** `class_of` reads the tool's own input when the tool has a separate input model (`tool_input_model()` is not `Params`), and the merged node data otherwise. A Browser call without an `operation` runs `snapshot`, not the saved `navigate`.
+- **Which data it reads.** `class_of` judges the tool's own input when the tool has a separate input model (`tool_input_model()` is not `Params`), and the merged node data otherwise; its caller passes that data. A Browser call without an `operation` runs `snapshot`, not the saved `navigate`.
 - **Lists.** A list value takes its worst member's class (montyExecutor's `capabilities`).
-- **Calls a spec says do not send.** When a spec reports that a call does not send (`spec.sends(data)` is False), the call's class is `write` at most. This covers calendar changes without invites and a Dodo `call` on a GET endpoint. Under the default mode these run, as they do today with Ask first on.
+- **Calls a spec says reach no one.** When a call's spec covers it and its `when` says the call reaches no one, a `send` call is `write`.
+  - This covers calendar changes without invites: under the default mode they run, as they do today with Ask first on.
+  - It never lowers `money`. A calendar delete without notices stays a delete; Hire's calendar app turns notices off, so lowering it would let every hired employee delete events unasked, even under "Only money and deletes".
+  - So a Dodo `call` asks in every mode, a GET endpoint included: the table cannot see the endpoint. This is a false positive in the safe direction.
 - **The class decides; the spec renders.** A plugin's `ApprovalSpec` renders the card: recipient, body, subject, details, Edit fields and outcome labels.
   - The Browser keeps `restrict_while_asking` (§4.3).
   - In v1 the service holds Stripe instead of honouring `refuse_while_asking` (D8). v0 keeps the refusal.
@@ -213,7 +216,7 @@ The table has the same shape as `repeats.py`:
     - the Browser's observations and `request_user`.
 - **write**
   - **The employee's own work:**
-    - agentBuilder's changes, canvas, employeeJob, fileModify, writeTodos, textToSpeech;
+    - agentBuilder's changes, and `plan_update`, which counts as the change it plans; canvas, employeeJob, fileModify, writeTodos, textToSpeech;
     - simpleMemory `remember`/`update`/`forget`;
     - vectorStore `store`/`delete`;
     - dataSource `write`/`append`/`copy_to_workspace`;
@@ -246,7 +249,7 @@ The table has the same shape as `repeats.py`:
 - **money**
   - **Money:**
     - stripeAction, every command;
-    - Dodo `create_refund`/`cancel_subscription`/`change_subscription_plan`/`call` (a `call` on a GET endpoint is `write`, above);
+    - Dodo `create_refund`/`cancel_subscription`/`change_subscription_plan`/`call` (any endpoint: the table cannot see which);
     - apifyActor, a paid run.
   - **Deletes:**
     - Calendar, Contacts, Tasks and emailRead `delete`;
