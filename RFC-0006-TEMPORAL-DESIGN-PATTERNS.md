@@ -6219,7 +6219,9 @@ Phase 1b is new to RFC-0005's rollout (§20).
    - 1b.11 (0194d836);
    - 1b.45a (24c2907f);
    - 1b.1a (f76b1dc3);
-   - the WhatsApp and Drive download fix (276d833b).
+   - the WhatsApp and Drive download fix (276d833b);
+   - 1b.1c (4e0f1675), 1b.1b (e02cc61f), 1b.2 (8f1db2df);
+   - RFC-0007 AP.1 (a9a85fde), 1b.31 (461e9e56), AP.2a (fc4b11f4), AP.2b (1ee6c023, 6ec3522d), AP.2c (af9c0607, 334fceff), AP.3 (4568fc7e, 1e94a3f8, 22d767fa, 3152dfd4), 1b.42 (8d308b9a), AP.4a (0374b5b7), AP.4b (dfdff73b), AP.4c (9d43d7aa), AP.5 (2fabb9ea). RFC-0005 §24.4 says what each changed.
 2. **Batch A:**
    - 1b.1c, 1b.1b, 1b.2;
    - then RFC-0007 AP.1, 1b.31 (from batch C), AP.2a, AP.2b, AP.2c, AP.3, 1b.42, AP.4a, AP.4b, AP.4c, AP.5, AP.6;

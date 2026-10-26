@@ -115,7 +115,10 @@ and never starts loops then. Toasts are a second sonner toaster
 over `--dur-toast-out` (`.pill-toaster` in index.css replaces sonner's slide).
 Start, Resume and Stop say they went through ("{Name} started" / "resumed" /
 "stopped"), and so does turning Ask first on or off in the chat ("{Name} will
-ask before sending" / "will send without asking").
+ask before sending" / "will send without asking"). Where the chat shows the
+mode menu instead (see [Asking before sending](#asking-before-sending)),
+choosing a mode says "{Name} will ask before anything outside" / "before
+everything" / "only before money and deletes".
 
 ### Deleting an employee
 
@@ -918,6 +921,26 @@ unless it was approved, and the recipient always comes from the run's
 trigger. Full contract: [Chat Protocol, Approvals](./chat_protocol.md#approvals)
 and [approvalGate](./node-logic-flows/workflow_triggers/approvalGate.md).
 
+A generation that waits for the owner (RFC-0007, `approval_wait_version` 1)
+works differently. Start does not write that flag yet; it turns on one release
+after the code that reads it.
+- **Ask first becomes a mode,** chosen from a menu in place of the chip
+  (`composer/AskModeMenu.tsx`): "Before anything outside" (`outside`, what Ask
+  first on meant), "Before everything" (`everything`, its own files and notes
+  too) or "Only for money and deletes" (`money_only`, what Ask first off
+  became).
+- **Every tool an agent calls** asks by its class (read, write, send, money;
+  `services/approvals/classes.py`), with or without an `approval` spec.
+- **The employee answering the owner in chat waits for the answer in its
+  turn,** then goes on with the real result. Allow runs the call at once, with
+  no Undo. Decline can carry a note. A message typed while it waits declines
+  the call, the message its note.
+- **Always allow** on a card adds a rule. The menu's "Allowed without asking"
+  lists the rules and switches money tools on.
+- **Stop pauses the employee** while a call waits. The call keeps waiting, and
+  a call allowed meanwhile runs after Resume. An `approvalGate` no longer
+  holds Stop.
+
 The summary's `asks_first` follows the live rule (for a workflow built in Dev
 mode with no rule, whether it has an approval gate), shown in a line under the
 employee's page. A graph an older builder made (`builder_version` below 3) is
@@ -1052,13 +1075,13 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `apply_employee_changes` | `{workflow_id, idempotency_key}` | `{employee}`: running ends running, paused or failed ends ready, ready is left alone. Errors: `invalid_request`, `not_found`, `conflict`, `restart_failed` (the last two with `employee`) |
 | `rename_employee` | `{workflow_id, name}` (spaces collapsed, at most 40 characters) | `{employee}`: renames the workflow (a new slug, the workspace folder moved, `workflow.renamed` sent), and each agent's instructions a hire wrote take the new name in their opening ("You are <name>, ..."); instructions the owner rewrote keep their words. Agents read them on every run, so nothing restarts. Errors: `invalid_request`, `not_found`, `save_failed` |
 | `set_employee_photo` | `{workflow_id, path \| null}` | `{employee}`: `path` is a PNG, JPEG, WebP or GIF the owner uploaded under `uploads/` (`POST /api/workspace/{workflow_id}/uploads`), at most 5 MB (`EMPLOYEE_PHOTO_MAX_BYTES`); `null` takes the photo away. Errors: `invalid_request`, `not_found`, `invalid_photo` (with `detail`), `unsupported` (a workflow built in the editor has no employee row to keep it on) |
-| `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?, options?: {web?, model?, effort?}}` (`model_unavailable` with `detail` when the model chosen can't answer) | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live. `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
+| `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?, options?: {web?, model?, effort?}}` (`model_unavailable` with `detail` when the model chosen can't answer) | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live, unless its turn waits on the owner's answer to a call: then a plain message declines that call and answers `{message_id: null, run_id: null, declined: {run_id, approval_ids}, delivery}` ([chat_protocol.md](./chat_protocol.md#approvals)). `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{protocol_version: 2, messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Controlled active run snapshots also include their owning `workflow_control`. Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
 | `stop_chat_run` | `{run_id, expected_revision, idempotency_key}` for controlled runs; `{run_id}` for legacy | Controlled: generation Stop payload with `run_id` and `resumable: true`; the owning root is checked. Legacy: terminal chat `stopping` / `stopped`. Full acknowledgement and error contract: [chat_protocol.md](./chat_protocol.md#controlled-stop-acknowledgement) |
 | `get_chat_models` | `{session_id: <workflow_id>}` | `{auto, models, efforts}`: the model picker's rows, each `{id, name, short, description, effort, effort_note, available, reason}`; the owner's choice is `chat_model` / `chat_effort` in `get_user_settings`, saved with `save_user_settings` (refused with `chat_choice_refused` and `detail`) |
 | `workspace_steps_list` | `{workflow_id}` | `{workflow_id, steps}`, oldest first, each `{id, surface: "browser" \| "canvas" \| "mobile", text, node_id, at}` (`at` an ISO time). Only the workflow's owner reads them (`access_denied` otherwise, and always for the internal worker socket) |
 | `list_approvals` | `{workflow_id?, status?, limit <= 100}` | `{approvals, counts, server_time}` |
-| `decide_approval` | `{approval_id, decision, text?, subject?, decision_key}` | `{approval, will_send_on_resume}` |
+| `decide_approval` | `{approval_id, decision, text?, subject?, note?, always?, decision_key}` | `{approval, will_send_on_resume}` |
 | `delete_workflow` | `{workflow_id}` | `{workflow_id, contexts_archived, context_archives_pending}`; `DELETE /api/database/workflows/{id}` is the same handler. Error `workflow_shutdown_failed` (with `detail`) when stopping the employee failed: nothing was deleted |
 
 Broadcasts, all CloudEvents events broadcast directly (no Temporal

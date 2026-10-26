@@ -116,7 +116,7 @@ All are WebSocket request/response handlers with snake_case payloads. Failures a
 
 | Handler | Request | Response |
 |---|---|---|
-| `send_chat_message` | `{session_id, message, role: "user", timestamp?, client_message_id?, attachments?: [{path}], options?: Options, ui_event?: {part_id, element_id, action, params}}` | `{success, message_id, run_id, delivery: "now" \| "queued", timestamp}`; `run_id` is null when the message starts no run; `attachment_rejected` for files that cannot go (see [Attachments](#attachments)); `model_unavailable` for a model that can't answer (see [Model and thinking](#model-and-thinking)) |
+| `send_chat_message` | `{session_id, message, role: "user", timestamp?, client_message_id?, attachments?: [{path}], options?: Options, ui_event?: {part_id, element_id, action, params}}` | `{success, message_id, run_id, delivery: "now" \| "queued", timestamp}`; `run_id` is null when the message starts no run; `{success, message_id: null, run_id: null, declined: {run_id, approval_ids}, delivery, timestamp}` when it answered a call the lane run waits on (see [Approvals](#approvals)); `attachment_rejected` for files that cannot go (see [Attachments](#attachments)); `model_unavailable` for a model that can't answer (see [Model and thinking](#model-and-thinking)) |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{success, protocol_version, session_id, messages, thread: {active_leaf_id, revision}, active_runs: [RunSnapshot]}` |
 | `chat_subscribe` | `{session_id}` | `{success, session_id, hub_epoch, active_runs: [RunSnapshot]}` |
 | `chat_unsubscribe` | `{session_id}` | `{success, session_id, hub_epoch}` |
@@ -159,22 +159,30 @@ chat reducer remain terminal even when a control snapshot is present.
 |---|---|---|
 | `list_approvals` | `{workflow_id?, status?: <row status> \| "open" \| "recent", run_id?, kind?: "gate" \| "tool_call" \| "effect", limit? (at most 100)}`; `status` defaults to `pending` | `{success, approvals, counts: {workflow_id: pending}, server_time}` |
 | `get_approvals` | `{approval_ids}` (at most 100) | `{success, approvals, server_time}` |
-| `decide_approval` | `{approval_id, decision: "send" \| "undo" \| "discard" \| "restore" \| "retry" \| "dismiss", decision_key, text?, subject?, confirm?}` | `{success, approval, idempotent?, will_send_on_resume}` |
-| `get_ask_first` | `{workflow_id}` | `{success, workflow_id, ask_first: bool \| null, revision}` (null: the workflow has no rule) |
-| `set_ask_first` | `{workflow_id, ask_first, expected_revision?}` | `{success, workflow_id, ask_first, revision, replies_gated, needs_apply}`; `rule_conflict` (with the current value) when it moved |
+| `decide_approval` | `{approval_id, decision: "send" \| "undo" \| "discard" \| "restore" \| "retry" \| "dismiss", decision_key, text?, subject?, confirm?, note?, always?}` | `{success, approval, idempotent?, will_send_on_resume}` |
+| `get_ask_first` | `{workflow_id}` | `{success, workflow_id, ask_first: bool \| null, mode: "outside" \| "everything" \| "money_only" \| null, revision}` (null: the workflow has no rule) |
+| `set_ask_first` | `{workflow_id, ask_first \| mode, expected_revision?}` | `{success, workflow_id, ask_first, mode, revision, replies_gated, needs_apply}`; `rule_conflict` (with the current values) when it moved |
+| `list_approval_allows` | `{workflow_id}` | `{success, workflow_id, allows: [{id, node_type, operation, scope_kind: "host" \| "recipient" \| "operation" \| "tool", scope_value, label, created_at}], money: [{node_type, operation, label, allow_id}]}`; `money` is the employee's money tools and operations, `allow_id` set where one is switched on |
+| `add_approval_allow` | `{workflow_id, node_type, operation?}`, one of the `money` options | `{success, allow}`; `invalid_request` for anything else |
+| `remove_approval_allow` | `{workflow_id, allow_id}` | `{success}`; `not_found` |
 
 `open` lists what the owner may still act on, or is on its way: pending, approved and not handed on, sending,
 failed, and discarded while it can be restored. `recent` lists everything, newest first. Only the owner's own drafts
 and workflows answer; any other id reads as `not_found`. `decide_approval` errors: `already_decided`, `expired`,
 `cancelled`, `too_late` (Undo after it went, Restore after its window), `confirm_required` (a retry of a send that
 broke off), `approval_conflict`, `send_unavailable` (nothing could start the send; the draft is back as it was),
-`not_found`, `invalid_request`. The same `decision_key` again answers `idempotent` with the row as it is.
+`not_found`, `invalid_request` (also for `always` on a card that offers no rule, and a `note` over 50,000
+characters). The same `decision_key` again answers `idempotent` with the row as it is. `note` goes with `discard`;
+`always` with `send` saves the rule the card offers (`always` in its summary).
 
 **ApprovalSummary**: `{approval_id, workflow_id, node_id, kind: "gate" | "tool_call" | "effect", status, channel,
 channel_label, action?, recipient, recipient_label, body, subject?, context_excerpt?, details: [{label, value}],
 created_at, expires_at, revision, max_length, editable, approved_by?: "owner" | "auto", edited?, undo_until?,
 restore_until?, consumed_at?, outcome?: {certainty: "sent" | "not_sent" | "unknown", error?, at?},
-outcome_labels: {sent, failed}, run_id?, tool_call_id?, ui_part_id?, agent_node_id?, deployment_state?}`. `status`
+outcome_labels: {sent, failed}, run_id?, tool_call_id?, ui_part_id?, agent_node_id?, deployment_state?, note?}`, and
+on a `tool_call` row `approval_class: "read" | "write" | "send" | "money" | null`, `generic` (a tool with no spec: the
+card shows what it runs with), `waits` (its turn waits on it) and `always: {label, scope} | null` (the rule Always
+allow would save). `status`
 is `pending`, `approved`, `sending`, `sent`, `failed`, `discarded`, `expired` or `cancelled`; see
 [Approvals](#approvals). `outcome_labels` is what the card says once it went and when it did not: a held tool
 call's plugin words it (its `ApprovalSpec.outcome_labels`, "Email sent" for the email apps), a gate's draft says
@@ -604,6 +612,38 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   (`DEFAULT_TIMEOUT_HOURS`); the chat watchdog ends it on its next round (`reconcile.expire_due`), announces it and
   tells the employee. A decision that reaches a draft past its expiry ends it the same way and answers `expired`.
   Rows are kept until their workflow is deleted.
+- **Generations that wait for the owner** (RFC-0007, `approval_wait_version` 1, frozen per generation). Start does
+  not write it yet, so every generation works as above until it does. In such a generation:
+  - **What asks** is the workflow's mode (`workflow_rules.mode`), applied to the call's class
+    (`services/approvals/classes.py`), for every tool an agent calls, with or without a spec.
+    - `outside` asks before sends and money, `everything` before writes too, and `money_only` before money and
+      deletes only. A rule with no mode follows Ask first: on is `outside`, off is `money_only`.
+    - A read never asks, and a tool the class table does not list is a send.
+    - A tool with no spec asks on a generic card. The browser asks only when it fetches a URL, and otherwise runs
+      read-only. Stripe asks instead of being refused.
+  - **Always-allow rules** (`approval_allows`, `services/approvals/allows.py`) let a matching call run unasked.
+    - A card whose turn waits on it offers one (Always allow), but never for money: the employee's list switches
+      money tools on instead (`list_approval_allows`).
+    - The chat shows the Ask first menu, with "Allowed without asking", in place of the chip while the latest
+      generation waits (`approval_wait_version` in the control snapshot, from `serialize_control`).
+  - **The agent answering a chat run waits in its turn** (a `turn` row, `waits: true`). AgentWorkflow waits in
+    `ApprovalWorkflow` for the answer ([Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)).
+    - Allow runs the call in the turn, once, and the model reads its real result. There is no Undo, no
+      `ApprovedToolCallWorkflow`, no Restore and no `[update]` note.
+    - Decline (with an optional `note`), expiry and a cancel tell the model that nothing ran.
+    - Chat Stop pauses the employee while the call waits; a call allowed meanwhile runs after Resume.
+  - **Every other held call** (another run's, a teammate's, a CLI or in-process agent's) is a draft. A CLI or
+    in-process draft is keyed by its call id (an MCP call's request digest), and a call without one is refused.
+  - **A message sent while the turn waits** declines the call instead of starting a run.
+    - The message is the note, nothing is saved in the thread, and `send_chat_message` answers `declined`. The same
+      `client_message_id` again answers the same.
+    - The model reads that the owner sent a message instead of answering.
+    - A message with files, or a button press, answers `run_in_progress`.
+  - **The run's clock.** The chat watchdog does not time out a run whose turn waits, and the owner's answer starts
+    its window again. When the run's workflow closes, or a Reset ends its generation, the calls its turns waited on
+    are cancelled (`waiting.cancel_waits`).
+  - **The approvalGate** waits outside Stop's checkpoint: Stop completes while it waits, and the node after it runs
+    after Resume.
 - **Broadcast.** `approval_lifecycle` (source `opencompany://services/approvals`, type
   `com.opencompany.approval.<stage>`: requested, decided, undone, restored, sending, sent, failed, expired,
   cancelled), identity only, with the chat run when there is one.

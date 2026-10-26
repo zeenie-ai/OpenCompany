@@ -353,10 +353,10 @@ In a v1 generation, for every caller: agent tool calls, CLI calls and in-process
 
 **The flag.** `begin_generation` writes `approval_wait_version: 1` into `resource_manifest` (`services/deployment/control.py:160`). The write is AP.7, the last step (§7). The flag follows `pi_harness_version`'s path (C3 §3.4):
 - `freeze_generation_harness` copies it into the payload and into `_temporal_routing_v1`. It is called at three sites: `manager.py:949-951`, `manager.py:1117-1119` and `temporal/executor.py:166-167`.
-- `_frozen_routing_from_input` keeps it (`workflow.py:175-195`).
+- `_frozen_routing_from_input` keeps it (`workflow.py:175-195`; every flag in `GENERATION_FLAGS`).
 - MachinaWorkflow sets it on the agent and node contexts after `workflow.py:762-763`.
 - `_INHERITED_SCOPE_KEYS` (`agent_workflow.py:295-325`) carries it into tool payloads, the Task Manager preflight, delegated children and continue-as-new.
-- The MCP bridge entry carries it beside `pi_harness_version` (`services/cli_agent/workflow_tools.py:335`), and so does the in-process tool path.
+- CLI and RLM tool calls get it inside the Pi inline scope (`INLINE_SCOPE_KEYS`). In a Pi generation, the Claude Code node and RLM's tool wrapper forward that scope into each call. Every generation Start admits is a Pi generation, so Start keeps writing `pi_harness_version` beside this flag; no bridge-entry hop is needed. The in-process tool path copies it into the plugin's context.
 - `serialize_control` exposes it to the client (`control.py:47-71`).
 
 Team jobs, Workspace tasks and manual Runs do not carry it, so their calls stay v0.
@@ -380,8 +380,8 @@ Team jobs, Workspace tasks and manual Runs do not carry it, so their calls stay 
 - **`run(ref)` loops:**
   - It clears the nudge flag, then reads the row through `approvals.read`, a new 30 s activity on `BOOKKEEPING_RETRY`.
     - That activity applies the row's expiry first (`decisions.expire_if_due`), so nothing spins at the deadline.
-    - When it returns a final answer, it stamps `consumed_at`.
-  - Once the row is no longer pending, it returns one of `approved{revision}`, `declined{note}`, `expired` or `cancelled`.
+    - When it returns a final answer other than `approved`, it stamps `consumed_at`; the claim stamps an approved row.
+  - Once the row is no longer pending, it returns the row's answer, `{status, revision, note?, by_message?}`. The status is the row's own: `approved`, `discarded` (declined, with the owner's note; `by_message` when a message declined it, §4.7), `expired` or `cancelled`.
   - Otherwise it waits with `workflow.wait_condition(lambda: self._nudged, timeout=max(expires_at - now, 1 s))`, then reads again.
 - **Its one message is the Signal `nudge()`,** with no payload. Duplicates are harmless, and nothing needs validating.
 - **Every wait has a timeout.** Switching a wait between `timeout=None` and a timeout is a nondeterministic change.
@@ -432,7 +432,7 @@ Team jobs, Workspace tasks and manual Runs do not carry it, so their calls stay 
   - the wait keys by the approval id, because `call_key` is not unique when a provider repeats a tool id (C3 P14).
 
 **7. Replay and the test gates.**
-- **The new type:** register `ApprovalWorkflow` in `framework_workflows` (`services/temporal/workflow_registry.py:20-25`). Record it in the golden identity file: `workflow_types`, its identities, and `signal:nudge`.
+- **The new type:** register `ApprovalWorkflow` in `framework_workflows` (`services/temporal/workflow_registry.py:20-25`). The golden identity file records it (`workflow_types`, its identities and `signal:nudge`) when the next release regenerates the golden; until then a reviewed `patch_entries` entry names it in `new_types`.
 - **Two test gates change,** in tests and data only:
   - `test_replay_corpus.py:69` requires N-1 histories only for the types the previous release had.
   - `test_workflow_identity_golden.py:26-35` accepts a reviewed entry that names a new type or a generation flag in place of a `workflow.patched` marker.
@@ -446,19 +446,18 @@ Team jobs, Workspace tasks and manual Runs do not carry it, so their calls stay 
   - A run is not timed out while a pending turn row carries its `run_id`.
   - The window restarts at the owner's latest decision on the run's rows. That is `decided_at`, ignoring `approved_by == "auto"`, the same way the window restarts at Resume (`:744`, `:763-765`).
   - The closure check stays (`:768-778`).
-  - One store helper, `run_wait`, answers both questions.
+  - One helper, `waiting.run_waited`, answers both questions, for a run already past its window. It counts turn rows only: since AP.2c a CLI draft carries its run id too.
   - 1b.14's cancel goes inside the same branch, after AP.4c.
-- **A closed run:** when the watchdog ends a v1 run whose workflow closed (`:768-778`), it cancels the run's pending rows.
+- **A closed run:** when the watchdog ends a run whose workflow closed (`:768-778`), it cancels the rows its turns waited on (`waiting.cancel_waits`). Its drafts stay for the owner to send.
 - **Chat Stop** is the employee's pause (D13; `services/chat/handlers.py:471-487`). Nothing in chat changes, and `request_stop` stays legacy-only.
 - **A new owner message while a run waits** (D3, D14):
-  - It is handled in the `RunInProgress` arm (`handlers.py:318-319`). Three conditions must all hold:
-    - the lane run's generation is v1;
+  - It is handled in the `RunInProgress` arm (`handlers.py:318-319`). Two conditions must both hold:
     - the message is plain text, with no button press and no attachments;
-    - the run has pending turn rows.
+    - the lane run has pending turn rows, which only a v1 generation makes.
 
-    Then `send_chat_message` declines those rows, with the text as the note and the decision key `chat:<client_message_uid>`.
+    Then `send_chat_message` declines those rows (`waiting.decline_with_message`), with the text as the note and the decision key `chat:<client_message_uid>`. The wait reads `by_message`, because the row's decision key starts with `chat:`, and the turn reads "The owner sent a message instead of answering; nothing happened. Their message: …", with nothing about trying again.
   - It saves no chat row and starts no run.
-  - A resend with the same `client_message_id` finds the decision by its key and gets the same answer.
+  - A resend with the same `client_message_id` finds the declined rows by that key before admission (`waiting.declined_with`), so it gets the same answer even once the run has ended.
   - Otherwise, or when the decline loses the race to the card, it answers `run_in_progress`, as today.
   - The answer is `{success: true, message_id: null, run_id: null, declined: {run_id, approval_ids}, delivery: "now" | "queued"}`. O5 is settled.
 - **The client** (AP.3):
