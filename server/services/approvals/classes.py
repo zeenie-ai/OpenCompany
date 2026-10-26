@@ -464,6 +464,28 @@ CLASSES_WHEN: Dict[str, Tuple[str, Dict[str, str]]] = {
 }
 
 
+#: Where a call that fetches a URL names it: the scope of a host rule
+#: (RFC-0007 §4.4); the Browser is held only when it navigates (§4.3).
+URL_FIELDS: Dict[str, str] = {"browser": "url", "crawleeScraper": "url", "httpRequest": "url", "proxyRequest": "url"}
+
+
+def call_data(node_cls: Any, node_data: Mapping[str, Any], tool_args: Any) -> Dict[str, Any]:
+    """What :func:`class_of` judges for an LLM tool call: the tool's own
+    arguments when it has an input model of its own, else the call's
+    arguments over the node's settings."""
+    tool_input = getattr(node_cls, "tool_input_model", None)
+    if isinstance(tool_args, Mapping) and callable(tool_input) and tool_input() is not getattr(node_cls, "Params", None):
+        return dict(tool_args)
+    return dict(node_data or {})
+
+
+def fetched_url(node_cls: Any, data: Mapping[str, Any]) -> str:
+    """The URL the call fetches, or "" when it fetches none."""
+    field = URL_FIELDS.get(getattr(node_cls, "type", ""))
+    value = data.get(field) if field else None
+    return value.strip() if isinstance(value, str) else ""
+
+
 def class_of(node_cls: Any, data: Mapping[str, Any], *, tool_call: bool = False) -> str:
     """The class of this call of ``node_cls`` with ``data``.
 
@@ -509,4 +531,17 @@ def _reaches_no_one(node_cls: Any, data: Mapping[str, Any]) -> bool:
     return not spec.sends(data)
 
 
-__all__ = ["CLASSES", "CLASSES_WHEN", "DEFAULT", "LADDER", "MONEY", "READ", "SEND", "WRITE", "class_of"]
+__all__ = [
+    "CLASSES",
+    "CLASSES_WHEN",
+    "DEFAULT",
+    "LADDER",
+    "MONEY",
+    "READ",
+    "SEND",
+    "URL_FIELDS",
+    "WRITE",
+    "call_data",
+    "class_of",
+    "fetched_url",
+]

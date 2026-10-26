@@ -39,7 +39,8 @@ the owner's decisions; the same ``decision_key`` again is a no-op.
 ``WorkflowRule`` is a workflow's Ask first rule, read when something would
 send: one row per workflow, seeded from an employee's ground rules, changed
 from the chat's Ask first chip (``set_ask_first``). A workflow without a row
-(the editor's own workflows) gates no tool calls.
+(the editor's own workflows) gates no tool calls. Its ``mode`` says what asks
+in a v1 generation (RFC-0007 §4.2); NULL follows ``ask_first``.
 """
 
 from __future__ import annotations
@@ -158,6 +159,9 @@ class WorkflowRule(SQLModel, table=True):
 
     workflow_id: str = Field(primary_key=True, max_length=255)
     ask_first: bool = Field(default=True)
+    #: ``outside`` | ``everything`` | ``money_only`` (services/approvals/
+    #: rules.py); NULL follows ``ask_first``.
+    mode: Optional[str] = Field(default=None, max_length=20)
     revision: int = Field(default=0)
     #: ``hire`` (seeded from the employee's ground rules) or ``owner``.
     source: str = Field(default="owner", max_length=20)

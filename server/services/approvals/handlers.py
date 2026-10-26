@@ -17,10 +17,12 @@ confirm?}`` -> ``{approval, idempotent?, will_send_on_resume}``. Decisions:
 ``approval_conflict``, ``send_unavailable``, ``not_found``,
 ``invalid_request``.
 
-``get_ask_first {workflow_id}`` -> ``{ask_first, revision}`` (``ask_first``
-is null for a workflow with no rule). ``set_ask_first {workflow_id,
-ask_first, expected_revision?}`` -> ``{ask_first, revision, replies_gated,
-needs_apply}``; ``rule_conflict`` when it moved.
+``get_ask_first {workflow_id}`` -> ``{ask_first, mode, revision}`` (both
+null for a workflow with no rule). ``set_ask_first {workflow_id, ask_first |
+mode, expected_revision?}`` -> ``{ask_first, mode, revision, replies_gated,
+needs_apply}``; ``rule_conflict`` when it moved. ``mode`` is ``outside``,
+``everything`` or ``money_only`` (services/approvals/rules.py): setting it
+keeps Ask first in step, and setting Ask first makes the mode follow it.
 
 Only the owner's own drafts and workflows are visible; any other id reads as
 not found.
@@ -243,6 +245,7 @@ async def handle_get_ask_first(data: Dict[str, Any], websocket: WebSocket) -> Di
         "success": True,
         "workflow_id": workflow_id,
         "ask_first": None if rule is None else bool(rule.ask_first),
+        "mode": None if rule is None else rules.mode_of(rule),
         "revision": 0 if rule is None else rule.revision,
     }
 
@@ -253,7 +256,9 @@ async def handle_set_ask_first(data: Dict[str, Any], websocket: WebSocket) -> Di
 
     workflow_id = str(data.get("workflow_id") or "").strip()
     value = data.get("ask_first")
-    if not workflow_id or not isinstance(value, bool):
+    mode = data.get("mode")
+    known_mode = isinstance(mode, str) and mode in rules.ASKS
+    if not workflow_id or (mode is None and not isinstance(value, bool)) or (mode is not None and not known_mode):
         return {"success": False, "error": "invalid_request"}
     expected = data.get("expected_revision")
     if expected is not None and not isinstance(expected, int):
@@ -262,21 +267,26 @@ async def handle_set_ask_first(data: Dict[str, Any], websocket: WebSocket) -> Di
     if not await _authorize_workflow(database, websocket, workflow_id):
         return {"success": False, "error": "not_found"}
     try:
-        rule = await rules.set_ask_first(database, workflow_id, value, expected_revision=expected)
+        if mode is not None:
+            rule = await rules.set_mode(database, workflow_id, mode, expected_revision=expected)
+        else:
+            rule = await rules.set_ask_first(database, workflow_id, value, expected_revision=expected)
     except rules.RuleConflict as conflict:
         current = conflict.rule
         return {
             "success": False,
             "error": "rule_conflict",
             "ask_first": None if current is None else bool(current.ask_first),
+            "mode": None if current is None else rules.mode_of(current),
             "revision": 0 if current is None else current.revision,
         }
     effects = await rules.notify_rule_changed(database, workflow_id, rule)
-    logger.info("Ask first changed", workflow_id=workflow_id, ask_first=rule.ask_first)
+    logger.info("Ask first changed", workflow_id=workflow_id, ask_first=rule.ask_first, mode=rule.mode)
     return {
         "success": True,
         "workflow_id": workflow_id,
         "ask_first": bool(rule.ask_first),
+        "mode": rules.mode_of(rule),
         "revision": rule.revision,
         "replies_gated": bool(effects.get("replies_gated", False)),
         "needs_apply": bool(effects.get("needs_apply", False)),

@@ -655,7 +655,8 @@ class Database:
 
     async def _migrate_approvals(self):
         """Give an older ``approval_requests`` table the columns approvals v2
-        added (held tool calls, Undo and Restore, outcomes). A draft approved
+        added (held tool calls, Undo and Restore, outcomes), and an older
+        ``workflow_rules`` table its ``mode`` (RFC-0007). A draft approved
         before them was handed on when it was decided, so it gets that as
         ``consumed_at`` and never reads as still undoable."""
         columns_added = {
@@ -684,6 +685,10 @@ class Database:
         }
         try:
             async with self.engine.begin() as conn:
+                result = await conn.execute(text("PRAGMA table_info(workflow_rules)"))
+                rule_columns = {row[1] for row in result.fetchall()}
+                if rule_columns and "mode" not in rule_columns:
+                    await conn.execute(text("ALTER TABLE workflow_rules ADD COLUMN mode VARCHAR(20)"))
                 result = await conn.execute(text("PRAGMA table_info(approval_requests)"))
                 columns = {row[1] for row in result.fetchall()}
                 if not columns:

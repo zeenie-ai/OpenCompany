@@ -343,15 +343,39 @@ def _iso(moment: Optional[datetime]) -> Optional[str]:
     return moment.isoformat() if moment is not None else None
 
 
+#: What the card of a tool with no spec says once it ran, and when it did not.
+DONE_OUTCOME = ("Done", "Not done")
+
+
+def _spec_of(row: ApprovalRequest) -> Any:
+    from services.node_registry import get_node_class
+    from services.plugin.approval import approval_spec
+
+    return approval_spec(get_node_class(row.node_type)) if row.node_type else None
+
+
 def _outcome_labels(row: ApprovalRequest) -> Tuple[str, str]:
     """What the card says once it went, and when it did not: a held tool
     call's plugin words it (its ``approval`` spec); a gate's draft is a
-    message."""
-    from services.node_registry import get_node_class
-    from services.plugin.approval import MESSAGE_OUTCOME, approval_spec
+    message; a tool with no spec did something."""
+    from services.plugin.approval import MESSAGE_OUTCOME
 
-    spec = approval_spec(get_node_class(row.node_type)) if row.kind == "tool_call" and row.node_type else None
-    return spec.outcome_labels if spec is not None else MESSAGE_OUTCOME
+    if row.kind != "tool_call":
+        return MESSAGE_OUTCOME
+    spec = _spec_of(row)
+    return spec.outcome_labels if spec is not None else DONE_OUTCOME
+
+
+def _class_of(row: ApprovalRequest) -> Optional[str]:
+    """What a held call may do (services/approvals/classes.py), for the
+    card's pill."""
+    from services.approvals.classes import call_data, class_of
+    from services.node_registry import get_node_class
+
+    node_cls = get_node_class(row.node_type) if row.node_type else None
+    if node_cls is None:
+        return None
+    return class_of(node_cls, call_data(node_cls, row.node_data or {}, row.args), tool_call=bool(row.tool_call_id))
 
 
 def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -380,6 +404,12 @@ def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now
     }
     sent, failed = _outcome_labels(row)
     out["outcome_labels"] = {"sent": sent, "failed": failed}
+    if kind == "tool_call":
+        out["approval_class"] = _class_of(row)
+        # A tool with no spec: the card shows what it runs with, not a message.
+        out["generic"] = _spec_of(row) is None
+        # Its turn waits on it: no Undo, and the employee gets the real result.
+        out["waits"] = row.runtime == "turn"
     if row.action:
         out["action"] = row.action
     subject = row.final_subject if decided and row.final_subject else row.subject

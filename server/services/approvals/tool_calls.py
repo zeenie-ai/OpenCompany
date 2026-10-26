@@ -17,6 +17,19 @@ A call that comes back to run because the owner pressed Send carries
 ``approval_execution`` (services/approvals/execution.py): it runs only when
 its row is the one being sent, and is never held again.
 
+**In a v1 generation** (``approval_wait_version`` 1, RFC-0007 §4.3) the
+workflow's mode and the call's class (services/approvals/classes.py) decide,
+for every tool an agent calls, spec or not:
+
+- A read runs. So does a call whose class the mode does not ask; one that
+  reaches out (send, money) and answers the owner in the chat is recorded.
+- An asked call is held, on a generic card when its tool has no spec, and
+  Stripe is held instead of refused. A restricted tool (the Browser) is held
+  only when it fetches a URL, and runs restricted otherwise.
+- A call its turn waits on (``approval_wait``) is a turn row (``runtime:
+  turn``); any other is a draft.
+- A rule that cannot be read asks before everything.
+
 **Agents outside AgentWorkflow** (rlm, claude_code, or every agent
 with AgentWorkflow off) reach plugins through ``services/handlers/tools.py``,
 which calls :func:`check_in_process`. Such a call cannot wait as a draft, so
@@ -66,6 +79,11 @@ MAX_DRAFT = 20000
 HELD_MESSAGE = (
     "Not sent yet: it waits for the owner's OK on a card in the chat. It goes out only if they press Send, "
     "so do not call this again for it. Tell them it is ready for them to check."
+)
+#: The same in a v1 generation, where the card's button is Allow.
+WAITING_MESSAGE = (
+    "Not done yet: it waits for the owner's OK on a card in the chat, and runs only if they allow it. "
+    "Do not call this again for it; tell them it is ready for them to check."
 )
 REFUSED_MESSAGE = (
     "Not run: {channel} cannot wait for the owner's OK, and they ask to approve everything first. "
@@ -150,7 +168,7 @@ def _clean_node_data(node_cls: Any, node_data: Mapping[str, Any], args: Mapping[
     return {key: value for key, value in dict(node_data or {}).items() if not (key in locked and key in (args or {}))}
 
 
-def _held(row: Any, node_cls: Any, context: Mapping[str, Any]) -> Dict[str, Any]:
+def _held(row: Any, node_cls: Any, context: Mapping[str, Any], message: str = HELD_MESSAGE) -> Dict[str, Any]:
     from datetime import datetime as _dt
 
     return {
@@ -162,7 +180,7 @@ def _held(row: Any, node_cls: Any, context: Mapping[str, Any]) -> Dict[str, Any]
             "approval_id": row.id,
             "channel": row.channel,
             "to": row.recipient_label or row.recipient,
-            "message": HELD_MESSAGE,
+            "message": message,
         },
         "approval_id": row.id,
         "execution_id": context.get("execution_id"),
@@ -188,6 +206,24 @@ async def _asks_first(database: Any, workflow_id: Any) -> Optional[bool]:
         return True
 
 
+async def _ask_mode(database: Any, workflow_id: Any) -> Optional[str]:
+    """The workflow's mode (None: no rule). The strictest when it cannot be
+    read: hold the call rather than run it unasked."""
+    try:
+        return await rules.ask_mode(database, workflow_id)
+    except Exception:
+        logger.warning("Could not read the Ask first mode; asking before everything", workflow_id=workflow_id, exc_info=True)
+        return "everything"
+
+
+def _restricted(spec: Any, node_data: Mapping[str, Any], context: Mapping[str, Any]) -> Checked:
+    """Run with the spec's restrictions instead of holding (the Browser,
+    read-only); the model's arguments cannot lift them."""
+    restricted = {**node_data, **dict(spec.restrict_while_asking)}
+    tool_args = {k: v for k, v in dict(context.get("tool_args") or {}).items() if k not in spec.restrict_while_asking}
+    return Checked(node_data=restricted, tool_args=tool_args)
+
+
 async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
     """What to do with a tool call before it runs (see the module docstring)."""
     from services.plugin.approval import approval_spec
@@ -206,6 +242,8 @@ async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
                 "error_type": "ApprovalNotClaimed",
             }
         )
+    if context.get("approval_wait_version") == 1:
+        return await _check_by_class(context, node_cls, spec)
     if spec is None or not is_agent_tool_call(context):
         return RUN
     node_data = await as_it_runs(context, node_cls)
@@ -230,11 +268,34 @@ async def check(context: Mapping[str, Any], node_cls: Any) -> Checked:
             }
         )
     if spec.restrict_while_asking:
-        restricted = {**node_data, **dict(spec.restrict_while_asking)}
-        tool_args = {k: v for k, v in dict(context.get("tool_args") or {}).items() if k not in spec.restrict_while_asking}
-        return Checked(node_data=restricted, tool_args=tool_args)
+        return _restricted(spec, node_data, context)
     row = await hold(database, context, node_cls, spec, node_data)
     return Checked(result=_held(row, node_cls, context))
+
+
+async def _check_by_class(context: Mapping[str, Any], node_cls: Any, spec: Any) -> Checked:
+    """:func:`check` in a v1 generation (see the module docstring)."""
+    from services.approvals.classes import MONEY, READ, SEND, call_data, class_of, fetched_url
+
+    if not is_agent_tool_call(context):
+        return RUN
+    node_data = await as_it_runs(context, node_cls)
+    judged = call_data(node_cls, node_data, context.get("tool_args"))
+    klass = class_of(node_cls, judged, tool_call=True)
+    if klass == READ:
+        return RUN
+    database = _database()
+    mode = await _ask_mode(database, context.get("workflow_id"))
+    if mode is None:
+        return RUN
+    if klass not in rules.ASKS[mode]:
+        if klass in (SEND, MONEY) and isinstance(context.get("chat_stream"), Mapping):
+            return Checked(record=_auto_recorder(database, context, node_cls, spec, node_data))
+        return RUN
+    if spec is not None and spec.restrict_while_asking and not fetched_url(node_cls, judged):
+        return _restricted(spec, node_data, context)
+    row = await hold(database, context, node_cls, spec, node_data)
+    return Checked(result=_held(row, node_cls, context, WAITING_MESSAGE))
 
 
 async def check_in_process(
@@ -264,10 +325,44 @@ async def check_in_process(
     return Checked(result={"status": "not_run", "message": REFUSED_MESSAGE.format(channel=spec.channel)})
 
 
+def _preview(node_cls: Any, spec: Any, data: Mapping[str, Any], args: Mapping[str, Any]) -> Dict[str, Any]:
+    """What the card shows: the spec's view of the call, or, for a tool with
+    no spec, its name and up to six of what it runs with, the call's own
+    arguments first. A call that fetches a URL shows it."""
+    from services.approvals.classes import call_data, fetched_url
+
+    own = call_data(node_cls, data, args)
+    if spec is not None:
+        preview = spec.preview(data)
+        url = fetched_url(node_cls, own)[:300]
+        if url and all(line.get("value") != url for line in preview["details"]):
+            preview["details"] = [{"label": "Address", "value": url}, *preview["details"]]
+        return preview
+    node_type = getattr(node_cls, "type", "")
+    name = _tool_name(node_cls, node_type)
+    values = {**args, **{key: value for key, value in data.items() if key not in args}}
+    return {"channel": name, "action": _action(name, node_type, own), "details": _argument_lines(node_cls, values)}
+
+
+def _tool_name(node_cls: Any, node_type: str) -> str:
+    return str(getattr(node_cls, "display_name", None) or node_type or "a tool")
+
+
+def _action(name: str, node_type: str, data: Mapping[str, Any]) -> str:
+    """"Use {tool}", with the operation the call names, as the class and
+    repeat tables name each node's operation field."""
+    from services.approvals.classes import CLASSES_WHEN
+    from services.approvals.repeats import REPEATABLE_WHEN
+
+    field = (CLASSES_WHEN.get(node_type) or REPEATABLE_WHEN.get(node_type) or ("",))[0]
+    operation = data.get(field) if field else None
+    return f"Use {name} ({operation})" if isinstance(operation, str) and operation else f"Use {name}"
+
+
 def _row_fields(context: Mapping[str, Any], node_cls: Any, spec: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
     args = _clean_args(node_cls, context.get("tool_args") or {})
     data = _clean_node_data(node_cls, node_data, context.get("tool_args") or {})
-    preview = spec.preview(data)
+    preview = _preview(node_cls, spec, data, args)
     stream = context.get("chat_stream") if isinstance(context.get("chat_stream"), Mapping) else {}
     run_id = context.get("chat_run_id") or (stream or {}).get("run_id")
     return {
@@ -300,8 +395,12 @@ def _row_fields(context: Mapping[str, Any], node_cls: Any, spec: Any, node_data:
 
 
 async def hold(database: Any, context: Mapping[str, Any], node_cls: Any, spec: Any, node_data: Mapping[str, Any]) -> Any:
-    """The held call's row: created once, found again on a retry."""
+    """The held call's row: created once, found again on a retry. ``spec``
+    is None for a tool with no spec (a v1 generation's generic card)."""
     fields = _row_fields(context, node_cls, spec, node_data)
+    if context.get("approval_wait"):
+        # Its turn waits on it (RFC-0007 §4.6): a turn row, not a draft.
+        fields["runtime"] = "turn"
     fields["expires_at"] = _utcnow() + timedelta(hours=DEFAULT_TIMEOUT_HOURS)
     fields["ui_part_id"] = await _ui_part(database, fields.get("run_id"))
     row, created = await store.get_or_create(database, idempotency_key=call_key(context), fields=fields)
@@ -539,12 +638,8 @@ async def _graph_send(context: Mapping[str, Any], node_cls: Any, node_data: Mapp
 def _effect_fields(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
     """An ``effect`` row: what was tried and what it ran with (no secrets),
     for a card the owner checks and dismisses."""
-    from services.approvals.repeats import REPEATABLE_WHEN
-
     node_type = getattr(node_cls, "type", None) or str(context.get("node_type") or "")
-    name = str(getattr(node_cls, "display_name", None) or node_type or "a tool")
-    field = REPEATABLE_WHEN.get(node_type, ("", frozenset()))[0]
-    operation = node_data.get(field) if field else None
+    name = _tool_name(node_cls, node_type)
     tool_args = context.get("tool_args")
     stream = context.get("chat_stream") if isinstance(context.get("chat_stream"), Mapping) else {}
     run_id = context.get("chat_run_id") or (stream or {}).get("run_id")
@@ -557,7 +652,7 @@ def _effect_fields(context: Mapping[str, Any], node_cls: Any, node_data: Mapping
         "runtime": "temporal",
         "kind": "effect",
         "channel": name[:60],
-        "action": (f"Use {name} ({operation})" if isinstance(operation, str) and operation else f"Use {name}")[:200],
+        "action": _action(name, node_type, node_data)[:200],
         "details": _argument_lines(node_cls, tool_args if isinstance(tool_args, Mapping) else node_data),
         "node_type": node_type or None,
         "tool_node_id": str(context.get("node_id") or ""),
@@ -595,6 +690,7 @@ __all__ = [
     "REDO_MESSAGE",
     "RESEND_MESSAGE",
     "RUN",
+    "WAITING_MESSAGE",
     "as_it_runs",
     "call_key",
     "check",

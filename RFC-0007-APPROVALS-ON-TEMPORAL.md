@@ -330,6 +330,7 @@ In a v1 generation, for every caller: agent tool calls, CLI calls and in-process
   - up to six argument lines, each cut at 300 characters;
   - secret-named keys removed by `sanitize_runtime_payload`, which also drops `authorization`, `proxyauthorization` and `cookie`;
   - no Edit.
+- **A call that fetches a URL** shows it on its card, as an "Address" line when its spec's lines lack it (the Browser's spec has none). The URL fields are a service table, `URL_FIELDS` in `classes.py`, which §4.4's host rules use too.
 - **A class pill** on every request card: "Makes changes" (write), "Reaches out" (send), "Money or deletes" (money).
 - **Keys:** the chat-wide Ctrl/Cmd+Enter never allows a money card, and the note box keeps Ctrl/Cmd+Enter to itself.
 - **1b.1's outcome cards** are not requests and never offer Always:
