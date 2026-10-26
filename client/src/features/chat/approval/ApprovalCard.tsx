@@ -1,11 +1,14 @@
 /**
  * A draft waiting for the owner's OK, in the chat (design handoff chat,
  * "Approval card"): who it goes to, through which app, the message as it
- * will go, and Discard / Edit / Send. After Send it says when it goes, with
- * Undo while it can; then that it went (or did not, with Try again). A
- * discarded draft can be restored while its window lasts. Ctrl/Cmd+Enter in
- * the edit box sends it. A call that broke off midway (an `effect` row) has
- * no message: it says what was tried, and offers Dismiss only.
+ * will go, what kind of call it is, and Decline (with a note for the
+ * employee) / Edit / Always allow (the rule the server offers) / Send. After
+ * Send it says when it goes, with Undo while it can; then that it went (or
+ * did not, with Try again). A declined draft can be restored while its
+ * window lasts. Ctrl/Cmd+Enter in the edit box sends it. A call with no
+ * message to show (a tool with no spec) shows what it runs with and offers
+ * Allow; a call that broke off midway (an `effect` row) says what was tried,
+ * and offers Dismiss only.
  *
  * The draft itself lives on the server (data/approvals.ts); the card holds
  * only the edit in progress. `chat-approval` is the theme hook.
@@ -19,7 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { ChatApproval } from '../data/approvals';
 import { ApprovalsContext } from './context';
-import { approvalView, needsTicks, type CardTone, type CardView } from './view';
+import { approvalView, classLabel, needsTicks, type CardTone, type CardView } from './view';
 
 const PILL_TONE: Record<CardTone, string> = {
   waiting: 'border-action-config-border bg-action-config-soft text-action-config-ink',
@@ -111,13 +114,14 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
   // A draft with no message to edit (a tool call) sends as it is.
   const canSend = approval.status === 'pending' && !busy && !tooLong && (!approval.editable || text.trim().length > 0);
 
-  const send = () => {
+  const send = (always = false) => {
     if (!canSend) return;
     decide({
       approval,
       decision: 'send',
       ...(edited ? { text: text.trim() } : {}),
       ...(edited && approval.subject !== null ? { subject: subject.trim() } : {}),
+      ...(always ? { always: true } : {}),
     });
   };
 
@@ -131,8 +135,10 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
 
   const to = approval.recipientLabel || approval.recipient || 'them';
   const linked = approval.uiPartId !== null && approval.status === 'pending' && !edited;
-  // A call that broke off midway has no recipient and no message to show.
-  const message = approval.kind !== 'effect';
+  // A call with no message to show (a tool with no spec, a call that broke
+  // off midway): no recipient line and no bubble; its lines say what it runs.
+  const message = view.preview === 'message';
+  const kind = approval.status === 'pending' ? classLabel(approval) : null;
 
   return (
     <div
@@ -155,6 +161,9 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
           <span className="text-sm font-semibold text-fg-default">{view.title}</span>
           <span className="truncate text-xs text-fg-muted">{view.sub}</span>
         </div>
+        {kind && (
+          <span className={cn('flex h-6 flex-none items-center rounded-pill border px-2.25 text-xs font-medium whitespace-nowrap', PILL_TONE.muted)}>{kind}</span>
+        )}
         <span className={cn('flex h-6 flex-none items-center gap-1.5 rounded-pill border px-2.25 text-xs font-medium whitespace-nowrap', PILL_TONE[view.pill.tone])}>
           <span aria-hidden className={cn('size-1.5 rounded-full', DOT_TONE[view.pill.tone], view.pill.pulse && 'opencompany-pip-pulse')} />
           {view.pill.label}
@@ -233,7 +242,8 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
               {approval.details.map((row) => (
                 <div key={row.label} className="contents">
                   <dt className="text-fg-faint">{row.label}</dt>
-                  <dd className="m-0 min-w-0 truncate text-fg-default">{row.value}</dd>
+                  {/* Without a message, the lines are the call: shown whole (the server cuts each). */}
+                  <dd className={cn('m-0 min-w-0 text-fg-default', message ? 'truncate' : 'break-words whitespace-pre-wrap')}>{row.value}</dd>
                 </div>
               ))}
             </dl>
@@ -260,7 +270,8 @@ function Footer({
   busy: boolean;
   editing: boolean;
   canSend: boolean;
-  onSend: () => void;
+  /** Send this one; ``always``: and save the rule the card offers. */
+  onSend: (always?: boolean) => void;
   onToggleEdit: () => void;
 }) {
   const { decide } = useContext(ApprovalsContext)!;
@@ -268,39 +279,7 @@ function Footer({
   const bar = 'flex flex-wrap items-center gap-2 border-t border-border-default px-3.5 py-2.5';
 
   if (footer.kind === 'decide') {
-    return (
-      <div className={cn(bar, 'bg-bg-app')}>
-        <Button
-          variant="quiet"
-          size="sm"
-          disabled={busy}
-          onClick={() => decide({ approval, decision: 'discard' })}
-          className="font-semibold hover:bg-action-stop-soft hover:text-action-stop-ink"
-        >
-          Discard
-        </Button>
-        {approval.editable && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy}
-            aria-pressed={editing}
-            onClick={onToggleEdit}
-            className={cn('gap-1.5 font-semibold', editing && 'border-action-tools-border bg-action-tools-soft text-action-tools-ink')}
-          >
-            <Pencil aria-hidden className="size-3.25" />
-            {editing ? 'Done' : 'Edit'}
-          </Button>
-        )}
-        <span aria-hidden className="ml-auto flex items-center font-mono text-2xs font-medium text-fg-faint">
-          <kbd className="rounded-sm border border-border-default bg-bg-panel px-1.25 py-px font-[inherit]">{isMac() ? '⌘ ↵' : 'Ctrl ↵'}</kbd>
-        </span>
-        <ActionButton intent="run" disabled={!canSend} onClick={onSend} className="gap-1.75">
-          <Send aria-hidden className="size-3.25" />
-          Send
-        </ActionButton>
-      </div>
-    );
+    return <DecideFooter className={bar} view={view} approval={approval} busy={busy} editing={editing} canSend={canSend} onSend={onSend} onToggleEdit={onToggleEdit} />;
   }
   if (footer.kind === 'undo') {
     return (
@@ -318,7 +297,7 @@ function Footer({
     return (
       <div className={cn(bar, 'bg-bg-app text-xs text-fg-muted')} role="status">
         <Loader2 aria-hidden className="opencompany-spinner size-3.5 text-action-run-ink" />
-        Sending on {approval.channel}…
+        {view.preview === 'message' ? `Sending on ${approval.channel}…` : 'Running…'}
       </div>
     );
   }
@@ -343,8 +322,9 @@ function Footer({
   if (footer.kind === 'discarded') {
     return (
       <div className={cn(bar, 'bg-bg-app')}>
-        <span className="min-w-0 flex-1 text-xs text-fg-muted" role="status">
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-fg-muted" role="status">
           {footer.text}
+          {footer.note && <span className="line-clamp-3 break-words whitespace-pre-wrap text-fg-default">You said: “{footer.note}”</span>}
         </span>
         {footer.canRestore && (
           // Its countdown ticks every second: never announced.
@@ -364,7 +344,16 @@ function Footer({
     );
   }
   if (footer.kind === 'failed') {
-    return <FailedFooter className={bar} text={footer.text} unknown={footer.unknown} busy={busy} onRetry={(confirm) => decide({ approval, decision: 'retry', confirm })} />;
+    return (
+      <FailedFooter
+        className={bar}
+        text={footer.text}
+        unknown={footer.unknown}
+        message={view.preview === 'message'}
+        busy={busy}
+        onRetry={(confirm) => decide({ approval, decision: 'retry', confirm })}
+      />
+    );
   }
   if (footer.kind === 'effect') {
     return (
@@ -386,27 +375,141 @@ function Footer({
   );
 }
 
+/** A request still waiting for the owner: Decline (with an optional note
+ *  for the employee), Edit, Always allow (when the card offers a rule), and
+ *  Send, or Allow for a call with no message. */
+function DecideFooter({
+  className,
+  view,
+  approval,
+  busy,
+  editing,
+  canSend,
+  onSend,
+  onToggleEdit,
+}: {
+  className: string;
+  view: CardView;
+  approval: ChatApproval;
+  busy: boolean;
+  editing: boolean;
+  canSend: boolean;
+  onSend: (always?: boolean) => void;
+  onToggleEdit: () => void;
+}) {
+  const { decide, name } = useContext(ApprovalsContext)!;
+  const [declining, setDeclining] = useState(false);
+  const [note, setNote] = useState('');
+  const decline = () => decide({ approval, decision: 'discard', ...(note.trim() ? { note: note.trim() } : {}) });
+
+  if (declining) {
+    const onNoteKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Never the chat's Ctrl/Cmd+Enter, which allows the newest request.
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!busy) decline();
+      }
+    };
+    return (
+      <div className={cn(className, 'flex-col items-stretch bg-bg-app')}>
+        <Textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          onKeyDown={onNoteKeyDown}
+          rows={2}
+          autoFocus
+          aria-label={`Tell ${name} what to do instead`}
+          placeholder={`Tell ${name} what to do instead (optional)`}
+          className="min-h-16 resize-y bg-bg-input text-sm"
+        />
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="quiet" size="sm" onClick={() => setDeclining(false)} className="font-semibold">
+            Back
+          </Button>
+          <ActionButton intent="stop" disabled={busy} onClick={decline}>
+            Decline
+          </ActionButton>
+        </div>
+      </div>
+    );
+  }
+  const always = approval.always;
+  return (
+    <div className={cn(className, 'bg-bg-app')}>
+      <Button
+        variant="quiet"
+        size="sm"
+        disabled={busy}
+        onClick={() => setDeclining(true)}
+        className="font-semibold hover:bg-action-stop-soft hover:text-action-stop-ink"
+      >
+        Decline
+      </Button>
+      {approval.editable && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          aria-pressed={editing}
+          onClick={onToggleEdit}
+          className={cn('gap-1.5 font-semibold', editing && 'border-action-tools-border bg-action-tools-soft text-action-tools-ink')}
+        >
+          <Pencil aria-hidden className="size-3.25" />
+          {editing ? 'Done' : 'Edit'}
+        </Button>
+      )}
+      {always && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!canSend}
+          title={`Always allow ${always.label}`}
+          onClick={() => onSend(true)}
+          className="max-w-64 min-w-0 font-semibold"
+        >
+          <span className="truncate">Always allow {always.label}</span>
+        </Button>
+      )}
+      <span aria-hidden className="ml-auto flex items-center font-mono text-2xs font-medium text-fg-faint">
+        <kbd className="rounded-sm border border-border-default bg-bg-panel px-1.25 py-px font-[inherit]">{isMac() ? '⌘ ↵' : 'Ctrl ↵'}</kbd>
+      </span>
+      <ActionButton intent="run" disabled={!canSend} onClick={() => onSend()} className="gap-1.75">
+        {view.preview === 'message' ? <Send aria-hidden className="size-3.25" /> : <Check aria-hidden className="size-3.25" />}
+        {view.preview === 'message' ? 'Send' : 'Allow'}
+      </ActionButton>
+      {approval.approvalClass === 'money' && (
+        <span className="w-full text-xs text-fg-muted">Money and deletes always ask unless you allow them under Allowed without asking.</span>
+      )}
+    </div>
+  );
+}
+
 /** A send that did not go: Try again. One that broke off may have gone,
  *  so sending it again asks once more first. */
 function FailedFooter({
   className,
   text,
   unknown,
+  message,
   busy,
   onRetry,
 }: {
   className: string;
   text: string;
   unknown: boolean;
+  /** A message: it "goes out"; otherwise it "runs". */
+  message: boolean;
   busy: boolean;
   onRetry: (confirm: boolean) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const again = message ? 'Send again' : 'Run again';
   if (confirming) {
     return (
       <div className={cn(className, 'bg-action-stop-soft')}>
         <span className="min-w-0 flex-1 text-xs text-fg-default" role="status">
-          It may already have gone out. Send it again anyway?
+          {message ? 'It may already have gone out. Send it again anyway?' : 'It may already have happened. Run it again anyway?'}
         </span>
         <Button variant="quiet" size="sm" onClick={() => setConfirming(false)} className="font-semibold">
           Keep it
@@ -419,7 +522,7 @@ function FailedFooter({
             onRetry(true);
           }}
         >
-          Send again
+          {again}
         </ActionButton>
       </div>
     );
@@ -437,7 +540,7 @@ function FailedFooter({
         className="gap-1.5 font-semibold"
       >
         <RotateCcw aria-hidden className="size-3.25" />
-        {unknown ? 'Send again' : 'Try again'}
+        {unknown ? again : 'Try again'}
       </Button>
     </div>
   );

@@ -80,7 +80,7 @@ describe('the card says what happened', () => {
   it('says it went only once it went', () => {
     const sent = view({ status: 'sent', outcome: { certainty: 'sent', at: '2026-10-04T09:00:05Z' }, approved_by: 'auto' });
     expect(sent.title).toBe('Message sent');
-    expect(sent.footer.kind === 'sent' && sent.footer.text).toMatch(/^Sent to Ana on WhatsApp at .+, without asking: Ask first was off\.$/);
+    expect(sent.footer.kind === 'sent' && sent.footer.text).toMatch(/^Sent to Ana on WhatsApp at .+, without asking\.$/);
     const failed = view({ status: 'failed', outcome: { certainty: 'unknown', error: 'TimeoutError' } });
     expect(failed.footer).toEqual({ kind: 'failed', text: 'It may have gone out: TimeoutError', unknown: true });
     expect(view({ status: 'failed', outcome: { certainty: 'not_sent' } }).footer).toEqual({ kind: 'failed', text: 'It didn’t go out.', unknown: false });
@@ -110,12 +110,36 @@ describe('the card says what happened', () => {
     expect(optimistic(approval(effect), 'dismiss', NOW, 0)).toMatchObject({ status: 'cancelled' });
   });
 
-  it('a discarded draft can come back while its window lasts', () => {
+  it('a declined draft can come back while its window lasts', () => {
     const gate = view({ kind: 'gate', status: 'discarded', restore_until: '2026-10-04T09:00:03Z' });
-    expect(gate.footer).toEqual({ kind: 'discarded', text: 'Discarded. Maya won’t send this.', restoreSeconds: 3, canRestore: true });
-    const held = view({ status: 'discarded', restore_until: '2026-10-11T09:00:00Z' });
-    expect(held.footer).toMatchObject({ restoreSeconds: null, canRestore: true });
+    expect(gate.footer).toEqual({ kind: 'discarded', text: 'Declined. Maya won’t send this.', note: null, restoreSeconds: 3, canRestore: true });
+    const held = view({ status: 'discarded', restore_until: '2026-10-11T09:00:00Z', note: 'Ask Sam first.' });
+    expect(held.footer).toMatchObject({ restoreSeconds: null, canRestore: true, note: 'Ask Sam first.' });
     expect(view({ status: 'discarded', restore_until: '2026-10-04T08:00:00Z' }).footer).toMatchObject({ canRestore: false });
+  });
+
+  it('a call with no message to show says what it does, not what it sends', () => {
+    const shell: Wire = { channel: 'Shell', action: 'Use Shell', recipient: '', recipient_label: '', body: '', editable: false, generic: true };
+    const asking = view({ ...shell, approval_class: 'send' });
+    expect([asking.title, asking.preview]).toEqual(['Maya wants to use Shell', 'none']);
+    expect(view({ ...shell, status: 'sending' }).pill.label).toBe('Running');
+    const done = view({ ...shell, status: 'sent', outcome_labels: { sent: 'Done', failed: 'Not done' }, outcome: { certainty: 'sent' } });
+    expect([done.title, done.pill.label, done.footer]).toEqual(['Done', 'Done', { kind: 'sent', text: 'Done.' }]);
+    expect(view({ ...shell, status: 'failed', outcome: { certainty: 'unknown' } }).footer).toEqual({ kind: 'failed', text: 'It may have happened.', unknown: true });
+    expect(view({ ...shell, status: 'expired' }).footer).toEqual({ kind: 'ended', text: 'It waited too long, so it did not run.' });
+    expect(view({ ...shell, status: 'discarded' }).footer).toMatchObject({ text: 'Declined. Maya won’t do this.' });
+    // A spec'd message keeps its preview.
+    expect(view({}).preview).toBe('message');
+  });
+
+  it('a call its turn waits on gets no Undo or Restore, and runs on Resume', () => {
+    const waits = approval({ waits: true });
+    expect(optimistic(waits, 'send', NOW, 0)).toMatchObject({ status: 'approved', undoUntil: null });
+    expect(optimistic(waits, 'discard', NOW, 0)).toMatchObject({ status: 'discarded', restoreUntil: null });
+    // A retry makes it a draft again.
+    expect(optimistic(approval({ waits: true, status: 'failed' }), 'retry', NOW, 0)).toMatchObject({ waits: false, undoUntil: '2026-10-04T09:00:05.000Z' });
+    const paused = view({ waits: true, status: 'approved', deployment_state: 'paused' });
+    expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.' });
   });
 
   it('reads the list with the server’s clock, and moves at once on a decision', () => {
@@ -213,13 +237,67 @@ describe('a draft in the chat', () => {
     expect(server.decisions[0].decision_key).not.toBe(server.decisions[1].decision_key);
   });
 
-  it('sends a call that has no message to edit as it is', async () => {
-    server.approvals = [summary({ channel: 'Custom connector', action: 'Use a connector tool', recipient: '', recipient_label: '', body: '', editable: false })];
+  it('allows a call that has no message as it is, showing what it runs with', async () => {
+    server.approvals = [
+      summary({
+        channel: 'Custom connector',
+        action: 'Use a connector tool',
+        recipient: '',
+        recipient_label: '',
+        body: '',
+        editable: false,
+        details: [{ label: 'query', value: 'pricing for the Pro plan' }],
+        approval_class: 'send',
+      }),
+    ];
     renderPane();
     const card = (await screen.findByText('Maya wants to use a connector tool')).closest('[data-approval]') as HTMLElement;
-    fireEvent.click(within(card).getByRole('button', { name: /^Send$/ }));
+    expect(card).not.toHaveTextContent('To them');
+    expect(card).not.toHaveTextContent('(no message)');
+    expect(within(card).getByText('pricing for the Pro plan')).toBeInTheDocument();
+    expect(within(card).getByText('Reaches out')).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: /^Allow$/ }));
     await waitFor(() => expect(server.decisions).toHaveLength(1));
     expect(server.decisions[0]).toMatchObject({ approval_id: 'ap1', decision: 'send' });
+    expect(server.decisions[0]).not.toHaveProperty('always');
+  });
+
+  it('Always allow sends the call and saves the rule the card offers', async () => {
+    server.approvals = [summary({ waits: true, always: { label: 'Send a WhatsApp message to 447700900123', scope: 'recipient' } })];
+    const pane = host();
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ChatPane host={pane} />
+      </QueryClientProvider>,
+    );
+    const card = (await screen.findByText('Maya wants to send a WhatsApp message')).closest('[data-approval]') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Always allow Send a WhatsApp message to 447700900123' }));
+    await waitFor(() => expect(server.decisions).toHaveLength(1));
+    expect(server.decisions[0]).toMatchObject({ decision: 'send', always: true });
+    await waitFor(() => expect(pane.notify).toHaveBeenCalledWith('Always allowed: Send a WhatsApp message to 447700900123', 'success'));
+  });
+
+  it('declines with a note for the employee; Ctrl+Enter in the note declines', async () => {
+    renderPane();
+    const card = (await screen.findByText('Maya wants to send a WhatsApp message')).closest('[data-approval]') as HTMLElement;
+    fireEvent.click(within(card).getByRole('button', { name: 'Decline' }));
+    const note = within(card).getByRole('textbox', { name: 'Tell Maya what to do instead' });
+    fireEvent.change(note, { target: { value: 'Call Ana instead.' } });
+    fireEvent.keyDown(note, { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(server.decisions).toHaveLength(1));
+    expect(server.decisions[0]).toMatchObject({ decision: 'discard', note: 'Call Ana instead.' });
+  });
+
+  it('a money request names itself, and Ctrl+Enter never allows it', async () => {
+    server.approvals = [summary({ channel: 'Stripe', action: 'Run a Stripe command', body: '', editable: false, approval_class: 'money' })];
+    renderPane();
+    const card = (await screen.findByText('Maya wants to run a Stripe command')).closest('[data-approval]') as HTMLElement;
+    expect(within(card).getByText('Money or deletes')).toBeInTheDocument();
+    expect(within(card).getByText(/Money and deletes always ask/)).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message Maya' }), { key: 'Enter', ctrlKey: true });
+    await act(async () => {});
+    expect(server.decisions).toEqual([]);
   });
 
   it('sends an edit with Ctrl+Enter', async () => {
@@ -249,12 +327,12 @@ describe('a draft in the chat', () => {
     expect(within(own).getByText('Yes, Saturday at 10 works.')).toBeInTheDocument();
   });
 
-  it('announces a discarded draft once, not its Restore countdown', async () => {
+  it('announces a declined draft once, not its Restore countdown', async () => {
     const restore = new Date(Date.now() + 60_000).toISOString();
     server.approvals = [summary({ approval_id: 'g1', kind: 'gate', run_id: null, tool_call_id: null, status: 'discarded', restore_until: restore })];
     renderPane();
     const own = await screen.findByRole('region', { name: 'Drafts waiting for you' });
-    expect(within(own).getByRole('status')).toHaveTextContent('Discarded. Maya won’t send this.');
+    expect(within(own).getByRole('status')).toHaveTextContent('Declined. Maya won’t send this.');
     expect(within(own).getByRole('button', { name: /^Restore/ })).toHaveAttribute('aria-live', 'off');
   });
 

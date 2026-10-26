@@ -75,6 +75,16 @@ const summarySchema = z
     tool_call_id: optionalText,
     ui_part_id: optionalText,
     deployment_state: optionalText,
+    // What the held call may do (RFC-0007 §4.1), and whether its tool has no
+    // spec (the card shows what it runs with, not a message).
+    approval_class: z.enum(['read', 'write', 'send', 'money']).nullable().optional().catch(null),
+    generic: z.boolean().optional().catch(undefined),
+    // Its employee's turn waits on it: no Undo after Allow, no Restore after
+    // Decline (RFC-0007 §4.6).
+    waits: z.boolean().optional().catch(undefined),
+    // The always-allow rule the card offers, or null.
+    always: z.object({ label: z.string(), scope: z.string() }).nullable().optional().catch(null),
+    note: optionalText,
   })
   .transform((raw) => ({
     id: raw.approval_id,
@@ -106,6 +116,12 @@ const summarySchema = z
     toolCallId: raw.tool_call_id,
     uiPartId: raw.ui_part_id,
     deploymentState: raw.deployment_state,
+    approvalClass: raw.approval_class ?? null,
+    generic: raw.generic === true,
+    waits: raw.waits === true,
+    always: raw.always ?? null,
+    /** What the owner told the employee on declining. */
+    note: raw.note,
   }));
 
 export type ChatApproval = z.output<typeof summarySchema>;
@@ -191,6 +207,10 @@ export interface DecideInput {
   text?: string;
   subject?: string;
   confirm?: boolean;
+  /** With send: also save the always-allow rule the card offers. */
+  always?: boolean;
+  /** With discard: what the employee should do instead. */
+  note?: string;
 }
 
 export class DecideError extends Error {
@@ -228,13 +248,16 @@ export function optimistic(approval: ChatApproval, decision: Decision, nowMs: nu
   const soon = (seconds: number) => new Date(serverNow + seconds * 1000).toISOString();
   switch (decision) {
     case 'send':
+      // A call its turn waits on runs at once: no Undo.
+      return { ...approval, status: 'approved', undoUntil: approval.waits ? null : soon(5), outcome: null };
     case 'retry':
-      return { ...approval, status: 'approved', undoUntil: soon(5), outcome: null };
+      // A retried call is a draft again, whoever made it.
+      return { ...approval, status: 'approved', undoUntil: soon(5), outcome: null, waits: false };
     case 'undo':
     case 'restore':
       return { ...approval, status: 'pending', undoUntil: null, restoreUntil: null };
     case 'discard':
-      return { ...approval, status: 'discarded', restoreUntil: approval.kind === 'gate' ? soon(5) : approval.expiresAt };
+      return { ...approval, status: 'discarded', restoreUntil: approval.waits ? null : approval.kind === 'gate' ? soon(5) : approval.expiresAt };
     case 'dismiss':
       return { ...approval, status: 'cancelled' };
   }
@@ -255,7 +278,7 @@ export function useDecideApproval(workflowId: string, onError?: (error: DecideEr
   const queryClient = useQueryClient();
   const key = chatApprovalsKey(workflowId);
   return useMutation<ChatApproval | null, DecideError, DecideInput, { previous: ChatApprovals | undefined }>({
-    mutationFn: async ({ approval, decision, text, subject, confirm }) => {
+    mutationFn: async ({ approval, decision, text, subject, confirm, always, note }) => {
       let reply: DecideReply | undefined;
       try {
         reply = await sendRequest<DecideReply>('decide_approval', {
@@ -265,6 +288,8 @@ export function useDecideApproval(workflowId: string, onError?: (error: DecideEr
           ...(text !== undefined ? { text } : {}),
           ...(subject !== undefined ? { subject } : {}),
           ...(confirm ? { confirm: true } : {}),
+          ...(always ? { always: true } : {}),
+          ...(note ? { note } : {}),
         });
       } catch {
         throw new DecideError('transport', 'That didn’t reach the server. Try again.');

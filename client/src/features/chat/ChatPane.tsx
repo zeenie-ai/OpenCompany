@@ -291,6 +291,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       decideMutation.mutate(input, {
         onSuccess: () => {
           if (input.decision === 'send') onSent?.('draft');
+          if (input.always && input.approval.always) notify(`Always allowed: ${input.approval.always.label}`, 'success');
         },
         onSettled: () =>
           setDeciding((current) => {
@@ -300,7 +301,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
           }),
       });
     },
-    [decideMutation, onSent],
+    [decideMutation, onSent, notify],
   );
   const linked = useMemo(() => {
     const ids = new Set<string>();
@@ -322,11 +323,12 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     [approvals, persona.name, compact, decide, deciding],
   );
 
-  // Ctrl/Cmd+Enter sends the newest draft still waiting for the owner.
+  // Ctrl/Cmd+Enter sends the newest draft still waiting for the owner, never
+  // one that spends money or deletes.
   const sendNewestDraft = () => {
     const id = approvals.order.find((candidate) => approvals.byId.get(candidate)?.status === 'pending');
     const approval = id ? approvals.byId.get(id) : undefined;
-    if (!approval || deciding.has(approval.id)) return false;
+    if (!approval || deciding.has(approval.id) || approval.approvalClass === 'money') return false;
     decide({ approval, decision: 'send' });
     return true;
   };
