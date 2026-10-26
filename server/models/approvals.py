@@ -43,6 +43,9 @@ send: one row per workflow, seeded from an employee's ground rules, changed
 from the chat's Ask first chip (``set_ask_first``). A workflow without a row
 (the editor's own workflows) gates no tool calls. Its ``mode`` says what asks
 in a v1 generation (RFC-0007 §4.2); NULL follows ``ask_first``.
+
+``ApprovalAllow`` is an always-allow rule: the owner's standing OK for one
+kind of call of one employee (services/approvals/allows.py, RFC-0007 §4.4).
 """
 
 from __future__ import annotations
@@ -175,4 +178,28 @@ class WorkflowRule(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
 
 
-__all__ = ["ApprovalDecision", "ApprovalRequest", "WorkflowRule"]
+class ApprovalAllow(SQLModel, table=True):
+    """An always-allow rule (see the module docstring)."""
+
+    __tablename__ = "approval_allows"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "node_type", "operation", "scope_kind", "scope_value", name="uq_approval_allows_scope"),
+    )
+
+    id: str = Field(primary_key=True, max_length=64)
+    workflow_id: str = Field(index=True, max_length=255)
+    node_type: str = Field(max_length=100)
+    #: The value of the class table's field the call names; "" for every
+    #: operation.
+    operation: str = Field(default="", max_length=100)
+    #: ``host``, ``recipient``, ``operation`` or ``tool``.
+    scope_kind: str = Field(max_length=20)
+    #: The host or the recipient; "" for the other scopes.
+    scope_value: str = Field(default="", max_length=500)
+    #: How the owner reads it ("Google Calendar: create").
+    label: str = Field(default="", max_length=300)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column=Column(DateTime(timezone=True), nullable=False))
+    created_by: str = Field(default="owner", max_length=255)
+
+
+__all__ = ["ApprovalAllow", "ApprovalDecision", "ApprovalRequest", "WorkflowRule"]

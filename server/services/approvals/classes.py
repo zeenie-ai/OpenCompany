@@ -22,7 +22,7 @@ question: whether a broken-off attempt may run again. Never imports
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from services.approvals.repeats import _default
 
@@ -479,6 +479,19 @@ def call_data(node_cls: Any, node_data: Mapping[str, Any], tool_args: Any) -> Di
     return dict(node_data or {})
 
 
+def operation_of(node_cls: Any, data: Mapping[str, Any], *, tool_call: bool = False) -> Optional[str]:
+    """The value of the node's class field this call names (its model's
+    default when unset). None for a node the table classes whole, and for a
+    value that is not one string."""
+    rule = CLASSES_WHEN.get(getattr(node_cls, "type", ""))
+    if rule is None:
+        return None
+    value = data.get(rule[0])
+    if value is None:
+        value = _default(node_cls, rule[0], tool_call)
+    return value if isinstance(value, str) else None
+
+
 def fetched_url(node_cls: Any, data: Mapping[str, Any]) -> str:
     """The URL the call fetches, or "" when it fetches none."""
     field = URL_FIELDS.get(getattr(node_cls, "type", ""))
@@ -544,4 +557,5 @@ __all__ = [
     "call_data",
     "class_of",
     "fetched_url",
+    "operation_of",
 ]

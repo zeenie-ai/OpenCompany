@@ -19,7 +19,9 @@
 A discard may carry the owner's ``note`` for the employee. A held call its
 agent's turn waits on (``runtime: turn``, RFC-0007 §4.6) gets no Undo grace
 and no Restore: its turn runs it, or hears the decline, at once. A retry of
-one makes it a draft again, since that turn is over.
+one makes it a draft again, since that turn is over. A send with ``always``
+also saves the always-allow rule its card offers (services/approvals/
+allows.py), and is refused when the card offers none.
 
 Each decision is a compare-and-swap on the row's revision, recorded with its
 ``decision_key`` in the same transaction (``approval_decisions``): the same
@@ -35,10 +37,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
+from core.logging import get_logger
 from models.approvals import ApprovalRequest
 from services.approvals import store
 from services.approvals.contract import DEFAULT_TIMEOUT_HOURS, RESTORE_SECONDS, UNDO_SECONDS
 from services.approvals.listeners import change_of, notify_approval_changed
+
+logger = get_logger(__name__)
 
 DECISIONS = ("send", "undo", "discard", "restore", "retry", "dismiss")
 #: The longest note a discard keeps (the chat's message limit).
@@ -134,6 +139,7 @@ async def decide(
     subject: Any = None,
     confirm: bool = False,
     note: Any = None,
+    always: bool = False,
     now: Optional[datetime] = None,
 ) -> Tuple[ApprovalRequest, bool]:
     """Apply a decision. Returns ``(row, idempotent)``; raises
@@ -156,7 +162,16 @@ async def decide(
         values["decision_key"] = decision_key
         if turn:
             values["grace_until"] = None
+        scope = None
+        if always:
+            from services.approvals import allows
+
+            scope = allows.offer(row, store.approval_class(row))
+            if scope is None:
+                raise DecisionRefused("invalid_request", "This one cannot be always allowed.")
         moved = await _move(database, row, ("pending",), "approved", values, record)
+        if scope is not None:
+            await _save_rule(database, moved, scope, actor)
     elif decision == "undo":
         grace = store.aware(row.grace_until)
         if row.status != "approved" or row.consumed_at is not None or row.claim_token or grace is None or grace <= now:
@@ -202,6 +217,17 @@ async def decide(
             values["runtime"] = "temporal"
         moved = await _move(database, row, ("failed",), "approved", values, record)
     return moved, False
+
+
+async def _save_rule(database: Any, row: ApprovalRequest, scope: Any, actor: str) -> None:
+    """Save the rule a send with ``always`` made. The send stands without
+    it: the next such call asks again."""
+    from services.approvals import allows
+
+    try:
+        await allows.add(database, row.workflow_id, scope, created_by=actor)
+    except Exception:  # noqa: BLE001 - logged, and the next call asks
+        logger.warning("Could not save an always-allow rule", approval_id=row.id, exc_info=True)
 
 
 async def _move(database: Any, row: ApprovalRequest, from_statuses, status: str, values: Dict[str, Any], record) -> ApprovalRequest:

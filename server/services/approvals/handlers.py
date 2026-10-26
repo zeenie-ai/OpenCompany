@@ -9,9 +9,10 @@ on its way) or ``recent`` (everything, newest first); default ``pending``.
 ``get_approvals {approval_ids: [...]}`` -> ``{approvals, server_time}``.
 
 ``decide_approval {approval_id, decision, decision_key, text?, subject?,
-confirm?, note?}`` -> ``{approval, idempotent?, will_send_on_resume}``.
-Decisions: ``send``, ``undo``, ``discard`` (with the owner's ``note``),
-``restore``, ``retry``, ``dismiss`` (services/approvals/decisions.py).
+confirm?, note?, always?}`` -> ``{approval, idempotent?, will_send_on_resume}``.
+Decisions: ``send`` (``always``: and save the card's always-allow rule),
+``undo``, ``discard`` (with the owner's ``note``), ``restore``, ``retry``,
+``dismiss`` (services/approvals/decisions.py).
 Sending a held tool call starts its send (services/approvals/execution.py),
 unless its agent's turn waits on it (``runtime: turn``) and runs it itself.
 Errors: ``already_decided``,
@@ -26,6 +27,13 @@ needs_apply}``; ``rule_conflict`` when it moved. ``mode`` is ``outside``,
 ``everything`` or ``money_only`` (services/approvals/rules.py): setting it
 keeps Ask first in step, and setting Ask first makes the mode follow it.
 
+Always-allow rules (services/approvals/allows.py): ``list_approval_allows
+{workflow_id}`` -> ``{allows, money}``, the rules and the money switches of
+the employee's tools (``{node_type, operation, label, allow_id}``, the rule
+that switches each on or null); ``add_approval_allow {workflow_id,
+node_type, operation?}`` -> ``{allow}``, a money switch only;
+``remove_approval_allow {workflow_id, allow_id}``.
+
 Only the owner's own drafts and workflows are visible; any other id reads as
 not found.
 """
@@ -38,7 +46,7 @@ from typing import Any, Dict, List
 from fastapi import WebSocket
 
 from core.logging import get_logger
-from services.approvals import decisions, execution, rules, store, waiter
+from services.approvals import allows, decisions, execution, rules, store, waiter
 from services.approvals.contract import APPROVAL_KINDS
 from services.approvals.listeners import change_of, notify_approval_changed
 from services.approvals.reconcile import reconcile_once
@@ -189,6 +197,7 @@ async def handle_decide_approval(data: Dict[str, Any], websocket: WebSocket) -> 
             subject=data.get("subject"),
             confirm=bool(data.get("confirm")),
             note=data.get("note"),
+            always=data.get("always") is True,
         )
     except decisions.DecisionRefused as refused:
         current = await store.get(database, approval_id) or row
@@ -298,9 +307,73 @@ async def handle_set_ask_first(data: Dict[str, Any], websocket: WebSocket) -> Di
     }
 
 
+async def _authorized(data: Dict[str, Any], websocket: Any) -> Any:
+    """The workflow a rules command names, or None when the caller may not
+    see it."""
+    from core.container import container
+
+    workflow_id = str(data.get("workflow_id") or "").strip()
+    database = container.database()
+    if not workflow_id or not await _authorize_workflow(database, websocket, workflow_id):
+        return None
+    return workflow_id
+
+
+@ws_response
+async def handle_list_approval_allows(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+
+    workflow_id = await _authorized(data, websocket)
+    if workflow_id is None:
+        return {"success": False, "error": "not_found"}
+    database = container.database()
+    found = await allows.list_for_workflow(database, workflow_id)
+    switches = {(row.node_type, row.operation): row.id for row in found if row.scope_kind in ("tool", "operation")}
+    money = [
+        {**option, "allow_id": switches.get((option["node_type"], option["operation"]))}
+        for option in await allows.money_options(database, workflow_id)
+    ]
+    return {"success": True, "workflow_id": workflow_id, "allows": [allows.serialize(row) for row in found], "money": money}
+
+
+@ws_response
+async def handle_add_approval_allow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+
+    workflow_id = await _authorized(data, websocket)
+    if workflow_id is None:
+        return {"success": False, "error": "not_found"}
+    database = container.database()
+    node_type, operation = data.get("node_type"), data.get("operation") or ""
+    option = next(
+        (item for item in await allows.money_options(database, workflow_id) if (item["node_type"], item["operation"]) == (node_type, operation)),
+        None,
+    )
+    if option is None:
+        return {"success": False, "error": "invalid_request"}
+    scope = allows.Scope(node_type, operation, "operation" if operation else "tool", "", option["label"])
+    row = await allows.add(database, workflow_id, scope, created_by=execution_principal(data, websocket))
+    logger.info("Always allowed", workflow_id=workflow_id, node_type=node_type, operation=operation)
+    return {"success": True, "allow": allows.serialize(row)}
+
+
+@ws_response
+async def handle_remove_approval_allow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+
+    workflow_id = await _authorized(data, websocket)
+    if workflow_id is None:
+        return {"success": False, "error": "not_found"}
+    if not await allows.remove(container.database(), workflow_id, str(data.get("allow_id") or "")):
+        return {"success": False, "error": "not_found"}
+    logger.info("Removed an always-allow rule", workflow_id=workflow_id, allow_id=data.get("allow_id"))
+    return {"success": True}
+
+
 async def on_workflow_deleted(database: Any, workflow_id: str) -> None:
     removed = await store.delete_for_workflow(database, workflow_id)
     await rules.delete_rule(database, workflow_id)
+    await allows.delete_for_workflow(database, workflow_id)
     if removed:
         logger.info("Removed a deleted workflow's drafts", workflow_id=workflow_id, count=removed)
 
@@ -311,15 +384,21 @@ WS_HANDLERS: Dict[str, Any] = {
     "decide_approval": handle_decide_approval,
     "get_ask_first": handle_get_ask_first,
     "set_ask_first": handle_set_ask_first,
+    "list_approval_allows": handle_list_approval_allows,
+    "add_approval_allow": handle_add_approval_allow,
+    "remove_approval_allow": handle_remove_approval_allow,
 }
 
 
 __all__ = [
     "WS_HANDLERS",
+    "handle_add_approval_allow",
     "handle_decide_approval",
     "handle_get_approvals",
     "handle_get_ask_first",
+    "handle_list_approval_allows",
     "handle_list_approvals",
+    "handle_remove_approval_allow",
     "handle_set_ask_first",
     "on_workflow_deleted",
 ]

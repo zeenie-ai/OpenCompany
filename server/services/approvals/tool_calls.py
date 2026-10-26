@@ -21,8 +21,9 @@ its row is the one being sent, and is never held again.
 workflow's mode and the call's class (services/approvals/classes.py) decide,
 for every tool an agent calls, spec or not:
 
-- A read runs. So does a call whose class the mode does not ask; one that
-  reaches out (send, money) and answers the owner in the chat is recorded.
+- A read runs. So does a call whose class the mode does not ask, or that an
+  always-allow rule matches (services/approvals/allows.py); one that reaches
+  out (send, money) and answers the owner in the chat is recorded.
 - An asked call is held, on a generic card when its tool has no spec, and
   Stripe is held instead of refused. A restricted tool (the Browser) is held
   only when it fetches a URL, and runs restricted otherwise.
@@ -216,6 +217,19 @@ async def _ask_mode(database: Any, workflow_id: Any) -> Optional[str]:
         return "everything"
 
 
+async def _allowed(database: Any, context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> bool:
+    """Whether an always-allow rule, or the binding's own Ask first switch,
+    lets the call run (services/approvals/allows.py). When the rules cannot
+    be read, the call asks."""
+    from services.approvals import allows
+
+    try:
+        return await allows.allowed(database, context.get("workflow_id"), node_cls, node_data, context.get("tool_args"))
+    except Exception:
+        logger.warning("Could not read the always-allow rules; asking", workflow_id=context.get("workflow_id"), exc_info=True)
+        return False
+
+
 def _restricted(spec: Any, node_data: Mapping[str, Any], context: Mapping[str, Any]) -> Checked:
     """Run with the spec's restrictions instead of holding (the Browser,
     read-only); the model's arguments cannot lift them."""
@@ -288,7 +302,7 @@ async def _check_by_class(context: Mapping[str, Any], node_cls: Any, spec: Any) 
     mode = await _ask_mode(database, context.get("workflow_id"))
     if mode is None:
         return RUN
-    if klass not in rules.ASKS[mode]:
+    if klass not in rules.ASKS[mode] or await _allowed(database, context, node_cls, node_data):
         if klass in (SEND, MONEY) and isinstance(context.get("chat_stream"), Mapping):
             return Checked(record=_auto_recorder(database, context, node_cls, spec, node_data))
         return RUN

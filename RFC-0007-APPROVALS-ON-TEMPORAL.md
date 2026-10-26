@@ -304,12 +304,15 @@ In a v1 generation, for every caller: agent tool calls, CLI calls and in-process
   - **An operation-mapped node:** the operation, for example "Google Calendar: create events". twitterSend is mapped on `action`.
   - **Otherwise the whole tool,** for example "Always allow Shell".
 - **Offered** on the card only when it can name everything the rule covers (Claude Code's rule), and never on a money card. Money rules are switched on in the employee's list (D19).
+  - Only the card of a call its turn waits on offers one. No other row is known to be v1, and a rule made from a v0 card would do nothing.
+  - The label names the tool as its cards do: the spec's channel, else the tool's display name ("Google Calendar: create", "Web browser on shop.example", "HTTP Request: GET requests to api.example.com").
 - **Storage:** a small `approval_allows` table with `id`, `workflow_id`, `node_type`, `operation`, `scope_kind`, `scope_value`, `label`, `created_at` and `created_by`.
   - `tool_calls.check` reads it.
   - It is a new table, so `create_all` makes it on both databases.
 - **Applies** in v1 generations only, to waits and drafts alike.
 - **Lifetime:** Reset keeps rules, because they are the owner's settings. Deleting the employee deletes them through the approvals `on_workflow_deleted` hook (`services/approvals/handlers.py:285-289`).
 - **Revocation:** the Ask-first menu's "Allowed without asking…" (D19) lists the rules, each with Remove, plus a switch for each of the employee's money tools. A removed rule applies from the next call.
+  - The commands are `list_approval_allows {workflow_id}` (the rules, and the money switches of the employee's tools, each with the rule that allows it), `add_approval_allow {workflow_id, node_type, operation?}` (a money switch only) and `remove_approval_allow {workflow_id, allow_id}`.
 - **Not adopted:** deny rules, session-scoped approvals, and rule files.
 
 ### 4.5 The card and the decisions

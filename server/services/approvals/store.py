@@ -366,9 +366,9 @@ def _outcome_labels(row: ApprovalRequest) -> Tuple[str, str]:
     return spec.outcome_labels if spec is not None else DONE_OUTCOME
 
 
-def _class_of(row: ApprovalRequest) -> Optional[str]:
-    """What a held call may do (services/approvals/classes.py), for the
-    card's pill."""
+def approval_class(row: ApprovalRequest) -> Optional[str]:
+    """What a held call may do (services/approvals/classes.py): the card's
+    pill, and whether it may offer an always-allow rule."""
     from services.approvals.classes import call_data, class_of
     from services.node_registry import get_node_class
 
@@ -405,11 +405,16 @@ def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now
     sent, failed = _outcome_labels(row)
     out["outcome_labels"] = {"sent": sent, "failed": failed}
     if kind == "tool_call":
-        out["approval_class"] = _class_of(row)
+        from services.approvals import allows
+
+        klass = approval_class(row)
+        out["approval_class"] = klass
         # A tool with no spec: the card shows what it runs with, not a message.
         out["generic"] = _spec_of(row) is None
         # Its turn waits on it: no Undo, and the employee gets the real result.
         out["waits"] = row.runtime == "turn"
+        scope = allows.offer(row, klass)
+        out["always"] = None if scope is None else {"label": scope.label, "scope": scope.kind}
     if row.action:
         out["action"] = row.action
     subject = row.final_subject if decided and row.final_subject else row.subject
@@ -449,6 +454,7 @@ def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now
 
 __all__ = [
     "ApprovalConflict",
+    "approval_class",
     "aware",
     "cancel_open",
     "cancel_pending",
