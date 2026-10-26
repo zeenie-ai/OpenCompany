@@ -208,14 +208,16 @@ def update_note(row: Any) -> Optional[str]:
         payload["edited_by_owner"] = True
     if row.status == "failed" and row.outcome_error:
         payload["error"] = row.outcome_error[:300]
+    if row.status == "discarded" and row.note:
+        payload["owner_note"] = row.note
     return f"[update]{json.dumps(payload, ensure_ascii=False, separators=(', ', ': '))}[/update]"
 
 
 async def tell_employee(database: Any, row: Any) -> None:
     """Leave the outcome for the employee's next turn in the chat (its
-    session is the workflow's)."""
+    session is the workflow's). A call its turn waits on hears it there."""
     text = update_note(row)
-    if text is None or not row.workflow_id:
+    if text is None or not row.workflow_id or row.runtime == "turn":
         return
     try:
         from services.chat.notes import upsert_note

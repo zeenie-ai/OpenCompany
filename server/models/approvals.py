@@ -33,7 +33,9 @@ one of three kinds (``kind``):
     failed -> cancelled           Dismiss (an effect row)
     pending | approved | discarded -> expired | cancelled
 
-Every move is a compare-and-swap on ``revision``. ``ApprovalDecision`` keeps
+A held call its agent's turn waits on (``runtime: turn``, RFC-0007 §4.6) has
+no Undo or Restore; a Retry makes it a draft. A Discard keeps the owner's
+``note``. Every move is a compare-and-swap on ``revision``. ``ApprovalDecision`` keeps
 the owner's decisions; the same ``decision_key`` again is a no-op.
 
 ``WorkflowRule`` is a workflow's Ask first rule, read when something would
@@ -67,6 +69,8 @@ class ApprovalRequest(SQLModel, table=True):
     generation: int = Field(default=0)
     execution_id: Optional[str] = Field(default=None, max_length=255)
     #: ``temporal`` or ``local``: a local wait cannot outlive its process.
+    #: ``turn``: a held call its agent's turn waits on (RFC-0007 §4.6); it
+    #: has no Undo or Restore, and its turn hears how it went.
     runtime: str = Field(default="local", max_length=20)
     status: str = Field(default="pending", index=True, max_length=20)
     #: ``gate``, ``tool_call`` or ``effect`` (see the module docstring).
@@ -116,6 +120,9 @@ class ApprovalRequest(SQLModel, table=True):
     # ---- the decision and what came of it ----
     #: ``owner``, or ``auto`` when Ask first was off.
     approved_by: Optional[str] = Field(default=None, max_length=20)
+    #: What the owner told the employee on declining (the chat's message
+    #: limit).
+    note: Optional[str] = Field(default=None, max_length=50000)
     #: Undo works until this; then it goes.
     grace_until: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     #: A discarded draft can be restored until this.

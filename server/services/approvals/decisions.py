@@ -16,6 +16,11 @@
   off midway and may have happened, once the owner has checked it. Nothing
   runs.
 
+A discard may carry the owner's ``note`` for the employee. A held call its
+agent's turn waits on (``runtime: turn``, RFC-0007 §4.6) gets no Undo grace
+and no Restore: its turn runs it, or hears the decline, at once. A retry of
+one makes it a draft again, since that turn is over.
+
 Each decision is a compare-and-swap on the row's revision, recorded with its
 ``decision_key`` in the same transaction (``approval_decisions``): the same
 key again returns the row as it is. Never imports ``nodes/``.
@@ -36,6 +41,8 @@ from services.approvals.contract import DEFAULT_TIMEOUT_HOURS, RESTORE_SECONDS, 
 from services.approvals.listeners import change_of, notify_approval_changed
 
 DECISIONS = ("send", "undo", "discard", "restore", "retry", "dismiss")
+#: The longest note a discard keeps (the chat's message limit).
+MAX_NOTE = 50000
 #: Why a decision on a row that already moved on was refused.
 SETTLED_ERRORS = {
     "approved": "already_decided",
@@ -126,23 +133,29 @@ async def decide(
     text: Any = None,
     subject: Any = None,
     confirm: bool = False,
+    note: Any = None,
     now: Optional[datetime] = None,
 ) -> Tuple[ApprovalRequest, bool]:
     """Apply a decision. Returns ``(row, idempotent)``; raises
     :class:`DecisionRefused` when it does not apply."""
-    if decision not in DECISIONS or not decision_key:
+    if decision not in DECISIONS or not decision_key or not (note is None or isinstance(note, str)):
         raise DecisionRefused("invalid_request")
+    if note is not None and len(note.strip()) > MAX_NOTE:
+        raise DecisionRefused("invalid_request", f"Keep the note under {MAX_NOTE} characters.")
     if await store.find_decision(database, row.id, decision_key) is not None:
         return (await store.get(database, row.id)) or row, True
     now = now or _utcnow()
     row = await expire_if_due(database, row, now)
     record = (decision, decision_key, actor)
     kind = row.kind or "gate"
+    turn = row.runtime == "turn"
     if decision == "send":
         if row.status != "pending":
             raise _settled(row)
         values = _send_values(row, text, subject, now)
         values["decision_key"] = decision_key
+        if turn:
+            values["grace_until"] = None
         moved = await _move(database, row, ("pending",), "approved", values, record)
     elif decision == "undo":
         grace = store.aware(row.grace_until)
@@ -153,11 +166,13 @@ async def decide(
     elif decision == "discard":
         if row.status != "pending":
             raise _settled(row)
-        if kind == "gate":
+        if turn:
+            restore = None
+        elif kind == "gate":
             restore = now + timedelta(seconds=RESTORE_SECONDS)
         else:
             restore = store.aware(row.expires_at) or now + timedelta(hours=DEFAULT_TIMEOUT_HOURS)
-        values = {"decided_at": now, "restore_until": restore, "decision_key": decision_key}
+        values = {"decided_at": now, "restore_until": restore, "decision_key": decision_key, "note": (note or "").strip() or None}
         moved = await _move(database, row, ("pending",), "discarded", values, record)
     elif decision == "restore":
         restore = store.aware(row.restore_until)
@@ -183,6 +198,8 @@ async def decide(
             "decided_at": now,
             "approved_by": "owner",
         }
+        if turn:
+            values["runtime"] = "temporal"
         moved = await _move(database, row, ("failed",), "approved", values, record)
     return moved, False
 

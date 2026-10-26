@@ -655,8 +655,8 @@ class Database:
 
     async def _migrate_approvals(self):
         """Give an older ``approval_requests`` table the columns approvals v2
-        added (held tool calls, Undo and Restore, outcomes), and an older
-        ``workflow_rules`` table its ``mode`` (RFC-0007). A draft approved
+        added (held tool calls, Undo and Restore, outcomes; RFC-0007's decline
+        ``note``), and an older ``workflow_rules`` table its ``mode``. A draft approved
         before them was handed on when it was decided, so it gets that as
         ``consumed_at`` and never reads as still undoable."""
         columns_added = {
@@ -682,6 +682,7 @@ class Database:
             "outcome": "VARCHAR(20)",
             "outcome_error": "VARCHAR(1000)",
             "outcome_at": "DATETIME",
+            "note": "VARCHAR(50000)",
         }
         try:
             async with self.engine.begin() as conn:

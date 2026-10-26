@@ -9,10 +9,12 @@ on its way) or ``recent`` (everything, newest first); default ``pending``.
 ``get_approvals {approval_ids: [...]}`` -> ``{approvals, server_time}``.
 
 ``decide_approval {approval_id, decision, decision_key, text?, subject?,
-confirm?}`` -> ``{approval, idempotent?, will_send_on_resume}``. Decisions:
-``send``, ``undo``, ``discard``, ``restore``, ``retry``, ``dismiss``
-(services/approvals/decisions.py). Sending a held tool call starts its send
-(services/approvals/execution.py). Errors: ``already_decided``,
+confirm?, note?}`` -> ``{approval, idempotent?, will_send_on_resume}``.
+Decisions: ``send``, ``undo``, ``discard`` (with the owner's ``note``),
+``restore``, ``retry``, ``dismiss`` (services/approvals/decisions.py).
+Sending a held tool call starts its send (services/approvals/execution.py),
+unless its agent's turn waits on it (``runtime: turn``) and runs it itself.
+Errors: ``already_decided``,
 ``expired``, ``cancelled``, ``too_late``, ``confirm_required``,
 ``approval_conflict``, ``send_unavailable``, ``not_found``,
 ``invalid_request``.
@@ -186,6 +188,7 @@ async def handle_decide_approval(data: Dict[str, Any], websocket: WebSocket) -> 
             text=data.get("text"),
             subject=data.get("subject"),
             confirm=bool(data.get("confirm")),
+            note=data.get("note"),
         )
     except decisions.DecisionRefused as refused:
         current = await store.get(database, approval_id) or row
@@ -199,7 +202,7 @@ async def handle_decide_approval(data: Dict[str, Any], websocket: WebSocket) -> 
     await notify_approval_changed(change_of(decided, _STAGES.get(decision, "decided")))
     if decided.status == "discarded":
         await execution.tell_employee(database, decided)
-    if (decided.kind or "gate") == "tool_call" and decision in ("send", "retry"):
+    if (decided.kind or "gate") == "tool_call" and decision in ("send", "retry") and decided.runtime != "turn":
         try:
             decided = await _start_or_revert(database, decided, row)
         except execution.SendUnavailable:
@@ -216,7 +219,9 @@ async def handle_decide_approval(data: Dict[str, Any], websocket: WebSocket) -> 
         "success": True,
         "approval": store.summary(decided, deployment_state=state),
         # A paused employee's run holds the approved draft until Resume.
-        "will_send_on_resume": (decided.kind or "gate") == "gate" and decided.status == "approved" and state in ("paused", "pausing"),
+        "will_send_on_resume": ((decided.kind or "gate") == "gate" or decided.runtime == "turn")
+        and decided.status == "approved"
+        and state in ("paused", "pausing"),
     }
 
 

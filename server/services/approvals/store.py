@@ -419,6 +419,8 @@ def summary(row: ApprovalRequest, *, deployment_state: Optional[str] = None, now
         out["context_excerpt"] = row.context_excerpt
     if row.approved_by:
         out["approved_by"] = row.approved_by
+    if row.note:
+        out["note"] = row.note
     if row.edited:
         out["edited"] = True
     grace = aware(row.grace_until)
