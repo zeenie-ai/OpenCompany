@@ -288,6 +288,15 @@ def supports_model_listing(provider: str) -> bool:
     return bool(_provider_block(provider).get("supports_model_listing", True))
 
 
+def attempt_timeout_seconds(provider: str) -> Optional[float]:
+    """How long one LLM attempt may take for ``provider``, in seconds: its
+    block's ``attempt_timeout_seconds`` (local and OpenAI-compatible
+    servers, which send nothing until the whole answer is done), else
+    ``None``, which keeps the SDK's and the LLM step's own defaults."""
+    seconds = _provider_block(provider).get("attempt_timeout_seconds")
+    return None if seconds is None else float(seconds)
+
+
 # ---------------------------------------------------------------------------
 # Max-tokens / temperature resolution
 # ---------------------------------------------------------------------------

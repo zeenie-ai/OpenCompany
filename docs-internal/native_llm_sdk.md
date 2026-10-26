@@ -147,6 +147,16 @@ the stored key as stored (no provider rewrites a key any more). The OpenAI SDK
 then sends to the configured local endpoint — traffic never reaches
 api.openai.com.
 
+**Attempt timeout** — a server that does not stream sends nothing until the
+whole answer is done, so `ollama`, `lmstudio` and `openai_compatible` declare
+`attempt_timeout_seconds: 1800` in `llm_defaults.json`
+(`services/llm/config.py::attempt_timeout_seconds`). `OpenAIProvider` gives
+their client that read timeout (the SDK's own is 10 minutes), and
+`agent.prepare_payload` records it as `llm_attempt_timeout_seconds`, which
+`AgentWorkflow` and the Pi workflow use as the LLM step's
+`start_to_close_timeout`. Every other provider, and a history recorded
+without the key, keeps 10 minutes.
+
 **OpenCompany Gateway** — a `chat` call that arrives with no key (the install
 has none for that provider) goes to the hosted gateway when it is connected and
 the provider's `llm_defaults.json` block has a `"gateway"` entry: the gateway's
@@ -365,7 +375,9 @@ Invalid, zero, or unrepresentable waits use exponential backoff. Native
 agent retries start at five seconds; Temporal retains its durable retry
 policy and cancellation behavior.
 
-SDK HTTP transport errors use this same boundary. OpenAI Responses failures
+SDK HTTP transport errors use this same boundary, and so does a raw
+`TimeoutError` from an SDK's own deadline (category `timeout`, retryable),
+which is never read as a programming error. OpenAI Responses failures
 in a successful HTTP body or `response.failed` event are classified before
 recording any output; valid max-token incomplete responses remain supported.
 Failed streamed attempts are withdrawn immediately, while an owner's Stop

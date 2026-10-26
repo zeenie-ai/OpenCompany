@@ -207,7 +207,9 @@ class ChatUnifier:
             if not translate_errors:
                 raise
             raise error.as_node_error() from error
-        except spec.sdk_exception_types + (httpx.TransportError, httpx.HTTPStatusError) as e:
+        except spec.sdk_exception_types + (httpx.TransportError, httpx.HTTPStatusError, TimeoutError) as e:
+            # A raw TimeoutError (an SDK's own deadline) is a timeout to
+            # classify and retry, not a programming error.
             error = _provider_failure(provider, e)
             observe_stage("normalization", provider_request_id=error.request_id)
             if route is not None:

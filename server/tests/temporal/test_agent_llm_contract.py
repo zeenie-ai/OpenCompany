@@ -483,6 +483,28 @@ class TestLlmStepActivity:
         heartbeat.assert_called_with("waiting")
 
     @pytest.mark.asyncio
+    async def test_a_request_timeout_comes_back_instead_of_a_beat(
+        self,
+        monkeypatch,
+    ):
+        # 1b.25: the old wait read the request's own TimeoutError as its
+        # interval tick and looped on the finished request without end.
+        import services.temporal.agent_activities as activity_module
+
+        heartbeat = MagicMock(side_effect=AssertionError("a finished request was read as the interval"))
+        monkeypatch.setattr(activity_module.activity, "heartbeat", heartbeat)
+
+        async def timed_out():
+            raise TimeoutError("the SDK's own deadline")
+
+        with pytest.raises(TimeoutError):
+            await activity_module._await_with_llm_heartbeats(
+                timed_out(),
+                detail="waiting",
+                interval_seconds=5,
+            )
+
+    @pytest.mark.asyncio
     async def test_step_disables_sdk_retries_and_keeps_result_keys(
         self,
         monkeypatch,
@@ -548,3 +570,62 @@ class TestLlmStepActivity:
         assert kwargs["sdk_max_retries"] == 0
         assert kwargs["translate_errors"] is False
         assert kwargs["tools"][0].name == "write_todos"
+
+
+# 1b.25: an attempt gets the timeout agent.prepare_payload recorded for its
+# provider; a cloud provider (None) and a history recorded before the key
+# keep 10 minutes.
+_ATTEMPT_TIMEOUTS = [
+    ({}, timedelta(minutes=10)),
+    ({"llm_attempt_timeout_seconds": None}, timedelta(minutes=10)),
+    ({"llm_attempt_timeout_seconds": 1800.0}, timedelta(minutes=30)),
+]
+
+
+class TestLLMAttemptTimeout:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("recorded", "expected"), _ATTEMPT_TIMEOUTS)
+    async def test_agent_workflow_takes_the_recorded_timeout(
+        self, monkeypatch, patched_workflow, recorded, expected
+    ):
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        options = []
+
+        async def fake_execute_activity(name, *, args, **kwargs):
+            if name == "agent.prepare_payload":
+                return {**_payload(), **recorded}
+            if name == "agent.execute_llm_step":
+                options.append(kwargs)
+                return {"kind": "final", "content": "done", "thinking": None,
+                        "usage": {"input_tokens": 3, "output_tokens": 1}}
+            if name in {"agent.broadcast_progress", "agent.store_output", "agent.skill.clear"}:
+                return {}
+            raise AssertionError(f"Unexpected activity {name}")
+
+        monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)
+
+        result = await AgentWorkflow().run({"node_id": "agent-1", "execution_id": "root-run-1"})
+
+        assert result["success"] is True
+        assert options[0]["start_to_close_timeout"] == expected
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("recorded", "expected"), _ATTEMPT_TIMEOUTS)
+    async def test_pi_workflow_takes_the_recorded_timeout(self, monkeypatch, recorded, expected):
+        from services.temporal import pi_workflow
+
+        options = {}
+
+        async def fake_execute_activity(name, *, args, **kwargs):
+            assert name == "agent.execute_llm_step"
+            options.update(kwargs)
+            return {"kind": "final", "content": "done"}
+
+        monkeypatch.setattr(pi_workflow.workflow, "execute_activity", fake_execute_activity)
+        value = pi_workflow.PiCodingAgentWorkflow({})
+        value._pi.begin(0, {"turn:0:model": {"kind": "model", "payload": {}}})
+
+        await value._execute_model_step({"messages": []}, {}, {"node_id": "coding", **recorded}, 0)
+
+        assert options["start_to_close_timeout"] == expected

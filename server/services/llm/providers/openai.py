@@ -97,6 +97,8 @@ class OpenAIProvider:
     ):
         import openai
 
+        from services.llm.config import attempt_timeout_seconds
+
         self.provider_name = provider_name or type(self).provider_name
         self._model_prefix = model_prefix
         kwargs: Dict[str, Any] = {
@@ -108,6 +110,11 @@ class OpenAIProvider:
         url = proxy_url or base_url
         if url:
             kwargs["base_url"] = url
+        # A provider whose server sends nothing until the whole answer is
+        # done declares a longer attempt than the SDK's default read timeout.
+        attempt = attempt_timeout_seconds(self.provider_name)
+        if attempt is not None:
+            kwargs["timeout"] = openai.Timeout(attempt, connect=openai.DEFAULT_TIMEOUT.connect)
         #: Which setting produced the URL, for failure logs (RFC-0003 D10).
         self.url_source = "proxy" if proxy_url else ("llm_defaults" if base_url else "sdk_default")
         self._client = openai.AsyncOpenAI(**kwargs)

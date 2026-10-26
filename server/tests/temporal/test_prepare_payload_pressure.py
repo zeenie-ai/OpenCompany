@@ -52,16 +52,15 @@ def prepare(monkeypatch):
         conversation=[],
         context_descriptor=None,
         compaction_service=lambda: None,
+        parameters={
+            "provider": "openai",
+            "model": "test-model",
+            "api_key": "sk-test",
+            "prompt": "hello",
+        },
     )
     database = SimpleNamespace(
-        get_node_parameters=AsyncMock(
-            return_value={
-                "provider": "openai",
-                "model": "test-model",
-                "api_key": "sk-test",
-                "prompt": "hello",
-            }
-        ),
+        get_node_parameters=AsyncMock(side_effect=lambda *_a, **_k: state.parameters),
         get_user_settings=AsyncMock(side_effect=lambda *_a, **_k: state.user_settings),
         get_workflow_control_generation=AsyncMock(return_value=None),
     )
@@ -114,6 +113,19 @@ class TestPressureControls:
         assert payload["tool_result_max_chars"] == _ENV_TOOL_LIMIT
         assert payload["transcript_budget_bytes"] == transcript_budget_bytes()
         assert payload["context_pressure_version"] == CONTEXT_PRESSURE_VERSION
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("provider", ["openai", "ollama"])
+    async def test_the_run_records_its_providers_attempt_timeout(self, prepare, provider):
+        # 1b.25: the workflow reads the attempt timeout here, never in config.
+        from services.llm.config import attempt_timeout_seconds
+
+        prepare.parameters["provider"] = provider
+
+        payload = await prepare_agent_payload(dict(_CONTEXT))
+
+        assert payload["llm_attempt_timeout_seconds"] == attempt_timeout_seconds(provider)
+        assert (payload["llm_attempt_timeout_seconds"] is None) is (provider == "openai")
 
     @pytest.mark.asyncio
     async def test_the_users_tool_limit_beats_the_env_value(self, prepare):

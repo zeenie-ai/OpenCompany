@@ -384,18 +384,17 @@ async def _await_with_llm_heartbeats(
     detail: str,
     interval_seconds: float = 20.0,
 ) -> Any:
-    """Await one buffered SDK request while heartbeating the activity."""
+    """Await one buffered SDK request while heartbeating the activity. The
+    request's own errors, a ``TimeoutError`` among them, come back as they
+    are (``task.result()``), never mistaken for the heartbeat interval."""
 
     task = asyncio.ensure_future(awaitable)
     try:
         while True:
-            try:
-                return await asyncio.wait_for(
-                    asyncio.shield(task),
-                    timeout=interval_seconds,
-                )
-            except TimeoutError:
-                activity.heartbeat(detail)
+            done, _pending = await asyncio.wait({task}, timeout=interval_seconds)
+            if done:
+                return task.result()
+            activity.heartbeat(detail)
     finally:
         if not task.done():
             task.cancel()
@@ -763,8 +762,8 @@ async def _execute_llm_step_body(payload: Dict[str, Any]) -> Dict[str, Any]:
     owns the messages list. This makes replay safe per Temporal's
     determinism contract — each activity is a pure transformation.
 
-    Heartbeats every 30 s so long LLM streams don't trip
-    ``heartbeat_timeout``.
+    Heartbeats every 20 s while it waits on the provider, so a long
+    answer doesn't trip ``heartbeat_timeout``.
     """
 
     from core.logging import log_context
@@ -1159,6 +1158,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     from services.chat.choice import effort_of, model_of
     from services.llm.config import (
         agent_model,
+        attempt_timeout_seconds,
         resolve_max_tokens,
         resolve_temperature,
     )
@@ -1835,6 +1835,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")),
         "provider": provider,
         "model": model,
+        # How long one LLM attempt may take for this provider (None: the
+        # workflow's default). The workflow reads it here, never in config.
+        "llm_attempt_timeout_seconds": attempt_timeout_seconds(provider),
         # The owner's chat choice (Quick / Thorough), for the agent that
         # answers them; the LLM step sends it (services/chat/choice.py).
         "effort": effort_of(chat_options) if chat_stream else None,

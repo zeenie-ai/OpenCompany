@@ -32,6 +32,8 @@ def dispatch(monkeypatch):
     (httpx.ReadTimeout, LLMErrorCategory.TIMEOUT),
     (httpx.ConnectError, LLMErrorCategory.CONNECTION),
     (httpx.RemoteProtocolError, LLMErrorCategory.CONNECTION),
+    # An SDK's own deadline (1b.25): an OSError on Python 3.11+, never a bug.
+    (TimeoutError, LLMErrorCategory.TIMEOUT),
 ])
 async def test_sdk_transport_failure_is_retryable_and_releases_client(dispatch, error_type, category):
     unifier, client = dispatch

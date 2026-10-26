@@ -14,7 +14,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityCancellationType
 
-from .agent_workflow import AgentWorkflow, LLM_STEP_TIMEOUT, LLM_STEP_HEARTBEAT_TIMEOUT, LLM_STEP_RETRY
+from .agent_workflow import AgentWorkflow, LLM_STEP_HEARTBEAT_TIMEOUT, LLM_STEP_RETRY, llm_attempt_timeout
 from .pi_protocol import DRIVER_QUEUE, INLINE_LIMIT, OperationLedger, canonical_digest, canonical_json, conflict, tool_operation_id
 from .pi_control import PiDescendantExecutionControl, PiLocalExecutionControl
 
@@ -257,7 +257,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
     async def _execute_model_step(self, llm_payload, context, payload, iteration):
         model_id = f"turn:{iteration}:model"
         step = await workflow.execute_activity("agent.execute_llm_step", args=[llm_payload],
-            activity_id=f"llm-step-{iteration + 1}", start_to_close_timeout=LLM_STEP_TIMEOUT,
+            activity_id=f"llm-step-{iteration + 1}", start_to_close_timeout=llm_attempt_timeout(payload),
             heartbeat_timeout=LLM_STEP_HEARTBEAT_TIMEOUT, retry_policy=LLM_STEP_RETRY)
         self._pi_calls = list(step.get("calls") or [])
         for index, call in enumerate(self._pi_calls):

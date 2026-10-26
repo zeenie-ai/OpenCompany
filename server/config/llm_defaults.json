@@ -466,6 +466,8 @@
       "_description": "Local Ollama server (OpenAI-compatible /v1). No `default_model` because the dropdown should reflect the user's actually-pulled models — fetch_models hits the user's saved {provider}_proxy URL and returns whatever Ollama reports; when the server is offline we want an empty list (a 'start your server' cue), not a placeholder name the user almost certainly doesn't have.",
       "detection_patterns": ["ollama"],
       "open_world_models": true,
+      "attempt_timeout_seconds": 1800,
+      "_attempt_timeout_note": "One LLM attempt, in seconds: OpenAIProvider's client timeout and the agent LLM step's start_to_close_timeout (recorded by agent.prepare_payload). A server that does not stream sends nothing until the whole answer is done, so a slow local model needs longer than the 10 minutes every other provider gets (RFC-0006 §11.3).",
       "auth": {
         "placeholder_key": "ollama",
         "_note": "Ollama's OpenAI-compatibility docs (docs.ollama.com/openai): api_key='ollama', 'required but ignored'. Read by services/llm/config.py::resolve_credential."
@@ -484,6 +486,8 @@
       "_description": "Local LM Studio server (pure OpenAI-compatible). Same no-default-model rule as ollama — the dropdown reflects what the user has loaded in LM Studio, not a fake placeholder.",
       "detection_patterns": ["lmstudio", "lm_studio", "lm-studio"],
       "open_world_models": true,
+      "attempt_timeout_seconds": 1800,
+      "_attempt_timeout_note": "One LLM attempt, in seconds: OpenAIProvider's client timeout and the agent LLM step's start_to_close_timeout (recorded by agent.prepare_payload). A server that does not stream sends nothing until the whole answer is done, so a slow local model needs longer than the 10 minutes every other provider gets (RFC-0006 §11.3).",
       "auth": {
         "placeholder_key": "lm-studio",
         "_note": "LM Studio's OpenAI-compatibility docs use api_key='lm-studio'; the server needs no key unless API tokens are enabled. Read by services/llm/config.py::resolve_credential."
@@ -502,6 +506,8 @@
       "_description": "User-named OpenAI-compatible endpoints: llama.cpp, vLLM, a LiteLLM proxy, a second Ollama host, and so on. No base_url and no default_model: each endpoint is its own provider reference, openai_compatible:<slug>, whose resolved base URL and model list are stored on its credential rows when it is saved (RFC-0003 D13). This block supplies the fallbacks every endpoint shares.",
       "detection_patterns": [],
       "open_world_models": true,
+      "attempt_timeout_seconds": 1800,
+      "_attempt_timeout_note": "One LLM attempt, in seconds: OpenAIProvider's client timeout and the agent LLM step's start_to_close_timeout (recorded by agent.prepare_payload). A server that does not stream sends nothing until the whole answer is done, so a slow model needs longer than the 10 minutes every other provider gets (RFC-0006 §11.3).",
       "auth": {
         "placeholder_key": "sk-no-key-required",
         "_note": "Sent when an endpoint has no key: the value llama.cpp's server README uses in its OpenAI client example. Servers without auth ignore it, and the OpenAI SDK refuses an empty key."

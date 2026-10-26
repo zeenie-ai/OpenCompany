@@ -88,11 +88,21 @@ from .execution_control import ExecutionControl
 # reasoning models; tool calls vary widely (python: seconds, browser:
 # minutes). Tool activities use the plugin-declared
 # ``start_to_close_timeout`` automatically — we only set defaults here
-# for the agent-specific activities.
+# for the agent-specific activities. A provider that declares a longer
+# attempt gets it through ``llm_attempt_timeout``.
 LLM_STEP_TIMEOUT = timedelta(minutes=10)
 PERSIST_TURN_TIMEOUT = timedelta(seconds=30)
 COMPACT_MEMORY_TIMEOUT = timedelta(minutes=5)
 LLM_STEP_HEARTBEAT_TIMEOUT = timedelta(minutes=1)
+
+
+def llm_attempt_timeout(payload: Dict[str, Any]) -> timedelta:
+    """One LLM-step attempt's ``start_to_close_timeout``: the provider's,
+    as ``agent.prepare_payload`` recorded it (local and OpenAI-compatible
+    servers), else ``LLM_STEP_TIMEOUT``, which a history recorded without
+    the key also gets. Options only (RFC-0006 §5 rule 6)."""
+    seconds = payload.get("llm_attempt_timeout_seconds")
+    return timedelta(seconds=seconds) if seconds else LLM_STEP_TIMEOUT
 
 
 def _declared_tool_options(node_type: str) -> Dict[str, Any]:
@@ -1000,6 +1010,7 @@ class AgentWorkflow:
             {
                 "provider": str,
                 "model": str,
+                "llm_attempt_timeout_seconds": Optional[float],  # None: LLM_STEP_TIMEOUT
                 "max_tokens": int,
                 "temperature": float,
                 "system_message": str,
@@ -3317,7 +3328,7 @@ class AgentWorkflow:
         """Native command sequence; the Pi subclass bridges this durable leaf."""
         return await workflow.execute_activity(
             "agent.execute_llm_step", args=[llm_payload],
-            activity_id=f"llm-step-{iteration + 1}", start_to_close_timeout=LLM_STEP_TIMEOUT,
+            activity_id=f"llm-step-{iteration + 1}", start_to_close_timeout=llm_attempt_timeout(payload),
             heartbeat_timeout=LLM_STEP_HEARTBEAT_TIMEOUT, retry_policy=LLM_STEP_RETRY)
 
     async def _before_runtime_model_step(self, llm_payload, context, payload, iteration, tools=None):
