@@ -23,7 +23,7 @@ in this module exists to make the correct thing the easy thing.
 |---|---|---|
 | Temporal blob **error** (activity result *and input*, workflow result) | **2,097,152 B** | server default; no custom DataConverter anywhere |
 | Temporal blob **warning** | 524,288 B → `PayloadSizeWarning`, unfiltered | |
-| Retries burned before failing | **3** — `_PayloadSizeError` is not in `NON_RETRYABLE_ERROR_TYPES` | [`_retry_policies.py`](../server/services/temporal/_retry_policies.py) |
+| Retries burned before failing | **none** since 1b.26: the SDK core fails an oversized result as `PayloadsTooLarge`, which is in `NON_RETRYABLE_ERROR_TYPES` (before, **3** attempts, each re-billing the producer) | [`_retry_policies.py`](../server/services/temporal/_retry_policies.py) |
 | `node_outputs.data` | no cap, written **3×** per store | [`activities.py`](../server/services/temporal/activities.py) |
 | WS broadcast | no size guard; payload retained in `_status` **forever** and replayed to every new client | [`status_broadcaster.py`](../server/services/status_broadcaster.py) |
 

@@ -145,10 +145,11 @@ newly connecting client, aggregated into the workflow result, copied into
 `usable_as_tool` — serialized verbatim into an LLM message.
 
 Temporal caps a blob at **2,097,152 B** for activity results *and inputs*, and
-warns at 524,288 B. `_PayloadSizeError` is not in `NON_RETRYABLE_ERROR_TYPES`,
-so exceeding the cap costs **three attempts** — re-invoking (and re-billing)
-whatever produced the payload each time — before surfacing a generic failure
-that names nothing useful.
+warns at 524,288 B. Exceeding the cap fails the activity as `PayloadsTooLarge`
+(the SDK core's failure type since temporalio 1.31). It is in
+`NON_RETRYABLE_ERROR_TYPES` (1b.26), so whatever produced the payload runs
+once; before, an oversized result cost **three attempts**, re-invoking (and
+re-billing) the producer each time.
 
 So: **large data lives on disk in the workflow workspace, and the node returns
 a reference.** `services/media/` provides that for binary media (`AudioRef`,

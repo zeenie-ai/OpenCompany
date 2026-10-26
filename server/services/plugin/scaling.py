@@ -68,6 +68,9 @@ class RetryPolicy:
             # NodeUserError fail fast; the framework surfaces the message
             # to the user / agent loop without traceback noise.
             "NodeUserError",
+            # A result over the server's payload limit is as big on the next
+            # attempt, which would run (and bill) the call again.
+            "PayloadsTooLarge",
         )
     )
 

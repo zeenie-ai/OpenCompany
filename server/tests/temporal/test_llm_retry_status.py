@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -210,4 +211,36 @@ async def test_activity_cancellation_withdraws_partial_and_cancels_provider(step
     assert cancelled.is_set()
     assert events[-1]["fields"] == {"name": "opencompany.segment_discarded", "value": {"message_id": "run-1.7.1"}}
     assert not any(event["suffix"] == "text.ended" for event in events)
+    run.assert_awaited_once()
+
+
+def test_a_result_too_big_for_temporal_is_not_retried():
+    # 1b.26: the next attempt would be as big, and would pay for it again.
+    from services.plugin.scaling import RetryPolicy
+    from services.temporal._retry_policies import LLM_STEP_RETRY, NON_RETRYABLE_ERROR_TYPES
+
+    assert "PayloadsTooLarge" in NON_RETRYABLE_ERROR_TYPES
+    assert "PayloadsTooLarge" in LLM_STEP_RETRY.non_retryable_error_types
+    assert "PayloadsTooLarge" in RetryPolicy().non_retryable_error_types
+
+
+@pytest.mark.asyncio
+async def test_a_step_that_cannot_be_built_fails_once_before_the_provider(step):
+    env, run, _broadcaster, payload = step
+    with pytest.raises(ApplicationError) as raised:
+        await env.run(execute_llm_step, {**payload, "thinking_config": {"not_a_field": True}})
+    assert raised.value.type == "LLMStepFailed" and raised.value.non_retryable
+    run.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_bug_after_the_answer_fails_once(step):
+    # The provider answered and billed: a retry would pay for it again.
+    env, run, _broadcaster, payload = step
+    run.return_value = SimpleNamespace(
+        tool_calls=None, assistant_message=None, content="done", thinking=None, usage="not a usage", finish_reason=None
+    )
+    with pytest.raises(ApplicationError) as raised:
+        await env.run(execute_llm_step, payload)
+    assert raised.value.type == "LLMStepInternalError" and raised.value.non_retryable
     run.assert_awaited_once()

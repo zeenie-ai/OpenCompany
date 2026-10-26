@@ -492,31 +492,40 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         messages_from_wire,
     )
 
-    messages = filter_empty_messages(
-        messages_from_wire(payload.get("messages") or [])
-    )
-    _ensure_llm_contents(messages)
-
-    tool_defs: List[ToolDef] = []
-    for value in payload.get("tools") or []:
-        definition = value.get("definition", value)
-        tool_defs.append(
-            ToolDef(
-                name=str(definition.get("name") or ""),
-                description=str(definition.get("description") or ""),
-                parameters=dict(
-                    definition.get("parameters")
-                    or {"type": "object", "properties": {}}
-                ),
-            )
+    # A step that cannot be built fails once, before the provider is called:
+    # a retry would build it the same way (1b.26).
+    try:
+        messages = filter_empty_messages(
+            messages_from_wire(payload.get("messages") or [])
         )
+        _ensure_llm_contents(messages)
 
-    thinking_data = payload.get("thinking_config")
-    thinking = (
-        ThinkingConfig(**thinking_data)
-        if isinstance(thinking_data, dict)
-        else None
-    )
+        tool_defs: List[ToolDef] = []
+        for value in payload.get("tools") or []:
+            definition = value.get("definition", value)
+            tool_defs.append(
+                ToolDef(
+                    name=str(definition.get("name") or ""),
+                    description=str(definition.get("description") or ""),
+                    parameters=dict(
+                        definition.get("parameters")
+                        or {"type": "object", "properties": {}}
+                    ),
+                )
+            )
+
+        thinking_data = payload.get("thinking_config")
+        thinking = (
+            ThinkingConfig(**thinking_data)
+            if isinstance(thinking_data, dict)
+            else None
+        )
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise ApplicationError(
+            f"The model request could not be built: {type(exc).__name__}: {exc}",
+            type="LLMStepFailed",
+            non_retryable=True,
+        ) from exc
     # A chat run the owner stopped ends at this step, before paying for it.
     chat_run_id = payload.get("chat_run_id")
     if isinstance(chat_run_id, str) and chat_run_id and await _chat_run_stopping(chat_run_id):
@@ -580,72 +589,83 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
             emitter.discard()
         raise
 
-    if response is _STOPPED:
-        # What the owner saw so far is the answer: the reply node posts it,
-        # saved as stopped, and the run finishes ``stopped``.
-        partial = shown_text(emitter.text).rstrip() if emitter is not None else ""
+    # The provider answered and billed: a bug from here on fails once, since
+    # a retry would pay for the same answer again (1b.26).
+    try:
+        if response is _STOPPED:
+            # What the owner saw so far is the answer: the reply node posts it,
+            # saved as stopped, and the run finishes ``stopped``.
+            partial = shown_text(emitter.text).rstrip() if emitter is not None else ""
+            if emitter is not None:
+                emitter.end(final=True)
+            return await _stopped_llm_step(payload, messages, partial=partial)
         if emitter is not None:
-            emitter.end(final=True)
-        return await _stopped_llm_step(payload, messages, partial=partial)
-    if emitter is not None:
-        # Text beside tool calls is narration; without them it is the reply.
-        emitter.end(final=not response.tool_calls)
+            # Text beside tool calls is narration; without them it is the reply.
+            emitter.end(final=not response.tool_calls)
 
-    assistant = response.assistant_message or Message(
-        role="assistant",
-        content=response.content or "",
-        tool_calls=list(response.tool_calls or []),
-    )
-    assistant_wire = message_to_wire(assistant)
-    usage = asdict(response.usage)
+        assistant = response.assistant_message or Message(
+            role="assistant",
+            content=response.content or "",
+            tool_calls=list(response.tool_calls or []),
+        )
+        assistant_wire = message_to_wire(assistant)
+        usage = asdict(response.usage)
 
-    # Persist the conversation exactly as it happened: the message list this
-    # activity just sent to the provider plus the reply it got back.
-    # ``messages`` above IS the argument handed to ``ChatUnifier.chat`` —
-    # nothing is rebuilt, inferred, or re-typed, so the stored conversation
-    # cannot drift from the request.
-    observe_stage("persistence")
-    await _save_conversation(
-        payload,
-        sent=[dict(message_to_wire(message)) for message in messages],
-        assistant_wire=dict(assistant_wire),
-    )
+        # Persist the conversation exactly as it happened: the message list this
+        # activity just sent to the provider plus the reply it got back.
+        # ``messages`` above IS the argument handed to ``ChatUnifier.chat`` —
+        # nothing is rebuilt, inferred, or re-typed, so the stored conversation
+        # cannot drift from the request.
+        observe_stage("persistence")
+        await _save_conversation(
+            payload,
+            sent=[dict(message_to_wire(message)) for message in messages],
+            assistant_wire=dict(assistant_wire),
+        )
 
-    if response.tool_calls:
-        calls = []
-        for tool_call in response.tool_calls:
-            call = {
-                "id": tool_call.id,
-                "name": tool_call.name,
-                "args": tool_call.args,
+        if response.tool_calls:
+            calls = []
+            for tool_call in response.tool_calls:
+                call = {
+                    "id": tool_call.id,
+                    "name": tool_call.name,
+                    "args": tool_call.args,
+                }
+                raw_arguments = getattr(tool_call, "raw_arguments", None)
+                parse_error = getattr(tool_call, "parse_error", None)
+                if raw_arguments is not None:
+                    call["raw_arguments"] = raw_arguments
+                if parse_error:
+                    call["parse_error"] = parse_error
+                calls.append(call)
+            result = {
+                "kind": "tool_calls",
+                "assistant_message": assistant_wire,
+                "calls": calls,
+                "usage": usage,
             }
-            raw_arguments = getattr(tool_call, "raw_arguments", None)
-            parse_error = getattr(tool_call, "parse_error", None)
-            if raw_arguments is not None:
-                call["raw_arguments"] = raw_arguments
-            if parse_error:
-                call["parse_error"] = parse_error
-            calls.append(call)
+            if payload.get("include_finish_reason"):
+                result["finish_reason"] = response.finish_reason
+            return result
+
         result = {
-            "kind": "tool_calls",
+            "kind": "final",
             "assistant_message": assistant_wire,
-            "calls": calls,
+            "content": response.content or "",
+            "thinking": response.thinking,
             "usage": usage,
         }
         if payload.get("include_finish_reason"):
             result["finish_reason"] = response.finish_reason
         return result
-
-    result = {
-        "kind": "final",
-        "assistant_message": assistant_wire,
-        "content": response.content or "",
-        "thinking": response.thinking,
-        "usage": usage,
-    }
-    if payload.get("include_finish_reason"):
-        result["finish_reason"] = response.finish_reason
-    return result
+    except ApplicationError:
+        raise
+    except Exception as exc:
+        raise ApplicationError(
+            f"The model's answer could not be handled: {type(exc).__name__}: {exc}",
+            type="LLMStepInternalError",
+            non_retryable=True,
+        ) from exc
 
 
 async def _save_conversation(

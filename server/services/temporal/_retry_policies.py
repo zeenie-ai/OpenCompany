@@ -52,6 +52,9 @@ from temporalio.common import RetryPolicy
 NON_RETRYABLE_ERROR_TYPES: tuple[str, ...] = (
     "NodeUserError",
     "InvalidEvent",
+    # A result over the server's payload limit (the SDK core's failure type)
+    # is as big on the next attempt, which would pay for it again.
+    "PayloadsTooLarge",
 )
 
 
