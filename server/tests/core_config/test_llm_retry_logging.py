@@ -55,6 +55,7 @@ def test_configured_sdk_logger_installs_filter_once_and_applies_it(monkeypatch):
 
     activity_logger = logging.getLogger("temporalio.activity")
     monkeypatch.setattr(activity_logger, "filters", [])
+    monkeypatch.setattr(logging.getLogger("temporalio.worker._workflow_instance"), "filters", [])
     monkeypatch.setattr(logging_module.logging, "basicConfig", Mock())
     monkeypatch.setattr(logging_module.structlog, "configure", Mock())
     for name in ("httpx", "httpcore"):

@@ -285,6 +285,21 @@ class ExpectedLLMRetryFilter(logging.Filter):
         return True
 
 
+class WorkflowTaskFailureFilter(logging.Filter):
+    """Log a failed workflow task at ERROR.
+
+    The SDK logs it at WARNING ("Failed activation on workflow ..."), yet a
+    workflow task that fails fails again on every retry until the code
+    changes: the workflow is stuck, not slowed down.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if getattr(record, "__temporal_error_identifier", None) == "WorkflowTaskFailure":
+            record.levelno = logging.ERROR
+            record.levelname = logging.getLevelName(logging.ERROR)
+        return True
+
+
 def configure_logging(settings: Settings) -> None:
     """Configure structured logging based on settings.
 
@@ -335,6 +350,9 @@ def configure_logging(settings: Settings) -> None:
     activity_logger = logging.getLogger("temporalio.activity")
     if not any(isinstance(item, ExpectedLLMRetryFilter) for item in activity_logger.filters):
         activity_logger.addFilter(ExpectedLLMRetryFilter())
+    workflow_logger = logging.getLogger("temporalio.worker._workflow_instance")
+    if not any(isinstance(item, WorkflowTaskFailureFilter) for item in workflow_logger.filters):
+        workflow_logger.addFilter(WorkflowTaskFailureFilter())
 
     # Configure structlog. ``merge_contextvars`` pulls fields bound via
     # ``structlog.contextvars.bind_contextvars`` (or the :func:`log_context`

@@ -78,7 +78,10 @@ This invokes `run_standalone_worker()` from `services/temporal/worker.py`. It al
 (`services/chat/relay.py`): the worker has no sockets of its own, so the chat run events and the `chat.updated` /
 `approval_lifecycle` broadcasts its activities make go to the backend over `/ws/internal`
 ([Chat Protocol → Standalone workers](./chat_protocol.md#standalone-workers)). Other broadcasts from its activities
-(node status, agent progress) still reach only its own process.
+(node status, agent progress) still reach only its own process. Run as a module, it configures logging like the
+backend (`configure_logging`), including the filters on the SDK's loggers: a failed workflow task, which the SDK logs
+at WARNING, is raised to ERROR (`core/logging.WorkflowTaskFailureFilter`), because it fails again on every retry
+until the code changes.
 
 ## System Architecture
 

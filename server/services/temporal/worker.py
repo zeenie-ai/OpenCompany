@@ -1020,4 +1020,10 @@ async def create_worker(
 if __name__ == "__main__":
     # Allow running worker standalone
     # Usage: python -m services.temporal.worker
+    from core.config import Settings
+    from core.logging import configure_logging
+
+    # The embedded worker logs through main.py's configuration; a standalone
+    # one needs its own (levels, and the filters on the SDK's loggers).
+    configure_logging(Settings())
     asyncio.run(run_standalone_worker())
