@@ -259,6 +259,12 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
     team_id = str(lead_output.get("team_id") or ctx.raw.get("team_id") or "")
     execution_id = str(lead_output.get("execution_id") or ctx.execution_id or "")
     claim = uuid.uuid4().hex
+    # The activity that claims the delivery holds its lease, so its own
+    # retry (a restart in the middle of an approval wait) re-attaches
+    # instead of answering "delivering" and leaving the draft stranded.
+    from temporalio import activity
+    info = activity.info() if activity.in_activity() else None
+    holder = f"{info.workflow_id}:{info.activity_id}" if info else None
     async with database.reserved_session() as session:
         criteria = EmployeeJob.team_id == team_id if team_id else EmployeeJob.origin_execution_id == execution_id
         found = await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == ctx.workflow_id,
@@ -270,8 +276,11 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
             return {"delivered": False, "state": "failed", "job_id": job.id, "failure": job.delivery["failure"]}
         if job.state == "delivered":
             return {"delivered": True, "state": "delivered", "job_id": job.id}
+        if job.state == "failed":
+            # Never deliver a failed job again (a refused send ends it so).
+            return {"delivered": False, "state": "failed", "job_id": job.id}
         lease = job.delivery.get("lease_until")
-        if lease and datetime.fromisoformat(lease) > _now():
+        if lease and datetime.fromisoformat(lease) > _now() and not (holder and job.delivery.get("lease_holder") == holder):
             return {"delivered": False, "state": "delivering", "job_id": job.id}
         inflight = job.delivery.get("inflight")
         node_types = {node["id"]: node["type"] for node in job.source["nodes"]}
@@ -316,7 +325,7 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
         # reattach after a crashed worker rather than treating a waiting gate
         # as an uncertain external send.
         job.result = job.result or response
-        job.delivery = {**job.delivery, "inflight": None, "claim_token": claim,
+        job.delivery = {**job.delivery, "inflight": None, "claim_token": claim, "lease_holder": holder,
                         "lease_until": (_now() + timedelta(minutes=2)).isoformat()}
         job.state = "delivering"
         job.updated_at = _now()
@@ -383,7 +392,25 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
             renewal.cancel()
             await asyncio.gather(renewal, return_exceptions=True)
         if not result.get("success"):
-            raise RuntimeError("The reviewed result could not be delivered; check its saved delivery request")
+            from services.plugin.base import NODE_WAIT_INTERRUPTED, NodeWaitInterrupted
+
+            if result.get("error_type") == NODE_WAIT_INTERRUPTED:
+                # The worker stopped in the middle of a wait: the retry
+                # re-attaches under this lease, and nothing is recorded.
+                raise NodeWaitInterrupted(str(result.get("error") or "The delivery's wait was interrupted"))
+            # A clean refusal ends the job failed, unless a Reset or an Apply
+            # ended it first.
+            async with database.reserved_session() as session:
+                current = await session.get(EmployeeJob, job.id)
+                if current.delivery.get("claim_token") == claim and current.state == "delivering":
+                    current.delivery = {**current.delivery, "inflight": None, "claim_token": None, "lease_until": None}
+                    current.state = "failed"
+                    current.updated_at = _now()
+                    await session.commit()
+                state = current.state
+            from services.employees.events import employee_changed_now
+            employee_changed_now(job.workflow_id)
+            return {"delivered": False, "state": state, "job_id": job.id}
         restored[node_id] = result.get("result", {})
         completed.append(node_id)
         async with database.reserved_session() as session:

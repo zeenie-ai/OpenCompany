@@ -14,6 +14,14 @@ Operations:
 - `deliver`: resolve the originating job by its execution or team identity.
   Assignment receipts and unaccepted task submissions cannot publish.
   Accepted work uses the original delivery configuration and approval gates.
+  On the team runtime (`EmployeeJobWorkflow`, the lead's own delivery and the
+  owner's resolution of an uncertain send) the delivery activity retries
+  without limit (`REVIEWED_DELIVERY_RETRY`): a worker restart during the
+  approval wait re-attaches to the same delivery under its lease, a sink
+  that refuses cleanly ends the job failed, and a failed job is never
+  delivered again. In a v1 graph `deliver` runs as the node's own activity
+  under the plugin's default policy, 3 attempts of up to 24 h each, so it
+  re-attaches only within those.
 
 `operation`, `lead_node_id` and `delivery_node_ids` are server-controlled
 configuration. Models can supply only the mission when this node is a tool.

@@ -5,6 +5,7 @@ from typing import Any
 from temporalio import workflow, activity
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import is_cancelled_exception
+from services.temporal._retry_policies import REVIEWED_DELIVERY_RETRY
 from services.temporal.execution_control import ExecutionControl
 
 
@@ -133,10 +134,10 @@ class EmployeeJobWorkflow:
             async with self._execution_control.action():
                 return await workflow.execute_activity("employee.job.deliver", delivery,
                     start_to_close_timeout=timedelta(days=31), heartbeat_timeout=timedelta(minutes=2),
-                    retry_policy=RetryPolicy(maximum_attempts=3))
+                    retry_policy=REVIEWED_DELIVERY_RETRY)
         return await workflow.execute_activity("employee.job.deliver", delivery,
             start_to_close_timeout=timedelta(days=31), heartbeat_timeout=timedelta(minutes=2),
-            retry_policy=RetryPolicy(maximum_attempts=3))
+            retry_policy=REVIEWED_DELIVERY_RETRY)
 
 
 @activity.defn(name="employee.job.resolve_delivery")
@@ -154,4 +155,4 @@ class EmployeeJobDeliveryWorkflow:
     async def run(self, request: dict[str, Any]) -> dict:
         return await workflow.execute_activity("employee.job.resolve_delivery", request,
             start_to_close_timeout=timedelta(days=31), heartbeat_timeout=timedelta(minutes=2),
-            retry_policy=RetryPolicy(maximum_attempts=3))
+            retry_policy=REVIEWED_DELIVERY_RETRY)

@@ -135,6 +135,22 @@ PERMIT_WAIT_RETRY: RetryPolicy = RetryPolicy(
 )
 
 
+# Reviewed delivery (``employee.job.deliver`` from EmployeeJobWorkflow and
+# from the lead itself, and ``employee.job.resolve_delivery``) waits inside
+# its activity for the owner's approval, possibly for days, and a worker
+# restart ends that attempt. The next attempt re-attaches to the same
+# delivery under its lease (``services/employees/jobs.deliver_job``), and the
+# write-ahead ``inflight`` mark keeps an external send at most once, so the
+# retries are unlimited; one that keeps failing shows as an attention item
+# (the ``activity_retry`` interceptor, limit 10).
+REVIEWED_DELIVERY_RETRY: RetryPolicy = RetryPolicy(
+    initial_interval=timedelta(seconds=2),
+    maximum_interval=timedelta(minutes=1),
+    maximum_attempts=0,
+    non_retryable_error_types=list(NON_RETRYABLE_ERROR_TYPES),
+)
+
+
 # Keep the existing Browser task policies unchanged for Temporal replay.
 # A busy claim fails immediately; cleanup must wait for its owner to return.
 BROWSER_TASK_CLAIM_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
@@ -166,6 +182,7 @@ __all__ = [
     "LLM_STEP_RETRY",
     "DELEGATION_CLEANUP_RETRY",
     "PERMIT_WAIT_RETRY",
+    "REVIEWED_DELIVERY_RETRY",
     "BROWSER_TASK_CLAIM_RETRY",
     "BROWSER_TASK_CLEANUP_RETRY",
     "frozen_retry_policy",

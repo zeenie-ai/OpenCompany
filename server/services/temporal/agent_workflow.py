@@ -69,6 +69,7 @@ from ._retry_policies import (
     DELEGATION_CLEANUP_RETRY,
     LLM_STEP_RETRY,
     PERMIT_WAIT_RETRY,
+    REVIEWED_DELIVERY_RETRY,
     frozen_retry_policy,
 )
 from .agent_context_pressure import (
@@ -3283,7 +3284,7 @@ class AgentWorkflow:
                 await workflow.execute_activity("employee.job.deliver", {**context, "team_id": result_payload.get("team_id"),
                     "outputs": {**(context.get("outputs") or {}), agent_node_id: result_payload}},
                     activity_id="employee-reviewed-delivery", start_to_close_timeout=timedelta(days=31),
-                    heartbeat_timeout=timedelta(minutes=2), retry_policy=AGENT_ACTIVITY_RETRY)
+                    heartbeat_timeout=timedelta(minutes=2), retry_policy=REVIEWED_DELIVERY_RETRY)
 
         # Final lifecycle broadcast — canvas glow goes green + FE
         # consumers of com.opencompany.agent.progress see phase="completed".

@@ -126,6 +126,7 @@ async def continue_delivery(database: Any, job_id: str, resolution_id: str) -> d
         return {"delivered": False, "state": "not_found"}
     if resolution.get("state") == "complete":
         return resolution.get("result") or {"delivered": job.state == "delivered", "state": job.state}
+    from services.plugin.base import NodeWaitInterrupted
     from services.temporal.employee_job_workflow import deliver_employee_job
     # Only the stored reviewed answer is reconstructed; the owner request
     # cannot supply a response, a recipient, a graph, or approval parameters.
@@ -136,6 +137,10 @@ async def continue_delivery(database: Any, job_id: str, resolution_id: str) -> d
             {"response": job.result, "team_id": job.team_id, "execution_id": job.origin_execution_id}}}
     try:
         result = await deliver_employee_job(context)
+    except NodeWaitInterrupted:
+        # The worker stopped in the middle of a wait: this activity's retry
+        # re-attaches; the resolution is not finished.
+        raise
     except Exception:
         # A failed external activity may already have sent. Its durable
         # inflight intent is retained for another explicit owner decision.

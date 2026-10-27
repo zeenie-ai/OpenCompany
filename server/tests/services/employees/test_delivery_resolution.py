@@ -99,6 +99,18 @@ async def test_retry_uses_saved_reviewed_response_recipient_and_approval(real_da
     assert tail.kwargs["node_id"] == "tail"
 
 
+async def test_an_interrupted_wait_is_retried_not_settled(real_database, delivery_runtime):
+    # 1b.9: the activity's retry re-attaches; the resolution stays open.
+    from services.plugin.base import NodeWaitInterrupted
+
+    await install(real_database)
+    review = await decide(real_database)
+    delivery_runtime.execute.return_value = {"success": False, "error": "The worker is stopping", "error_type": "NodeWaitInterrupted"}
+    with pytest.raises(NodeWaitInterrupted):
+        await continue_delivery(real_database, "job", review["request_id"])
+    assert (await saved(real_database)).delivery["resolutions"][review["request_id"]].get("state") != "complete"
+
+
 async def test_retry_preserves_declined_approval_and_does_not_send(real_database, delivery_runtime):
     await install(real_database, tail=False, approval=False)
     review = await decide(real_database)

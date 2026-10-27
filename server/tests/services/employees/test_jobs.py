@@ -164,3 +164,67 @@ async def test_expired_gate_claim_reattaches_and_chat_uid_is_stable(database, ru
     assert (await deliver_job(database, context("changed"), lead_node_id="lead"))["delivered"]
     assert len(ids) == 2 and ids[0] == ids[1]
     assert (await saved(database)).result == "Reviewed result"
+
+
+# 1b.9: reviewed delivery re-attaches to its own lease.
+WAIT_INTERRUPTED = {"success": False, "error": "The worker is stopping", "error_type": "NodeWaitInterrupted"}
+
+
+def attempt(number, *, workflow_id="job", activity_id="deliver"):
+    from dataclasses import replace
+    from temporalio.testing import ActivityEnvironment
+
+    env = ActivityEnvironment()
+    env.info = replace(env.info, workflow_id=workflow_id, activity_id=activity_id, attempt=number)
+    return env
+
+
+async def test_a_retry_of_the_same_delivery_reattaches_within_its_lease(database, runtime):
+    from services.plugin.base import NodeWaitInterrupted
+
+    await install(database)
+    runtime.execute.return_value = WAIT_INTERRUPTED
+    with pytest.raises(NodeWaitInterrupted):
+        await attempt(1).run(deliver_job, database, context(), lead_node_id="lead")
+    row = await saved(database)
+    # The interrupted wait records nothing.
+    assert row.state == "delivering"
+    assert row.delivery["inflight"] == "gate" and row.delivery["completed"] == []
+    assert row.delivery["lease_holder"] == "job:deliver"
+
+    # Another delivery within the lease still waits its turn.
+    other = await attempt(1, workflow_id="job:lead", activity_id="employee-reviewed-delivery").run(
+        deliver_job, database, context(), lead_node_id="lead")
+    assert other["state"] == "delivering"
+
+    runtime.execute.return_value = {"success": True, "result": {"approved": True}}
+    assert (await attempt(2).run(deliver_job, database, context(), lead_node_id="lead"))["delivered"]
+    assert (await saved(database)).state == "delivered"
+
+
+async def test_a_refused_send_fails_the_job_and_a_failed_job_is_never_delivered(database, runtime):
+    await install(database)
+    runtime.execute.return_value = {"success": False, "error": "Telegram refused the message"}
+    assert await attempt(1).run(deliver_job, database, context(), lead_node_id="lead") == {
+        "delivered": False, "state": "failed", "job_id": "job"}
+    row = await saved(database)
+    assert row.state == "failed"
+    assert (row.delivery["inflight"], row.delivery["claim_token"], row.delivery["lease_until"]) == (None, None, None)
+    sends = runtime.execute.await_count
+
+    assert (await attempt(2).run(deliver_job, database, context(), lead_node_id="lead"))["state"] == "failed"
+    assert runtime.execute.await_count == sends
+
+
+async def test_a_refusal_keeps_a_resets_cancelled(database, runtime):
+    await install(database)
+
+    async def refuse_after_reset(**_kwargs):
+        async with database.reserved_session() as session:
+            (await session.get(EmployeeJob, "job")).state = "cancelled"
+            await session.commit()
+        return {"success": False, "error": "refused"}
+
+    runtime.execute.side_effect = refuse_after_reset
+    assert (await deliver_job(database, context(), lead_node_id="lead"))["state"] == "cancelled"
+    assert (await saved(database)).state == "cancelled"
