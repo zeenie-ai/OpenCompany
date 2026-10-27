@@ -16,9 +16,12 @@ All providers use the same client-side summarization path:
 `run_native_llm_step(ChatUnifier, ...)`, then replaces the active memory
 history with a structured five-section summary. The current agent runtime does
 not enable Anthropic or OpenAI provider-managed compaction. Compaction reduces
-active context pressure and never stops an agent early, but on the Temporal
-path a summarizer that still fails after the activity's retries ends the run
-with `CompactionError` (past that point the transcript could only grow).
+active context pressure and never stops an agent early. An empty summary is a
+failure that records and replaces nothing. On the Temporal path the summarizer
+runs like an LLM step (the step's retry policy, attempt timeout and
+heartbeat): a transient provider error waits out the outage, and any other
+failure ends the run with `CompactionError` at the third attempt (past that
+point the transcript could only grow).
 
 **Inspired by:** Claude Code's structured compaction pattern
 

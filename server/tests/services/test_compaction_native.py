@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from services.compaction import CompactionService
-from services.llm.protocol import LLMResponse, Usage
+from services.llm.protocol import LLMError, LLMErrorCategory, LLMResponse, Usage
 
 
 class _Database:
@@ -79,3 +79,47 @@ async def test_compaction_uses_chat_unifier_with_native_messages(monkeypatch):
     assert "long history" in request["messages"][0].content
     assert request["sdk_max_retries"] == 0
     assert request["translate_errors"] is False
+
+
+_REQUEST = dict(session_id="session-1", node_id="agent-1", memory_content="long history " * 20,
+                provider="openai", api_key="secret", model="gpt-test")
+
+
+def _service(monkeypatch, chat):
+    for mock in (_Database.get_or_create_session_token_state, _Database.save_token_metric,
+                 _Database.save_compaction_event, _Database.update_session_token_state):
+        mock.reset_mock()
+    registry = SimpleNamespace(get_max_output_tokens=lambda *_args: 2048)
+    monkeypatch.setattr("services.model_registry.get_model_registry", lambda: registry)
+    service = CompactionService(_Database(), SimpleNamespace(compaction_enabled=True))
+    service.set_ai_service(SimpleNamespace(chat_unifier=SimpleNamespace(chat=chat)))
+    return service
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content", ["", "  \n"])
+async def test_an_empty_summary_fails_and_replaces_nothing(monkeypatch, content):
+    # 1b.27: saved behind its header, an empty reply replaced the conversation.
+    reply = LLMResponse(content=content, usage=Usage(input_tokens=40, output_tokens=0, total_tokens=40))
+    service = _service(monkeypatch, AsyncMock(return_value=reply))
+
+    result = await service.compact_context(**_REQUEST)
+
+    assert result["success"] is False and result["error"] == "empty summary"
+    assert result["usage"]["total_tokens"] == 40  # the call was billed
+    _Database.save_token_metric.assert_awaited_once()
+    _Database.save_compaction_event.assert_not_awaited()
+    assert all(call.args[1].get("cumulative_total") != 0 for call in _Database.update_session_token_state.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_an_llm_error_is_raised_only_when_asked(monkeypatch):
+    error = LLMError("private body", "openai", category=LLMErrorCategory.RATE_LIMIT, retryable=True)
+    service = _service(monkeypatch, AsyncMock(side_effect=error))
+
+    result = await service.compact_context(**_REQUEST, explicit_max_retries=0)
+    assert result["success"] is False and result["error"] == error.user_message
+
+    with pytest.raises(LLMError) as raised:
+        await service.compact_context(**_REQUEST, explicit_max_retries=0, raise_llm_errors=True)
+    assert raised.value.category == LLMErrorCategory.RATE_LIMIT

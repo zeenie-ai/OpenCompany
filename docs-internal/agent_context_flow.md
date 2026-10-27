@@ -244,9 +244,10 @@ The trigger (projected tokens against the threshold, transcript bytes against
 the budget), the applied swap (before → after counts, summary size, kept
 messages), each clear and each cut log at INFO, as does the activity
 (rendered chars in, summary chars + summarizer usage out). A summarizer
-failure after the activity's retries is terminal for the run
-(`CompactionError`), not best-effort: past that point the transcript could
-only grow until the provider rejected it.
+failure is terminal for the run (`CompactionError`), not best-effort: a
+transient provider error waits out the outage like an LLM step, and any other
+failure (an empty summary among them) ends the run at the third attempt. Past
+that point the transcript could only grow until the provider rejected it.
 
 - **Load failures raise.** `agent.prepare_payload` raises
   `ApplicationError("ConversationLoadFailed")` (retryable) when the row

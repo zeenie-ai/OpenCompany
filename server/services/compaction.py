@@ -305,16 +305,17 @@ class CompactionService:
         model: str,
         *,
         explicit_max_retries: int = 2,
-        stop_on_user_action: bool = False,
+        raise_llm_errors: bool = False,
     ) -> Dict[str, Any]:
         """Perform compaction by summarizing conversation history.
 
         Uses the AI service to generate a structured summary following Claude Code pattern.
 
-        A failed summarizer call returns ``success: False``. With
-        ``stop_on_user_action``, a failure only the user can fix (a spent
-        allowance or exhausted credits, a rejected key, missing access) raises
-        the :class:`LLMError` instead, since retrying compaction cannot help.
+        A failed summarizer call, or an empty summary, returns ``success:
+        False`` and records nothing, so an empty reply never replaces the
+        conversation. With ``raise_llm_errors`` a summarizer
+        :class:`LLMError` raises instead, for a caller that retries or stops
+        on it the way it does for an LLM step (the Temporal activity).
         """
         if not self._ai_service:
             logger.warning("[Compaction] AI service not wired")
@@ -388,6 +389,11 @@ Provide a concise but complete summary."""
                 iteration=0,
             )
             summary = _extract_text_from_response(response.content)
+            if not summary.strip():
+                # Saved behind the header below, an empty reply would replace
+                # the whole conversation.
+                logger.error("[Compaction] Failed: empty summary")
+                return {"success": False, "error": "empty summary", "usage": compaction_usage}
 
             new_memory = f"# Conversation Summary (Compacted)\n*Generated: {datetime.now(timezone.utc).isoformat()}*\n\n{summary}"
 
@@ -403,7 +409,7 @@ Provide a concise but complete summary."""
             }
 
         except LLMError as e:
-            if stop_on_user_action and e.requires_user_action:
+            if raise_llm_errors:
                 raise
             # user_message: the raw SDK text can carry payload fragments.
             logger.error(f"[Compaction] Failed: {e.user_message}")

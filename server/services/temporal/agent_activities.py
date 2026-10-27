@@ -2703,7 +2703,9 @@ async def compact_context(payload: Dict[str, Any]) -> Dict[str, Any]:
             "model": str,
         }
 
-    Returns ``{"success": bool, "summary": str, "usage": dict}``.
+    Returns ``{"success": bool, "summary": str, "usage": dict}``. The
+    summarizer runs like an LLM step: it heartbeats while it waits, and the
+    workflow gives it the step's retry policy and attempt timeout.
     """
 
     from services.compaction import get_compaction_service
@@ -2756,22 +2758,26 @@ async def compact_context(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         async with log_context(**(payload.get("attribution") or {})):
-            result = await svc.compact_context(
-                session_id=str(payload.get("session_id") or "default"),
-                node_id=payload["node_id"],
-                memory_content=rendered,
-                provider=payload["provider"],
-                api_key=await _resolve_activity_api_key(payload),
-                model=payload["model"],
-                # Temporal owns activity retries; never repeat an ambiguous provider
-                # request inside the activity or SDK.
-                explicit_max_retries=0,
-                # A spent allowance or a rejected key stops the run with its
-                # reason, like an LLM step, instead of retrying compaction.
-                stop_on_user_action=True,
+            result = await _await_with_llm_heartbeats(
+                svc.compact_context(
+                    session_id=str(payload.get("session_id") or "default"),
+                    node_id=payload["node_id"],
+                    memory_content=rendered,
+                    provider=payload["provider"],
+                    api_key=await _resolve_activity_api_key(payload),
+                    model=payload["model"],
+                    # Temporal owns activity retries; never repeat an ambiguous provider
+                    # request inside the activity or SDK.
+                    explicit_max_retries=0,
+                    # Every LLM error comes back here, as for an LLM step: a
+                    # retryable one waits out the outage, and one only the owner
+                    # can fix stops the run with its reason.
+                    raise_llm_errors=True,
+                ),
+                detail="Compacting agent context",
             )
     except LLMError as error:
-        raise _as_temporal_llm_error(error) from None
+        raise _as_temporal_llm_error(error, attempt=_llm_activity_attempt()) from None
     if result.get("success") and result.get("summary"):
         usage = result.get("usage") or {}
         activity.logger.info(
@@ -2781,14 +2787,14 @@ async def compact_context(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"out={usage.get('output_tokens', 0)})"
         )
     if not result.get("success") or not result.get("summary"):
-        # Compaction is the run's pressure-relief valve. Raising (retryable)
-        # gives transient summarizer failures the activity policy's retry
-        # budget; if it still cannot compact, the workflow fails the run
+        # Compaction is the run's pressure-relief valve. A failure that is no
+        # LLM error (an empty summary, a summarizer bug) gets two more tries
+        # under the step's unlimited policy, then the workflow fails the run
         # loudly rather than letting the transcript grow unbounded.
         raise ApplicationError(
             f"Compaction failed: {result.get('error') or 'empty summary'}",
             type="CompactionFailed",
-            non_retryable=False,
+            non_retryable=_llm_activity_attempt() >= 3,
         )
     return result
 

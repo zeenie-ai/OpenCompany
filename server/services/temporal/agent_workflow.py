@@ -92,15 +92,15 @@ from .execution_control import ExecutionControl
 # attempt gets it through ``llm_attempt_timeout``.
 LLM_STEP_TIMEOUT = timedelta(minutes=10)
 PERSIST_TURN_TIMEOUT = timedelta(seconds=30)
-COMPACT_MEMORY_TIMEOUT = timedelta(minutes=5)
 LLM_STEP_HEARTBEAT_TIMEOUT = timedelta(minutes=1)
 
 
 def llm_attempt_timeout(payload: Dict[str, Any]) -> timedelta:
-    """One LLM-step attempt's ``start_to_close_timeout``: the provider's,
-    as ``agent.prepare_payload`` recorded it (local and OpenAI-compatible
-    servers), else ``LLM_STEP_TIMEOUT``, which a history recorded without
-    the key also gets. Options only (RFC-0006 §5 rule 6)."""
+    """One LLM attempt's ``start_to_close_timeout`` (the step's and
+    compaction's): the provider's, as ``agent.prepare_payload`` recorded it
+    (local and OpenAI-compatible servers), else ``LLM_STEP_TIMEOUT``, which
+    a history recorded without the key also gets. Options only (RFC-0006
+    §5 rule 6)."""
     seconds = payload.get("llm_attempt_timeout_seconds")
     return timedelta(seconds=seconds) if seconds else LLM_STEP_TIMEOUT
 
@@ -187,11 +187,12 @@ def _default_max_iterations() -> int:
         except Exception:  # noqa: BLE001
             return 200
 
-# Retry policy for the agent's own activities (LLM step, persist,
-# compact). Tool activities use their plugin's policy. Wave 12 D1:
+# Retry policy for the agent's own short activities (persist, progress,
+# cleanup). The LLM step and compaction use ``LLM_STEP_RETRY``, and tool
+# activities their plugin's policy. Wave 12 D1:
 # delegates to the shared constant so the policy's
 # non_retryable_error_types include ``NodeUserError`` — user-correctable
-# failures inside the LLM step fail fast instead of burning 3 retries.
+# failures fail fast instead of burning 3 retries.
 AGENT_ACTIVITY_RETRY: RetryPolicy = DEFAULT_ACTIVITY_RETRY
 
 # Agent/delegated children start with NO execution/run timeout, and the
@@ -2970,12 +2971,15 @@ class AgentWorkflow:
                 await self._wait_until_resumed()
                 async with self._execution_control.action():
                     try:
+                        # The summarizer is an LLM call: it waits out an outage
+                        # and gets the provider's attempt timeout, as the step does.
                         compact_result = await workflow.execute_activity(
                             "agent.compact_context",
                             args=[compact_payload],
                             activity_id=f"compact-context-{iteration + 1}",
-                            start_to_close_timeout=COMPACT_MEMORY_TIMEOUT,
-                            retry_policy=AGENT_ACTIVITY_RETRY,
+                            start_to_close_timeout=llm_attempt_timeout(payload),
+                            heartbeat_timeout=LLM_STEP_HEARTBEAT_TIMEOUT,
+                            retry_policy=LLM_STEP_RETRY,
                         )
                     except Exception as compact_error:
                         # Compaction is the run's pressure-relief valve. If it

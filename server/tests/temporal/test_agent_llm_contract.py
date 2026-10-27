@@ -612,6 +612,45 @@ class TestLLMAttemptTimeout:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(("recorded", "expected"), _ATTEMPT_TIMEOUTS)
+    async def test_compaction_runs_with_the_llm_steps_options(
+        self, monkeypatch, patched_workflow, recorded, expected
+    ):
+        # 1b.27: the summarizer waits out an outage like the step it relieves.
+        from services.temporal._retry_policies import LLM_STEP_RETRY
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        steps = []
+        options = []
+
+        async def fake_execute_activity(name, *, args, **kwargs):
+            if name == "agent.prepare_payload":
+                return {**_payload(), "compaction_threshold": 5, **recorded}
+            if name == "agent.execute_llm_step":
+                steps.append(name)
+                if len(steps) == 1:
+                    return {"kind": "tool_calls", "calls": [{"id": "missing-1", "name": "not_connected", "args": {}}],
+                            "usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}}
+                return {"kind": "final", "content": "done", "thinking": None,
+                        "usage": {"input_tokens": 5, "output_tokens": 1, "total_tokens": 6}}
+            if name == "agent.compact_context":
+                options.append(kwargs)
+                return {"success": True, "summary": "compacted history", "usage": {}}
+            if name in {"agent.broadcast_progress", "agent.store_output", "agent.skill.clear"}:
+                return {}
+            raise AssertionError(f"Unexpected activity {name}")
+
+        monkeypatch.setattr(patched_workflow, "execute_activity", fake_execute_activity)
+
+        result = await AgentWorkflow().run({"node_id": "agent-1", "execution_id": "root-run-1"})
+
+        assert result["success"] is True
+        assert options[0]["activity_id"] == "compact-context-1"
+        assert options[0]["start_to_close_timeout"] == expected
+        assert options[0]["heartbeat_timeout"] == timedelta(minutes=1)
+        assert options[0]["retry_policy"] is LLM_STEP_RETRY
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("recorded", "expected"), _ATTEMPT_TIMEOUTS)
     async def test_pi_workflow_takes_the_recorded_timeout(self, monkeypatch, recorded, expected):
         from services.temporal import pi_workflow
 
