@@ -5,7 +5,8 @@
  * current view, either hiring a new employee or one employee's page.
  *
  * The shell owns what spans views: the employee broadcasts that keep the
- * team current, the orb behind the content, the Workspace dock on the
+ * team current, the line for work that keeps retrying (header/AttentionLine),
+ * the orb behind the content, the Workspace dock on the
  * right, the Settings dialog, the Welcome guide (onboarding/, which
  * opens over the hire view on first launch) and, once the guide is
  * finished, the Get started checklist. Connection actions open the app shell's
@@ -25,6 +26,7 @@ import { useApprovalLifecycle } from './approvals/data';
 import { useEmployeeLifecycle, useEmployeesQuery } from './data/employees';
 import type { EmployeeSummary } from './data/schemas';
 import { EmployeeView } from './employee/EmployeeView';
+import { AttentionLine } from './header/AttentionLine';
 import { HomeHeader } from './header/HomeHeader';
 import { HireView } from './hire/HireView';
 import { GetStartedChecklist } from './onboarding/GetStartedChecklist';
@@ -89,6 +91,7 @@ export default function HomeShell() {
           employee={employee}
           scrolled={scrolled}
         />
+        <AttentionLine />
         {view.kind === 'employee' ? (
           <div className="relative z-10 flex min-h-0 flex-1 flex-col">
             <div ref={viewRef} key={viewKey} className="flex min-h-0 w-full flex-1 flex-col">

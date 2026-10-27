@@ -62,6 +62,7 @@ from models.employees import (  # noqa: F401 - registers SQLModel tables
     WorkflowQueuedEvent,
 )
 from models.employee_conversion import EmployeeConversion  # noqa: F401
+from models.attention import AttentionItem  # noqa: F401 - registers SQLModel tables
 from models.approvals import (  # noqa: F401 - registers SQLModel tables
     ApprovalDecision,
     ApprovalRequest,

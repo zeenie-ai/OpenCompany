@@ -575,7 +575,12 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         failure = _as_temporal_llm_error(error, attempt=attempt)
         if error.retryable:
             await _publish_llm_attempt_status(payload, error=error, delay=failure.next_retry_delay)
-            logger.warning(
+            # Logged like the interceptor logs the retry it schedules: WARN at
+            # the first, at the limit and every 10th attempt after it.
+            from ._interceptors import retry_limit, retry_warns
+
+            log = logger.warning if retry_warns(attempt + 1, retry_limit("agent.execute_llm_step")) else logger.debug
+            log(
                 "LLM retry scheduled: provider=%s category=%s attempt=%s delay_seconds=%s",
                 error.provider, error.category.value, attempt,
                 failure.next_retry_delay.total_seconds() if failure.next_retry_delay is not None else None,

@@ -384,9 +384,12 @@ Failed streamed attempts are withdrawn immediately, while an owner's Stop
 keeps the intentionally saved partial reply. A planned Temporal retry is a
 benign `ApplicationError` (`category=BENIGN`): the SDK logs it at DEBUG,
 without a traceback (`core/logging.ExpectedLLMRetryFilter`), and counts no
-failure metric; the retry itself shows at WARNING when the next attempt
-starts (the `activity_retry` interceptor). Terminal quota, credential, and
-unexpected programming failures keep their tracebacks.
+failure metric. The retry itself shows at WARNING at the first retry, at
+attempt 8 and every 10th attempt after it, at DEBUG otherwise (the
+`activity_retry` interceptor and the activity's "LLM retry scheduled" line),
+and a step still retrying past attempt 8 shows on Home as an attention item
+until it gets through. Terminal quota, credential, and unexpected
+programming failures keep their tracebacks.
 
 The legacy `factory.py` (`create_provider` / `is_native_provider` /
 `NATIVE_PROVIDERS`) was **removed** — `ChatUnifier` + `registry.py` is the

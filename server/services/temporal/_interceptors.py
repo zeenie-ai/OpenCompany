@@ -4,9 +4,11 @@ On a local-PC deployment the worker dies without SIGTERM (laptop sleep,
 hard kill, battery). Temporal re-dispatches the interrupted activity on
 the next poll — invisibly, unless something logs the attempt number.
 These interceptors give the operator log a structured
-``activity_retry`` line whenever ``activity.info().attempt > 1`` so
-"first attempt" vs "re-dispatch after worker restart" is
-distinguishable without opening the Temporal Web UI.
+``activity_retry`` line (WARN at the first retry, at the attempt limit
+and every 10th attempt after it; DEBUG otherwise) so "first attempt" vs
+"re-dispatch after worker restart" is distinguishable without opening
+the Temporal Web UI, and an activity still retrying past its limit shows
+on Home as an attention item (services/attention.py).
 
 Registration: both Worker constructions in ``worker.py`` pass
 ``interceptors=[ObservabilityWorkerInterceptor()]``.
@@ -38,6 +40,24 @@ from core.logging import get_logger, log_context
 
 logger = get_logger(__name__)
 
+#: Retries past these attempts mean an activity is stuck: an LLM call
+#: (unlimited retries through an outage) sooner than the rest.
+RETRY_LIMITS = {"agent.execute_llm_step": 8, "agent.compact_context": 8}
+DEFAULT_RETRY_LIMIT = 10
+#: Activities that wait by retrying, or whose attempts end on a timer: their
+#: attempts are no sign of trouble (names or prefixes).
+PLANNED_WAITS = ("agent.acquire_subagent_permit", "node.approvalGate.", "coding.pi_drive_turn")
+
+
+def retry_limit(activity_type: str) -> int:
+    return RETRY_LIMITS.get(activity_type, DEFAULT_RETRY_LIMIT)
+
+
+def retry_warns(attempt: int, limit: int) -> bool:
+    """A retry is WARN-worthy at the first one, at the limit and every 10th
+    attempt after it; DEBUG otherwise."""
+    return attempt == 2 or attempt == limit or (attempt > limit and attempt % 10 == 0)
+
 
 class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
     """Log start / retry / end (with outcome) for every activity.
@@ -45,6 +65,10 @@ class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
     Also binds the Temporal identifiers to the log context for the whole
     activity, under their own keys (``workflow_id`` elsewhere is the graph
     id). The LLM gateway's attribution reads them (services.gateway).
+
+    An attempt past its retry limit touches a ``stuck_retry`` attention
+    item (one line on Home), and its success resolves it. Planned waits
+    never count. The store calls are best effort.
     """
 
     async def execute_activity(self, input: ExecuteActivityInput) -> Any:
@@ -55,13 +79,20 @@ class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
             "workflow_id": info.workflow_id,
             "attempt": info.attempt,
         }
-        if info.attempt > 1:
+        planned = info.activity_type.startswith(PLANNED_WAITS)
+        limit = retry_limit(info.activity_type)
+        stuck = not planned and info.attempt > limit
+        if info.attempt > 1 and not planned and retry_warns(info.attempt, limit):
             # Re-dispatch: prior attempt died (worker crash / laptop
             # sleep / timeout) or failed retryably. WARN so ops can
             # count these without DEBUG noise.
-            logger.warning("activity_retry", **extra)
+            logger.warning("activity_retry", limit=limit, **extra)
         else:
-            logger.debug("activity_start", **extra)
+            logger.debug("activity_retry" if info.attempt > 1 else "activity_start", **extra)
+        if stuck:
+            from services import attention
+
+            await attention.touch(attention.STUCK_RETRY, f"{info.workflow_id}:{info.activity_id}")
         bound = {
             "temporal_workflow_id": info.workflow_id,
             "temporal_run_id": info.workflow_run_id,
@@ -80,6 +111,10 @@ class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
             )
             raise
         logger.debug("activity_end", outcome="success", **extra)
+        if stuck:
+            from services import attention
+
+            await attention.resolve(attention.STUCK_RETRY, f"{info.workflow_id}:{info.activity_id}")
         return result
 
 

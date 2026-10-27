@@ -1,6 +1,7 @@
 """A provider outage stays visible until the next attempt; quota fails fast."""
 
 import asyncio
+import logging
 from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
@@ -212,6 +213,21 @@ async def test_activity_cancellation_withdraws_partial_and_cancels_provider(step
     assert events[-1]["fields"] == {"name": "opencompany.segment_discarded", "value": {"message_id": "run-1.7.1"}}
     assert not any(event["suffix"] == "text.ended" for event in events)
     run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("attempt", "warned"), [(1, True), (2, False), (7, True), (8, False), (9, True)])
+async def test_a_scheduled_retry_warns_by_the_quiet_rule(step, caplog, attempt, warned):
+    # 1b.30: judged on the attempt it schedules, like the interceptor's line
+    # (WARN at the first retry, at the limit 8 and every 10th attempt).
+    env, run, _broadcaster, payload = step
+    env.info = replace(env.info, attempt=attempt)
+    run.side_effect = LLMError("private", "gemini", category=LLMErrorCategory.SERVER, retryable=True)
+    with caplog.at_level(logging.DEBUG, logger="services.temporal.agent_activities"):
+        with pytest.raises(ApplicationError):
+            await env.run(execute_llm_step, payload)
+    [line] = [record for record in caplog.records if record.getMessage().startswith("LLM retry scheduled")]
+    assert (line.levelno == logging.WARNING) is warned
 
 
 def test_a_result_too_big_for_temporal_is_not_retried():

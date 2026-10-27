@@ -183,6 +183,10 @@ async def lifespan(app: FastAPI):
     # Workspace timeline) and its cleanup on workflow delete.
     import services.workspace_steps  # noqa: F401
 
+    # services/attention.py self-registers list_attention_items (Home's
+    # line for work that keeps retrying).
+    import services.attention  # noqa: F401
+
     # Wave 13.8: services/pricing_handlers.py self-registers the 3
     # pricing handlers (get_pricing_config / save_pricing_config /
     # get_api_usage_summary). Flat module (sibling to services/pricing.py)
