@@ -1779,7 +1779,8 @@ async def _rearm_generation(control) -> None:
     """Re-establish process-local deployment state for a durable generation.
 
     Idempotent by construction: canary triggers re-register with the
-    controller keyed by listener id (no-op when already known), legacy
+    controller keyed by listener id (a known listener takes only the
+    re-sent, sanitized parameter snapshot), legacy
     listener starts use ``id_conflict_policy=USE_EXISTING``, and cron
     schedule creation preserves server-owned paused state on redeploy.
     In-process collectors for non-canary trigger types are re-armed

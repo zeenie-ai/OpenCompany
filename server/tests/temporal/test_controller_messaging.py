@@ -280,6 +280,35 @@ async def test_graph_message_preserves_existing_hashable_id_contract(runtime):
     assert controller._triggers["listener"]["listener_args"]["nodes"] == graph["nodes"]
 
 
+async def test_a_rearm_refreshes_a_known_listeners_snapshot_in_place(runtime):
+    # 1b.32: a generation started before the deploy funnel sanitized its
+    # snapshot drops the raw one at its next re-arm.
+    controller = WorkflowControlWorkflow(control_data(triggers={
+        "listener": {
+            "listener_id": "listener", "workflow_type": "TriggerListenerWorkflow", "trigger_node_id": "trigger",
+            "listener_args": {
+                "nodes": [{"id": "trigger"}], "edges": [],
+                "parameter_snapshot": {"http": {"headers": {"Authorization": "Bearer raw"}}},
+            },
+        },
+    }))
+    stored = controller._triggers["listener"]["listener_args"]
+    rearm = {
+        "listener_id": "listener", "workflow_type": "TriggerListenerWorkflow", "trigger_node_id": "trigger",
+        "listener_args": {"nodes": [], "edges": [], "parameter_snapshot": {"http": {}}},
+    }
+
+    await controller.register_trigger(rearm)
+
+    assert controller._triggers["listener"]["listener_args"] is stored
+    assert stored == {"nodes": [{"id": "trigger"}], "edges": [], "parameter_snapshot": {"http": {}}}
+
+    await controller.register_trigger({**rearm, "listener_args": {"nodes": []}})
+
+    assert stored["parameter_snapshot"] == {"http": {}}
+    assert not runtime
+
+
 def test_controller_registers_read_only_control_and_membership_validators():
     definitions = WorkflowControlWorkflow.__temporal_workflow_definition.updates
     for name in ("set_control_state", "wait_for_checkpoint", "register_execution", "unregister_execution", "replace_graph"):

@@ -652,7 +652,9 @@ the control plane is hardened against Temporal's per-run event-history ceiling
   from the persisted graph snapshot — DeploymentManager runtime state,
   in-process collectors for non-canary trigger types, and the paused posture
   (admission, trigger pause flags, cron schedule pause). Re-arm is idempotent:
-  controller `register_trigger` is keyed by listener id, legacy listener
+  controller `register_trigger` is keyed by listener id (a known listener takes
+  only the re-sent parameter snapshot, sanitized at the deploy funnel, so a
+  generation started before the sanitizer drops its raw snapshot), legacy listener
   starts use `USE_EXISTING`, cron schedule creation preserves server-owned
   pause state, and a Start node fires once per generation (its first fire
   records a `generation_start` claim in the runtime mutation ledger, which

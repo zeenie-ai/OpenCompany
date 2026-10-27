@@ -326,6 +326,12 @@ class WorkflowControlWorkflow:
     async def register_trigger(self, spec: Dict[str, Any]) -> None:
         listener_id = str(spec["listener_id"])
         if listener_id in self._triggers:
+            # A re-arm sends the generation's parameter snapshot again, as the
+            # deploy funnel sanitized it. Take it in place (poll loops hold
+            # this dict); the rest of the first registration stands.
+            snapshot = spec.get("listener_args", {}).get("parameter_snapshot")
+            if snapshot is not None:
+                self._triggers[listener_id].get("listener_args", {})["parameter_snapshot"] = snapshot
             return
         self._triggers[listener_id] = spec
         if spec["workflow_type"] == "PollingTriggerWorkflow":
