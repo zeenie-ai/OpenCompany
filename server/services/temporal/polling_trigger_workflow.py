@@ -55,10 +55,12 @@ _MAX_EVENTS_BEFORE_CONTINUE_AS_NEW = 16_000
 # Mirrors PollingTriggerNode.default_poll_interval defaults.
 _DEFAULT_POLL_INTERVAL_S = 60
 
-# Activity timeout: 4× the poll interval gives the activity plenty of
-# headroom for slow Gmail / Twitter responses without hanging forever.
-# Workflow ``RetryPolicy`` (default) handles transient failures.
+# Activity deadline: 4x the poll interval for slow responses, never more than
+# POLL_ACTIVITY_MAX_S (1b.17). Stop and rollover wait for an admitted poll
+# through all three attempts of DEFAULT_ACTIVITY_RETRY, so an hours-long
+# deadline at a long interval meant an hours-long wait behind a hung poll.
 _ACTIVITY_TIMEOUT_MULT = 4
+POLL_ACTIVITY_MAX_S = 180
 # Child runs may execute — or stay cooperatively paused — for months,
 # so they start without lifetime caps; Temporal's timeout timer keeps
 # ticking through a pause. Liveness comes from activity heartbeats.
@@ -142,7 +144,7 @@ class PollingTriggerWorkflow:
         params = listener_data.get("filter_params", {}) or {}
         poll_interval = int(params.get("poll_interval") or _DEFAULT_POLL_INTERVAL_S)
         poll_interval = max(_MIN_POLL_INTERVAL_S, poll_interval)
-        activity_timeout_s = max(30, poll_interval * _ACTIVITY_TIMEOUT_MULT)
+        activity_timeout_s = min(POLL_ACTIVITY_MAX_S, max(30, poll_interval * _ACTIVITY_TIMEOUT_MULT))
 
         # Carry seen_ids across continueAsNew. First-start payload has
         # ``seen_ids=[]`` and the first activity call is baseline-only.

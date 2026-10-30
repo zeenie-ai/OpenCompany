@@ -76,6 +76,8 @@ def _make_fake_polling_class(
     current_ids: Set[str],
     detail_payload_fn=None,
     fail_on_post_emit: bool = False,
+    setup_error: BaseException | None = None,
+    fetch_ids_error: BaseException | None = None,
 ):
     """Build a PollingTriggerNode subclass with override-able hooks.
 
@@ -92,9 +94,13 @@ def _make_fake_polling_class(
         # abstract=True suppresses registration
 
         async def setup_service(self, params):
+            if setup_error is not None:
+                raise setup_error
             return _FakeService()
 
         async def fetch_ids(self, service, params):
+            if fetch_ids_error is not None:
+                raise fetch_ids_error
             return set(current_ids)
 
         async def fetch_detail(self, service, msg_id, params):
@@ -125,6 +131,39 @@ class TestAsPollActivity:
             if inner is not None:
                 return inner
         return activity_fn
+
+    @staticmethod
+    def _credential_error():
+        error = PermissionError("Microsoft not connected. Reconnect it in Credentials.")
+        error.provider, error.reason, error.auth = "microsoft", "missing", "oauth2"
+        return error
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("hook", ["setup_error", "fetch_ids_error"])
+    async def test_an_annotated_credential_failure_is_not_retried(self, hook):
+        # 1b.17: reconnecting fixes it; a retry cannot.
+        from services.plugin import NodeUserError
+        from services.temporal._retry_policies import DEFAULT_ACTIVITY_RETRY
+
+        original = self._credential_error()
+        cls = _make_fake_polling_class("test.credential", current_ids={"a"}, **{hook: original})
+        inner = self._underlying(cls.as_poll_activity())
+        with pytest.raises(NodeUserError) as raised:
+            await inner({"node_id": "n1", "params": {}, "seen_ids": [], "baseline_only": True})
+        assert raised.value.__cause__ is original
+        assert type(raised.value).__name__ in DEFAULT_ACTIVITY_RETRY.non_retryable_error_types
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("hook", ["setup_error", "fetch_ids_error"])
+    @pytest.mark.parametrize("error", [PermissionError("the OS refused a file"), ValueError("Google Workspace not connected")])
+    async def test_other_failures_raise_unchanged(self, hook, error):
+        # A bare PermissionError, or an unannotated "not connected" (Gmail,
+        # IMAP), keeps the policy's retries.
+        cls = _make_fake_polling_class("test.unchanged", current_ids={"a"}, **{hook: error})
+        inner = self._underlying(cls.as_poll_activity())
+        with pytest.raises(type(error)) as raised:
+            await inner({"node_id": "n1", "params": {}, "seen_ids": [], "baseline_only": True})
+        assert raised.value is error
 
     @pytest.mark.asyncio
     async def test_baseline_only_returns_no_events(self):

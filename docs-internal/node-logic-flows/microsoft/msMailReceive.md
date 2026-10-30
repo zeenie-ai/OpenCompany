@@ -105,8 +105,10 @@ flowchart TD
   every cycle (both the activity and the coroutine), so a message that
   leaves the 25-item window and re-enters it later fires again. On the
   baseline pass nothing is emitted.
-- **Temporal activity** (`as_poll_activity`): `setup_service` failure
-  re-raises (Temporal retry policy owns it); a `fetch_detail` failure skips
+- **Temporal activity** (`as_poll_activity`): a `setup_service` or
+  `fetch_ids` failure re-raises (Temporal retry policy owns it), except the
+  "not connected" `PermissionError` annotated with `provider` (see Auth),
+  which is raised as `NodeUserError` and not retried; a `fetch_detail` failure skips
   that id with a warning; `post_emit` failures are swallowed; the result is
   `{"events": [...], "seen_ids": list(current)}`.
 - **Legacy coroutine** (`_build_poll_coroutine`): setup failure ends the

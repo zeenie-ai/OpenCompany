@@ -805,6 +805,7 @@ class WorkflowControlWorkflow:
 
     async def _poll_trigger(self, listener_id: str, spec: Dict[str, Any]) -> None:
         from services.temporal.polling_trigger_workflow import (
+            POLL_ACTIVITY_MAX_S,
             PollingTriggerWorkflow,
             _ACTIVITY_TIMEOUT_MULT,
             _DEFAULT_POLL_INTERVAL_S,
@@ -820,7 +821,7 @@ class WorkflowControlWorkflow:
         poll_interval = int(params.get("poll_interval") or _DEFAULT_POLL_INTERVAL_S)
         # A few-second user-supplied interval overflows history in hours.
         poll_interval = max(_MIN_POLL_INTERVAL_S, poll_interval)
-        activity_timeout_s = max(30, poll_interval * _ACTIVITY_TIMEOUT_MULT)
+        activity_timeout_s = min(POLL_ACTIVITY_MAX_S, max(30, poll_interval * _ACTIVITY_TIMEOUT_MULT))
         seen_ids: set[str] = set(listener_data.get("seen_ids") or [])
         baseline = not seen_ids
         runner = PollingTriggerWorkflow()

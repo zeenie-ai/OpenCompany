@@ -49,6 +49,7 @@ import asyncio
 from typing import Any, Callable, ClassVar, Dict, Set, Tuple
 
 from core.logging import get_logger
+from services.plugin.base import NodeUserError
 from services.plugin.trigger import TriggerNode
 
 logger = get_logger(__name__)
@@ -197,7 +198,9 @@ class PollingTriggerNode(TriggerNode, abstract=True):
         I/O, mutable state) — the workflow body only sees the serialised
         result so replay stays deterministic. Per-cycle errors raise
         out of the activity; the workflow's ``RetryPolicy`` / try-except
-        owns retry semantics.
+        owns retry semantics. A credential failure annotated at its
+        source (a ``PermissionError`` with ``provider``) is raised as
+        ``NodeUserError``, which the policy does not retry.
         """
         from temporalio import activity
 
@@ -213,16 +216,27 @@ class PollingTriggerNode(TriggerNode, abstract=True):
             instance = cls()
             try:
                 service = await instance.setup_service(params)
+                current = await instance.fetch_ids(service, params)
             except Exception as exc:  # noqa: BLE001
+                if isinstance(exc, PermissionError) and getattr(exc, "provider", None):
+                    # A missing or rejected credential, annotated at its
+                    # source with .provider: reconnecting fixes it, a retry
+                    # cannot. A bare PermissionError (the OS refusing a
+                    # file) stays retryable.
+                    logger.warning(
+                        "Polling activity credential failure",
+                        node_id=node_id,
+                        node_type=cls.type,
+                        error=str(exc),
+                    )
+                    raise NodeUserError(str(exc)) from exc
                 logger.error(
-                    "Polling activity setup failed",
+                    "Polling activity setup or fetch_ids failed",
                     node_id=node_id,
                     node_type=cls.type,
                     error=str(exc),
                 )
                 raise
-
-            current = await instance.fetch_ids(service, params)
 
             if baseline_only:
                 # First call after workflow start: establish the seen

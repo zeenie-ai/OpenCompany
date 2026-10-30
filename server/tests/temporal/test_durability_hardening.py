@@ -369,6 +369,63 @@ async def test_controller_seeds_carried_state_and_restarts_poll_loops(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("interval", "expected"), [(5, 120), (45, 180), (60, 180), (3600, 180)])
+async def test_the_legacy_poll_deadline_is_capped(monkeypatch, interval, expected):
+    # 1b.17: a hung poll holds Stop and rollover for minutes, not hours.
+    from services.temporal import polling_trigger_workflow as polling_module
+    from services.temporal._retry_policies import DEFAULT_ACTIVITY_RETRY
+
+    temporal_workflow = polling_module.workflow
+    monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "patched", lambda _pid: True)
+    monkeypatch.setattr(temporal_workflow, "info", _pressure_info)
+    monkeypatch.setattr(temporal_workflow, "sleep", AsyncMock())
+    activity = AsyncMock(return_value={"seen_ids": ["prior"], "events": []})
+    monkeypatch.setattr(temporal_workflow, "execute_activity", activity)
+
+    def fake_can(_listener_data):
+        raise _CanFired
+
+    monkeypatch.setattr(temporal_workflow, "continue_as_new", fake_can)
+    listener_data = _listener_data()
+    listener_data["node_type"] = "googleGmailReceive"
+    listener_data["seen_ids"] = ["prior"]
+    listener_data["filter_params"] = {"poll_interval": interval}
+    with pytest.raises(_CanFired):
+        await PollingTriggerWorkflow().run(listener_data)
+    assert activity.await_args.kwargs["start_to_close_timeout"] == timedelta(seconds=expected)
+    assert activity.await_args.kwargs["retry_policy"] is DEFAULT_ACTIVITY_RETRY
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("interval", "expected"), [(5, 120), (60, 180), (3600, 180)])
+async def test_the_controller_poll_deadline_is_capped(monkeypatch, interval, expected):
+    # Also runs the poll loop's function-local import: a name missing there
+    # would end every poll loop silently (it runs in its own asyncio task).
+    from services.temporal import workflow_control_workflow as control_module
+
+    temporal_workflow = control_module.workflow
+    monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "wait_condition", _predicate_wait)
+    monkeypatch.setattr(temporal_workflow, "sleep", AsyncMock())
+    controller = WorkflowControlWorkflow()
+    controller._can_enabled = False
+    spec = _poll_spec()
+    spec["listener_args"]["filter_params"] = {"poll_interval": interval}
+    controller._triggers[spec["listener_id"]] = spec
+    options = {}
+
+    async def poll_activity(*_args, **kwargs):
+        options.update(kwargs)
+        controller._closed = True  # one cycle, then exit
+        return {"seen_ids": ["provider-1"], "events": []}
+
+    monkeypatch.setattr(temporal_workflow, "execute_activity", poll_activity)
+    await controller._poll_trigger(spec["listener_id"], spec)
+    assert options["start_to_close_timeout"] == timedelta(seconds=expected)
+
+
+@pytest.mark.asyncio
 async def test_controller_poll_loop_writes_seen_ids_back_into_the_spec(monkeypatch):
     """The provider baseline must live in the carried spec so a rollover
     restarts the poll loop exactly where it left off."""

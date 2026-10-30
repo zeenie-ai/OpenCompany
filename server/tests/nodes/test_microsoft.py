@@ -334,6 +334,19 @@ class TestEnsureFreshToken:
                 await _auth_helper.ensure_fresh_microsoft_token("owner")
         assert getattr(exc.value, "provider", None) == "microsoft"
 
+    async def test_a_disconnected_mailbox_fails_the_poll_cycle_without_retries(self):
+        # 1b.17: the poll activity turns this annotated error into NodeUserError,
+        # which the poll's retry policy does not retry.
+        from nodes.microsoft.mail_receive import MailReceiveNode
+        from services.plugin import NodeUserError
+
+        auth = AsyncMock()
+        auth.get_oauth_tokens = AsyncMock(return_value=None)
+        poll = MailReceiveNode.as_poll_activity()
+        with patch("services.plugin.deps.get_auth_service", return_value=auth):
+            with pytest.raises(NodeUserError):
+                await poll({"node_id": "n", "params": {}, "seen_ids": [], "baseline_only": True})
+
     async def test_refresh_persists_new_token(self):
         from nodes.microsoft import _auth_helper
 
