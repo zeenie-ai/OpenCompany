@@ -297,6 +297,71 @@ async def test_live_claim_serializes_handoffs_and_renews_lease(harness, monkeypa
         await first
 
 
+def _hang_on(harness, monkeypatch, hangs):
+    """1b.15: the controller never answers the Updates ``hangs`` picks."""
+    import services.deployment.handlers as handlers
+
+    class HangingHandle(harness.Handle):
+        async def execute_update(self, name, argument, **kwargs):
+            result = await super().execute_update(name, argument, **kwargs)
+            if hangs(name, kwargs.get("id") or ""):
+                await asyncio.Event().wait()
+            return result
+
+    monkeypatch.setattr(safe_apply, "UPDATE_SECONDS", 0.05)
+    monkeypatch.setattr(handlers, "_controller_handle", lambda _control: HangingHandle())
+
+
+def _answer_again(harness, monkeypatch):
+    import services.deployment.handlers as handlers
+    monkeypatch.setattr(handlers, "_controller_handle", lambda _control: harness.Handle())
+
+
+async def _request(harness, key):
+    async with harness.database.get_session() as session:
+        return await session.get(EmployeeApply, f"apply:7:{key}")
+
+
+async def test_an_unanswered_graph_update_waits_without_rollback_and_recovery_applies_it(harness, monkeypatch):
+    _hang_on(harness, monkeypatch, lambda name, _id: name == "replace_graph")
+    result = await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="slow")
+    assert result["success"] is True and result["activation_state"] == "waiting"
+    assert not any(":rollback" in (update_id or "") for _name, _argument, update_id in harness.update_ids)
+    assert (await harness.database.get_latest_workflow_control("7")).graph_snapshot == harness.before
+    assert harness.manager._deployments["7"].nodes == harness.before["nodes"]
+    request = await _request(harness, "slow")
+    assert request.state == "applying" and request.claim_token
+    # The claim lapses with its lease; recovery applies the snapshot again.
+    async with harness.database.reserved_session() as session:
+        (await session.get(EmployeeApply, "apply:7:slow")).lease_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+        await session.commit()
+    _answer_again(harness, monkeypatch)
+    await safe_apply.recover_applies(harness.database)
+    assert (await _request(harness, "slow")).state == "applied"
+    assert (await harness.database.get_latest_workflow_control("7")).graph_snapshot == harness.operational
+
+
+async def test_an_unanswered_admission_pause_keeps_the_apply_waiting_and_recovery_bounded(harness, monkeypatch):
+    _hang_on(harness, monkeypatch, lambda name, _id: name == "pause_admissions")
+    result = await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="first")
+    assert result["activation_state"] == "waiting"
+    assert (await _request(harness, "first")).state == "waiting"
+    # The recovery loop's own call answers too, instead of stalling the loop.
+    await asyncio.wait_for(safe_apply.recover_applies(harness.database), timeout=5)
+    assert (await _request(harness, "first")).state == "waiting"
+    _answer_again(harness, monkeypatch)
+    await safe_apply.recover_applies(harness.database)
+    assert (await _request(harness, "first")).state == "applied"
+
+
+async def test_an_unanswered_rollback_leaves_the_apply_waiting_not_failed(harness, monkeypatch):
+    harness.fail = True  # the forward replace_graph fails once
+    _hang_on(harness, monkeypatch, lambda _name, update_id: ":rollback-pause:" in update_id)
+    result = await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="undo")
+    assert result["activation_state"] == "waiting"
+    assert (await _request(harness, "undo")).state == "applying"
+
+
 async def test_restart_recovers_expired_applying_lease(harness):
     async with harness.database.reserved_session() as session:
         session.add(EmployeeApply(id="apply:7:expired", workflow_id="7", owner_id="owner", state="applying", resume_after=True,

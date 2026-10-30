@@ -75,8 +75,9 @@ class ControllerExecutionMissing(RuntimeError):
 # Maps workflow_id -> asyncio.Task for parallel workflow deployments.
 _deployment_tasks: Dict[str, asyncio.Task] = {}
 
-# A socket only waits on these tasks. Disconnecting a waiter must not undo a
-# durable Stop, and status polling must never start a second checkpoint drain.
+# A socket only waits on these tasks, and at most _TRANSITION_ANSWER_SECONDS.
+# Disconnecting a waiter must not undo a durable Stop, and status polling must
+# never start a second checkpoint drain.
 _control_transition_tasks: Dict[tuple[str, int], asyncio.Task] = {}
 _boot_reconciliation_tasks: Dict[tuple[str, int], asyncio.Task] = {}
 _control_completion_locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
@@ -85,6 +86,9 @@ _control_completion_locks: weakref.WeakValueDictionary = weakref.WeakValueDictio
 _CONTROL_OBSERVATION_TIMEOUT_SECONDS = 1.0
 _BOOT_REARM_TIMEOUT_SECONDS = 30.0
 _BOOT_RETRY_SECONDS = 1.0
+# A Stop or Resume request answers within this, pending while its drain runs
+# on; the transition's broadcast carries the outcome (1b.15).
+_TRANSITION_ANSWER_SECONDS = 10.0
 
 
 def _control_completion_lock(workflow_id: str) -> asyncio.Lock:
@@ -132,11 +136,21 @@ def _cancel_boot_reconciliation(control) -> None:
 
 
 async def _await_versioned_transition(service: WorkflowControlService, control, *, task=None) -> Dict[str, Any]:
+    """Wait for the shared transition for at most ``_TRANSITION_ANSWER_SECONDS``.
+    A drain still running answers ``transition_pending``; it goes on in its
+    task, whose broadcast carries the outcome."""
     intent_revision, intent_status = control.revision, control.status
     intent_identity = (control.id, control.generation)
     task = task or _schedule_versioned_transition(service, control)
     try:
-        current, controller_status = await asyncio.shield(task)
+        # asyncio.wait never cancels the task, and never mistakes a TimeoutError
+        # the transition itself raised for its own bound.
+        await asyncio.wait({task}, timeout=_TRANSITION_ANSWER_SECONDS)
+        if task.done():
+            current, controller_status = task.result()
+        else:
+            current = await service.database.get_latest_workflow_control(control.workflow_id) or control
+            controller_status = None
     except asyncio.CancelledError:
         # A Reset can retire a scheduled poll before its coroutine starts.
         # Cancellation of just this socket waiter leaves task alive instead.
@@ -1434,8 +1448,9 @@ async def _finish_versioned_transition(service: WorkflowControlService, control)
         if isinstance(exc, WorkflowUpdateRPCTimeoutOrCancelledError):
             if isinstance(exc.__cause__, asyncio.CancelledError):
                 raise asyncio.CancelledError() from exc
-            # A bounded RPC poll can fail without rejecting the durable
-            # Update. Keep intent and closed admission; status can retry it.
+            # The SDK ended its wait without rejecting the durable Update (its
+            # own RPC deadline). Keep the intent and the closed admission; a
+            # later status read drives it again.
             logger.info("Workflow control acknowledgement remains pending", workflow_id=control.workflow_id,
                         revision=intent[2], error_type=type(exc).__name__)
             return latest, None
@@ -2499,6 +2514,25 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
 
 @ws_handler("workflow_id")
 async def handle_reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Reset a workflow. When the Workspace controller has not answered its
+    reset in time, the answer is ``workflow_control_transition_pending``; the
+    row stays ``resetting``, and the same Reset again finishes it."""
+    from services.temporal.update_calls import UpdatePending
+
+    try:
+        return await _reset_workflow(data, websocket)
+    except UpdatePending as exc:
+        workflow_id = data["workflow_id"]
+        service = _control_service()
+        logger.warning("Workspace cleanup has not answered; the Reset stays pending",
+                       workflow_id=workflow_id, error=str(exc))
+        latest = await service.database.get_latest_workflow_control(workflow_id)
+        payload = (await _control_payload(latest) if latest
+                   else await _with_runtime_counts(await service.get_status(workflow_id), workflow_id))
+        return {"success": False, "error": "workflow_control_transition_pending", **payload}
+
+
+async def _reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     workflow_id = data["workflow_id"]
     service = _control_service()
     current = await service.database.get_latest_workflow_control(workflow_id)

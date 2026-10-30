@@ -8,6 +8,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 
+# How long a request waits for the Workspace controller's Update (1b.15). A
+# submit then answers "still pending"; a reset raises UpdatePending, which
+# Reset answers as workflow_control_transition_pending.
+SUBMIT_UPDATE_SECONDS = 15
+RESET_UPDATE_SECONDS = 240
+
+
 def invocation_id(principal: str, workflow_id: str, node_id: str, submission_id: str) -> str:
     submission_id = str(UUID(submission_id))
     identity = json.dumps([principal, workflow_id, node_id, submission_id], separators=(",", ":"))
@@ -41,22 +48,25 @@ async def controller_status(workflow_id: str, *, client=None) -> dict | None:
         raise
 
 
-async def _controller_update(workflow_id: str, update, argument, *, update_id: str):
+async def _controller_update(workflow_id: str, update, argument, *, update_id: str, seconds: float):
+    """Send an Update to the Workspace controller, waiting at most ``seconds``
+    (``UpdatePending`` past it; the Update may still be applied later)."""
     from core.config import Settings
+    from services.temporal.update_calls import bounded_update
     from services.temporal.workspace_tasks_workflow import WorkspaceTaskControllerWorkflow
     from temporalio.client import WithStartWorkflowOperation, WorkflowUpdateFailedError
     from temporalio.common import WorkflowIDConflictPolicy
     from services.plugin import NodeUserError
 
     try:
-        return await temporal_client().execute_update_with_start_workflow(
+        return await bounded_update(temporal_client().execute_update_with_start_workflow(
             update, argument, id=update_id,
             start_workflow_operation=WithStartWorkflowOperation(
                 WorkspaceTaskControllerWorkflow.run, {"workflow_id": workflow_id},
                 id=controller_id(workflow_id), task_queue=Settings().temporal_task_queue,
                 id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
             ),
-        )
+        ), seconds)
     except WorkflowUpdateFailedError as exc:
         cause = exc.cause
         messages = {
@@ -89,7 +99,10 @@ async def workspace_task_nodes(database, workflow_id: str, control=None) -> tupl
 
 
 async def reset(workflow_id: str, request_id: str) -> dict:
-    """Durably cancel admitted tasks and await plugin cleanup before acknowledging."""
+    """Durably cancel admitted tasks and await plugin cleanup before acknowledging.
+
+    Waits at most ``RESET_UPDATE_SECONDS`` and then raises ``UpdatePending``:
+    the cleanup goes on, and the next Reset joins it."""
     from services.temporal.workspace_tasks_workflow import WorkspaceTaskControllerWorkflow
 
     state = await controller_status(workflow_id)
@@ -98,7 +111,7 @@ async def reset(workflow_id: str, request_id: str) -> dict:
     request_id = (state or {}).get("reset_request_id") or request_id
     result = await _controller_update(
         workflow_id, WorkspaceTaskControllerWorkflow.reset, request_id,
-        update_id="reset:" + uuid4().hex,
+        update_id="reset:" + uuid4().hex, seconds=RESET_UPDATE_SECONDS,
     )
     if state is not None:
         from services.llm_wait import close_diagnostic_waits
@@ -158,6 +171,7 @@ async def submit(principal: str, workflow_id: str, node_id: str, prompt: str, su
     from services.plugin import NodeUserError
     from services.plugin.deps import get_database
     from services.temporal.node_invocation import NodeInvocationWorkflow
+    from services.temporal.update_calls import UpdatePending
     from services.temporal.workspace_tasks_workflow import WorkspaceTaskControllerWorkflow
 
     # Establish the admission epoch before any saved-graph/authorization await.
@@ -248,11 +262,16 @@ async def submit(principal: str, workflow_id: str, node_id: str, prompt: str, su
     client = temporal_client()
     # The controller owns submission idempotence. A new Update ID permits a
     # retry after queue-full/reset rejection; a completed failed Update would
-    # otherwise permanently cache that transient admission result.
-    admitted = await _controller_update(
-        workflow_id, WorkspaceTaskControllerWorkflow.submit, payload,
-        update_id=f"submit:{run_id}:{uuid4().hex}",
-    )
+    # otherwise permanently cache that transient admission result. The same
+    # submission ID again is safe after "still pending": the controller
+    # dedupes it.
+    try:
+        admitted = await _controller_update(
+            workflow_id, WorkspaceTaskControllerWorkflow.submit, payload,
+            update_id=f"submit:{run_id}:{uuid4().hex}", seconds=SUBMIT_UPDATE_SECONDS,
+        )
+    except UpdatePending:
+        raise NodeUserError("Submitted; still pending. Check the task list before submitting again.") from None
     if admitted.get("status") == "duplicate":
         from temporalio.service import RPCError, RPCStatusCode
         try:

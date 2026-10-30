@@ -90,8 +90,11 @@ export function useEmployeeControl(employee: EmployeeSummary, onConnect: (provid
           : kind === 'resume'
             ? actions.resumeWorkflow(id, current.revision)
             : actions.startEmployee(id, current.revision);
-      setAwaiting({ kind, target: await run });
-      pillToast(`${employee.name} ${CONTROL_DONE[kind]}`);
+      const target = await run;
+      setAwaiting({ kind, target });
+      // A Stop or Resume whose drain is still running answers early: the
+      // label keeps saying so, and no toast claims it is done.
+      if (target.state !== 'pausing' && target.state !== 'resuming') pillToast(`${employee.name} ${CONTROL_DONE[kind]}`);
       if (kind !== 'pause') spikeOrb(SPIKE.start);
     } catch (error) {
       if (error instanceof Error && error.message === 'workflow_control_superseded') return;

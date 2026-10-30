@@ -78,6 +78,63 @@ async def test_direct_reset_barrier_failure_does_not_publish_success(monkeypatch
 
 
 @pytest.mark.parametrize("current", [None, control()])
+async def test_a_pending_workspace_cleanup_answers_pending_and_publishes_nothing(monkeypatch, current):
+    # 1b.15: the Workspace controller's reset waits at most 240 s.
+    from services.temporal.update_calls import UpdatePending
+
+    database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=current))
+    service = SimpleNamespace(database=database, get_status=AsyncMock(return_value={"state": "ready"}), transition=AsyncMock())
+    monkeypatch.setattr(handlers, "_control_service", lambda: service)
+    monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(side_effect=UpdatePending("no answer in 240 s")))
+    monkeypatch.setattr(handlers, "_control_payload", AsyncMock(return_value={"state": "ready"}))
+    monkeypatch.setattr(handlers, "_with_runtime_counts", AsyncMock(return_value={"state": "ready"}))
+    notices = broadcaster(monkeypatch)
+    data = {"workflow_id": "wf", "expected_revision": current.revision if current else 0}
+    assert await handlers.handle_reset_workflow(data, None) == {
+        "success": False, "error": "workflow_control_transition_pending", "state": "ready",
+    }
+    notices.broadcast.assert_not_awaited()
+    service.transition.assert_not_awaited()
+
+
+async def test_a_pending_workspace_cleanup_keeps_a_generation_resetting(monkeypatch):
+    from services.deployment import runtime_state
+    from services.temporal.update_calls import UpdatePending
+
+    initial, resetting = control("running", 3), control("resetting", 4)
+    statuses = []
+
+    async def transition(_current, **kwargs):
+        statuses.append(kwargs["status"])
+        return resetting
+
+    database = SimpleNamespace(
+        get_latest_workflow_control=AsyncMock(side_effect=[initial, initial, resetting]),
+        update_workflow_run_data_scope=AsyncMock(),
+    )
+    service = SimpleNamespace(database=database, transition=AsyncMock(side_effect=transition))
+    archive = AsyncMock()
+    monkeypatch.setattr(handlers, "_control_service", lambda: service)
+    monkeypatch.setattr(handlers, "_close_local_admission", Mock())
+    monkeypatch.setattr(handlers, "_broadcast_control", AsyncMock(return_value={"state": "resetting"}))
+    monkeypatch.setattr(handlers, "_signal_controller", AsyncMock())
+    monkeypatch.setattr(handlers, "_delete_cron_schedules", AsyncMock(return_value=0))
+    monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
+    monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(return_value=0))
+    monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
+    monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(side_effect=UpdatePending("no answer in 240 s")))
+    monkeypatch.setattr(handlers, "_control_payload", AsyncMock(side_effect=lambda row, **_: {"state": row.status}))
+    monkeypatch.setattr(runtime_state, "archive_and_reset_node_state", archive)
+    broadcaster(monkeypatch)
+    result = await handlers.handle_reset_workflow(
+        {"workflow_id": "wf", "expected_revision": 3, "idempotency_key": "reset-generation"}, None)
+    assert result == {"success": False, "error": "workflow_control_transition_pending", "state": "resetting"}
+    assert statuses == ["resetting"]
+    database.update_workflow_run_data_scope.assert_not_awaited()
+    archive.assert_not_awaited()
+
+
+@pytest.mark.parametrize("current", [None, control()])
 async def test_ordinary_idempotent_reset_has_no_workspace_reset_broadcast(monkeypatch, current):
     database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=current))
     payload = {"state": "ready", "can_reset": False}

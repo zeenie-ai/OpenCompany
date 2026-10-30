@@ -74,6 +74,43 @@ async def test_retry_uses_same_child_but_new_update_identity(admission):
     assert first.kwargs["update_id"] != second.kwargs["update_id"]
 
 
+async def test_a_submit_the_controller_has_not_answered_says_still_pending(admission):
+    # 1b.15: the request waits 15 s; the same submission ID again is safe.
+    from services.temporal.update_calls import UpdatePending
+
+    admission.update.side_effect = UpdatePending("no answer in 15 s")
+    with pytest.raises(NodeUserError, match="still pending"):
+        await service.submit("owner", "wf", "phone", "Read", SUBMISSION)
+    assert admission.update.await_args.kwargs["seconds"] == service.SUBMIT_UPDATE_SECONDS
+    admission.broadcast.assert_not_awaited()
+
+
+async def test_a_reset_the_controller_has_not_answered_stays_pending(admission, monkeypatch):
+    from services import llm_wait
+    from services.temporal.update_calls import UpdatePending
+
+    closed = AsyncMock()
+    monkeypatch.setattr(llm_wait, "close_diagnostic_waits", closed)
+    admission.update.side_effect = UpdatePending("no answer in 240 s")
+    with pytest.raises(UpdatePending):
+        await service.reset("wf", "reset-1")
+    assert admission.update.await_args.kwargs["seconds"] == service.RESET_UPDATE_SECONDS
+    closed.assert_not_awaited()  # the cleanup is not known done
+
+
+async def test_the_controller_update_is_bounded(monkeypatch):
+    from core import config
+    from services.temporal.update_calls import UpdatePending
+
+    async def hangs(*_args, **_kwargs):
+        await asyncio.sleep(60)
+
+    monkeypatch.setattr(config, "Settings", lambda: SimpleNamespace(temporal_task_queue="main"))
+    monkeypatch.setattr(service, "temporal_client", lambda: SimpleNamespace(execute_update_with_start_workflow=hangs))
+    with pytest.raises(UpdatePending):
+        await service._controller_update("wf", "submit", {}, update_id="submit:1", seconds=0.01)
+
+
 async def test_notification_failure_does_not_undo_committed_admission(admission):
     admission.broadcast.side_effect = RuntimeError("socket unavailable")
     assert (await service.submit("owner", "wf", "phone", "Read", SUBMISSION))["status"] == "accepted"

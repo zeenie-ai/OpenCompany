@@ -1,6 +1,7 @@
 """Reviewed conversion preserves existing identities and configuration."""
 from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 import pytest
 import nodes as _nodes  # noqa: F401 - register shipped plugins
 
@@ -212,6 +213,21 @@ async def test_apply_and_rollback_keep_configuration_identity_without_reset(real
     for node_id, parameters in source["parameters"].items():
         assert await real_database.get_node_parameters(node_id) == parameters
     assert len(calls) == 2
+
+
+async def test_a_waiting_apply_leaves_the_review_saved(real_database, monkeypatch):
+    # 1b.15: an apply the engine has not answered is not applied yet.
+    from models.employee_conversion import EmployeeConversion
+    from services.employees import safe_apply, team_runtime
+    await save_existing(real_database, "app_event")
+    monkeypatch.setattr(team_runtime, "team_runtime_error", lambda: None)
+    monkeypatch.setattr(safe_apply, "apply_saved_changes",
+                        AsyncMock(return_value={"success": True, "activation_state": "waiting"}))
+    review = await plan_conversion(real_database, "81", "owner", enabled=True)
+    applied = await apply_conversion(real_database, review["review_id"], "owner", enabled=True)
+    assert applied["activation_state"] == "waiting"
+    async with real_database.get_session() as session:
+        assert (await session.get(EmployeeConversion, review["review_id"])).state == "saved"
 
 
 async def test_later_owner_changes_require_new_review_before_applying(real_database, monkeypatch):

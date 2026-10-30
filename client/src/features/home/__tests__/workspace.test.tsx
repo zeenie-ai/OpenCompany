@@ -7,7 +7,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -40,6 +40,7 @@ vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
 }));
 
 vi.mock('../../../app/useShellActions', () => ({ enterDev: vi.fn() }));
+vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 // The browser's Take over handle (components/workspace/surface.ts), and the
 // way to give back what a claim took.
 const screenControl = vi.hoisted(() => ({ claim: vi.fn(), giveBack: vi.fn() }));
@@ -64,6 +65,7 @@ import { EMPLOYEES_QUERY_KEY } from '../data/employees';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { SPIKE, orbState } from '../orb/orb';
 import { WORKSPACE_MIN_WIDTH, loadWorkspacePrefs, useHomeStore } from '../state/homeStore';
+import { pillToast } from '../ui/pillToast';
 import { WorkspaceButton } from '../workspace/WorkspaceButton';
 import { WorkspaceDock } from '../workspace/WorkspaceDock';
 // Loaded up front so the dock's lazy import resolves from the module cache:
@@ -200,6 +202,19 @@ describe('WorkspaceDock', () => {
     renderWith([employee({ control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 4 }, 'w1') })]);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
+  });
+
+  it('does not say stopped while the stop is still draining', async () => {
+    // The server answers a Stop within 10 s even while work drains (1b.15).
+    vi.mocked(pillToast).mockClear();
+    actions.pauseWorkflow.mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'pausing', revision: 5 }, 'w1'));
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
+    renderWith([employee({ control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 4 }, 'w1') })]);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4));
+    await act(async () => {});
+    expect(pillToast).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
   });
 

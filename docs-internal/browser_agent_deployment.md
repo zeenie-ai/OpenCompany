@@ -230,7 +230,9 @@ All routes use application authentication and saved-workflow authorization.
 | `DELETE /api/browser/tasks/{submission_id}` | The same authorized identity; requests Cancel and waits for confirmed cleanup |
 | `GET /api/browser/tasks/history` | `workflow_id`, optional agent `node_id`, opaque `cursor` and `limit` between 1 and 100 |
 
-Reuse the submission UUID after a lost acknowledgement. A changed prompt or
+Reuse the submission UUID after a lost acknowledgement, or after the 400
+"Submitted; still pending. Check the task list before submitting again." that
+answers a submission the controller has not acknowledged within 15 s. A changed prompt or
 binding under the same identity fails the fingerprint check. Browser tools
 must be saved and connected before admission; clients cannot provide graphs,
 credential sources, owner URLs or CDP endpoints. Temporal remains authoritative

@@ -85,6 +85,18 @@ for its checkpoint. A disconnected socket cancels only its local waiter; the
 supervised transition and durable admission fence remain. Reset retires older
 local checkpoint polling and reports the newer control state to those waiters.
 
+No request waits on the engine without a bound
+(`services/temporal/update_calls.bounded_update`). A version 1 Stop or Resume
+answers within 10 s (`_TRANSITION_ANSWER_SECONDS`): while its drain still
+runs, the answer is `success: true` with `transition_pending: true` and the
+`pausing` or `resuming` state, the drain goes on in its task, and its
+`workflow_control_status` broadcast carries the outcome. Reset waits up to
+240 s for the Workspace task controller's cleanup; past that it answers
+`workflow_control_transition_pending` and the row stays `resetting` until the
+same Reset runs again. Safe Apply waits 30 s for each controller Update and
+otherwise answers `waiting`; `recover_applies` finishes it once its claim's
+lease lapses.
+
 ## Acknowledged Stop for new generations
 
 New generations atomically store `resource_manifest.execution_control_version=1`.

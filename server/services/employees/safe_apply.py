@@ -7,8 +7,20 @@ from datetime import datetime, timedelta, timezone
 import uuid
 from typing import Any
 from sqlmodel import select
+from core.logging import get_logger
 from models.employees import EmployeeApply, EmployeeJob
 from models.database import AgentTeam, WorkflowControlExecution
+
+logger = get_logger(__name__)
+
+# How long each controller Update of an apply waits (1b.15). Past it the
+# apply answers "waiting", and recover_applies finishes it after the lease.
+UPDATE_SECONDS = 30
+
+
+def _send(handle, name: str, argument, update_id: str):
+    from services.temporal.update_calls import bounded_update
+    return bounded_update(handle.execute_update(name, argument, id=update_id), UPDATE_SECONDS)
 
 
 async def _active(database, workflow_id):
@@ -32,7 +44,24 @@ async def _active(database, workflow_id):
 
 
 async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str, key: str, stop_work: bool = False) -> dict:
+    """Apply the saved graph to the running generation. An Update the
+    controller does not answer in ``UPDATE_SECONDS`` leaves the apply
+    ``waiting``: it is not a failure, so nothing is rolled back, and
+    ``recover_applies`` applies it again once its claim's lease lapses."""
+    from services.temporal.update_calls import UpdatePending
+
+    try:
+        return await _apply_saved_changes(database, workflow_id, owner_id=owner_id, key=key, stop_work=stop_work)
+    except UpdatePending as exc:
+        logger.warning("The workflow engine did not answer an apply Update; recovery finishes it",
+                       workflow_id=workflow_id, error=str(exc))
+        return {"success": True, "activation_state": "waiting",
+                "message": "The change is saved and will apply as soon as the workflow engine answers."}
+
+
+async def _apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str, key: str, stop_work: bool = False) -> dict:
     from core.container import container
+    from services.temporal.update_calls import UpdatePending
     from services.deployment.handlers import _controller_handle, _set_cron_pause
     from services.workflow_validator import validate_workflow
     from services.deployment.control import _graph_hash
@@ -104,7 +133,7 @@ async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str,
     # approvals, reset Context, or empty the controller's accepted queue.
     if handle:
         pause_key = identifier + ":pause" + (":" + uuid.uuid4().hex if request.state == "failed" else "")
-        await handle.execute_update("pause_admissions", request.resume_after, id=pause_key)
+        await _send(handle, "pause_admissions", request.resume_after, pause_key)
     await _set_cron_pause(workflow_id, paused=True, strict=True)
     manager = container.workflow_service()._get_deployment_manager()
     manager.pause(workflow_id)
@@ -196,7 +225,7 @@ async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str,
             await client.get_schedule_handle(description.id).update(update_schedule)
         if handle:
             await verify_claim()
-            await handle.execute_update("replace_graph", snapshot, id=identifier + ":graph:" + claim)
+            await _send(handle, "replace_graph", snapshot, identifier + ":graph:" + claim)
         if old_state:
             await verify_claim()
             changes = {"nodes": snapshot["nodes"], "edges": snapshot["edges"]}
@@ -228,7 +257,7 @@ async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str,
         if request.resume_after:
             await verify_claim()
             if handle:
-                await handle.execute_update("set_control_state", "running", id=identifier + ":resume:" + claim)
+                await _send(handle, "set_control_state", "running", identifier + ":resume:" + claim)
             await _set_cron_pause(workflow_id, paused=False, strict=True)
             await manager.resume(workflow_id)
         await restore_producers()
@@ -243,6 +272,10 @@ async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str,
             await session.commit()
         employee_changed_now(workflow_id)
         return {"success": True, "activation_state": "running" if request.resume_after else "paused"}
+    except UpdatePending:
+        # Not a failure: no rollback. The claim lapses with its lease and
+        # recover_applies applies the snapshot again.
+        raise
     except Exception:
         async with database.get_session() as session:
             current_request = await session.get(EmployeeApply, identifier)
@@ -251,8 +284,8 @@ async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str,
         # Retain the last operational graph if any part of handoff fails.
         if handle:
             await verify_claim()
-            await handle.execute_update("pause_admissions", False, id=identifier + ":rollback-pause:" + claim)
-            await handle.execute_update("replace_graph", request.previous, id=identifier + ":rollback:" + claim)
+            await _send(handle, "pause_admissions", False, identifier + ":rollback-pause:" + claim)
+            await _send(handle, "replace_graph", request.previous, identifier + ":rollback:" + claim)
         for schedule_id, previous_schedule in old_schedules:
             await verify_claim()
             await client.get_schedule_handle(schedule_id).update(lambda _input, previous_schedule=previous_schedule: ScheduleUpdate(schedule=previous_schedule))
@@ -261,7 +294,7 @@ async def apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str,
         if request.resume_after:
             await verify_claim()
             if handle:
-                await handle.execute_update("set_control_state", "running", id=identifier + ":rollback-resume:" + claim)
+                await _send(handle, "set_control_state", "running", identifier + ":rollback-resume:" + claim)
             await _set_cron_pause(workflow_id, paused=False, strict=True)
             await manager.resume(workflow_id)
         await restore_producers()

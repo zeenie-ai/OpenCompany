@@ -831,7 +831,7 @@ and server tests alike:
 | `idempotency_key_required` / `expected_revision_required` | controlled stop_chat_run | The generation mutation lacks its request identity or revision. |
 | `control_generation_conflict` | controlled stop_chat_run, Resume | The run's owning root differs from the generation currently being controlled. Refresh control; do not target the successor using the old run. |
 | `control_revision_conflict` | controlled stop_chat_run, Resume | The generation revision changed; the response/status supplies the authoritative control. This revision is distinct from the thread's revision. |
-| `workflow_control_transition_pending` | controlled stop_chat_run, Resume | A durable lifecycle transition is still in progress. Reconcile control status; the chat run remains live. |
+| `workflow_control_transition_pending` | controlled stop_chat_run, Resume, Reset | A durable lifecycle transition is still in progress. Reconcile control status; the chat run remains live. A version 1 Stop or Resume whose drain outlasts 10 s answers success with `transition_pending: true` instead; Reset answers this code when Workspace cleanup has not answered in 240 s, with the row still `resetting`. |
 | `revision_conflict` | edit, regenerate, switch | `expected_revision` is not the thread's revision. |
 | `rule_conflict` | set_ask_first | `expected_revision` is stale; the answer carries the current value. |
 | `not_editable` | edit, regenerate, decide | Not the owner's text message a run answered, not the latest answer, the editor's `default` chat, or an edited argument that is not editable. |

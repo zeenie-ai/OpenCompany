@@ -235,6 +235,39 @@ async def test_disconnect_cancels_waiter_and_preserves_durable_stop(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_a_stop_still_draining_answers_pending_and_the_drain_goes_on(monkeypatch):
+    # 1b.15: the socket request answers within the bound; the task carries on.
+    record = lifecycle(monkeypatch)
+    admitted, release = asyncio.Event(), asyncio.Event()
+
+    async def stuck(*args, **kwargs):
+        admitted.set()
+        await release.wait()
+        return {"controller_status": {}, "controlled_executions": 3}
+
+    monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=stuck))
+    monkeypatch.setattr(handlers, "_TRANSITION_ANSWER_SECONDS", 0.05)
+    outcome = await asyncio.wait_for(
+        handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None), 5)
+    assert outcome["success"] and outcome["transition_pending"] and not outcome["superseded"]
+    assert outcome["state"] == "pausing"
+    transition_task = handlers._control_transition_tasks[(record.row.id, 3)]
+    assert admitted.is_set() and not transition_task.done()
+    release.set()
+    finished, _ = await asyncio.wait_for(asyncio.shield(transition_task), 1)
+    assert finished.status == "paused" and record.row.status == "paused"
+
+
+@pytest.mark.asyncio
+async def test_a_timeout_raised_by_the_transition_is_not_read_as_pending(monkeypatch):
+    lifecycle(monkeypatch)
+    monkeypatch.setattr(execution_control, "transition_generation",
+                        AsyncMock(side_effect=TimeoutError("request timeout; tool still running")))
+    outcome = await handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None)
+    assert outcome == {"success": False, "error": "request timeout; tool still running"}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("intent", ["pausing", "resuming"])
 async def test_late_transition_after_reset_does_not_broadcast_or_reopen(monkeypatch, intent):
     record = lifecycle(monkeypatch, intent)
