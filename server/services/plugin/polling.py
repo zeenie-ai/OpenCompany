@@ -46,13 +46,39 @@ Out of scope (commit-stage)
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, ClassVar, Dict, Set, Tuple
+import json
+import time
+from typing import Any, Callable, ClassVar, Dict, Optional, Set, Tuple
 
 from core.logging import get_logger
 from services.plugin.base import NodeUserError
 from services.plugin.trigger import TriggerNode
 
 logger = get_logger(__name__)
+
+#: One poll cycle's events add up to at most this many bytes of JSON (1b.18):
+#: the bound controller_queue.event_batches puts on a queue page, under the
+#: SDK's 524,288-byte payload warning. The first event is always admitted, so a
+#: single event over the payload limit still fails its cycle (RFC-0006 12.3).
+POLL_RESULT_MAX_BYTES = 512_000
+
+
+def _oldest_first(msg_id: Any) -> tuple:
+    """Order ids numeric-as-number (IMAP uids), the rest as text after them."""
+    text = str(msg_id)
+    return (0, int(text)) if text.isdecimal() else (1, text)
+
+
+def _detail_budget_s() -> Optional[float]:
+    """Two thirds of this attempt's deadline for fetching details (1b.18): a
+    burst of new messages (one provider call each) defers its tail to the next
+    cycle instead of timing every attempt out. None outside an activity."""
+    from temporalio import activity
+
+    if not activity.in_activity():
+        return None
+    deadline = activity.info().start_to_close_timeout
+    return deadline.total_seconds() * 2 / 3 if deadline else None
 
 
 class PollingTriggerNode(TriggerNode, abstract=True):
@@ -190,8 +216,13 @@ class PollingTriggerNode(TriggerNode, abstract=True):
         Activity result (out)::
 
             {
-                "events": List[Dict],     # NEW event payloads this cycle
-                "seen_ids": List[str],    # union of prior seen + current
+                "events": List[Dict],     # new event payloads, oldest first, at most
+                                          # POLL_RESULT_MAX_BYTES of JSON (the first
+                                          # always included) and fetched within two
+                                          # thirds of the attempt's deadline
+                "seen_ids": List[str],    # the provider's current ids minus the new
+                                          # ids this cycle did not reach (they stay
+                                          # new for the next cycle)
             }
 
         Determinism: every operation runs inside the activity (network
@@ -208,6 +239,7 @@ class PollingTriggerNode(TriggerNode, abstract=True):
 
         @activity.defn(name=activity_name)
         async def _poll_cycle_activity(payload: Dict[str, Any]) -> Dict[str, Any]:
+            started = time.monotonic()
             node_id = payload.get("node_id", "")
             params = payload.get("params", {}) or {}
             prior_seen: Set[str] = set(payload.get("seen_ids") or [])
@@ -246,7 +278,14 @@ class PollingTriggerNode(TriggerNode, abstract=True):
 
             new_ids = current - prior_seen
             events: list[Dict[str, Any]] = []
-            for msg_id in new_ids:
+            attempted: Set[str] = set()
+            size = 0
+            budget = _detail_budget_s()
+            # Oldest first, so a cycle that stops early leaves the newest
+            # ids for the next one, and a retried cycle picks the same ids.
+            for msg_id in sorted(new_ids, key=_oldest_first):
+                if budget is not None and attempted and time.monotonic() - started > budget:
+                    break  # out of time: the rest stays new for the next cycle
                 try:
                     detail = await instance.fetch_detail(service, msg_id, params)
                 except Exception as exc:  # noqa: BLE001
@@ -257,16 +296,23 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                         msg_id=msg_id,
                         error=str(exc),
                     )
+                    attempted.add(msg_id)  # a failed detail stays seen, as before
                     continue
                 # The workflow needs a stable event.id for cross-cycle
                 # dedup. Fall back to the provider id when fetch_detail
                 # doesn't supply one.
                 if "id" not in detail:
                     detail["id"] = msg_id
+                # The Temporal payload encoding; the first event always fits.
+                item_bytes = len(json.dumps(detail, separators=(",", ":")))
+                if events and size + item_bytes > POLL_RESULT_MAX_BYTES:
+                    break  # this id and the ones after it stay new for the next cycle
+                attempted.add(msg_id)
                 events.append(detail)
-                # post_emit side effect (e.g. mark-as-read). Failures
-                # MUST NOT block the next emit or kill the cycle —
-                # mirror the legacy coroutine semantics.
+                size += item_bytes
+                # post_emit side effect (e.g. mark-as-read), only for an
+                # event in the result. Failures MUST NOT block the next
+                # emit or kill the cycle — mirror the legacy coroutine.
                 try:
                     await instance.post_emit(service, msg_id, params)
                 except Exception:
@@ -280,8 +326,18 @@ class PollingTriggerNode(TriggerNode, abstract=True):
             # ever got evicted). At Gmail's ~100 msgs/day cadence the
             # set hit ~36K entries in a year — ~1.4MB just for IDs,
             # serialised through Temporal payload on every cycle. Now
-            # bounded by the provider's natural window size.
-            return {"events": events, "seen_ids": list(current)}
+            # bounded by the provider's natural window size, minus the
+            # ids this cycle deferred, which stay new for the next one.
+            deferred = new_ids - attempted
+            if deferred:
+                logger.info(
+                    "Polling activity deferred ids to the next cycle",
+                    node_id=node_id,
+                    node_type=cls.type,
+                    deferred=len(deferred),
+                    result_bytes=size,
+                )
+            return {"events": events, "seen_ids": list(current - deferred)}
 
         return _poll_cycle_activity
 

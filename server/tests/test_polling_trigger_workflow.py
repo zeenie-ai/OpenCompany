@@ -92,11 +92,14 @@ def _make_fake_polling_class(
         type = cls_type
         display_name = "Test"
         # abstract=True suppresses registration
+        services: List[_FakeService] = []  # one per cycle, for the assertions
 
         async def setup_service(self, params):
             if setup_error is not None:
                 raise setup_error
-            return _FakeService()
+            service = _FakeService()
+            type(self).services.append(service)
+            return service
 
         async def fetch_ids(self, service, params):
             if fetch_ids_error is not None:
@@ -299,6 +302,91 @@ class TestAsPollActivity:
 
         # Both events still came through even though post_emit raised.
         assert {e["id"] for e in result["events"]} == {"x", "y"}
+
+
+class TestPollResultByteCap:
+    """1b.18: one cycle's events stay under the payload limit; what does not
+    fit (in bytes, or in the attempt's time) stays new for the next cycle."""
+
+    @staticmethod
+    def _cycle(cls, seen):
+        inner = TestAsPollActivity._underlying(None, cls.as_poll_activity())
+        return inner({"node_id": "n1", "params": {}, "seen_ids": list(seen), "baseline_only": False})
+
+    @staticmethod
+    def _big(msg_id):
+        return {"id": msg_id, "body": "x" * 200_000}
+
+    @pytest.mark.asyncio
+    async def test_the_cap_defers_the_rest_and_the_next_cycle_takes_it(self):
+        import json
+
+        from services.plugin.polling import POLL_RESULT_MAX_BYTES
+
+        cls = _make_fake_polling_class("test.cap", current_ids={"1", "2", "3", "4", "5"}, detail_payload_fn=self._big)
+        seen: List[str] = []
+        emitted = []
+        for _ in range(4):
+            result = await self._cycle(cls, seen)
+            emitted.append([event["id"] for event in result["events"]])
+            assert len(json.dumps(result["events"], separators=(",", ":"))) <= POLL_RESULT_MAX_BYTES + len(result["events"]) + 1
+            seen = result["seen_ids"]
+        assert emitted == [["1", "2"], ["3", "4"], ["5"], []]
+        # post_emit (mark-as-read) ran only for the emitted events.
+        assert cls.services[0].detail_calls == ["1", "2", "3"]
+        assert cls.services[0].post_emit_calls == ["1", "2"]
+
+    @pytest.mark.asyncio
+    async def test_the_first_item_is_always_admitted(self):
+        def payload(msg_id):
+            return {"id": msg_id, "body": "x" * (600_000 if msg_id == "1" else 10)}
+
+        cls = _make_fake_polling_class("test.first", current_ids={"1", "2"}, detail_payload_fn=payload)
+        first = await self._cycle(cls, [])
+        assert [event["id"] for event in first["events"]] == ["1"]
+        assert set(first["seen_ids"]) == {"1"}
+        second = await self._cycle(cls, first["seen_ids"])
+        assert [event["id"] for event in second["events"]] == ["2"]
+
+    @pytest.mark.asyncio
+    async def test_numeric_ids_are_walked_as_numbers_oldest_first(self):
+        cls = _make_fake_polling_class("test.order", current_ids={"10", "9", "2", "abc"})
+        result = await self._cycle(cls, [])
+        assert cls.services[0].detail_calls == ["2", "9", "10", "abc"]
+        assert [event["id"] for event in result["events"]] == ["2", "9", "10", "abc"]
+
+    @pytest.mark.asyncio
+    async def test_a_failed_detail_stays_attempted(self):
+        def payload(msg_id):
+            if msg_id == "2":
+                raise RuntimeError("detail failed")
+            return {"id": msg_id}
+
+        cls = _make_fake_polling_class("test.failed", current_ids={"1", "2", "3"}, detail_payload_fn=payload)
+        result = await self._cycle(cls, [])
+        assert [event["id"] for event in result["events"]] == ["1", "3"]
+        assert set(result["seen_ids"]) == {"1", "2", "3"}  # not retried, as before
+
+    @pytest.mark.asyncio
+    async def test_a_cycle_out_of_time_defers_the_rest(self, monkeypatch):
+        # Two thirds of a 3 s deadline: 2 s. A burst of slow detail calls
+        # (IMAP) must not time every attempt out.
+        from dataclasses import replace
+        from datetime import timedelta
+        from types import SimpleNamespace
+
+        from temporalio.testing import ActivityEnvironment
+
+        from services.plugin import polling
+
+        clock = iter([0.0, 0.5, 3.0])
+        monkeypatch.setattr(polling, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+        cls = _make_fake_polling_class("test.budget", current_ids={"1", "2", "3"})
+        env = ActivityEnvironment()
+        env.info = replace(env.info, start_to_close_timeout=timedelta(seconds=3))
+        result = await env.run(cls.as_poll_activity(), {"node_id": "n1", "params": {}, "seen_ids": [], "baseline_only": False})
+        assert [event["id"] for event in result["events"]] == ["1", "2"]
+        assert set(result["seen_ids"]) == {"1", "2"}
 
 
 # ---------------------------------------------------------------------------

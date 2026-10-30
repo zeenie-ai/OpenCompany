@@ -510,6 +510,8 @@ Both polling paths grew `seen: Set[str]` unboundedly:
 
 At Gmail's ~100 msgs/day / 60s poll, this hit ~36K entries / ~1.4MB just for IDs in a year. Fix: rebase `seen = current` at end of every cycle in both paths ([polling.py](../server/services/plugin/polling.py)). Items the provider no longer reports drop out. Bounded by the provider's natural window size.
 
+Since 1b.18 the activity's `seen_ids` is `current` minus the new ids a cycle defers: it walks new ids oldest first (numeric ids as numbers), stops admitting once its events would pass 512,000 bytes of JSON (`POLL_RESULT_MAX_BYTES`; the first event is always admitted) or once detail fetching has used two thirds of the attempt's deadline, and leaves the rest new for the next cycle; `post_emit` runs only for emitted events. A single event over the 2 MiB payload limit still fails its cycle.
+
 Semantic note: if a filtered item disappears then reappears (e.g. user marks an email unread again under `is:unread`), it re-emits. That's the correct semantic for visibility-filtered providers; the old unbounded set suppressed legitimate re-emits.
 
 ### 5. Template resolution against trigger output (canary path)

@@ -110,7 +110,10 @@ flowchart TD
   "not connected" `PermissionError` annotated with `provider` (see Auth),
   which is raised as `NodeUserError` and not retried; a `fetch_detail` failure skips
   that id with a warning; `post_emit` failures are swallowed; the result is
-  `{"events": [...], "seen_ids": list(current)}`.
+  `{"events": [...], "seen_ids": [...]}`: the events of at most 512,000 bytes
+  (the first always included, fetched within two thirds of the attempt's
+  deadline), and the current ids minus the new ones the cycle deferred, which
+  the next cycle takes.
 - **Legacy coroutine** (`_build_poll_coroutine`): setup failure ends the
   poller; baseline failure logs a warning and treats everything as new on the
   next cycle; per-cycle exceptions are logged and retried next interval.
