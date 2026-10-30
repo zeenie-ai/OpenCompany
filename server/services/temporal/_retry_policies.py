@@ -151,6 +151,22 @@ REVIEWED_DELIVERY_RETRY: RetryPolicy = RetryPolicy(
 )
 
 
+# Controller queue paging (``controller.queue.read`` and
+# ``controller.queue.spill``) is awaited by WorkflowControlWorkflow outside any
+# try. An exhausted policy fails the controller, and a version 1 generation
+# cannot rebuild one (``handlers._rebuild_missing_controller``), so a short
+# database outage would end the deployment. Both are idempotent (a read is
+# keyed by its mutation id, a spill by the event's hash), so they retry until
+# the database answers; one that keeps failing shows as an attention item
+# (the ``activity_retry`` interceptor, limit 10).
+QUEUE_PAGING_RETRY: RetryPolicy = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=0,
+    non_retryable_error_types=list(NON_RETRYABLE_ERROR_TYPES),
+)
+
+
 # Keep the existing Browser task policies unchanged for Temporal replay.
 # A busy claim fails immediately; cleanup must wait for its owner to return.
 BROWSER_TASK_CLAIM_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
@@ -183,6 +199,7 @@ __all__ = [
     "DELEGATION_CLEANUP_RETRY",
     "PERMIT_WAIT_RETRY",
     "REVIEWED_DELIVERY_RETRY",
+    "QUEUE_PAGING_RETRY",
     "BROWSER_TASK_CLAIM_RETRY",
     "BROWSER_TASK_CLEANUP_RETRY",
     "frozen_retry_policy",

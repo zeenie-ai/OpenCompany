@@ -75,6 +75,13 @@ async def test_no_item_up_to_the_limit_or_for_a_planned_wait(store, activity_typ
     store.resolve.assert_not_awaited()
 
 
+@pytest.mark.parametrize("activity_type", ["controller.queue.read", "controller.queue.spill"])
+async def test_controller_paging_past_its_limit_is_counted_not_a_planned_wait(store, activity_type):
+    # 1b.16: paging retries without limit, so a stuck outage must show on Home.
+    await _attempt(activity_type, 11)
+    store.touch.assert_awaited_once_with("stuck_retry", "wf:act-1")
+
+
 async def test_the_retry_log_is_quiet_between_its_warnings(store):
     await _attempt("node.httpRequest.v1", 2)
     _interceptors.logger.warning.assert_called_once()

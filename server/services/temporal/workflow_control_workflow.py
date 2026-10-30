@@ -9,7 +9,7 @@ from temporalio.common import SearchAttributeKey, SearchAttributePair
 from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
 
 from services.temporal._exits import is_workflow_bug
-from services.temporal._retry_policies import DEFAULT_ACTIVITY_RETRY
+from services.temporal._retry_policies import DEFAULT_ACTIVITY_RETRY, QUEUE_PAGING_RETRY
 from services.temporal.execution_control import ExecutionControl
 
 
@@ -410,7 +410,10 @@ class WorkflowControlWorkflow:
                     "controller_id": workflow.info().workflow_id,
                     "request_id": f"{workflow.info().run_id}:queue:{self._queue_reads}",
                     **({"review_listener_ids": [listener_id for listener_id, spec in self._triggers.items() if (spec.get("listener_args") or {}).get("node_type") == "taskTrigger"]} if read_reviews else {})},
-                    start_to_close_timeout=timedelta(seconds=60), retry_policy=DEFAULT_ACTIVITY_RETRY)
+                    # Paging retries without limit: an exhausted policy would
+                    # fail the controller, which a version 1 generation cannot
+                    # rebuild.
+                    start_to_close_timeout=timedelta(seconds=60), retry_policy=QUEUE_PAGING_RETRY)
                 incoming = [(str(item[0]), item[1]) for item in page["events"]]
                 if queue_v2:
                     if accumulator_v1:
@@ -637,7 +640,7 @@ class WorkflowControlWorkflow:
             async def spill(batch, prepend=False):
                 base = {"controller_id": workflow.info().workflow_id, "prepend": prepend}
                 async def invoke(payload):
-                    await workflow.execute_activity("controller.queue.spill", payload, start_to_close_timeout=timedelta(seconds=60), retry_policy=DEFAULT_ACTIVITY_RETRY)
+                    await workflow.execute_activity("controller.queue.spill", payload, start_to_close_timeout=timedelta(seconds=60), retry_policy=QUEUE_PAGING_RETRY)
                 if len(batch) == 1:
                     encoded = json.dumps(batch[0], separators=(",", ":"), ensure_ascii=True)
                     if len(encoded.encode()) > 512_000:
@@ -687,7 +690,7 @@ class WorkflowControlWorkflow:
                 await workflow.execute_activity("controller.queue.spill", {
                     "controller_id": workflow.info().workflow_id,
                     "events": [list(item) for item in self._events[_MAX_CARRIED_EVENTS:]]},
-                    start_to_close_timeout=timedelta(seconds=60), retry_policy=DEFAULT_ACTIVITY_RETRY)
+                    start_to_close_timeout=timedelta(seconds=60), retry_policy=QUEUE_PAGING_RETRY)
                 self._overflow = True
                 carry = self._events[:_MAX_CARRIED_EVENTS]
         if self._execution_control.enabled and not accumulator_v1:

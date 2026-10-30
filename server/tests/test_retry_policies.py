@@ -114,6 +114,38 @@ class TestReviewedDeliveryRetry:
         assert policies == ["REVIEWED_DELIVERY_RETRY"] * count
 
 
+class TestQueuePagingRetry:
+    """1b.16: controller queue paging retries without limit."""
+
+    def test_the_policy_is_unlimited_and_keeps_the_non_retryable_list(self):
+        from datetime import timedelta
+
+        from services.temporal._retry_policies import NON_RETRYABLE_ERROR_TYPES, QUEUE_PAGING_RETRY
+
+        assert QUEUE_PAGING_RETRY.maximum_attempts == 0
+        assert QUEUE_PAGING_RETRY.initial_interval == timedelta(seconds=1)
+        assert QUEUE_PAGING_RETRY.maximum_interval == timedelta(seconds=30)
+        assert list(QUEUE_PAGING_RETRY.non_retryable_error_types) == list(NON_RETRYABLE_ERROR_TYPES)
+
+    def test_every_paging_call_uses_it(self):
+        import ast
+        import pathlib
+
+        path = pathlib.Path(__file__).resolve().parent.parent / "services/temporal/workflow_control_workflow.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        policies = [
+            keyword.value.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "execute_activity"
+            and node.args and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value in {"controller.queue.read", "controller.queue.spill"}
+            for keyword in node.keywords
+            if keyword.arg == "retry_policy" and isinstance(keyword.value, ast.Name)
+        ]
+        # The read, the batch and chunk spill, and the legacy spill.
+        assert policies == ["QUEUE_PAGING_RETRY"] * 3
+
+
 class TestNoDuplicatedInlineRetryPolicy:
     """Workflow files must import the shared constant — not re-type
     ``RetryPolicy(initial_interval=..., maximum_interval=..., maximum_attempts=N)``
