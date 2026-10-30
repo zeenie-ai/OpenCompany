@@ -19,7 +19,12 @@ pytestmark = pytest.mark.asyncio
 
 SOCKET = SimpleNamespace(scope={"path": "/ws/status"}, state=SimpleNamespace(user_id="owner"))
 WHATSAPP = {"recipient_type": "phone", "phone": "447700900123", "message": "Running late, there at 10."}
-LATER = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+
+def later():
+    """Five minutes from now, past the start grace. A module constant would go
+    stale: the full suite reaches this file long after importing it."""
+    return datetime.now(timezone.utc) + timedelta(minutes=5)
 
 
 @pytest.fixture
@@ -83,10 +88,10 @@ async def test_a_send_waits_while_its_employee_is_stopped(harness, control, star
     assert (await store.get(harness.database, row.id)).status == "approved"
     for state in ("pausing", "paused", "resuming"):
         control.status = state
-        assert await reconcile.recover_sends(harness.database, now=LATER) == []
+        assert await reconcile.recover_sends(harness.database, now=later()) == []
     # Once its employee runs, the round starts it, and the claim goes.
     control.status = "running"
-    assert await reconcile.recover_sends(harness.database, now=LATER) == [row.id]
+    assert await reconcile.recover_sends(harness.database, now=later()) == [row.id]
     assert starts == [row.id, row.id]
     assert (await execution.claim_send(harness.database, row.id, row.revision, "t-2"))["claimed"] is True
 
@@ -103,12 +108,12 @@ async def test_a_send_waits_while_its_employee_is_stopped(harness, control, star
 async def test_a_send_whose_generation_ended_is_cancelled_and_the_employee_told(harness, control, starts, ended):
     _, row = await approved(harness)
     control.generation, control.status = ended.generation, ended.status
-    assert await reconcile.recover_sends(harness.database, now=LATER) == [row.id]
+    assert await reconcile.recover_sends(harness.database, now=later()) == [row.id]
     assert (await store.get(harness.database, row.id)).status == "cancelled"
     [note] = await notes.claim_notes(harness.database, session_id="wf", run_id="r_next")
     assert '"result": "cancelled unsent"' in note.text
     # Nothing starts it again.
-    assert await reconcile.recover_sends(harness.database, now=LATER) == []
+    assert await reconcile.recover_sends(harness.database, now=later()) == []
 
 
 async def test_a_claim_for_an_ended_generation_cancels_the_send(harness, control, starts):
