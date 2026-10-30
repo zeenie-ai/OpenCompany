@@ -157,8 +157,16 @@ async def test_wrapper_does_not_start_or_cancel_work_from_unverified_input(runti
     await module.start_inline_pi_delegation({"task": "edit"}, runtime.config)
     request = runtime.client.start_workflow.await_args.args[1]
     instance = module.PiInlineDelegationWorkflow(request)
+
+    @asynccontextmanager
+    async def action():
+        yield
+
+    # The admission check itself refuses (an AttributeError from an incomplete
+    # fake would be a bug in workflow code, which records no cleanup; 1b.13).
     instance._control = SimpleNamespace(register_root=AsyncMock(), unregister_root=AsyncMock(),
-        wait_until_running=AsyncMock(), begin_bookkeeping=MagicMock(), end_action=MagicMock(), enabled=False)
+        wait_until_running=AsyncMock(), begin_bookkeeping=MagicMock(), end_action=MagicMock(), enabled=False,
+        action=action)
     execute = AsyncMock(side_effect=ApplicationError("not admitted", type="PiProtocolConflict", non_retryable=True))
     start = AsyncMock()
     monkeypatch.setattr(module.workflow, "execute_activity", execute)

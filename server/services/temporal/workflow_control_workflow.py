@@ -8,6 +8,7 @@ from temporalio import workflow
 from temporalio.common import SearchAttributeKey, SearchAttributePair
 from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
 
+from services.temporal._exits import is_workflow_bug
 from services.temporal._retry_policies import DEFAULT_ACTIVITY_RETRY
 from services.temporal.execution_control import ExecutionControl
 
@@ -468,9 +469,13 @@ class WorkflowControlWorkflow:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 — per-event isolation
-                # One bad event (duplicate child id, exhausted broadcast
+                # One failed event (duplicate child id, exhausted broadcast
                 # retries) must not fail the deployment's entire control
-                # plane. Same isolation contract as the listener classes.
+                # plane. Same isolation contract as the listener classes. A
+                # bug in workflow code is not a failure: it fails the task
+                # (_exits).
+                if is_workflow_bug(exc):
+                    raise
                 if accumulator_v1 and isinstance(exc, WorkflowAlreadyStartedError):
                     # The deterministic child ID is the durable dispatch key.
                     # Temporal has already accepted this event's child start;

@@ -45,6 +45,7 @@ from temporalio.workflow import ParentClosePolicy
 
 from services.run_graph import collect_downstream_node_ids
 
+from ._exits import is_workflow_bug
 from .workflow import TEMPORAL_ROUTING_INPUT_KEY
 
 
@@ -280,7 +281,10 @@ class TriggerListenerWorkflow:
                 # Log and move on; the rejected event still counts as
                 # "seen" so a producer retry with the same id won't
                 # re-fire (correct: server-side dedup applies even on
-                # downstream failure).
+                # downstream failure). A bug in workflow code is not a
+                # failure: it fails the task (_exits).
+                if is_workflow_bug(exc):
+                    raise
                 workflow.logger.error(f"TriggerListener spawn failed for event.id={event.get('id')}: {exc}")
 
             self._processed_count += 1

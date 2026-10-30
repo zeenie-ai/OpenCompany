@@ -7,6 +7,8 @@ from typing import Any
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+from services.temporal._exits import is_workflow_bug
+
 
 # The parent Temporal package registers services on import. Match the other
 # framework workflows: orchestration remains deterministic, without re-importing
@@ -26,6 +28,7 @@ class NodeInvocationWorkflow:
         self.metadata = {k: payload[k] for k in ("principal", "workflow_id", "node_id", "fingerprint")}
         self.status = "running"
         result: dict = {}
+        bug = False
         try:
             if payload.get("history_version") == 1:
                 await self._record_status(payload)
@@ -53,6 +56,9 @@ class NodeInvocationWorkflow:
             self.status = "cancelled"
             raise
         except Exception as exc:
+            if is_workflow_bug(exc):
+                bug = True
+                raise
             if payload.get("dispatch_version") == 1:
                 from temporalio.exceptions import is_cancelled_exception
                 if is_cancelled_exception(exc):
@@ -76,34 +82,35 @@ class NodeInvocationWorkflow:
             self.status = "failed"
             raise
         finally:
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                if payload.get("history_version") == 1:
+                    # Cancellation waits for the attached child and its owner cleanup
+                    # before this terminal projection is persisted.
+                    try:
+                        await asyncio.shield(asyncio.create_task(self._record_status(payload, result)))
+                    except Exception as exc:
+                        workflow.logger.warning("Workspace task projection failed: %s", type(exc).__name__)
 
-            if payload.get("history_version") == 1:
-                # Cancellation waits for the attached child and its owner cleanup
-                # before this terminal projection is persisted.
+                async def record() -> None:
+                    await workflow.execute_activity(
+                        "workflow_runs.record_completion",
+                        {
+                            "workflow_id": payload["workflow_id"],
+                            "run_id": f"{workflow.info().workflow_id}:{workflow.info().run_id}",
+                            "generation": payload["context"].get("generation", 0),
+                            "status": "success" if self.status == "completed" else "failed",
+                        },
+                        start_to_close_timeout=timedelta(seconds=30),
+                        retry_policy=RetryPolicy(maximum_attempts=3),
+                    )
+
                 try:
-                    await asyncio.shield(asyncio.create_task(self._record_status(payload, result)))
+                    await asyncio.shield(asyncio.create_task(record()))
                 except Exception as exc:
-                    workflow.logger.warning("Workspace task projection failed: %s", type(exc).__name__)
-
-            async def record() -> None:
-                await workflow.execute_activity(
-                    "workflow_runs.record_completion",
-                    {
-                        "workflow_id": payload["workflow_id"],
-                        "run_id": f"{workflow.info().workflow_id}:{workflow.info().run_id}",
-                        "generation": payload["context"].get("generation", 0),
-                        "status": "success" if self.status == "completed" else "failed",
-                    },
-                    start_to_close_timeout=timedelta(seconds=30),
-                    retry_policy=RetryPolicy(maximum_attempts=3),
-                )
-
-            try:
-                await asyncio.shield(asyncio.create_task(record()))
-            except Exception as exc:
-                # A summary outage must not convert a completed device task into
-                # a failure that a user may replay. Temporal remains authoritative.
-                workflow.logger.warning("Workspace run summary failed: %s", type(exc).__name__)
+                    # A summary outage must not convert a completed device task into
+                    # a failure that a user may replay. Temporal remains authoritative.
+                    workflow.logger.warning("Workspace run summary failed: %s", type(exc).__name__)
 
     async def _record_status(self, payload: dict, result: dict | None = None) -> None:
         await workflow.execute_activity(

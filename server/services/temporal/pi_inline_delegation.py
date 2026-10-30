@@ -16,6 +16,7 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
 from temporalio.workflow import ActivityCancellationType, ChildWorkflowCancellationType, ParentClosePolicy
 
+from services.temporal._exits import is_workflow_bug
 from services.temporal._retry_policies import DELEGATION_CLEANUP_RETRY
 from services.temporal.execution_control import ExecutionControl
 from services.temporal.pi_protocol import canonical_digest, canonical_json
@@ -352,6 +353,7 @@ class PiInlineDelegationWorkflow:
     async def run(self, request: dict) -> dict:
         validate_inline_request(request)
         error = None
+        bug = False
         admission_verified = False
         try:
             await self._control.register_root()
@@ -374,32 +376,35 @@ class PiInlineDelegationWorkflow:
             error = "Coding delegation cancelled"
             raise
         except Exception as exc:
+            bug = is_workflow_bug(exc)
             error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
-            self._control.begin_bookkeeping()
-            try:
-                if not admission_verified:
-                    # Registration may fail before the admission check. No
-                    # cleanup mutation may trust an unverified external input.
-                    await workflow.execute_activity("coding.inline_delegation_status", {"request": request, "status": "running"},
-                        start_to_close_timeout=timedelta(seconds=60), retry_policy=DELEGATION_CLEANUP_RETRY,
-                        cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
-                if error:
-                    await workflow.execute_activity("agent.cancel_delegation", {**request["lifecycle"], "reason": error,
-                        "terminal_event_id": f"{request['lifecycle']['team_task_id']}:inline-terminal"},
-                        start_to_close_timeout=timedelta(seconds=60), retry_policy=DELEGATION_CLEANUP_RETRY,
-                        cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
-                await workflow.execute_activity("coding.inline_delegation_status", {"request": request, "error": error},
-                    start_to_close_timeout=timedelta(seconds=60), retry_policy=DELEGATION_CLEANUP_RETRY,
-                    cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
-            finally:
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                self._control.begin_bookkeeping()
                 try:
-                    await self._control.unregister_root()
+                    if not admission_verified:
+                        # Registration may fail before the admission check. No
+                        # cleanup mutation may trust an unverified external input.
+                        await workflow.execute_activity("coding.inline_delegation_status", {"request": request, "status": "running"},
+                            start_to_close_timeout=timedelta(seconds=60), retry_policy=DELEGATION_CLEANUP_RETRY,
+                            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
+                    if error:
+                        await workflow.execute_activity("agent.cancel_delegation", {**request["lifecycle"], "reason": error,
+                            "terminal_event_id": f"{request['lifecycle']['team_task_id']}:inline-terminal"},
+                            start_to_close_timeout=timedelta(seconds=60), retry_policy=DELEGATION_CLEANUP_RETRY,
+                            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
+                    await workflow.execute_activity("coding.inline_delegation_status", {"request": request, "error": error},
+                        start_to_close_timeout=timedelta(seconds=60), retry_policy=DELEGATION_CLEANUP_RETRY,
+                        cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
                 finally:
-                    self._control.end_action()
-                    if self._control.enabled:
-                        await workflow.wait_condition(workflow.all_handlers_finished)
+                    try:
+                        await self._control.unregister_root()
+                    finally:
+                        self._control.end_action()
+                        if self._control.enabled:
+                            await workflow.wait_condition(workflow.all_handlers_finished)
         return {"task_id": request["lifecycle"]["team_task_id"], "status": "completed"}
 
 

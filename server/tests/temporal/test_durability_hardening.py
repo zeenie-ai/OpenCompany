@@ -31,6 +31,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from temporalio.exceptions import ApplicationError
 
 from services.temporal.polling_trigger_workflow import PollingTriggerWorkflow
 from services.temporal.trigger_listener_workflow import TriggerListenerWorkflow
@@ -408,7 +409,8 @@ async def test_controller_push_spawn_failure_does_not_kill_the_run_loop(monkeypa
     async def failing_spawn(_event, _spec):
         calls["n"] += 1
         if calls["n"] == 1:
-            raise RuntimeError("duplicate child id")
+            # A failure (not a bug in workflow code, which fails the task).
+            raise ApplicationError("duplicate child id")
         controller._closed = True
 
     monkeypatch.setattr(controller, "_spawn_push_run", failing_spawn)
@@ -420,6 +422,60 @@ async def test_controller_push_spawn_failure_does_not_kill_the_run_loop(monkeypa
     # First spawn failed, second still ran; the controller survived both.
     assert calls["n"] == 2
     assert result["generation"] == 1
+
+
+@pytest.mark.asyncio
+async def test_controller_push_spawn_bug_fails_the_task(monkeypatch):
+    # 1b.13: a bug in workflow code is not a failed event. It fails the task
+    # instead of being logged and skipped, so a fixed release replays it.
+    from services.temporal import workflow_control_workflow as control_module
+
+    temporal_workflow = control_module.workflow
+    monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "wait_condition", _predicate_wait)
+    monkeypatch.setattr(temporal_workflow, "in_workflow", lambda: False)
+
+    controller = WorkflowControlWorkflow()
+    calls = {"n": 0}
+
+    async def spawn(_event, _spec):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("bug in workflow code")
+        controller._closed = True  # ends the loop if the bug was swallowed
+
+    monkeypatch.setattr(controller, "_spawn_push_run", spawn)
+    controller._triggers["l-push"] = _push_spec()
+    controller._events.append(("l-push", {"id": "evt-1", "type": "t.x"}))
+    controller._events.append(("l-push", {"id": "evt-2", "type": "t.x"}))
+
+    with pytest.raises(RuntimeError, match="bug in workflow code"):
+        await controller.run({"generation": 1, "state": "running"})
+    assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_listener_spawn_bug_fails_the_task(monkeypatch):
+    from services.temporal import trigger_listener_workflow as trigger_module
+
+    temporal_workflow = trigger_module.workflow
+    monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "patched", lambda _pid: True)
+    monkeypatch.setattr(temporal_workflow, "info", _pressure_info)
+    monkeypatch.setattr(temporal_workflow, "wait_condition", _predicate_wait)
+
+    def fake_can(args=None):
+        raise _CanFired
+
+    monkeypatch.setattr(temporal_workflow, "continue_as_new", fake_can)
+    instance = TriggerListenerWorkflow()
+    monkeypatch.setattr(instance, "_spawn_child_run", AsyncMock(side_effect=RuntimeError("bug in workflow code")))
+    listener_data = _listener_data()
+    listener_data["pending_events"] = [{"id": "evt-1", "data": {}}]
+
+    # Before 1b.13 the bug was logged and the listener rolled over.
+    with pytest.raises(RuntimeError, match="bug in workflow code"):
+        await instance.run(listener_data)
 
 
 # ---------------------------------------------------------------------------

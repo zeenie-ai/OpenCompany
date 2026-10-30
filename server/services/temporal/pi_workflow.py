@@ -14,6 +14,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityCancellationType
 
+from ._exits import is_workflow_bug
 from .agent_workflow import AgentWorkflow, LLM_STEP_HEARTBEAT_TIMEOUT, LLM_STEP_RETRY, llm_attempt_timeout
 from .pi_protocol import DRIVER_QUEUE, INLINE_LIMIT, OperationLedger, canonical_digest, canonical_json, conflict, tool_operation_id
 from .pi_control import PiDescendantExecutionControl, PiLocalExecutionControl
@@ -128,6 +129,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         if not context or context.get("pi_harness_version") != 1 or context.get("node_type") != "coding_agent":
             raise conflict("Pi workflow requires an admitted Coding Agent runtime marker")
         self._pi_context = context
+        bug = False
         try:
             try:
                 result = await super().run(context)
@@ -135,6 +137,9 @@ class PiCodingAgentWorkflow(AgentWorkflow):
                     await self._clear_failed_skills(context)
                 return result
             except Exception as exc:
+                if is_workflow_bug(exc):
+                    bug = True
+                    raise
                 from temporalio.exceptions import is_cancelled_exception
                 if is_cancelled_exception(exc):
                     raise
@@ -147,9 +152,11 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         finally:
             # Cancellation and terminal failure cannot leave a driver process
             # occupying private capacity while native cleanup drains children.
-            await self._stop_driver(cancel=True)
-            self._pi_checkpointing = False
-            self._pi_receipt_checkpointing = False
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                await self._stop_driver(cancel=True)
+                self._pi_checkpointing = False
+                self._pi_receipt_checkpointing = False
 
     async def _clear_failed_skills(self, context):
         await workflow.execute_activity("agent.skill.clear", {"workflow_id": context.get("workflow_id"),

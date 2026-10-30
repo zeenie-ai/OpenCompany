@@ -62,6 +62,7 @@ from services.node_registry import get_node_class
 from services.plugin.base import BaseNode
 from services.tool_output import bound_tool_output, tool_output_is_capped
 
+from ._exits import is_workflow_bug
 from ._retry_policies import (
     BROWSER_TASK_CLAIM_RETRY,
     BROWSER_TASK_CLEANUP_RETRY,
@@ -601,6 +602,7 @@ class DelegatedTaskWorkflow:
         root_id = lifecycle["root_execution_id"]
         acquired_permit_id: Optional[str] = None
         began = False
+        bug = False
         completion_action_active = False
         try:
             await self._wait_until_resumed()
@@ -745,6 +747,9 @@ class DelegatedTaskWorkflow:
                     )
             raise
         except Exception as exc:
+            if is_workflow_bug(exc):
+                bug = True
+                raise
             if began:
                 await workflow.execute_activity(
                     "agent.finish_delegation",
@@ -756,31 +761,33 @@ class DelegatedTaskWorkflow:
                 )
             raise
         finally:
-            if acquired_permit_id:
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                if acquired_permit_id:
+                    try:
+                        await workflow.execute_activity(
+                            "agent.release_subagent_permit",
+                            args=[{
+                                "root_execution_id": root_id,
+                                "permit_id": acquired_permit_id,
+                            }],
+                            activity_id="release-permit-final",
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                            retry_policy=DELEGATION_CLEANUP_RETRY,
+                            **acquire_cancellation_options,
+                        )
+                    except Exception as release_exc:
+                        workflow.logger.error(
+                            "DelegatedTaskWorkflow final permit release failed "
+                            f"for {task_id}: {release_exc}"
+                        )
                 try:
-                    await workflow.execute_activity(
-                        "agent.release_subagent_permit",
-                        args=[{
-                            "root_execution_id": root_id,
-                            "permit_id": acquired_permit_id,
-                        }],
-                        activity_id="release-permit-final",
-                        start_to_close_timeout=PERSIST_TURN_TIMEOUT,
-                        retry_policy=DELEGATION_CLEANUP_RETRY,
-                        **acquire_cancellation_options,
-                    )
-                except Exception as release_exc:
-                    workflow.logger.error(
-                        "DelegatedTaskWorkflow final permit release failed "
-                        f"for {task_id}: {release_exc}"
-                    )
-            try:
-                await self._execution_control.unregister_root()
-            finally:
-                if completion_action_active:
-                    self._execution_control.end_action()
-                if self._execution_control.enabled:
-                    await workflow.wait_condition(workflow.all_handlers_finished)
+                    await self._execution_control.unregister_root()
+                finally:
+                    if completion_action_active:
+                        self._execution_control.end_action()
+                    if self._execution_control.enabled:
+                        await workflow.wait_condition(workflow.all_handlers_finished)
 
 
 @workflow.defn(sandboxed=False, name="AgentWorkflow")
@@ -942,6 +949,7 @@ class AgentWorkflow:
             if runtime_v2:
                 await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": cancelled, "runtime_admission": True},
                     activity_id="employee-runtime-failed", start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=AGENT_ACTIVITY_RETRY))
+        bug = False
         try:
             result = await self._run_impl(context)
             if not result.get("success", True):
@@ -951,27 +959,32 @@ class AgentWorkflow:
             await fail_job(cancelled=True)
             raise
         except Exception as exc:
+            if is_workflow_bug(exc):
+                bug = True
+                raise
             from temporalio.exceptions import is_cancelled_exception
             await fail_job(cancelled=is_cancelled_exception(exc))
             raise
         finally:
-            if not self._continuing:
-                for binding in reversed(self._browser_claims):
-                    async def release(binding=binding):
-                        await workflow.execute_activity(
-                            "browser_tasks.release",
-                            {"binding": binding, "task_id": context["_browser_task_id"]},
-                            task_queue=binding.get("task_queue") or workflow.info().task_queue,
-                            start_to_close_timeout=timedelta(seconds=120),
-                            heartbeat_timeout=timedelta(seconds=30),
-                            retry_policy=BROWSER_TASK_CLEANUP_RETRY,
-                            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-                        )
-                    # Owner absence leaves cleanup queued. Cancel/Reset wait for
-                    # its receipt instead of releasing another task's claim.
-                    await asyncio.shield(asyncio.create_task(release()))
-            if self._execution_control.enabled:
-                await workflow.wait_condition(workflow.all_handlers_finished)
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                if not self._continuing:
+                    for binding in reversed(self._browser_claims):
+                        async def release(binding=binding):
+                            await workflow.execute_activity(
+                                "browser_tasks.release",
+                                {"binding": binding, "task_id": context["_browser_task_id"]},
+                                task_queue=binding.get("task_queue") or workflow.info().task_queue,
+                                start_to_close_timeout=timedelta(seconds=120),
+                                heartbeat_timeout=timedelta(seconds=30),
+                                retry_policy=BROWSER_TASK_CLEANUP_RETRY,
+                                cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+                            )
+                        # Owner absence leaves cleanup queued. Cancel/Reset wait for
+                        # its receipt instead of releasing another task's claim.
+                        await asyncio.shield(asyncio.create_task(release()))
+                if self._execution_control.enabled:
+                    await workflow.wait_condition(workflow.all_handlers_finished)
 
     async def _run_impl(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Run the agent loop.
@@ -1841,7 +1854,9 @@ class AgentWorkflow:
                         # _cleanup_cancelled_delegations() sweep; releasing
                         # here as well would double-release the permit.
                         raise
-                    except BaseException:
+                    except BaseException as exc:
+                        if is_workflow_bug(exc):
+                            raise
                         await _release_delegation_permit(call_index)
                         raise
                 child_id = _delegation_child_id(
@@ -1875,7 +1890,9 @@ class AgentWorkflow:
                     # Cancellation cleanup is owned by the caller's
                     # _cleanup_cancelled_delegations() sweep.
                     raise
-                except BaseException:
+                except BaseException as exc:
+                    if is_workflow_bug(exc):
+                        raise
                     if team_id and call_index in delegation_permits:
                         await _release_delegation_permit(call_index)
                     raise
@@ -2140,7 +2157,9 @@ class AgentWorkflow:
                 ]:
                     await _start_delegation(delegation_index)
                     next_delegation_to_start += 1
-            except BaseException:
+            except BaseException as exc:
+                if is_workflow_bug(exc):
+                    raise
                 await _cleanup_cancelled_delegations()
                 raise
 
@@ -2388,7 +2407,9 @@ class AgentWorkflow:
                                 # Cancellation cleanup is owned by the outer
                                 # _cleanup_cancelled_delegations() sweep.
                                 raise
-                            except BaseException:
+                            except BaseException as exc:
+                                if is_workflow_bug(exc):
+                                    raise
                                 self._execution_control.begin_bookkeeping()
                                 tool_action_active = self._execution_control.enabled
                                 await _release_delegation_permit(call_index)

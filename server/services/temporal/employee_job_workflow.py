@@ -5,6 +5,7 @@ from typing import Any
 from temporalio import workflow, activity
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import is_cancelled_exception
+from services.temporal._exits import is_workflow_bug
 from services.temporal._retry_policies import REVIEWED_DELIVERY_RETRY
 from services.temporal.execution_control import ExecutionControl
 
@@ -103,11 +104,17 @@ class EmployeeJobWorkflow:
         if not self._execution_control.enabled:
             return await self._run_job(context)
         await self._execution_control.register_root()
+        bug = False
         try:
             return await self._run_job(context)
+        except Exception as exc:
+            bug = is_workflow_bug(exc)
+            raise
         finally:
-            await self._execution_control.unregister_root()
-            await workflow.wait_condition(workflow.all_handlers_finished)
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                await self._execution_control.unregister_root()
+                await workflow.wait_condition(workflow.all_handlers_finished)
 
     async def _run_job(self, context: dict[str, Any]) -> dict:
         from services.coding_agent_runtime import agent_workflow_name
@@ -120,6 +127,8 @@ class EmployeeJobWorkflow:
             else:
                 result = await workflow.execute_child_workflow(child_name, context, id=workflow.info().workflow_id + ":lead")
         except BaseException as exc:
+            if is_workflow_bug(exc):
+                raise
             # Cancellation must leave a durable terminal job record too.
             # Shield this short cleanup from the parent's cancellation.
             await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": isinstance(exc, asyncio.CancelledError) or is_cancelled_exception(exc)},

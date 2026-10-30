@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from temporalio import workflow
 
+from ._exits import is_workflow_bug
 from ._retry_policies import DEFAULT_ACTIVITY_RETRY, QUICK_ACTIVITY_RETRY
 from .execution_control import ExecutionControl
 
@@ -517,14 +518,20 @@ class MachinaWorkflow:
         if not self._execution_control.enabled:
             return await self._run_graph(workflow_data)
         await self._execution_control.register_root()
+        bug = False
         try:
             return await self._run_graph(workflow_data)
+        except Exception as exc:
+            bug = is_workflow_bug(exc)
+            raise
         finally:
-            for admission in self._action_contexts.values():
-                await admission.__aexit__(None, None, None)
-            self._action_contexts.clear()
-            await self._execution_control.unregister_root()
-            await workflow.wait_condition(workflow.all_handlers_finished)
+            # A bug fails the task and records nothing on the way out (_exits).
+            if not bug:
+                for admission in self._action_contexts.values():
+                    await admission.__aexit__(None, None, None)
+                self._action_contexts.clear()
+                await self._execution_control.unregister_root()
+                await workflow.wait_condition(workflow.all_handlers_finished)
 
     async def _run_graph(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
         """Execute workflow by orchestrating node activities.

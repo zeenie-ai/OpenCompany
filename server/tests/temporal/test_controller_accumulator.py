@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from temporalio.converter import DefaultPayloadConverter
-from temporalio.exceptions import WorkflowAlreadyStartedError
+from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
 
 from services.temporal import workflow_control_workflow as module
 from services.temporal.workflow_control_workflow import WorkflowControlWorkflow
@@ -196,7 +196,7 @@ async def test_transient_failure_keeps_same_event_pending_until_success(wf, monk
         assert "mail:retry" in controller._pending_event_ids
         if len(calls) == 1:
             await controller.on_event(event)
-            raise RuntimeError("temporary dispatch failure")
+            raise ApplicationError("temporary dispatch failure")
         controller._closed = True
 
     monkeypatch.setattr(controller, "_spawn_push_run", spawn)

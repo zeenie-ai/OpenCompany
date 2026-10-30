@@ -40,6 +40,7 @@ from temporalio import workflow
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.workflow import ParentClosePolicy
 
+from ._exits import is_workflow_bug
 from ._retry_policies import DEFAULT_ACTIVITY_RETRY
 from .workflow import TEMPORAL_ROUTING_INPUT_KEY
 
@@ -193,7 +194,11 @@ class PollingTriggerWorkflow:
             except Exception as exc:  # noqa: BLE001
                 # Activity exhausted its RetryPolicy. Log + continue —
                 # don't terminate the listener over one bad cycle.
-                # Workflow Event History records the failure for ops.
+                # Workflow Event History records the failure for ops. A
+                # bug in workflow code is not a failure: it fails the
+                # task (_exits).
+                if is_workflow_bug(exc):
+                    raise
                 workflow.logger.error(f"PollingTriggerWorkflow cycle failed (will retry next interval): {exc}")
                 continue
 
@@ -222,7 +227,9 @@ class PollingTriggerWorkflow:
                 except Exception as spawn_exc:  # noqa: BLE001
                     # Per-event spawn failure logged; subsequent events
                     # still try. Same isolation contract as the push
-                    # listener.
+                    # listener, which re-raises a bug the same way.
+                    if is_workflow_bug(spawn_exc):
+                        raise
                     workflow.logger.error(f"PollingTriggerWorkflow spawn failed for event.id={event_id}: {spawn_exc}")
                 self._processed_count += 1
 

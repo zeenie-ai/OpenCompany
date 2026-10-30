@@ -4,6 +4,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 import pytest
+from temporalio.exceptions import ApplicationError
 from services.temporal.controller_queue import event_batches, spill_controller_events, read_controller_events
 from services.temporal.workflow_control_workflow import WorkflowControlWorkflow
 
@@ -111,7 +112,7 @@ async def test_failed_accepted_spawn_requeues_the_same_event(wf, monkeypatch):
     async def spawn(event, _spec):
         calls.append(event["id"])
         if len(calls) == 1:
-            raise RuntimeError("temporary dispatch failure")
+            raise ApplicationError("temporary dispatch failure")
         controller._closed = True
     monkeypatch.setattr(wf, "sleep", sleep)
     monkeypatch.setattr(controller, "_spawn_push_run", spawn)

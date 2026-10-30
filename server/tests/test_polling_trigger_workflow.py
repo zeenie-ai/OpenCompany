@@ -472,7 +472,9 @@ class TestPollingTriggerWorkflowBody:
                 return {"found": False}
             call_count[0] += 1
             if call_count[0] == 2:  # second call fails
-                raise RuntimeError("transient API timeout")
+                from temporalio.exceptions import ApplicationError
+
+                raise ApplicationError("transient API timeout")
             if call_count[0] == 1:
                 return {"events": [], "seen_ids": ["a"]}  # baseline
             return {"events": [{"id": f"e{call_count[0]}", "x": 1}], "seen_ids": ["a"]}
@@ -517,6 +519,46 @@ class TestPollingTriggerWorkflowBody:
         # the loop kept running past the failure, only ending because
         # we forced sleep to raise.
         assert call_count[0] == 3
+
+    @pytest.mark.asyncio
+    async def test_a_bug_in_workflow_code_fails_the_task(self, monkeypatch):
+        """1b.13: a bug is not a failed cycle; it fails the task instead of
+        being logged and skipped, so a fixed release replays the cycle."""
+        from services.temporal import polling_trigger_workflow as pmod
+        from temporalio import workflow as temporal_workflow
+
+        class _Stop(BaseException):
+            """Ends the loop if the bug was swallowed (no arm catches it)."""
+
+        cycles = [0]
+
+        async def fake_execute_activity(name, payload, **kwargs):
+            cycles[0] += 1
+            if cycles[0] == 1:
+                return {"events": [], "seen_ids": ["a"]}  # baseline
+            if cycles[0] == 2:
+                raise RuntimeError("bug in workflow code")
+            raise _Stop()
+
+        async def fake_sleep(td):
+            return None
+
+        monkeypatch.setattr(temporal_workflow, "execute_activity", fake_execute_activity)
+        monkeypatch.setattr(temporal_workflow, "sleep", fake_sleep)
+
+        listener_data = {
+            "workflow_id": "wf-1",
+            "trigger_node_id": "n",
+            "node_type": "googleGmailReceive",
+            "version": 1,
+            "filter_params": {"poll_interval": 5},
+            "nodes": [{"id": "n", "type": "googleGmailReceive", "data": {}}],
+            "edges": [],
+            "session_id": "s",
+            "seen_ids": [],
+        }
+        with pytest.raises(RuntimeError, match="bug in workflow code"):
+            await pmod.PollingTriggerWorkflow().run(listener_data)
 
 
 # ---------------------------------------------------------------------------
