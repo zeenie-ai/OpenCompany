@@ -22,9 +22,10 @@ carry an ``event_key`` the hub publishes once.
 picked up (``not_delivered``, counted from the later of its creation and
 this process's start, so a restart does not expire runs it held up), a
 queued run whose deployment stopped or did not pick it up after resuming, a
-running run past ``runs.max_running_s`` (``timed_out``), and a running run
-whose Temporal workflow closed without finishing it: finished when its reply
-was saved, ``interrupted`` otherwise.
+running run past ``runs.max_running_s`` (``timed_out``; its Temporal workflow
+is cancelled first, so nothing keeps working on an answer no one waits for),
+and a running run whose Temporal workflow closed without finishing it:
+finished when its reply was saved, ``interrupted`` otherwise.
 
 **Controlled Stop** suspends the owning generation while keeping the run
 and its lane alive. The watchdog excludes intentionally suspended generations
@@ -705,7 +706,7 @@ async def sweep(
             if run.state == "stopping":
                 closed = await _sweep_stopping(database, run, now, temporal_cancel)
             else:
-                closed = await _sweep_one(database, run, now, process_started, pickup, longest, temporal_status)
+                closed = await _sweep_one(database, run, now, process_started, pickup, longest, temporal_status, temporal_cancel)
         except Exception:  # noqa: BLE001 - one bad row must not stop the sweep
             logger.warning("Chat run sweep failed for a run", run_id=run.run_id, exc_info=True)
             continue
@@ -724,13 +725,22 @@ async def _sweep_stopping(
     requested = _aware(run.stop_requested_at) or _aware(run.started_at) or _aware(run.created_at) or now
     if now - requested < timedelta(seconds=runs_setting("stop_grace_s")):
         return None
-    if temporal_cancel is not None and run.temporal_workflow_id:
-        try:
-            await temporal_cancel(run.temporal_workflow_id, run.temporal_run_id)
-        except Exception:  # noqa: BLE001 - the run ends either way
-            logger.warning("Could not cancel a stopped run's workflow", run_id=run.run_id, exc_info=True)
+    await _cancel_workflow(run, temporal_cancel)
     await _seal(database, run)
     return await _settle(database, run, await _success_values(database, run, "stopped"))
+
+
+async def _cancel_workflow(run: ChatRun, temporal_cancel: Optional[TemporalCancel]) -> None:
+    """Ask Temporal to cancel the workflow answering ``run``, best effort: the
+    caller ends the run either way (a stopped run, or one past
+    ``runs.max_running_s``). Asked before the row ends, so a sweep that
+    dies in between asks again on its next round."""
+    if temporal_cancel is None or not run.temporal_workflow_id:
+        return
+    try:
+        await temporal_cancel(run.temporal_workflow_id, run.temporal_run_id)
+    except Exception:  # noqa: BLE001 - the run ends either way
+        logger.warning("Could not cancel a chat run's workflow", run_id=run.run_id, exc_info=True)
 
 
 async def _sweep_one(
@@ -741,6 +751,7 @@ async def _sweep_one(
     pickup: timedelta,
     longest: timedelta,
     temporal_status: Optional[TemporalStatus],
+    temporal_cancel: Optional[TemporalCancel],
 ) -> Optional[ChatRun]:
     control = await owning_control(database, run)
     controlled = controlled_generation(control)
@@ -772,6 +783,7 @@ async def _sweep_one(
         from services.approvals.waiting import run_waited
 
         if not await run_waited(database, run.run_id, since=now - longest):
+            await _cancel_workflow(run, temporal_cancel)
             return await fail_run(database, run, code="timed_out", message="The employee took too long to answer.")
     if temporal_status is None or not run.temporal_workflow_id or now - started < _CLOSED_GRACE:
         return None

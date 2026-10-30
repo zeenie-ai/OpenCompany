@@ -356,6 +356,36 @@ async def test_a_run_past_its_longest_ends_as_timed_out(database, hub):
     assert (await ledger.get_run(database, admission.run.run_id)).error_code == "timed_out"
 
 
+async def test_a_timed_out_run_has_its_workflow_cancelled_before_the_row_ends(database, hub):
+    # 1b.14: nothing keeps working on an answer no one waits for.
+    admission = await admit(database)
+    run = await started(database, admission)
+    await age(database, run.run_id, started_at=LONG_AGO)
+    asked = []
+
+    async def cancel(workflow_id, temporal_run_id):
+        asked.append((workflow_id, temporal_run_id, (await ledger.get_run(database, run.run_id)).state))
+
+    assert await sweep(database, temporal_cancel=cancel) == [run.run_id]
+    assert asked == [("tw-1", "tr-1", "running")]  # asked while the row was still live
+    assert (await ledger.get_run(database, run.run_id)).error_code == "timed_out"
+    # Ended, it is neither swept nor cancelled again.
+    assert await sweep(database, temporal_cancel=cancel) == []
+    assert len(asked) == 1
+
+
+async def test_a_failed_cancel_still_times_the_run_out(database, hub):
+    admission = await admit(database)
+    run = await started(database, admission)
+    await age(database, run.run_id, started_at=LONG_AGO)
+
+    async def broken(*_):
+        raise RuntimeError("temporal is down")
+
+    assert await sweep(database, temporal_cancel=broken) == [run.run_id]
+    assert (await ledger.get_run(database, run.run_id)).error_code == "timed_out"
+
+
 async def answered(database, approval_id, at):
     """The owner answered a held call at ``at``."""
     from sqlalchemy import update
@@ -369,15 +399,24 @@ async def answered(database, approval_id, at):
 
 async def test_a_turn_waiting_for_the_owner_is_not_timed_out(database, hub):
     # RFC-0007 D2: the wait does not count, and the answer starts a fresh window.
+    # A run that waited 30 h and was then answered is not timed out, nor is
+    # its workflow cancelled (1b.14), until its fresh window passes too.
     admission = await admit(database)
     run = await started(database, admission)
-    await age(database, run.run_id, started_at=LONG_AGO)
+    await age(database, run.run_id, started_at=NOW - timedelta(hours=30))
     await held_call(database, "ap_1", run.run_id)
-    assert await sweep(database) == []
+    cancelled = []
+
+    async def cancel(workflow_id, temporal_run_id):
+        cancelled.append((workflow_id, temporal_run_id))
+
+    assert await sweep(database, temporal_cancel=cancel) == []
     await answered(database, "ap_1", NOW - timedelta(hours=1))
-    assert await sweep(database) == []
+    assert await sweep(database, temporal_cancel=cancel) == []
+    assert cancelled == []
     await answered(database, "ap_1", LONG_AGO)
-    assert await sweep(database) == [run.run_id]
+    assert await sweep(database, temporal_cancel=cancel) == [run.run_id]
+    assert cancelled == [("tw-1", "tr-1")]
     assert (await ledger.get_run(database, run.run_id)).error_code == "timed_out"
 
 

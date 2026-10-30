@@ -102,7 +102,8 @@ streamed.
 | `stopped` | A legacy or uncontrolled chat run ended after Stop (an OpenCompany addition to AG-UI's outcomes). Controlled Stop does not emit this terminal outcome. |
 
 Runs nothing will finish end with `run.failed`: code `not_delivered` (never picked up, or the employee stopped
-first), `timed_out` (running longer than its current `runs.max_running_s` window), `interrupted` (its workflow closed without finishing
+first), `timed_out` (running longer than its current `runs.max_running_s` window; the watchdog cancels its Temporal
+workflow first, so nothing keeps working on the answer), `interrupted` (its workflow closed without finishing
 it and no reply was saved; with a saved reply it finishes instead). A Reset ends live runs with code `reset`, the
 owner's Clear with `cleared`, and both delete them. Intentional suspension of a controlled generation excludes
 its live runs from pickup and running expiry; Resume starts a fresh timeout window, as described below.
@@ -365,7 +366,9 @@ newer version wins in place.
   running runs are excluded from age expiry. After successful Resume, the existing generation manifest stores
   `last_resumed_at`: pending pickup counts from the latest of creation, server start and Resume; queued pickup
   follows the resumed delivery window; running expiry counts from the later of run start and Resume. Stop does
-  not move controlled runs into the legacy `stopping` state, so they bypass grace-period cancellation. Temporal
+  not move controlled runs into the legacy `stopping` state, so they bypass grace-period cancellation. A running
+  run past `runs.max_running_s`, controlled or not, has its workflow cancelled before it ends `timed_out`, unless
+  its generation is paused or a turn of it waits for the owner. Temporal
   closure checks follow the current Workflow ID and compare execution chains across continue-as-new.
 
 ## Streaming, steps and Stop

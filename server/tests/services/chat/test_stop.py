@@ -289,10 +289,18 @@ async def test_long_controlled_pause_does_not_expire_and_resume_grants_a_fresh_w
             started_at=NOW - timedelta(days=30), created_at=NOW - timedelta(days=30),
         ))
         await session.commit()
+    cancelled = []
+
+    async def cancel(workflow_id, temporal_run_id):
+        cancelled.append((workflow_id, temporal_run_id))
+
+    # A paused run is never timed out, so its workflow is never cancelled (1b.14).
     for state in ("pausing", "paused", "resuming"):
         await version_control(database, status=state)
-        assert await ledger.sweep(database, now=NOW, process_started=NOW - timedelta(days=30)) == []
+        assert await ledger.sweep(database, now=NOW, process_started=NOW - timedelta(days=30), temporal_cancel=cancel) == []
     await version_control(database, status="running", resumed=NOW)
-    assert await ledger.sweep(database, now=NOW + longest - timedelta(seconds=1), process_started=NOW) == []
-    assert await ledger.sweep(database, now=NOW + longest + timedelta(seconds=1), process_started=NOW) == [run.run_id]
+    assert await ledger.sweep(database, now=NOW + longest - timedelta(seconds=1), process_started=NOW, temporal_cancel=cancel) == []
+    assert cancelled == []
+    assert await ledger.sweep(database, now=NOW + longest + timedelta(seconds=1), process_started=NOW, temporal_cancel=cancel) == [run.run_id]
+    assert cancelled == [(run.temporal_workflow_id, run.temporal_run_id)]
     assert (await ledger.get_run(database, run.run_id)).error_code == "timed_out"

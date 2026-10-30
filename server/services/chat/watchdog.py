@@ -61,8 +61,9 @@ async def temporal_workflow_closed(workflow_id: str, run_id: Optional[str]) -> O
 
 
 async def cancel_temporal_workflow(workflow_id: str, run_id: Optional[str]) -> None:
-    """Ask Temporal to cancel a workflow (a stopped run's). Does nothing when
-    Temporal cannot be reached; a workflow that already closed is fine."""
+    """Ask Temporal to cancel a workflow (a stopped or timed-out run's). Does
+    nothing when Temporal cannot be reached; a workflow that already closed is
+    fine."""
     try:
         from core.container import container
 
