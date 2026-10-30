@@ -382,6 +382,20 @@ def _employee_runtime_metadata() -> dict:
 _CAN_TRANSCRIPT_MAX_BYTES = 1_000_000
 _CAN_INPUT_MAX_BYTES = 1_900_000
 
+# The seed keys of the prepared payload that a durable rollover does not carry
+# (1b.19). The resumed run reads `conversation` and `memory_content` only when
+# it has no carried transcript (it always has one here), and the run's own
+# `parameter_snapshot` already rides in the context, where a tool rebind keeps
+# it current; carried again it would overwrite that copy. A Context agent's
+# seed conversation alone can be 1 MB, which the byte guard counted twice. A
+# denylist on purpose: the resumed run reads every other key.
+_CARRY_DROPPED_KEYS = frozenset({"conversation", "memory_content", "parameter_snapshot"})
+
+
+def _carried_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """The prepared payload a durable rollover carries: all of it but the seed keys."""
+    return {key: value for key, value in payload.items() if key not in _CARRY_DROPPED_KEYS}
+
 
 def _inherited_scope(context: Dict[str, Any], *, delegation: bool = False) -> Dict[str, Any]:
     """Return the scope keys a delegated child must inherit from its parent."""
@@ -3181,7 +3195,7 @@ class AgentWorkflow:
                                 "transcript": messages,
                                 "usage": usage_total,
                                 "context_usage": context_usage_total,
-                                "prepared_payload": payload,
+                                "prepared_payload": _carried_payload(payload),
                                 "tools": tools,
                                 "thinking": thinking_accumulated,
                                 "browser_artifacts": browser_artifacts,

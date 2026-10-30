@@ -1278,6 +1278,37 @@ class TestAgentContinueAsNew:
         ):
             assert required in carried, f"{required} must cross the rollover"
 
+    def test_a_durable_rollover_carries_the_payload_without_its_seed_keys(self):
+        # 1b.19: the seed conversation (up to 1 MB) was counted again beside the
+        # live transcript, and the stale snapshot overwrote the refreshed one.
+        import inspect
+        from datetime import timedelta
+
+        from services.temporal.agent_workflow import (
+            _CARRY_DROPPED_KEYS,
+            AgentWorkflow,
+            _carried_payload,
+            llm_attempt_timeout,
+        )
+
+        payload = {
+            "node_id": "agent", "system_message": "s", "user_prompt": "go",
+            "conversation": [{"role": "user", "content": "earlier"}], "memory_content": "# earlier",
+            "parameter_snapshot": {"agent": {"label": "a"}}, "tools": [{"name": "t", "tool_node_id": "t"}],
+            "conversation_key": {"agent_node_id": "agent"}, "llm_attempt_timeout_seconds": 1800.0,
+            "context_pressure_version": 1, "tool_result_max_chars": 100_000, "transcript_budget_bytes": 393_216,
+            "chat_stream": {"run_id": "r"},
+        }
+        carried = _carried_payload(payload)
+        assert _CARRY_DROPPED_KEYS == {"conversation", "memory_content", "parameter_snapshot"}
+        assert list(carried) == [key for key in payload if key not in _CARRY_DROPPED_KEYS]  # order kept
+        assert all(carried[key] is payload[key] for key in carried)  # tools and the rest kept as they are
+        assert "conversation" in payload  # the live payload is untouched
+        assert _carried_payload(carried) == carried  # a second rollover
+        assert llm_attempt_timeout(carried) == timedelta(minutes=30)  # 1b.25's key survives
+        # And the durable carry uses it.
+        assert '"prepared_payload": _carried_payload(payload)' in inspect.getsource(AgentWorkflow._run_impl)
+
     def test_rollover_is_not_gated_on_a_context_node(self):
         """Every agent must roll over under history pressure.
 

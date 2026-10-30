@@ -114,7 +114,12 @@ the transcript. `AgentWorkflow` restores these values and skips
 definitions, plugin Activity policies, and explicit in-run binding changes.
 Configuration edited during a pause or restart cannot reconstruct a different
 continuation. Iteration, usage, context usage, thinking, application execution
-identity, and control revision/hold state are carried too.
+identity, and control revision/hold state are carried too. The carried payload
+leaves out its seed keys (`conversation`, `memory_content`, `parameter_snapshot`;
+`_carried_payload`): the carried transcript always wins over the stored
+conversation, and the context already carries the snapshot a rebind kept
+current, so a 1 MB seed conversation no longer counts twice against the byte
+guard.
 
 Rollover happens at a completed-turn boundary without live child handles or
 Task Manager tasks. A stopped agent waits there for Resume and for control

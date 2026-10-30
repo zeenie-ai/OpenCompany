@@ -715,7 +715,9 @@ delegation handles or Task Manager tasks. Version 1 parks at that boundary
 while stopped and waits for all control handlers to finish before
 continue-as-new. The next input carries pause/revision/hold state, application
 execution identity, transcript, accumulated thinking, iteration, usage,
-context usage, prepared payload, and the resolved tool bindings. A rollover
+context usage, prepared payload (without its seed `conversation`,
+`memory_content` and `parameter_snapshot`, which a resumed run does not read
+from it), and the resolved tool bindings. A rollover
 changes Temporal's Run ID while preserving the application's execution scope.
 
 The converter measures the **complete encoded continuation input**, including
