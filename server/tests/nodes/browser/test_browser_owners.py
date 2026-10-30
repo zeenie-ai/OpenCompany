@@ -36,6 +36,11 @@ async def native_reset_client(scope, *, status=None, workflow_type="AgentWorkflo
     return SimpleNamespace(get_workflow_handle=Mock(return_value=handle), data_converter=converter)
 
 
+def authorized_browser_node():
+    """resolve_browser_node's (graph, node) for tests that skip the saved-graph checks."""
+    return AsyncMock(return_value=({}, {"id": "browser", "data": {"label": "Browser"}}))
+
+
 @pytest.fixture
 async def database():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -329,7 +334,7 @@ async def test_viewer_routing_keeps_active_frozen_profile_after_parameter_edit(d
         await session.commit()
     binding = {**await owners.bind_profile(db, "profile", "owner"), "workflow_id": "wf", "node_id": "browser"}
     await owners.claim_browser_task(db, binding, "owner", "task")
-    with patch("nodes.browser._handlers.resolve_browser_node", AsyncMock()):
+    with patch("nodes.browser._handlers.resolve_browser_node", authorized_browser_node()):
         assert (await owners.routing_for_node(db, "wf", "browser", "owner"))["profile_id"] == "profile"
         await owners.release_browser_task(db, binding, "stale")
         assert (await owners.routing_for_node(db, "wf", "browser", "owner"))["profile_id"] == "profile"
@@ -382,7 +387,7 @@ async def test_inprocess_delegated_claim_survives_stale_reset_and_cleans_up_with
         return {"response": "Complete"}
     runtime = BrowserRuntime()
     with patch("services.plugin.deps.get_database", return_value=db), \
-            patch("nodes.browser._handlers.resolve_browser_node", AsyncMock()), \
+            patch("nodes.browser._handlers.resolve_browser_node", authorized_browser_node()), \
             patch("nodes.browser._runtime.get_browser_runtime", return_value=runtime), \
             patch.object(SpecializedAgentBase, "execute_op", reason):
         child = asyncio.create_task(BrowserAgentNode().execute_op(context, BrowserAgentParams()))
@@ -454,7 +459,7 @@ async def test_ambiguous_active_browser_bindings_fail_closed(database):
         session.add(BrowserProfileOwner(profile_id="other", principal_id="owner", owner_id="alpha",
             task_id="other-task", workflow_id="wf", browser_node_id="browser"))
         await session.commit()
-    with patch("nodes.browser._handlers.resolve_browser_node", AsyncMock()), pytest.raises(NodeUserError, match="ambiguous"):
+    with patch("nodes.browser._handlers.resolve_browser_node", authorized_browser_node()), pytest.raises(NodeUserError, match="ambiguous"):
         await owners.routing_for_node(db, "wf", "browser", "owner")
 
 

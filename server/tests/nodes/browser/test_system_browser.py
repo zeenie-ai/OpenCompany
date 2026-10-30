@@ -264,7 +264,7 @@ async def test_open_reuses_running_profile_for_agent_and_viewer(monkeypatch):
     runtime._profiles["shared"] = existing
     start = AsyncMock(side_effect=AssertionError("must reuse the profile's browser"))
     monkeypatch.setattr(runtime, "_start", start)
-    profile = SimpleNamespace(id="shared")
+    profile = SimpleNamespace(id="shared", kind="shared")
     assert await runtime.open(profile) is existing
     assert await runtime.open(profile) is existing
     start.assert_not_awaited()
@@ -287,7 +287,7 @@ async def test_concurrent_opens_share_one_browser_start(monkeypatch):
     start = AsyncMock(side_effect=launch)
     monkeypatch.setattr(runtime, "_start", start)
     monkeypatch.setattr(runtime, "_ensure_reaper", Mock())
-    profile = SimpleNamespace(id="shared")
+    profile = SimpleNamespace(id="shared", kind="shared")
     first = asyncio.create_task(runtime.open(profile))
     await asyncio.wait_for(entered.wait(), timeout=1)
     second = asyncio.create_task(runtime.open(profile))
