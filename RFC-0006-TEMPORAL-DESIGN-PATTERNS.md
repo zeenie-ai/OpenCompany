@@ -1908,7 +1908,7 @@ class ApprovalWorkflow:
    - Versioning: none (database only). When: Phase 1b (1b.21). Effort S-M.
    - Risk: a hook that misses a row type; the test lists every non-terminal state.
    - T14 makes this essential: a generation whose histories cannot replay is marked "needs Reset", its workflow compensations can never run, and these hooks are its only cleanup.
-3. **Start's compensation runs in reverse order, by known ids, each step logged and continued:** cancel the local deployment, terminate the generation's workflows (the controller by its known id first, then the Visibility sweep for descendants), signal reset, then fail the row. A lost compare-and-swap on the row no longer skips the rest.
+3. **Start's compensation runs in reverse order, by known ids, each step logged and continued:** cancel the local deployment, signal the controller reset, sweep the generation's workflows, then fail the row (only this generation's, while it still reads `starting`) and broadcast. A lost compare-and-swap on the row no longer skips the rest. The Start runs as a task of its own, so a Start whose socket drops finishes on its own instead of being abandoned halfway.
    - Versioning: none (API process). When: Phase 1b (1b.22). Effort S.
    - Risk: mistakes appear only on failure paths; the test injects a failure at each step.
    - New generations get the rest with RFC-0005 §9.3 (subscriptions compiled in the transaction that creates the `starting` generation, §7.2) and RFC-0005 §15 (Schedules addressed by id).

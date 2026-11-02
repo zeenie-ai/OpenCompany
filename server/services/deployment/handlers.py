@@ -80,6 +80,11 @@ _deployment_tasks: Dict[str, asyncio.Task] = {}
 # never start a second checkpoint drain.
 _control_transition_tasks: Dict[tuple[str, int], asyncio.Task] = {}
 _boot_reconciliation_tasks: Dict[tuple[str, int], asyncio.Task] = {}
+# A Start runs as a task of its own, held here. Its handler is cancelled a
+# second after its socket drops, and a cancel is not an Exception, so neither
+# the Start's remaining steps nor their undo would run. The socket only waits
+# on the task.
+_start_tasks: set[asyncio.Task] = set()
 _control_completion_locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 # Counts and Queries are UI observations, never checkpoint acknowledgements.
 # An unavailable worker must not keep Reset behind an admission broadcast.
@@ -118,6 +123,15 @@ def _schedule_versioned_transition(service: WorkflowControlService, control) -> 
 
     task.add_done_callback(completed)
     return task
+
+
+def _start_finished(task: asyncio.Task) -> None:
+    _start_tasks.discard(task)
+    if not task.cancelled() and (exc := task.exception()) is not None:
+        # After a dropped socket nobody awaits the task, and shield() marks its
+        # error retrieved, so this line is the only record of how that Start ended.
+        logger.warning("Start ended with an error", task=task.get_name(),
+                       error_type=type(exc).__name__, error=str(exc))
 
 
 def _supersede_versioned_transitions(control) -> None:
@@ -1523,7 +1537,7 @@ async def mark_clean_shutdown() -> None:
     """Stamp the clean-shutdown marker (lifespan teardown hook)."""
     from core.container import container
 
-    tasks = [*_control_transition_tasks.values(), *_boot_reconciliation_tasks.values()]
+    tasks = [*_control_transition_tasks.values(), *_boot_reconciliation_tasks.values(), *_start_tasks]
     for task in tasks:
         task.cancel()
     if tasks:
@@ -2027,9 +2041,59 @@ async def handle_get_workflow_control_status(data: Dict[str, Any], websocket: We
     )
 
 
+async def _undo_failed_start(service: WorkflowControlService, control, error: Exception) -> None:
+    """Undo a Start that raised, last in first out. Each step has its own try:
+    one that fails is logged and the next still runs, so the row is failed even
+    when Temporal cannot be reached. The row goes last: while it reads
+    ``starting`` no second Start can begin, so the workflow-wide cancel and
+    sweep cannot reach a later generation."""
+    workflow_id = control.workflow_id
+    row = control
+
+    async def cancel_local_deployment() -> None:
+        # The deploy may have armed listeners and taken the workflow lock; left
+        # behind, they would block every later Start and the boot re-arm.
+        await handle_cancel_deployment({"workflow_id": workflow_id}, None)
+
+    async def reset_controller() -> None:
+        await _signal_controller(control, "reset")
+
+    async def sweep_generation() -> None:
+        await _terminate_generation_workflows(control)
+
+    async def fail_row() -> None:
+        nonlocal row
+        # The freshest row is the one announced; only this generation's, still
+        # starting, is failed.
+        row = await service.database.get_latest_workflow_control(workflow_id) or control
+        if row.generation == control.generation and row.status == "starting":
+            row = await service.fail(row, str(error)[:500])
+
+    async def announce() -> None:
+        await _broadcast_control(row)
+
+    for step in (cancel_local_deployment, reset_controller, sweep_generation, fail_row, announce):
+        try:
+            await step()
+        except Exception as step_error:
+            logger.warning("Start cleanup step failed", workflow_id=workflow_id, step=step.__name__,
+                           error_type=type(step_error).__name__, error=str(step_error))
+
+
 @ws_handler("workflow_id")
 async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
-    """Create generation one and retain deploy_workflow wire compatibility."""
+    """Create generation one and retain deploy_workflow wire compatibility.
+
+    The Start runs as a task of its own (``_start_tasks``): a socket that drops
+    mid-way no longer abandons it. It finishes, or fails and undoes itself, and
+    the client reads the outcome from the ``workflow_control_status`` broadcast."""
+    task = asyncio.create_task(_run_start(data, websocket), name=f"workflow-start:{data['workflow_id']}")
+    _start_tasks.add(task)
+    task.add_done_callback(_start_finished)
+    return await asyncio.shield(task)
+
+
+async def _run_start(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     workflow_id = data["workflow_id"]
     # A socket's identity wins; a server-side call (no socket, e.g.
     # start_saved_workflow) names the owner in the payload.
@@ -2182,34 +2246,7 @@ async def handle_start_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
             raise RuntimeError(str(deployed.get("error", "deployment_failed")))
         control = await service.transition(control, expected_revision=control.revision, from_statuses={"starting"}, status="running")
     except Exception as exc:
-        latest = await service.database.get_latest_workflow_control(workflow_id)
-        if latest is not None and latest.generation == control.generation:
-            control = latest
-        if control.status == "starting":
-            control = await service.fail(control, str(exc))
-        try:
-            await _signal_controller(control, "reset")
-        except Exception as reset_exc:
-            logger.warning(
-                "Failed to reset controller after deployment setup error",
-                workflow_id=workflow_id,
-                error=str(reset_exc),
-            )
-        await _terminate_generation_workflows(control)
-        # Tear down the local half too: the deploy may have armed
-        # listeners and taken the workflow lock, and leaving them meant a
-        # locked, armed, invisible deployment that blocked every future
-        # Start AND the boot re-arm for this workflow. Cancel unlocks and
-        # emits the terminal UI-facing state; "not deployed" is benign.
-        try:
-            await handle_cancel_deployment({"workflow_id": workflow_id}, None)
-        except Exception as cancel_exc:  # noqa: BLE001 — best-effort teardown
-            logger.warning(
-                "Local teardown after failed start did not complete",
-                workflow_id=workflow_id,
-                error=str(cancel_exc),
-            )
-        await _broadcast_control(control)
+        await _undo_failed_start(service, control, exc)
         raise
 
     # Reaching ``running`` commits successful deployment setup. Projection

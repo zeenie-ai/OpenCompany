@@ -52,6 +52,19 @@ Once the `running` compare-and-swap commits, a status-broadcast/projection
 failure does not tear down that live generation; the failed request is recovered
 by the client's authoritative status resync.
 
+A failed Start undoes its steps last in first out
+(`services/deployment/handlers._undo_failed_start`): it cancels the local
+deployment, signals the controller `reset`, sweeps the generation's executions,
+fails the row, and broadcasts. Each step runs on its own, so one that fails is
+logged and never skips the next. The row goes last: while it reads `starting`,
+no second Start can begin, so the workflow-wide cancel and sweep cannot reach a
+later generation. A Start runs as a task of its own, so a socket that drops
+mid-way no longer abandons it: it finishes, or fails and undoes itself, and the
+client reads the outcome from the status broadcast. A Start still running when
+the app quits can fail forward instead: the row ends `failed`, and the owner
+presses Start again. A crash or kill still leaves `starting` for the boot
+reconcile to converge.
+
 Legacy Pause and Resume use the controller's acknowledged `set_control_state` Temporal
 Update. The database first publishes `pausing`/`resuming`, then publishes the
 stable state only after the Update result confirms `paused`/`running`. If the
