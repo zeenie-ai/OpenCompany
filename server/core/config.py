@@ -194,9 +194,10 @@ class Settings(BaseSettings):
     # Wave 16.4: default flipped to True — per-queue routing is the
     # production default (LLM / browser / code-exec / REST workloads
     # get isolated slot pools instead of sharing one 100-slot queue).
-    # Rollback: TEMPORAL_WORKER_POOL_ENABLED=false + restart — the pool
-    # stops and every activity routes back to the single manager worker
-    # on "machina-tasks". Opt out via the env var, never by reverting
+    # Rollback: TEMPORAL_WORKER_POOL_ENABLED=false + restart — runs started
+    # afterwards route every activity back to the single manager worker on
+    # "machina-tasks". The pool keeps polling, so runs already routed per
+    # queue still finish. Opt out via the env var, never by reverting
     # this default (locked by test_task_queue_coverage.py).
     temporal_worker_pool_enabled: bool = Field(
         default=True,

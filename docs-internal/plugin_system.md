@@ -479,12 +479,13 @@ activities are **wired into the orchestrator** behind
   because the worker shares the FastAPI process.
 
 `TemporalWorkerManager._worker` registers BOTH the legacy activity AND
-every per-type activity. With the default-on
-`TEMPORAL_WORKER_POOL_ENABLED`, `main.py` also starts a
-`TemporalWorkerPool`, and `MachinaWorkflow._resolve_activity()` routes each
-per-type activity to its plugin-declared `cls.task_queue`. Setting
-`TEMPORAL_WORKER_POOL_ENABLED=false` stops the pool and routes activities back
-to the manager's single default queue.
+every per-type activity. The Temporal lifecycle also starts a
+`TemporalWorkerPool`, and with the default-on `TEMPORAL_WORKER_POOL_ENABLED`,
+`MachinaWorkflow._resolve_activity()` routes each per-type activity to its
+plugin-declared `cls.task_queue`. Setting `TEMPORAL_WORKER_POOL_ENABLED=false`
+routes the activities of runs started afterwards back to the manager's single
+default queue; the pool keeps polling, so runs already routed per queue still
+finish.
 
 Execution routing is recorded in the run's input; changing environment settings
 does not redirect an already-running workflow. New controlled generations
@@ -523,7 +524,7 @@ activities = collect_plugin_activities()
 ai_heavy = collect_plugin_activities(task_queue="ai-heavy")
 worker = Worker(client, task_queue="ai-heavy", activities=ai_heavy, ...)
 
-# Multi-queue pool (started by main.py when TEMPORAL_WORKER_POOL_ENABLED=true):
+# Multi-queue pool (always started by the Temporal lifecycle):
 from services.temporal.worker import TemporalWorkerPool
 pool = TemporalWorkerPool(client)  # defaults to all declared queues
 await pool.start()

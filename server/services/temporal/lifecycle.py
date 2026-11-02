@@ -193,7 +193,7 @@ async def _start_execution_engine(
     settings: Settings,
     log: Callable[[str], None],
 ) -> None:
-    """Wire the executor and start the worker manager (+ optional pool)."""
+    """Wire the executor and start the worker manager and the pool."""
     from core.container import container
     from services.temporal import TemporalExecutor
     from services.temporal.worker import TemporalWorkerManager
@@ -220,11 +220,12 @@ async def _start_execution_engine(
             await manager._browser_pool.start()
 
         # Start specialized queues after framework workflow registration.
-        # The Browser owner above is mandatory regardless of this flag.
-        if settings.temporal_worker_pool_enabled:
-            from services.temporal.worker import TemporalWorkerPool
-            pool = TemporalWorkerPool(client=client)
-            await pool.start()
+        # They always poll: TEMPORAL_WORKER_POOL_ENABLED only selects the
+        # routing of runs started later, and runs already routed per queue
+        # must still find a worker.
+        from services.temporal.worker import TemporalWorkerPool
+        pool = TemporalWorkerPool(client=client)
+        await pool.start()
     except BaseException:
         # The outer lifecycle retries startup. Do not leave workers polling
         # an abandoned client if one of the later pool constructions fails.

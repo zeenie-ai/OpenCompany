@@ -8,7 +8,7 @@ import pytest
 
 
 @pytest.mark.parametrize("owner_fails", [False, True])
-async def test_owner_worker_is_required_without_general_pool_and_startup_failure_is_cleaned(monkeypatch, owner_fails):
+async def test_owner_worker_and_pool_start_with_the_routing_flag_off_and_startup_failure_is_cleaned(monkeypatch, owner_fails):
     from core import container as container_module
     from services import browser_owners
     from services.temporal import lifecycle, worker
@@ -21,8 +21,14 @@ async def test_owner_worker_is_required_without_general_pool_and_startup_failure
         events.append("owner")
         if owner_fails:
             raise RuntimeError("owner construction failed")
+    async def start_pool():
+        events.append("pool")
     manager = SimpleNamespace(start=start_main, stop=AsyncMock(), _browser_pool=None)
     owner = SimpleNamespace(start=start_owner)
+    # 1b.34: the pool polls whatever the routing flag says, so runs already
+    # routed per queue still find a worker.
+    pool = SimpleNamespace(start=start_pool, stop=AsyncMock(), queues=["code-exec"])
+    monkeypatch.setattr(worker, "TemporalWorkerPool", lambda **kwargs: pool)
     wrapper = SimpleNamespace(worker_manager=None)
     fake_container = SimpleNamespace(database=lambda: object(),
         workflow_service=lambda: SimpleNamespace(set_temporal_executor=MagicMock()), temporal_client=lambda: wrapper)
@@ -39,12 +45,14 @@ async def test_owner_worker_is_required_without_general_pool_and_startup_failure
         manager.stop.assert_awaited_once()
         assert wrapper.worker_manager is None
         assert not hasattr(state, "temporal_worker_manager")
+        assert events == ["registered", "main", "owner"]
     else:
         await lifecycle._start_execution_engine(object(), state, settings, lambda line: None)
         assert wrapper.worker_manager is manager
         assert manager._browser_pool is owner
+        assert state.temporal_pool is pool
         manager.stop.assert_not_awaited()
-    assert events == ["registered", "main", "owner"]
+        assert events == ["registered", "main", "owner", "pool"]
 
 
 async def test_stop_closes_partial_manager_session_before_worker_started():
