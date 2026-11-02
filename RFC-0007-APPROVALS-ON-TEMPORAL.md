@@ -1,6 +1,6 @@
 # RFC-0007: Approvals the Claude Code and Codex way, on Temporal
 
-- **Status:** Accepted design, 2026-10-25. Checked against the code the same day and revised (§10). The owner's decisions are in §3. Implementation is present behind the per-generation flag, but Start does not yet admit `approval_wait_version=1`; the activation step AP.7 remains pending. See the implementation status below.
+- **Status:** Accepted design, 2026-10-25. Checked against the code the same day and revised (§10). The owner's decisions are in §3. AP.1-AP.6 are implemented behind the per-generation flag (a9a85fde to a290bf2d, 2026-10-26 and 27; RFC-0005 §24.4 lists each commit). Start does not yet write `approval_wait_version=1`: AP.7 does, one release after the release that ships AP.1-AP.6. See the implementation status below.
 - **Created:** 2026-10-25
 - **Scope:**
   - `server/services/approvals/`: what asks, rules, decisions, the card's data, and the wait's activities;

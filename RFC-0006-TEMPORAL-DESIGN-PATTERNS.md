@@ -6155,7 +6155,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | Id | Fix | § |
 |---|---|---|
 | 1b.1 | A redo guard on every path, graph nodes and tool calls alike, in three commits. 1b.1a (done, f76b1dc3): one service table, `services/approvals/repeats.py` (`REPEATABLE`, `REPEATABLE_WHEN`, `repeatable()`); an unlisted node type is unsafe to repeat, and no plugin declares anything. 1b.1c: the client's `effect` card ("May have happened", Dismiss), before 1b.1b. 1b.1b: a later attempt of a call that is not repeatable answers `SendOutcomeUnknown` (sends) or `OutcomeUnknown` (other effects), records an `unknown` card (`approved_by: auto`) and tells the employee; a graph node pauses its employee at once. RFC-0007 §6 lists the corrections from its check of the code | 11.2 |
-| 1b.2 | Activities re-raise cancellation instead of returning a failure envelope; a worker shutdown becomes the retryable `NodeWaitInterrupted`; a cancel during a call that is not repeatable records `unknown` (RFC-0004 H2). The cron and Timer nodes stop turning a cancel into a `RuntimeError`, a fix to their own code | 9.3 |
+| 1b.2 | Activities re-raise cancellation instead of returning a failure envelope; a worker shutdown becomes the retryable `NodeWaitInterrupted` for a call safe to repeat; a cancel or a shutdown during a call that is not repeatable records `unknown` and answers at once (RFC-0004 H2). The cron and Timer nodes stop turning a cancel into a `RuntimeError`, a fix to their own code | 9.3 |
 | 1b.3 | The legacy tool path passes each plugin's declared retry policy and timeouts | 11.2 |
 | 1b.4 | Dropped on 2026-10-25. 1b.1 refuses a second paid Apify run, and 1b.3 ends the legacy path's unlimited retries | 9.3 |
 | 1b.5 | With 1b.6, for drafts and Retry; a row whose turn waits for it is left to that turn, which waits for Resume itself (RFC-0007 §6). An approved send waits while its generation is stopped (`claim_send` refuses) and is cancelled, with the employee told, once its generation has ended. The chat watchdog's 30 s round runs `recover_sends`, which starts a waiting send after Resume. Undo works until the claim (T12) | 9.6 |
@@ -6181,7 +6181,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | 1b.15 | Every Update call that a request or a loop waits on is bounded (`bounded_update`, which raises `UpdatePending`): the socket waiter answers within 10 s, Workspace submit within 15 s ("still pending") and reset within 240 s, safe-apply within 30 s ("waiting"). Background transitions and the Stop drain keep today's unbounded wait | 7.3 |
 | 1b.16 | Controller queue paging retries without limit (`QUEUE_PAGING_RETRY`) | 12.3 |
 | 1b.17 | Poll activities run under `min(180 s, today's formula)`. A credential error already annotated at its source (a `PermissionError` with `provider`) becomes `NodeUserError` and fails fast. No heartbeats; the Google and IMAP plugins are unchanged | 9.2 |
-| 1b.18 | Each poll cycle appends at most 512 KB, oldest first, and leaves the deferred ids unseen, so the next cycle takes them | 12.3 |
+| 1b.18 | Each poll cycle appends at most 512 KB, oldest first, and stops once two thirds of its attempt's deadline has passed; it leaves the deferred ids unseen, so the next cycle takes them | 12.3 |
 | 1b.19 | The AgentWorkflow continue-as-new carry drops the seed conversation, memory content and parameter snapshot, and keeps `tools` | 16.8 |
 
 **Track 4: compensation and Reset**
@@ -6191,7 +6191,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | 1b.20 | Compensations retry until they land: delegation cleanup (`DELEGATION_CLEANUP_RETRY`, now unlimited) and job failure (`BOOKKEEPING_RETRY`, moved to `_retry_policies.py`). `cancel_agent_delegation` answers `absent` for a missing row. The run record stays best-effort | 10.2 |
 | 1b.21 | Reset closes teams, team tasks and employee jobs (`close_open_work`, shared with Stop work). `dispatch_job` cancels a job of an ended generation instead of starting it, and a delivery keeps a cancelled job cancelled and sends nothing more. It ships in the same release as 1b.20 | 10.2 |
 | 1b.22 | Start's compensation runs in reverse order, each step in its own try and logged, and fails the row last. A Start whose socket drops finishes on its own | 10.2 |
-| 1b.23 | Boot reconcile finishes a Reset that a crash interrupted | 10.2 |
+| 1b.23 | Boot reconcile runs once more, inline, a Reset that a crash interrupted; a failure leaves the row `resetting` | 10.2 |
 | 1b.24 | The pause-on-failure breaker counts each run once | 11.8 |
 
 **Track 5: errors and retries**
@@ -6199,11 +6199,11 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | Id | Fix | § |
 |---|---|---|
 | 1b.25 | LLM step: the heartbeat helper stops busy-looping, the unifier classifies `TimeoutError`, and local and OpenAI-compatible endpoints get 30-minute attempts, recorded in the payload. No in-attempt deadline and no Gemini client timeout. The step's total budget waits for Phase 5 (T18) | 16.3 |
-| 1b.26 | LLM-step bugs (`LLMStepFailed`, `LLMStepInternalError`) and `PayloadsTooLarge` are non-retryable, in both non-retryable lists | 11.4 |
-| 1b.27 | Compaction runs on the LLM step's retry policy, with a heartbeat; an empty summary is non-retryable from attempt 3 | 11.4 |
+| 1b.26 | `PayloadsTooLarge` is in both non-retryable lists (`NON_RETRYABLE_ERROR_TYPES` and the plugin `RetryPolicy` default); the LLM step raises `LLMStepFailed` and `LLMStepInternalError` non-retryable | 11.4 |
+| 1b.27 | Compaction runs on the LLM step's retry policy, with a heartbeat and the step's attempt timeout; an empty summary fails and records nothing | 11.4 |
 | 1b.28 | Retryable LLM errors carry the BENIGN category | 18.5 |
 | 1b.29 | Workflow task failures are logged at ERROR (`WorkflowTaskFailureFilter`) | 18.5 |
-| 1b.30 | The retry alert, with the attention store it first uses (1b.38a). A `stuck_retry` item is raised once an activity passes its attempt threshold (8 for LLM steps and compaction, 10 elsewhere; permits and `approvalGate` skipped) and resolved on success. A quieter log: attempt 2, the threshold, then every 10th. The store is one `attention_items` table and `services/attention.py` (`touch`, `resolve`, `open_items`, which shows items seen in the last hour), with one owner-only WS command, an identity-only CloudEvent and one Home line. The metric counter follows in Phase 8 | 11.7 |
+| 1b.30 | The retry alert, with the attention store it first uses (1b.38a). A `stuck_retry` item is raised once an activity passes its attempt threshold (8 for LLM steps and compaction, 10 elsewhere; permits, `approvalGate` and the Pi driver skipped) and resolved on success. A quieter log: attempt 2, the threshold, then every 10th. The store is one `attention_items` table and `services/attention.py` (`touch`, `resolve`, `open_items`, which shows items seen in the last hour), with one owner-only WS command, an identity-only CloudEvent and one Home line. The metric counter follows in Phase 8 | 11.7 |
 
 **Track 6: platform and workers**
 
@@ -6211,13 +6211,13 @@ Phase 1b is new to RFC-0005's rollout (§20).
 |---|---|---|
 | 1b.31 | The Start-path parameter snapshot is sanitized; activities restore secrets from the saved row; the sanitizer drops `Authorization`, `Proxy-Authorization` and `Cookie` values. It lands whole before RFC-0007 AP.2a, whose generic approval card needs the sanitizer change; that change alone would drop a saved `Authorization` header from the settings a generation's runs read | 17.8 |
 | 1b.32 | Live controllers refresh a known listener's snapshot on re-registration, which clears raw copies held since Start | 17.8 |
-| 1b.33 | Named dev-server ports (`TEMPORAL_HTTP_PORT`, `TEMPORAL_METRICS_PORT`, passed as `--http-port` and `--metrics-port`) and `services/netpolicy.py` on the HTTP request node, the node's own bug fix. `own_ports_from_env` skips the AI proxy. A small netpolicy port registry takes the live Browser DevTools, egress-proxy and ADB ports, one line each in the Browser runtime and the Android router. The wrong `--metrics-port` comment in `_runtime.py` is fixed here | 17.8 |
+| 1b.33 | Named dev-server ports (`TEMPORAL_HTTP_PORT`, `TEMPORAL_METRICS_PORT`, passed as `--http-port` and `--metrics-port`) and `services/netpolicy.py` on the HTTP request node, the node's own bug fix. `own_ports_from_env` skips the AI proxy. A small netpolicy port registry takes the live Browser DevTools, egress-proxy and ADB ports, registered once by the Browser runtime module (for the shared runtime, 5862af23) and by the Android router. The wrong `--metrics-port` comment in `_runtime.py` is fixed here | 17.8 |
 | 1b.34 | The worker pool always polls; the flag only sets the routing of new runs | 15.2 |
 | 1b.35 | The standalone worker refuses to run outside distributed mode | 15.2 |
-| 1b.36 | One main-queue registration: one activity-list function and `plugins=temporal_plugins()` for the manager, the standalone worker and `create_worker`; one CI test replaces four count pins | 15.3 |
+| 1b.36 | One main-queue registration: one activity-list function and `plugins=temporal_plugins()` for the manager, the standalone worker and `create_worker`; three count pins became membership checks. The standalone worker polls `TEMPORAL_TASK_QUEUE` in `TEMPORAL_NAMESPACE` (56f0b397, §17.2 rec 3) | 15.3 |
 | 1b.37 | Workers stop together (`asyncio.gather` in `main.py` and in `TemporalWorkerManager.stop()`), so their graceful windows overlap | 17.9 |
 | 1b.38 | Split. 1b.38a, the attention store, ships in 1b.30. 1b.38b: the dev server gets `system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute=5`, and a count of `TemporalReportedProblems` every 5 minutes raises or clears one "stuck runs" item. The SDK metrics runtime and its four alerts move to RFC-0005 Phase 8 (§22.3) | 17.10 |
-| 1b.39 | An event-loop lag watchdog that only logs (`core/loop_watchdog.py`) | 17.19 | <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
+| 1b.39 | An event-loop lag watchdog that only logs (`services/loop_watchdog.py`; under `services/` because tests stub `core`) | 17.19 |
 
 **Track 7: tests and docs**
 
@@ -6226,10 +6226,10 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | 1b.40 | Dropped on 2026-10-25: it guards only against future regressions, and the replay corpus and the golden already gate replay. §17.18 rec 1 is deferred; text fixes move to 1b.45 | 17.18 |
 | 1b.41 | Dropped on 2026-10-25: 1b.9, 1b.16 and 1b.20 add the constants they need. Text fixes move to 1b.45 | 11.1 |
 | 1b.42 | The golden identity snapshot records each plugin's task queue (`plugin_task_queues`), checked additively. It runs just before RFC-0007 AP.4a, because it rewrites the golden with no patch entries | 15.2 |
-| 1b.43 | A dev-server test of the per-run Update limit, lowered to 50 (`history.maxTotalUpdates=50`) | 12.1 |
+| 1b.43 | A dev-server test of the per-run Update limit, lowered to 50 (`history.maxTotalUpdates=50`). Done (c195b617): the server suggests continue-as-new at the 45th Update, so no Update counter is needed (§12.1 rec 1) | 12.1 |
 | 1b.44 | Dropped on 2026-10-25: a script no one runs. Its two text fixes move to 1b.45 | 17.4 |
-| 1b.45 | Comment and doc corrections, the text fixes of the dropped items, and the transaction rule in DESIGN.md. Services, env files and docs only; it runs last. It also fixes this RFC's passages that still name dropped or narrowed items (§4.1, §5 rules 3, 5, 13, 14, 16, 18 and 25, §7.3, §16.10, §24.1, §25). Done in part (1b.45a, 24c2907f): option and retry-policy changes need no patch (§5 rule 6) | 10.1, 17.13 |
-| 1b.46 | Refuse `deploy_workflow` when the generation is 0 or less or its control row is not live (`DEPLOYABLE_CONTROL_STATES`), and remove the unused client `deployWorkflow` | 8.2 |
+| 1b.45 | Comment and doc corrections, the text fixes of the dropped items, and the transaction rule in DESIGN.md. Services, env files and docs only; it runs last. It also fixes this RFC's passages that still name dropped or narrowed items (§4.1, §5 rules 3, 5, 13, 14, 16, 18 and 25, §7.3, §16.10, §24.1, §25). Done: 1b.45a (24c2907f), option and retry-policy changes need no patch (§5 rule 6); then a4c9da25, 614f9115 and the RFC commits after them | 10.1, 17.13 |
+| 1b.46 | Refuse `deploy_workflow` when the generation is 0 or less or its control row is not live (`LIVE_STATES`), and remove the unused client `deployWorkflow` | 8.2 |
 
 **Order and dependencies** (set on 2026-10-25; every commit leaves `main` releasable)
 1. **Done:**
@@ -6238,14 +6238,14 @@ Phase 1b is new to RFC-0005's rollout (§20).
    - 1b.1a (f76b1dc3);
    - the WhatsApp and Drive download fix (276d833b);
    - 1b.1c (4e0f1675), 1b.1b (e02cc61f), 1b.2 (8f1db2df);
-   - RFC-0007 AP.1 (a9a85fde), 1b.31 (461e9e56), AP.2a (fc4b11f4), AP.2b (1ee6c023, 6ec3522d), AP.2c (af9c0607, 334fceff), AP.3 (4568fc7e, 1e94a3f8, 22d767fa, 3152dfd4), 1b.42 (8d308b9a), AP.4a (0374b5b7), AP.4b (dfdff73b), AP.4c (9d43d7aa), AP.5 (2fabb9ea). RFC-0005 §24.4 says what each changed.
-2. **Batch A:**
-   - 1b.1c, 1b.1b, 1b.2;
-   - then RFC-0007 AP.1, 1b.31 (from batch C), AP.2a, AP.2b, AP.2c, AP.3, 1b.42, AP.4a, AP.4b, AP.4c, AP.5, AP.6;
-   - then 1b.3, 1b.8, 1b.5, 1b.10, 1b.28, 1b.26, 1b.25, 1b.27, 1b.29, 1b.30, 1b.9.
-3. **Batch B:** 1b.13, 1b.14, 1b.15, 1b.16, 1b.17, 1b.18, 1b.19, 1b.21, 1b.20, 1b.22, 1b.23, 1b.24.
-4. **Batch C:** 1b.46, 1b.32, 1b.33, 1b.34, 1b.35, 1b.37, 1b.36, 1b.38b, 1b.39.
-5. **Batch D:** 1b.43, 1b.45.
+   - RFC-0007 AP.1 (a9a85fde), 1b.31 (461e9e56), AP.2a (fc4b11f4), AP.2b (1ee6c023, 6ec3522d), AP.2c (af9c0607, 334fceff), AP.3 (4568fc7e, 1e94a3f8, 22d767fa, 3152dfd4), 1b.42 (8d308b9a), AP.4a (0374b5b7), AP.4b (dfdff73b), AP.4c (9d43d7aa), AP.5 (2fabb9ea), AP.6 (a290bf2d);
+   - the rest of batch A: 1b.3 (0b0225f0), 1b.8 (b7a575be), 1b.5 (32c082de), 1b.10 (780d9ba9), 1b.28 (0c427055), 1b.26 (444c70a5), 1b.25 (663cb651), 1b.32 (ded22c7d, moved up from batch C), 1b.27 (427c4ac4), 1b.29 (5635ac6c), 1b.30 (bc26edc8), 1b.9 (0c582e64);
+   - batch B: 1b.13 (1416f5b5), 1b.14 (e6fb360a), 1b.15 (03504492), 1b.16 (3e0d91f5), 1b.17 (c6c55451), 1b.18 (2f62393e), 1b.19 (675375dc), 1b.21 (a6f9af68), 1b.22 (a95120ed), 1b.20 (2dcd53f9), 1b.23 (9357689a), 1b.24 (525736d2);
+   - batch C: 1b.46 (7959e5c3), 1b.33 (ad038ae6), 1b.34 (02800a04), 1b.35 (032953de), 1b.37 (02c002c3), 1b.36 (d379ab3e), 1b.38b (77c1a3aa), 1b.39 (4ef27b5a);
+   - batch D: 1b.43 (c195b617), 1b.45 (a4c9da25, 614f9115 and the RFC commits after them);
+   - fixes found on 2026-11-02: 5862af23 (1b.33), 986b8484 (1b.22), 8d24efb4 (1b.13), 56f0b397 (1b.36).
+
+   RFC-0005 §24.4 says what each changed. Every item but AP.7 was done on 2026-11-02.
 
 RFC-0007 AP.7, which starts writing `approval_wait_version=1`, lands after the release that ships AP.1-AP.6: a release reads a flag one release before any release writes it (RFC-0005 §24.3).
 
@@ -6266,7 +6266,7 @@ Rules:
   - 1b.15 before 1b.23;
   - 1b.17 before 1b.18.
 - **Batch C:**
-  - 1b.31 and 1b.32 in one release, so 1b.32 lands before the next release; 1b.46 then drops the `generation > 0` condition at the deploy funnel;
+  - 1b.31 and 1b.32 in one release (both landed in batch A); 1b.46 then dropped the `generation > 0` condition at the deploy funnel;
   - 1b.33 before 1b.38b;
   - 1b.35 before 1b.36.
 - **Golden and docs:** 1b.42 comes before the first reviewed golden entry (RFC-0007 AP.4a), and 1b.45 comes last.
