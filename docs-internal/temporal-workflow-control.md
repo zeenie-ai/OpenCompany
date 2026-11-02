@@ -57,13 +57,13 @@ A failed Start undoes its steps last in first out
 deployment, signals the controller `reset`, sweeps the generation's executions,
 fails the row, and broadcasts. Each step runs on its own, so one that fails is
 logged and never skips the next. The row goes last: while it reads `starting`,
-no second Start can begin, so the workflow-wide cancel and sweep cannot reach a
-later generation. A Start runs as a task of its own, so a socket that drops
-mid-way no longer abandons it: it finishes, or fails and undoes itself, and the
-client reads the outcome from the status broadcast. A Start still running when
-the app quits can fail forward instead: the row ends `failed`, and the owner
-presses Start again. A crash or kill still leaves `starting` for the boot
-reconcile to converge.
+no second Start can begin. A Reset can still take a starting row and a new
+Start follow it, so the workflow-wide cancel and sweep run only while the row
+is still this generation's `starting`. A Start runs as a task of its own, so a
+socket that drops mid-way no longer abandons it: it finishes, or fails and
+undoes itself, and the client reads the outcome from the status broadcast. A
+clean shutdown cancels a Start still running without undoing it: like a crash
+or kill, that leaves the row `starting` for the boot reconcile to converge.
 
 Legacy Pause and Resume use the controller's acknowledged `set_control_state` Temporal
 Update. The database first publishes `pausing`/`resuming`, then publishes the

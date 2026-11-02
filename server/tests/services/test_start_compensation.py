@@ -73,8 +73,9 @@ def start_plane(monkeypatch, *, forward_error=None, setup=None):
     service = SimpleNamespace(
         database=SimpleNamespace(
             get_workflow_control_by_idempotency_key=AsyncMock(return_value=None),
-            # The Start reads the latest row once (there is none yet), and the undo reads it again.
-            get_latest_workflow_control=AsyncMock(side_effect=[None, reread]),
+            # The Start reads the latest row once (there is none yet); the undo
+            # reads it before the cancel, the sweep and the fail.
+            get_latest_workflow_control=AsyncMock(side_effect=[None, reread, reread, reread]),
             update_workflow_run_data_scope=AsyncMock(return_value=True),
         ),
         begin_generation=AsyncMock(return_value=(starting, True)),
@@ -146,14 +147,16 @@ async def test_a_failing_undo_step_never_skips_the_next(monkeypatch, broken):
     "latest",
     [
         _control("running", 3),
+        _control("resetting", 2),
         _control("reset", 4),
         _control("failed", 2),
         _control("starting", generation=2),  # a newer generation
     ],
 )
 async def test_the_undo_fails_only_this_generations_starting_row(monkeypatch, latest):
-    for name in ("handle_cancel_deployment", "_signal_controller", "_terminate_generation_workflows"):
-        monkeypatch.setattr(handlers, name, AsyncMock())
+    steps = {name: AsyncMock() for name in ("handle_cancel_deployment", "_signal_controller", "_terminate_generation_workflows")}
+    for name, step in steps.items():
+        monkeypatch.setattr(handlers, name, step)
     broadcast = AsyncMock()
     monkeypatch.setattr(handlers, "_broadcast_control", broadcast)
     control = _control("starting")
@@ -161,6 +164,12 @@ async def test_the_undo_fails_only_this_generations_starting_row(monkeypatch, la
     await handlers._undo_failed_start(service, control, RuntimeError("setup refused"))
     service.fail.assert_not_awaited()
     assert broadcast.await_args.args[0] is latest
+    # A Reset took the row, and a newer Start may follow it: the workflow-wide
+    # cancel and sweep leave it alone, while this generation's own controller
+    # is still told to reset.
+    steps["handle_cancel_deployment"].assert_not_awaited()
+    steps["_terminate_generation_workflows"].assert_not_awaited()
+    steps["_signal_controller"].assert_awaited_once_with(control, "reset")
 
 
 def parked_setup(result):

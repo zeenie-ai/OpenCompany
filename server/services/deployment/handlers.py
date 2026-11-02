@@ -2050,21 +2050,30 @@ async def _undo_failed_start(service: WorkflowControlService, control, error: Ex
     """Undo a Start that raised, last in first out. Each step has its own try:
     one that fails is logged and the next still runs, so the row is failed even
     when Temporal cannot be reached. The row goes last: while it reads
-    ``starting`` no second Start can begin, so the workflow-wide cancel and
-    sweep cannot reach a later generation."""
+    ``starting`` no second Start can begin. A Reset can still take a starting
+    row and a new Start follow it, so the workflow-wide cancel and sweep first
+    check that the row is still this generation's ``starting``."""
     workflow_id = control.workflow_id
     row = control
+
+    async def still_ours() -> bool:
+        latest = await service.database.get_latest_workflow_control(workflow_id)
+        return latest is None or (latest.generation == control.generation and latest.status == "starting")
 
     async def cancel_local_deployment() -> None:
         # The deploy may have armed listeners and taken the workflow lock; left
         # behind, they would block every later Start and the boot re-arm.
-        await handle_cancel_deployment({"workflow_id": workflow_id}, None)
+        if await still_ours():
+            await handle_cancel_deployment({"workflow_id": workflow_id}, None)
 
     async def reset_controller() -> None:
         await _signal_controller(control, "reset")
 
     async def sweep_generation() -> None:
-        await _terminate_generation_workflows(control)
+        # The sweep also matches every root tagged with the workflow id, a
+        # later generation's controller among them.
+        if await still_ours():
+            await _terminate_generation_workflows(control)
 
     async def fail_row() -> None:
         nonlocal row
