@@ -203,7 +203,10 @@ def test_real_driver_worker_death_reconstructs_completed_receipts():
         env = {**os.environ, "DEBUG": "false", "DATA_DIR": str(directory / "data")}
         result = subprocess.run([sys.executable, "-m", "tests.temporal.test_pi_worker_recovery", str(directory)],
             cwd=Path(__file__).parents[2], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, env=env, timeout=180, check=False)
+            # About 115 s on a Windows runner. Above the sum of the gate's own
+            # waits, so a slow run reports which one ran out instead of being
+            # killed without its output.
+            stderr=subprocess.STDOUT, env=env, timeout=300, check=False)
         logs = "\n".join(path.read_text(errors="replace")[-5000:] for path in directory.glob("driver-*.log"))
         assert result.returncode == 0, result.stdout.decode(errors="replace")[-15000:] + logs
 

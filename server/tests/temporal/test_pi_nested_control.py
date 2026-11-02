@@ -167,7 +167,11 @@ async def nested_gate(directory):
                     id="pi-nested-root-" + uuid4().hex, task_queue=QUEUE)
                 await controller.execute_update("register_execution", {"generation": 7,
                     "workflow_id": handle.id, "first_execution_run_id": handle.first_execution_run_id})
-                await asyncio.wait_for(STARTED.wait(), 30)
+                # Each Pi turn spawns bun through the one driver slot, and a
+                # Windows runner has taken over 2.5 s a turn, against about
+                # 1 s locally. This wait spans four turns, the first one cold;
+                # the wait for the result spans the eighteen after Resume.
+                await asyncio.wait_for(STARTED.wait(), 60)
                 description = await handle.describe()
                 assert 1 <= len(description.raw_description.pending_children) <= 2
                 assert COUNTS["max_permits"] == 2 and DRIVERS["max"] == 1
@@ -191,7 +195,7 @@ async def nested_gate(directory):
                 assert business_counts() == before_resume, "Paused descendants may not admit new work"
                 scope.revision = 2
                 await asyncio.wait_for(transition_generation(environment.client, scope, paused=False), 30)
-                result = await asyncio.wait_for(handle.result(), 45)
+                result = await asyncio.wait_for(handle.result(), 180)
                 assert result["success"], result
                 assert result["result"]["response"] == "done: root" and result["result"]["usage"]["total_tokens"] == 6
                 assert COUNTS["llm:root"] == 2
@@ -234,7 +238,9 @@ def test_nested_pi_one_driver_slot_bounded_team_and_central_control():
         env = {**os.environ, "DEBUG": "false", "DATA_DIR": str(directory / "data")}
         result = subprocess.run([sys.executable, "-m", "tests.temporal.test_pi_nested_control", str(directory)],
             cwd=Path(__file__).parents[2], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, env=env, timeout=180, check=False)
+            # Above the sum of the gate's own waits, so a slow run reports
+            # which one ran out instead of being killed without its output.
+            stderr=subprocess.STDOUT, env=env, timeout=420, check=False)
     assert result.returncode == 0, result.stdout.decode(errors="replace")[-15000:]
 
 
