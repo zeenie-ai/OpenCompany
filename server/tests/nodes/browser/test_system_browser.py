@@ -297,6 +297,23 @@ async def test_concurrent_opens_share_one_browser_start(monkeypatch):
     start.assert_awaited_once_with(profile)
 
 
+def test_only_the_shared_runtime_feeds_the_fetch_policy(monkeypatch):
+    """A node's own fetch never reaches the shared runtime's Chromes, and a
+    runtime built elsewhere never joins the policy: one a test left behind,
+    holding a fake Chrome without a port, broke every later fetch."""
+    from nodes.browser import _runtime as module
+    from services.netpolicy import fetch_policy
+
+    stray = module.BrowserRuntime()
+    stray._chromes["left-behind"] = SimpleNamespace()
+    shared = module.BrowserRuntime()
+    shared._chromes["live"] = SimpleNamespace(port=9333)
+    monkeypatch.setattr(module, "_runtime", shared)
+    assert 9333 in fetch_policy().blocked_local_ports
+    monkeypatch.setattr(module, "_runtime", None)
+    assert 9333 not in fetch_policy().blocked_local_ports
+
+
 @pytest.mark.asyncio
 async def test_start_records_connected_version_and_passes_actual_major(monkeypatch):
     import asyncio

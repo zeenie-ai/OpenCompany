@@ -118,7 +118,6 @@ class BrowserRuntime:
         self._reaper: Optional[asyncio.Task] = None
         self._own_ports: FrozenSet[int] = own_ports_from_env()
         self._local_addresses = local_addresses()
-        register_port_source(self._blocked_ports)  # a node's own fetch never reaches them either
 
     # -- settings --------------------------------------------------------------
 
@@ -617,6 +616,16 @@ def get_browser_runtime() -> BrowserRuntime:
 def peek_browser_runtime() -> Optional[BrowserRuntime]:
     """The runtime if one was created, without creating it (for shutdown)."""
     return _runtime
+
+
+def _shared_runtime_ports() -> FrozenSet[int]:
+    """The shared runtime's Chrome and proxy ports, which a node's own fetch
+    never reaches either. Only the shared runtime counts: another instance
+    (tests build many) would otherwise stay in the policy after it is gone."""
+    return _runtime._blocked_ports() if _runtime is not None else frozenset()
+
+
+register_port_source(_shared_runtime_ports)
 
 
 __all__ = ["BrowserRuntime", "ProfileRuntime", "get_browser_runtime", "peek_browser_runtime"]
