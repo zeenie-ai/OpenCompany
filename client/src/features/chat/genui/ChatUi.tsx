@@ -10,9 +10,10 @@
  *   for the ones still to come. The count only moves forward, so patches
  *   that land in several bursts never restart it. A UI read back later shows
  *   at once, without motion.
- * - **State.** It keeps its own state store (lib/jsonRender/uiState.ts),
- *   seeded from what the owner last set (`state`) or the spec's own, and
- *   reports every change to `onStateChange`.
+ * - **State.** json-render keeps it (JSONUIProvider's own store), seeded
+ *   from what the owner last set (`state`) or the spec's own, and reports
+ *   every change to `onStateChange`. Every path it can write at was made
+ *   safe first (prepare.ts, lib/jsonRender/sanitize.ts).
  * - **Buttons** run the chat's actions (genui/actions.ts); `setState` is
  *   json-render's own.
  */
@@ -20,7 +21,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Spec } from '@json-render/core';
 import { JSONUIProvider, Renderer } from '@json-render/react';
-import { LiveUiContext, createUiStateStore, useSpecReveal, type UiStateChange } from '@/lib/jsonRender';
+import { LiveUiContext, useSpecReveal } from '@/lib/jsonRender';
+import type { UiStateChange } from '../data/uiState';
 import { chatActionHandlers, type ChatUiActions } from './actions';
 import { prepareChatSpec } from './prepare';
 import { chatRegistry } from './registry';
@@ -44,18 +46,17 @@ function NoElement() {
 function ChatUiBody({ partId, spec, state, live, actions, onStateChange }: Omit<ChatUiProps, 'spec'> & { spec: Spec }) {
   const { spec: shown, revealing } = useSpecReveal(spec, live);
 
-  const latest = useRef({ actions, onStateChange });
+  const latest = useRef(actions);
   useLayoutEffect(() => {
-    latest.current = { actions, onStateChange };
+    latest.current = actions;
   });
-  const [store] = useState(() =>
-    createUiStateStore(state ?? spec.state ?? {}, (changes) => latest.current.onStateChange?.(changes)),
-  );
-  const [handlers] = useState(() => chatActionHandlers(partId, () => latest.current.actions));
+  // Seeds json-render's store once: a new object later would be applied again.
+  const [initialState] = useState(() => state ?? spec.state ?? {});
+  const [handlers] = useState(() => chatActionHandlers(partId, () => latest.current));
 
   return (
     <LiveUiContext.Provider value={live}>
-      <JSONUIProvider registry={chatRegistry} store={store} handlers={handlers}>
+      <JSONUIProvider registry={chatRegistry} initialState={initialState} onStateChange={onStateChange} handlers={handlers}>
         <Renderer spec={shown} registry={chatRegistry} loading={revealing} fallback={NoElement} />
         {revealing && (
           <div aria-hidden data-slot="next" className="opencompany-shimmer-slot h-9 rounded-xl border border-dashed border-border-default" />

@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { REVEAL_STEP_MS } from '@/lib/jsonRender';
+import { writePath } from '@/lib/jsonRender/paths';
 import { setReducedMotion } from '@/test/waapi';
 import ChatUi from '../genui/ChatUi';
 
@@ -71,5 +72,19 @@ describe('ChatUi', () => {
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
     expect(toggle).toBeChecked();
+  });
+
+  /** Where the fixture's reminder switch keeps its value. */
+  const REMIND_PATH = (
+    Object.values(SPEC.elements) as { type: string; props: { label?: string; checked?: { $bindState: string } } }[]
+  ).find((element) => element.type === 'Toggle' && element.props.label === 'Remind her the day before')!.props.checked!.$bindState;
+
+  it('reports what the owner sets, and starts from what they set before', () => {
+    const onStateChange = vi.fn();
+    render(<ChatUi partId="ui_1" spec={SPEC} state={writePath({}, REMIND_PATH, false)} live={false} actions={ACTIONS} onStateChange={onStateChange} />);
+    const toggle = screen.getByRole('switch', { name: 'Remind her the day before' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    expect(onStateChange).toHaveBeenCalledWith([{ path: REMIND_PATH, value: true }]);
   });
 });

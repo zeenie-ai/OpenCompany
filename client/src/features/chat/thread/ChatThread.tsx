@@ -17,7 +17,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from '
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { animate } from '@/lib/motion';
-import type { UiStateChange } from '@/lib/jsonRender/uiState';
+import type { UiStateChange } from '../data/uiState';
 import { prefersReducedMotion } from '@/lib/useReducedMotion';
 import { cn } from '@/lib/utils';
 import type { ChatUiActions } from '../genui/actions';

@@ -12,7 +12,12 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import type { UiStateChange } from '@/lib/jsonRender/uiState';
+
+/** One value the owner set, as json-render reports it (its `onStateChange`). */
+export interface UiStateChange {
+  path: string;
+  value: unknown;
+}
 
 /** How long the owner pauses before changes go. */
 export const UI_STATE_IDLE_MS = 300;

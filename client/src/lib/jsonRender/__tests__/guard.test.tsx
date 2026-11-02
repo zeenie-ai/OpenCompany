@@ -7,12 +7,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { defineCatalog, type Spec } from '@json-render/core';
+import { createStateStore, defineCatalog, type Spec } from '@json-render/core';
 import { JSONUIProvider, Renderer, defineRegistry, schema } from '@json-render/react';
 import { z } from 'zod';
 import { installWaapiStub } from '@/test/waapi';
 import { LiveUiContext, guarded, parseProps, type GuardedComponentProps } from '../guard';
-import { createUiStateStore } from '../uiState';
 
 const Label = z.object({ title: z.string(), tone: z.enum(['calm', 'loud']).optional() });
 const Box = z.object({});
@@ -52,7 +51,7 @@ const { registry } = defineRegistry(catalog, {
 });
 
 function show(spec: Spec, live = false) {
-  const store = createUiStateStore(spec.state ?? {});
+  const store = createStateStore(spec.state ?? {});
   const view = render(
     <LiveUiContext.Provider value={live}>
       <JSONUIProvider registry={registry} store={store}>

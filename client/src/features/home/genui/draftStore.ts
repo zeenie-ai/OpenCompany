@@ -351,11 +351,6 @@ export function setComposerInput(input: string): void {
   useDraftStore.setState({ input });
 }
 
-/** A control on the setup screen changed a value. */
-export function setDraftValue(path: string, value: unknown): void {
-  useDraftStore.setState((state) => ({ uiState: writePath(state.uiState, path, value) }));
-}
-
 /**
  * Claim the one hire slot. Returns the idempotency key to send, or null when
  * a hire is already in flight. The same payload gets the same key.
@@ -398,7 +393,6 @@ export function useDraftActions() {
       discard: () => discardDraft(send),
       setRefining,
       setInput: setComposerInput,
-      setValue: setDraftValue,
     };
   }, [sendRequest]);
 }

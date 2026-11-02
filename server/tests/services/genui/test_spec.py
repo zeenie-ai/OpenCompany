@@ -146,6 +146,15 @@ def test_only_a_bound_prop_binds_state():
     assert any("only an input's bound prop" in problem for problem in refused(raw))
 
 
+def test_set_state_writes_a_path_written_out():
+    """The client drops a binding whose statePath is an expression, so the
+    model is told here instead of the button doing nothing."""
+    raw = spec(go={"type": "Button", "props": {"label": "Go"}, "on": {"press": {"action": "setState", "params": {"statePath": {"$state": "/p"}, "value": 1}}}})
+    assert any("statePath" in problem and "not an expression" in problem for problem in refused(raw))
+    raw = spec(go={"type": "Button", "props": {"label": "Go"}, "on": {"press": {"action": "setState", "params": {"statePath": "/form/name", "value": 1}}}})
+    assert check_spec(raw).spec["elements"]["go"]["on"]["press"]["params"] == {"statePath": "/form/name", "value": 1}
+
+
 def test_ask_needs_its_text():
     raw = spec(go={"type": "Button", "props": {"label": "Ask"}, "on": {"press": {"action": "ask"}}})
     assert any("(ask)" in problem and "text" in problem for problem in refused(raw))

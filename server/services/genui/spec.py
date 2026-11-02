@@ -338,6 +338,8 @@ class _Checker:
                 self.refuse(f"{where} ({action}): {_describe(error)}")
             if action == "setState" and "statePath" in literal:
                 literal["statePath"] = self.path(literal["statePath"], f"{where}.params.statePath")
+            if action == "setState" and "statePath" in dynamic:
+                self.refuse(f"{where}.params.statePath: write the path itself (\"/form/name\"), not an expression")
         unknown = sorted(set(raw) - {"action", "params"})
         if unknown:
             self.notes.append(f"{where}: dropped {', '.join(unknown)} from the action binding")

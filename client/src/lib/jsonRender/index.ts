@@ -9,7 +9,6 @@
  * - guard.tsx: props read through the component's schema, parent rules,
  *   the one-time live entrance
  * - reveal.ts: the patch stream for a spec, and its paced reveal
- * - uiState.ts: a StateStore that refuses forbidden paths and reports changes
  * - prompts.ts: the prompt files the server reads (never loaded by the app)
  * - SpecInspector.tsx: the development view of a spec and its patches
  *
@@ -23,5 +22,4 @@
 export { readPath } from './paths';
 export { LiveUiContext, guarded, type GuardedComponentProps } from './guard';
 export { REVEAL_STEP_MS, specToPatches, useSpecReveal, type SpecReveal } from './reveal';
-export { createUiStateStore, type UiStateChange } from './uiState';
 export { SpecInspector } from './SpecInspector';

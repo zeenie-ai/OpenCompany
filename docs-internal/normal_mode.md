@@ -396,8 +396,10 @@ Hire button, one change button and the "Ask me before sending anything" toggle
 `__proto__`, `constructor` or `prototype`, and `watch`, `repeat`, `slots`,
 `$computed` and an action's `confirm`. That glue is shared with the chat's
 generated replies in [lib/jsonRender/](../client/src/lib/jsonRender/)
-(sanitising, the per-element guard that reads props through the catalogue's
-forgiving schema, the paced reveal, the guarded state store). The vocabulary
+(sanitising, including every path json-render may write state at, the
+per-element guard that reads props through the catalogue's forgiving schema,
+the paced reveal). The screen's state is the draft's own, which json-render
+reads and writes through `createStoreAdapter`. The vocabulary
 itself is [config/genui_catalog.json](../server/config/genui_catalog.json),
 which the server writes the prompt from and the client imports (`catalog.ts`,
 `hirePayload.ts`); `genui/__tests__/catalog.test.ts` holds the prop schemas to

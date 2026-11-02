@@ -120,6 +120,21 @@ describe('features a model must not reach', () => {
   });
 });
 
+describe('where json-render writes state', () => {
+  it('keeps a usable state path, written canonically', () => {
+    expect(sanitizeActionBinding({ action: 'setState', params: { statePath: 'form//name', value: 'Ana' } })).toEqual({
+      action: 'setState',
+      params: { statePath: '/form/name', value: 'Ana' },
+    });
+  });
+
+  it('drops a binding whose state path is refused or not written out', () => {
+    expect(sanitizeActionBinding({ action: 'setState', params: { statePath: '/__proto__/x', value: 1 } })).toBeNull();
+    expect(sanitizeActionBinding({ action: 'setState', params: { statePath: { $state: '/p' }, value: 1 } })).toBeNull();
+    expect(sanitizeActionBinding({ action: 'pushState', params: { statePath: '/list', clearStatePath: '/constructor' } })).toBeNull();
+  });
+});
+
 describe('conditions', () => {
   it('canonicalizes what json-render reads differently', () => {
     expect(sanitizeCondition(undefined)).toBeUndefined();

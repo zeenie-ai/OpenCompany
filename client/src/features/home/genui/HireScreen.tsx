@@ -12,23 +12,24 @@
  * which bleeds to the card's edges, with Ask first on the left and the
  * buttons on the right, both in the strip's look (HireSpecContext.inFooter).
  *
- * The screen keeps its own state store (lib/jsonRender/uiState.ts), seeded
- * from the draft (what the model wrote, plus anything the owner already
- * changed on this version), and every change goes back to the draft
- * (setDraftValue), which Hire reads. Buttons run the hire actions
- * (actions.ts); setState is json-render's own. The screen appears one
+ * The screen's state is the draft's own (`uiState` in draftStore: what the
+ * model wrote, plus anything the owner changed on this version), which
+ * json-render reads and writes through createStoreAdapter and Hire reads.
+ * Every path it can write at was made safe by the normaliser. Buttons run
+ * the hire actions (actions.ts); setState is json-render's own. The screen appears one
  * element at a time (useSpecReveal) and each element rises in once.
  * Development builds also show the spec and its patch stream.
  */
 
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Spec } from '@json-render/core';
+import { createStoreAdapter } from '@json-render/core/store-utils';
 import { JSONUIProvider, Renderer } from '@json-render/react';
-import { LiveUiContext, SpecInspector, createUiStateStore, useSpecReveal } from '@/lib/jsonRender';
+import { LiveUiContext, SpecInspector, useSpecReveal } from '@/lib/jsonRender';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
 import { hireActionHandlers, type HireActionContext } from './actions';
-import { setDraftValue, useDraftStore } from './draftStore';
+import { useDraftStore } from './draftStore';
 import { HireSpecContext } from './hireSpecContext';
 import type { NormalizedSpec } from './normalize';
 import { hireRegistry } from './registry';
@@ -47,6 +48,13 @@ export interface HireScreenProps {
   children?: ReactNode;
 }
 
+/** The draft's state, as json-render's store. */
+const draftState = createStoreAdapter({
+  getSnapshot: () => useDraftStore.getState().uiState,
+  setSnapshot: (uiState) => useDraftStore.setState({ uiState }),
+  subscribe: useDraftStore.subscribe,
+});
+
 /** Unknown types are dropped by the normaliser; anything else renders nothing. */
 function NoElement() {
   return null;
@@ -56,11 +64,6 @@ export default function HireScreen({ spec, busy, triggerApps, actions, discard, 
   const devMode = useAppStore((state) => state.shellMode === 'dev');
   const uiSpec = useMemo<Spec>(() => ({ root: spec.root, state: spec.state, elements: spec.elements }), [spec]);
   const { spec: shown, revealing } = useSpecReveal(uiSpec);
-  const [store] = useState(() =>
-    createUiStateStore(useDraftStore.getState().uiState, (changes) => {
-      for (const { path, value } of changes) setDraftValue(path, value);
-    }),
-  );
   const latest = useRef(actions);
   useLayoutEffect(() => {
     latest.current = actions;
@@ -78,7 +81,7 @@ export default function HireScreen({ spec, busy, triggerApps, actions, discard, 
     <div className={cn('flex min-w-0 flex-col gap-3.5', busy && 'pointer-events-none opacity-60')}>
       <HireSpecContext.Provider value={context}>
         <LiveUiContext.Provider value>
-          <JSONUIProvider registry={hireRegistry} store={store} handlers={handlers}>
+          <JSONUIProvider registry={hireRegistry} store={draftState} handlers={handlers}>
             {layout.identity && (
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">{part(layout.identity)}</div>

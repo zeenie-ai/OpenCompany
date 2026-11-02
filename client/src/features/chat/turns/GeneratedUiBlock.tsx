@@ -11,7 +11,7 @@
 import { Suspense, lazy, useMemo } from 'react';
 import { specToPatches } from '@/lib/jsonRender/reveal';
 import { SpecInspector } from '@/lib/jsonRender/SpecInspector';
-import type { UiStateChange } from '@/lib/jsonRender/uiState';
+import type { UiStateChange } from '../data/uiState';
 import type { UiPart } from '../data/parts';
 import type { ChatUiActions } from '../genui/actions';
 import { prepareChatSpec } from '../genui/prepare';

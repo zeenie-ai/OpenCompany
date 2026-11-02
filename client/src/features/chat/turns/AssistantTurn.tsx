@@ -22,7 +22,7 @@ import { CircleAlert, Pause, RotateCcw, Square } from 'lucide-react';
 import { Suspense, lazy, useContext, useMemo, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { isLiveRun, type RunSnapshot } from '@/lib/agui/reduceRun';
-import type { UiStateChange } from '@/lib/jsonRender/uiState';
+import type { UiStateChange } from '../data/uiState';
 import { cn } from '@/lib/utils';
 import { ApprovalCard } from '../approval/ApprovalCard';
 import { ApprovalsContext } from '../approval/context';

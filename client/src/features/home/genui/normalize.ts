@@ -49,6 +49,7 @@ import { bindingPath, isForbiddenSegment, readPath, writePath } from '@/lib/json
 import {
   DEFAULT_SANITIZE_LIMITS,
   isUsableId,
+  sanitizeActionBinding,
   sanitizeCondition,
   sanitizeExpressions,
   sanitizeState,
@@ -137,10 +138,13 @@ function text(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
 }
 
-function pressBinding(action: ActionType, rawParams: unknown): PressBinding {
+/** A press of `action` with its params made safe (sanitizeActionBinding);
+ *  null when they cannot be. */
+function pressBinding(action: ActionType, rawParams: unknown): PressBinding | null {
   if (action === 'refine') return { action };
-  const params = sanitizeExpressions(rawParams ?? {}, PARAM_LIMITS, 1);
-  return isRecord(params) && Object.keys(params).length > 0 ? { action, params } : { action };
+  const binding = sanitizeActionBinding({ action, params: rawParams }, PARAM_LIMITS);
+  if (!binding) return null;
+  return binding.params ? { action, params: binding.params } : { action };
 }
 
 /** The first binding under `on.press` (one, or a list) whose action is known. */
@@ -150,7 +154,8 @@ function pressOf(on: unknown): PressBinding | null {
   for (const binding of bindings) {
     if (!isRecord(binding)) continue;
     const action = actionOf(binding.action);
-    if (action) return pressBinding(action, binding.params);
+    const press = action ? pressBinding(action, binding.params) : null;
+    if (press) return press;
   }
   return null;
 }

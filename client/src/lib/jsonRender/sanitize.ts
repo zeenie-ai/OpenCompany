@@ -212,13 +212,27 @@ export function sanitizeCondition(
   return out as VisibilityCondition;
 }
 
-/** An action binding: a usable action name and its params, nothing else. */
+/** Params json-render's own actions (setState and the rest) write state at. */
+const STATE_PATH_PARAMS = ['statePath', 'clearStatePath'] as const;
+
+/** An action binding: a usable action name and its params, nothing else.
+ *  A param json-render writes state at must be a usable path written out
+ *  (made canonical), or the binding is dropped: json-render's state store
+ *  writes through any path it is given. */
 export function sanitizeActionBinding(raw: unknown, limits: SanitizeLimits = DEFAULT_SANITIZE_LIMITS): ActionBinding | null {
   if (!isRecord(raw) || !isUsableName(raw.action)) return null;
   const binding: ActionBinding = { action: raw.action };
   if (raw.params !== undefined) {
     const params = sanitizeExpressions(raw.params, limits, 1);
-    if (isRecord(params) && Object.keys(params).length > 0) binding.params = params;
+    if (isRecord(params)) {
+      for (const key of STATE_PATH_PARAMS) {
+        if (!(key in params)) continue;
+        const path = canonicalStatePath(params[key], limits.maxPathSegments);
+        if (!path) return null;
+        params[key] = path;
+      }
+      if (Object.keys(params).length > 0) binding.params = params;
+    }
   }
   return binding;
 }
