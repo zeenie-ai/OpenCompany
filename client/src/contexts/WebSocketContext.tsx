@@ -526,7 +526,6 @@ interface WebSocketContextValue {
   cancelEventWait: (nodeId: string, waiterId?: string) => Promise<{ success: boolean; cancelled_count?: number }>;
 
   // Deployment Operations
-  deployWorkflow: (workflowId: string, nodes: any[], edges: any[], sessionId?: string) => Promise<any>;
   cancelDeployment: (workflowId?: string) => Promise<any>;
   getDeploymentStatus: (workflowId?: string) => Promise<{ isRunning: boolean; activeRuns: number; settings?: any; workflow_id?: string }>;
   cancelExecution: (workflowId: string, nodeId?: string) => Promise<any>;
@@ -2765,37 +2764,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Deployment Operations
   // =========================================================================
 
-  const deployWorkflowAsync = useCallback(async (
-    workflowId: string,
-    nodes: any[],
-    edges: any[],
-    sessionId?: string
-  ): Promise<any> => {
-    try {
-      const response = await sendRequest<any>('deploy_workflow', {
-        workflow_id: workflowId,
-        nodes: nodes.map(node => ({
-          id: node.id,
-          type: node.type || '',
-          data: node.data || {}
-        })),
-        edges: edges.map(edge => ({
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          sourceHandle: edge.sourceHandle || undefined,
-          targetHandle: edge.targetHandle || undefined
-        })),
-        session_id: sessionId || 'default'
-      });
-
-      return response;
-    } catch (error) {
-      console.error('[WebSocket] Failed to start deployment:', error);
-      throw error;
-    }
-  }, [sendRequest]);
-
   const cancelDeploymentAsync = useCallback(async (workflowId?: string): Promise<any> => {
     try {
       const response = await sendRequest<any>('cancel_deployment', {
@@ -3776,7 +3744,6 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     cancelEventWait: cancelEventWaitAsync,
 
     // Deployment Operations
-    deployWorkflow: deployWorkflowAsync,
     cancelDeployment: cancelDeploymentAsync,
     getDeploymentStatus: getDeploymentStatusAsync,
     cancelExecution: cancelExecutionAsync,
@@ -3842,7 +3809,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     saveNodeParametersAsync, deleteNodeParametersAsync,
     executeNodeAsync, executeWorkflowAsync, getNodeOutputAsync,
     cancelEventWaitAsync,
-    deployWorkflowAsync, cancelDeploymentAsync, getDeploymentStatusAsync,
+    cancelDeploymentAsync, getDeploymentStatusAsync,
     cancelExecutionAsync, getWorkflowStatusAsync,
     startWorkflowAsync, pauseWorkflowAsync, stopChatRunAsync, resumeWorkflowAsync, resetWorkflowAsync,
     getWorkflowControlStatusAsync, getTeamTaskTraceAsync,

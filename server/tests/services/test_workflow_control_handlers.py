@@ -1480,8 +1480,10 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
         lock_workflow=AsyncMock(return_value=True), unlock_workflow=AsyncMock(), update_node_status=AsyncMock(),
         update_workflow_status=AsyncMock(), update_deployment_status=AsyncMock(),
     )
+    live = SimpleNamespace(generation=1, status="running")
+    database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=live))
     monkeypatch.setattr("core.container.container", SimpleNamespace(workflow_service=lambda: workflow_service,
-                                                                    database=lambda: SimpleNamespace()))
+                                                                    database=lambda: database))
     monkeypatch.setattr("services.status_broadcaster.get_status_broadcaster", lambda: broadcaster)
     monkeypatch.setattr("services.workflow_validator.validate_workflow", AsyncMock(return_value={"errors": []}))
     monkeypatch.setattr("services.employees.store.get_by_workflow", AsyncMock(return_value=SimpleNamespace(team_plan=plan)))
@@ -1508,3 +1510,32 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
     deployed = {node["id"]: node["data"] for node in workflow_service.deploy_workflow.await_args.kwargs["nodes"]}
     assert deployed["wf:ai_employee:1"] == {"label": "Lead", "employee_recipe_version": 2, "employee_team_plan": plan}
     assert deployed["wf:aiAgent:1"] == {"label": "Talk"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("generation", "latest", "error"), [
+    (0, None, "generation_required"),
+    (1, None, "generation_not_live"),
+    (1, SimpleNamespace(generation=1, status="reset"), "generation_not_live"),
+    (1, SimpleNamespace(generation=2, status="running"), "generation_not_live"),
+])
+async def test_deploy_refuses_without_a_live_generation(monkeypatch, generation, latest, error):
+    """1b.46: a deploy arms only a live controlled generation's triggers.
+    Anything else is refused before the lock and before any read or write."""
+    broadcaster = SimpleNamespace(lock_workflow=AsyncMock())
+    database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=latest))
+    monkeypatch.setattr("core.container.container", SimpleNamespace(workflow_service=lambda: SimpleNamespace(),
+                                                                    database=lambda: database))
+    monkeypatch.setattr("services.status_broadcaster.get_status_broadcaster", lambda: broadcaster)
+    load = AsyncMock()
+    monkeypatch.setattr("services.workflow_context_migration.load_node_parameters", load)
+
+    result = await handlers.handle_deploy_workflow(
+        {"workflow_id": "wf", "nodes": [{"id": "n", "type": "start", "data": {}}], "edges": [],
+         "generation": generation},
+        None,
+    )
+
+    assert result == {"success": False, "error": error}
+    broadcaster.lock_workflow.assert_not_awaited()
+    load.assert_not_awaited()

@@ -228,6 +228,12 @@ async def test_repeated_reads_are_stable(patched_handlers):
     assert first == second == {"session_id": "support"}
 
 
+def live_generation(database, monkeypatch):
+    """A deploy arms only a live controlled generation (1b.46)."""
+    monkeypatch.setattr(database, "get_latest_workflow_control",
+                        AsyncMock(return_value=SimpleNamespace(generation=1, status="running")), raising=False)
+
+
 @pytest.mark.asyncio
 async def test_failed_deploy_validation_does_not_rekey_parameters(recording_db, monkeypatch):
     """A rejected deploy must leave node configuration untouched.
@@ -260,12 +266,14 @@ async def test_failed_deploy_validation_does_not_rekey_parameters(recording_db, 
     )
 
     await recording_db.save_node_parameters("legacy-node", {"prompt": "keep me"})
+    live_generation(recording_db, monkeypatch)
 
     result = await deployment_handlers.handle_deploy_workflow(
         {
             "workflow_id": "1",
             "nodes": [{"id": "legacy-node", "type": "console", "position": {"x": 0, "y": 0}, "data": {}}],
             "edges": [],
+            "generation": 1,
         },
         _caller(),
     )
@@ -317,6 +325,7 @@ async def test_restart_rearm_keeps_saved_node_secrets(recording_db, monkeypatch)
     node_id = "1:webhookTrigger:1"
     saved = {"path": "orders", "header_name": "X-Token", "header_value": "kept-secret"}
     await recording_db.save_node_parameters(node_id, saved)
+    live_generation(recording_db, monkeypatch)
 
     result = await deployment_handlers.handle_deploy_workflow(
         {
@@ -375,6 +384,7 @@ async def test_start_hands_deploy_a_snapshot_without_secrets(recording_db, monke
     http = {"url": "https://api.example/orders", "headers": {"Authorization": "Bearer saved", "Accept": "application/json"}}
     await recording_db.save_node_parameters(trigger_id, trigger)
     await recording_db.save_node_parameters(http_id, http)
+    live_generation(recording_db, monkeypatch)
 
     result = await deployment_handlers.handle_deploy_workflow(
         {

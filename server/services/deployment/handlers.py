@@ -189,32 +189,41 @@ async def _await_versioned_transition(service: WorkflowControlService, control, 
 
 @ws_handler()
 async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
-    """Deploy workflow to run continuously until cancelled.
+    """Arm a live controlled generation's triggers (Start and the boot re-arm).
 
     Expects:
         workflow_id: Workflow identifier (required for locking)
+        generation: The live generation the triggers belong to
         nodes: List of workflow nodes with {id, type, data}
         edges: List of edges with {id, source, target}
         session_id: Optional session identifier
-        delay_between_runs: Optional delay in seconds between iterations (default: 1.0)
+
+    A deploy without a live generation is refused: its listeners would
+    belong to no controller.
 
     Returns:
         Deployment start confirmation (deployment runs in background)
     """
     global _deployment_tasks
     from core.container import container
+    from services.deployment.control import LIVE_STATES
     from services.status_broadcaster import get_status_broadcaster
 
     workflow_service = container.workflow_service()
     broadcaster = get_status_broadcaster()
 
     workflow_id = data.get("workflow_id")
+    generation = int(data.get("generation") or 0)
+    if generation <= 0:
+        return {"success": False, "error": "generation_required"}
+    latest = await container.database().get_latest_workflow_control(str(workflow_id or ""))
+    if latest is None or latest.generation != generation or latest.status not in LIVE_STATES:
+        return {"success": False, "error": "generation_not_live"}
     nodes = data.get("nodes", [])
     edges = data.get("edges", [])
     from services.workflow_context_migration import (
         import_legacy_context_receipts,
         load_node_parameters,
-        persist_parameter_aliases,
     )
     from services.employees.team_runtime import admit_team_plan
     from services.workflow_migrations import normalize_workflow_graph
@@ -244,7 +253,6 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
         normalization.state_imports,
     )
     graph_version = normalization.graph_version
-    graph_aliases = normalization.aliases
     if normalization.warnings:
         logger.warning("[Deploy] %s", "; ".join(normalization.warnings))
     session_id = data.get("session_id", "default")
@@ -287,20 +295,11 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
             "report": deploy_report,
         }
 
-    # Rekey parameter rows onto canonical ids only after the graph is admitted.
-    # Running this before the gate orphaned configuration on a failed deploy:
-    # the rows were renamed and the originals deleted, while the stored graph
-    # kept its old ids, so the next read looked up ids that no longer existed.
-    # A generation's deploy writes no rows. Start saved them before it created
-    # the generation, and the restart re-arm passes the generation's sanitized
-    # snapshot, which would replace each saved row and erase its secrets (a
-    # webhook's header value among them) and any edit saved while paused.
-    if int(data.get("generation") or 0) <= 0:
-        await persist_parameter_aliases(
-            container.database(),
-            aliases=graph_aliases,
-            parameters=normalized_parameters,
-        )
+    # A generation's deploy writes no parameter rows. Start saved them before
+    # it created the generation, and the restart re-arm passes the
+    # generation's sanitized snapshot, which would replace each saved row and
+    # erase its secrets (a webhook's header value among them) and any edit
+    # saved while paused.
 
     if workflow_service.is_workflow_deployed(workflow_id):
         status = workflow_service.get_deployment_status(workflow_id)
@@ -367,14 +366,10 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
                 status_callback=status_callback,
                 workflow_id=workflow_id,
                 graph_version=graph_version,
-                generation=int(data.get("generation") or 0),
+                generation=generation,
                 # No secret rides the snapshot into Temporal: a node gets its
                 # saved ones back when it runs (plugin.base.saved_settings).
-                **(
-                    {"parameter_snapshot": sanitize_runtime_payload(data.get("parameters_by_id") or {})}
-                    if int(data.get("generation") or 0) > 0
-                    else {}
-                ),
+                parameter_snapshot=sanitize_runtime_payload(data.get("parameters_by_id") or {}),
                 user_id=str(
                     (
                         getattr(
@@ -471,7 +466,7 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
             "nodes": nodes,
             "edges": edges,
         },
-        "aliases": graph_aliases,
+        "aliases": normalization.aliases,
         "migration_warnings": normalization.warnings,
     }
 
