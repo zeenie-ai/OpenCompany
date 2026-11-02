@@ -463,6 +463,34 @@ in-process and Temporal turns. There is one wire standard (`MessageWire`) and
 no engine or wire-version discriminator is recorded (see the end of this
 document).
 
+### Anthropic thinking after a prefix change
+
+Claude Opus/Sonnet/Haiku 5.5 and Fable/Mythos 5.1 bind signed thinking to
+the system instructions, tools, and preceding messages. A delegated task can
+replace the system instructions while loading the same agent's stored
+conversation; changed policy, skills, or tool definitions can also change that
+prefix. Replaying the old signed blocks then fails with HTTP 400 even when
+every tool call has its result.
+
+For these configured model families, `AnthropicProvider` sends the
+`thinking-binding-controls-2026-08-01` beta and
+`thinking.block_binding.prefix_mismatch_behavior: "drop_block"`, including
+requests without an explicit `ThinkingConfig`. The local transcript stays
+intact; Anthropic discards thinking it cannot reuse under the new prefix.
+This also allows already affected conversations to continue without clearing
+their context. Other request betas and gateway attribution remain in place.
+This compatibility setting can increase generated thinking and cost after
+prefix edits. Keep prefixes append-only where possible, while preserving the
+application's requirement that current system instructions take effect.
+See Anthropic's [preserved thinking guide](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking).
+
+Known Anthropic thinking-signature rejections carry a fixed `diagnostic_code`
+in the provider failure log and Temporal failure details:
+`thinking_prefix_mismatch` or `thinking_signature_invalid`. Raw SDK rejection
+text remains excluded from public errors, logs, and Temporal history because
+it can contain request data. An unrecognized 400 retains the general
+`invalid_request` category.
+
 ## Thinking and Reasoning
 
 The unified `ThinkingConfig` dataclass is translated per provider:
@@ -483,7 +511,7 @@ Each provider's `chat()` method reads only the fields it supports. The extracted
 
 | Provider | Models | Parameter | Thinking Type | Notes |
 |----------|--------|-----------|---------------|-------|
-| **Claude** (adaptive) | `claude-opus-5*`, `claude-fable-5*`, `claude-mythos-5`, `claude-sonnet-5*`, `claude-opus-4-8`, `claude-opus-4-7` (`adaptive_thinking_models`, prefix-matched) | `thinkingEnabled` only — the budget is ignored | adaptive | Sends `{"type":"adaptive","display":"summarized"}` when enabled; when disabled the field is omitted (`disabled` is itself rejected on Fable/Mythos). `budget_tokens` is a 400 on these generations. No `temperature` / `top_p` / `top_k` is sent at all (`sampling_params_removed`). `anthropic.py:72-92`. |
+| **Claude** (adaptive) | `claude-opus-5*`, `claude-fable-5*`, `claude-mythos-5`, `claude-sonnet-5*`, `claude-opus-4-8`, `claude-opus-4-7` (`adaptive_thinking_models`, prefix-matched) | `thinkingEnabled` only — the budget is ignored | adaptive | Sends `{"type":"adaptive","display":"summarized"}` when enabled. Otherwise the field is omitted, except when the model's prefix-binding policy requires adaptive thinking with `block_binding` (see above). `budget_tokens` is a 400 on these generations. No `temperature` / `top_p` / `top_k` is sent at all (`sampling_params_removed`). |
 | **Claude** (budget) | `claude-sonnet-4-6`, `claude-haiku-4-5` and older 4.x/3.5 | `thinkingBudget` (1024-16000 tokens) | budget | `{"type":"enabled","budget_tokens":N}`; provider bumps `max_tokens` to `budget + 1024` if it is not already larger. Temperature auto-set to 1. |
 | **Gemini** | gemini-3.x, gemini-2.5-pro/flash | `thinkingBudget` (token count); `thinkingLevel` on 3.x when set explicitly | budget | Uses `thinking_budget` API parameter (`thinking_level` only when the user set it — Vertex rejects an unsolicited level on 2.5-era models) |
 | **OpenAI** | `o3`, `o4-mini` (reasoning-only; both on the API-shutdown path per `_models_note`, `o1`/`o3`/`o4` prefixes still detected) | `reasoningEffort` (low/medium/high) | effort | Reasoning-only models. Temperature omitted. |

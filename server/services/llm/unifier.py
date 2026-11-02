@@ -562,6 +562,7 @@ class ChatUnifier:
             retry_after=error.retry_after,
             url=redact_url(getattr(client, "endpoint_url", None)),
             url_source=getattr(client, "url_source", None),
+            **({"diagnostic_code": error.diagnostic_code} if error.diagnostic_code else {}),
         )
 
 

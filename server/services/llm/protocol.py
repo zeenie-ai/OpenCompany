@@ -369,6 +369,9 @@ class LLMError(Exception):
     # (services/gateway/errors.py): "check the provider's billing" would
     # point at the wrong account.
     public_hint: Optional[str] = None
+    # Fixed diagnostic identifiers, never copied from a provider response.
+    # These may cross logging and durable execution boundaries safely.
+    diagnostic_code: Optional[str] = None
 
     def __post_init__(self) -> None:
         Exception.__init__(self, self.message)
@@ -563,6 +566,7 @@ class LLMError(Exception):
                 if retry_after_value is not None
                 else None
             ),
+            diagnostic_code=_thinking_signature_diagnostic(provider, status, body),
         )
 
 
@@ -827,6 +831,28 @@ def _http_date(value: Any) -> Optional[datetime]:
         return date.replace(tzinfo=timezone.utc) if date.tzinfo is None else date.astimezone(timezone.utc)
     except (TypeError, ValueError, OverflowError):
         return None
+
+
+def _thinking_signature_diagnostic(provider: str, status: Optional[int], body: Mapping[str, Any]) -> Optional[str]:
+    """Recognize Anthropic's stable signature errors without exposing text.
+
+    The trailing explanation of which prefix changed is deliberately ignored:
+    it can contain conversation content and its wording is not API-stable.
+    """
+    if provider != "anthropic" or status != 400 or body.get("type") != "invalid_request_error":
+        return None
+    message = body.get("message")
+    if not isinstance(message, str):
+        return None
+    match = re.match(
+        r"(?:messages\.\d+\.content\.\d+:\s*)?Invalid `signature` in `thinking` block(?:\.|$)",
+        message,
+    )
+    if match is None:
+        return None
+    if message[match.end():].lstrip().startswith("The block is bound to a different conversation."):
+        return "thinking_prefix_mismatch"
+    return "thinking_signature_invalid"
 
 
 def _error_body(exc: BaseException) -> Mapping[str, Any]:

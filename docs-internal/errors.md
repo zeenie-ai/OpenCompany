@@ -691,3 +691,40 @@ With a login that can see several Cloudflare accounts, operations fail instead w
 - cf has no `--account-id` flag on most commands. It takes the account from `CLOUDFLARE_ACCOUNT_ID`, or uses the only one the login can see, and with no terminal to ask it stops when there are several.
 
 **Fix**: log in again (Credentials → Cloudflare → Login: the modal shows a one-time code to approve on Cloudflare's page, from any browser), or paste an API token there. With several accounts, set the node's `account_id` to the account to use; the `whoami` operation lists them. See [Cloudflare Service](./cloudflare_service.md).
+
+## 34. Anthropic rejects a resumed delegated agent with HTTP 400
+
+**Symptom**: the first LLM step of a new delegated task fails with
+`LLMError.invalid_request: Anthropic rejected the model request configuration.`
+The same agent completed an earlier task successfully, and its Context is
+connected.
+
+**Evidence**: the reported Opus 5.5 failure replayed 21 messages and five tools.
+The preceding successful run saved 20 messages, including four assistant
+messages with signed thinking. The new delegation replaced the 829-character
+system prompt with a 1,498-character prompt; tool definitions were identical,
+and all tool results were paired. Temporal retained only the normalized
+failure and request ID, so the original provider rejection text is unavailable.
+
+**Likely cause**: these newer Claude models bind thinking to its original
+conversation prefix. The delegation contract makes the new mission the system
+message, and conversation seeding keeps that current system authoritative
+while replaying prior assistant state. This combination can invalidate prior
+thinking signatures. Anthropic documents it as a 400
+`invalid_request_error`; the generic category alone cannot confirm it.
+
+**Fix**: the Anthropic adapter opts supported model families into the
+`thinking-binding-controls-2026-08-01` beta with
+`thinking.block_binding.prefix_mismatch_behavior: "drop_block"`. Anthropic can
+discard incompatible thinking while the agent keeps its conversation and
+tool history. The setting also applies when `thinking_config` is absent,
+because Opus 5.5 thinks by default. Model families without this capability
+retain their existing request shape. See [Native LLM SDK → Anthropic thinking
+after a prefix change](./native_llm_sdk.md#anthropic-thinking-after-a-prefix-change)
+and [Anthropic's documented recovery](https://platform.claude.com/docs/en/build-with-claude/preserved-thinking).
+
+Subsequent recognized signature failures include a safe `diagnostic_code` in
+logs and Temporal details, distinguishing `thinking_prefix_mismatch` from
+`thinking_signature_invalid` without exposing provider response text. Restart
+the backend/workers to load the adapter and configuration, then retry the
+failed task; terminal failures do not retry themselves.

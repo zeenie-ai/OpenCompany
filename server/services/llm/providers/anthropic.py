@@ -75,6 +75,7 @@ class AnthropicProvider:
             params["system"] = system
 
         thinking_on = bool(thinking and thinking.enabled)
+        betas: List[str] = []
 
         if policy["adaptive_thinking"]:
             # ``budget_tokens`` was removed on these generations and is a 400,
@@ -94,6 +95,18 @@ class AnthropicProvider:
                 params["max_tokens"] = budget + 1024
             params["thinking"] = {"type": "enabled", "budget_tokens": budget}
 
+        if policy["thinking_prefix_binding"]:
+            # Context can deliberately change between delegated missions or
+            # at client-side compaction. New Claude models bind thinking to
+            # that prefix. Let the API discard only incompatible reasoning,
+            # preserving the signed history locally and valid blocks in tool
+            # loops. Dropped reasoning can increase output-token usage.
+            # The pinned SDK passes this beta field through unchanged.
+            params.setdefault("thinking", {"type": "adaptive"})[
+                "block_binding"
+            ] = {"prefix_mismatch_behavior": "drop_block"}
+            betas.append("thinking-binding-controls-2026-08-01")
+
         if policy["sampling_params"]:
             # Anthropic requires temperature=1 alongside budget thinking.
             params["temperature"] = 1 if thinking_on else temperature
@@ -110,8 +123,15 @@ class AnthropicProvider:
 
         # Per-request extras: the LLM gateway's attribution headers and
         # replay-cache body (ChatUnifier sends them for gateway calls only).
-        if extra_headers:
-            params["extra_headers"] = dict(extra_headers)
+        headers = dict(extra_headers or {})
+        # The beta SDK lets extra_headers overwrite its generated beta header.
+        # Combine caller betas first, including differently cased headers, so
+        # gateway attribution and every requested capability survive.
+        for name in list(headers):
+            if name.lower() == "anthropic-beta":
+                betas.extend(value.strip() for value in headers.pop(name).split(",") if value.strip())
+        if headers:
+            params["extra_headers"] = headers
         if extra_body:
             params["extra_body"] = dict(extra_body)
 
@@ -142,10 +162,12 @@ class AnthropicProvider:
                     "type": "input_tokens",
                     "value": threshold,
                 }
+            betas.append("compact-2026-01-12")
+            params["context_management"] = {"edits": [edit]}
+
+        if betas:
             stream_ctx = self._client.beta.messages.stream(
-                betas=["compact-2026-01-12"],
-                context_management={"edits": [edit]},
-                **params,
+                betas=list(dict.fromkeys(betas)), **params
             )
         else:
             stream_ctx = self._client.messages.stream(**params)
@@ -213,6 +235,7 @@ class AnthropicProvider:
         return {
             "adaptive_thinking": matches("adaptive_thinking_models"),
             "sampling_params": not matches("sampling_params_removed"),
+            "thinking_prefix_binding": matches("thinking_prefix_binding_models"),
         }
 
     def _split_system(self, messages: List[Message]):

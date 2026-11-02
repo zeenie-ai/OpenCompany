@@ -400,6 +400,34 @@ class TestWorkflowLoopContract:
 
 
 class TestLlmStepActivity:
+    def test_thinking_diagnostic_crosses_temporal_boundary_without_provider_text(self):
+        import anthropic
+        import httpx
+
+        from services.llm.protocol import LLMError
+        from services.temporal.agent_activities import _as_temporal_llm_error
+
+        secret = "private prompt sk-secret https://internal.test/?token=secret"
+        message = (
+            "messages.12.content.0: Invalid `signature` in `thinking` block. "
+            "The block is bound to a different conversation. " + secret
+        )
+        response = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"),
+                                  headers={"request-id": "req-thinking"})
+        sdk_error = anthropic.BadRequestError(message, response=response,
+                                             body={"error": {"type": "invalid_request_error", "message": message}})
+
+        temporal_error = _as_temporal_llm_error(LLMError.from_exception("anthropic", sdk_error))
+
+        assert temporal_error.type == "LLMError.invalid_request"
+        assert temporal_error.non_retryable is True
+        assert temporal_error.next_retry_delay is None
+        assert temporal_error.details[0]["diagnostic_code"] == "thinking_prefix_mismatch"
+        assert temporal_error.details[0]["request_id"] == "req-thinking"
+        assert secret not in str(temporal_error)
+        assert secret not in str(temporal_error.details)
+        assert message not in str(temporal_error.details)
+
     def test_structured_llm_error_becomes_safe_temporal_failure(self):
         from services.llm.protocol import LLMError, LLMErrorCategory
         from services.temporal.agent_activities import (

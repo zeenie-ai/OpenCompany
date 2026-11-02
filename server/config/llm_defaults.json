@@ -155,6 +155,14 @@
         "claude-sonnet-5",
         "claude-haiku-5"
       ],
+      "_thinking_prefix_binding_note": "These models bind replayed thinking to system/tools/earlier messages. Delegation and client-side compaction can intentionally change that prefix. AnthropicProvider sends thinking-binding-controls-2026-08-01 with block_binding.prefix_mismatch_behavior=drop_block so the API drops only incompatible reasoning while preserving stored signed blocks. Dropped reasoning can increase output tokens. Older models retain their existing request shape.",
+      "thinking_prefix_binding_models": [
+        "claude-fable-5-1",
+        "claude-mythos-5-1",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5"
+      ],
       "_effort_models_note": "effort_models (prefix-matched): the models that take the chat picker's effort as output_config.effort, beside any adaptive thinking. The adaptive generations; the budget-thinking models have no effort setting.",
       "effort_models": [
         "claude-fable-5",

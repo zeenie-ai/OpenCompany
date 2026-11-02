@@ -28,8 +28,8 @@ def _anthropic_stream(provider):
     ctx = MagicMock()
     ctx.__aenter__ = AsyncMock(return_value=stream)
     ctx.__aexit__ = AsyncMock(return_value=False)
-    provider._client.messages.stream = MagicMock(return_value=ctx)
-    return provider._client.messages.stream
+    provider._client.beta.messages.stream = MagicMock(return_value=ctx)
+    return provider._client.beta.messages.stream
 
 
 @pytest.mark.asyncio
@@ -38,11 +38,14 @@ async def test_anthropic_sends_effort_as_output_config():
     stream = _anthropic_stream(provider)
     await provider.chat([Message(role="user", content="Hi")], model="claude-sonnet-5-5", effort="high")
     assert stream.call_args.kwargs["output_config"] == {"effort": "high"}
-    # Thinking stays the agent's own: effort alone adds none.
-    assert "thinking" not in stream.call_args.kwargs
+    # Prefix-binding recovery requires adaptive thinking on this model.
+    # Effort changes depth without changing that recovery configuration.
+    thinking = stream.call_args.kwargs["thinking"]
+    assert thinking == {"type": "adaptive", "block_binding": {"prefix_mismatch_behavior": "drop_block"}}
 
     await provider.chat([Message(role="user", content="Hi")], model="claude-sonnet-5-5")
     assert "output_config" not in stream.call_args.kwargs
+    assert stream.call_args.kwargs["thinking"] == thinking
 
 
 def _openai():

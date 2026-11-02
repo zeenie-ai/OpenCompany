@@ -247,7 +247,7 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
     """Translate a structured SDK failure at the Temporal boundary.
 
     Raw provider messages can contain payload fragments or internal endpoint
-    details. The user-facing message is category-based, while the complete
+    details. The user-facing message is category-based, while safe
     structured diagnostics remain JSON-safe in ``ApplicationError.details``
     and therefore in Temporal history for operators.
     """
@@ -279,6 +279,7 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
         "request_id": getattr(error, "request_id", None),
         "retry_after": provider_delay.total_seconds() if provider_delay is not None else None,
         "retry_after_raw": getattr(error, "retry_after_raw", None),
+        **({"diagnostic_code": error.diagnostic_code} if getattr(error, "diagnostic_code", None) else {}),
         **({"hint": error.hint} if getattr(error, "hint", None) else {}),
         **({"requires_user_action": True} if getattr(error, "requires_user_action", False) else {}),
     }
