@@ -1,5 +1,8 @@
 # RFC-0005 — Event OS: Event-Driven AI Employees on Temporal
 
+
+> **Current-state reading rule:** defect lists, measurements and code sketches below are anchored to their cited baseline commits. Some fixes have since landed. Use the [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md), current runtime references and recorded generation flags for shipped behavior; proposed paths and later rollout phases remain designs until implemented. This audit does not change the accepted owner decisions.
+
 - **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) is in progress. RFC-0006 amended this RFC on 2026-10-24, and RFC-0007 on 2026-10-25 (§30).
 - **Created:** 2026-10-23
 - **Scope:** the path from every event source to every effect:
@@ -386,9 +389,9 @@ class Bus(Protocol):
     async def lag(self) -> BusLag  # per class: oldest pending age, held count, relay lag
 ```
 
-There are two drivers, `SqliteBus` and `PostgresBus` (`server/services/bus/sql.py`). Producers, the router, the relay and the entities never see which one is in use. A test-only `DirectBus` performs Signal-With-Start without an inbox.
+There are two drivers, `SqliteBus` and `PostgresBus` (`server/services/bus/sql.py`). Producers, the router, the relay and the entities never see which one is in use. A test-only `DirectBus` performs Signal-With-Start without an inbox. <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 
-### 9.2 Tables (`server/models/events.py`)
+### 9.2 Tables (`server/models/events.py`) <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 
 | Table | Columns (main) |
 |---|---|
@@ -721,7 +724,7 @@ The OpenCompany Gateway already records spend per call and replays retried calls
 - Subscriptions add match rules on store and subject.
 - Inputs coalesce per (subscription, record) and are delivered level-triggered: "changed N times; re-read the record". Up to 200 subjects, then a single `resync` input.
 
-### 16.3 Storm guards (`server/services/bus/causal.py`, `token_buckets`)
+### 16.3 Storm guards (`server/services/bus/causal.py`, `token_buckets`) <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 
 - At most 8 hops.
 - **Cycle check.** An input whose target is already on its `path` (at most 16 entries) is suppressed as `loop_suppressed`.

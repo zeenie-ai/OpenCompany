@@ -95,9 +95,7 @@ keeps the node out of the component palette; it does not protect it.
 - Two agents on one Context node keep separate conversations (the key is
   per agent node); the panel offers a selector. The validator nevertheless
   rejects that wiring as `SHARED_CONTEXT` at save, Run and Start.
-- A plain Stop → Start starts a fresh conversation (new generation) and
-  leaves prior rows as inert, non-browsable history until Reset or
-  workflow delete.
+- Cooperative Stop/Resume preserves the admitted generation and its conversation. Reset clears conversation state; a newly admitted generation has a new conversation key. Earlier rows, where retained, are not the live panel conversation.
 - Attaching a Context node must never change what the agent sends —
   requests always build from `messages`; the key only says where to save
   (the original `context_ref` regression, locked by

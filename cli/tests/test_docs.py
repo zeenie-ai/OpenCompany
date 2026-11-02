@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from cli.commands import docs
+from cli.platform_ import project_root
 
 
 def test_read_h1_extracts_first_h1(tmp_path: Path):
@@ -114,3 +117,33 @@ def test_collect_registry_keys_resolves_module_level_constant(tmp_path: Path):
         encoding="utf-8",
     )
     assert docs._collect_registry_keys(tmp_path) == {"constNode"}
+
+
+def _assert_current_index(root: Path) -> None:
+    directory = docs._docs_dir(root)
+    content = (directory / "README.md").read_text(encoding="utf-8")
+    assert content.count(docs._START) == content.count(docs._END) == 1, "Node index needs exactly one marker pair"
+    start, end = content.index(docs._START), content.index(docs._END)
+    assert start < end, "Node index markers are reversed"
+    actual = content[start:end + len(docs._END)]
+    assert actual == docs._build_index_block(directory), "Node index is stale; regenerate with company docs nodes"
+
+
+def test_repository_node_index_is_current():
+    _assert_current_index(project_root())
+
+
+def test_index_check_detects_stale_titles_and_duplicate_markers(tmp_path: Path):
+    directory = docs._docs_dir(tmp_path)
+    (directory / "group").mkdir(parents=True)
+    card = directory / "group" / "node.md"
+    card.write_text("# Original\n", encoding="utf-8")
+    index = directory / "README.md"
+    index.write_text(docs._build_index_block(directory), encoding="utf-8")
+    _assert_current_index(tmp_path)
+    card.write_text("# Updated\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="stale"):
+        _assert_current_index(tmp_path)
+    index.write_text(docs._build_index_block(directory) + docs._START, encoding="utf-8")
+    with pytest.raises(AssertionError, match="marker pair"):
+        _assert_current_index(tmp_path)

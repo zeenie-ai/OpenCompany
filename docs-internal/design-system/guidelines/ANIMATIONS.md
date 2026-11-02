@@ -1,5 +1,7 @@
 # OpenCompany animation system
 
+> **Status: Reference guide.** Live `client/src/themes/` and `client/src/lib/motion.ts` own production tokens and lifecycle behavior. Bundled specimens and token snapshots illustrate design intent; retain explicit product amendments when they differ.
+
 Motion is a **first-class part of each theme's identity**, not a global constant. Every theme declares the same six-token motion contract; the personality lives in the **easing function**, not just duration. Tokens + keyframes: `tokens/animations.css`.
 
 ## The contract (per theme)

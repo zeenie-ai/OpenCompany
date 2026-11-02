@@ -17,7 +17,7 @@ Single-turn chat completion against Google's Gemini API (google-genai native SDK
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -28,14 +28,18 @@ Single-turn chat completion against Google's Gemini API (google-genai native SDK
 | `model` | string | `""` (injected) | no | - | e.g. `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3-pro` |
 | `temperature` | number\|null | `null` | no | - | 0-2 range |
 | `max_tokens` | number\|null | `null` (clamped to ceiling) | no | - | 1-200000; up to 65K output |
-| `top_p` | number\|null | `1.0` | no | - | |
-| `top_k` | number\|null | `40` | no | - | 1-100; Gemini-specific |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `top_k` | number\|null | `40` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` | no | - | Enable thinking (2.5 Pro/Flash, 3.x) |
 | `thinking_budget` | number\|null | `2048` | no | `thinking_enabled=[true]` | 1024-16000 token budget for internal reasoning |
-| `safety_settings` | enum | `default` | no | - | `default` / `strict` / `permissive` |
+| `safety_settings` | enum | `default` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('gemini', 'default')` |
 
 (Field names are snake_case on `GeminiChatModelParams`; unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 
@@ -80,7 +84,7 @@ flowchart TD
 - **Provider routing**: matches `'gemini' in node_type.lower()`.
 - **Native SDK**: `ChatUnifier` uses `google.genai.Client` for both chat and
   current agent requests.
-- **Thinking budget**: `thinkingBudget` -> `NativeThinkingConfig.budget` -> Gemini `thinking_budget` API parameter.
+- **Thinking budget**: the standalone path builds `NativeThinkingConfig.budget`; the native provider sends `thinking_budget` when thinking is enabled and no explicit level applies. Owner-selected effort on eligible agent requests can instead send `thinking_level`; that is a separate caller path.
 - **Model ID handling**: only the UI-only `[FREE] ` decoration is stripped; the remaining provider model ID is preserved.
 
 ## Side Effects
@@ -103,9 +107,9 @@ flowchart TD
 - **Windows/Python 3.13 quirk**: the native `google-genai` provider avoids the
   former adapter's gRPC import deadlock. Both current chat and agent
   executions use the native path.
-- **Thinking budget units**: expressed as token count, not low/medium/high effort levels. Defaults to 2048.
-- **Safety settings**: forwarded via the SDK; typed API failures are translated into a user-safe node error at the execution boundary.
-- **`maxTokens` clamp**: capped at the model's ceiling (65K for 2.5/3.x).
+- **Standalone thinking budget units**: a token count, default 2048. The shared Params do not declare `thinking_level`, so extra values with that name are ignored on this node path.
+- **Safety settings**: the declared field is not forwarded by `execute_chat` or the native Gemini provider. Typed API failures still follow the shared user-safe error boundary.
+- **`max_tokens` clamp**: capped at the model's ceiling (65K for 2.5/3.x).
 - **Error boundary**: typed Google SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 
 ## Related

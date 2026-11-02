@@ -17,7 +17,7 @@ DeepSeek V4 models: `deepseek-v4.1-flash` (the default), `deepseek-v4-pro` and t
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -28,12 +28,16 @@ DeepSeek V4 models: `deepseek-v4.1-flash` (the default), `deepseek-v4-pro` and t
 | `model` | string | `""` (injected) | no | - | `deepseek-v4.1-flash` (default) / `deepseek-v4-pro` / `deepseek-v4-flash` |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` (8-64K) | no | - | 1-200000 |
-| `top_p` | number\|null | `1.0` | no | - | |
-| `frequency_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 (DeepSeek-specific) |
-| `presence_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 (DeepSeek-specific) |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `frequency_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `presence_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('deepseek', 'default')` |
 
 (Field names are snake_case on `DeepseekChatModelParams`; unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 
@@ -78,7 +82,7 @@ flowchart TD
 - **Provider routing**: `detect_ai_provider` matches `'deepseek' in node_type.lower()` **first** (before kimi/mistral/cerebras/groq/openrouter/anthropic/gemini), so routing is unambiguous.
 - **Native path**: uses the OpenAI SDK with DeepSeek's base URL from `llm_defaults.json`. The compatible provider sends `max_tokens` directly in the Chat Completions request; there is no LangChain parameter translation on current chat or agent executions.
 - **Model ID handling**: only the UI-only `[FREE] ` decoration is stripped. The remaining model ID is preserved.
-- **Reasoning trace**: when DeepSeek returns `reasoning_content` the native provider extracts it into `LLMResponse.thinking`, regardless of `thinkingEnabled`. (The always-on-CoT `deepseek-reasoner` this rule was written for was discontinued in July 2026; the extraction still applies to any model that emits the field.)
+- **Reasoning trace**: when DeepSeek returns `reasoning_content` the native provider extracts it into `LLMResponse.thinking`, regardless of `thinking_enabled`. This normalization does not establish which models are currently available from the vendor.
 
 ## Side Effects
 
@@ -97,8 +101,8 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **`thinkingEnabled=false` does not suppress a trace**: it only means the UI will not highlight one. If the model returns `reasoning_content`, the response still carries it.
-- **`thinkingBudget` has no effect**: DeepSeek reasoning is not budget-configurable; the field is silently ignored.
+- **`thinking_enabled=false` does not suppress a trace**: it only means the UI will not highlight one. If the model returns `reasoning_content`, the response still carries it.
+- **`thinking_budget` has no effect**: DeepSeek reasoning is not budget-configurable; the field is silently ignored.
 - **Context and output**: all three curated models have a 1,048,576-token context window. The output ceiling is 943,718 tokens for `deepseek-v4.1-flash`, 384,000 for `deepseek-v4-pro` and 943,717 for `deepseek-v4-flash` (OpenRouter snapshot, 2026-10-19). A node that leaves `max_tokens` unset requests the whole ceiling (`resolve_max_tokens`).
 - **OpenAI-compatible but not OpenAI**: features like `response_format: json_object` have subtly different behavior.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.

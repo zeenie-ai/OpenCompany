@@ -64,7 +64,7 @@ Params uses `extra="allow"`, so the retry loop also reads an undeclared `proxy_f
 
 ### Output payload (failure)
 
-All retries exhausted -> `raise RuntimeError("All N attempts failed. Last error: <str>")`. Short-circuit raises are `NodeUserError` ("Proxy service not initialized..." when the service is disabled; "No proxy provider available" when `get_proxy_url` returns `None`). A status `>= 400` on an attempt raises `NodeUserError(f"HTTP {status}: ...")`. `BaseNode.execute()` maps `NodeUserError` to a single WARN line + structured envelope, and the bare `RuntimeError` to a full-traceback error envelope.
+All retries exhausted -> `raise RuntimeError("All N attempts failed. Last error: <str>")`. Short-circuit raises are `NodeUserError` ("Proxy service not initialized..." when the service is disabled; "No proxy provider available" when `get_proxy_url` returns `None`). A status `>= 400` on an attempt raises `NodeUserError(f"HTTP {status}: ...")`. `BaseNode.execute()` maps `NodeUserError` to a single WARN line + structured envelope, and the bare `RuntimeError` to a structured error envelope with a traceback in operator logs.
 
 ## Logic Flow
 
@@ -129,7 +129,7 @@ flowchart TD
 ## Edge cases & known limits
 
 - Failed attempts are **not** tracked in `api_usage_metrics` - only successful requests that returned a response. If every attempt raises, the DB sees nothing for that call.
-- `follow_redirects` is a declared field but never forwarded to `httpx`; httpx default follows redirects.
+- `follow_redirects` is a declared field but never forwarded to `httpx`; the client therefore keeps httpx's default of not following redirects.
 - `provider_name` in the result echoes `params.proxy_provider or ""` verbatim; with the default `auto` it shows `"auto"` even though `ProxyService` picked a concrete provider.
 - Retry loop re-requests a new proxy URL via `get_proxy_url` on each retry; if that call raises (e.g. `BudgetExceededError`), the retry loop silently `break`s and the envelope reports the previous network error rather than the budget exception.
 - Cost tracking reads `pricing._config["proxy"]` directly - touching a private attribute. If the pricing config is missing a `proxy` section, `cost_per_gb` falls back to `0.0` and cost rows are still written with `cost=0`.

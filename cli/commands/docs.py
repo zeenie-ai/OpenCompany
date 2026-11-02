@@ -4,8 +4,9 @@ Walks ``docs-internal/node-logic-flows/<category>/<node>.md``, scrapes
 each doc's first H1, and rewrites the AUTO-GENERATED-INDEX block in
 ``docs-internal/node-logic-flows/README.md``. With ``--check`` instead
 of rewriting, cross-references against the plugin tree under
-``server/nodes/`` and exits non-zero if any registered node lacks a
-doc.
+``server/nodes/`` and exits non-zero if a source-discovered node lacks a
+doc. This dependency-light scan cannot resolve every dynamic registration;
+the backend plugin-contract test checks the authoritative runtime registry.
 """
 
 from __future__ import annotations
@@ -144,7 +145,8 @@ def _check_completeness(root: Path) -> int:
     missing = sorted(k for k in registered if k not in documented)
     if not missing:
         console.print(
-            f"OK: every registered node has a logic-flow doc ({len(registered)} total)"
+            f"OK: all {len(registered)} source-discovered node types have logic-flow docs. "
+            "The backend plugin-contract tests verify dynamic registrations."
         )
         return 0
     console.print(f"[red]MISSING DOCS for {len(missing)}/{len(registered)} nodes:[/]")
@@ -158,7 +160,7 @@ def nodes(
     check: bool = typer.Option(
         False,
         "--check",
-        help="Instead of rewriting, exit 1 if any registered node lacks a doc.",
+        help="Read-only source scan: exit 1 for missing node docs (backend tests cover dynamic registrations).",
     ),
 ) -> None:
     root = project_root()

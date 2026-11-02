@@ -17,7 +17,7 @@ Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-sma
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -28,10 +28,14 @@ Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-sma
 | `model` | string | `""` (injected) | no | - | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest` |
 | `temperature` | number\|null | `null` | no | - | Narrower range than OpenAI (0-1.5) |
 | `max_tokens` | number\|null | `null` (up to 131K) | no | - | 1-200000 |
-| `top_p` | number\|null | `1.0` | no | - | |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('mistral', 'default')` |
 
 (Mistral uses the shared `ChatModelParams` unchanged; field names are snake_case, unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 
@@ -75,7 +79,7 @@ flowchart TD
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'mistral' in node_type.lower()` early, before other providers.
 - **Temperature clamp**: 0-1.5 (narrower than OpenAI).
-- **No thinking**: `thinkingEnabled` is silently ignored (Mistral API has no equivalent parameter). `thinking` always returns null.
+- **Shipped thinking policy**: no Mistral thinking model/type is configured, so the native compatible provider sends no thinking control. Returned thinking text, if any, follows the actual response payload; this is not a universal statement about every upstream model.
 - **Native path**: uses OpenAI SDK with Mistral base_url from `llm_defaults.json`.
 - **Model ID handling**: only the UI-only `[FREE] ` decoration is stripped. The remaining model ID is preserved.
 
@@ -96,7 +100,7 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **No reasoning support**: `thinkingEnabled` / `thinkingBudget` / `reasoningEffort` / `reasoningFormat` are all silently ignored. The UI may still surface these fields because the parameter factory is shared.
+- **Control limitations**: shared fields remain in Params even without a configured outgoing thinking policy. The standalone null-budget conversion caveat above occurs before provider dispatch; do not assume every accepted field is inert or supported by the upstream API.
 - **Temperature capped at 1.5** (not 2).
 - **Codestral is code-specialized**: prompts that assume chat behavior may produce different output patterns.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.

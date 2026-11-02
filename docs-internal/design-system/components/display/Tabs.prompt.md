@@ -1,3 +1,5 @@
+> **Status: Prototype reference.** This is the bundled demo component contract. For production use the existing React primitives, live theme tokens and current frontend documentation; prototype props and visual restrictions do not override shipped behavior.
+
 Tab strip used by the multi-tab console dock (Chat / Console / Terminal) and settings panels.
 
 ```jsx

@@ -23,15 +23,23 @@ Related docs:
 
 ## Execution Modes
 
-`WorkflowService` in `server/services/workflow.py` is a thin facade (~855 lines) that routes every workflow run based on available infrastructure. In every shipped configuration the effective routing is Temporal -> sequential:
+`WorkflowService` in `server/services/workflow.py` uses the call's `use_temporal`
+value, or `TEMPORAL_ENABLED` when that argument is omitted, together with whether
+a Temporal executor is wired. Shipped defaults prefer Temporal; eligible
+minimal/legacy graph runs can select sequential execution when Temporal is
+disabled for that call or the executor is absent. An explicit `use_temporal=False`
+can select local execution even when an executor is wired. A failure after Temporal dispatch returns
+an error: it does not rerun the graph locally, which could repeat effects.
+Managed employee teams and new Pi Coding Agent work require Temporal and do
+not use sequential fallback.
 
 ```
 workflow.execute(workflow_id, workflow_data)
             |
             v
     +---------------------+
-    | TEMPORAL_ENABLED    |  yes --> _execute_temporal()
-    | and Temporal up?    |             |
+    | Temporal requested  |  yes --> _execute_temporal()
+    | and executor wired? |             |
     +---------------------+             v
             | no                   TemporalExecutor
             v                      (per-node activities,
@@ -42,7 +50,13 @@ workflow.execute(workflow_id, workflow_data)
 
 ### 1. Temporal Distributed (primary production mode)
 
-When `TEMPORAL_ENABLED=true` and the Temporal server is reachable, every workflow node executes through Temporal. Three dispatch paths coexist (legacy `execute_node_activity` / per-type `node.{type}.v{version}` / Agent-as-child-workflow `AgentWorkflow`) gated by `TEMPORAL_PER_TYPE_DISPATCH` and `TEMPORAL_AGENT_WORKFLOW_ENABLED` flags. Per-node retries, per-node timeouts, horizontal scaling via worker pool, and the FIRST_COMPLETED orchestrator pattern.
+When Temporal is requested (`use_temporal=True`, or the enabled settings default)
+and a Temporal executor is wired, graph execution is submitted to Temporal. Dispatch includes legacy `execute_node_activity`,
+per-type `node.{type}.v{version}`, native-agent `AgentWorkflow` children, and
+`PiCodingAgentWorkflow` for newly admitted Coding Agent work. Feature flags
+and frozen generation/runtime markers select the compatible path. Nodes have
+declared retries, timeouts and task queues; the graph uses continuous
+FIRST_COMPLETED scheduling.
 
 Full dispatch matrix + activity inventory (legacy + per-type + the F4.B `agent.*` activities — read the live set from `collect_agent_activities()` in `services/temporal/agent_activities.py`) + worker configuration + heartbeat semantics live in [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md). Tool-call dispatch under F4.A: [tool_building_pipeline.md §9](./tool_building_pipeline.md).
 
@@ -65,7 +79,12 @@ guarantees do not extend to the sequential fallback.
 
 ### 2. Sequential Fallback
 
-When Temporal is not available, workflow execution falls back to a simple topological walk with no parallelism, no caching, and no retry. Intended only for minimal environments and CI smoke tests.
+For an eligible graph, Temporal disabled for the call or an absent executor
+selects a simple topological walk with no parallelism, no caching and no orchestration
+retry. This is a minimal/legacy path, not a failover after a Temporal call
+fails. Managed teams and new Pi Coding Agent admissions reject a missing
+required runtime instead. See `services/workflow.py`,
+`services/employees/team_runtime.py` and `services/coding_agent_runtime.py`.
 
 ### Redis-parallel branch (unreachable in shipped configs)
 

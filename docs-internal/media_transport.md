@@ -32,9 +32,11 @@ retained in the status cache, aggregated into the workflow result, copied into
 every downstream activity's *input*, and — if the node is `usable_as_tool` —
 serialized into an LLM message.
 
-So a 12 MB base64 TTS result does not merely fail. It fails the activity,
-**retries three times re-billing the provider on each attempt**, and reports a
-generic payload error that names nothing useful.
+Historically, a 12 MB base64 TTS result could fail the Activity and burn
+three attempts, re-billing its producer. Since 1b.26, `PayloadsTooLarge` is
+non-retryable, so that oversized result fails without those additional
+attempts. Returning contained file references remains required: disabling
+retries does not make a large payload fit the engine.
 
 A capped opt-in ("inline base64 up to N bytes") is worse than no opt-in,
 because it makes the tool path *sometimes* catastrophic — which passes review.

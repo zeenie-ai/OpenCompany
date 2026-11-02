@@ -107,9 +107,7 @@ flowchart TD
   divider where the stamp changes (a row left from before a Start).
 - **Reset** (`reset_execution_state`): clears the workflow's thread, every
   generation, through `chat_thread.clear_chat_thread`. The conversation
-  ended with the generation (the Context node forgets it in the same Reset,
-  and every restart, Home's Apply and Turn on Talk included, is a Reset), so
-  neither Talk nor the editor's chat pane keeps showing it. Returns
+  is explicitly cleared by Reset (the Context node clears its store in the same Reset). Safe Apply and Turn on Talk use the preserving Safe Apply path by default; they are not unconditional Reset operations. Returns
   `{reset, cleared_chat_messages}`; `reset` is false when there was nothing
   to clear, as when `chatTrigger`'s identical hook ran first in the same
   Reset.

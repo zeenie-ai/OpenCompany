@@ -21,7 +21,7 @@ Bare chat and current agent executions share this native provider path.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -32,12 +32,16 @@ Bare chat and current agent executions share this native provider path.
 | `model` | string | `""` (injected) | no | - | e.g. `openai/gpt-oss-120b` (default), `llama-3.3-70b-versatile`, `qwen/qwen3.8-27b` |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` (8-131K per model) | no | - | 1-200000 |
-| `top_p` | number\|null | `1.0` | no | - | |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` | no | - | Only the Qwen3 family supports format-based reasoning; GPT-OSS takes `reasoning_effort` |
 | `reasoning_format` | enum | `parsed` | no | `thinking_enabled=[true]` | `parsed` (returns reasoning) or `hidden` (suppresses it) |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('groq', 'default')` |
 
 (Field names are snake_case on `GroqChatModelParams`; unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 
@@ -50,7 +54,7 @@ Bare chat and current agent executions share this native provider path.
 ```ts
 {
   response: string;
-  thinking: string | null;   // only populated for Qwen3 with reasoningFormat=parsed
+  thinking: string | null;   // provider-normalized reasoning content, when returned
   thinking_enabled: boolean;
   model: string;
   provider: 'groq';
@@ -84,7 +88,7 @@ flowchart TD
 - **Native OpenAI-compatible path**: `ChatUnifier` resolves the `groq` spec
   registered in `providers/_compat.py` (reuses `OpenAIProvider` with the
   `base_url` from `llm_defaults.json`) for both chat and agent requests.
-- **Reasoning**: only the Qwen3 family honors `reasoningFormat` (`qwen/qwen3.8-27b` today; Groq retired `qwen/qwen3-32b`). Other models ignore the flag, and GPT-OSS takes `reasoning_effort` instead.
+- **Reasoning**: the shipped provider policy uses `reasoning_format` for configured Qwen prefixes and `reasoning_effort` for configured GPT-OSS prefixes. Live model availability and acceptance are outside the offline audit.
 - **Model ID handling**: only the UI-only `[FREE] ` decoration is stripped. Owner-qualified IDs such as `openai/gpt-oss-120b` and `qwen/qwen3.8-27b` are preserved because Groq requires them.
 
 ## Side Effects
@@ -104,8 +108,8 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Reasoning only on Qwen3-32b**: QwQ has been removed from Groq. Other models ignore `reasoningFormat`.
-- **`reasoningFormat=hidden` suppresses `thinking`**: response contains only the final answer.
+- **Thinking controls are policy-driven**: reasoning_format is emitted for configured Qwen prefixes; other model families use only the controls their local provider policy declares. Do not infer live model availability from an older model-name example.
+- **`reasoning_format=hidden`**: the policy sends this control for eligible format-based models; the returned `thinking` still reflects whatever reasoning content the provider actually emits.
 - **Finish reason**: passed through from the API response (`"stop"` fallback when absent).
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 

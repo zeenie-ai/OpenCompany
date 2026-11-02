@@ -830,22 +830,35 @@ merging that snapshot, which may already be stale when the response arrives.
 - **`enable_employee_talk`** plans the line (`plan_talk_line`), adds it
   through `apply_graph_additions` (one transaction; an editor with the
   workflow open adopts it), records its roles on a hired row
-  (`store.merge_node_roles`), and restarts the employee on the saved graph. A
+  (`store.merge_node_roles`), and applies the saved graph through Safe Apply. A
   hired employee's talk agent gets instructions written again from its hire,
   the Agent Builder, and, for a schedule worker, Post to Talk. A workflow built
   in Dev mode gets a talk agent with the worker's own instructions plus a note
   that this is Talk (`talk_addendum`), and neither extra. Talk already on
-  succeeds without a restart unless saved changes are waiting.
-- **`apply_employee_changes`** restarts the employee on the latest saved
-  graph.
+  succeeds without applying again unless saved changes are waiting.
+- **`apply_employee_changes`** uses
+  [Safe Apply](../server/services/employees/safe_apply.py) to activate the latest
+  saved graph for future work.
 
-A restart is `restart_with_latest_graph`
-([services/deployment/restart.py](../server/services/deployment/restart.py)):
-running → Reset, then Start again (ends running); paused or failed → Reset
-(ends ready, and the next Start takes the saved graph); ready or never
-started → nothing to do; starting, pausing, resuming or resetting →
-`conflict`. The same idempotency key reports the restart it already made. A
-Reset ends the chat session with the generation: the Context node clears
+Safe Apply is enabled by default (`EMPLOYEE_SAFE_APPLY_ENABLED=true`). It
+pauses producer admission, lets admitted work and reviews finish, then swaps
+the saved snapshot without Reset. Context, memory, chats, files, approvals,
+accepted events and queued requests are preserved. A running employee returns
+to running; a paused employee stays paused. It cannot reopen a stopped
+generation to drain its work: Resume is needed for that work to finish.
+While work remains, the request returns `activation_state: "waiting"`; an
+in-progress handoff returns `starting`. The idempotency key identifies the
+same durable apply request. Ready, failed, completed or reset employees keep
+the saved graph for their next Start (`activation_state: "saved"`).
+Transitional control states return `conflict`; invalid graphs return
+`invalid_changes`. A disabled feature returns `safe_apply_disabled`, and an
+unavailable required controller returns `safe_apply_runtime_required`, rather
+than silently performing Reset. `stop_work: true` is the explicit
+"Stop work and apply" path: it cancels active work and closes its team/job
+records, while keeping queued requests for the applied snapshot.
+
+**Reset is a separate destructive action.** It ends the chat session with
+the generation: the Context node clears
 the workflow's conversations and the chat nodes (`chatTrigger`, `chatReply`)
 clear its thread through the same `reset_execution_state` hook, so Talk and
 the editor's chat pane never show a conversation the agent no longer has.
@@ -1076,8 +1089,8 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building |
 | `start_employee` | `{workflow_id, expected_revision, idempotency_key}` | as `start_workflow` |
 | `pause_workflow` / `resume_workflow` | `{workflow_id, expected_revision, idempotency_key}` | Generation control snapshot: `state`, `revision`, root and execution identities, capabilities and `execution_control_version`; acknowledged `paused` means admitted work drained for version 1. Transitional status is reconciled after a timeout |
-| `enable_employee_talk` | `{workflow_id, idempotency_key}` | `{employee}`. Errors: `invalid_request`, `not_found`, `unsupported`, `conflict` (a start, pause, resume or reset is under way, or the graph changed meanwhile), `restart_failed`; the last three carry `employee` too |
-| `apply_employee_changes` | `{workflow_id, idempotency_key}` | `{employee}`: running ends running, paused or failed ends ready, ready is left alone. Errors: `invalid_request`, `not_found`, `conflict`, `restart_failed` (the last two with `employee`) |
+| `enable_employee_talk` | `{workflow_id, idempotency_key}` | Fresh `{employee}` plus Safe Apply result when activation is needed: `activation_state` can be `saved`, `waiting`, `starting`, `running` or `paused`. Errors include `invalid_request`, `not_found`, `unsupported`, `conflict`, `invalid_changes`, `safe_apply_disabled`, `safe_apply_runtime_required` and `apply_failed` |
+| `apply_employee_changes` | `{workflow_id, idempotency_key, stop_work?: boolean}` | Safe Apply result with `activation_state` (`saved`, `waiting`, `starting`, `running`, `paused` or failure state). Ordinary Apply also returns fresh `employee`; explicit `stop_work` returns the apply result directly. Paused employees stay paused; queued work and conversation state survive. Errors include `invalid_request`, `not_found`, `conflict`, `invalid_changes`, `safe_apply_disabled`, `safe_apply_runtime_required` and `apply_failed` |
 | `rename_employee` | `{workflow_id, name}` (spaces collapsed, at most 40 characters) | `{employee}`: renames the workflow (a new slug, the workspace folder moved, `workflow.renamed` sent), and each agent's instructions a hire wrote take the new name in their opening ("You are <name>, ..."); instructions the owner rewrote keep their words. Agents read them on every run, so nothing restarts. Errors: `invalid_request`, `not_found`, `save_failed` |
 | `set_employee_photo` | `{workflow_id, path \| null}` | `{employee}`: `path` is a PNG, JPEG, WebP or GIF the owner uploaded under `uploads/` (`POST /api/workspace/{workflow_id}/uploads`), at most 5 MB (`EMPLOYEE_PHOTO_MAX_BYTES`); `null` takes the photo away. Errors: `invalid_request`, `not_found`, `invalid_photo` (with `detail`), `unsupported` (a workflow built in the editor has no employee row to keep it on) |
 | `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?, options?: {web?, model?, effort?}}` (`model_unavailable` with `detail` when the model chosen can't answer) | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live, unless its turn waits on the owner's answer to a call: then a plain message declines that call and answers `{message_id: null, run_id: null, declined: {run_id, approval_ids}, delivery}` ([chat_protocol.md](./chat_protocol.md#approvals)). `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
@@ -1189,10 +1202,11 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   Event ingress uses eventually consistent Visibility discovery and logs
   delivery failures; saving a message does not establish an end-to-end durable
   outbox guarantee. See [Chat Trigger](./node-logic-flows/workflow_triggers/chatTrigger.md#edge-cases--known-limits).
-- Turn on Talk and Apply reset the employee: the conversation starts fresh
-  (its thread is cleared with the agent's Context), messages queued while
-  paused are dropped, and drafts waiting for the owner are cancelled (the
-  confirmation and the notice warn about those).
+- Turn on Talk and Apply use Safe Apply: they preserve Context, chat threads,
+  queued messages and approval drafts, and keep paused employees paused. A
+  stopped generation may need Resume before existing work can drain. Reset
+  separately clears generation execution/conversation state and accepted
+  queues; "Stop work and apply" explicitly interrupts active work.
 - A Dev editor holding unsaved edits made before a server-side change (Turn on
   Talk, the Agent Builder) can still overwrite it on its next save, because
   saves carry no revision check. Adopting persisted batches narrows the

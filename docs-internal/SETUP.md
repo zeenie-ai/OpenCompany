@@ -218,12 +218,18 @@ The startup warning about placeholder secrets appears only with login on or `DEP
 | `REDIS_ENABLED` | false | Enable Redis cache (production) |
 | `DEBUG` | false | Debug mode |
 
-### API Keys (Optional)
-Add these to `.env` or configure via the Credentials UI:
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GOOGLE_AI_API_KEY`
-- `GOOGLE_MAPS_API_KEY`
+### Provider credentials
+
+Connect native AI providers through **Settings > Connectors** / Credentials,
+using the encrypted local store or an approved 1Password binding. Native model
+requests resolve that connection explicitly; `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY` and `GOOGLE_AI_API_KEY` in `.env` do not configure it.
+Keyless local servers use the placeholder declared by their provider contract.
+CLI-backed agents have separate documented login/environment contracts.
+
+Google Maps still accepts `GOOGLE_MAPS_API_KEY` as an executor fallback.
+See [credential resolution](./onepassword_credentials.md) and
+[native model providers](./native_llm_sdk.md).
 
 ### Authentication Toggle
 | Variable | Default | Description |
@@ -248,7 +254,7 @@ built from source; see [docker.md](./docker.md).
 |---------|-------------|
 | `bun run start` | Start the app (backend-owned daemons start on demand) |
 | `bun run stop` | Stop all services |
-| `bun run build` | Full production build (`company build`: bun install, client, sidecar, `uv sync --extra docs`, bytecode, Temporal binary) |
+| `bun run build` | Full production build (`company build`: bun install, client, JS sidecar, Pi runtime, `uv sync --extra docs`, bytecode, Temporal binary) |
 | `bun run dev` | Start development server |
 
 ## Troubleshooting

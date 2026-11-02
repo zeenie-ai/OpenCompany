@@ -32,6 +32,8 @@ downloaded files land in the per-workflow workspace and can be picked up by
 | `skip_existing` | boolean | `true` | no | - | Declared Params field |
 | `timeout` | number | `60` | no | - | Declared Params field (1-600) |
 
+**Known code gap:** normal schema fields `output_dir`, `max_workers`, and `skip_existing` are accepted but are not consumed by the current download operation. It reads retained legacy extra keys instead, so a UI edit to those canonical fields can leave the effective directory, concurrency (8), and skip behavior unchanged. This audit documents the discrepancy without changing execution.
+
 **Quirk**: `Params = FileDownloaderParams` declares snake_case fields (above), but `extra="allow"` lets camelCase keys pass through, and the `download` op reads camelCase off `model_dump()`: `items`, `outputDir`, `maxWorkers` (default `8` here, not `4`), `skipExisting`, plus `urls`/`timeout`. So the operative keys consumed at runtime are `items`/`urls`, `outputDir`, `maxWorkers`, `skipExisting`, `timeout`.
 
 ## Outputs (handles)
@@ -105,6 +107,10 @@ flowchart TD
 - **Environment variables**: none.
 
 ## Edge cases & known limits
+
+- **Decoded filename containment**: the URL basename is URL-decoded before joining it to `output_dir`, and no final containment check is performed. Encoded path separators can therefore change the destination outside that directory. Use trusted download sources; this audit records the runtime gap without repairing it.
+- **Unbounded response body**: the HTTP client materializes `resp.content` before writing; no download byte limit is enforced by this operation.
+
 
 - Each download opens its own `httpx.AsyncClient` inside the semaphore - overhead per file, not a shared client/session.
 - No retry on failure; one HTTP error per URL means one `failed` entry.

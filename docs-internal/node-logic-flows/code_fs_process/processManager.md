@@ -40,6 +40,7 @@ envelope so the framework returns a clean failure.
 | `cwd` | string | `""` | no | `operation=start` | Working directory; defaults to `<workspace>/<node_id>` |
 | `ports` | int[] | `[]` | no | `operation=start` | Listener ports reserved before spawn; occupied ports fail with `PORT_IN_USE` instead of launching |
 | `env` | object (Dict[str,str]) | `{}` | no | `operation=start` | Extra environment variables, forwarded to `ProcessService.start(extra_env=...)` |
+| `ports` | array of integers | `[]` | no | `operation=start` | Listener ports reserved before spawn; common port flags and PORT environment variables are also recognized |
 | `input_text` | string | `""` | yes (`send_input`) | `operation=send_input` | Text to write to stdin (newline auto-appended by the service) |
 | `stream` | `stdout`/`stderr` (Literal) | `stdout` | no | `operation=get_output` | Stream to read for `get_output` |
 | `tail` | number | `100` (ge=1, le=10000) | no | `operation=get_output` | Tail N lines |
@@ -111,7 +112,7 @@ Each service call (except `list`) is wrapped in `_unwrap`, which raises
   workspace is also empty, `ProcessService.start` falls back to
   `<workspace_base>/default` and mkdir's it.
 - **Workspace guardrail**: `cwd` must resolve inside `workspace_base_resolved`
-  via `Path.is_relative_to()`. Violations return an error.
+  or the managed daemons state root. Versioned runtime v1 additionally resolves its node `cwd` under the workflow workspace; violations return an error.
 - **Destructive-command block**: the service maintains a hard-coded list of
   prefixes/tokens (`rm `, `rmdir`, `del `, `rd `, `remove-item`, `format `,
   `mkfs`, `dd if=`, `shred`, `> /dev/`, `chmod 777`, `chmod -r`) and refuses
@@ -124,8 +125,7 @@ Each service call (except `list`) is wrapped in `_unwrap`, which raises
   running triggers an implicit `stop` first; the new process inherits the
   same `log_dir` (cleared before spawn).
 - **PATH inheritance**: `env = {**os.environ, "PYTHONUNBUFFERED": "1"}`.
-  The full system PATH is available - this is the main distinction from the
-  sandboxed shell node.
+  The system PATH is available, with 1Password environment stripped. Shell also inherits PATH; Process Manager differs by its managed long-running process lifecycle and streamed logs.
 - **ANSI-stripped at capture**: `_read_stream` runs each decoded line through
   `core.ansi.strip_ansi` (a wrapper over **`click.unstyle`**) BEFORE the log-file
   write / `broadcast_terminal_log` / `line_handler`, so colour + cursor/erase
@@ -139,6 +139,14 @@ Each service call (except `list`) is wrapped in `_unwrap`, which raises
 - **Auto cleanup**: 60 seconds after a process exits, `_cleanup_completed`
   removes its log directory and drops it from the tracking dict. Fast
   consumers must call `get_output` before the grace window.
+
+## Admission and runtime versions
+
+`start` parses one executable/argument vector with `shlex.split`; it does not evaluate shell operators. Use an explicit shell executable when shell grammar is required. It reserves declared `ports` and recognized port flags/environment before spawning under a start lock. Occupied ports return `PORT_IN_USE` with owner facts; unrelated listeners are never killed and refusal does not truncate logs. Only same-workflow, same-name replacement first stops its managed process.
+
+Missing `cwd` defaults to the sanitized process-node directory. Runtime v1 resolves an explicit `cwd` within the workflow workspace and returns runtime/port-owner facts; legacy working-directory behavior is retained for old agents. `env` is forwarded after secret-environment filtering.
+
+Successful service responses from `start`/`stop`/`restart`/`send_input` retain their nested `result` field inside the outer node envelope; `list` and `get_output` have their own direct payload shapes. The AI-tool path unwraps the outer ActionNode envelope only.
 
 ## Side Effects
 

@@ -20,8 +20,7 @@ the `android_agent` folder via a Master Skill.
 
 - **Intended tool set**: Android service nodes (16 total) and the
   independent tool capabilities.
-- **Intended skills**: `server/skills/android_agent/` (12 skills:
-  personality, battery, wifi, bluetooth, location, etc.).
+- **Intended skills**: `server/skills/android_agent/` (personality, Android phone, battery, wifi, bluetooth, location, and other device guidance).
 - **Frontend theming**: green dracula accent, phone emoji in component
   palette.
 

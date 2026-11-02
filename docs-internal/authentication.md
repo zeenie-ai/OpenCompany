@@ -260,8 +260,12 @@ Recorded explicitly because each of these is easy to assume is handled.
   every spawned run. What is still missing is *enforcement*: there is no
   ownership check on workflow get / list / delete, and the checks that exist on
   the Context and Memory panels are fail-open (`if stored_owner and
-  stored_owner != caller`), so a row with an empty `owner_id` — every legacy
-  row, and every row written through the REST path — authorizes everyone.
+  stored_owner != caller`), so a genuinely ownerless legacy row can authorize
+  every caller. New REST-created graphs instead receive the placeholder owner
+  `"owner"`, because the shared save handler is called without a WebSocket
+  identity; REST updates preserve an existing owner. Under login that
+  placeholder differs from the numeric JWT subject and can deny access to
+  owner-checked panels. These creation, update and legacy cases are distinct.
   `get_all_workflows` returns every tenant's rows unfiltered. `is_owner` is
   still decorative. Until ownership moves to an indexed column with scoped
   accessors, treat `multi` as "several people who fully trust each other".
@@ -298,13 +302,18 @@ Recorded explicitly because each of these is easy to assume is handled.
   public origin in `CORS_ORIGINS`. Locked by `tests/test_internal_socket_surface.py`,
   which runs real handshakes.
 - **No CSRF token.** The API is cookie-authenticated and `SameSite` is the only
-  defence. Mitigated by every mutating endpoint being `POST` under `/api/` and
-  by `SameSite=none` + insecure being rejected at startup. A real double-submit
+  defence. Mutations include POST and DELETE routes under `/api/`; HTTP
+  method alone is not a CSRF guarantee. `SameSite=none` + insecure is rejected
+  at startup. A real double-submit
   scheme would touch every `fetch` and the WebSocket handshake.
 - **No token revocation.** `logout` clears the cookie; there is no `jti`
   denylist, so a token captured beforehand stays valid until `exp` (default 7
-  days). The practical lever is `User.is_active`, enforced in
-  `get_current_user`.
+  days). `get_current_user` checks `User.is_active` for auth status/me, but
+  the main HTTP middleware and WebSocket admission currently verify JWT
+  claims without looking up active-account state. Deactivation therefore
+  does not reliably revoke API access or new socket handshakes before token
+  expiry, and it does not disconnect existing sockets. Treat consistent
+  account-state enforcement as a separate code gap.
 - **Rate-limit counters are per-process** — see `core/rate_limit.py`.
 - **`/docs`, `/redoc`, `/openapi.json` are served only when auth is disabled or
   `DEPLOYMENT_MODE=local`.** They were previously public on every deployment

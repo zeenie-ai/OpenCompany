@@ -17,7 +17,7 @@ connections: `timer`, `cronScheduler`, `taskManager`, `writeTodos`.
 
 - **Intended tool set**: scheduling, reminders, todo planning.
 - **Intended skills**: `server/skills/task_agent/` (timer-skill,
-  cron-scheduler-skill and write-todos-skill). Task Manager guidance now
+  cron-scheduler-skill). `write-todos-skill` and Task Manager guidance now
   lives in the AI Assistant skill catalog as `task-manager`.
 - **Frontend theming**: purple dracula accent.
 

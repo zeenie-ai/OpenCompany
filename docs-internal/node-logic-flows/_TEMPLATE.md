@@ -19,6 +19,9 @@ this file must still describe what the code does end-to-end.
 | **Tests** | [`server/tests/nodes/test_<category>.py`](../../../server/tests/nodes/test_<category>.py) |
 | **Skill (if any)** | [`server/skills/<folder>/<skill>/SKILL.md`](../../../server/skills/<folder>/<skill>/SKILL.md) |
 | **Dual-purpose tool** | yes / no - tool name `<tool_name>` if yes |
+| **Direct Run** | supported / refused / passive; saved graph, context and runtime prerequisites |
+| **Controlled execution** | actual graph/tool retry/timeout and Stop/Resume/Reset behavior |
+| **Workspace task** | separate task path and ownership, or not applicable |
 
 ## Purpose
 

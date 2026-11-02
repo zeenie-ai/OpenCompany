@@ -25,6 +25,8 @@ confusing the two is the most common misuse.
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
+| `tool_name` | string | `transliterate_text` | Saved callable-name override; check the actual tool catalogue |
+| `tool_description` | string | plugin default | Description supplied to the model |
 | `provider` | enum | registry-driven | `transliterate_providers()` — `sarvam` / `openai`. **DeepL is absent and unselectable.** |
 | `text` | string | - | Text to convert (required) |
 | `target_language` | string | provider default | Loader `transliterateLanguages` |

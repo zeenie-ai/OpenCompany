@@ -52,7 +52,7 @@ Note: for `days` / `weeks` / `months` the op hard-codes the wait to 24h
 |--------|-------|-------------|
 | `output-main` | object | Schedule metadata (see below). |
 
-Dual-purpose: the plugin sets `usable_as_tool = True` with `tool_name = "cron_scheduler"`, so when wired to an agent's `input-tools` handle the LLM fills the same Params schema and receives the same payload. There is no separate `output-tool` handle declared.
+Dual-purpose: the plugin sets `usable_as_tool = True` with `tool_name = "cron_scheduler"`, so when wired to an agent's `input-tools` handle the LLM fills the same Params schema and receives the same payload. The class does not declare an additional tool handle, but shared metadata projection emits `output-tool` for this dual-purpose node.
 
 ### Output payload
 

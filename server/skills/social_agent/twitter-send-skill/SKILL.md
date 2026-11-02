@@ -17,7 +17,7 @@ Post and interact with tweets on Twitter/X via X API v2.
 
 This skill provides instructions for the **Twitter Send** tool node. Connect the **Twitter Send** node to an AI Agent's `input-tools` handle to enable posting and interactions.
 
-All actions use OAuth 2.0 user context with automatic token refresh on expiry (tokens last 2 hours).
+Actions use the connected OAuth user context and the plugin's token-refresh/retry path. Provider scopes and account limits still apply.
 
 ## twitter_send Tool
 
@@ -27,21 +27,21 @@ Send tweets, replies, retweets, likes, and deletions.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| action | string | Yes | Action type: `tweet`, `reply`, `retweet`, `like`, `unlike`, `delete` |
-| text | string | If tweet/reply | Tweet text content (max 280 characters) |
-| tweet_id | string | If retweet/like/unlike/delete | Target tweet ID |
-| reply_to_id | string | If reply | Tweet ID to reply to |
+| action | string | Yes | Action type: `tweet`, `reply`, `quote`, `retweet`, `like`, `unlike`, `delete` |
+| text | string | If tweet/reply/quote | Tweet text content (max 280 characters) |
+| tweet_id | string | If reply/quote/retweet/like/unlike/delete | Target tweet ID |
 
 ### Actions
 
 | Action | Required Fields | Description | Rate Limit Notes |
 |--------|-----------------|-------------|------------------|
-| `tweet` | text | Post a new tweet | 200 tweets/15min (app), 300/3hr (user) |
-| `reply` | text, reply_to_id | Reply to an existing tweet | Same as tweet limits |
-| `retweet` | tweet_id | Retweet an existing tweet | 5 retweets/15min (free tier) |
-| `like` | tweet_id | Like a tweet | 200 likes/24hr (free tier) |
-| `unlike` | tweet_id | Remove like from a tweet | 50 unlikes/15min |
-| `delete` | tweet_id | Delete your own tweet | 50 deletes/15min |
+| `tweet` | text | Post a new tweet | Provider controlled |
+| `reply` | text, tweet_id | Reply to an existing tweet | Provider controlled |
+| `quote` | text, tweet_id | Quote an existing tweet | Provider controlled |
+| `retweet` | tweet_id | Retweet an existing tweet | Provider controlled |
+| `like` | tweet_id | Like a tweet | Provider controlled |
+| `unlike` | tweet_id | Remove like from a tweet | Provider controlled |
+| `delete` | tweet_id | Delete your own tweet | Provider controlled |
 
 ### Examples
 
@@ -58,7 +58,7 @@ Send tweets, replies, retweets, likes, and deletions.
 {
   "action": "reply",
   "text": "Thanks for sharing this!",
-  "reply_to_id": "1234567890123456789"
+  "tweet_id": "1234567890123456789"
 }
 ```
 
@@ -75,7 +75,7 @@ Then reply to the returned tweet ID for each subsequent post:
 {
   "action": "reply",
   "text": "Tip 1: Write tests first (2/3)",
-  "reply_to_id": "<id_from_first_tweet>"
+  "tweet_id": "<id_from_first_tweet>"
 }
 ```
 
@@ -170,13 +170,13 @@ Then reply to the returned tweet ID for each subsequent post:
 
 ## Guidelines
 
-1. **Character limit**: Tweets are limited to 280 characters. The API will reject longer text.
+1. **Character limit**: This node clips tweet/reply/quote text to the first 280 characters before sending. Compose within that limit to avoid losing content.
 2. **Tweet IDs**: Use the numeric ID string (e.g., `1234567890123456789`). Get these from search results or user timelines.
 3. **Rate limits**: X API has strict rate limits (see table above). Space out rapid actions.
 4. **Content policy**: Follow X's content policies and terms of service.
-5. **Threading**: Use reply action with `reply_to_id` set to the previous tweet's ID to create threads.
+5. **Threading**: Use reply action with `tweet_id` set to the previous tweet's ID to create threads.
 6. **Token refresh**: If a 401/403 error occurs, the system automatically refreshes the OAuth token and retries.
-7. **Retweet vs Quote**: This tool only supports native retweets. For quote tweets, use `tweet` action and include the tweet URL in the text.
+7. **Retweet vs Quote**: Use `retweet` with `tweet_id` for a native retweet. Use `quote` with `tweet_id` and `text` for a quote tweet.
 
 ## Common Use Cases
 

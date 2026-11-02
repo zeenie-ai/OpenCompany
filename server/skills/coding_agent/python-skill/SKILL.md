@@ -80,7 +80,7 @@ All modules below are **pre-injected as names** in the sandbox. **Do not use `im
 **Date calculations:**
 ```json
 {
-  "code": "today = datetime.datetime.now()\nfuture = today + timedelta(days=30)\nresult = future.strftime('%Y-%m-%d')\nprint(f'30 days from now: {result}')\noutput = result"
+  "code": "today = datetime.datetime.now()\nfuture = today + timedelta(days=30)\nresult = f'{future.year:04d}-{future.month:02d}-{future.day:02d}'\nprint(f'30 days from now: {result}')\noutput = result"
 }
 ```
 
@@ -147,7 +147,9 @@ All modules below are **pre-injected as names** in the sandbox. **Do not use `im
 1. **Always set `output`**: This returns data to the workflow
 2. **Use `print()` for debugging**: Output is captured and returned
 3. **Keep code focused**: One task per execution
-4. **Handle errors**: Use try/except for robust code
+Some datetime formatting helpers such as `strftime` perform internal imports and can fail in this restricted namespace. Use direct fields or simple formatting, as in the date example.
+
+4. **Handle expected invalid input**: Prefer explicit guards. Named exception classes are not injected into this executor's restricted builtins; the runtime reports uncaught failures with line information.
 5. **No network access**: Use http-skill for web requests
 6. **No file system access**: Restricted to safe operations
 7. **Timeout**: Default 30 seconds max execution time

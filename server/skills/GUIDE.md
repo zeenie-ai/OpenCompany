@@ -99,7 +99,7 @@ Provide usage guidelines, examples, and constraints.
 |-------|----------|-------------|
 | `name` | Yes | Lowercase, hyphens only. Must match pattern `^[a-z0-9]+(-[a-z0-9]+)*$` |
 | `description` | Yes | One-line summary shown in skill lists and to the LLM |
-| `allowed-tools` | No | Space-delimited list of LLM-facing tool names (snake_case, e.g. `stripe_action`, `apify_actor`, `whatsapp_send`). The first token whose snake→camel conversion (`stripe_action` → `stripeAction`) matches a node `type` in `server/nodes/visuals.json` becomes the skill's visual source — its icon/color come from that entry via the `_visuals` handler. **Convention:** the LLM tool name MUST be the snake_case form of the node type (e.g. `stripeAction` → `stripe_action`). The same string is the plugin's `tool_name` ClassVar (locked by `server/tests/fixtures/tool_names_snapshot.json`) so the LLM and the skill agree on the name. Mismatching the snake_case (e.g. `stripe_cli` for a `stripeAction` node) silently breaks icon resolution. |
+| `allowed-tools` | No | Space-delimited tool identifiers or supported visual aliases. Callable names come from each plugin's `tool_name` or dynamic binding, not a universal snake_case conversion. The loader also uses these tokens to resolve a node's icon/color. For example, Python's callable is `python_code`, while the shipped visual token `python_executor` identifies `pythonExecutor`. Check both the actual tool schema and visual resolution. |
 | `metadata` | No | Arbitrary key-value pairs (author, version, category). **Don't set `icon`/`color` for skills that target a node** — those are resolved from the first `allowed-tools` entry that names a node (`SkillLoader._parse_skill_metadata`): the icon from that plugin's `icon_<type>.svg` / `icon.svg`, else its `visuals.json` entry; the colour from its `meta.json`, else `visuals.json`. `meta.json` icon references (`lucide:...`) are not consulted, so a skill targeting a node that uses only such a reference gets no icon from it. Skills with no node target (personality skills, memory operators, autonomous patterns) **may** set inline `icon` and `color` — they're the only visual source for those. |
 
 ### Name Format Rules
@@ -110,22 +110,25 @@ Provide usage guidelines, examples, and constraints.
 - Examples: `my-skill`, `brave-search-skill`, `python-skill`
 - Invalid: `My_Skill`, `my--skill`, `MySkill`
 
-### Tool naming — snake_case ↔ camelCase contract
+### Node types, callables, and visual aliases
 
-Three places have to agree for a skill's icon to render correctly:
+These are separate identifiers:
 
-| Place | Form | Example |
+| Identifier | Authority | Example |
 |---|---|---|
-| Plugin node `type` (in `<plugin>.py`) | camelCase | `stripeAction` |
-| `server/nodes/visuals.json` key | camelCase (= node type) | `"stripeAction": { "icon": "asset:stripe", ... }` |
-| Plugin `tool_name` ClassVar (snapshot: `tests/fixtures/tool_names_snapshot.json`) | snake_case (LLM tool name) | `tool_name = "stripe_action"` |
-| Skill `allowed-tools` | snake_case (matches the LLM tool name) | `allowed-tools: "stripe_action"` |
+| Registered node type | Plugin `type` | `pythonExecutor` |
+| Callable tool name | Plugin `tool_name`, or a dynamic tool binding | `python_code` |
+| Skill visual token | `SkillLoader._parse_skill_metadata` and plugin/visual aliases | `python_executor` |
+| Skill name | This file's `name` | `python-skill` |
 
-The skill resolver (`SkillLoader._parse_skill_metadata`) takes each `allowed-tools` token, runs snake→camel (`stripe_action` → `stripeAction`), and looks it up in `visuals.json`. If the conversion doesn't equal the node type, no icon resolves and the skill renders without one.
-
-**Common pitfall:** picking a "creative" LLM tool name that doesn't snake-back to the node type. For example, calling a `stripeAction` node's tool `stripe_cli` (because it wraps a CLI) breaks the convention — `stripe_cli` snakes to `stripeCli`, not `stripeAction`, so `visuals.json` lookup fails. Stick to `<node_type_in_snake_case>` unless you're prepared to also add an alias entry to `visuals.json`.
-
-**If you do keep a short tool name, the alias entry is mandatory, not optional.** Real precedent: `githubAction` / `vercelAction` use the tool names `github` / `vercel`, and their skills rendered blank Master Skill rows until `visuals.json` gained lowercase alias entries keyed by the tool name. The alias must carry both `icon` and `color` (the color fallback via the plugin's `meta.json` is keyed by node type, so it misses too): `"github": {"icon": "lobehub:Github", "color": "#8250df"}`. Every shipped skill must resolve a non-empty icon — locked by `server/tests/test_skill_icon_resolution.py`, so a mismatch fails CI with a message pointing back here.
+The loader tries supported visual aliases and snake-to-camel resolution for
+`allowed-tools`; this metadata is not a universal naming or authorization
+contract. Other examples include node `shell` with callable `shell_execute`,
+and `githubAction` with callable/alias `github`. Do not mechanically rename
+existing tokens: that can remove their icons without changing callable names.
+Teach actual tool names in examples, then verify the chosen metadata token
+resolves to the intended visuals with `server/tests/test_skill_icon_resolution.py`.
+Runtime grants and connected-node policy determine available tools.
 
 ## Optional Supporting Files
 

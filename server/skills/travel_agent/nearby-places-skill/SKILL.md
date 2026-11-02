@@ -9,225 +9,53 @@ metadata:
 
 ---
 
-# Nearby Places Tool
+# Nearby Places
 
-Search for places near a location using Google Places API.
+Use the connected **Nearby Places** node's callable `nearby_places`. The skill's
+`gmaps_nearby_places` metadata token identifies its visuals; use the callable
+name shown in the current tool catalogue.
 
-## How It Works
+## Current implementation limitation
 
-This skill provides instructions for the **Show Nearby Places** (gmaps_nearby_places) tool node. Connect the **Show Nearby Places** node to Zeenie's `input-tools` handle to enable place search.
+The node declares `latitude`, `longitude` and `place_type`, but its current
+service helper still reads the older `lat`, `lng` and `type` keys after Params
+validation has discarded them. It therefore searches its fallback location
+(40.7484, -73.9857) and type (`restaurant`) instead of reliably honoring the
+requested location/type. The top-level `keyword` is also ignored by the helper's
+default nested-options branch.
 
-## show_nearby_places Tool
+Do not present these fallback results as nearby the user's requested location.
+Inspect the returned `search_parameters`; report the limitation when it does
+not match the request. Adding legacy keys to a tool call does not repair the
+mapping. This is a code gap, not a configuration workaround.
 
-Search for places near GPS coordinates.
+## Declared arguments
 
-### Schema Fields
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| latitude | number | required | -90 through 90 |
+| longitude | number | required | -180 through 180 |
+| radius | integer | 1000 | 1 through 50000 meters |
+| place_type | string | empty | Requested place type; affected by the mapping gap above |
+| keyword | string | empty | Requested text filter; affected by the gap above |
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| lat | float | Yes | Center latitude for search |
-| lng | float | Yes | Center longitude for search |
-| radius | int | No | Search radius in meters (default: 500, max: 50000) |
-| type | string | No | Place type to search for (default: "restaurant") |
-| keyword | string | No | Keyword to filter results |
-
-### Place Types
-
-**Food & Drink:**
-- `restaurant` - Restaurants
-- `cafe` - Coffee shops
-- `bar` - Bars and pubs
-- `bakery` - Bakeries
-- `meal_takeaway` - Takeout restaurants
-
-**Shopping:**
-- `store` - General stores
-- `supermarket` - Grocery stores
-- `shopping_mall` - Shopping centers
-- `clothing_store` - Clothing shops
-- `convenience_store` - Convenience stores
-
-**Services:**
-- `bank` - Banks
-- `atm` - ATMs
-- `gas_station` - Gas/petrol stations
-- `pharmacy` - Pharmacies
-- `post_office` - Post offices
-
-**Health:**
-- `hospital` - Hospitals
-- `doctor` - Doctor's offices
-- `dentist` - Dental clinics
-
-**Transport:**
-- `bus_station` - Bus stations
-- `train_station` - Train stations
-- `airport` - Airports
-- `taxi_stand` - Taxi stands
-- `parking` - Parking lots
-
-**Entertainment:**
-- `movie_theater` - Cinemas
-- `gym` - Fitness centers
-- `park` - Parks
-- `museum` - Museums
-- `zoo` - Zoos
-
-**Accommodation:**
-- `hotel` - Hotels
-- `lodging` - All lodging types
-
-### Examples
-
-**Find nearby restaurants:**
-```json
-{
-  "lat": 40.7484,
-  "lng": -73.9857,
-  "radius": 500,
-  "type": "restaurant"
-}
-```
-
-**Find coffee shops:**
-```json
-{
-  "lat": 37.7749,
-  "lng": -122.4194,
-  "type": "cafe",
-  "radius": 1000
-}
-```
-
-**Find specific chain:**
-```json
-{
-  "lat": 37.7749,
-  "lng": -122.4194,
-  "type": "cafe",
-  "keyword": "starbucks"
-}
-```
-
-**Find gas stations:**
-```json
-{
-  "lat": 34.0522,
-  "lng": -118.2437,
-  "type": "gas_station",
-  "radius": 2000
-}
-```
-
-**Find hotels:**
-```json
-{
-  "lat": 51.5074,
-  "lng": -0.1278,
-  "type": "hotel",
-  "radius": 1000
-}
-```
-
-### Response Format
+Schema-valid example (the implementation limitation still applies):
 
 ```json
-{
-  "success": true,
-  "type": "restaurant",
-  "search_parameters": {
-    "location": {"lat": 40.7484, "lng": -73.9857},
-    "radius": 500,
-    "type": "restaurant"
-  },
-  "results": [
-    {
-      "name": "Example Restaurant",
-      "vicinity": "123 Main St, New York",
-      "rating": 4.5,
-      "user_ratings_total": 150,
-      "price_level": 2,
-      "geometry": {
-        "location": {"lat": 40.7485, "lng": -73.9860}
-      },
-      "types": ["restaurant", "food", "establishment"],
-      "opening_hours": {"open_now": true}
-    }
-  ],
-  "total_results": 10,
-  "status": "OK"
-}
+{"latitude":48.8584,"longitude":2.2945,"radius":1000,"place_type":"cafe"}
 ```
 
-### Response Fields
+## Results
 
-| Field | Description |
-|-------|-------------|
-| name | Place name |
-| vicinity | Address or location description |
-| rating | Average rating (1-5) |
-| user_ratings_total | Number of reviews |
-| price_level | Price level (0-4, 0=free, 4=very expensive) |
-| geometry.location | Place coordinates |
-| types | Place type categories |
-| opening_hours.open_now | Whether currently open |
+The current helper returns `search_parameters`, `results`, `total_results` and
+`status`. Check the echoed location, type and keyword before using the results.
+The declared Output convenience fields `places` and `count` are not the
+helper's current response keys. Empty results and provider errors must be
+reported as returned.
 
-### Error Response
-
-```json
-{
-  "error": "lat and lng are required for nearby places search"
-}
-```
-
-## Price Level Guide
-
-| Level | Meaning |
-|-------|---------|
-| 0 | Free |
-| 1 | Inexpensive ($) |
-| 2 | Moderate ($$) |
-| 3 | Expensive ($$$) |
-| 4 | Very Expensive ($$$$) |
-
-## Common Workflows
-
-### Find places near an address
-
-1. Use `geocoding` tool to convert address to coordinates
-2. Use `nearby_places` with the lat/lng from step 1
-
-### Find best-rated places
-
-1. Search with appropriate type and radius
-2. Sort results by rating in response
-3. Filter by minimum rating threshold
-
-### Find open places now
-
-1. Search with desired type
-2. Check `opening_hours.open_now` in results
-
-## Radius Guidelines
-
-| Radius | Use Case |
-|--------|----------|
-| 100-500m | Walking distance |
-| 500-1000m | Short walk |
-| 1000-2000m | 5-10 min walk |
-| 2000-5000m | Driving distance |
-| 5000-50000m | City-wide search |
-
-## Tips
-
-1. **Use specific types**: "cafe" not "coffee"
-2. **Add keywords**: Filter by chain name or cuisine
-3. **Adjust radius**: Start small, expand if needed
-4. **Check ratings**: Higher ratings usually mean better quality
-5. **Verify open_now**: Important for time-sensitive searches
-
-## Setup Requirements
-
-1. Connect the **Show Nearby Places** (gmaps_nearby_places) node to Zeenie's `input-tools` handle
-2. Google Maps API key must be configured in Credentials
-3. Places API must be enabled in Google Cloud Console
+Google Maps credentials are required, but the current node also drops the
+executor-injected saved key during Params validation. Its service can use the
+runtime's `google_maps_api_key` setting (`GOOGLE_MAPS_API_KEY`); a saved
+connection alone can fail. Do not add secret arguments to bypass that gap.
+Calls record usage and may incur provider charges. Provider limits and live place accuracy are not verified by
+a schema-valid example.

@@ -1,19 +1,8 @@
-"""Every repo path a live internal doc names must exist.
+"""Offline navigation and implementation-path checks for source Markdown.
 
-``docs-internal`` cites files in backticks (``server/services/foo.py``). When
-the file moves, the citation silently rots; a September 2026 audit found
-dozens of dead ones, some pointing at modules that never existed. This test
-keeps that from recurring. It checks existence only -- never line numbers or
-symbols, which drift with every commit and would make the test a nuisance.
-
-Skipped on purpose:
-
-- anything under ``docs-internal/ARCHIVE/`` and any doc whose first lines
-  carry an ARCHIVED / HISTORICAL / Superseded banner -- those record the
-  past and are expected to name things that are gone;
-- paths containing ``<``, ``*`` or ``...`` (templates and globs);
-- the ``_ILLUSTRATIVE`` set (recipe placeholders such as ``acme_search``);
-- any line carrying ``docs-lint: ignore``.
+Archived bodies remain historical; their current-successor notice and incoming
+links still work. Prototype/planned material keeps navigation coverage without
+asserting that illustrative source paths are shipped implementation files.
 """
 
 from __future__ import annotations
@@ -24,57 +13,50 @@ from pathlib import Path
 import pytest
 
 from cli.platform_ import project_root
+from cli.tests.docs_checks import document_status, link_errors, markdown_paths, prose_code_spans
 
 ROOT = project_root()
-DOCS = ROOT / "docs-internal"
 SEARCH_BASES = (ROOT, ROOT / "server", ROOT / "client", ROOT / "client" / "src")
-SKIP_DIRS = {"ARCHIVE", "design-system", "diagram-generation"}
-
-_BANNER = re.compile(r"ARCHIVED|HISTORICAL|Superseded", re.I)
 _PATH = re.compile(
-    r"`((?:server|client|cli|scripts|docs-internal|services|nodes|core|routers|src|"
+    r"^((?:server|client|cli|scripts|docs-internal|services|nodes|core|routers|src|"
     r"components|hooks|models|middleware|tests|config|skills|lib|store|stores|utils|"
     r"types|contexts|assets)/[A-Za-z0-9_./-]+"
-    r"\.(?:py|ts|tsx|js|json|md|css|svg|toml|yml|yaml|html))`"
+    r"\.(?:py|ts|tsx|js|json|md|css|svg|toml|yml|yaml|html))$"
 )
-
 _ILLUSTRATIVE = {
     "server/nodes/search/acme_search.py",
     "server/nodes/search/acme_search/__init__.py",
 }
 
 
-def _live_docs() -> list[Path]:
-    out: list[Path] = []
-    for path in sorted(DOCS.rglob("*.md")):
-        if SKIP_DIRS & set(path.relative_to(DOCS).parts):
-            continue
-        head = "\n".join(path.read_text(encoding="utf-8", errors="replace").splitlines()[:12])
-        if _BANNER.search(head):
-            continue
-        out.append(path)
-    return out
+@pytest.mark.parametrize("doc", markdown_paths(ROOT), ids=lambda p: p.relative_to(ROOT).as_posix())
+def test_markdown_links_and_anchors_resolve(doc: Path) -> None:
+    errors = link_errors(ROOT, doc)
+    assert not errors, f"{doc.relative_to(ROOT).as_posix()}:\n" + "\n".join(errors)
 
 
-def _resolves(rel: str) -> bool:
-    return any((base / rel).exists() for base in SEARCH_BASES)
-
-
-@pytest.mark.parametrize("doc", _live_docs(), ids=lambda p: p.relative_to(DOCS).as_posix())
+@pytest.mark.parametrize("doc", markdown_paths(ROOT), ids=lambda p: p.relative_to(ROOT).as_posix())
 def test_backtick_paths_resolve(doc: Path) -> None:
-    dead: list[str] = []
-    for lineno, line in enumerate(doc.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-        if "docs-lint: ignore" in line:
+    text = doc.read_text(encoding="utf-8")
+    if document_status(doc, text) != "current":
+        return
+    lines = text.splitlines()
+    dead = []
+    for lineno, span in prose_code_spans(text):
+        if "docs-lint: ignore" in lines[lineno - 1]:
             continue
-        for rel in _PATH.findall(line):
-            if rel in _ILLUSTRATIVE or "<" in rel or "*" in rel or "..." in rel:
-                continue
-            if "/dist/" in rel:  # build output, exists only after a build
-                continue
-            if not _resolves(rel):
-                dead.append(f"  line {lineno}: {rel}")
+        match = _PATH.fullmatch(span)
+        if not match:
+            continue
+        rel = match.group(1)
+        if rel in _ILLUSTRATIVE or "/dist/" in rel or "..." in rel:
+            continue
+        # Package READMEs legitimately use paths relative to their own package.
+        local_bases = [doc.parent, *[parent for parent in doc.parents if parent.is_relative_to(ROOT)]]
+        if not any((base / rel).exists() for base in (*SEARCH_BASES, *local_bases)):
+            dead.append(f"line {lineno}: {rel}")
     assert not dead, (
         f"{doc.relative_to(ROOT).as_posix()} names paths that do not exist:\n"
         + "\n".join(dead)
-        + "\nFix the citation, or mark the line with `docs-lint: ignore` if it is illustrative."
+        + "\nFix the citation, or use docs-lint: ignore with a reason for an illustrative path."
     )

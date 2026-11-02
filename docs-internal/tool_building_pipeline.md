@@ -55,7 +55,7 @@ Activity, without creating canvas nodes or node output records.
 `input-context`, or the legacy Memory descriptor on `input-memory` graphs.)
 
 - **`tool_data`** is a list of dicts. Each entry: `{node_id, node_type, parameters, label}`. (The `connected_services` extra belonged to the retired `androidTool` gateway tool — see §7.)
-- **MasterSkill expansion** runs at discovery time: a single `masterSkill` connection with `skillsConfig` expands into N individual skill entries, one per enabled skill key.
+- **MasterSkill expansion** runs at discovery time: a single `masterSkill` connection with `skills_config` expands into N individual skill entries, one per enabled skill key.
 - **Team-lead expansion** (`orchestrator_agent` / `ai_employee`): agents connected
   to `input-teammates` become authorized descriptors. Internal `delegate_to_*`
   identities remain available to the coordinator, while the LLM delegates via

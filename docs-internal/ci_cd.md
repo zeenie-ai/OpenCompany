@@ -45,7 +45,7 @@ The repo currently ships **six workflows** plus one composite action. Code scann
 | Release | `.github/workflows/release.yml` | `v*.*.*` tag, `workflow_dispatch` | predeploy gate → publish (npm + GitHub Packages) |
 | Desktop CI | `.github/workflows/desktop-ci.yml` | PR touching `desktop/**` or the backend host-contract files; push to main touching `desktop/**` | typecheck + unit + staged-tree invariants + `electron-vite build` + Playwright Electron smoke on ubuntu-22.04 (xvfb) and windows-latest |
 | Desktop release | `.github/workflows/desktop-release.yml` | `v*.*.*` tag, `workflow_dispatch` | `prepare` drafts the GitHub Release from the annotated tag's message (first line = title, rest = notes); a 3-runner matrix (windows-latest x64, macos-15 arm64, ubuntu-22.04 x64) checks the synced version against the tag, builds installers with electron-builder and uploads into that one **draft**; `finalize` undrafts once every leg and the predeploy checks (the same reusable workflow `release.yml` runs) are green. Artifacts-only on dispatch unless `publish` is ticked |
-| Gateway CI | `.github/workflows/gateway-ci.yml` | PR / push to main touching `gateway/**`, `server/config/llm_defaults.json` or the workflow | The LiteLLM gateway ([LLM Gateway](./llm_gateway.md)): `terraform fmt`/`validate` with Terraform 1.14.8, cosign verification of the pinned LiteLLM images, `uv lock --check` and pip-audit for `gateway/uv.lock`, then the contract and pin tests against the local mock stack. Path-filtered, so it is not a required check |
+| Gateway CI | `.github/workflows/gateway-ci.yml` | PR / push to main touching `gateway/**`, `server/config/llm_defaults.json`, `server/config/speech_defaults.json` or the workflow | The LiteLLM gateway ([LLM Gateway](./llm_gateway.md)): `terraform fmt`/`validate` with Terraform 1.14.8, cosign verification of the pinned LiteLLM images, `uv lock --check` and pip-audit for `gateway/uv.lock`, then the contract and pin tests against the local mock stack. Path-filtered, so it is not a required check |
 | Setup | `.github/actions/setup/action.yml` | (composite) | bun 1.4 + Node 22 (CI-only: bun runs vite / vitest / eslint on it) + Python 3.12 + uv v8 + editable CLI install |
 
 ### Toolchain pin
@@ -143,7 +143,7 @@ publish-npm                    publish-github-packages
 Both registries use `@zeenie-ai/opencompany`, matching the npm and GitHub
 organization owned by the project.
 
-There is currently no audit gate, no PyPI publish, no SLSA `attest-build-provenance` step, no GitHub Release step in `release.yml` itself (the desktop workflow drafts the release from the tag message), and no test-install stage — see [Planned](#planned-not-yet-implemented).
+Predeploy gates releases with JavaScript dependency audits (root and desktop) and a Python dependency audit. There is currently no PyPI publish, no SLSA `attest-build-provenance` step, no GitHub Release step in `release.yml` itself (the desktop workflow drafts the release from the tag message), and no test-install stage — see [Planned](#planned-not-yet-implemented).
 
 ---
 

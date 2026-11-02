@@ -1,6 +1,6 @@
 # RFC-0007: Approvals the Claude Code and Codex way, on Temporal
 
-- **Status:** Accepted design, 2026-10-25. Checked against the code the same day and revised (§10). The owner's decisions are in §3. Not implemented.
+- **Status:** Accepted design, 2026-10-25. Checked against the code the same day and revised (§10). The owner's decisions are in §3. Implementation is present behind the per-generation flag, but Start does not yet admit `approval_wait_version=1`; the activation step AP.7 remains pending. See the implementation status below.
 - **Created:** 2026-10-25
 - **Scope:**
   - `server/services/approvals/`: what asks, rules, decisions, the card's data, and the wait's activities;
@@ -24,6 +24,17 @@
     - R5: classes, modes, rules and the card;
     - `SYNTHESIS.md`.
   - `approvals-check/`: the check against the code, eight reports (C1 to C8, one per area) and `SYNTHESIS.md`.
+
+## Implementation status
+
+At the documentation audit baseline, `ApprovalWorkflow` is registered by
+`server/services/temporal/workflow_registry.py`; the agent waiting path, approval
+classes/rules and UI support are implemented. `begin_generation` in
+`server/services/deployment/control.py` still writes execution-control and Pi
+flags without enabling `approval_wait_version`. Ordinary newly started employees
+therefore retain the draft/send behavior. Sections below describe the accepted
+versioned design; they must not be read as a claim that its rollout is enabled.
+The release-order requirement in §7 still applies.
 
 ## 1. Summary
 

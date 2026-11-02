@@ -14,10 +14,7 @@ declaring a `SpecializedAgentBase` subclass; the body lives in
 Dispatch is via `BaseNode.execute()` -> the `@Operation("execute")` method
 (`SpecializedAgentBase.execute_op`), which calls
 [`prepare_agent_call`](../../../server/nodes/agent/_inline.py) for the shared
-pre-dispatch flow then `AIService.execute_chat_agent`. The agents differ only
-in frontend presentation (icon, color, subtitle) and intended use case. The
-two agents that DON'T use `execute_chat_agent` (`rlm_agent`,
-`claude_code_agent`) are documented separately.
+pre-dispatch flow then `AIService.execute_chat_agent`. The common operation is inherited by the domain agents; per-type overrides remain authoritative. Coding Agent has an additional `tool_mode` and uses Pi for newly admitted native executions, while Browser AI Agent wraps browser ownership. The dedicated RLM, Claude Code, and Codex paths are documented separately.
 
 | Field | Value |
 |------|-------|
@@ -46,7 +43,7 @@ specialization is conveyed only through:
 
 ## Inputs (handles)
 
-All 13 agents share these input handles.
+The common native agent handle shape is below; inspect each plugin for overrides and creation/runtime constraints.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
@@ -65,9 +62,7 @@ for the two team leads) in
 
 All 13 specialized agents share the `SpecializedAgentParams` Pydantic model in
 [`server/nodes/agent/_specialized.py`](../../../server/nodes/agent/_specialized.py).
-There are **no** per-agent parameter extras: `orchestrator_agent` and
-`ai_employee` reuse the same `Params` (they override only `handles` +
-`tool_description`), so there is no `teamMode` / `maxConcurrent` field.
+`orchestrator_agent` and `ai_employee` reuse this Params model; they do not declare `teamMode` or `maxConcurrent`. Coding Agent adds `tool_mode`, Browser AI Agent changes the default system message and ownership wrapper, and all native agent Params inherit the server-controlled `runtime_behavior_version`. These overrides must be checked in each plugin.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
@@ -143,13 +138,17 @@ flowchart TD
   teammate's own `input-tools` edges are walked to populate `child_tools` so
   the delegation tool description lists what the teammate can do.
 - **Master Skill expansion**: `masterSkill` source nodes are expanded in
-  `collect_agent_connections` - each enabled entry in `skillsConfig`
+  `collect_agent_connections` - each enabled entry in `skills_config`
   becomes a separate skill entry with `node_id = f"{source_id}_{skill_key}"`.
 - **api_key recovery**: `prepare_agent_call` reads the resolved key from
   `context["_raw_parameters"]["api_key"]` (injected before Pydantic strips
   it) and re-attaches it to `parameters` so `execute_chat_agent` sees it.
 - **Failure**: `execute_op` raises `RuntimeError(response["error"])` when
   `execute_chat_agent` returns `success=False`.
+
+## Execution and lifecycle
+
+Direct canvas Run requires the workflow graph and connected-node configuration; it is not an execution with no context. New Coding Agent work requires Temporal/Pi, and Browser AI Agent requires exactly one Browser tool. Controlled native agent runs are dispatched through AgentWorkflow/Pi rather than this in-process operation. Stop closes new action admission, admitted work drains, and Resume continues the same execution; explicit cancellation and Reset are separate. Legacy generations keep their recorded runtime path. See the shared node index execution contract and each specialized card.
 
 ## Side Effects
 

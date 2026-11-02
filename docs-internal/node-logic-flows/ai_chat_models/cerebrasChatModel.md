@@ -24,7 +24,7 @@ native provider path.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -35,13 +35,17 @@ native provider path.
 | `model` | string | `""` (injected) | no | - | `gpt-oss-120b` (default) or `qwen-3.8-27b` |
 | `temperature` | number\|null | `null` | no | - | Narrower range than OpenAI (0-1.5 rather than 0-2) |
 | `max_tokens` | number\|null | `null` (up to 40K) | no | - | 1-200000 |
-| `top_p` | number\|null | `1.0` | no | - | |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` | no | - | Inert: no current Cerebras model is in `thinking_models` |
 | `thinking_budget` | number\|null | `2048` | no | `thinking_enabled=[true]` | 1024-16000; inert while `thinking_models` is empty |
-| `reasoning_format` | enum | `parsed` | no | - | `parsed` / `hidden` - same semantics as Groq Qwen (inherited base field) |
+| `reasoning_format` | enum or null | `null` | no | - | Shared base field; no configured Cerebras thinking control is currently emitted |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('cerebras', 'default')` |
 
 (Field names are snake_case on `CerebrasChatModelParams`; unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 
@@ -88,7 +92,7 @@ flowchart TD
 - **Native OpenAI-compatible path**: `ChatUnifier` resolves the `cerebras`
   spec registered in `providers/_compat.py` (reuses `OpenAIProvider` with the
   Cerebras `base_url`) for both chat and agent requests.
-- **Reasoning**: no curated reasoning-capable model since `zai-glm-4.7` left Cerebras' public endpoints (2026-09); the two current models (`gpt-oss-120b`, `qwen-3.8-27b`) ignore the shared thinking controls.
+- **Reasoning**: the shipped Cerebras `thinking_models` list is empty, so shared thinking controls do not enable a configured reasoning mode. This is a local policy fact; the audit did not verify live model availability or vendor lifecycle dates.
 - **Temperature range**: narrower (0-1.5 clamp) than OpenAI/Groq. `_resolve_temperature` applies the clamp.
 
 ## Side Effects
@@ -109,7 +113,7 @@ flowchart TD
 ## Edge cases & known limits
 
 - **Temperature capped at 1.5**, not 2.
-- **Reasoning only on the configured GLM preview tier**.
+- **Thinking controls**: the shipped Cerebras thinking_models list is empty, so no shared thinking control is emitted. Any returned reasoning content depends on the actual provider response, not a configured GLM preview promise.
 - **Output ceiling**: current curated Cerebras models allow up to 40,960 output tokens; unknown models use the configured 8K fallback.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 

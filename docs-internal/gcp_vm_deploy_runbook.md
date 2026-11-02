@@ -184,12 +184,10 @@ AUTH_MODE=single
 # true ONLY behind Cloudflare/TLS (step 4). IP-only deploy: false (pitfall 11).
 JWT_COOKIE_SECURE=true
 JWT_COOKIE_SAMESITE=lax
-# true works on >= 0.0.95 (dev server ships in-package; the backend spawns it
-# and connects on TEMPORAL_FRONTEND_GRPC_PORT — Temporal's stock 7233 on the
-# 0.0.95-era releases this runbook was validated against, the serial-block
-# value from that release's .env.template afterwards).
-# false = in-process sequential execution.
-TEMPORAL_ENABLED=false
+# Required by managed employee teams, deployed triggers/schedules and the
+# current Pi Coding Agent. The backend supervises the pinned Temporal dev
+# server locally; use this release's .env.template for its port defaults.
+TEMPORAL_ENABLED=true
 REDIS_ENABLED=false
 LOG_FORMAT=text
 JWT_SECRET_KEY=<JWT_KEY>

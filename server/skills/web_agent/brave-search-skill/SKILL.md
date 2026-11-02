@@ -33,10 +33,10 @@ Additional options configured on the node:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| maxResults | 10 | Number of results to return (max 100) |
+| max_results | 10 | Number of results to return (1–20) |
 | country | (empty) | Country code for regional results (e.g., US, GB, DE) |
-| searchLang | (empty) | Language code for search results (e.g., en, es, fr) |
-| safeSearch | moderate | Safe search filtering: off, moderate, strict |
+| search_lang | en | Language code for search results (e.g., en, es, fr) |
+| safe_search | moderate | Safe search filtering: off, moderate, strict |
 
 ### Response Format
 

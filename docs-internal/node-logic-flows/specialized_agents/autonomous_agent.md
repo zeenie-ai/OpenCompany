@@ -36,4 +36,4 @@ it is delegated to by a team lead.)
 
 - **Pattern doc**: [`_pattern.md`](./_pattern.md)
 - **Skills**: [`server/skills/autonomous/`](../../../server/skills/autonomous/)
-- **Architecture**: [Autonomous Agent Creation](../../autonomous_agent_creation.md)
+- **Architecture**: [Autonomous Agent Creation](../../ARCHIVE/autonomous_agent_creation.md)

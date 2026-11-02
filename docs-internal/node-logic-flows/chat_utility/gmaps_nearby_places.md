@@ -113,14 +113,15 @@ flowchart TD
 
 ## Edge cases & known limits
 
+- **Stored credential alone fails**: injected `api_key` is removed by `extra="ignore"` before the service receives `params.model_dump()`. The service uses the `GOOGLE_MAPS_API_KEY` settings fallback; without it a saved `google_maps` credential does not prevent the missing-key failure. The preserved raw parameters in context are unused by this helper.
 - **Param/service key mismatch (load-bearing)**: the plugin dumps `latitude` / `longitude` / `place_type` / `keyword`, but `find_nearby_places` reads `lat` / `lng` / `type` and takes `keyword` only from a nested `options` dict (`parameters.get("options", {})` is a dict, so the top-level `keyword` fallback branch is never taken). Under the current wiring every call therefore searches for `restaurant` within `radius` metres of `40.7484, -73.9857` regardless of the configured centre, type or keyword. Only `radius` reaches the API. (Documented, not fixed here; same class of bug as the `gmaps_create` card.)
-- The tool path cannot route around it: the LLM schema is derived from the Params (`latitude`, `longitude`, ...), and a model following the skill doc's `lat` / `lng` / `type` names has those arguments stripped by `extra="ignore"` during the `{**node_params, **tool_args}` merge.
+- The tool path cannot route around it: the LLM schema is derived from Params (`latitude`, `longitude`, ...). Undeclared `lat` / `lng` / `type` arguments are stripped by `extra="ignore"` during the `{**node_params, **tool_args}` merge.
 - The service's richer filters (`name`, `min_price`, `max_price`, `open_now`, `language`, `rank_by`) are unreachable from the node.
 - Synchronous `googlemaps` call blocks the event loop.
 - `results` is the raw Google payload (up to 20 rows of several KB each), persisted, broadcast and replayed into LLM context when used as a tool.
 - Usage is charged on every successful call, including empty result sets.
-- The declared `Output` fields (`places`, `count`) never appear; the real keys are `results` / `total_results`.
-- The skill doc still calls the node "Show Nearby Places" with a `show_nearby_places` tool and a `type` field; the registered display name is "Nearby Places", the tool is `nearby_places`, and the Params field is `place_type`.
+- The service does not populate declared `Output` fields (`places`, `count`); validation may emit their null defaults. Read actual places/count from `results` / `total_results`.
+- The registered display name is "Nearby Places", the callable is `nearby_places`, and the Params field is `place_type`. Use those identifiers in skills; they do not repair the service key mismatch above.
 
 ## Related
 

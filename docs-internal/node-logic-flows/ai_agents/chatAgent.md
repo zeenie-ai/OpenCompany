@@ -22,9 +22,7 @@ the service method it calls (`AIService.execute_chat_agent` instead of
 takes the **same execution path** — they subclass
 [`SpecializedAgentBase`](../../../server/nodes/agent/_specialized.py) whose
 `execute_op` also runs `prepare_agent_call` + `execute_chat_agent`. Each is its
-own plugin folder; there is no `functools.partial` wiring anymore. In a default
-Temporal graph run these supported types route to the same `AgentWorkflow`
-child path instead of executing the whole service loop as one node Activity.
+own plugin folder; there is no `functools.partial` wiring anymore. In a default Temporal graph run native supported types route to `AgentWorkflow`; newly admitted Coding Agent executions use `PiCodingAgentWorkflow`, and Browser AI Agent additionally requires its saved Browser ownership binding. CLI-backed and RLM agents retain their separate Activity boundaries.
 
 ## Temporal execution and Stop/Resume
 

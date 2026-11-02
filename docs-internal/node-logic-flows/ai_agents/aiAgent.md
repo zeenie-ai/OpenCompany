@@ -85,7 +85,7 @@ Source: `AIAgentParams` in [`ai_agent/__init__.py`](../../../server/nodes/agent/
 ```ts
 {
   response: string;
-  thinking?: string;       // when thinkingEnabled=true and provider supports it
+  thinking?: string;       // when thinking_enabled=true and provider supports it
   model: string;
   provider: string;
   finish_reason?: string;
@@ -126,7 +126,7 @@ flowchart TD
     `input-memory` + `simpleMemory` edges in old graphs still yield their
     recorded Memory descriptor.
   - `input-skill` -> append to `skill_data`. `masterSkill` is expanded into
-    one entry per **enabled** skill in `skillsConfig`; instructions come from
+    one entry per **enabled** skill in `skills_config`; instructions come from
     the DB-stored `instructions` first, with a skill-folder fallback.
   - `input-tools` -> append to `tool_data`. Two special expansions:
     - Android service nodes are exposed directly as individual tools

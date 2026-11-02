@@ -16,7 +16,12 @@ A workflow JSON document contains:
 - **Nodes**: Array of workflow nodes with their types, positions, and parameters
 - **Edges**: Array of connections between nodes
 
-## Complete Schema
+## Illustrative envelope schema
+
+This excerpt explains the persisted/exported envelope; it is not a standalone
+runtime JSON Schema validator. Its node/edge references are described in the
+sections below. Backend graph normalization, registered plugin schemas and
+`services/workflow_validator.py` determine accepted current workflows.
 
 ```json
 {
@@ -68,7 +73,13 @@ A workflow JSON document contains:
 
 ## Supported Node Types
 
-> Authoritative count = the plugin registry: one self-contained folder (or file) per node under `server/nodes/<group>/` — 140+ node types (live total: `len(services.node_registry.NODE_METADATA)` after `import nodes`, or `uv run pytest --collect-only`); 34 palette groups registered in `server/nodes/groups.py`. A bare `server/nodes/**/__init__.py` glob overcounts because it also matches the group packages. The breakdown below is illustrative and grouped by category; do not rely on a hand-maintained total.
+> The authoritative supported inventory is the discovered plugin registry:
+> `registered_node_classes()`, reconciled with `NODE_METADATA` and NodeSpec
+> registrations after `import nodes`. Pytest collection counts tests, not node
+> types; a filename glob also miscounts helper packages and multi-node modules.
+> The categorized list below is illustrative. Use the
+> [per-node index](node-logic-flows/README.md) and each current NodeSpec for
+> operations, availability and independent execution support.
 
 > The canonical list of nodes lives in the backend plugin tree at `server/nodes/<category>/<node>/__init__.py`; this section is a human-readable index.
 
@@ -146,7 +157,7 @@ Work as both workflow nodes and AI tools. Defined under `server/nodes/search/<pl
 - `gmaps_nearby_places` - Google Places nearbySearch
 
 ### Google Workspace Nodes (7 nodes)
-Consolidated operation-based nodes sharing one OAuth connection. See [new_service_integration.md](new_service_integration.md):
+Consolidated operation-based nodes sharing one OAuth connection. See the current [plugin authoring guide](plugin_system.md):
 - `googleGmail` - send / search / read (dual-purpose)
 - `googleGmailReceive` - Polling trigger for incoming emails
 - `googleCalendar` - create / list / update / delete

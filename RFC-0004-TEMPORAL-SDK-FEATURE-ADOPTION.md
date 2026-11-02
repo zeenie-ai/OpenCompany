@@ -1,5 +1,8 @@
 # RFC-0004 — Temporal: Using the Python SDK and Platform Correctly and Fully
 
+
+> **Current-state reading rule:** defect lists, measurements and code sketches below are anchored to their cited baseline commits. Some fixes have since landed. Use the [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md), current runtime references and recorded generation flags for shipped behavior; proposed paths and later rollout phases remain designs until implemented. This audit does not change the accepted owner decisions.
+
 Status: Draft. Owner decisions recorded in §17 (2026-10-16 and 2026-10-23); Q15 was answered on 2026-10-24 by RFC-0006's T14; Q5, Q9, Q11 and Q13 are still open. The event path is designed in RFC-0005. RFC-0006 corrected this RFC on 2026-10-24 (§22).
 Created: 2026-10-16
 Scope: `server/services/temporal/`, `server/services/deployment/` (control, recovery, Reset), `server/services/events/dispatch.py`, `server/services/plugin/{base,scaling,polling}.py`, `server/nodes/scheduler/cron_scheduler/`, `server/nodes/workflow/approval_gate/`, `server/routers/webhook.py`, the Temporal CLI packaging (`server/services/temporal/_install.py`, `docker/Dockerfile`, the desktop shell), `server/tests/temporal/`, `.env.template` (`TEMPORAL_*`)

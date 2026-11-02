@@ -1,5 +1,7 @@
 # OpenCompany theming architecture — analysis
 
+> **Status: Reference guide.** Live `client/src/themes/` and `client/src/lib/motion.ts` own production tokens and lifecycle behavior. Bundled specimens and token snapshots illustrate design intent; retain explicit product amendments when they differ.
+
 Source: `client/src/themes/*.css` + `client/src/index.css` in https://github.com/zeenie-ai/OpenCompany (the live files are authoritative; the `reference/themes/` snapshots were retired — see its README). The app ships **3 themes**: 2 canonical (light, dark) + 1 "skin" (Atomic). The handoff's nine other skins (Renaissance, Greek, Edo, Steampunk, Cyber, Wasteland, Rot, Plague, Surveillance) were removed on 2026-10-12, and Home, the editor and the sign-in screen all show the chosen theme.
 
 ## 1. How it works — a four-layer contract

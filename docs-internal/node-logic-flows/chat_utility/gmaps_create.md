@@ -108,6 +108,7 @@ flowchart TD
 
 ## Edge cases & known limits
 
+- **Stored credential alone fails**: injected `api_key` is removed by the Params schema (`extra="ignore"`) before the service receives `params.model_dump()`. A saved `google_maps` credential therefore does not reach this operation. The `GOOGLE_MAPS_API_KEY` settings fallback can mask this gap; with no fallback the service reports a missing key. The preserved raw parameters in context are not consumed here.
 - Param/service key mismatch: the plugin Params are `center_lat` / `center_lng`
   / `map_type`, but `MapsService.create_map` reads `lat` / `lng` / `map_type_id`.
   With the current `params.model_dump()` wiring the service falls back to its

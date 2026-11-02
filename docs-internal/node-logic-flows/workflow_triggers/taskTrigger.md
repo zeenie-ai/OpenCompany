@@ -90,7 +90,7 @@ flowchart TD
 - **status_filter**:
   - `completed` -> requires `event.status == 'completed'`
   - `error` -> requires `event.status == 'error'`
-  - `all` (or anything else) -> no status restriction
+  - `all` -> no status restriction; other values fail the declared Literal schema
 - **parent_node_id**: exact match if non-empty.
 
 If any filter rejects, the event is skipped and the waiter stays blocked.
@@ -122,8 +122,7 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 - `agent_name` is a case-insensitive **substring** match, not an exact
   match. Two agents named `"TwitterAgent"` and `"TwitterAgentV2"` are both
   matched by `agent_name="Twitter"`.
-- `status_filter` values other than `completed` / `error` are treated as
-  `all`. There is no validation of unknown values.
+- `status_filter` is validated as `all`, `completed`, or `error` before a direct wait registers; unknown values are rejected, not treated as wildcards.
 - Waiter has no timeout; if the child agent never dispatches a
   `task_completed` event (e.g. it is still running or died silently) the
   trigger blocks until cancelled.

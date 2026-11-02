@@ -9,177 +9,57 @@ metadata:
 
 ---
 
-# Geocoding Tool
+# Geocoding
 
-Convert addresses to GPS coordinates or coordinates to addresses using Google Maps Geocoding API.
+Use the connected **Geocoding** node's callable `geocode`. The skill's
+`gmaps_locations` metadata token identifies its visuals; it is not the callable
+name. A saved tool override can change the name shown in the tool catalogue.
 
-## How It Works
+The current node drops the executor-injected saved Maps key during Params
+validation, while its service reads only the parameter key or the runtime's
+`google_maps_api_key` setting (`GOOGLE_MAPS_API_KEY`). A saved connection alone
+can therefore fail; the runtime setting can mask that code gap. Report the
+credential error and direct the owner to configuration/diagnostics. Do not put
+a secret in a tool argument to bypass validation.
 
-This skill provides instructions for the **Add Locations** (gmaps_locations) tool node. Connect the **Add Locations** node to Zeenie's `input-tools` handle to enable geocoding operations.
+## Arguments
 
-## add_locations Tool
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| service_type | enum | geocode | `geocode` or `reverse_geocode` |
+| address | string | empty | Required for forward geocoding |
+| region | string | empty | Declared bias field; the current helper does not forward it |
+| lat | number | 0 | Latitude for reverse geocoding |
+| lng | number | 0 | Longitude for reverse geocoding |
 
-Geocode addresses or reverse geocode coordinates.
+## Examples
 
-### Schema Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| service_type | string | Yes | `"geocode"` (address to coordinates) or `"reverse_geocode"` (coordinates to address) |
-| address | string | If geocode | Address to convert to coordinates |
-| lat | float | If reverse_geocode | Latitude coordinate |
-| lng | float | If reverse_geocode | Longitude coordinate |
-
-### Operations
-
-| Service Type | Input | Output |
-|--------------|-------|--------|
-| `geocode` | Address string | Coordinates (lat, lng) |
-| `reverse_geocode` | Coordinates (lat, lng) | Formatted address |
-
-### Examples
-
-**Geocode an address:**
-```json
-{
-  "service_type": "geocode",
-  "address": "1600 Amphitheatre Parkway, Mountain View, CA"
-}
-```
-
-**Geocode a landmark:**
-```json
-{
-  "service_type": "geocode",
-  "address": "Eiffel Tower, Paris"
-}
-```
-
-**Geocode a city:**
-```json
-{
-  "service_type": "geocode",
-  "address": "New York City, USA"
-}
-```
-
-**Reverse geocode (coordinates to address):**
-```json
-{
-  "service_type": "reverse_geocode",
-  "lat": 48.8584,
-  "lng": 2.2945
-}
-```
-
-### Response Format
-
-**Geocode response:**
-```json
-{
-  "success": true,
-  "service_type": "geocoding",
-  "input": {"address": "Eiffel Tower, Paris"},
-  "results": [
-    {
-      "formatted_address": "Champ de Mars, 5 Av. Anatole France, 75007 Paris, France",
-      "geometry": {
-        "location": {"lat": 48.8583701, "lng": 2.2944813}
-      },
-      "address_components": [
-        {"long_name": "5", "short_name": "5", "types": ["street_number"]},
-        {"long_name": "Avenue Anatole France", "short_name": "Av. Anatole France", "types": ["route"]},
-        {"long_name": "Paris", "short_name": "Paris", "types": ["locality"]}
-      ]
-    }
-  ],
-  "status": "OK"
-}
-```
-
-**Reverse geocode response:**
-```json
-{
-  "success": true,
-  "service_type": "reverse_geocoding",
-  "input": {"lat": 48.8584, "lng": 2.2945},
-  "results": [
-    {
-      "formatted_address": "Champ de Mars, 5 Av. Anatole France, 75007 Paris, France",
-      "geometry": {
-        "location": {"lat": 48.8583701, "lng": 2.2944813}
-      },
-      "address_components": [...]
-    }
-  ],
-  "status": "OK"
-}
-```
-
-### Error Response
+Forward geocoding:
 
 ```json
-{
-  "error": "address is required for geocoding"
-}
+{"service_type":"geocode","address":"Eiffel Tower, Paris"}
 ```
+
+Reverse geocoding:
 
 ```json
-{
-  "error": "Geocoding failed: ZERO_RESULTS"
-}
+{"service_type":"reverse_geocode","lat":48.8584,"lng":2.2945}
 ```
 
-## Use Cases
+## Results and limits
 
-| Use Case | Service Type | Description |
-|----------|--------------|-------------|
-| Find location | geocode | Get coordinates for an address |
-| Validate address | geocode | Get standardized address format |
-| Get address | reverse_geocode | Find address from GPS coordinates |
-| Location lookup | geocode | Search for landmarks, POIs |
+The current helper returns `service_type`, `input`, `results` and `status`.
+For forward results, inspect each entry's `geometry.location.lat` /
+`geometry.location.lng` and `formatted_address`. Reverse results carry candidate
+addresses in `results`. `ZERO_RESULTS` is a valid empty result; do not invent a
+location.
 
-## Common Workflows
+The node's declared Output model lists convenience fields such as `latitude`
+and `formatted_address`, but the current helper returns the raw result list
+instead. Read the actual response rather than assuming those convenience
+fields are populated. Invalid coordinates, missing credentials and API failures
+surface as errors.
 
-### Get coordinates for sending location via WhatsApp
-
-1. Use `geocode` to convert address to coordinates
-2. Extract `lat` and `lng` from response
-3. Use `whatsapp_send` with message_type="location"
-
-### Identify a GPS location
-
-1. Use `reverse_geocode` with lat/lng coordinates
-2. Get formatted address from response
-
-### Search for nearby places
-
-1. Use `geocode` to get coordinates from address
-2. Use `nearby_places` tool with those coordinates
-
-## Address Format Guidelines
-
-**Good address formats:**
-- `"123 Main Street, New York, NY 10001"`
-- `"Eiffel Tower, Paris, France"`
-- `"Times Square, NYC"`
-- `"Tokyo Station, Japan"`
-
-**Tips:**
-- Include city and country for better accuracy
-- Landmarks and POIs work well
-- Postal codes improve precision
-- Use local language or English
-
-## Coordinate Guidelines
-
-- Latitude range: -90 to 90
-- Longitude range: -180 to 180
-- More decimal places = higher precision
-- Standard precision: 6 decimal places
-
-## Setup Requirements
-
-1. Connect the **Add Locations** (gmaps_locations) node to Zeenie's `input-tools` handle
-2. Google Maps API key must be configured in Credentials
-3. Geocoding API must be enabled in Google Cloud Console
+Provider charges, quotas and availability are external to this skill. A
+successful invocation records usage; it does not establish that the returned
+place is appropriate for the user's purpose.

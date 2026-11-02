@@ -34,9 +34,9 @@ Additional options configured on the node:
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | model | sonar | Model: sonar (fast), sonar-pro (deeper research) |
-| searchRecencyFilter | (empty) | Filter results by recency: month, week, day, hour |
-| returnImages | false | Include relevant images in response |
-| returnRelatedQuestions | false | Include follow-up question suggestions |
+| search_recency_filter | all | Filter results by recency: month, week, day, hour |
+| return_images | false | Include relevant images in response |
+| return_related_questions | false | Include follow-up question suggestions |
 
 ### Response Format
 
@@ -106,8 +106,8 @@ Additional options configured on the node:
 ## When NOT to Use Perplexity Search
 
 - **Simple factual lookups** - Use Brave or Serper for quick facts
-- **Image search** - Use Serper with searchType "images"
-- **Local business search** - Use Serper with searchType "places"
+- **Image search** - Use Serper with search_type "images"
+- **Local business search** - Use Serper with search_type "places"
 - **High-volume queries** - Perplexity costs more per query ($0.005)
 - **Simple calculations** - Use the calculator tool
 

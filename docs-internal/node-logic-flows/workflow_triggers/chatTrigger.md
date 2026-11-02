@@ -125,8 +125,7 @@ flowchart TD
   `reset_execution_state` clears the workflow's own thread (session = the
   workflow id, never a custom `session_id` another workflow may share),
   as `chatReply`'s does: the conversation ended with the generation. It
-  matters for a graph with a trigger and no reply yet, such as the one
-  Turn on Talk resets before its new reply node runs.
+  also applies to graphs with a trigger and no reply node. Turn on Talk normally uses preserving Safe Apply; it does not unconditionally Reset this thread.
 - **Broadcasts**: the producer emits a CloudEvents `WorkflowEvent` via
   `dispatch.emit` (Temporal Signal fan-out only: `broadcast=False`, since the
   envelope carries the owner's text). The

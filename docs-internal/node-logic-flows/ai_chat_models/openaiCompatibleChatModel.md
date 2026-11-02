@@ -17,7 +17,7 @@ Chat with any OpenAI-compatible server the user has saved as a named endpoint un
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -29,10 +29,14 @@ Chat with any OpenAI-compatible server the user has saved as a named endpoint un
 | `model` | string | `""` (first option) | no | - | Options from the `openaiCompatibleModels` loader: the models stored when the endpoint was saved or refreshed. Reloads when `endpoint` changes, and moves to the first model the new endpoint serves when the old one is not among them. Open-world: the name is not pattern-checked |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` | no | - | 1-200000. Unset: the model's registered max output (a quarter of its context, 512-4096, when only the context is known), else 2048 |
-| `top_p` | number\|null | `1.0` | no | - | |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `api_key` | string\|null | `null` (injected) | no | - | Injected from the endpoint's `{ref}` row: the key the user saved, or the placeholder `sk-no-key-required` |
 
 The field is named `endpoint`, not `provider`, on purpose: a `provider` sibling of `model` triggers the parameter panel's stored-key effect, which would copy the endpoint's key into this node's `api_key`.
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 

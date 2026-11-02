@@ -83,7 +83,7 @@ flowchart TD
 - **Missing `b`**: when `params.b is None`, `b_value` defaults to `0.0` before
   the lambda runs (so `add`/`multiply`/etc. with no `b` operate against 0).
 - **`power` overflow**: raised as `OverflowError` by `math.pow`; bubbles up to
-  `BaseNode.execute()`'s generic exception path (full traceback envelope).
+  `BaseNode.execute()`'s generic exception path (structured public error; traceback in operator logs).
 
 ## Side Effects
 

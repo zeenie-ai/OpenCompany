@@ -506,7 +506,7 @@ The skill resolver in `SkillLoader._parse_skill_metadata` runs each
 `stripeAction`) and looks the result up in `visuals.json` to source
 the skill's icon and color. The skill renders without an icon if
 those don't agree — see the **Common pitfall** callout in
-[`server/skills/GUIDE.md`](../server/skills/GUIDE.md#tool-naming--snake_case--camelcase-contract).
+[`server/skills/GUIDE.md`](../server/skills/GUIDE.md#node-types-callables-and-visual-aliases).
 
 ## Skill — `payments_agent/stripe-skill`
 

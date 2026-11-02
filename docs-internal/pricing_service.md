@@ -63,6 +63,10 @@ The pricing service provides centralized cost tracking for both LLM tokens and e
 
 Located at `server/config/pricing.json`. User-editable; picked up via `PricingService.reload()` or `save_config()`; there is no filesystem watcher.
 
+Numeric examples below illustrate the configuration/accounting shape. The
+local configuration and provider-reported usage determine recorded costs;
+these examples are not independently verified current vendor quotes.
+
 ### Structure
 
 ```json

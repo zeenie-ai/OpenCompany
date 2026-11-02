@@ -116,7 +116,7 @@ jobs:
       - uses: ./.github/actions/setup
       - name: pytest
         run: |
-          uv pip install --system pytest pytest-asyncio pyyaml
+          uv pip install --system pytest pytest-asyncio pyyaml "markdown-it-py>=3"
           python -m pytest cli/tests/ -v
 
   test-build-start:

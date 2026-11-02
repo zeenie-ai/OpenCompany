@@ -1,10 +1,10 @@
 ---
 name: code-mode-skill
-description: Generate Python code instead of sequential tool calls (81-98% token savings)
+description: Batch calculations and data transformations into one Python Executor call using its preinjected modules.
 allowed-tools: "python_executor javascript_executor"
 metadata:
   author: opencompany
-  version: "1.0"
+  version: "2.0"
   category: autonomous
 
 ---
@@ -14,24 +14,21 @@ You are a Code Mode agent. Instead of calling tools sequentially, generate Pytho
 
 ## Why Code Mode?
 
-Research from Cloudflare and Anthropic shows Code Mode provides:
-- **81-98% token savings** vs sequential tool call sequences
+Batching suitable calculations can reduce tool-call round trips; savings depend on the task. It provides:
 - **Explicit control flow** - loops, conditionals, error handling in code
-- **Reusable patterns** - functions and variables persist across iterations
+- **Reusable source** - include needed functions and variables in each call; the Python Executor creates a fresh namespace for every invocation
 - **Better debugging** - executable code is easier to trace and verify
 
 ## Available Libraries
 
-When generating Python code, you have access to:
-```python
-import math          # Mathematical functions (factorial, sqrt, sin, cos, etc.)
-import json          # JSON parsing and serialization
-import datetime      # Date and time operations
-from datetime import timedelta
-import re            # Regular expressions for text processing
-import random        # Random number generation
-from collections import Counter, defaultdict  # Data structures
-```
+Python Executor already injects `math`, `json`, `datetime`, `re`, `random`,
+`Counter`, and `defaultdict`. Refer to them directly. Its restricted builtins
+do not include `__import__`, so `import` and `from ... import ...` fail.
+`datetime` is the module: use `datetime.datetime` or `datetime.timedelta`.
+There is no persistent namespace between calls. Put values to return in
+`output`; `print` is also captured as console output. For additional packages
+or a complete Python runtime, use a connected Process Manager to run a script
+with the required environment instead.
 
 ## Core Pattern
 
@@ -51,13 +48,11 @@ from collections import Counter, defaultdict  # Data structures
 3. Call calculator: 3628800 % 7
 4. Get result: 0
 5. Return answer
-(4 LLM round-trips, ~4000 tokens)
+
 ```
 
 **Code Mode approach** (single execution):
 ```python
-import math
-import json
 
 # Calculate factorial
 result = math.factorial(10)
@@ -73,14 +68,13 @@ output = {
 }
 print(json.dumps(output, indent=2))
 ```
-(2 LLM round-trips, ~800 tokens - 80% savings)
+
 
 ## Complex Example with Loop
 
 **Task**: "Find all prime numbers between 1 and 100, show which are twin primes"
 
 ```python
-import json
 
 def is_prime(n):
     """Check if a number is prime."""
@@ -115,9 +109,6 @@ print(json.dumps(output, indent=2))
 **Task**: "Analyze this list of numbers: find mean, median, mode, and standard deviation"
 
 ```python
-import json
-from collections import Counter
-import math
 
 # Input data (would come from user or previous step)
 numbers = [23, 45, 67, 23, 89, 45, 23, 67, 90, 12, 45, 78]
@@ -154,32 +145,20 @@ output = {
 print(json.dumps(output, indent=2))
 ```
 
-## Error Handling in Code
+## Validate Inputs in Code
 
-Always include error handling for robustness:
+Use explicit guards for expected invalid inputs. Named exception classes such
+as `Exception` and `ZeroDivisionError` are not among Python Executor's injected
+builtins, so do not assume they are available in an `except` clause.
 
 ```python
-import json
-
 def safe_divide(a, b):
-    """Safely divide two numbers."""
-    try:
-        return {"result": a / b, "success": True}
-    except ZeroDivisionError:
+    if b == 0:
         return {"error": "Division by zero", "success": False}
-    except Exception as e:
-        return {"error": str(e), "success": False}
+    return {"result": a / b, "success": True}
 
-# Example usage
-results = []
-test_cases = [(10, 2), (15, 3), (7, 0), (100, 4)]
-
-for a, b in test_cases:
-    result = safe_divide(a, b)
-    result["operation"] = f"{a} / {b}"
-    results.append(result)
-
-print(json.dumps({"calculations": results}, indent=2))
+output = [safe_divide(a, b) for a, b in [(10, 2), (7, 0), (100, 4)]]
+print(json.dumps(output))
 ```
 
 ## When NOT to Use Code Mode
@@ -214,7 +193,6 @@ User: "Search for Python release dates and calculate days since each release"
 
 Always output results as JSON for downstream processing:
 ```python
-import json
 # ... your calculations ...
 print(json.dumps(output, indent=2))
 ```

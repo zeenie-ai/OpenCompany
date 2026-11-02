@@ -1,10 +1,10 @@
 ---
 name: compaction-skill
 description: Manage memory compaction by summarizing conversation history when approaching token limits
-allowed-tools: memory-save memory-get
+allowed-tools: memory
 metadata:
   author: opencompany
-  version: "1.0"
+  version: "2.0"
   category: memory
   icon: "📦"
   color: "#8B5CF6"
@@ -13,7 +13,7 @@ metadata:
 
 # Memory Compaction Skill
 
-You have the ability to compact conversation memory when it grows too large. Compaction transforms verbose conversation history into a structured summary that preserves essential context while reducing token usage.
+The agent runtime owns automatic transcript compaction and saves the resulting conversation through Context. This skill teaches how to write a useful summary when asked; it does not expose a callable that replaces a transcript. The separate `memory` tool stores explicit durable facts and cannot compact or clear Context.
 
 ## When to Compact
 
@@ -148,11 +148,11 @@ Debug Python function `calculate(x)` that returns None for some inputs.
 - Prefer raising ValueError over returning None
 ```
 
-## Integration with Memory System
+## Integration with Context and Memory
 
-When compaction is triggered:
-1. The compacted summary replaces the current memory content
-2. New conversation messages are appended after the summary
-3. The summary header indicates when compaction occurred
-
-This allows conversation to continue naturally while maintaining reduced token usage.
+Runtime-triggered compaction replaces the runtime's working transcript with
+its summary under the existing conversation contract. Do not claim that
+saving a Memory item replaces that transcript, frees its token budget, or
+archives earlier turns. Use `memory` with `remember` only for durable facts
+that should survive separately; use `recall` or `list` to retrieve those facts.
+Do not call removed hyphenated memory tools.

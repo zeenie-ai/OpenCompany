@@ -30,12 +30,12 @@ Prefix any Linux command with `wsl` to run it inside the default WSL distro:
 
 ### Install Linux packages
 ```json
-{"operation": "start", "name": "wsl-apt", "command": "wsl sudo apt-get update && wsl sudo apt-get install -y curl jq"}
+{"operation": "start", "name": "wsl-apt", "command": "wsl sudo apt-get install -y curl jq"}
 ```
 
 ### Run a Linux server
 ```json
-{"operation": "start", "name": "wsl-server", "command": "wsl python3 -m http.server 8080"}
+{"operation": "start", "name": "wsl-server", "command": "wsl python3 -m http.server 8080", "ports": [8080]}
 ```
 
 ### Access Windows files from WSL

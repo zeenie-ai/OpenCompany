@@ -11,6 +11,10 @@ adds plugins, they automatically participate.
 from __future__ import annotations
 
 
+from collections import Counter
+import logging
+from pathlib import Path
+
 from pydantic import BaseModel
 
 
@@ -388,3 +392,54 @@ class TestTriggerRegistryAutoPopulate:
             cfg = event_waiter.get_trigger_config(cls.type)
             assert cfg is not None, f"{cls.__qualname__}: get_trigger_config('{cls.type}') returned None"
             assert cfg.event_type == cls.event_type
+
+
+class TestNodeDocumentationCoverage:
+    """The loaded registry, including private/imported registrations, owns coverage."""
+
+    def test_every_supported_node_has_exactly_one_current_card(self, caplog):
+        import nodes
+        from models.node_metadata import NODE_METADATA
+        from services.node_registry import registered_node_classes, registered_node_types
+        from services.node_spec import list_node_types_with_spec
+
+        # Discovery logs individual failures instead of raising them. Retrying
+        # under capture prevents a partially loaded registry passing this gate.
+        with caplog.at_level(logging.ERROR, logger="nodes"):
+            nodes._discover()
+        errors = [record.getMessage() for record in caplog.records
+                  if record.name == "nodes" and "Failed to import node plugin" in record.getMessage()]
+        assert not errors, "Node discovery was incomplete:\n" + "\n".join(errors)
+
+        all_classes = registered_node_classes()
+        classes = {key: cls for key, cls in all_classes.items()
+                   if cls.__module__.startswith("nodes.")}
+        assert classes, "An empty plugin registry cannot establish documentation coverage"
+        # These registration shapes are missed by the standalone source scan.
+        assert {"android_tool", "mobile_use_agent", "approvalGate"} <= classes.keys()
+        assert classes.keys() <= NODE_METADATA.keys(), "Registered classes lack NodeSpec metadata"
+        test_types = all_classes.keys() - classes.keys()
+        assert set(list_node_types_with_spec()) - test_types == classes.keys(), (
+            "Unclassified metadata/schema-only entries: reconcile them with the supported-node inventory"
+        )
+        assert registered_node_types() - test_types <= classes.keys(), "Unclassified handler-only node registrations"
+
+        root = Path(__file__).resolve().parents[2]
+        directory = root / "docs-internal" / "node-logic-flows"
+        cards = [path for path in directory.glob("*/*.md")
+                 if not path.name.startswith("_") and path.name != "README.md"]
+        counts = Counter(path.stem for path in cards)
+        duplicates = sorted(key for key, count in counts.items() if count != 1)
+        assert not duplicates, f"Duplicate node cards: {duplicates}"
+        missing = sorted(classes.keys() - counts.keys())
+        assert not missing, f"Supported nodes without documentation cards: {missing}"
+        # The retired Browser Harness remains an explicitly marked migration
+        # reference; it must never make a supported-node coverage claim.
+        historical = {"browserHarness": "browser"}
+        unexplained = sorted(counts.keys() - classes.keys() - historical.keys())
+        assert not unexplained, f"Node cards without a supported type or migration annotation: {unexplained}"
+        for retired, replacement in historical.items():
+            card = next(path for path in cards if path.stem == retired)
+            text = card.read_text(encoding="utf-8").lower()
+            assert "historical" in text or "retired" in text, f"{retired} must be labelled historical"
+            assert replacement in classes and replacement in text, f"{retired} must identify its current replacement"

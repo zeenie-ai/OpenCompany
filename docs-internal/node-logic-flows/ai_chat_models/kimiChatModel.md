@@ -21,7 +21,7 @@ provider layer and the shared `ChatModelParams`.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -32,11 +32,15 @@ provider layer and the shared `ChatModelParams`.
 | `model` | string | `""` (injected) | no | - | `kimi-k3` default; `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` also supported |
 | `temperature` | number\|null | `null` | no | - | K2.6 / K2.7 Code (+ `-highspeed`) force 0.6; K3 uses the supplied/default value clamped to 0-1 |
 | `max_tokens` | number\|null | `null` (model ceiling) | no | - | Up to 131,072 for K3; lower model-specific ceilings for K2 tiers |
-| `top_p` | number\|null | `1.0` | no | - | |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` (Params default) | no | - | When false/unset, the native provider explicitly disables the K2 tiers' thinking defaults |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('kimi', 'default')` |
 
 (Kimi uses the shared `ChatModelParams` unchanged; field names are snake_case, unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 

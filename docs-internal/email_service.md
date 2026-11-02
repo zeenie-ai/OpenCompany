@@ -287,13 +287,19 @@ deduplication baseline in durable workflow state, and starts `MachinaWorkflow`
 only for new messages. Pause gates new polls and graph starts; Resume continues
 the same controller execution.
 
-`EmailReceiveNode(PollingTriggerNode)` declares the polling hooks (`poll_ids`,
-`fetch_detail`); the plugin system registers the corresponding Temporal poll
+`EmailReceiveNode(PollingTriggerNode)` declares `setup_service`, `fetch_ids`,
+`fetch_detail` and `post_emit`; `fetch_ids` forwards to `EmailService.poll_ids`.
+The plugin system registers the corresponding Temporal poll
 activity. The older deployment poll-coroutine registry and
 `PollingTriggerWorkflow` remain compatibility paths for uncontrolled deployments
 and replay of existing histories, not the authority for new controlled runs.
 
-The poll loop:
+For each controlled polling Activity, `setup_service` resolves the service and
+credentials again. The Activity returns bounded `events` and `seen_ids` to the
+controller; the controller owns its next interval, continuation and graph
+admission. It is not a single long-lived credential snapshot.
+
+The separate canvas Run / legacy coroutine loop:
 1. Resolves credentials once via `EmailService.resolve_credentials`
 2. Establishes the baseline via `svc.poll_ids(creds, folder)`
 3. On each iteration (clamped interval from `resolve_poll_params`):
@@ -303,8 +309,9 @@ The poll loop:
 
 All credential resolution and IMAP access still delegate to `EmailService` —
 nothing is duplicated in the controller. See
-[Temporal Execution Engine RFC](ARCHIVE/temporal-execution-engine-rfc.md) for the
-control and trigger lifecycle.
+[workflow control](temporal-workflow-control.md) and
+[the event framework](event_framework.md) for the current control and trigger
+lifecycle. The archived execution RFC describes the earlier design.
 
 ## Credentials Storage
 

@@ -49,7 +49,7 @@ configured residential proxy provider via `ProxyService`.
   status: number;              // HTTP status code
   data: any;                   // Parsed JSON body if possible, else text string
   headers: Record<string, string>;
-  url: string;                 // Final URL after redirects (httpx default follows them)
+  url: string;                 // Response URL; redirects are not followed by default
   method: string;              // Echo of request method
   proxied: boolean;            // true iff a proxy URL was applied
 }
@@ -97,7 +97,7 @@ flowchart TD
   - Non-JSON response body -> plain `text` string in `data`.
 - **Error paths**:
   - Status `>= 400` -> `raise RuntimeError(f"HTTP {status}: {body!r}")`.
-  - Any httpx exception (timeout, connection error, etc.) propagates uncaught; `BaseNode.execute()` produces the error envelope with the traceback. There is no timeout special-casing.
+  - `httpx.ConnectError` and `httpx.TimeoutException` become actionable `NodeUserError` failures naming the URL/timeout. Unexpected failures use the generic logged error path; traceback data is not part of the public envelope.
 
 ## Side Effects
 
@@ -117,7 +117,7 @@ flowchart TD
 ## Edge cases & known limits
 
 - Proxy lookup errors are **swallowed** (`_resolve_proxy_url` logs a warning and returns `None`); the request then proceeds directly, silently losing the proxy. Downstream nodes can detect this by checking `result.proxied`.
-- A `4xx`/`5xx` response raises `RuntimeError` rather than returning the body, so the error envelope carries the status; `3xx` are followed by httpx default and only surface if final status is `>= 400`.
+- A `4xx`/`5xx` response raises `RuntimeError` rather than returning the body, so the error envelope carries the status; `3xx` are returned without automatic redirect following because this client does not set `follow_redirects=True`.
 - No caching, no retry (retry / failover is only implemented in `proxyRequest`).
 - `response.url` (final URL) is stringified; for non-proxied requests with redirects disabled this equals the request URL.
 

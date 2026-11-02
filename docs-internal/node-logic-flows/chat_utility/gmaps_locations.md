@@ -110,13 +110,13 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Stored credential vs env key**: the injected `api_key` is stripped by `extra="ignore"` before `params.model_dump()` reaches the service, so a key saved in the Credentials modal is not what executes — only `GOOGLE_MAPS_API_KEY` works. (Documented, not fixed here; same wiring as `gmaps_create`.)
+- **Stored credential vs env key**: injected `api_key` is stripped by `extra="ignore"` before `params.model_dump()` reaches the service. A saved `google_maps` credential alone therefore fails with a missing key; `GOOGLE_MAPS_API_KEY` supplies the settings fallback and can mask the gap. The preserved raw parameters in context are unused by this helper. (Documented, not fixed here; all three Maps nodes share the wiring.)
 - `region` is a dead parameter: the service never passes it to `gmaps.geocode`.
 - The `googlemaps` client is synchronous; `gmaps.geocode` / `gmaps.reverse_geocode` block the event loop for the duration of the HTTP call (no `to_thread`).
 - `results` is the untrimmed Google payload — several KB per row — and it is persisted, broadcast and (as a tool) replayed into the LLM context.
 - Usage is charged even for `ZERO_RESULTS`.
-- The declared `Output` fields (`latitude`, `longitude`, `formatted_address`, `place_id`) never appear; consumers must read `results[0].geometry.location` / `results[0].formatted_address` themselves.
-- The skill doc still calls the node "Add Locations" with an `add_locations` tool; the registered display name is "Geocoding" and the tool name is `geocode`. Its argument table (`service_type`, `address`, `lat`, `lng`) does match the Params.
+- The service does not populate declared flat `Output` fields (`latitude`, `longitude`, `formatted_address`, `place_id`). Output validation may emit those defaults as null; actual geocoded values remain under `results[0].geometry.location` / `results[0].formatted_address`.
+- Use registered display name "Geocoding" and callable `geocode` in skills. Valid Params include `service_type`, `address`, `lat`, and `lng`; successful service payloads still require the nested result handling above.
 
 ## Related
 

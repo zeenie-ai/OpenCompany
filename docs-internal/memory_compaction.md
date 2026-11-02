@@ -4,9 +4,15 @@
 
 ## Overview
 
+On current graphs, the Context conversation store supplies the transcript.
+`simpleMemory` is an explicit facts tool and is not the transcript compaction
+replaces. Legacy `memory_data`/markdown names below describe retained
+compatibility paths; a Memory facts-tool connection is not the current
+conversation-continuity switch. See [Context continuity](agent_context_flow.md).
+
 `CompactionService` provides session token tracking, cost calculation, and
-automatic memory compaction for agent executions that have a connected memory
-session. Every provider normalizes reported usage into `services.llm.protocol.Usage`,
+automatic transcript compaction for agent executions with the appropriate
+stored Context or legacy memory-session descriptor. Every provider normalizes reported usage into `services.llm.protocol.Usage`,
 but only execution paths that call `CompactionService.track()` persist that
 usage to the session metric tables. Standalone chat-model calls and arbitrary
 third-party API requests are not part of this accounting surface.
@@ -37,7 +43,7 @@ reports; missing usage cannot be inferred
 ```
 native agent loop
   └─ aggregates Usage across all LLM iterations
-       ├─ in-process + connected memory
+       ├─ in-process + stored conversation/legacy history
        │    └─ CompactionService.track()
        │         ├─ persist TokenUsageMetric + calculated cost
        │         ├─ update SessionTokenState

@@ -31,7 +31,8 @@ Send messages to individual contacts, groups, or channels.
 | channel_jid | string | If channel | Newsletter JID (e.g., `120363198765432101@newsletter`) |
 | message_type | string | Yes | Message type (see below) |
 | message | string | If text | Text message content |
-| media_url | string | If media | URL for image/video/audio/document/sticker |
+| media_source | enum | For media | Use `url` with media_url, `file` with file_path, or `base64` with media_data (default) |
+| media_url | string | If media_source=url | URL for image/video/audio/document/sticker |
 | caption | string | No | Caption for media messages |
 | latitude | float | If location | Latitude coordinate |
 | longitude | float | If location | Longitude coordinate |
@@ -71,6 +72,7 @@ Send messages to individual contacts, groups, or channels.
   "recipient_type": "phone",
   "phone": "1234567890",
   "message_type": "image",
+  "media_source": "url",
   "media_url": "https://example.com/photo.jpg",
   "caption": "Check out this photo!"
 }
@@ -104,6 +106,7 @@ Send messages to individual contacts, groups, or channels.
   "recipient_type": "phone",
   "phone": "1234567890",
   "message_type": "video",
+  "media_source": "url",
   "media_url": "https://example.com/video.mp4",
   "caption": "Check this video"
 }
@@ -115,6 +118,7 @@ Send messages to individual contacts, groups, or channels.
   "recipient_type": "phone",
   "phone": "1234567890",
   "message_type": "document",
+  "media_source": "url",
   "media_url": "https://example.com/report.pdf",
   "caption": "Here's the report"
 }
@@ -146,19 +150,10 @@ Send messages to individual contacts, groups, or channels.
 
 ### Response Format
 
-```json
-{
-  "success": true,
-  "recipient": "1234567890",
-  "recipient_type": "phone",
-  "message_type": "text",
-  "details": {
-    "status": "sent",
-    "preview": "Hello! How are you?",
-    "timestamp": "2025-01-30T12:00:00"
-  }
-}
-```
+A completed tool call returns a flat result containing `status: "sent"`,
+`recipient`, `recipient_type`, `message_type`, `timestamp`, and type-specific
+fields such as `preview` or `media_source`. Direct node Run wraps that result
+in its standard success envelope. A held draft is not a completed send.
 
 ### Error Response
 
@@ -169,6 +164,10 @@ Send messages to individual contacts, groups, or channels.
 ```
 
 ## Guidelines
+
+Media URLs require `media_source: "url"`; the default source is `base64`.
+Honor the employee's approval mode. A held draft is not a sent message.
+
 
 1. **Phone numbers**: Always use without + prefix, just digits (e.g., `919876543210`)
 2. **Group IDs**: Use JID format ending in `@g.us` (e.g., `123456789@g.us`)

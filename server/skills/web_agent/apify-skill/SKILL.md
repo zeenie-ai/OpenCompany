@@ -17,7 +17,7 @@ Run pre-built web scrapers (Actors) to extract data from websites and social med
 
 This skill provides instructions for the **Apify Actor** tool node. Connect the **Apify Actor** node to Zeenie's `input-tools` handle to enable web scraping capabilities.
 
-## apify_run_actor Tool
+## apify_actor Tool
 
 Run any Apify actor and retrieve scraped results.
 
@@ -25,8 +25,9 @@ Run any Apify actor and retrieve scraped results.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| actor_id | string | Yes | Actor ID from Apify Store (e.g., `apify/instagram-scraper`) |
-| input_json | string | No | Actor input as JSON string (default: `{}`) |
+| actor_id | enum | No | A built-in preset, or `custom` |
+| custom_actor_id | string | If actor_id=custom | Actor ID outside the preset list |
+| actor_input | object/string | No | Actor-specific object or JSON string (default: `{}`) |
 | max_results | integer | No | Maximum items to return (default: 100) |
 
 ### Popular Actors
@@ -36,13 +37,13 @@ Run any Apify actor and retrieve scraped results.
 | Instagram | `apify/instagram-scraper` | Profiles, posts, hashtags, comments |
 | TikTok | `clockworks/tiktok-scraper` | Videos, profiles, trends, hashtags |
 | Twitter/X | `apidojo/tweet-scraper` | Tweets, profiles, search results |
-| LinkedIn | `curious_coder/linkedin-profile-scraper` | Profiles, companies |
-| Facebook | `apify/facebook-posts-scraper` | Posts, pages, groups |
-| YouTube | `apify/youtube-scraper` | Videos, channels, comments |
+| LinkedIn | `apify/linkedin-scraper` | Profiles, companies |
+| Facebook | `apify/facebook-pages-scraper` | Posts, pages, groups |
+| YouTube | `streamers/youtube-scraper` | Videos, channels, comments |
 | Google Search | `apify/google-search-scraper` | SERP results, organic listings |
-| Google Maps | `apify/google-maps-scraper` | Places, reviews, business info |
+| Google Maps | `compass/crawler-google-places` | Places, reviews, business info |
 | Web Crawler | `apify/website-content-crawler` | Any website content |
-| Web Scraper | `apify/web-scraper` | Custom scraping with selectors |
+| Web Scraper | `curious_coder/web-scraper` | Custom scraping with selectors |
 
 ### Response Format
 
@@ -68,7 +69,7 @@ Run any Apify actor and retrieve scraped results.
 ```json
 {
   "actor_id": "apify/instagram-scraper",
-  "input_json": "{\"directUrls\": [\"https://instagram.com/natgeo\"], \"resultsLimit\": 50}",
+  "actor_input": "{\"directUrls\": [\"https://instagram.com/natgeo\"], \"resultsLimit\": 50}",
   "max_results": 50
 }
 ```
@@ -77,7 +78,7 @@ Run any Apify actor and retrieve scraped results.
 ```json
 {
   "actor_id": "clockworks/tiktok-scraper",
-  "input_json": "{\"hashtags\": [\"trending\", \"fyp\"], \"resultsPerPage\": 30}",
+  "actor_input": "{\"hashtags\": [\"trending\", \"fyp\"], \"resultsPerPage\": 30}",
   "max_results": 30
 }
 ```
@@ -86,7 +87,7 @@ Run any Apify actor and retrieve scraped results.
 ```json
 {
   "actor_id": "apidojo/tweet-scraper",
-  "input_json": "{\"searchTerms\": [\"AI automation\"], \"maxItems\": 100}",
+  "actor_input": "{\"searchTerms\": [\"AI automation\"], \"maxItems\": 100}",
   "max_results": 100
 }
 ```
@@ -95,7 +96,7 @@ Run any Apify actor and retrieve scraped results.
 ```json
 {
   "actor_id": "apify/google-search-scraper",
-  "input_json": "{\"queries\": \"best AI tools 2026\", \"maxPagesPerQuery\": 3}",
+  "actor_input": "{\"queries\": \"best AI tools 2026\", \"maxPagesPerQuery\": 3}",
   "max_results": 30
 }
 ```
@@ -104,7 +105,7 @@ Run any Apify actor and retrieve scraped results.
 ```json
 {
   "actor_id": "apify/website-content-crawler",
-  "input_json": "{\"startUrls\": [{\"url\": \"https://docs.example.com\"}], \"maxCrawlDepth\": 2, \"maxCrawlPages\": 50}",
+  "actor_input": "{\"startUrls\": [{\"url\": \"https://docs.example.com\"}], \"maxCrawlDepth\": 2, \"maxCrawlPages\": 50}",
   "max_results": 50
 }
 ```
@@ -112,13 +113,19 @@ Run any Apify actor and retrieve scraped results.
 **Scrape Google Maps places:**
 ```json
 {
-  "actor_id": "apify/google-maps-scraper",
-  "input_json": "{\"searchStringsArray\": [\"restaurants in San Francisco\"], \"maxCrawledPlaces\": 20}",
+  "actor_id": "compass/crawler-google-places",
+  "actor_input": "{\"searchStringsArray\": [\"restaurants in San Francisco\"], \"maxCrawledPlaces\": 20}",
   "max_results": 20
 }
 ```
 
 ## Common Input Parameters by Actor
+
+These actor-specific inputs are external examples; verify the chosen actor's
+current schema. Their camelCase names belong inside `actor_input`. OpenCompany's
+argument names remain snake_case. Use `actor_id: "custom"` with `custom_actor_id`
+for an actor outside the preset enum.
+
 
 ### Instagram Scraper
 | Parameter | Type | Description |

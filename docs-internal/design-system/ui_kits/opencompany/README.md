@@ -1,6 +1,12 @@
 # OpenCompany app UI kit
 
-Interactive recreation of the OpenCompany workflow canvas (`localhost:3000`), built from the real client code (`client/src/Dashboard.tsx`, `ui/TopToolbar.tsx`, `ui/ComponentPalette.tsx`, `ui/WorkflowSidebar.tsx`, `ui/StatusBar.tsx`, `SquareNode.tsx`).
+**Status: Historical prototype/reference.** This recreates an earlier
+canvas-only shell; its Normal/Dev switch filters the palette rather than
+opening today's Home/Dev screens. It uses mock data and does not establish
+backend, runtime or authentication behavior. The current app defaults to
+`localhost:5678` (see `.env.template`).
+
+Interactive recreation of the OpenCompany workflow canvas, derived from the client code (`client/src/Dashboard.tsx`, `ui/TopToolbar.tsx`, `ui/ComponentPalette.tsx`, `ui/WorkflowSidebar.tsx`, `ui/StatusBar.tsx`, `SquareNode.tsx`).
 
 **What's interactive:** toggle sidebar/palette panels, Normal↔Dev mode (filters palette sections), search the palette, click palette items to add nodes, select canvas nodes, Start/Stop (runs an executing-pulse sequence through the flow), Save (Modified→Saved), light/dark theme toggle, console dock tabs + collapse.
 

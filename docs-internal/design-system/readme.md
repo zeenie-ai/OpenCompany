@@ -2,13 +2,19 @@
 
 Design system for **OpenCompany** — opencompany.sh's open-source, local-first AI workflow OS. "Your own AI assistant that does real work": users drag, drop, and connect AI agents to email, calendar, messages, phone, and 50+ services on a visual node canvas, then run or deploy workflows that keep running in the background. No code, no subscription; bring your own API keys or run models locally.
 
+**Status: Prototype/reference bundle.** Production values and behavior are
+owned by `client/src/themes/`, current React components, and the active
+frontend/theme documentation. The snapshots and component prompts here show
+prototype anatomy; their APIs, fonts, effects and layout are not universal
+production constraints. The canvas recreation predates today's Home/Dev shell.
+
 **Sources** (explore these to design even better against this product):
-- GitHub: https://github.com/zeenie-ai/OpenCompany — primary source. Key design files: `client/src/index.css` (all color/role tokens), `client/src/themes/{base,light,dark}.css` (contract tokens: surfaces, type, motion), `client/tailwind.config.js`, `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
+- GitHub: https://github.com/zeenie-ai/OpenCompany — primary source. Key design files: `client/src/index.css` (Tailwind v4 bridge), `client/src/themes/{base,light,dark,atomic}.css` (live tokens: surfaces, type, motion), `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
 - Hosted docs: https://docs.opencompany.sh/ · DeepWiki: https://deepwiki.com/zeenie-ai/OpenCompany
 - Reference screenshot: `assets/product-canvas-screenshot.png` (real product — dark canvas, neon nodes, WhatsApp automation demo).
 
 ## Product surfaces
-1. **OpenCompany app** (`localhost:3000`) — the core product. A three-zone desktop workspace: workflow sidebar (left), node canvas (center), component palette (right), top toolbar, bottom status bar, multi-tab console dock. Recreated in `ui_kits/opencompany/`.
+1. **OpenCompany app** (default `localhost:5678`; see `.env.template`) — Home hires and supervises AI employees; Dev mode exposes their workflow canvas. `ui_kits/opencompany/` recreates an earlier canvas-only shell, with mock data and local interactions.
 2. **Marketing/docs** (opencompany.sh, docs.opencompany.sh) — not in the repo; no UI kit was fabricated for them. Use the foundations here plus the README voice when designing those.
 
 The app ships 3 visual themes: light, dark and Atomic. This design system encodes the two canonical ones: **light** (default `:root`) and **dark** (`class="dark"` — the signature look used in every screenshot and demo).

@@ -509,32 +509,50 @@ Each provider's `chat()` method reads only the fields it supports. The extracted
 
 ### Supported thinking/reasoning providers
 
+The table describes the repository's configured adapter/model rules. Vendor
+availability, access requirements and upstream retirement dates are external
+claims; they are not established by local schema validation. Consult the
+provider's current documentation before relying on those external guarantees.
+
 | Provider | Models | Parameter | Thinking Type | Notes |
 |----------|--------|-----------|---------------|-------|
-| **Claude** (adaptive) | `claude-opus-5*`, `claude-fable-5*`, `claude-mythos-5`, `claude-sonnet-5*`, `claude-opus-4-8`, `claude-opus-4-7` (`adaptive_thinking_models`, prefix-matched) | `thinkingEnabled` only — the budget is ignored | adaptive | Sends `{"type":"adaptive","display":"summarized"}` when enabled. Otherwise the field is omitted, except when the model's prefix-binding policy requires adaptive thinking with `block_binding` (see above). `budget_tokens` is a 400 on these generations. No `temperature` / `top_p` / `top_k` is sent at all (`sampling_params_removed`). |
-| **Claude** (budget) | `claude-sonnet-4-6`, `claude-haiku-4-5` and older 4.x/3.5 | `thinkingBudget` (1024-16000 tokens) | budget | `{"type":"enabled","budget_tokens":N}`; provider bumps `max_tokens` to `budget + 1024` if it is not already larger. Temperature auto-set to 1. |
-| **Gemini** | gemini-3.x, gemini-2.5-pro/flash | `thinkingBudget` (token count); `thinkingLevel` on 3.x when set explicitly | budget | Uses `thinking_budget` API parameter (`thinking_level` only when the user set it — Vertex rejects an unsolicited level on 2.5-era models) |
-| **OpenAI** | `o3`, `o4-mini` (reasoning-only; both on the API-shutdown path per `_models_note`, `o1`/`o3`/`o4` prefixes still detected) | `reasoningEffort` (low/medium/high) | effort | Reasoning-only models. Temperature omitted. |
-| **OpenAI** | GPT-6 sol/luna/astra and GPT-5.6 sol/terra/luna (+ `-pro`), GPT-5.5, GPT-5.4 (`thinking_models: ["gpt-5", "gpt-6"]`) | `reasoningEffort` (low/medium/high/xhigh) | effort | Hybrid reasoning: can operate with or without thinking. |
-| **Groq** | qwen/qwen3.8-27b (`thinking_models: ["qwen3"]`, prefix match) | `reasoningFormat` ('parsed' or 'hidden') | format | 'parsed' returns reasoning, 'hidden' returns only final answer. GPT-OSS models on Groq use `reasoning_effort` instead (`openai.py:671-675`). |
-| **Cerebras** | none — `thinking_models` is empty since zai-glm-4.7 left the public endpoints (2026-09) | `thinkingBudget` | budget | Would be sent as `extra_body.thinking_budget` (`openai.py:111-114`) if a thinking model were curated again. The qwen-3-235b variants are shut down upstream. |
+| **Claude** (adaptive) | `claude-opus-5*`, `claude-fable-5*`, `claude-mythos-5`, `claude-sonnet-5*`, `claude-opus-4-8`, `claude-opus-4-7` (`adaptive_thinking_models`, prefix-matched) | `thinking_enabled` only — the budget is ignored | adaptive | Sends `{"type":"adaptive","display":"summarized"}` when enabled. Otherwise the field is omitted, except when the model's prefix-binding policy requires adaptive thinking with `block_binding` (see above). `budget_tokens` is a 400 on these generations. No `temperature` / `top_p` / `top_k` is sent at all (`sampling_params_removed`). |
+| **Claude** (budget) | `claude-sonnet-4-6`, `claude-haiku-4-5` and older 4.x/3.5 | `thinking_budget` (1024-16000 tokens) | budget | `{"type":"enabled","budget_tokens":N}`; provider bumps `max_tokens` to `budget + 1024` if it is not already larger. Temperature auto-set to 1. |
+| **Gemini** | gemini-3.x, gemini-2.5-pro/flash | `thinking_budget` (token count); `thinking_level` on 3.x when set explicitly | budget | Uses `thinking_budget` API parameter (`thinking_level` only when the user set it — Vertex rejects an unsolicited level on 2.5-era models) |
+| **OpenAI** | `o3`, `o4-mini` (reasoning-only; both on the API-shutdown path per `_models_note`, `o1`/`o3`/`o4` prefixes still detected) | `reasoning_effort` (low/medium/high) | effort | Reasoning-only models. Temperature omitted. |
+| **OpenAI** | GPT-6 sol/luna/astra and GPT-5.6 sol/terra/luna (+ `-pro`), GPT-5.5, GPT-5.4 (`thinking_models: ["gpt-5", "gpt-6"]`) | `reasoning_effort` (low/medium/high/xhigh) | effort | Hybrid reasoning: can operate with or without thinking. |
+| **Groq** | qwen/qwen3.8-27b (`thinking_models: ["qwen3"]`, prefix match) | `reasoning_format` ('parsed' or 'hidden') | format | 'parsed' returns reasoning, 'hidden' returns only final answer. GPT-OSS models on Groq use `reasoning_effort` instead (`openai.py:671-675`). |
+| **Cerebras** | none — `thinking_models` is empty since zai-glm-4.7 left the public endpoints (2026-09) | `thinking_budget` | budget | Would be sent as `extra_body.thinking_budget` (`openai.py:111-114`) if a thinking model were curated again. The qwen-3-235b variants are shut down upstream. |
 
-The thinking/reasoning fields (`thinkingEnabled`, `thinkingBudget`, `reasoningEffort`, `reasoningFormat`) live in the backend NodeSpec for each chat model (`server/nodes/model/<provider>_chat_model/`) and are declared once on the shared `ChatModelParams` model in `server/nodes/model/_base.py:24`. The frontend renders them automatically via the universal parameter panel.
+The thinking/reasoning parameter names are `thinking_enabled`,
+`thinking_budget`, `thinking_level`, `reasoning_effort` and `reasoning_format`
+where the provider supports them. Common fields live on `ChatModelParams`
+(`server/nodes/model/_base.py`); provider-specific Params subclasses declare
+additional fields and constraints. The frontend renders the actual provider's
+NodeSpec through the universal parameter panel. Unsupported names, including
+retired camelCase spellings, can be ignored by `extra="ignore"` and must not
+be copied as valid tuning parameters.
 
-### Thinking extraction (legacy replay path)
+Schema declarations and provider support do not by themselves establish
+standalone model-node forwarding. `ChatModelBase.chat` dumps Params into
+`AIService.execute_chat`, which currently passes only provider/key, messages,
+model, temperature, max tokens and thinking configuration to the unifier.
+Declared `top_p`, provider-specific `top_k`, penalties, `response_format` and
+`safety_settings` are not forwarded on this path. It also constructs the
+thinking budget with `int(flattened.get("thinking_budget", 2048))`; if thinking
+is enabled while a shared-schema budget remains `None`, the call fails before
+provider dispatch. These are current standalone chat-node code gaps, separate
+from the provider implementations and agent execution paths.
 
-Native providers normalize reasoning directly into `LLMResponse.thinking` and
-ordered `Message.blocks`. The helper below remains only for pre-cutover
-Temporal histories executing the legacy branch:
+### Thinking extraction (current native wire)
 
-```python
-def extract_thinking_from_response(response, provider: str) -> Optional[str]:
-    """Extract thinking/reasoning from AI response based on provider."""
-    # Claude: content_blocks with type='thinking'
-    # Gemini: response_metadata.candidates[0].content.parts with thought=True
-    # Groq: additional_kwargs.reasoning or response_metadata.reasoning
-    # OpenAI o-series: requires organization verification
-```
+Native providers normalize provider-exposed reasoning into `LLMResponse.thinking`
+and ordered `Message.blocks`. There is no current
+`extract_thinking_from_response` helper or LangChain replay adapter. Preserve
+recorded Temporal command paths when changing workflows, but do not infer
+that retired Python helper APIs remain available. The single-wire boundary is
+covered by `tests/llm/test_single_wire_standard.py` and
+`tests/llm/test_langchain_removed.py`.
 
 The agent/chat result envelope carries `thinking` alongside the answer:
 
@@ -557,8 +575,8 @@ The `thinking` field is exposed to downstream nodes via the backend output schem
 ### Thinking limitations
 
 - **OpenAI o-series**: Reasoning summaries are only available to organizations that have completed verification at platform.openai.com. Without verification, `thinking` is `null`.
-- **Claude (budget models)**: `max_tokens` must be greater than `thinkingBudget`; the provider raises `max_tokens` to `budget + 1024` when it is not. Temperature is automatically set to 1 when thinking is enabled.
-- **Claude (adaptive models)**: `thinkingBudget` is ignored — the model picks its own depth. No sampling parameters are sent; a user-set temperature is silently dropped for these models rather than rejected.
+- **Claude (budget models)**: `max_tokens` must be greater than `thinking_budget`; the provider raises `max_tokens` to `budget + 1024` when it is not. Temperature is automatically set to 1 when thinking is enabled.
+- **Claude (adaptive models)**: `thinking_budget` is ignored — the model picks its own depth. No sampling parameters are sent; a user-set temperature is silently dropped for these models rather than rejected.
 - **Groq**: Only the Qwen3 family (`qwen/qwen3.8-27b` today; qwen3-32b was retired) supports format-based reasoning. Format `hidden` suppresses reasoning output. GPT-OSS models take `reasoning_effort`.
 - **Cerebras**: No curated thinking model since `zai-glm-4.7` left the public endpoints; `thinking_budget` support stays in the provider for when one returns.
 

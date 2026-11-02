@@ -8,7 +8,9 @@ rooted at `__init__.py` = one plugin (one or more node classes).
 No cross-cutting edits.
 
 **Status: shipped.** Plugin classes cover every node type in the
-product — live count via `glob server/nodes/**/__init__.py`. Pytest
+product. Derive its inventory from `registered_node_classes()` after plugin
+discovery and reconcile metadata/NodeSpecs; a folder glob miscounts helpers
+and modules declaring several nodes. Pytest
 contract invariants (live count = test fns under
 `server/tests/test_node_spec.py` + `test_plugin_self_containment.py`)
 lock the architecture. `services/handlers/` shrank from
@@ -1516,7 +1518,7 @@ Mismatches silently break icon resolution — a skill with
 nothing in `visuals.json` even though the node `stripeAction` is
 registered. Stick to `<snake_case_of_node_type>` unless you're
 prepared to maintain alias entries in `visuals.json`. See
-[`server/skills/GUIDE.md → Tool naming`](../server/skills/GUIDE.md#tool-naming--snake_case--camelcase-contract).
+[`server/skills/GUIDE.md → Tool naming`](../server/skills/GUIDE.md#node-types-callables-and-visual-aliases).
 
 This is not hypothetical: `githubAction` / `vercelAction` deliberately
 use the short LLM tool names `github` / `vercel`, and their Master

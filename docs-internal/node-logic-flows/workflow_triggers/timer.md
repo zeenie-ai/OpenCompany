@@ -35,7 +35,7 @@ of next-run; it simply pauses the branch of the workflow it is on for
 |--------|-------|-------------|
 | `output-main` | object | Timing metadata (see below). |
 
-Dual-purpose: the plugin sets `usable_as_tool = True` with `tool_name = "timer"`, so when wired to an agent's `input-tools` handle the LLM fills the same Params schema. There is no separate `output-tool` handle declared.
+Dual-purpose: the plugin sets `usable_as_tool = True` with `tool_name = "timer"`, so when wired to an agent's `input-tools` handle the LLM fills the same Params schema. The class does not declare an additional tool handle, but shared metadata projection emits `output-tool` for this dual-purpose node.
 
 ### Output payload
 

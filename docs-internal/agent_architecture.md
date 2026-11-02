@@ -608,6 +608,13 @@ frozenset.
 
 ### Temporal dispatch routing
 
+Newly admitted Coding Agent work additionally freezes `pi_harness_version=1`
+and dispatches through `PiCodingAgentWorkflow`. This requires Temporal even
+when general agent-child routing is disabled; existing native invocations
+retain their recorded markers. Inline calls from RLM/Claude use the durable
+`PiInlineDelegationWorkflow` bridge. See [Pi Coding Agent](pi_coding_agent.md)
+for its broker, Context, control and recovery boundaries.
+
 Two settings flags route agent execution through different Temporal paths (see [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md) for the full matrix):
 
 | Flag | Off | On (default) |

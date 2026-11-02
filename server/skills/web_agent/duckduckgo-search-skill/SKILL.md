@@ -36,7 +36,7 @@ Search the web using DuckDuckGo and get relevant results.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| maxResults | 5 | Number of results to return |
+| max_results | 5 | Number of results to return |
 
 ### Examples
 

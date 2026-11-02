@@ -344,11 +344,12 @@ holding the wiped transcript, and broadcasts `context.updated` so open
 panels refresh. The generation bump alone is NOT enough: the panel shows
 the newest STORED generation, so surviving rows would keep rendering the
 pre-Reset conversation as the live context and Reset would look like a
-no-op. A plain Stop → Start (new generation without Reset) leaves prior
-rows in the store as inert history — deliberately **not browsable from
-the panel**, which shows only the agent's current context — until Reset
-runs or the archive-outbox drain in `services/workflow_storage/handlers.py`
-clears them. The drain runs when the workflow is deleted AND when a save
+no-op. Cooperative Stop/Resume retains the same generation and continuation;
+it does not create a fresh conversation. If another explicit lifecycle path
+admits a new generation without clearing old rows, those rows are inert
+history — deliberately **not browsable from the panel**, which shows only
+the agent's current context — until Reset or the archive-outbox drain in
+`services/workflow_storage/handlers.py` clears them. The drain runs when the workflow is deleted AND when a save
 removes a Context node, and it clears every stored conversation of the
 workflow, not only the removed Context's agent.
 

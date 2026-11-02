@@ -2,11 +2,25 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft (research, revision 2) |
+| Status | Historical research/alignment snapshot; original draft recommendations retained |
 | Date | 2026-05-07 |
 | Scope | `services/cli_agent` framework — Claude Code, Codex, Gemini-CLI agents spawned by OpenCompany |
 | Companion code | [`server/services/cli_agent/`](../server/services/cli_agent/), [`server/nodes/agent/claude_code_agent/`](../server/nodes/agent/claude_code_agent/) |
 | Companion docs | [cli_agent_framework.md](./cli_agent_framework.md), [claude_code_agent_architecture.md](./ARCHIVE/claude_code_agent_architecture.md) |
+
+## Current status and precedence
+
+This is a dated research/alignment snapshot, not a current implementation
+checklist. The original `simpleMemory.memory_content` mirror and JSONL-as-
+canonical statements below predate the plain Context conversation store.
+Current Context-enabled agents use the bridge in
+[`context_bridge.py`](../server/services/cli_agent/context_bridge.py) and the
+[Context continuity contract](agent_context_flow.md); runtime behavior is
+summarized in [CLI framework](cli_agent_framework.md) and
+[interactive mode](claude_code_interactive_mode.md). Legacy `input-memory`
+notes remain historical compatibility context. Draft recommendations below
+are not evidence that an unimplemented change is enabled. Upstream flags,
+billing and discovery guarantees are dated external references.
 
 ## Abstract
 

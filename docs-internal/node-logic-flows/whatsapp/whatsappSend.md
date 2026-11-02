@@ -48,6 +48,11 @@ Key parameters (see frontend definition for the full list and `displayOptions.sh
 | `location_name` | string | `""` | no | Location name |
 | `address` | string | `""` | no | Location address |
 | `contact_name` | string | `""` | conditional | Required for `message_type == 'contact'` |
+| `vcard` | string | `""` | conditional | vCard content; required with `contact_name` for contact messages |
+| `is_reply` | boolean | `false` | no | Include quote context when both reply identifiers are supplied |
+| `reply_message_id` | string | `""` | conditional | Original message ID for a quoted reply |
+| `reply_sender` | string | `""` | conditional | Original sender JID for a quoted reply |
+| `reply_content` | string | `""` | no | Text preview of the quoted message |
 
 ## Outputs (handles)
 

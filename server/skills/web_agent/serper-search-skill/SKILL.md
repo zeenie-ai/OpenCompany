@@ -33,10 +33,10 @@ Additional options configured on the node:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| maxResults | 10 | Number of results to return (max 100) |
-| searchType | search | Type: search (web), news, images, places |
+| max_results | 10 | Number of results to return (max 100) |
+| search_type | search | Type: search (web), news, images, places |
 | country | (empty) | Country code for regional results (gl parameter) |
-| language | (empty) | Language code for results (hl parameter) |
+| language | en | Language code for results (hl parameter) |
 
 ### Response Format
 
@@ -122,14 +122,14 @@ Additional options configured on the node:
 }
 ```
 
-**News search** (set searchType to "news" on node):
+**News search** (set search_type to "news" on node):
 ```json
 {
   "query": "stock market today"
 }
 ```
 
-**Places search** (set searchType to "places" on node):
+**Places search** (set search_type to "places" on node):
 ```json
 {
   "query": "Italian restaurants in Manhattan"
@@ -139,9 +139,9 @@ Additional options configured on the node:
 ## When to Use Serper Search
 
 - **Google-quality results** - Powered by Google's search index
-- **News search** - Set searchType to "news" for current headlines with sources and dates
-- **Image search** - Set searchType to "images" for visual content
-- **Places/Local search** - Set searchType to "places" for business listings with ratings
+- **News search** - Set search_type to "news" for current headlines with sources and dates
+- **Image search** - Set search_type to "images" for visual content
+- **Places/Local search** - Set search_type to "places" for business listings with ratings
 - **Knowledge Graph** - Includes Google Knowledge Graph data when available
 
 ## When NOT to Use Serper Search

@@ -62,9 +62,19 @@ The theming architecture is the whole point: a component is written **once**, ag
 
 ## About the Design Files
 
+**Historical layout:** references below to the external bundle's `themes/`
+directory describe the handoff at extraction time. That local directory is
+not shipped here. Use live [`client/src/themes/`](../../client/src/themes/)
+for production CSS and the recorded product amendments above for intended
+deviations. The token/component snapshots are scoped prototype references.
+
 The files in `reference-mockup/` are a **design reference created in HTML** — a prototype showing intended look and behavior, not production code to copy. Recreate the designs in the target codebase's existing environment (this app is React + TypeScript + Tailwind + React Flow) using its established patterns.
 
-The files in `themes/`, `tokens/`, `components/`, and `guidelines/` are **the real design system**, lifted verbatim from the repo. Those are not references — they are the source of truth, and the CSS in `themes/` and `tokens/` can be used directly.
+At the original handoff, `themes/`, `tokens/`, `components/`, and `guidelines/`
+were copied from that source bundle. They do not define current production
+precedence: theme snapshots were retired and live `client/src/themes/` has
+advanced. Use bundled components and guidelines as explicitly scoped design
+references.
 
 ## Fidelity
 
@@ -76,8 +86,8 @@ The files in `themes/`, `tokens/`, `components/`, and `guidelines/` are **the re
 
 ```
 design_handoff_theme_system/
-├─ themes/            ← 14 CSS files. THE SOURCE OF TRUTH. Ship these.
-│                       base.css (contract) + animations.css + 12 theme files
+├─ themes/            ← historical external-bundle directory; not retained here.
+│                       Production source: client/src/themes/ (3 themes)
 ├─ tokens/            ← 7 CSS files: the distilled token layer, well commented.
 │                       Read these first — they explain the system.
 ├─ components/        ← 106 files. The component library, grouped by family
@@ -100,7 +110,11 @@ design_handoff_theme_system/
                         token usage — worth wiring into CI).
 ```
 
-**Read in this order:** `tokens/*.css` → `guidelines/THEMES.md` → `themes/base.css` → one theme file (`themes/atomic.css`, the one skin) → `components/*/**.prompt.md` for whatever you're building.
+**For production:** read `client/src/themes/base.css`, the relevant live
+`client/src/themes/{light,dark,atomic}.css`, and the current frontend/theme
+docs. For prototype anatomy, then read `tokens/*.css`, `guidelines/THEMES.md`
+and the relevant `components/*/**.prompt.md`. The historical tree above is
+not a current copying checklist.
 
 ---
 

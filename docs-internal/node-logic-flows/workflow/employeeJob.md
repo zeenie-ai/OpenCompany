@@ -20,7 +20,7 @@ Operations:
   approval wait re-attaches to the same delivery under its lease, a sink
   that refuses cleanly ends the job failed, and a failed job is never
   delivered again. In a v1 graph `deliver` runs as the node's own activity
-  under the plugin's default policy, 3 attempts of up to 24 h each, so it
+  under the graph scheduler's 24-hour attempt timeout and this plugin's three-attempt retry policy, so it
   re-attaches only within those. A job that a Reset or "Stop work and apply"
   cancels sends nothing more, even when its approval wait ends afterwards.
 

@@ -11,7 +11,7 @@ OpenCompany's hosted LLM gateway is the stock open-source LiteLLM Proxy, deploye
 - **Where it appears:** in normal mode, the Get Started guide's Connect an AI model step and Connectors; in dev mode, API Credentials. Both shells use the same `CredentialsBrowser`.
 - `OPENCOMPANY_GATEWAY_URL` (`gateway_url`) points at the gateway.
 - `false` hides the card and turns the routing off, so behaviour is exactly as without the gateway.
-- **No 1Password:** the router reads the key on every call, which a 1Password lookup can't serve. So the card offers no 1Password source (`catalogue_extras`), and distributed mode keeps the gateway off.
+- **Gateway source limitation:** this router currently reads its key from the local encrypted store on every call, and the credential card declares that a 1Password source is unsupported (`catalogue_extras`). Ordinary provider credential resolution can use approved per-call 1Password bindings; that capability has not been integrated into this gateway path. Distributed mode keeps the gateway off.
 
 **The key.** One gateway key per install, saved like any API key (`OpenCompanyGatewayCredential`, `services/gateway/credential.py`, default `validate`). Its probe calls the gateway's `/user/info` with the key: 401 means a wrong key; 403 means an LLM-API key, and the person is told to create a Default one. The card's `ws.status` hook (`gateway_status`, `services/gateway/handlers.py`) returns the allowance as one line, which the API-key panel shows under the key (`statusSummary` in `useCredentialPanel`).
 

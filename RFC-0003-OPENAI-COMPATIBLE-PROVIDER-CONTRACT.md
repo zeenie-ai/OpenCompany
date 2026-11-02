@@ -541,7 +541,7 @@ is separate work.
 ## 16. References
 
 - openai-python `_base_client.py` — `_prepare_url:496`, `_enforce_trailing_slash:414`
-- openai-python `lib/azure.py` — `azure_endpoint` / `base_url` mutual exclusion
+- openai-python's installed Azure client module (azure.py) — `azure_endpoint` / `base_url` mutual exclusion
 - DeepSeek https://api-docs.deepseek.com/ — base `https://api.deepseek.com`
 - Groq https://console.groq.com/docs/openai — `/openai/v1`
 - OpenRouter https://openrouter.ai/docs/quickstart — `/api/v1`; models API https://openrouter.ai/api/v1/models

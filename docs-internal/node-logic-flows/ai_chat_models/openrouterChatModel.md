@@ -17,7 +17,7 @@ Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -28,15 +28,19 @@ Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google
 | `model` | string | `""` (injected) | no | - | `provider/model-id` format, e.g. `anthropic/claude-opus-4.6`, `openai/gpt-4o`. `[FREE] ` prefix stripped before the API call but preserved for dropdown grouping |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` (varies per model) | no | - | 1-200000 |
-| `top_p` | number\|null | `1.0` | no | - | |
-| `frequency_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0; forwarded to downstream provider |
-| `presence_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0; forwarded |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `frequency_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `presence_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` | no | - | Only honored if the routed model supports it |
-| `thinking_budget` | number\|null | `2048` | no | - | Inherited base field (no displayOptions); 1024-16000 |
+| `thinking_budget` | number\|null | `null` | no | - | Inherited base field (no displayOptions); schema minimum 1. Supply a numeric value when enabling thinking to avoid the current null conversion gap |
 | `reasoning_effort` | enum\|null | `null` | no | - | Inherited base field (no displayOptions); `low`/`medium`/`high` |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('openrouter', 'default')` |
 
 (Only `frequency_penalty` / `presence_penalty` are OpenRouter overrides; the thinking/reasoning fields come from the shared base `ChatModelParams` with no displayOptions. Field names are snake_case, unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 

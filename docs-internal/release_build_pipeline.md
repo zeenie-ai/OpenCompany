@@ -86,8 +86,9 @@ named `tsgo` — stopped publishing the day before and must not come back.
   would leave bun's bin-link conflict resolution (under the isolated linker)
   deciding which compiler gates
   CI. (No collision exists today only because `native-preview`'s bin was `tsgo`.)
-- Root declares no `typescript` and no `typescript-eslint`, so there is no peer
-  conflict and nothing else claims `tsc`.
+- Root owns the exact-pinned `typescript@7` compiler and declares no
+  `typescript-eslint`. The client keeps its separate TypeScript 5 lint tooling;
+  root `typecheck` deliberately resolves the root compiler.
 
 - root `package.json` → `devDependencies: { "typescript": "7.0.2" }`, **exact —
   no caret**, so the compiler that gates CI never moves on an unrelated install;

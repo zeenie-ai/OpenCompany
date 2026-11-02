@@ -34,8 +34,7 @@ Params model (`TextGeneratorParams`, `model_config extra="allow"`):
 | `api_url` | string | `""` | no | - | Reserved for `source=api` (unused by the current service) |
 
 Note: the service reads `include_timestamp` (default `True`) but no Param exposes
-it, so the ISO `timestamp` is always attached to `data`. If `text` is omitted the
-service substitutes `"Hello World"`.
+it as a declared field, but `extra="allow"` preserves it when explicitly supplied. The service default is true. The Params default supplies `text=""`, so an omitted or empty node text produces an empty string; `"Hello World"` is only the service fallback when called directly without a `text` key.
 
 ## Outputs (handles)
 
@@ -77,7 +76,7 @@ flowchart TD
 
 - **Validation**: none; all params have defaults.
 - **Branches**: `source` is accepted but ignored; only the static-text path runs.
-- **Fallbacks**: empty `text` falls back to `"Hello World"` inside the service.
+- **Fallbacks**: a missing `text` key in a direct service call uses `"Hello World"`; a normal node call passes the Params default `""`, which remains empty.
 - **Error paths**: the service catches exceptions and returns `success=false`;
   on `not response.success` the op raises `RuntimeError(response.error or "Text generator failed")`.
 

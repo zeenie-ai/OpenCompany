@@ -15,8 +15,9 @@ historical diagrams do not override the current shared execution contract.
   `server/tests/nodes/test_<category>.py` *first*, then change the handler,
   then update this doc.
 - **The index below is generated.** Run `company docs nodes` after adding,
-  renaming or removing a card; `company docs nodes --check` fails when a
-  registered node has no card. Do not hand-edit between the
+  renaming or removing a card; `company docs nodes --check` is a dependency-light source scan for missing
+  cards. The authoritative completeness gate loads the real plugin registry in
+  `server/tests/test_plugin_contract.py`, including imported/private registrations. Do not hand-edit between the
   `AUTO-GENERATED-INDEX` markers.
 
 ## Conventions
@@ -55,6 +56,33 @@ and [Event Waiter System](../event_waiter_system.md) for topology, Activity
 policies, compatibility, producer delivery gaps, and known naming limits.
 This shared contract applies to all cards below; individual cards call out
 provider identities and operation-specific stopping boundaries.
+
+## Independent node execution
+
+Every supported registered node is included in the audit, even when hidden,
+outside Hire's positive list, or restricted by platform/configuration.
+Registration and schema discovery do not prove that every execution path works.
+
+| Path | Contract to document |
+|---|---|
+| Direct canvas Run | Whether supported, saved graph/context prerequisites, input resolution, one-shot output and cancellation |
+| Workflow graph | Handles, dependency and operation dispatch, validation and downstream output |
+| Agent tool | Published callable/binding, ToolInput versus saved Params, locked settings, grants and approvals |
+| Controlled Temporal run | Admission, actual activity timeout/retry selection, Stop/Resume, Reset, idempotency and recovery |
+| Specialized Workspace task | Separate task admission, owner routing and cancellation, where implemented |
+
+Triggers can wait/poll once on Run while deploying a continuous definition.
+Passive/configuration nodes may have no independent effect. A hidden Run button
+is a UI choice; it does not itself define the backend execution contract.
+Registered-but-unavailable nodes such as Twitter Receive are classified
+explicitly. Retired Browser Harness remains a migration reference.
+
+The [core matrix](../audits/CORE_NODES.md) and
+[integration matrix](../audits/INTEGRATION_NODES.md) record every supported node's
+operations, path applicability and implementation evidence. Shared base
+contracts are reviewed once; each node's overrides and limitations remain
+explicit. Dynamic MCP/SDK/CLI capabilities require adapter-contract review,
+without claiming verification of every external server or future endpoint.
 
 ## Index
 
@@ -98,6 +126,7 @@ that a retired node remains registered.
 - [Current Time Tool (`currentTimeTool`)](./ai_tools/currentTimeTool.md)
 - [Data (`dataSource`)](./ai_tools/dataSource.md)
 - [DuckDuckGo Search (`duckduckgoSearch`)](./ai_tools/duckduckgoSearch.md)
+- [Custom Connector (`mcpConnector`)](./ai_tools/mcpConnector.md)
 - [Task Manager (`taskManager`)](./ai_tools/taskManager.md)
 - [Vision Analyze (`visionAnalyze`)](./ai_tools/visionAnalyze.md)
 - [Write Todos (`writeTodos`)](./ai_tools/writeTodos.md)
@@ -230,6 +259,7 @@ that a retired node remains registered.
 - [AI Employee (`ai_employee`)](./specialized_agents/ai_employee.md)
 - [Android Control Agent (`android_agent`)](./specialized_agents/android_agent.md)
 - [Autonomous Agent (`autonomous_agent`)](./specialized_agents/autonomous_agent.md)
+- [Browser AI Agent (`browser_agent`)](./specialized_agents/browser_agent.md)
 - [Claude Code Agent (`claude_code_agent`)](./specialized_agents/claude_code_agent.md)
 - [Codex (`codex_agent`)](./specialized_agents/codex_agent.md)
 - [Coding Agent (`coding_agent`)](./specialized_agents/coding_agent.md)
@@ -287,6 +317,7 @@ that a retired node remains registered.
 ### workflow
 
 - [Team work (`employeeJob`)](./workflow/employeeJob.md)
+- [Original email (`employeeJobSource`)](./workflow/employeeJobSource.md)
 
 ### workflow_triggers
 

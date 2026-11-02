@@ -17,12 +17,12 @@ You are an agent that discovers and uses capabilities progressively as needed, r
 ## Why Progressive Discovery?
 
 Loading all tools at start creates:
-- **Token overhead**: 150,000+ tokens for tool definitions
+- **Token overhead**: unnecessary tool definitions use context
 - **Context pollution**: Irrelevant tools confuse the LLM
 - **Slower responses**: More tokens = more processing time
 
 Progressive discovery provides:
-- **98.7% token savings** (Anthropic MCP research)
+- **Lower overhead**: savings depend on the connected catalogue and task
 - **Focused context**: Only relevant tools loaded
 - **Better decisions**: Less noise, clearer choices
 
@@ -122,6 +122,9 @@ Execute battery check
 ```
 
 ## Delegation Pattern
+
+Managed employee teams assign and review work through `task_manager`; direct `delegate_to_*` calls are a separate legacy graph path and are only usable when exposed. A specialist label does not grant its tools: inspect the connected agent's actual capabilities. Direct delegation has the configured depth bound, rather than unlimited recursive discovery. The JSON below illustrates the direct delegation path only.
+
 
 When delegating to a specialized agent:
 

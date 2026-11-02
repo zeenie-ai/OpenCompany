@@ -169,7 +169,7 @@ Currently RLM supports one `other_backend` (for depth>=1 calls). If multiple cha
 Bridges non-agent, non-chat-model tool nodes into RLM `custom_tools` dict format.
 
 **How it works**:
-1. Filters out `AI_AGENT_TYPES` (handled via delegation) and `AI_CHAT_MODEL_TYPES` (handled by ChatModelExtractor)
+1. Filters out ordinary `AI_AGENT_TYPES` and `AI_CHAT_MODEL_TYPES` (the latter go through ChatModelExtractor). Under a frozen `pi_harness_version=1`, connected Coding Agent targets use the durable inline-delegation bridge instead of this ordinary-agent exclusion.
 2. For each remaining tool node, creates a sync callable wrapper
 3. The wrapper uses `asyncio.run_coroutine_threadsafe()` to call OpenCompany's `execute_tool()` dispatcher from RLM's synchronous REPL thread
 4. Returns dict in RLM custom_tools format: `{"tool_name": {"tool": callable, "description": str}}`
@@ -180,33 +180,44 @@ Bridges non-agent, non-chat-model tool nodes into RLM `custom_tools` dict format
 
 | Tool Node | Bridged Name | REPL Usage |
 |-----------|-------------|------------|
-| pythonExecutor | python_executor | `python_executor(code="output = 2+2")` |
+| pythonExecutor | python_code | `python_code(code="output = 2+2")` |
 | httpRequest | http_request | `http_request(url="...", method="GET")` |
-| duckduckgoSearch | duckduckgo_search | `duckduckgo_search(query="...")` |
+| duckduckgoSearch | web_search | `web_search(query="...")` |
 | braveSearch | brave_search | `brave_search(query="...")` |
 | serperSearch | serper_search | `serper_search(query="...")` |
 | perplexitySearch | perplexity_search | `perplexity_search(query="...")` |
-| calculatorTool | calculator_tool | `calculator_tool(operation="add", a=1, b=2)` |
-| currentTimeTool | current_time_tool | `current_time_tool(timezone="UTC")` |
-| crawleeScraper | crawlee_scraper | `crawlee_scraper(url="...")` |
-| gmail | gmail | `gmail(operation="send", ...)` |
-| sheets | sheets | `sheets(operation="read", ...)` |
+| calculatorTool | calculator | `calculator(operation="add", a=1, b=2)` |
+| currentTimeTool | get_current_time | `get_current_time(timezone="UTC")` |
+| crawleeScraper | web_reader | Use the connected node's declared tool input schema |
+| googleGmail | google_gmail | Use the connected node's declared operation/input schema |
+| googleSheets | google_sheets | Use the connected node's declared operation/input schema |
 
-Any tool node connected to `input-tools` is automatically bridged -- no per-tool configuration needed.
+The bridge uses the prepared canonical tool name and validated tool-input
+model, falling back to the registered class declarations. Operator parameters
+remain separate from model arguments; duplicate callable names are refused.
+A connected node still needs its normal credentials, policy and runtime
+prerequisites. An omitted agent or chat-model node does not become an ordinary
+callable merely because it has an `input-tools` edge.
 
 ---
 
 ## RLM-Specific Parameters
 
-These are extracted from the node's `options` object:
+The RLM service reads these **snake_case service settings** after flattening
+an optional internal `options` mapping. However, the current node uses
+`SpecializedAgentParams` with `extra="ignore"`: it exposes the shared
+`max_tokens` field but not the other RLM limit fields or an `options` object.
+Those omitted fields are not configurable through the current node schema;
+unknown saved values are discarded before `execute_op`. Exposing them is a
+separate code/schema gap, not a supported hidden-parameter recipe.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `maxIterations` | int | 30 | Maximum REPL loop iterations before stopping |
-| `maxDepth` | int | 1 | Maximum recursion depth for `rlm_query()` calls |
-| `maxBudget` | float | null | Maximum USD spend across all LM calls (optional) |
-| `maxTimeout` | float | null | Maximum seconds for entire execution (optional) |
-| `maxTokens` | int | null | Maximum tokens across all LM calls (optional) |
+| `max_iterations` | int | 30 | Maximum REPL loop iterations before stopping |
+| `max_depth` | int | 1 | Maximum recursion depth for `rlm_query()` calls |
+| `max_budget` | float | null | Maximum USD spend across all LM calls (optional) |
+| `max_timeout` | float | null | Maximum seconds for entire execution (optional) |
+| `max_tokens` | int | null | Maximum tokens across all LM calls (optional) |
 | `verbose` | bool | false | Enable detailed REPL output logging |
 
 ---

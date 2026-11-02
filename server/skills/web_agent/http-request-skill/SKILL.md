@@ -28,7 +28,7 @@ Make an HTTP request to any URL.
 | url | string | Yes | Full URL to request (e.g., `https://api.example.com/data`) |
 | method | string | No | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH` (default: `GET`) |
 | body | object | No | Request body as JSON object (for POST/PUT/PATCH) |
-| useProxy | boolean | No | Route through proxy (default: `false`). The proxy service handles provider selection, geo-targeting, and session type automatically. |
+| use_proxy | boolean | No | Route through proxy (default: `false`). The proxy service handles provider selection, geo-targeting, and session type automatically. |
 
 ### Node Parameters
 
@@ -37,7 +37,11 @@ Additional options can be configured on the node:
 | Parameter | Description |
 |-----------|-------------|
 | headers | Custom headers as JSON (e.g., `{"Authorization": "Bearer token"}`) |
-| base_url | Base URL prepended to the url parameter |
+| timeout | Request timeout in seconds, default 30 (1–600) |
+| proxy_provider / proxy_country | Optional proxy selection and country |
+| session_type / sticky_duration | Rotating/sticky session selection and duration |
+
+Pass a complete `url`; this node does not declare a `base_url` argument.
 
 ### Response Format
 
@@ -191,14 +195,14 @@ Additional options can be configured on the node:
 
 ## Proxy Usage
 
-To route a request through a residential proxy, just set `useProxy: true`. The proxy service automatically selects the best provider, geo-target, and session type from its configuration. A proxy provider must be configured first via the `proxy_config` tool (see proxy-config-skill).
+To route a request through a residential proxy, just set `use_proxy: true`. The proxy service automatically selects the best provider, geo-target, and session type from its configuration. A proxy provider must be configured first via the `proxy_config` tool (see proxy-config-skill).
 
 **Proxied request:**
 ```json
 {
   "url": "https://example.com/data",
   "method": "GET",
-  "useProxy": true
+  "use_proxy": true
 }
 ```
 
@@ -211,7 +215,7 @@ If no proxy providers are configured or the proxy lookup fails, the request proc
 3. **Timeout**: Default 30 seconds
 4. **JSON body**: Automatically serialized for POST/PUT/PATCH
 5. **Response**: JSON responses are automatically parsed
-6. **Proxy**: Set `useProxy: true` to route through proxy -- the proxy service handles all routing details
+6. **Proxy**: Set `use_proxy: true` to route through proxy -- the proxy service handles all routing details
 
 ## Security Notes
 

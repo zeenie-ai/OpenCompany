@@ -1,5 +1,8 @@
 # RFC-0006 — Temporal Design Patterns for OpenCompany
 
+
+> **Current-state reading rule:** defect lists, measurements and code sketches below are anchored to their cited baseline commits. Some fixes have since landed. Use the [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md), current runtime references and recorded generation flags for shipped behavior; proposed paths and later rollout phases remain designs until implemented. This audit does not change the accepted owner decisions.
+
 - **Status:** Draft, 2026-10-24. Owner decisions T1-T20 are in §3.1. The amendments to RFC-0005 listed in §20 and the corrections to RFC-0004 listed in §21 were made in the same commit. On 2026-10-25 the Phase 1b plan was simplified (§22.2), and RFC-0007 amended §9.6 and §22.5.
 - **Created:** 2026-10-24
 - **Scope:**
@@ -3067,7 +3070,7 @@ of revealing starvation; control actions need key 1; class floors are enforced t
 
 **Recommendation:**
 1. **Correct RFC-0005 §13 now** with items 2 to 6 (§20). *Versioning:* none. *When:* this RFC. *Effort:* S.
-2. **An explicit key on every top-level start.** One helper, `services/temporal/priority.py`, holds the table, and
+2. **An explicit key on every top-level start.** One helper, `services/temporal/priority.py`, holds the table, and <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
    an AST test fails when a top-level start (client `start_workflow` or `execute_workflow`,
    `WithStartWorkflowOperation`, `ScheduleActionStartWorkflow`) omits `priority=`. Keys (default):
    - 1: owner chat (the talk lane), approval decisions and the ApprovedToolCallWorkflow or ApprovalWorkflow that
@@ -3832,7 +3835,7 @@ not give "ready before polling", nor a statement of which process provides what,
 registration.
 
 **Recommendation:**
-1. **One worker builder.** `build_worker_runtime(client, role)` in a new `services/temporal/worker_runtime.py`, used
+1. **One worker builder.** `build_worker_runtime(client, role)` in a new `services/temporal/worker_runtime.py`, used <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
    by the embedded manager, the standalone worker, `create_worker` and the fixture recorder:
    - imports `nodes` in every role, so the plugin registry is never empty;
    - outside the embedded role, starts and checks the database, cache, credentials and encryption, model registry,
@@ -4184,7 +4187,7 @@ def _check_step_input(llm_payload) -> None:          # bound 2, before schedulin
 **Verdict:** Adopted with deviations. The escalate-only, auditable structure exists for actions; rules on content are missing, and T15 adds them.
 
 **Recommendation:**
-1. Built-in content rules. A new `server/services/approvals/content_rules.py` with two rules that cannot misfire on ordinary mail: (a) the text contains the value of a saved credential (API keys and OAuth tokens read through `AuthService`, compared in process, values of 12 characters or more); (b) it contains a secret-shaped token (well-known key prefixes, PEM private-key headers). Call it where sends are decided today: in `tool_calls.check` with Ask first off, a hit holds the call as a draft through the existing `hold` path instead of running it; in the approvalGate's `request` operation, a hit keeps the row `pending` instead of approving it; in `check_in_process` (CLI agents, which cannot hold a draft), a hit refuses the call. The owner's card says which rule fired, as a line in the row's existing `details`, so no column is added before Phase 7's `held_reason`; the row keeps the rule id and a redacted excerpt, never the secret. Versioning: none (activity bodies). When: Phase 1b, as 1b.7. Effort M. Risk: a message that legitimately carries a key the owner asked for is held, which is the intended outcome.
+1. Built-in content rules. A new `server/services/approvals/content_rules.py` with two rules that cannot misfire on ordinary mail: (a) the text contains the value of a saved credential (API keys and OAuth tokens read through `AuthService`, compared in process, values of 12 characters or more); (b) it contains a secret-shaped token (well-known key prefixes, PEM private-key headers). Call it where sends are decided today: in `tool_calls.check` with Ask first off, a hit holds the call as a draft through the existing `hold` path instead of running it; in the approvalGate's `request` operation, a hit keeps the row `pending` instead of approving it; in `check_in_process` (CLI agents, which cannot hold a draft), a hit refuses the call. The owner's card says which rule fired, as a line in the row's existing `details`, so no column is added before Phase 7's `held_reason`; the row keeps the rule id and a redacted excerpt, never the secret. Versioning: none (activity bodies). When: Phase 1b, as 1b.7. Effort M. Risk: a message that legitimately carries a key the owner asked for is held, which is the intended outcome. <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 2. Owner-editable rules and the recipient rule. Owner rules (phrases, patterns, recipient lists) per employee or for all, edited in Settings and run by the same engine. The built-in rule "a recipient outside the conversation" applies to turns that answer a customer thread, once Phase 4b gives each customer conversation its own thread. In Phase 7 every send goes through the outbox, whose row gains `held_reason`, so graph sends without a gate (Dev-mode graphs) are covered too. Versioning: none for the rules. When: RFC-0005 Phase 7. Effort M.
 
 **Remarks:**
@@ -5053,7 +5056,7 @@ async def runs_that_cannot_replay(client) -> dict[str, list[str]]:
 
 **Recommendation:**
 1. Fix comments 2 and 5 to 7 now (1b.45). Comment 1 changes with the pool fix (§15.2, 1b.34), comment 4 with the named metrics port (17.8 item 5, 1b.33), and comment 3 with the T5 revert in the fresh-start release (Phase 1). Versioning: none. When: Phase 1b (comment 3: Phase 1). Effort S. Test: none at runtime; reviewed in the diff.
-2. One `docs-internal/temporal_handbook.md` in the page's four parts: why Temporal and the decisions; how to add a workflow type (sandbox, registry, golden identity, fixtures, patch or flag, the bug guard of 18.2); tiers, versions, retention, payload rules and capacity budgets; the runbook (including "needs Reset") and the alerts. Link to docs.temporal.io instead of copying, and give each part a review date. Versioning: none. When: later. Effort M. Risk: another document to keep current; the review dates are the guard.
+2. One `docs-internal/temporal_handbook.md` in the page's four parts: why Temporal and the decisions; how to add a workflow type (sandbox, registry, golden identity, fixtures, patch or flag, the bug guard of 18.2); tiers, versions, retention, payload rules and capacity budgets; the runbook (including "needs Reset") and the alerts. Link to docs.temporal.io instead of copying, and give each part a review date. Versioning: none. When: later. Effort M. Risk: another document to keep current; the review dates are the guard. <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 
 **Remarks:** none.
 
@@ -5166,7 +5169,7 @@ async def runs_that_cannot_replay(client) -> dict[str, list[str]]:
    - The orchestration checks of §6.1: a child start without explicit `parent_close_policy`, `cancellation_type` and `id_reuse_policy`, and an `execute_activity` or `start_activity` call inside a `@workflow.signal` handler. The same commit writes out the current defaults at the child starts that rely on them; passing a default explicitly changes nothing on replay.
    - The blocking-call lint of RFC-0004 §9.1 over plugin operations (17.19).
 
-   Versioning: none. When: Phase 1b (1b.40), after the bug guard (1b.13), without which the exit-cleanup rule fails on today's tree. Every child start states its policies explicitly: today's for agent children, until the cancellation lane ships 1b.12 (§6.1). Effort S. Risk: false positives; an explicit allow comment with a reason. Test: `server/tests/temporal/test_workflow_lint.py` passes on the tree (RFC-0004 AG8) and fails on seeded violations: an `asyncio.wait` in a workflow module, a child start without `parent_close_policy`, an `execute_activity` in a `@workflow.signal` handler, and command-issuing cleanup in `finally`.
+   Versioning: none. When: Phase 1b (1b.40), after the bug guard (1b.13), without which the exit-cleanup rule fails on today's tree. Every child start states its policies explicitly: today's for agent children, until the cancellation lane ships 1b.12 (§6.1). Effort S. Risk: false positives; an explicit allow comment with a reason. Test: `server/tests/temporal/test_workflow_lint.py` passes on the tree (RFC-0004 AG8) and fails on seeded violations: an `asyncio.wait` in a workflow module, a child start without `parent_close_policy`, an `execute_activity` in a `@workflow.signal` handler, and command-issuing cleanup in `finally`. <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 2. Every new RFC-0005 type (ConversationWorkflow, EmployeeSupervisorWorkflow, ApprovalWorkflow, ScheduleFireWorkflow and PollWorkflow, T7's poll workflow) is sandboxed: no `sandboxed=False`, app modules imported through `imports_passed_through()`, tests run with `RAISE_ON_UNINTENTIONAL_PASSTHROUGH`, production keeps the default warning policy, and a golden test asserts new types are sandboxed. Everything a sandboxed type imports must sit in packages without import side effects; `services.temporal`'s `__init__` registers handlers, so shared contracts live in a leaf package such as RFC-0005's `services/bus/`. Versioning: new types. When: with each new type, from RFC-0005 Phase 3 (PollWorkflow) and Phase 4. Effort S. Risk: a restricted call on a rare path fails that run's workflow task; tests with the RAISE policy find most of them first. RFC-0007's ApprovalWorkflow arrives in Phase 1b, before this rule takes effect, and lives in `services/temporal`, whose `__init__` has import side effects; it runs unsandboxed like the 14 existing types (RFC-0007 §4.6), and item 3 covers it with them.
 3. Sandbox the small existing types (ApprovedToolCallWorkflow, NodeInvocationWorkflow, EmployeeJobDeliveryWorkflow, CronTriggerWorkflow) once the corpus replays green under the sandboxed runner; the large types stay unsandboxed until their imports are free of side effects. Turning the sandbox on changes no commands, but replay every fixture under it first. Until then all 14 existing types stay unsandboxed under the determinism lint (1b.40). When: later. Effort M.
 
@@ -6200,7 +6203,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | 1b.36 | One main-queue registration: one activity-list function and `plugins=temporal_plugins()` for the manager, the standalone worker and `create_worker`; one CI test replaces four count pins | 15.3 |
 | 1b.37 | Workers stop together (`asyncio.gather` in `main.py` and in `TemporalWorkerManager.stop()`), so their graceful windows overlap | 17.9 |
 | 1b.38 | Split. 1b.38a, the attention store, ships in 1b.30. 1b.38b: the dev server gets `system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute=5`, and a count of `TemporalReportedProblems` every 5 minutes raises or clears one "stuck runs" item. The SDK metrics runtime and its four alerts move to RFC-0005 Phase 8 (§22.3) | 17.10 |
-| 1b.39 | An event-loop lag watchdog that only logs (`core/loop_watchdog.py`) | 17.19 |
+| 1b.39 | An event-loop lag watchdog that only logs (`core/loop_watchdog.py`) | 17.19 | <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 
 **Track 7: tests and docs**
 

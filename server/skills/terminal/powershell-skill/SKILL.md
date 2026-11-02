@@ -21,6 +21,8 @@ Before using PowerShell commands, verify the OS:
 ```
 If output contains `Windows_NT`, use this skill. Otherwise use the bash skill.
 
+Process Manager parses an executable and arguments; it does not itself evaluate PowerShell grammar. Keep PowerShell syntax inside the explicit `powershell -Command` argument. Declare server listener `ports`; inspect the owner before stopping a process on a port.
+
 ## Common Patterns
 
 ### Run a PowerShell command
@@ -38,7 +40,7 @@ If output contains `Windows_NT`, use this skill. Otherwise use the bash skill.
 
 ### Start a dev server
 ```json
-{"operation": "start", "name": "dev-server", "command": "npm run dev"}
+{"operation": "start", "name": "dev-server", "command": "npm run dev", "ports": [3000]}
 ```
 
 ### Check what's running on a port

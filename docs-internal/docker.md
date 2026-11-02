@@ -97,7 +97,7 @@ Leave `HOST` and `PORT` at their template values. The backend uses `HOST` to rea
 
 Compose publishes the app on `127.0.0.1` only, so only this machine reaches it. To serve other machines, drop the `127.0.0.1:` prefix from the `ports:` mapping, put a TLS proxy in front, and set `JWT_COOKIE_SECURE=true`. Until you do, the log warns at every start that the session cookie travels over plain HTTP.
 
-The proxy should also refuse `/ws/internal`. That is where the backend's Temporal workers call back in; it skips the login check and runs any node a message names, `shell` included. The handshake requires a token derived from `SECRET_KEY` (see [authentication.md](./authentication.md)), and the workers reach it inside the container, so blocking it at the proxy costs nothing and adds a second layer. Keep `Host` intact through the proxy, or list the public origin in `CORS_ORIGINS`: every WebSocket handshake refuses an `Origin` that is neither the request's own host nor listed there. Compose keeps the `127.0.0.1` mapping by default because login is off until you turn it on.
+The proxy should also refuse `/ws/internal`. That is where the backend's Temporal workers call back in; it skips the login check and runs any node a message names, `shell` included. The handshake requires a token derived from `SECRET_KEY` (see [authentication.md](./authentication.md)), and the workers reach it inside the container, so blocking it at the proxy costs nothing and adds a second layer. Keep `Host` intact through the proxy, or list the public origin in `CORS_ORIGINS`: every WebSocket handshake refuses an `Origin` that is neither the request's own host nor listed there. Compose keeps the `127.0.0.1` mapping by default to limit exposure to this machine. The image enables login; register the owner before exposing it through a proxy.
 
 ## Upgrading
 
@@ -106,7 +106,7 @@ git pull
 docker compose up -d --build
 ```
 
-The volume keeps all state. An upgrade does not refresh the tools downloaded into `/data/packages`; delete a tool's directory there and the app fetches the current version the next time it needs it.
+The volume keeps state, including downloaded tools in `/data/packages`. Refresh behavior belongs to each installer: version-aware installers, such as Cloudflare's, replace a cached tool when its pinned version changes. Follow the specific tool's diagnostics before removing a cache directory; removing all packages is not a required upgrade step.
 
 ## Stopping
 
@@ -118,7 +118,7 @@ With plain `docker run`, pass `--init` and `--stop-timeout 120` to get the same 
 
 - **Temporal Web UI.** The dev server binds loopback inside the container, so its UI is not reachable from outside.
 - **Claude Code login.** The login button in the credentials panel waits for a browser callback on the container's own localhost, so it cannot finish. Log in from an interactive shell in the container (`docker compose exec opencompany sh`) with `CLAUDE_CONFIG_DIR=/data/claude` set, or supply `ANTHROPIC_API_KEY` through `environment:`. Codex has no login button at all; run its login from the same shell.
-- **Owner-checked panels under login.** The image always requires a login, and the editor saves workflows through a REST route that records the placeholder owner `owner` rather than the logged-in account. The Canvas, Memory, Context and dataSource panels check that owner, so they can refuse the logged-in user for such a workflow. `company deploy` VMs, which also require a login, behave the same.
+- **Owner-checked panels under login.** New workflows created through the REST save route receive placeholder owner `owner` rather than the logged-in account. REST updates preserve an existing workflow's owner. The Canvas, Memory, Context and dataSource panels check that owner, so they can refuse the logged-in user for a newly placeholder-owned workflow. This identity-propagation limitation is separate from legacy rows with empty ownership. `company deploy` VMs, which also require a login, behave the same.
 - **Browser image integration.** The image selects system Chromium with `BROWSER_FAMILY=chromium` and enables `BROWSER_HEADLESS=true` for displayless operation. The default system mode fails clearly when no installed browser exists. Testing mode is a separate opt-in download. Both modes install the pinned browser-use CLI with uv. Validate selected-browser version/profile compatibility and Linux libraries in the built image; adding the extra alone is not an end-to-end browser check.
 - **Agent nodes need the `git` extra and a git repository.** Claude Code and Codex agents work in git worktrees, and the image contains no `.git`. Run `git init` in a workflow's workspace and make a first commit before pointing an agent at it. Set a commit identity once from a shell in the container (`git config --global user.name ...` and `user.email ...`); it is stored in `/data/home` and survives upgrades.
 - **Bind mounts.** A bind mount works in place of the named volume, but the Temporal CLI is then downloaded on first start (a new named volume receives the copy baked into the image), and the directory must allow executables, symlinks and Unix sockets. Prefer the named volume on Windows and macOS hosts.

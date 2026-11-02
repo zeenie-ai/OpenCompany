@@ -62,7 +62,7 @@ Once a provider is configured:
 ```
 proxy_request({
   "url": "https://example.com/page",
-  "proxyCountry": "US"
+  "proxy_country": "US"
 })
 ```
 
@@ -71,9 +71,9 @@ The system auto-selects the best healthy provider. To force a specific one:
 ```
 proxy_request({
   "url": "https://example.com/page",
-  "proxyProvider": "smartproxy",
-  "proxyCountry": "US",
-  "sessionType": "sticky"
+  "proxy_provider": "smartproxy",
+  "proxy_country": "US",
+  "session_type": "sticky"
 })
 ```
 
@@ -135,10 +135,10 @@ For providers that don't encode params in credentials:
 
 ## If Provider Uses Unfamiliar Format
 
-Use `python_code` to reverse-engineer the template from the provider's example URL:
+Use `python_code` to reverse-engineer the template from the provider's example URL.
+The sandbox preinjects `json`; imports are unavailable:
 
 ```python
-import json
 
 # Example from provider docs:
 # Username: user123-cc-US-city-NewYork-sess-abc123
@@ -199,22 +199,22 @@ Optional fields for `add_provider`/`update_provider`: `enabled` (bool), `priorit
 |-----------|----------|---------|-------------|
 | `url` | yes | | Target URL |
 | `method` | no | GET | HTTP method |
-| `headers` | no | | JSON string of headers |
+| `headers` | no | | Object mapping header names to string values |
 | `body` | no | | Request body string |
-| `proxyProvider` | no | auto | Provider name |
-| `proxyCountry` | no | | ISO country code (US, GB, DE) |
-| `sessionType` | no | rotating | `rotating` or `sticky` |
+| `proxy_provider` | no | auto | Provider name |
+| `proxy_country` | no | | ISO country code (US, GB, DE) |
+| `session_type` | no | rotating | `rotating` or `sticky` |
 | `timeout` | no | 30 | Seconds |
-| `maxRetries` | no | 3 | Retry with failover |
+| `max_retries` | no | 3 | Retry with failover |
 
 ## Transparent Proxy on HTTP Nodes
 
-The `httpRequest` and `httpScraper` nodes have built-in proxy support. Set `useProxy: true` and the proxy service handles everything -- provider selection, geo-targeting, and session type are all managed from the proxy service configuration (provider priorities, routing rules, default country).
+The `httpRequest` and `httpScraper` nodes have built-in proxy support. Set `use_proxy: true` and the proxy service handles everything -- provider selection, geo-targeting, and session type are all managed from the proxy service configuration (provider priorities, routing rules, default country).
 
-When the AI Agent uses `http_request` as a tool, it can set `useProxy: true` in the tool arguments. No other proxy fields needed.
+When the AI Agent uses `http_request` as a tool, it can set `use_proxy: true` in the tool arguments. No other proxy fields needed.
 
 **When to use which:**
-- Use **http_request with useProxy: true** for proxied requests (simple, proxy service handles routing)
+- Use **http_request with use_proxy: true** for proxied requests (simple, proxy service handles routing)
 - Use **proxy_request** tool only when you need explicit control over retries and failover
 
 ## Notes
@@ -223,5 +223,5 @@ When the AI Agent uses `http_request` as a tool, it can set `useProxy: true` in 
 - If the user does not know their credentials, they need to get them from their proxy provider dashboard
 - If test fails: check credentials, gateway host/port, and that the url_template matches the provider's format
 - Use `proxy_status` to check provider health before making requests
-- `sessionType: "sticky"` keeps the same IP across requests (good for scraping sessions)
-- `sessionType: "rotating"` gets a new IP each request (good for anonymity)
+- `session_type: "sticky"` keeps the same IP across requests (good for scraping sessions)
+- `session_type: "rotating"` gets a new IP each request (good for anonymity)

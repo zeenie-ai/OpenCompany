@@ -1,3 +1,5 @@
+> **Status: Prototype reference.** This is the bundled demo component contract. For production use the existing React primitives, live theme tokens and current frontend documentation; prototype props and visual restrictions do not override shipped behavior.
+
 General button (dialogs, forms, menus). Toolbar actions should use ActionButton instead.
 
 ```jsx

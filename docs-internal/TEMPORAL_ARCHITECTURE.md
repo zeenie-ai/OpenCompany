@@ -67,11 +67,11 @@ company stop             # Stops all services including Temporal
 
 The embedded Temporal worker runs **inside the Python backend**, not as a separate process. `main.py` only schedules `run_temporal_lifecycle` (task `temporal-init`); [services/temporal/lifecycle.py](../server/services/temporal/lifecycle.py) `_start_execution_engine` creates the `TemporalWorkerManager` and then the `TemporalWorkerPool`.
 
-**Standalone worker** (for horizontal scaling — add more pollers against the same task queue):
+**Standalone worker** (distributed mode only, for horizontal scaling — add more pollers against the same task queue):
 
 ```bash
 cd server
-python -m services.temporal.worker
+DISTRIBUTED_MODE=true python -m services.temporal.worker
 ```
 
 This invokes `run_standalone_worker()` from `services/temporal/worker.py`. It also starts the chat relay
@@ -446,7 +446,7 @@ Add more workers = handle more concurrent nodes
 
 ### Specialized Worker Pools (Wave 16 — `TEMPORAL_WORKER_POOL_ENABLED`, default on since 16.4)
 
-`TemporalWorkerPool` is started by the Temporal lifecycle task (`services/temporal/lifecycle.py::_start_execution_engine`, right after `TemporalWorkerManager`) and stopped before it by the `main.py` lifespan teardown. One activity-only Worker per plugin-declared queue polls its specialised queue, and `MachinaWorkflow._resolve_activity` returns `(activity_name, cls.task_queue)` when the run's frozen routing snapshot has `worker_pool_enabled` set, so per-type activities land there. Setting `TEMPORAL_WORKER_POOL_ENABLED=false` (then restarting) routes every activity of runs started afterwards to the single manager worker on `machina-tasks`; the pool itself keeps polling — **the flag is the rollback channel** (locked default-on by `test_task_queue_coverage.py::TestWorkerPoolDefaultOn`). It is not retroactive: `_resolve_activity` receives the flag from the run's `_temporal_routing_v1` snapshot rather than reading `Settings`, so a run (or a deployed trigger) that started with the pool on keeps scheduling onto the specialised queues, which is why the pool polls whatever the flag says (1b.34).
+`TemporalWorkerPool` is started by the Temporal lifecycle task (`services/temporal/lifecycle.py::_start_execution_engine`, right after `TemporalWorkerManager`) and stopped concurrently with the manager by the `main.py` lifespan teardown. The manager drains its Pi, browser, and main workers concurrently as well. One activity-only Worker per plugin-declared queue polls its specialised queue, and `MachinaWorkflow._resolve_activity` returns `(activity_name, cls.task_queue)` when the run's frozen routing snapshot has `worker_pool_enabled` set, so per-type activities land there. Setting `TEMPORAL_WORKER_POOL_ENABLED=false` (then restarting) routes every activity of runs started afterwards to the single manager worker on `machina-tasks`; the pool itself keeps polling — **the flag is the rollback channel** (locked default-on by `test_task_queue_coverage.py::TestWorkerPoolDefaultOn`). It is not retroactive: `_resolve_activity` receives the flag from the run's `_temporal_routing_v1` snapshot rather than reading `Settings`, so a run (or a deployed trigger) that started with the pool on keeps scheduling onto the specialised queues, which is why the pool polls whatever the flag says (1b.34).
 
 ```
 Queue: rest-api         Queue: ai-heavy         Queue: code-exec
@@ -970,7 +970,8 @@ Trigger nodes that aren't the firing trigger are:
 | Worker crashes mid-execution | Workflow state replays from history; an unfinished Activity retries according to its timeout/retry policy on an eligible worker. Completed recorded work is not explicitly rescheduled by Resume. A node or tool call that is not safe to repeat (`services/approvals/repeats.py`) is not run again: its later attempt answers that it may have happened, and the owner gets a card (`tool_calls.redo_refusal` and `record_unknown`); a graph node's answer carries `requires_user_action`, so its employee pauses at once. |
 | A node/tool Activity times out | Temporal applies the scheduled retry policy. Graph timeout/heartbeat defaults and version 1 agent-tool/plugin options differ as described above. |
 | A compensation or failure record fails (a delegation's cancel, a permit release, `coding.inline_delegation_status`, an approved call's bookkeeping, a job's `employee.job.failed`) | `DELEGATION_CLEANUP_RETRY` and `BOOKKEEPING_RETRY` retry without limit (1 s to 30 s). The activities are idempotent, so a row is never left `running` or `sending` by an outage. One that keeps failing shows as a `stuck_retry` attention item on Home after attempt 10, and a Reset terminates it and closes its rows. The no-assignments decision and `agent.finish_delegation` keep 3 attempts: their activities can raise errors a retry never fixes. |
-| All retries exhausted | Workflow receives failure, stops execution |
+| A graph Activity exhausts its retry policy | The graph receives Activity failure and follows its workflow failure path. |
+| An agent tool exhausts retries or returns an error | The agent can receive a tool-error message and continue its loop; ordinary tool failure does not universally terminate the workflow. Non-retryable model/support failures follow their owning workflow's error handling. |
 
 ## File Structure
 
@@ -1106,7 +1107,7 @@ guarantee applies to version 1 generations with their controller chain intact.
 
 | Setting | Env var | `.env.template` default | Purpose |
 |---|---|---|---|
-| `temporal_enabled` | `TEMPORAL_ENABLED` | `true` | Master toggle. When false, `WorkflowService` falls back to the sequential executor. |
+| `temporal_enabled` | `TEMPORAL_ENABLED` | `true` | Default for `WorkflowService.use_temporal` when the call omits it. False selects eligible local execution; managed teams and newly admitted Pi Coding Agent work still require Temporal. |
 | `temporal_server_address` | `TEMPORAL_SERVER_ADDRESS` | `localhost:<TEMPORAL_FRONTEND_GRPC_PORT>` | Address the Python SDK client connects to. |
 | `temporal_namespace` | `TEMPORAL_NAMESPACE` | `default` | Bootstrapped at server start. |
 | `temporal_task_queue` | `TEMPORAL_TASK_QUEUE` | `machina-tasks` | Default task queue for the embedded worker. |

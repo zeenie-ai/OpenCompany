@@ -16,7 +16,7 @@ chunk-size and overlap behavior. Its Markdown mode reuses the historical
 separator list, but the local implementation escapes every separator before
 matching it. Regex-shaped entries such as `\n#{1,6} ` are therefore literal,
 not regular expressions; this is not full regex parity with the former
-LangChain Markdown splitter. Typically sits between `documentParser` and
+local Markdown heading splitter. Typically sits between `documentParser` and
 `embeddingGenerator` in a RAG pipeline.
 
 ## Inputs (handles)
@@ -33,6 +33,8 @@ LangChain Markdown splitter. Typically sits between `documentParser` and
 | `strategy` | options | `recursive` | no | - | `recursive` / `markdown` / `token` (token falls through to recursive) |
 | `chunk_size` | number | `1000` | no | - | Declared Params field (100-8000) |
 | `overlap` | number | `200` | no | - | Declared Params field (0-1000) |
+
+**Known code gap:** canonical `chunk_size` is accepted by Params but the operation reads legacy `chunkSize`, defaulting to 1000. Setting the schema field alone does not change chunk size. `overlap` does reach the splitter. This audit documents the discrepancy without changing execution.
 
 **Quirk**: `Params = TextChunkerParams` declares `text` / `strategy` / `chunk_size` / `overlap` (snake_case), but `extra="allow"` passes camelCase through and the `chunk` op reads `documents`, `chunkSize` (default `1000`), `chunkOverlap` or `overlap`, and `strategy` off `model_dump()`. So the operative inputs at runtime are `documents`/`text`, `chunkSize`, `chunkOverlap`/`overlap`, `strategy`.
 

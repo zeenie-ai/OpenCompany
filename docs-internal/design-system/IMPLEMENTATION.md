@@ -2,7 +2,14 @@
 
 This bundle is the **OpenCompany (opencompany.sh) design system**: real design tokens, reference React components, full-screen UI-kit recreations, and foundation/theme documentation. Hand it to Claude Code to implement OpenCompany-branded UI in a real codebase.
 
-> **What these files are.** `styles.css` + everything under `tokens/` is **production-ready CSS** — ship it as-is. Everything under `components/`, `ui_kits/`, and `guidelines/` is a **design reference**: faithful prototypes (React with inline styles that read the CSS variables) showing the intended look, anatomy, and behavior. Recreate them in the target codebase's own environment and patterns (your component library, your styling system) rather than copying verbatim. If there's no environment yet, React + plain CSS variables is the path of least resistance because the components are already written that way.
+> **Status: Prototype/reference bundle.** For the OpenCompany application,
+> live `client/src/themes/` and existing React primitives are authoritative.
+> The bundled `styles.css`, `tokens/`, `components/`, `ui_kits/` and `guidelines/`
+> support standalone design prototypes; their values and component APIs can
+> differ from the shipped product. The quickstart below is for such a
+> prototype. Production changes follow [Frontend architecture](../frontend_architecture.md)
+> and [Theme system](../theme_system.md); do not replace live CSS with bundled
+> snapshots or copy inline-style prototype components verbatim.
 
 This guide is self-sufficient — a developer who wasn't in the original conversation can implement from it alone.
 
@@ -121,7 +128,10 @@ Implementation notes:
 
 ## 4. UI kits (full screens to match)
 
-`ui_kits/opencompany/` is an interactive recreation of the product — the source of truth for how components compose into real views. Open `ui_kits/opencompany/index.html`.
+`ui_kits/opencompany/` is an interactive prototype of an earlier canvas shell.
+It demonstrates composition with mock data; the live application owns current
+Home/Dev navigation and runtime behavior. Open `ui_kits/opencompany/index.html`
+for that scoped reference.
 
 - `Toolbar.jsx` — 48px top toolbar (file menu, workflow name, Normal/Dev toggle, action cluster, save state).
 - `Panels.jsx` — 280px workflow sidebar + 320px component palette (search, categorized node catalogue, count badges).
@@ -136,7 +146,7 @@ Layout contract: fixed 48px toolbar + 24px status bar top/bottom; 280px sidebar 
 
 ## 5. Theming beyond light/dark
 
-The real app ships **3 themes**: light, dark and one "skin", Atomic (the other nine skins — Renaissance, Greek, Edo, Steampunk, Cyber, Wasteland, Rot, Plague, Surveillance — were removed on 2026-10-12). Only light/dark are encoded as live token scopes here. The architecture, per-theme token tables, and porting recipe are in `guidelines/THEMES.md`; the authoritative theme CSS lives in `client/src/themes/` (the `reference/themes/` snapshots were retired — see its README). To add a skin: copy its token block into a `[data-theme="X"]` scope, map its accents onto the action/node role triplets, and load its fonts. **Readability rule:** decorative display faces are documentation specimens only — UI copy always uses a readable body font.
+The real app ships **3 themes**: light, dark and one "skin", Atomic (the other nine skins — Renaissance, Greek, Edo, Steampunk, Cyber, Wasteland, Rot, Plague, Surveillance — were removed on 2026-10-12). Only light/dark are encoded as live token scopes here. The architecture, per-theme token tables, and porting recipe are in `guidelines/THEMES.md`; the authoritative theme CSS lives in `client/src/themes/` (the `reference/themes/` snapshots were retired — see its README). To add a skin: copy its token block into a `[data-theme="X"]` scope, map its accents onto the action/node role triplets, and load its fonts. **Prototype readability rule:** use readable body fonts for this bundle's UI copy. The live product has explicit theme display roles (including Atomic headings); its CSS and current application guidance take precedence.
 
 Visual verification (open in a browser): `reference-mockup/Panel Theme Matrix.dc.html` — every panel in the three themes.
 

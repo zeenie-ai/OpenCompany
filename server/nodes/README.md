@@ -663,7 +663,7 @@ Added in Wave 11 (Mar 2026):
   (no central `server/credentials/` dir).
 - **11.E.2**: Dead-code sweep — 2 broken imports fixed, 13 dead
   dispatch branches stripped, duplicate proxy handler removed,
-  `routers/whatsapp.py` (misnamed) → `services/whatsapp_service.py`.
+  `routers/whatsapp.py` (misnamed) → `services/whatsapp_service.py`. <!-- docs-lint: ignore; retired paths are recorded here as migration history. -->
 - **11.E.3**: 14 handler files deleted, last per-domain bodies
   inlined into plugins; `handle_ai_agent` / `handle_chat_agent`
   retired in favour of `BaseNode.execute()` via the node registry.

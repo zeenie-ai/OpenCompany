@@ -21,6 +21,8 @@ Before using Bash commands, verify the OS:
 ```
 `Linux` = Linux, `Darwin` = macOS. If neither, use the powershell skill.
 
+Process Manager runs a parsed executable/argument vector, not a shell program. For pipelines, expansion, or shell builtins, explicitly invoke `bash -lc` with the intended script. Declare server listener `ports` and inspect existing owners before stopping anything.
+
 ## Common Patterns
 
 ### Install packages
@@ -47,7 +49,7 @@ Before using Bash commands, verify the OS:
 
 ### Start a dev server
 ```json
-{"operation": "start", "name": "dev-server", "command": "npm run dev"}
+{"operation": "start", "name": "dev-server", "command": "npm run dev", "ports": [3000]}
 ```
 
 ### Check what's running on a port
@@ -67,7 +69,7 @@ Before using Bash commands, verify the OS:
 
 ### Disk usage
 ```json
-{"operation": "start", "name": "disk", "command": "df -h && echo '---' && du -sh ./*"}
+{"operation": "start", "name": "disk", "command": "df -h"}
 ```
 
 ### Environment

@@ -24,7 +24,10 @@ The plugin declares `uiHints.createsBrowserAgent`; canvas drag-and-drop reads
 that capability from NodeSpec to select the recipe. Keep this hint separate
 from `isBrowserPanel`, which belongs only to the Browser tool.
 
-Reuse an explicitly selected saved Browser tool. The server allocates IDs and
+Legacy creation may reuse an explicitly selected saved Browser tool. A fresh
+agent admitted under `NEW_AGENT_RUNTIME_V1_ENABLED` instead receives a private
+runtime-v1 Browser reservation and cannot reuse or transfer an existing binding;
+see [creation-only rollout](browser.md#creation-only-runtime-rollout). The server allocates IDs and
 checks graph ownership and operator blocklists; transport retries use the same
 mutation UUID. Repeating Add for an already associated Browser agent returns
 its association without recreating a deliberately deleted Context or Skills

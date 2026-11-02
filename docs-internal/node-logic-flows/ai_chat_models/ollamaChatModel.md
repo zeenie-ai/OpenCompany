@@ -17,7 +17,7 @@ Run local LLMs (llama, mistral, qwen, deepseek-r1, ...) through a locally-runnin
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -28,10 +28,14 @@ Run local LLMs (llama, mistral, qwen, deepseek-r1, ...) through a locally-runnin
 | `model` | string | `""` (injected) | no | - | A model Ollama had loaded when the server was last fetched (`ps()` lists loaded models only), e.g. `qwen2.5`, `llama3.x`, `deepseek-r1`. Open-world: name not pattern-checked by `is_model_valid_for_provider` |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` | no | - | 1-200000; default per-loaded-model ctx ÷ 4 (capped 4096) |
-| `top_p` | number\|null | `1.0` | no | - | |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `api_key` | string\|null | `null` (injected) | no | - | Optional; local servers usually run with no auth. Without a stored key the declared placeholder is sent (`auth.placeholder_key` in `llm_defaults.json`: `"ollama"`, the value Ollama's docs use) |
 
 (Ollama uses the shared `ChatModelParams` unchanged; field names are snake_case, unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 

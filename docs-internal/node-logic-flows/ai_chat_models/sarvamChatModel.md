@@ -21,7 +21,7 @@ subclass); reasoning is on by default server-side.
 
 | Handle | Connection type | Required | Purpose |
 |--------|-----------------|----------|---------|
-| `input-main` | main | no | Upstream data; not consumed directly |
+| (none declared) | - | - | Configure `prompt` directly or resolve it through saved parameter templates; the model connection uses `output-model`. |
 
 ## Parameters
 
@@ -31,16 +31,20 @@ subclass); reasoning is on by default server-side.
 | `system_prompt` | string | `""` | no | - | System prompt |
 | `model` | string | `""` (injected) | no | - | `sarvam-105b` / `sarvam-30b` |
 | `temperature` | number\|null | `null` | no | - | 0-2. Sarvam's own default is 0.5 with reasoning on, 0.2 without |
-| `max_tokens` | number\|null | `null` | no | - | Defaults to the `llm_defaults.json` value (4096 — the Starter-tier cap). Raising it here does nothing unless the JSON is raised too |
-| `top_p` | number\|null | `1.0` | no | - | |
-| `frequency_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 |
-| `presence_penalty` | number\|null | `0.0` | no | - | -2.0 to 2.0 |
-| `response_format` | enum\|null | `"text"` | no | - | `text` / `json_object` |
+| `max_tokens` | number\|null | `null` | no | - | Uses the configured `llm_defaults.json` default and ceiling (4096 in this snapshot); higher node values are clamped to that policy |
+| `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `frequency_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `presence_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
+| `response_format` | enum\|null | `"text"` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` | no | - | Only decides whether we override Sarvam's default effort |
 | `reasoning_effort` | enum\|null | `"medium"` | no | `thinking_enabled: [true]` | `low` / `medium` / `high` |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('sarvam', 'default')` |
 
 (Field names are snake_case on `SarvamChatModelParams`; unknown keys ignored.)
+
+## Standalone chat parameter boundary
+
+See the [shared standalone chat contract](./_pattern.md) for the declared-but-unforwarded tuning fields, numeric thinking_budget requirement, direct/model/advisor execution paths and provider-policy limits. The Params table is not a promise that every field reaches the provider.
 
 ## Outputs (handles)
 
@@ -106,10 +110,10 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **No `/v1/models` endpoint.** Verified against <https://docs.sarvam.ai/openapi.json> (25 paths, none for model listing). Unhandled, the 404 surfaces as an `openai.OpenAIError` -> `NodeUserError`, which `AIService.fetch_models` re-raises *before* its curated fallback — breaking credential validation and the model dropdown for a valid key. The `supports_model_listing: false` flag routes around this generically.
-- **The output cap is a subscription tier, not a model limit.** Sarvam allows 4096 output tokens on Starter, 16384 / 8192 on Pro and 128000 / 64000 on Business, and 400s on anything above your tier ("max_tokens (65536) exceeds the maximum allowed for sarvam-105b for your subscription tier (starter): 4096"). `resolve_max_tokens` uses the `llm_defaults.json` number as both the unset default and the clamp ceiling, so it ships as the Starter cap (4096) — the only value that works on every account. Pro/Business users must raise it in the JSON; raising `max_tokens` on the node alone is clamped straight back down.
+- **Model-list policy**: the shipped `supports_model_listing: false` flag skips the model-list request, uses the curated catalogue and validates credentials with a one-token completion. This audit verified the local routing, not the live vendor API surface.
+- **Configured output cap**: `resolve_max_tokens` uses `llm_defaults.json` as both the unset default and clamp ceiling (4096 in this snapshot). Raising the node field alone does not exceed that policy. Account-specific subscription limits and live service capabilities require separate verification.
 - **`popular_models` is `[]`** per the >=1M-context policy (Sarvam maxes at 131072); the dropdown falls through to the `max_output_tokens` keys, so both models still appear.
-- **`sarvam-m` is deprecated** and removed from the API — deliberately absent from the config.
+- **Catalogue snapshot**: `sarvam-m` is absent from the shipped configuration; this is not a live API availability check.
 - **`wiki_grounding` is not exposed.** Sarvam accepts it, but an extra `Params` field cannot reach the API today: `execute_chat` reads a closed key set off `flattened`. See [Sarvam AI Service](../../sarvam_service.md#known-limits).
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`.
 

@@ -33,7 +33,9 @@ Existing `browser` nodes and `web_agent` graphs keep their contracts.
 
 Creation uses one atomic graph recipe: the agent, a private Browser tool,
 Master Skill with the shipped browser skill, private Context and the existing
-`visionAnalyze` tool. Selecting an existing saved Browser tool reuses it.
+`visionAnalyze` tool. The default legacy creation policy can reuse a selected
+saved Browser tool. New agents admitted to runtime behavior v1 require a
+separate private Browser tool/profile, as described below.
 Intentionally deleted companion nodes are not recreated. The viewer stays
 attached to the Browser tool; only that tool has `isBrowserPanel`.
 
@@ -42,6 +44,34 @@ They have independent conversation/history, submission UUIDs and cancellation,
 and do not deploy their prompt into saved Context or employee chat. See
 [Browser workspace](browser_workspace.md#direct-browser-tasks) and
 [deployment and recovery](browser_agent_deployment.md).
+
+## Creation-only runtime rollout
+
+`NEW_AGENT_RUNTIME_V1_ENABLED=false` is the shipped release default. When
+enabled, authorized fresh creation paths stamp `runtime_behavior_version: 1`
+on the new agent. Ordinary edits and imported/existing agents preserve their
+saved identity; missing metadata means legacy behavior. Disabling the release
+switch later does not downgrade already admitted v1 agents.
+
+V1 agents receive a private Browser tool/profile reservation. That profile's
+binding cannot be shared with or transferred to another agent, and selecting
+an existing Browser tool during new v1 creation is refused with "Create
+separate Browser tool/profile" guidance. Shared-profile reuse described below
+applies to eligible legacy/shared sessions, not these private reservations.
+
+The implementation is in
+[`agent_runtime_policy.py`](../server/services/agent_runtime_policy.py),
+[`browser_resources.py`](../server/services/browser_resources.py) and
+[`browser_agents.py`](../server/routers/browser_agents.py); isolation and
+binding rules are covered by
+[`test_private_resources.py`](../server/tests/nodes/browser/test_private_resources.py).
+The `SKILL.v1.md` Browser and Process Manager files are active opt-in built-in
+defaults, selected by `services/skill_defaults.py` for eligible v1 creation or
+an explicit owner reset. They are not historical snapshots. Existing saved
+instructions and project/user overrides remain authoritative.
+
+This is implemented behind a disabled creation switch, not an enabled default
+or an unimplemented design proposal.
 
 ## Installation and configuration
 
@@ -110,7 +140,9 @@ data directory, then reuses that running process for agent actions and the
 workspace viewer. Opening the same profile again does not launch another browser;
 concurrent opens share one startup task. Cookies and local storage persist across
 restarts of that profile and remain separate from other profiles and personal
-browsing. Sessions intentionally assigned the same saved profile share its logins.
+browsing. Eligible legacy/shared sessions intentionally assigned the same
+saved profile share its logins; runtime-v1 private reservations prohibit such
+sharing and identity transfer.
 
 This is installed-browser reuse, not attachment to the user's everyday running
 browser. Chrome's CDP debugging switches require a non-default data directory
@@ -121,7 +153,9 @@ workspace live view without an extension or personal-profile migration.
 Profile metadata is stored in the `browser_profiles` table. Chrome state is
 under `<DATA_DIR>/browser/profiles/<profile-id>/user-data/`, with generated
 directory IDs rather than user-supplied names. A saved `profile_id` selects an
-owner-scoped profile; leaving it empty creates/reuses the workflow's profile.
+owner-scoped profile; eligible legacy nodes with an empty value create/reuse
+the workflow's profile. Runtime-v1 agents instead use their reserved private
+profile and cannot edit that identity into a shared binding.
 The CLI receives its own per-profile home, runtime and temporary directories.
 
 The node's profile dropdown (`browserProfiles` option loader) lists the

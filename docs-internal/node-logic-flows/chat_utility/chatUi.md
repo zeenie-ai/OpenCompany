@@ -115,8 +115,7 @@ flowchart TD
 - The client checks the spec again before drawing it
   (`client/src/features/chat/genui/prepare.ts` with `lib/jsonRender`), and a
   test on each side holds the two catalogues to each other.
-- Allowed for Hire by `node_allowlist.json` `enabled_nodes`; the employee
-  builder does not wire it into new hires yet.
+- Allowed for Hire by `node_allowlist.json` `enabled_nodes`; the employee builder adds it to Talk when the node is allowed (`_talk_tools`), so generated interfaces are available to the answering Talk agent.
 
 ## Related
 

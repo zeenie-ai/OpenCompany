@@ -117,7 +117,7 @@ When a workflow is deployed, a trigger type registered with `register_canary_tri
 | `whatsappReceive`, `telegramReceive`, `chatTrigger`, `webhookTrigger`, `taskTrigger`, `discordReceive`, `discordInteraction` | Canary push, delivered by `dispatch.emit` | `event_waiter` waiter; see the known gap below |
 | `whatsappBusinessReceive`, `whatsappBusinessStatus` | Canary push, delivered by `dispatch.emit` | `event_waiter` waiter, resolved by the `WebhookSource` intake in `services/events/webhook.py` |
 | `googleGmailReceive`, `emailReceive`, `msMailReceive` | Canary polling: the controller runs the plugin's `poll.{node_type}.v{version}` activity | The node polls from its own `execute`; no waiter |
-| `twitterReceive` | Not canary-registered. It is in `POLLING_TRIGGER_TYPES` but registers no polling factory, so deploy falls back to an in-process `event_waiter` collector | `event_waiter` waiter; see the known gap below |
+| `twitterReceive` | Unavailable: graph validation refuses Start with `TWITTER_RECEIVE_UNAVAILABLE` because no producer/poller exists | Direct Run returns the same unavailable reason; it does not register a waiter |
 | `cronScheduler` | Temporal Schedule (`services/temporal/schedules.py`) | Not a waiter |
 
 Controlled polling triggers are registered with `WorkflowControlWorkflow`, which starts a graph only for deduplicated new events. Legacy uncontrolled polling still uses the deployment compatibility layer. See [Workflow control](./temporal-workflow-control.md) and [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md) for the live deployment architecture; the [execution-engine RFC](ARCHIVE/temporal-execution-engine-rfc.md) is historical.
@@ -153,9 +153,16 @@ process-local `_waiters` map. See [Temporal workflow messaging](https://docs.tem
 
 Pressing Run on the push triggers in the first table row registers a waiter that no producer resolves. Their producers call only `dispatch.emit`, which signals Temporal consumers and broadcasts to WebSocket clients but never calls `event_waiter.dispatch`. `StatusBroadcaster.send_custom_event`, which does dispatch to waiters, has no production caller. The node stays in `waiting` until the user cancels it. Deployed runs of the same triggers are unaffected.
 
-### Known gap: `twitterReceive` never fires
+### Known gap: `twitterReceive` is unavailable
 
-Nothing produces Twitter trigger events. `dispatch_twitter_event_received` in `nodes/twitter/_events.py` has no caller, and `TwitterReceiveNode` is a plain `TriggerNode`, not a `PollingTriggerNode`, so it registers no polling factory. Canvas Run and a deployment both wait on an `event_waiter` future that is never resolved; on deploy, `DeploymentManager._setup_event_trigger` also logs `No polling factory registered for trigger`. The `_events.py` module docstring describes the missing `PollingTriggerNode` refactor.
+Nothing currently produces Twitter trigger events. `dispatch_twitter_event_received`
+in `nodes/twitter/_events.py` has no caller, and `TwitterReceiveNode` is a plain
+`TriggerNode`, not a `PollingTriggerNode`, so it has no polling factory.
+The current node fails explicitly: `validate_graph` refuses Start with
+`TWITTER_RECEIVE_UNAVAILABLE`, and its direct `execute` override returns a
+`NodeUserError` envelope explaining the missing producer. It recommends
+Twitter Search from a Cron Scheduler. The old never-resolved waiter/fallback
+behavior is historical; it is not an executable workaround for the guard.
 
 ## Cancellation
 

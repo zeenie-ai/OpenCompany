@@ -1,15 +1,16 @@
-# Agent Brief - Per-Category Rollout
+# Agent Brief - Per-Category Node Audit and Authoring
 
-You are documenting and writing contract tests for one category of OpenCompany
-workflow nodes. Phase 1 (test infrastructure) and Phase 2 (search-node pilot)
-are already done. Your job is to repeat the pilot pattern for your category.
+Document every supported node and declared operation in the assigned category.
+The search pilot is an authoring example, not an exhaustive implementation or
+test-count snapshot. Inspect direct Run, graph, tool, controlled execution and
+Workspace applicability independently; record unsupported paths explicitly.
 
 ## Pilot example (study before starting)
 
-- **Docs**: [`docs-internal/node-logic-flows/search/`](./search/) - 3 files
-  (`braveSearch.md`, `serperSearch.md`, `perplexitySearch.md`).
+- **Docs**: [`docs-internal/node-logic-flows/search/`](./search/), including
+  `braveSearch.md`, `serperSearch.md` and `perplexitySearch.md`.
 - **Test**: [`server/tests/nodes/test_search.py`](../../server/tests/nodes/test_search.py)
-  - 15 tests across 3 classes.
+  Inspect the current test cases rather than relying on a frozen count.
 - **Doc template**: [`./_TEMPLATE.md`](./_TEMPLATE.md) - copy verbatim,
   fill every section.
 
@@ -35,7 +36,12 @@ are already done. Your job is to repeat the pilot pattern for your category.
    - happy path (assert envelope success + payload shape)
    - one validation/error short-circuit (e.g. empty required param)
    - one external-error path (HTTP 4xx/5xx, missing credential, subprocess failure)
-3. **Update the docs index**: run `company docs nodes` after writing docs; `company docs nodes --check` fails when a registered node has no card.
+3. **Update the docs index**: run `company docs nodes` after writing docs.
+   `company docs nodes --check` is a quick source scan; the actual plugin-registry
+   coverage test and index-freshness test are authoritative, including imported
+   registrations. For documentation-only corrections, run existing relevant
+   checks; add behavioral tests for meaningful uncovered contracts rather than
+   mirroring prose.
 
 ## Doc style rules
 

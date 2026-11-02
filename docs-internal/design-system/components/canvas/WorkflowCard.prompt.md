@@ -1,3 +1,5 @@
+> **Status: Prototype reference.** This is the bundled demo component contract. For production use the existing React primitives, live theme tokens and current frontend documentation; prototype props and visual restrictions do not override shipped behavior.
+
 Saved-workflow card for the left sidebar list.
 
 ```jsx

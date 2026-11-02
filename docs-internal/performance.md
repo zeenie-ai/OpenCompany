@@ -1,5 +1,10 @@
 # Performance — Cold-Start, Bundle, Runtime Latency
 
+The dated measurements below are historical local observations, not a fresh
+benchmark of this checkout or a startup/latency guarantee. Current source
+and tests substantiate the described mechanisms; remeasure on the target
+machine before using the numbers for a performance decision.
+
 Living record of OpenCompany's performance posture: where launch time is
 spent, what each optimisation cost / saved, and how to reproduce the
 measurements. Update this file when you ship a perf-affecting change
@@ -26,7 +31,7 @@ frame delivery in this fixture, not a general speedup: baseline percentiles
 exclude missed updates, runs varied during development, and the full React
 renderer and pinned Chrome 154 were not measured. Agent CLI operation latency
 and cold installation are separate paths. See
-[Browser workspace](./browser_workspace.md#local-measurements-2026-09-26) for
+[Browser workspace](./browser_workspace.md#historical-local-measurements-2026-09-26) for
 complete results, source hashes, limitations and repeatable commands.
 
 Use `OPENCOMPANY_BROWSER_DIAGNOSTICS=1` for server timing summaries and
@@ -217,14 +222,18 @@ Single source of truth: [client/src/lib/connectionConfig.ts](../client/src/lib/c
 | `WS_RECONNECT.MAX_DELAY_MS` | 8000 ms | Cap on any single reconnect delay |
 | `WS_RECONNECT.GROW_FACTOR` | 1.3 | Multiplier per attempt |
 | `WS_RECONNECT.MAX_ENQUEUED_MESSAGES` | 200 | PartySocket send-while-disconnected buffer |
-| `WS_CLOSE.NORMAL_CLOSURE` | 1000 | RFC 6455 §7.4.1; PartySocket skips reconnect for this code |
+| `WS_CLOSE.NORMAL_CLOSURE` | 1000 | RFC 6455 §7.4.1; explicit disposal stops retries, remote close still reconnects |
 
 PartySocket's reconnect delay (no jitter: it randomises only its own default
 minimum, which `MIN_DELAY_MS` replaces):
 
     delay(n) = min(MAX_DELAY_MS, MIN_DELAY_MS * GROW_FACTOR^(n-1))
 
-Lock-in tests: [client/src/lib/__tests__/connectionConfig.test.ts](../client/src/lib/__tests__/connectionConfig.test.ts).
+Lock-in tests: [connection constants](../client/src/lib/__tests__/connectionConfig.test.ts)
+and [WebSocket lifecycle](../client/src/contexts/__tests__/webSocketLifecycle.test.tsx).
+The wrapper reconnects after remote close code 1000; only explicit disposal
+on logout/unmount stops retries. Already-sent requests reject on close because
+their outcome is unknown, while unsent queued requests retain their deadline.
 
 ## Bottleneck inventory (cold-start, warm cache)
 
@@ -322,7 +331,7 @@ These were observed and fixed; the lessons are durable.
 - **Unconditional `client/node_modules/.vite` wipe on every `company dev`.** Forced a full esbuild dependency re-optimization (1-2 minutes on Windows) on every first page load. Vite self-invalidates the dep cache via lockfile/config/NODE_ENV hashes in `.vite/deps/_metadata.json`; the wipe was pure waste on a stable lockfile. Replaced with `company dev --force` → `VITE_FORCE=1` → `optimizeDeps.force` (Vite's own re-bundle mechanism), plus `optimizeDeps.include` for the heavy lazily-reached deps so late discovery can't trigger the mid-session re-optimization behind the "Outdated Optimize Dep" 504 (vitejs/vite#14284).
 - **Synchronous temporalio `Worker()` construction on the event loop.** The constructor derives a default build id by MD5-hashing the bytecode of every module in `sys.modules` (disk reads included) — ~3.1 s at our module count, freezing the loop and inflating concurrent boot work (`broadcaster.refresh_whatsapp` measured 4.2 s vs its ~0.4 s siblings). The value is memoized SDK-globally, so `TemporalWorkerManager.start()` pre-warms it once via `asyncio.to_thread(load_default_build_id)` before constructing the manager worker; all pool workers then construct cheaply. Any new long synchronous call in an async startup path should get the same `to_thread` treatment.
 - **Recursive `setTimeout` retry chain in `useEffect` without `AbortController`.** Survived unmount, leaked timers, called `setState` on stale closures. The React docs explicitly flag this in [https://react.dev/reference/react/useEffect](https://react.dev/reference/react/useEffect). Replaced with TanStack Query's `signal`-aware `queryFn`; the retries themselves are now the sign-in gate's visible schedule (`components/auth/useRetrySchedule.ts`).
-- **Flat `setTimeout(connect, 3000)` reconnect loop.** No exponential backoff, no jitter, no `code === 1000` honouring, no message replay. Replaced with PartySocket — see [client/src/contexts/WebSocketContext.tsx](../client/src/contexts/WebSocketContext.tsx).
+- **Flat `setTimeout(connect, 3000)` reconnect loop.** No exponential backoff or lifecycle-owned disposal. The current wrapper reconnects after remote code 1000 and preserves unsent requests within their deadlines; explicit disposal stops retries, and already-sent requests are not replayed. Replaced with PartySocket — see [client/src/contexts/WebSocketContext.tsx](../client/src/contexts/WebSocketContext.tsx).
 - **`if (event.code !== 1000)` magic numbers** scattered through the WS lifecycle. Replaced with `WS_CLOSE.NORMAL_CLOSURE` from [connectionConfig.ts](../client/src/lib/connectionConfig.ts) per RFC 6455 §7.4.1.
 - **Inline `chunkSizeWarningLimit: 1500`** silently masking bundle bloat. Lowered to 850 KB so future regressions surface at `vite build` time.
 

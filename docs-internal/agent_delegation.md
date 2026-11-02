@@ -352,7 +352,7 @@ For each matching edge, it checks the target handle:
 
 | Handle | Action |
 |--------|--------|
-| `input-context` | Resolves the child's Context thread (RFC-0002). Memory is now an ordinary tool on `input-tools`. |
+| `input-context` | Resolves the child's conversation-store descriptor (RFC-0002). Memory is an ordinary tool on `input-tools`. |
 | `input-skill` | Loads skill instructions; expands masterSkill into individual enabled skills |
 | `input-tools` | Discovers directly connected tool nodes, including Android services |
 | `input-main` / `input-chat` | Reads upstream node output for auto-prompt fallback |
@@ -385,7 +385,7 @@ The child's result is broadcast to the UI via WebSocket but is NOT fed back into
 
 ## Memory Isolation
 
-Parent and child agents have completely separate memory systems. On current
+Parent and child agents have separate conversation contexts. On current
 (V2) graphs the child's conversation is its own RFC-0002 Context store row,
 keyed by `(workflow_id, generation, <child agent_node_id>)`, and `simpleMemory`
 is an explicit tool the child calls on its own `input-tools`; the table below
@@ -425,7 +425,7 @@ If the child has **no memory node connected**, it has no conversation history an
 | `model` | Child's DB params (e.g., `'gpt-4o'`), or first stored model as fallback |
 | `temperature` | Child's DB params |
 | `max_tokens` / `maxTokens` | Child's DB params |
-| `thinkingEnabled` / `thinkingBudget` | Child's DB params |
+| `thinking_enabled` / `thinking_budget` | Child's DB params |
 | `api_key` | Credential store, resolved by child's own provider |
 | Memory | Child's own connected simpleMemory node |
 | Skills | Child's own connected skill nodes |
@@ -560,7 +560,12 @@ If the child agent has other agents connected to its own `input-tools` handle, i
 3. Grandchild spawns as its own `asyncio.create_task()`
 4. Grandchild collects its own connections by filtering edges with its own `node_id`
 
-There is no hard recursion limit. Each agent in the chain is memory-isolated and independently configured.
+Delegation is depth-bounded. `MAX_DELEGATION_DEPTH` defaults to 2 and accepts
+1–2 child layers (`core/config.py`); `services/handlers/tools.py` rejects a
+request at the resolved limit before starting the child. Each agent remains
+independently configured. Its Context is private; durable facts can be shared
+only through explicitly connected Memory tools. Managed team assignments use
+the Task Manager contract and must also satisfy the topology limits.
 
 ---
 
@@ -602,7 +607,7 @@ All broadcasts include `workflow_id` for UI scoping. The frontend uses these to 
 
 2. **Child configuration comes from its own database params.** Whatever the user set in the child's parameter panel is what the child uses.
 
-3. **Memory is fully isolated.** Parent and child have separate simpleMemory nodes with separate session IDs and separate vector stores.
+3. **Context is private to each agent.** Each agent loads its own conversation row. Memory is an explicit facts tool: isolation or sharing follows the connected Memory nodes rather than an automatic parent-to-child transcript copy.
 
 4. **The child sees the full workflow graph** via `nodes`/`edges`, but `collect_agent_connections()` filters by the child's own `node_id`, so it only gets resources physically connected to it.
 
@@ -610,7 +615,7 @@ All broadcasts include `workflow_id` for UI scoping. The frontend uses these to 
 
 6. **Delegation is non-blocking.** `asyncio.create_task()` spawns the child; the parent continues immediately. The child's result is NOT returned to the parent's LLM.
 
-7. **Recursive delegation is supported.** If the child has agents connected to its own `input-tools`, it can delegate further with no hard depth limit.
+7. **Recursive delegation is bounded.** A child with connected agents may delegate only below the resolved `MAX_DELEGATION_DEPTH` limit (default 2, supported range 1–2).
 
 8. **Task Trigger enables workflow-based result handling.** The `taskTrigger` node fires when delegated tasks complete, allowing workflows to process child agent results.
 

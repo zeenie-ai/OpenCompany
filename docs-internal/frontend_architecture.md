@@ -14,7 +14,7 @@ Post-migration (2026-04-14). Single source of truth for the current frontend.
 - **Toasts**: `sonner` imported directly at call-sites. The shadcn `<Toaster />` wrapper (at [components/ui/sonner.tsx](../client/src/components/ui/sonner.tsx)) is patched to read our `ThemeContext` instead of `next-themes`. Normal mode has a second toaster, one bottom-centre pill at a time (`pillToast()` in [features/home/ui/pillToast.tsx](../client/src/features/home/ui/pillToast.tsx)).
 - **Two screens**: Normal mode (Home, [features/home/](../client/src/features/home/)) and Dev mode (the workflow editor, `Dashboard.tsx`), both lazy chunks switched by the app shell in [app/](../client/src/app/). See [Normal Mode](./normal_mode.md).
 - **State**: TanStack Query for server state, Zustand for UI-only state, plain `useState`/`useReducer` for local. No global redux store.
-- **WebSocket realtime** via `WebSocketContext`; chat/node/workflow events are push-based, never polled.
+- **WebSocket realtime** via `WebSocketContext` for chat/node/workflow events, with explicit REST and bounded workspace polling contracts described below.
 - **antd is gone.** `styled-components` is gone. `@ant-design/icons` is gone. Icons come from `lucide-react`.
 
 ## Tech stack (current)
@@ -438,11 +438,21 @@ components/credentials/CredentialsModal.tsx (one AppShell host)
 - Exception: EmailPanel has conditional `custom` IMAP/SMTP fields that the simple schema can't express — it gets a dedicated zod schema and RHF form. That's the boundary where config-driven hands off to hand-written.
 - Custom MCP connectors are cards the server builds, one per saved connector (`kind: 'mcp'`, with an `mcp` block: server, address, sign-in kind, tools, pending change). The browser's Add (`CatalogLayout.primaryAction`, off in the Welcome guide via `customConnectors={false}`) opens `AddConnectorForm`; after `mcp_connector_add` it refetches the catalogue, then opens the new card's page. The same form is the page of the MCP server card (`mcp` in `credential_providers.json`, `kind: 'mcpAdd'`, Custom category, never connected itself): `McpAddPanel` hands the saved connector to the host through the panel's `onOpen`, and ProviderPage opens its page once the refetched catalogue holds it (the credentials dialog passes `onOpen`). `McpConnectorPanel` sends each command with `CREDENTIAL_PROBE_REQUEST_TIMEOUT` and waits for the refetched catalogue before re-enabling, so it shows only what the server holds; Remove leaves the page through the panel's `onLeave` (ProviderPage's Back). See [MCP Connectors](./mcp_connectors.md).
 
-## ParameterRenderer (pending Phase 6)
+## ParameterRenderer (current implementation and planned refactor)
 
 Currently one large switch on `parameter.type` ([client/src/components/ParameterRenderer.tsx](../client/src/components/ParameterRenderer.tsx)), with a branch per type: `string | number | boolean | options | collection | fixedCollection | code | file | credential | ...`.
 
-**Phase 6 plan:** replace with `@jsonforms/react` renderer registry. Requires backend to expose a `get_node_spec` WebSocket handler returning `NodeSpec { jsonSchema, uiSchema, _uiHints? }` per the RFC. Frontend will own the custom renderer set (one file per widget under `components/inspector/renderers/`) and route via JSON Forms' tester-based dispatch. Feature flag `VITE_USE_NODESPEC` gates the rollout; the old `ParameterRenderer` deletes once stable.
+**Current contract:** `get_node_spec` is shipped and consumed by
+`client/src/lib/nodeSpec.ts`; `VITE_NODESPEC_BACKEND` defaults on. NodeSpec
+uses the live `inputs`, `outputs`, parameter schema and `uiHints` contract in
+`client/src/adapters/nodeSpecToDescription.ts`. The switch-based renderer
+remains in production.
+
+**Planned, not implemented:** a colocated widget registry may replace parts
+of the switch. The earlier JSON Forms proposal, alternate wire shape and
+`VITE_USE_NODESPEC` flag were superseded design ideas; they are not current
+prerequisites or supported configuration. The DIY registry sketch below is
+reference material for a future refactor, subject to a separate decision.
 
 See [ui_migration_plan.md](./ARCHIVE/ui_migration_plan.md) Phase 6.
 
@@ -490,8 +500,14 @@ See [media_transport.md](./media_transport.md).
 
 **Rules:**
 - `useEffect` fetch-on-mount is banned for anything the backend can push. Subscribe to the context slice instead.
-- All modifying operations go through WebSocket — REST is reserved for auth + webhooks.
-- No polling. If a component wants fresh data, call `sendRequest` once (or use TanStack Query with `staleTime: Infinity` + manual `invalidate`).
+- Prefer the established push/RPC contract for each feature. REST also owns
+  workflow CRUD, workspace uploads, Browser tasks and Mobile operations;
+  changing transport requires updating both callers and authorization.
+- Push is the default for execution/status projections. Bounded polling is
+  intentional for some workspaces: Browser task snapshots poll every three
+  seconds and Mobile status every two seconds while visible. Preserve their
+  visibility, cleanup and cancellation rules. Server data belongs in TanStack
+  Query; use explicit invalidation where a feature already pushes updates.
 - **`sendRequest` queues while the socket is down, with backpressure.** When the socket is not open, the request enqueues with an `AbortController`-backed per-request timeout (default 30s). On reconnect, `ws.onopen` sends it before `setIsReady(true)`, with whatever remains of its deadline. The queue caps at 200 with FIFO eviction (the oldest is rejected with `backpressure: too many queued requests`). Any close rejects requests that were already sent, because their outcome is unknown and they are never replayed; queued requests keep waiting. A remote close, even with code 1000, does not stop reconnecting. Only `disposeConnection` (logout or unmount) closes the socket with 1000, which stops PartySocket's retries and rejects everything still queued. Implementation: `pendingSendQueueRef`, `drainPendingSends` and `disposeConnection` in `WebSocketContext.tsx`.
 - **An application heartbeat replaces a dead socket.** While a socket is open and the page is visible, `lib/webSocketHeartbeat.ts` sends `{"type": "ping"}` every `WS_HEARTBEAT.INTERVAL_MS` (30 s). If no `pong` arrives within `WS_HEARTBEAT.TIMEOUT_MS` (10 s), it calls `ws.reconnect` with close code 4000 (`WS_CLOSE.HEARTBEAT_TIMEOUT`). A hidden page sends no pings. When the page becomes visible again, or the browser reports `online`, it probes at once with a fresh deadline. Reconnect delays come from `WS_RECONNECT` in `lib/connectionConfig.ts`.
 - **Workflow-control state reconciles on every WS connect.** The toolbar derives
@@ -520,17 +536,18 @@ See [media_transport.md](./media_transport.md).
   boundary through Temporal Visibility.
   The older `deployment_snapshot` and binary deployment status remain migration
   adapters for legacy deployments and must not override a resolved controller
-  generation. See [Temporal Execution Engine RFC](temporal-execution-engine-rfc.md).
+  generation. See [Temporal control contract](temporal-workflow-control.md).
 - **Runtime Reset clears execution and conversation projections.** The
   `workflow_runtime_reset` broadcast drops the workflow's node-status slot,
   variables, and current console/chat arrays; `Dashboard` remounts the
   parameter panel so local output reducers cannot leak the previous run.
-  Simple Memory parameters are refreshed from the backend's cleared-row
-  broadcast, and `compactionStats` caches are evicted. The old transcript stays
-  available only through the archived generation. See
-  [Memory Lifecycle](ARCHIVE/memory_lifecycle.md#workflow-reset-archives-then-clears-memory)
-  (archived; it describes the retired pre-RFC-0002 markdown memory model).
-- **`currentWorkflowId` lives in `useAppStore` only.** Non-React listeners (WS handlers) read it via `useAppStore.getState().currentWorkflow?.id` -- the documented Zustand escape hatch (https://github.com/pmndrs/zustand#read-state-without-subscription). The previous `currentWorkflowIdRef` mirror inside WebSocketContext was a one-render-late copy that misrouted broadcasts during workflow switches. The push to `nodeStatusStore.setCurrentWorkflowId` is driven from a single `useEffect` in `Dashboard.tsx`.
+  Context conversations are cleared by their reset hook and the corresponding
+  queries refresh; `compactionStats` caches are evicted. Simple Memory stores
+  explicit facts and follows its saved `reset_policy` (`preserve` by default,
+  `clear` when configured), rather than holding a transcript parameter. See
+  [Context continuity](agent_context_flow.md#the-context-node-and-panel) and the
+  [Memory node contract](node-logic-flows/ai_agents/simpleMemory.md).
+- **`currentWorkflowId` lives in `useAppStore` only.** Non-React listeners (WS handlers) read it via `useAppStore.getState().currentWorkflow?.id` -- the documented Zustand escape hatch (https://github.com/pmndrs/zustand#read-state-without-subscription). The previous `currentWorkflowIdRef` mirror inside WebSocketContext was a one-render-late copy that misrouted broadcasts during workflow switches. The push to `nodeStatusStore.setCurrentWorkflowId` is owned by `app/useCurrentWorkflowSync.ts`, mounted once by `app/AppShell.tsx`, so it remains active in both Home and Dev mode.
 
 ## Browser workspace live view
 
@@ -658,13 +675,18 @@ Frontend does **not** declare output shapes anymore. The backend owns them exclu
 2. Backend-declared schema fetched on demand (fallback).
 3. `{ data: 'any' }` empty state (final fallback — the legacy `sampleSchemas` map was deleted in Wave 3).
 
-**Adding a new node type's output shape:** define a Pydantic model in `node_output_schemas.py`, register it in `NODE_OUTPUT_SCHEMAS`. The frontend picks it up automatically — no client change, no rebuild. Research and rationale in [docs-internal/schema_source_of_truth_rfc.md](./ARCHIVE/schema_source_of_truth_rfc.md).
+**Adding a new node type's output shape:** declare the plugin's Pydantic
+`Output` model. `BaseNode.__init_subclass__` registers it in
+`NODE_OUTPUT_SCHEMAS`; ordinary plugin authors do not edit that registry by
+hand. The frontend fetches the schema without a client change or rebuild. Research and rationale in [docs-internal/schema_source_of_truth_rfc.md](./ARCHIVE/schema_source_of_truth_rfc.md).
 
 **`jsonSchemaToShape` must resolve Pydantic's indirection.** `model_json_schema()` does not emit a flat `{field: {type}}` map: `Optional[X]` becomes `{anyOf: [<X>, {type: 'null'}]}` with **no top-level `type`**, and a nested `BaseModel` becomes `{$ref: '#/$defs/Name'}` with the body in `$defs`. A reader that only inspects `prop.type` types both as `'any'`. Since every field on the trigger output models is Optional, that mistyped *every* field and left nested blocks (`telegramReceive.media`, `whatsappReceive.group_info`) with no drillable leaves — the useful drag target is `media.file_id`, not `media`. `resolveSchemaNode` unwraps unions (first non-null branch) and follows local `#/$defs/` pointers, threading the expanded-ref chain through the mutual recursion so a self-referencing model cannot recurse until the stack blows and takes the panel with it. Locked by [jsonSchemaToShape.test.ts](../client/src/components/parameterPanel/__tests__/jsonSchemaToShape.test.ts).
 
 ### Renderer registry shape (Phase 6 — pending)
 
-When the backend `get_node_spec` handler lands, the inspector will own a 4-file colocated layout under `client/src/components/inspector/`:
+This is an unimplemented layout sketch, not the current source tree. The
+backend `get_node_spec` handler already exists. A future refactor could use
+a four-file colocated layout under `client/src/components/inspector/`:
 
 ```
 inspector/
@@ -701,7 +723,7 @@ bun run build           # full prod build; bundle analyzer at dist/stats.html if
 
 # client-only
 cd client
-bun run dev             # Vite dev server
+bun run start           # Vite dev server (client/package.json script)
 bun run build           # Vite prod build (Tailwind v4 via @tailwindcss/vite plugin)
 bun run typecheck       # THE gate — delegates up to the root TypeScript 7 compiler
 bun run typecheck:tsc   # second opinion under client's tsc 5.9.3 (triage only, never the gate)

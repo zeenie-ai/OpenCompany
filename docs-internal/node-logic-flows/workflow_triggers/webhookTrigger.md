@@ -30,7 +30,7 @@ compatibility path; the plugin's waiter body is used for direct canvas Run.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `path` | string | `""` | no | - | URL path segment - full URL is `http://host:5678/webhook/{path}`. Must match the incoming request's `path` for the filter to accept it. Empty path = wildcard (matches any). |
+| `path` | string | `""` | no | - | URL path segment - full URL is `http://host:5678/webhook/{path}`. Must match the incoming request's `path` for the filter to accept it. An empty path matches nothing and prevents Start (`WEBHOOK_PATH_REQUIRED`). |
 | `method` | options | `POST` | no | - | Filter for HTTP method at the router layer (not the plugin filter). Values: `GET` / `POST` / `PUT` / `DELETE` / `ALL`. |
 | `response_mode` | options | `immediate` | no | - | `immediate` returns 200 OK right away; `responseNode` waits for a downstream `webhookResponse` node (see [`webhookResponse`](./webhookResponse.md)). |
 | `authentication` | options | `none` | no | - | `none` or `header`. |
@@ -74,11 +74,9 @@ flowchart TD
 ## Decision Logic
 
 - **Filter match** (`WebhookTriggerNode.build_filter`): accepts any
-  event whose `path` equals `params.path`. If `path` is empty the
-  filter accepts anything.
-- **Method / authentication** are NOT enforced inside the filter - they are
-  supposed to be enforced at the router layer when the HTTP request lands.
-  The handler/filter only looks at `path`.
+  event whose `path` equals a nonempty `params.path`. An empty path matches nothing.
+- **Route admission**: `_routes.deliver_webhook` reads active generation snapshots. Unknown paths return 404, unsupported methods 405, and failed configured header authentication 401. Header secrets are read from saved parameters and compared with `hmac.compare_digest`.
+- **Scope and privacy**: each accepting workflow receives one workflow-scoped event. Authorization, Cookie, proxy-auth and configured authentication headers are removed before dispatch; the webhook body is not broadcast. The plugin filter additionally checks nonempty path equality.
 - **Direct waiter cancellation**: user-initiated cancel via `cancel_event_wait` produces
   `success=False, error="Cancelled by user"`.
 
@@ -95,7 +93,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: none.
-- **Services**: `services.deployment` (canary listener), `services.events.dispatch`,
+- **Services**: `services.deployment` (controlled generation and legacy listener), `services.events.dispatch`,
   `services.status_broadcaster`, `routers.webhook` (receives the HTTP request and
   drives `_events.py` to emit the event).
 - **Python packages**: stdlib only.
@@ -106,9 +104,7 @@ flowchart TD
 - On direct canvas Run, the handler registers a waiter with `timeout=None`, so it waits forever
   until either an event arrives or the run is cancelled. There is no
   handler-side timeout.
-- When multiple `webhookTrigger` nodes share the same `path` (different
-  workflows), they all receive the event. There is no deduplication in the
-  filter.
+- When multiple workflows declare the same path, only workflows with an accepting method/auth route receive their own scoped event; several accepting triggers in one workflow still produce one workflow event.
 - `method` and `authentication` parameters are not re-checked inside the
   filter; if the HTTP router's enforcement is bypassed (direct dispatch for
   testing) the trigger will fire regardless.
@@ -128,6 +124,6 @@ flowchart TD
 
 - **Skills using this as a tool**: none.
 - **Companion node**: [`webhookResponse`](./webhookResponse.md) for
-  `responseMode=responseNode`.
+  `response_mode=responseNode`.
 - **Sibling triggers**: [`chatTrigger`](./chatTrigger.md), [`taskTrigger`](./taskTrigger.md).
 - **Architecture docs**: [Event Waiter System](../../event_waiter_system.md)

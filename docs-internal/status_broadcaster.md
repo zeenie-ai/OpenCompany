@@ -1,6 +1,6 @@
 # WebSocket Status Broadcaster
 
-OpenCompany uses WebSocket as the primary communication channel between the React frontend and the FastAPI backend. A single `StatusBroadcaster` service manages all active WebSocket connections and broadcasts real-time state updates (node status, workflow progress, Android device status, variable changes, etc.). This replaces REST polling with push-based updates and is the reason the UI can animate node execution, show live tool calls, and update Android status without reloading.
+OpenCompany uses WebSocket as the primary communication channel between the React frontend and the FastAPI backend. A single `StatusBroadcaster` service manages all active WebSocket connections and broadcasts real-time state updates (node status, workflow progress, Android device status, variable changes, etc.). This replaces polling for these status projections with push-based updates and is the reason the UI can animate node execution, show live tool calls, and update Android status without reloading.
 
 This document covers the broadcaster architecture, the WebSocket message handlers, the broadcast message types, and the Android two-state connection model.
 
@@ -17,7 +17,11 @@ Early iterations of OpenCompany used REST endpoints for most frontend-backend op
 2. **No push**: node execution status changes (running, completed, errored) could not reach the UI without polling; tool calls during agent execution were invisible until the whole agent finished.
 3. **Latency**: fetch -> parse -> re-render cycles added 100-200ms to every user action.
 
-Moving all frontend-backend traffic to a single WebSocket connection eliminated polling, enabled real-time status animations, and simplified authentication (one handshake, one cookie check).
+Moving execution/status projections and many commands to `/ws/status` enabled
+real-time animations and reduced polling. The application still has REST
+workflow CRUD and uploads, separate Browser streaming sockets, and bounded
+Browser-task/Mobile polling. Each transport enforces its own admission and
+ownership rules; see [Frontend architecture](frontend_architecture.md#real-time).
 
 ## Architecture
 

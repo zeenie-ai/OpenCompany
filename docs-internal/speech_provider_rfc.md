@@ -4,6 +4,13 @@
 **Date:** 2026-07-25
 **Supersedes:** the vendor-locked `sarvamTextToSpeech` / `sarvamSpeechToText` nodes
 
+**Reading status:** Sections 1–2 record the pre-implementation problem and
+measurements from July 2026. They are historical rationale, not current upload
+or retry instructions. Current speech nodes use workspace audio references;
+oversized payload failures are non-retryable after Phase 1b.26. See
+[Media transport](media_transport.md) for current limits, error mapping and file
+handling, and the current per-node cards for the actual schemas.
+
 ---
 
 ## 1. Problem

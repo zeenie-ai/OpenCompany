@@ -214,3 +214,5 @@ flowchart TD
 - **Architecture**: [CLI Agent Framework](../../cli_agent_framework.md),
   [Claude Code Interactive Mode](../../claude_code_interactive_mode.md),
   [Claude Code Agent](../../ARCHIVE/claude_code_agent_architecture.md)
+
+Codex is a separate CLI-backed agent using the shared CLI batch service; Claude Code is not the only subprocess-backed agent.
