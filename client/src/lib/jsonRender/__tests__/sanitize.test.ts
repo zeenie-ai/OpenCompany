@@ -1,8 +1,7 @@
 /**
  * What reaches json-render: prototype keys and paths refused everywhere,
  * the features a model must not reach (watch, repeat, slots, $computed,
- * confirm, onSuccess / onError) stripped, patches limited to the places a
- * spec stream writes, and sizes capped.
+ * confirm, onSuccess / onError) stripped, and sizes capped.
  */
 
 import { readFileSync } from 'node:fs';
@@ -10,12 +9,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SANITIZE_LIMITS,
-  MAX_PATCH_PATH,
   sanitizeActionBinding,
   sanitizeCondition,
   sanitizeElement,
   sanitizeExpressions,
-  sanitizePatch,
   sanitizeSpec,
   sanitizeState,
 } from '../sanitize';
@@ -174,81 +171,6 @@ describe('sanitizeSpec', () => {
         expect(spec.elements[id]).toEqual({ props: {}, ...element });
       }
     }
-  });
-});
-
-describe('sanitizePatch', () => {
-  const element = { type: 'Text', props: { text: 'hi' } };
-
-  it('takes add, replace and remove at the places a spec stream writes', () => {
-    expect(sanitizePatch({ op: 'add', path: '/root', value: 'root' })).toEqual({ op: 'add', path: '/root', value: 'root' });
-    expect(sanitizePatch({ op: 'add', path: '/state', value: JSON.parse('{"a":1,"__proto__":{"polluted":true}}') })).toEqual({
-      op: 'add',
-      path: '/state',
-      value: { a: 1 },
-    });
-    expect(sanitizePatch({ op: 'replace', path: '/state/form/name', value: 'Ana' })).toEqual({
-      op: 'replace',
-      path: '/state/form/name',
-      value: 'Ana',
-    });
-    expect(sanitizePatch({ op: 'add', path: '/elements/a', value: { ...element, watch: {} } })).toEqual({
-      op: 'add',
-      path: '/elements/a',
-      value: element,
-    });
-    expect(sanitizePatch({ op: 'replace', path: '/elements/a/props/text', value: { $state: '/__proto__' } })).toBeNull();
-    expect(sanitizePatch({ op: 'replace', path: '/elements/a/props/text', value: { $state: '/t' } })).toEqual({
-      op: 'replace',
-      path: '/elements/a/props/text',
-      value: { $state: '/t' },
-    });
-    expect(sanitizePatch({ op: 'add', path: '/elements/a/children/-', value: 'b' })).toEqual({
-      op: 'add',
-      path: '/elements/a/children/-',
-      value: 'b',
-    });
-    expect(sanitizePatch({ op: 'replace', path: '/elements/a/visible', value: [{ $state: '/x' }] })).toEqual({
-      op: 'replace',
-      path: '/elements/a/visible',
-      value: { $and: [{ $state: '/x' }] },
-    });
-    expect(sanitizePatch({ op: 'add', path: '/elements/a/on/press', value: { action: 'go', confirm: {} } })).toEqual({
-      op: 'add',
-      path: '/elements/a/on/press',
-      value: { action: 'go' },
-    });
-    expect(sanitizePatch({ op: 'remove', path: '/elements/a' })).toEqual({ op: 'remove', path: '/elements/a' });
-  });
-
-  it('refuses every other op, place and prototype path', () => {
-    const refused = [
-      { op: 'move', from: '/elements/a', path: '/elements/b' },
-      { op: 'copy', from: '/elements/a', path: '/elements/b' },
-      { op: 'test', path: '/root', value: 'r' },
-      { op: 'add', path: '/foo', value: 1 },
-      { op: 'add', path: 'root', value: 'r' },
-      { op: 'remove', path: '/root' },
-      { op: 'add', path: '/root', value: 'bad id' },
-      { op: 'add', path: '/state/__proto__/polluted', value: true },
-      { op: 'add', path: '/state/a/constructor', value: true },
-      { op: 'add', path: '/elements/__proto__', value: element },
-      { op: 'add', path: '/elements/a/props/constructor/prototype', value: 1 },
-      { op: 'add', path: '/elements/a/watch', value: {} },
-      { op: 'add', path: '/elements/a/repeat', value: { statePath: '/x' } },
-      { op: 'add', path: '/elements/a/slots/footer', value: ['b'] },
-      { op: 'add', path: '/elements/a/type', value: 'Text' },
-      { op: 'add', path: '/elements/a/visible/0', value: true },
-      { op: 'add', path: '/elements/a/children/x', value: 'b' },
-      { op: 'add', path: '/elements/a/children/0/y', value: 'b' },
-      { op: 'add', path: '/elements/a/on/constructor', value: { action: 'go' } },
-      { op: 'add', path: '/elements/a', value: { type: 'not a name' } },
-      { op: 'add', path: '/elements//props', value: {} },
-      { op: 'add', path: `/state/${'a/'.repeat(10)}b`, value: 1 },
-      { op: 'add', path: `/elements/${'a'.repeat(MAX_PATCH_PATH)}`, value: element },
-    ];
-    for (const patch of refused) expect(sanitizePatch(patch), JSON.stringify(patch).slice(0, 80)).toBeNull();
-    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
 

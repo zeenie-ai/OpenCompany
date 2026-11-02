@@ -271,7 +271,6 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
             <HireScreen
               key={version}
               spec={spec}
-              version={version}
               busy={hiring}
               triggerApps={triggerApps}
               actions={actionContext}

@@ -5,67 +5,47 @@
  * RFC 6901 says. `specToPatches` writes that stream for a whole spec; the
  * chat fixtures (features/chat/__fixtures__) hold it line for line.
  *
- * `useSpecReveal` replays the stream on screen for a spec that arrived
- * whole: the root and state at once, then one element every REVEAL_STEP_MS
- * (design handoff), so a screen reads as being written rather than dropped
- * in. Everything shows at once under reduced motion or while the page is
- * hidden (motionSuppressed). A new version starts again from nothing.
+ * `useSpecReveal` shows a spec the way that stream builds it: the root and
+ * state at once, then one element every REVEAL_STEP_MS (design handoff), so
+ * a screen reads as being written rather than dropped in. The count only
+ * moves forward, so a spec that keeps growing (a UI still streaming in)
+ * never restarts it; a host that wants a fresh reveal remounts. Everything
+ * shows at once for a UI that is not `live` (read back later), under
+ * reduced motion, or while the page is hidden (motionSuppressed).
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import type { Spec, UIElement } from '@json-render/core';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { JsonPatch, Spec, UIElement } from '@json-render/core';
 import { motionSuppressed } from '@/lib/motion';
-import { escapePointer, unescapePointer } from './paths';
-import type { SpecPatch } from './sanitize';
+import { escapePointer } from './paths';
 
 export const REVEAL_STEP_MS = 90;
-
-/** `add /root` and `add /state`, ahead of the elements. */
-const HEAD = 2;
-const ELEMENTS_PREFIX = '/elements/';
 
 function ownElement(spec: Spec, id: string): UIElement | undefined {
   return Object.prototype.hasOwnProperty.call(spec.elements, id) ? spec.elements[id] : undefined;
 }
 
-/** The patch stream that builds `spec`: root, state, then every element
- *  reachable from the root, depth first, each once. */
-export function specToPatches(spec: Spec): SpecPatch[] {
-  const patches: SpecPatch[] = [
-    { op: 'add', path: '/root', value: spec.root },
-    { op: 'add', path: '/state', value: spec.state ?? {} },
-  ];
-  const seen = new Set<string>();
+/** The ids of the elements the root reaches, depth first, each once. */
+export function revealOrder(spec: Spec): string[] {
+  const order: string[] = [];
   const walk = (id: string) => {
     const element = ownElement(spec, id);
-    if (!element || seen.has(id)) return;
-    seen.add(id);
-    patches.push({ op: 'add', path: `${ELEMENTS_PREFIX}${escapePointer(id)}`, value: element });
+    if (!element || order.includes(id)) return;
+    order.push(id);
     element.children?.forEach(walk);
   };
   walk(spec.root);
-  return patches;
+  return order;
 }
 
-/** The spec the first `count` patches of such a stream build. Only the
- *  three kinds specToPatches writes are applied. */
-export function specFromPatches(patches: readonly SpecPatch[], count: number = patches.length): Spec {
-  let root = '';
-  let state: Record<string, unknown> = {};
-  // No prototype: ids are looked up here as keys.
-  const elements: Record<string, UIElement> = Object.create(null);
-  for (const patch of patches.slice(0, count)) {
-    if (patch.op !== 'add') continue;
-    if (patch.path === '/root' && typeof patch.value === 'string') root = patch.value;
-    else if (patch.path === '/state' && patch.value && typeof patch.value === 'object') state = patch.value as Record<string, unknown>;
-    else if (patch.path.startsWith(ELEMENTS_PREFIX)) {
-      const token = patch.path.slice(ELEMENTS_PREFIX.length);
-      if (token && !token.includes('/') && patch.value && typeof patch.value === 'object') {
-        elements[unescapePointer(token)] = patch.value as UIElement;
-      }
-    }
-  }
-  return { root, state, elements };
+/** The patch stream that builds `spec`: root, state, then every element
+ *  the root reaches, depth first, each once. */
+export function specToPatches(spec: Spec): JsonPatch[] {
+  return [
+    { op: 'add', path: '/root', value: spec.root },
+    { op: 'add', path: '/state', value: spec.state ?? {} },
+    ...revealOrder(spec).map((id): JsonPatch => ({ op: 'add', path: `/elements/${escapePointer(id)}`, value: spec.elements[id] })),
+  ];
 }
 
 export interface SpecReveal {
@@ -76,30 +56,30 @@ export interface SpecReveal {
   revealing: boolean;
 }
 
-export function useSpecReveal(spec: Spec | null, version: number): SpecReveal {
-  const patches = useMemo(() => (spec ? specToPatches(spec) : []), [spec]);
-  const total = Math.max(0, patches.length - HEAD);
-  const [progress, setProgress] = useState({ version, count: 0 });
-  const count = progress.version === version ? progress.count : 0;
+export function useSpecReveal(spec: Spec | null, live = true): SpecReveal {
+  const order = useMemo(() => (spec ? revealOrder(spec) : []), [spec]);
+  const total = order.length;
+  const [count, setCount] = useState(() => (!live || motionSuppressed() ? Number.POSITIVE_INFINITY : 1));
+  const started = useRef<number | null>(null);
 
   useEffect(() => {
-    if (total === 0) return;
-    if (motionSuppressed()) {
-      setProgress({ version, count: total });
-      return;
-    }
-    const started = performance.now();
-    setProgress({ version, count: 1 });
+    if (count >= total) return;
+    const since = started.current ?? performance.now();
+    started.current = since;
     const timer = window.setInterval(() => {
-      const next = motionSuppressed()
-        ? total
-        : Math.min(total, Math.floor((performance.now() - started) / REVEAL_STEP_MS) + 1);
-      setProgress({ version, count: next });
-      if (next >= total) window.clearInterval(timer);
+      const due = motionSuppressed() ? total : Math.floor((performance.now() - since) / REVEAL_STEP_MS) + 1;
+      setCount((current) => Math.max(current, Math.min(total, due)));
     }, REVEAL_STEP_MS);
     return () => window.clearInterval(timer);
-  }, [version, total]);
+  }, [count, total]);
 
-  const shown = useMemo(() => (spec ? specFromPatches(patches, HEAD + count) : null), [spec, patches, count]);
-  return { spec: shown, revealing: count < total };
+  const shown = Math.min(total, count);
+  const part = useMemo(() => {
+    if (!spec || shown >= total) return spec;
+    // No prototype: ids are looked up here as keys.
+    const elements: Record<string, UIElement> = Object.create(null);
+    for (const id of order.slice(0, shown)) elements[id] = spec.elements[id];
+    return { root: spec.root, state: spec.state, elements };
+  }, [spec, order, shown, total]);
+  return { spec: part, revealing: shown < total };
 }

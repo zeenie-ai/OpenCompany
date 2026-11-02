@@ -77,9 +77,9 @@ describe('chatActionHandlers', () => {
     });
   });
 
-  it('answers no name json-render runs itself or that is not an action', () => {
+  it('answers no name that is not an action', () => {
     const { handlers: h } = handlers();
-    for (const name of ['setState', 'push', 'validateForm', 'then', 'toString', 'constructor', '__proto__', '9lives']) {
+    for (const name of ['then', 'toJSON', 'toString', 'constructor', '__proto__', '9lives']) {
       expect(h[name], name).toBeUndefined();
     }
   });

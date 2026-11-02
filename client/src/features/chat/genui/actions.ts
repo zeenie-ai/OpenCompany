@@ -33,9 +33,10 @@ export interface ChatUiActions {
   event: (event: ChatUiEvent) => void;
 }
 
-/** Names json-render handles itself, and names no handler object should
- *  answer (a Proxy that answered `then` would look like a promise). */
-const NOT_HANDLED = new Set(['setState', 'pushState', 'removeState', 'push', 'pop', 'validateForm', 'then', 'toJSON']);
+/** Names no handler object should answer: a Proxy that answered `then`
+ *  would look like a promise. (json-render runs its own actions, setState
+ *  and the rest, before it asks the handlers.) */
+const NOT_HANDLED = new Set(['then', 'toJSON']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

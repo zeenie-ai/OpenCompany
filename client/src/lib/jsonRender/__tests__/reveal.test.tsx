@@ -1,8 +1,9 @@
 /**
  * The patch stream for a spec (root, state, then each element depth first,
  * ids escaped as RFC 6901 says), held line for line against the chat
- * fixtures, and its paced replay: one element every 90 ms, everything at
- * once under reduced motion, from nothing again for a new version.
+ * fixtures, and its paced replay: one element every 90 ms, forward only
+ * as the spec grows, everything at once under reduced motion or for a UI
+ * that is not live.
  */
 
 import { readFileSync } from 'node:fs';
@@ -11,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import type { Spec } from '@json-render/core';
 import { setReducedMotion } from '@/test/waapi';
-import { REVEAL_STEP_MS, specFromPatches, specToPatches, useSpecReveal } from '../reveal';
+import { REVEAL_STEP_MS, specToPatches, useSpecReveal } from '../reveal';
 
 const FIXTURES = join(__dirname, '..', '..', '..', 'features', 'chat', '__fixtures__');
 
@@ -57,16 +58,6 @@ describe('specToPatches', () => {
       { op: 'add', path: '/state', value: {} },
     ]);
   });
-
-  it('builds the spec back, a prefix at a time', () => {
-    const patches = specToPatches(SPEC);
-    expect(specFromPatches(patches)).toEqual({
-      root: 'r',
-      state: { on: true },
-      elements: { r: SPEC.elements.r, a: SPEC.elements.a, a1: SPEC.elements.a1, a2: SPEC.elements.a2, 'b/c': SPEC.elements['b/c'] },
-    });
-    expect(Object.keys(specFromPatches(patches, 4).elements)).toEqual(['r', 'a']);
-  });
 });
 
 describe('useSpecReveal', () => {
@@ -85,7 +76,7 @@ describe('useSpecReveal', () => {
   const shownIds = (result: { current: ReturnType<typeof useSpecReveal> }) => Object.keys(result.current.spec?.elements ?? {});
 
   it('shows one element every REVEAL_STEP_MS, depth first', () => {
-    const { result } = renderHook(() => useSpecReveal(SPEC, 1));
+    const { result } = renderHook(() => useSpecReveal(SPEC));
     expect(result.current.spec?.root).toBe('r');
     expect(shownIds(result)).toEqual(['r']);
     expect(result.current.revealing).toBe(true);
@@ -100,31 +91,41 @@ describe('useSpecReveal', () => {
     act(() => {
       vi.advanceTimersByTime(REVEAL_STEP_MS * 10);
     });
-    expect(shownIds(result)).toEqual(['r', 'a', 'a1', 'a2', 'b/c']);
+    // Once everything shows, the spec itself is drawn.
+    expect(result.current.spec).toBe(SPEC);
     expect(result.current.revealing).toBe(false);
   });
 
-  it('starts again from nothing for a new version', () => {
-    const { result, rerender } = renderHook(({ version }) => useSpecReveal(SPEC, version), { initialProps: { version: 1 } });
+  it('only moves forward while the spec grows', () => {
+    const first: Spec = { root: 'r', elements: { r: { type: 'Stack', props: {}, children: ['a'] }, a: SPEC.elements.a1 } };
+    const { result, rerender } = renderHook(({ spec }) => useSpecReveal(spec), { initialProps: { spec: first } });
     act(() => {
       vi.advanceTimersByTime(REVEAL_STEP_MS * 10);
     });
-    expect(shownIds(result)).toHaveLength(5);
-    rerender({ version: 2 });
-    expect(shownIds(result)).toEqual(['r']);
-    expect(result.current.revealing).toBe(true);
+    expect(result.current.spec).toBe(first);
+    rerender({ spec: SPEC });
+    expect(shownIds(result)).toEqual(['r', 'a']);
+    act(() => {
+      vi.advanceTimersByTime(REVEAL_STEP_MS * 10);
+    });
+    expect(result.current.spec).toBe(SPEC);
+  });
+
+  it('shows a UI that is not live at once', () => {
+    const { result } = renderHook(() => useSpecReveal(SPEC, false));
+    expect(result.current).toEqual({ spec: SPEC, revealing: false });
   });
 
   it('shows everything at once under reduced motion', () => {
     restoreMotion();
     restoreMotion = setReducedMotion(true);
-    const { result } = renderHook(() => useSpecReveal(SPEC, 1));
-    expect(shownIds(result)).toEqual(['r', 'a', 'a1', 'a2', 'b/c']);
+    const { result } = renderHook(() => useSpecReveal(SPEC));
+    expect(result.current.spec).toBe(SPEC);
     expect(result.current.revealing).toBe(false);
   });
 
   it('has nothing to show without a spec', () => {
-    const { result } = renderHook(() => useSpecReveal(null, 1));
+    const { result } = renderHook(() => useSpecReveal(null));
     expect(result.current).toEqual({ spec: null, revealing: false });
   });
 });

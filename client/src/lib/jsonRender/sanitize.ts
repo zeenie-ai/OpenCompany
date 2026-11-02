@@ -6,15 +6,15 @@
  * features a model should never reach: `watch` (actions fired by state
  * changes), `repeat`, `slots`, `$computed`, and an action binding's
  * `confirm`, `onSuccess` and `onError` (the last two set state or run
- * further actions). So before a spec or a patch reaches the renderer:
+ * further actions). So before a spec reaches the renderer:
  *
  * - an element keeps its `type`, `props`, `children`, `visible` and `on`
  *   only, and an action binding its `action` and `params` only;
  * - `__proto__`, `constructor` and `prototype` are refused everywhere: as
  *   ids, object keys, and segments of `$state` / `$bindState` paths,
- *   `$template` placeholders, `visible` conditions, action params and
- *   patch paths (paths.ts holds the rule); every path that survives is
- *   rewritten in one canonical form;
+ *   `$template` placeholders, `visible` conditions and action params
+ *   (paths.ts holds the rule); every path that survives is rewritten in one
+ *   canonical form;
  * - `$computed` is dropped, and so are `$item`, `$index` and `$bindItem`,
  *   which mean nothing once `repeat` is gone;
  * - sizes are capped: elements, children, nesting depth, keys, array and
@@ -31,7 +31,7 @@
  */
 
 import type { ActionBinding, Spec, UIElement, VisibilityCondition } from '@json-render/core';
-import { MAX_PATH_SEGMENTS, canonicalStatePath, isForbiddenSegment, joinStatePath, unescapePointer } from './paths';
+import { MAX_PATH_SEGMENTS, canonicalStatePath, isForbiddenSegment } from './paths';
 
 export interface SanitizeLimits {
   /** Elements kept from a spec, in the order written. */
@@ -60,16 +60,6 @@ export const DEFAULT_SANITIZE_LIMITS: SanitizeLimits = {
   maxPathSegments: MAX_PATH_SEGMENTS,
 };
 
-/** A spec patch json-render can apply: add or replace a value, or remove one. */
-export interface SpecPatch {
-  op: 'add' | 'replace' | 'remove';
-  path: string;
-  value?: unknown;
-}
-
-/** Longest patch path accepted. */
-export const MAX_PATCH_PATH = 512;
-
 const ID_PATTERN = /^[A-Za-z0-9_.:-]+$/;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NAME_MAX = 64;
@@ -79,8 +69,6 @@ const COMPARISONS = ['eq', 'neq'] as const;
 const ORDERINGS = ['gt', 'gte', 'lt', 'lte'] as const;
 /** Bindings kept per event. */
 const MAX_BINDINGS = 4;
-/** Element fields a patch may write below an element. */
-const PATCHABLE_FIELDS = new Set(['props', 'children', 'visible', 'on']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -300,63 +288,4 @@ export function sanitizeSpec(raw: unknown, limits: SanitizeLimits = DEFAULT_SANI
     count++;
   }
   return { root: raw.root, state: sanitizeState(raw.state, limits), elements };
-}
-
-/** The value an add or replace may write at `segments` (already checked by
- *  patchSegments); undefined when there is nothing usable to write. */
-function patchValue(segments: readonly string[], value: unknown, limits: SanitizeLimits): unknown {
-  // ['root'] | ['state', ...path] | ['elements', id] | ['elements', id, field, ...rest]
-  const [area, , field, ...rest] = segments;
-  if (area === 'root') return isUsableId(value, limits) ? value : undefined;
-  if (area === 'state') return segments.length === 1 ? sanitizeState(value, limits) : sanitizeJson(value, limits, 1);
-  if (field === undefined) return sanitizeElement(value, limits) ?? undefined;
-  if (field === 'props') {
-    if (rest.length > 0) return sanitizeExpressions(value, limits, rest.length);
-    const props = sanitizeExpressions(value, limits);
-    return isRecord(props) ? props : undefined;
-  }
-  if (field === 'children') {
-    if (rest.length > 0) return isUsableId(value, limits) ? value : undefined;
-    return Array.isArray(value) ? sanitizeChildren(value, limits) : undefined;
-  }
-  if (field === 'visible') return sanitizeCondition(value, limits);
-  return rest.length > 0 ? sanitizeBindings(value, limits) : sanitizeOn(value, limits);
-}
-
-/** Where a patch may write: `/root`, `/state` and below, `/elements/<id>`,
- *  and an element's props, children, visible or on. */
-function patchSegments(path: string, limits: SanitizeLimits): string[] | null {
-  if (path.length > MAX_PATCH_PATH || !path.startsWith('/')) return null;
-  const segments = path.slice(1).split('/').map(unescapePointer);
-  if (segments.some((segment) => segment === '' || isForbiddenSegment(segment))) return null;
-  const [area, id, field, ...rest] = segments;
-  if (area === 'root') return segments.length === 1 ? segments : null;
-  if (area === 'state') return segments.length - 1 <= limits.maxPathSegments ? segments : null;
-  if (area !== 'elements' || !isUsableId(id, limits)) return null;
-  if (field === undefined) return segments;
-  if (!PATCHABLE_FIELDS.has(field)) return null;
-  if (field === 'visible' && rest.length > 0) return null;
-  if ((field === 'children' || field === 'on') && rest.length > 1) return null;
-  if (field === 'children' && rest.length === 1 && !/^(\d+|-)$/.test(rest[0])) return null;
-  if (field === 'on' && rest.length === 1 && !isUsableName(rest[0])) return null;
-  if (field === 'props' && rest.length > limits.maxDepth) return null;
-  return segments;
-}
-
-/**
- * One patch of a streamed spec, or null when it is refused: only `add`,
- * `replace` and `remove`, only at the paths above, and with a value
- * sanitized for where it lands (a whole element as sanitizeElement does,
- * state as plain JSON, props as expressions). `/root` cannot be removed.
- */
-export function sanitizePatch(raw: unknown, limits: SanitizeLimits = DEFAULT_SANITIZE_LIMITS): SpecPatch | null {
-  if (!isRecord(raw) || typeof raw.path !== 'string') return null;
-  const op = raw.op;
-  if (op !== 'add' && op !== 'replace' && op !== 'remove') return null;
-  const segments = patchSegments(raw.path, limits);
-  if (!segments) return null;
-  const path = joinStatePath(segments);
-  if (op === 'remove') return segments[0] === 'root' ? null : { op, path };
-  const value = patchValue(segments, raw.value, limits);
-  return value === undefined ? null : { op, path, value };
 }

@@ -35,7 +35,6 @@ import { hireRegistry } from './registry';
 
 export interface HireScreenProps {
   spec: NormalizedSpec;
-  version: number;
   /** A hire is in flight: the screen dims and takes no input. */
   busy: boolean;
   /** Apps that can start the work: any name the reply used -> the app's own name. */
@@ -53,10 +52,10 @@ function NoElement() {
   return null;
 }
 
-export default function HireScreen({ spec, version, busy, triggerApps, actions, discard, children }: HireScreenProps) {
+export default function HireScreen({ spec, busy, triggerApps, actions, discard, children }: HireScreenProps) {
   const devMode = useAppStore((state) => state.shellMode === 'dev');
   const uiSpec = useMemo<Spec>(() => ({ root: spec.root, state: spec.state, elements: spec.elements }), [spec]);
-  const { spec: shown, revealing } = useSpecReveal(uiSpec, version);
+  const { spec: shown, revealing } = useSpecReveal(uiSpec);
   const [store] = useState(() =>
     createUiStateStore(useDraftStore.getState().uiState, (changes) => {
       for (const { path, value } of changes) setDraftValue(path, value);
