@@ -28,6 +28,7 @@ are treated as backend-owned.
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any, Callable, Optional
 
 from core.config import Settings
@@ -41,6 +42,13 @@ _CONNECT_RETRY_SECONDS = 3.0
 # Consecutive failed gRPC health probes before the watchdog restarts a
 # supervisor-owned dev-server child that still holds the port ("wedged").
 _WATCHDOG_UNHEALTHY_THRESHOLD = 4
+
+# How often the watchdog counts runs whose workflow tasks keep failing (a
+# non-determinism error, an oversized task, a bug in workflow code). The
+# server sets TemporalReportedProblems after 5 failed tasks in a row
+# (config/temporal_cli.json).
+_STUCK_RUNS_CHECK_SECONDS = 300.0
+_STUCK_RUNS_QUERY = 'ExecutionStatus="Running" AND TemporalReportedProblems IS NOT NULL'
 
 # No-op default so ``startup_log`` is always callable.
 _NULL_LOG: Callable[[str], None] = lambda line: None  # noqa: E731
@@ -270,6 +278,7 @@ async def _watch_dev_server(wrapper: Any, settings: Settings) -> None:
     runtime = get_temporal_server_runtime()
     interval = settings.temporal_health_monitor_interval_seconds
     unhealthy = 0
+    last_stuck_check = float("-inf")
     while True:
         await asyncio.sleep(interval)
         try:
@@ -278,6 +287,9 @@ async def _watch_dev_server(wrapper: Any, settings: Settings) -> None:
             await runtime.ensure_started()
             if await wrapper.check_health():
                 unhealthy = 0
+                if time.monotonic() - last_stuck_check >= _STUCK_RUNS_CHECK_SECONDS:
+                    last_stuck_check = time.monotonic()
+                    await _check_stuck_runs(wrapper)
                 continue
             unhealthy += 1
             if unhealthy < _WATCHDOG_UNHEALTHY_THRESHOLD:
@@ -300,6 +312,23 @@ async def _watch_dev_server(wrapper: Any, settings: Settings) -> None:
             raise
         except Exception as exc:  # noqa: BLE001 — keep the watchdog alive
             logger.warning(f"Temporal health monitor iteration failed: {exc}")
+
+
+async def _check_stuck_runs(wrapper: Any) -> None:
+    """One ``stuck_runs`` attention item while any run's workflow tasks keep
+    failing: touched on every check while the count stays above 0 (so it
+    stays on Home), resolved at 0, left alone when the count fails."""
+    from services import attention
+
+    try:
+        count = (await wrapper.client.count_workflows(_STUCK_RUNS_QUERY)).count
+    except Exception as exc:  # noqa: BLE001 — the next check tries again
+        logger.debug(f"Stuck-run count failed: {exc}")
+        return
+    if count:
+        await attention.touch(attention.STUCK_RUNS, "temporal")
+    else:
+        await attention.resolve(attention.STUCK_RUNS, "temporal")
 
 
 __all__ = [

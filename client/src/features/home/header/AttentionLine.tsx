@@ -10,9 +10,11 @@ import { useAttentionItems, type AttentionItem } from '../data/attention';
 
 function describe(items: AttentionItem[]): string {
   const stuck = items.filter((item) => item.kind === 'stuck_retry').length;
-  const other = items.length - stuck;
+  const stuckRuns = items.some((item) => item.kind === 'stuck_runs');
+  const other = items.length - stuck - (stuckRuns ? 1 : 0);
   const parts: string[] = [];
   if (stuck) parts.push(stuck === 1 ? 'A task keeps retrying and may be stuck.' : `${stuck} tasks keep retrying and may be stuck.`);
+  if (stuckRuns) parts.push('Some runs keep failing in the engine and are stuck.');
   if (other) parts.push(other === 1 ? 'Something else needs a look.' : `${other} other things need a look.`);
   return parts.join(' ');
 }

@@ -84,7 +84,11 @@ def test_pin_names_one_exact_release_with_a_hash_for_every_platform():
 
 
 def test_pin_turns_on_fairness_with_one_task_queue_partition():
-    assert _install.cli_pin()["dynamic_config"] == {"matching.enableFairness": True, **ONE_PARTITION}
+    assert _install.cli_pin()["dynamic_config"] == {
+        "matching.enableFairness": True, **ONE_PARTITION,
+        # Pins the server default the stuck-runs count relies on (1b.38b).
+        "system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute": 5,
+    }
 
 
 def test_the_dev_server_passes_the_pin_dynamic_config_on_every_start(tmp_path):
@@ -106,6 +110,7 @@ def test_the_dev_server_passes_the_pin_dynamic_config_on_every_start(tmp_path):
         "matching.enableFairness=true",
         "matching.numTaskqueueReadPartitions=1",
         "matching.numTaskqueueWritePartitions=1",
+        "system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute=5",
     ]
 
 

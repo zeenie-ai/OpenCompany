@@ -2,7 +2,9 @@
 
 An item is a kind and a reference: ``stuck_retry`` and ``<Temporal workflow
 id>:<activity id>`` for an activity that keeps retrying past its limit
-(services/temporal/_interceptors.py). Every sighting :func:`touch`-es it, a
+(services/temporal/_interceptors.py); ``stuck_runs`` for runs whose workflow
+tasks keep failing (the dev-server watchdog, services/temporal/lifecycle.py).
+Every sighting :func:`touch`-es it, a
 recovery :func:`resolve`-s it, and :func:`open_items` returns the open ones
 seen in the last hour, so an item stranded by a Reset or a deletion drops
 off by itself. Both writes are best effort and never raise: the work never
@@ -30,6 +32,7 @@ from services.ws_handler_registry import ws_handler
 logger = get_logger(__name__)
 
 STUCK_RETRY = "stuck_retry"
+STUCK_RUNS = "stuck_runs"
 #: An item drops off this long after it was last seen.
 WINDOW = timedelta(hours=1)
 WIRE_KEY = "attention_lifecycle"

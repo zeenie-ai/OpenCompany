@@ -75,4 +75,15 @@ describe('the attention line on Home', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
     expect(listCalls()).toHaveLength(2);
   });
+
+  it('names runs stuck in the engine apart from other items', async () => {
+    items = [
+      { id: 'stuck_runs:temporal', kind: 'stuck_runs', count: 2 },
+      { id: 'other:x', kind: 'other', count: 1 },
+    ];
+    renderLine();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Some runs keep failing in the engine and are stuck. Something else needs a look.',
+    );
+  });
 });

@@ -1,11 +1,12 @@
 {
-  "_comment": "The Temporal CLI pin (services/temporal/_install.py). Asset keys are <os>_<arch> in the CLI release's spellings. Bump the version, server_version and all checksums together from the official checksums.txt. A new server minor starts every install from an empty Temporal database: at the next start, a database the pinned server minor did not create is deleted with every older CLI file (RFC-0005 E16). A patch bump of the same minor keeps the database. dynamic_config is passed to start-dev on every boot (RFC-0006 T17): fairness on and one task-queue partition. The marker records the partition values, and a database created with others starts from new, because partitions can be lowered safely only on a new database.",
+  "_comment": "The Temporal CLI pin (services/temporal/_install.py). Asset keys are <os>_<arch> in the CLI release's spellings. Bump the version, server_version and all checksums together from the official checksums.txt. A new server minor starts every install from an empty Temporal database: at the next start, a database the pinned server minor did not create is deleted with every older CLI file (RFC-0005 E16). A patch bump of the same minor keeps the database. dynamic_config is passed to start-dev on every boot (RFC-0006 T17): fairness on and one task-queue partition, and a run gets the TemporalReportedProblems search attribute after 5 failed workflow tasks in a row (the watchdog's stuck-runs count, 1b.38b). The marker records the partition values, and a database created with others starts from new, because partitions can be lowered safely only on a new database.",
   "version": "1.9.1",
   "server_version": "1.32.0",
   "dynamic_config": {
     "matching.enableFairness": true,
     "matching.numTaskqueueReadPartitions": 1,
-    "matching.numTaskqueueWritePartitions": 1
+    "matching.numTaskqueueWritePartitions": 1,
+    "system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute": 5
   },
   "base": "https://github.com/temporalio/cli/releases/download/v{version}/",
   "assets": {
