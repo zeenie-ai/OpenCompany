@@ -250,6 +250,16 @@ def test_malformed_operation_is_terminal_protocol_error(operation):
     assert error.value.non_retryable
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_a_non_finite_number_is_a_terminal_protocol_error_not_a_workflow_bug(value):
+    from services.temporal._exits import is_workflow_bug
+
+    with pytest.raises(ApplicationError) as error:
+        canonical_json({"result": [value]})
+    assert error.value.type == "PiProtocolConflict" and error.value.non_retryable
+    assert not is_workflow_bug(error.value)
+
+
 @pytest.mark.parametrize("value,expected", [(1.0, "1"), (-0.0, "0"), (1e-7, "1e-7"),
     (1e-6, "0.000001"), (1e20, "100000000000000000000"), (1e21, "1e+21"), (0.7, "0.7")])
 def test_hash_numbers_match_javascript(value, expected):

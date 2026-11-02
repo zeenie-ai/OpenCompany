@@ -27,7 +27,9 @@ def canonical_json(value: Any) -> str:
         return "[" + ",".join(canonical_json(v) for v in value) + "]"
     if isinstance(value, float):
         if not math.isfinite(value):
-            raise ValueError("Non-finite values are not valid Pi protocol JSON")
+            # A tool result can carry NaN or Infinity (payload JSON round-trips
+            # them): bad data ends the turn, it is no bug in workflow code.
+            raise conflict("Non-finite values are not valid Pi protocol JSON")
         if value == 0:
             return "0"
         absolute = abs(value)
