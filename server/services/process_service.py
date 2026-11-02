@@ -10,6 +10,7 @@ psutil-backed helper shared with browser_service and the supervisor base).
 """
 
 import asyncio
+import errno
 import os
 import shlex
 import shutil
@@ -316,8 +317,11 @@ class ProcessService:
                     # it local so the fallback never exposes a listener on
                     # every interface (and still detects wildcard listeners).
                     probe.bind(("127.0.0.1", port))
-                except OSError:
-                    owners[port].add(0)
+                except OSError as exc:
+                    # A privileged port (macOS refuses an unprivileged bind to
+                    # 127.0.0.1 below 1024) is not proof that anything listens.
+                    if exc.errno not in (errno.EACCES, errno.EPERM):
+                        owners[port].add(0)
                 finally:
                     probe.close()
         return {port: sorted(pid for pid in pids if pid) for port, pids in owners.items() if pids}

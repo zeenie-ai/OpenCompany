@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import socket
 from pathlib import Path
 from types import SimpleNamespace
@@ -39,6 +40,32 @@ def test_occupied_ports_reports_listener_without_killing_it() -> None:
             challenger.close()
     finally:
         listener.close()
+
+
+def test_bind_probe_reports_listeners_but_not_privileged_ports(monkeypatch) -> None:
+    """Without owner enumeration (psutil needs root on macOS) the bind probe
+    decides: an address in use is occupied, a refused privileged port is not."""
+    import psutil
+
+    def denied(*args, **kwargs):
+        raise psutil.AccessDenied()
+
+    monkeypatch.setattr(psutil, "net_connections", denied)
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    try:
+        assert ProcessService._occupied_ports([port]) == {port: []}
+    finally:
+        listener.close()
+
+    class PrivilegedPort(socket.socket):
+        def bind(self, address):
+            raise PermissionError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(socket, "socket", PrivilegedPort)
+    assert ProcessService._occupied_ports([1]) == {}
 
 
 @pytest.mark.asyncio
