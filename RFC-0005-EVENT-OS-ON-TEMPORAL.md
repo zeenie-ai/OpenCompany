@@ -641,7 +641,7 @@ A turn past its class's slow-turn time raises a "slow turn" attention item and m
   - LLM and compaction steps (`agent.execute_llm_step`, `agent.compact_context`) run on the four class queues and leave `machina-tasks` (RFC-0004 M9), the Pi override included. Each run freezes its route, recorded in `agent.prepare_payload`'s result, and a queue stays polled while any open run can target it.
   - Tools stay on their plugin queues with Priority keys; sends run on their own `egress` queue.
 - **No shared slot pool.** Each class queue has a fixed-size slot supplier, sized at least to admission's grant for its class. Class floors live only in admission (§13.3). A shared pool on `CustomSlotSupplier` was dropped, because `reserve_slot` runs before polling (RFC-0006 §13.3).
-- **Starvation shows without timeouts.** No queue gets a `schedule_to_start` timeout. Schedule-to-start and backlog are measured per queue, from the SDK metrics (Phase 1b, 1b.38) and the dev server's metrics on a pinned loopback port (1b.33), and a long wait raises an attention item. Metric labels carry no employee or thread ids.
+- **Starvation shows without timeouts.** No queue gets a `schedule_to_start` timeout. Schedule-to-start and backlog are measured per queue, from the SDK metrics (Phase 8) and the dev server's metrics on a pinned loopback port (1b.33), and a long wait raises an attention item. Metric labels carry no employee or thread ids.
 
 ### 13.3 Admission
 
@@ -777,7 +777,7 @@ Taking the token before the claim means a bucket wait longer than the claim leas
 
 For a provider without idempotency keys, a retry that finds an expired `sending` claim marks the row `unknown`. That raises an attention item and offers a Retry button. It never resends on its own.
 
-This covers every side-effecting plugin, not only sends (E12 as extended by T13). Each operation that changes something outside OpenCompany declares an effect class: `read_only`, `idempotent` (a provider key or a natural key) or `unsafe`, with `unsafe` the default. A later attempt of an `unsafe` call that broke off records `unknown` and tells the employee instead of calling again. Until the outbox exists, the redo guard of Phase 1b (1b.1, RFC-0006 §11.2) covers graph-node sends too, including the reply after the approval gate.
+This covers every side-effecting plugin, not only sends (E12 as extended by T13). Each operation that changes something outside OpenCompany has an effect class: `read_only`, `idempotent` (a provider key or a natural key) or `unsafe`, with `unsafe` the default. Plugins declare nothing: one service table lists the calls that are safe to repeat (`services/approvals/repeats.py`, 1b.1a), and every other call is unsafe. A later attempt of an `unsafe` call that broke off records `unknown` and tells the employee instead of calling again. Until the outbox exists, the redo guard of Phase 1b (1b.1, RFC-0006 §11.2) covers graph-node sends too, including the reply after the approval gate.
 
 ### 17.4 Order and backpressure
 
@@ -854,7 +854,7 @@ Every outgoing message passes content rules before it is sent, even with Ask fir
 | Egress | depth and latency |
 | Health | dead letters by reason, open breakers, budget transitions, event-loop lag |
 
-The event-loop lag watchdog, the SDK metrics runtime and five starter alerts (as attention items) ship earlier, in Phase 1b (1b.38, 1b.39), as does the retry alert's attention item (1b.30); the rest of this section ships in Phase 8.
+Three pieces shipped earlier, in Phase 1b: an event-loop lag watchdog that only logs (1b.39), a `stuck_runs` attention item for runs whose workflow tasks keep failing (1b.38b), and the retry alert's attention item (1b.30). The SDK metrics runtime, the starter alerts and the rest of this section ship in Phase 8.
 
 A per-employee `employee_timeline` view joins ingress, deliveries, turns, outbox, alarms, messages and attention on `chainid`.
 
