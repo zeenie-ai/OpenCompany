@@ -210,7 +210,7 @@ Internal: the backend accepts it on `/ws/internal` only (the worker token, `serv
 ## Standalone workers
 
 The hub delivers to the sockets of the process it runs in. The backend's embedded workers share that process, but
-a standalone worker (`run_standalone_worker`, for horizontal scaling) does not. It starts a relay at boot
+a standalone worker (`run_standalone_worker`, for horizontal scaling; distributed mode only) does not. It starts a relay at boot
 (`start_relay`), and from then on `publish_run_event`, `announce_chat_updated` (`services/chat_thread.py`) and
 `broadcast_approval_change` (`services/approvals/events.py`) queue what they would have published. One writer sends
 the queue in order over the worker's own `/ws/internal` connection as `chat_run_publish` frames, at most

@@ -129,7 +129,8 @@ async def test_standalone_bootstrap_wires_native_compaction_before_polling(monke
         get_max_output_tokens=lambda *_args: 4096))
     monkeypatch.setattr(worker, "create_runtime", lambda: None)
     monkeypatch.setattr(worker.Client, "connect", AsyncMock(return_value=object()))
-    monkeypatch.setattr("core.config.Settings", lambda: SimpleNamespace(distributed_mode=False))
+    # A standalone worker runs only in distributed mode (1b.35).
+    monkeypatch.setattr("core.config.Settings", lambda: SimpleNamespace(distributed_mode=True))
     monkeypatch.setattr(agent_activities.activity, "heartbeat", lambda *_args: None)
     monkeypatch.setattr(agent_activities, "_resolve_activity_api_key", AsyncMock(return_value="owner-key"))
 

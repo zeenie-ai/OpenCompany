@@ -781,7 +781,16 @@ async def run_standalone_worker(
         namespace: Temporal namespace
         task_queue: Task queue to poll
         pool_size: Connection pool size
+
+    Only in distributed mode (``DISTRIBUTED_MODE``). Otherwise the backend's
+    embedded worker runs every task, and this process, with no plugins or
+    credentials loaded, would fail the tasks it took.
     """
+    from core.config import Settings
+
+    if getattr(Settings(), "distributed_mode", False) is not True:
+        raise RuntimeError("The standalone worker runs only in distributed mode (DISTRIBUTED_MODE=true); "
+                           "otherwise the backend's embedded worker runs every task.")
     if server_address is None:
         from core.env_defaults import env_value
 

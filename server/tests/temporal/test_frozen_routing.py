@@ -229,10 +229,12 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     async def plugin_activity(_payload):
         return None
 
+    # A standalone worker runs only in distributed mode (1b.35).
+    monkeypatch.setattr("core.config.Settings", lambda: MagicMock(distributed_mode=True))
     monkeypatch.setattr(
         plugin_activities,
         "collect_plugin_activities",
-        lambda: [plugin_activity],
+        lambda **_kwargs: [plugin_activity],
     )
     monkeypatch.setattr(
         agent_activities,
@@ -295,3 +297,17 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     session.close.assert_awaited_once()
     unifier.aclose.assert_awaited_once()
     database.startup.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_the_standalone_worker_refuses_outside_distributed_mode(monkeypatch):
+    # Without the backend's plugins and credentials it would fail the tasks it took (1b.35).
+    from services.temporal import worker as worker_module
+
+    monkeypatch.setattr("core.config.Settings", lambda: SimpleNamespace(distributed_mode=False))
+    connect = AsyncMock()
+    monkeypatch.setattr(worker_module.Client, "connect", connect)
+
+    with pytest.raises(RuntimeError, match="DISTRIBUTED_MODE"):
+        await worker_module.run_standalone_worker(server_address="temporal.test:7233")
+    connect.assert_not_awaited()

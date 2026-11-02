@@ -32,10 +32,11 @@ Both bound by the same `temporal.exe` process. Killing the process releases both
 - Running and paused deployments survive restarts. `TEMPORAL_TERMINATE_RUNNING_ON_STARTUP` defaults to **`false`** and the boot-time reconcile pass (`reconcile_active_controls_on_boot`) re-arms live generations from their persisted graph snapshot. Setting it `true` is a debug-only sweep: [`services/temporal/lifecycle.py`](../server/services/temporal/lifecycle.py) then calls [`TemporalClientWrapper.terminate_running_workflows`](../server/services/temporal/client.py) once after client connect (reason `"OpenCompany startup: auto-resumption disabled"`), workflows show as `Terminated` (not deleted) in the UI — and even then any active workflow-control row vetoes the sweep so a live deployment is never killed.
 
 **Embedded worker:**
-The Temporal worker runs inside the Python backend: `services/temporal/lifecycle.py` builds `TemporalWorkerManager` + `TemporalWorkerPool` inside `run_temporal_lifecycle`, which `main.py` schedules from the lifespan. No separate worker process needed for single-server deployments. For horizontal scaling, run standalone workers:
+The Temporal worker runs inside the Python backend: `services/temporal/lifecycle.py` builds `TemporalWorkerManager` + `TemporalWorkerPool` inside `run_temporal_lifecycle`, which `main.py` schedules from the lifespan. No separate worker process needed for single-server deployments. For horizontal scaling in distributed mode, run standalone workers:
 ```bash
 cd server && uv run python -m services.temporal.worker
 ```
+A standalone worker refuses to start unless `DISTRIBUTED_MODE=true`: otherwise the backend's embedded worker runs every task, and a second process without the backend's plugins and credentials would fail the tasks it took.
 
 ---
 

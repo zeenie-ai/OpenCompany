@@ -111,7 +111,7 @@ uv, the venvs, bytecode, the Temporal binary; automatic on the first
 | `client:start` | `bun --cwd=client run start` | React frontend (Vite dev server) |
 | `python:start` | `cd server && uv run python main.py` | Backend only (`main.py` reads `HOST` / `PYTHON_BACKEND_PORT` from the env) |
 | `python:daemon` | `cd server && cross-env HOST=0.0.0.0 uv run python main.py` | Backend only, LAN-reachable |
-| `temporal:worker` | `cd server && uv run python -m services.temporal.worker` | Standalone Temporal worker |
+| `temporal:worker` | `cd server && uv run python -m services.temporal.worker` | Standalone Temporal worker (distributed mode only: refuses unless `DISTRIBUTED_MODE=true`) |
 
 The Temporal dev server is backend-owned: the FastAPI lifespan starts it via `TemporalServerRuntime.ensure_started()` when `TEMPORAL_ENABLED` (see [Temporal Architecture](./TEMPORAL_ARCHITECTURE.md)). The official `temporal` CLI is downloaded by `pooch` to `<DATA_DIR>/packages/temporal/` (= `~/.opencompany/packages/temporal/` by default) during `company build`.
 
