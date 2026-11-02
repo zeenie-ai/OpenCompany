@@ -43,12 +43,15 @@
  * (services/employees/setup_reply.py).
  */
 
-import type { VisibilityCondition } from '@json-render/core';
-// The file, not the index: this module is in Home's first chunk.
+import type { StateModel, VisibilityCondition } from '@json-render/core';
+// The files, not the index: this module is in Home's first chunk.
+import { bindingPath, isForbiddenSegment, readPath, writePath } from '@/lib/jsonRender/paths';
 import {
   DEFAULT_SANITIZE_LIMITS,
+  isUsableId,
   sanitizeCondition,
   sanitizeExpressions,
+  sanitizeState,
   type SanitizeLimits,
 } from '@/lib/jsonRender/sanitize';
 import {
@@ -63,8 +66,12 @@ import {
   type ActionType,
   type ComponentType,
 } from './catalog';
-import { bindingPath, getPath, isForbiddenKey, resolveValue, sanitizeState, setPath, type UiState } from './expressions';
 import { readTrigger, snapTrigger, type HireTrigger } from './hirePayload';
+
+/** json-render's own expression and visibility evaluation, the same the
+ *  screen uses. The caller loads it (`await import('@json-render/core')`),
+ *  so json-render stays out of Home's first chunk. */
+export type JsonRenderCore = Pick<typeof import('@json-render/core'), 'resolvePropValue' | 'evaluateVisibility'>;
 
 /** What pressing a Button runs: an action and its params (expressions
  *  resolved against the screen's state at the press). */
@@ -97,7 +104,7 @@ export interface CardLayout {
 
 export interface NormalizedSpec {
   root: string;
-  state: UiState;
+  state: StateModel;
   elements: Record<string, SpecElement>;
   /** Element ids in render order (depth first), for the reveal. */
   order: string[];
@@ -108,7 +115,6 @@ export interface NormalizedSpec {
  *  hoisted into them). The server reads replies with the same list
  *  (services/employees/setup_reply.py `_META_KEYS`). */
 const META_KEYS = new Set(['type', 'props', 'children', 'visible', 'watch', 'id', 'on', 'repeat', 'slots']);
-const ID_PATTERN = /^[A-Za-z0-9_.:-]+$/;
 const MAX_RAW_ELEMENTS = 64;
 const RULES_TITLE = /rule|setting|prefer|control|how/i;
 const APPS_TITLE = /app|connect|need|check/i;
@@ -118,15 +124,13 @@ const ASK_FIRST_WORDING = /\bask\b.*\b(before|first)\b/i;
 const PROP_LIMITS: SanitizeLimits = { ...DEFAULT_SANITIZE_LIMITS, maxIdLength: LIMITS.maxIdLength, maxString: LIMITS.maxBody };
 /** A button's params: shorter strings, shallower values. */
 const PARAM_LIMITS: SanitizeLimits = { ...PROP_LIMITS, maxString: LIMITS.maxText, maxDepth: 4, maxArray: 20 };
+/** The screen's initial state: short strings, shallow values. */
+const STATE_LIMITS: SanitizeLimits = { ...DEFAULT_SANITIZE_LIMITS, maxString: LIMITS.maxInput, maxDepth: 4, maxArray: 20 };
 
 type Elements = Map<string, SpecElement>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function usableId(id: string): boolean {
-  return id.length <= LIMITS.maxIdLength && ID_PATTERN.test(id) && !isForbiddenKey(id);
 }
 
 function text(value: unknown): string {
@@ -187,14 +191,14 @@ function collect(raw: Record<string, unknown>): Elements {
   const out: Elements = new Map();
   for (const [id, value] of Object.entries(raw)) {
     if (out.size >= MAX_RAW_ELEMENTS) break;
-    if (!usableId(id) || !isRecord(value) || !isComponentType(value.type)) continue;
+    if (!isUsableId(id, PROP_LIMITS) || !isRecord(value) || !isComponentType(value.type)) continue;
     const written: Record<string, unknown> = {};
     for (const key of Object.keys(value)) {
-      if (!META_KEYS.has(key) && !isForbiddenKey(key)) written[key] = value[key];
+      if (!META_KEYS.has(key) && !isForbiddenSegment(key)) written[key] = value[key];
     }
     if (isRecord(value.props)) {
       for (const key of Object.keys(value.props)) {
-        if (!isForbiddenKey(key)) written[key] = value.props[key];
+        if (!isForbiddenSegment(key)) written[key] = value.props[key];
       }
     }
     const children = Array.isArray(value.children)
@@ -265,11 +269,11 @@ function removeEverywhere(elements: Elements, id: string): void {
 /** When they work, as the screen first says it: the hire button's trigger,
  *  else the app the routine's first "When" step names, else the owner
  *  messaging them. */
-function seedTrigger(hire: SpecElement, plan: SpecElement | undefined, state: UiState): HireTrigger {
-  const params = resolveValue(hire.on?.press.params, state);
+function seedTrigger(hire: SpecElement, plan: SpecElement | undefined, state: StateModel, core: JsonRenderCore): HireTrigger {
+  const params = core.resolvePropValue(hire.on?.press.params, { stateModel: state });
   const given = readTrigger(isRecord(params) ? params.trigger : undefined);
   if (given && (given.kind !== 'app_event' || given.app)) return given;
-  const parsed = plan ? PROP_SCHEMAS.Plan.safeParse(resolveValue(plan.props, state) ?? {}) : null;
+  const parsed = plan ? PROP_SCHEMAS.Plan.safeParse(core.resolvePropValue(plan.props, { stateModel: state }) ?? {}) : null;
   const app = parsed?.success ? parsed.data.steps.find((step) => step.role === 'trigger')?.app : undefined;
   return snapTrigger(app ? { kind: 'app_event', app } : { kind: 'manual' });
 }
@@ -287,11 +291,11 @@ function hireButton(agent: SpecElement | undefined): SpecElement {
   };
 }
 
-export function normalizeSpec(spec: unknown): NormalizedSpec | null {
+export function normalizeSpec(spec: unknown, core: JsonRenderCore): NormalizedSpec | null {
   if (!isRecord(spec) || !isRecord(spec.elements)) return null;
   const elements = collect(spec.elements);
   if (elements.size === 0) return null;
-  let state = (sanitizeState(isRecord(spec.state) ? spec.state : {}, LIMITS.maxInput) ?? {}) as UiState;
+  let state = sanitizeState(isRecord(spec.state) ? spec.state : {}, STATE_LIMITS);
 
   // The root is always a vertical Stack.
   const declared = typeof spec.root === 'string' && elements.has(spec.root) ? spec.root : null;
@@ -376,13 +380,13 @@ export function normalizeSpec(spec: unknown): NormalizedSpec | null {
     });
     if (worded) {
       const element = elements.get(worded)!;
-      const previous = getPath(state, bindingPath(element.props.checked));
+      const previous = readPath(state, bindingPath(element.props.checked));
       element.props.checked = { $bindState: STATE_PATHS.askFirst };
-      if (typeof previous === 'boolean') state = setPath(state, STATE_PATHS.askFirst, previous);
+      if (typeof previous === 'boolean') state = writePath(state, STATE_PATHS.askFirst, previous);
       askFirst = worded;
     }
   }
-  if (typeof getPath(state, STATE_PATHS.askFirst) !== 'boolean') state = setPath(state, STATE_PATHS.askFirst, true);
+  if (typeof readPath(state, STATE_PATHS.askFirst) !== 'boolean') state = writePath(state, STATE_PATHS.askFirst, true);
   if (!askFirst) {
     askFirst = freshId(elements, '__askFirst');
     elements.set(askFirst, {
@@ -406,7 +410,7 @@ export function normalizeSpec(spec: unknown): NormalizedSpec | null {
 
   // When they work, bound to /trigger: the Plan's When row, else one
   // Schedule. Hire reads /trigger before the button.
-  state = setPath(state, STATE_PATHS.trigger, seedTrigger(elements.get(hire)!, plan ? elements.get(plan) : undefined, state));
+  state = writePath(state, STATE_PATHS.trigger, seedTrigger(elements.get(hire)!, plan ? elements.get(plan) : undefined, state, core));
   const schedules = depthFirst(elements, root).filter((id) => elements.get(id)!.type === 'Schedule');
   let routine: string;
   if (plan) {

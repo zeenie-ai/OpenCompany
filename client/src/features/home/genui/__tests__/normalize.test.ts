@@ -18,8 +18,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import * as core from '@json-render/core';
+import { bindingPath, readPath } from '@/lib/jsonRender/paths';
 import { STATE_PATHS } from '../catalog';
-import { bindingPath, getPath } from '../expressions';
 import { normalizeSpec, type NormalizedSpec } from '../normalize';
 
 type Raw = Record<string, unknown>;
@@ -36,7 +37,7 @@ function screen(hireTrigger: unknown, extra: Record<string, Raw> = {}, planSteps
       h: { type: 'Button', props: { label: 'Hire Maya', variant: 'primary', action: 'hire_employee', actionParams: { trigger: hireTrigger } } },
       c: { type: 'Button', props: { label: 'Change something', action: 'refine' } },
     },
-  })!;
+  }, core)!;
 }
 
 /** A screen with just these elements under the root (plus whatever the normalizer adds). */
@@ -45,7 +46,7 @@ function only(elements: Record<string, Raw>, state: Raw = {}) {
     root: 'r',
     state,
     elements: { r: { type: 'Stack', props: { direction: 'vertical' }, children: Object.keys(elements) }, ...elements },
-  })!;
+  }, core)!;
 }
 
 function schedules(spec: NormalizedSpec): string[] {
@@ -199,7 +200,7 @@ describe('the card', () => {
   it('adds the toggle and both buttons when the model left them out', () => {
     const spec = only({ a: { type: 'AgentCard', props: { name: 'Sam', role: 'Social media helper' } } });
     expect(spec.elements[spec.layout.askFirst].props.label).toBe('Ask me before sending anything');
-    expect(getPath(spec.state, STATE_PATHS.askFirst)).toBe(true);
+    expect(readPath(spec.state, STATE_PATHS.askFirst)).toBe(true);
     expect(actionsOf(spec)).toEqual(['refine', 'hire_employee']);
     const [, hire] = spec.elements[spec.layout.actions].children;
     expect(spec.elements[hire].props).toEqual({ label: 'Hire Sam', variant: 'primary' });
@@ -217,7 +218,7 @@ describe('when they work', () => {
     const spec = screen({ kind: 'app_event', app: 'WhatsApp' });
     expect(schedules(spec)).toHaveLength(0);
     expect(bindingPath(spec.elements.p.props.trigger)).toBe(STATE_PATHS.trigger);
-    expect(getPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
+    expect(readPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
   });
 
   it('is one Schedule after the agent card when there is no routine', () => {
@@ -233,7 +234,7 @@ describe('when they work', () => {
 
   it('starts as the hire button’s trigger, snapped to what can run', () => {
     const spec = screen({ kind: 'schedule', every: 'weekday', at: '09:30', app: 'Gmail' });
-    expect(getPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'schedule', every: 'weekday', at: '09:00' });
+    expect(readPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'schedule', every: 'weekday', at: '09:00' });
   });
 
   it('reads the hire button’s trigger from on.press as well', () => {
@@ -245,18 +246,18 @@ describe('when they work', () => {
         on: { press: { action: 'hire_employee', params: { trigger: { kind: 'schedule', every: 'week', day: 'tue', at: '08:00' } } } },
       },
     });
-    expect(getPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'schedule', every: 'week', day: 'tuesday', at: '08:00' });
+    expect(readPath(spec.state, STATE_PATHS.trigger)).toEqual({ kind: 'schedule', every: 'week', day: 'tuesday', at: '08:00' });
   });
 
   it('takes the routine’s app when the button names none, else the owner messaging them', () => {
     const steps = [{ title: 'When a message arrives', role: 'trigger', app: 'Telegram' }, { title: 'Answer', role: 'agent' }];
-    expect(getPath(screen(undefined, {}, steps).state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'Telegram' });
-    expect(getPath(screen({ kind: 'app_event' }, {}, steps).state, STATE_PATHS.trigger)).toEqual({
+    expect(readPath(screen(undefined, {}, steps).state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'Telegram' });
+    expect(readPath(screen({ kind: 'app_event' }, {}, steps).state, STATE_PATHS.trigger)).toEqual({
       kind: 'app_event',
       app: 'Telegram',
     });
-    expect(getPath(screen(undefined).state, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
-    expect(getPath(screen({ kind: 'manual' }, {}, steps).state, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
+    expect(readPath(screen(undefined).state, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
+    expect(readPath(screen({ kind: 'manual' }, {}, steps).state, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
   });
 
   it('keeps one Schedule the model wrote when there is no routine, rebound, and drops the rest', () => {

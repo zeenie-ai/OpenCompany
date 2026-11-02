@@ -6,7 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 const sendRequest = vi.fn();
 const connectors = { hasAi: false, isLoading: false };
@@ -55,7 +55,7 @@ describe('useHireComposer', () => {
     sendRequest.mockResolvedValue({ success: false, error: 'no_ai_provider' });
     const { result, rerender } = renderHook(() => useHireComposer());
     await submit(result, 'Answer my WhatsApp');
-    expect(useDraftStore.getState().failure?.code).toBe('no_ai_provider');
+    await waitFor(() => expect(useDraftStore.getState().failure?.code).toBe('no_ai_provider'));
     expect(useShellDialogsStore.getState()).toMatchObject({
       credentialsOpen: true,
       credentialsOptions: { categoryId: 'ai', intent: 'connect' },
@@ -66,7 +66,7 @@ describe('useHireComposer', () => {
     await act(async () => rerender());
     expect(sendRequest).toHaveBeenCalledTimes(2);
     expect(sendRequest.mock.calls[1][1]).toMatchObject({ job: 'Answer my WhatsApp' });
-    expect(useDraftStore.getState().status).toBe('ready');
+    await waitFor(() => expect(useDraftStore.getState().status).toBe('ready'));
   });
 
   it('does not send again when the model it has was already there', async () => {

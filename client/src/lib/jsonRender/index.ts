@@ -20,6 +20,7 @@
 export {
   FORBIDDEN_SEGMENTS,
   MAX_PATH_SEGMENTS,
+  bindingPath,
   canonicalStatePath,
   escapePointer,
   isForbiddenSegment,

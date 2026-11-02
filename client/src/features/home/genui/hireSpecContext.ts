@@ -7,11 +7,11 @@
  */
 
 import { createContext } from 'react';
-import type { UiState } from './expressions';
+import type { StateModel } from '@json-render/core';
 
 export interface HireSpecContextValue {
   /** The screen's state as normalised, before the owner changed anything. */
-  writtenState: UiState;
+  writtenState: StateModel;
   /** Apps that can start the work: any name the reply used -> the app's own name. */
   triggerApps: Readonly<Record<string, string>>;
   /** Drawn in the card's footer strip (Ask first, Change something, Hire),

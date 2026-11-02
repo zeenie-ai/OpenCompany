@@ -12,11 +12,13 @@
  * that runs.
  */
 
+import type { StateModel } from '@json-render/core';
+// The file, not the index: this module is in Home's first chunk.
+import { bindingPath, readPath } from '@/lib/jsonRender/paths';
 import { trigger as triggerLists } from '../../../../../server/config/genui_catalog.json';
 import type { Starter } from '../hire/templates';
 import { PROP_SCHEMAS, STATE_PATHS, STEP_ROLES, type ComponentType, type PropsOf, type StepRole } from './catalog';
-import { bindingPath, getPath, resolveValue, type UiState } from './expressions';
-import type { NormalizedSpec, SpecElement } from './normalize';
+import type { JsonRenderCore, NormalizedSpec, SpecElement } from './normalize';
 
 export const HIRE_PAYLOAD_KEYS = [
   'idempotency_key',
@@ -225,10 +227,29 @@ function elementsOf(spec: NormalizedSpec, type: SpecElement['type']): SpecElemen
   return spec.order.map((id) => spec.elements[id]).filter((element) => element?.type === type);
 }
 
-function resolved<T extends ComponentType>(type: T, element: SpecElement | undefined, state: UiState): PropsOf<T> | null {
+function resolved<T extends ComponentType>(
+  type: T,
+  element: SpecElement | undefined,
+  state: StateModel,
+  core: JsonRenderCore,
+): PropsOf<T> | null {
   if (!element) return null;
-  const parsed = PROP_SCHEMAS[type].safeParse(resolveValue(element.props, state) ?? {});
+  const parsed = PROP_SCHEMAS[type].safeParse(core.resolvePropValue(element.props, { stateModel: state }) ?? {});
   return parsed.success ? (parsed.data as PropsOf<T>) : null;
+}
+
+/** The elements the screen shows: the root down, each element whose own
+ *  `visible` condition holds under a shown parent. */
+function shownIds(spec: NormalizedSpec, state: StateModel, core: JsonRenderCore): Set<string> {
+  const shown = new Set<string>();
+  const walk = (id: string) => {
+    const element = spec.elements[id];
+    if (!element || shown.has(id) || !core.evaluateVisibility(element.visible, { stateModel: state })) return;
+    shown.add(id);
+    element.children.forEach(walk);
+  };
+  walk(spec.root);
+  return shown;
 }
 
 /** The key a control writes under a state root: "/rules/replyHours" -> "replyHours". */
@@ -255,17 +276,18 @@ function uniqueStrings(values: unknown, max: number, each: number): string[] {
 
 export interface HireInput {
   spec: NormalizedSpec;
-  state: UiState;
+  state: StateModel;
   /** The hire button's params, resolved. */
   params: Record<string, unknown>;
   job: string;
   idempotencyKey: string;
   source?: { provider?: string | null; model?: string | null } | null;
+  core: JsonRenderCore;
 }
 
-export function buildHirePayload({ spec, state, params, job, idempotencyKey, source }: HireInput): HireEmployeePayload {
-  const agent = resolved('AgentCard', elementsOf(spec, 'AgentCard')[0], state);
-  const plan = resolved('Plan', elementsOf(spec, 'Plan')[0], state);
+export function buildHirePayload({ spec, state, params, job, idempotencyKey, source, core }: HireInput): HireEmployeePayload {
+  const agent = resolved('AgentCard', elementsOf(spec, 'AgentCard')[0], state, core);
+  const plan = resolved('Plan', elementsOf(spec, 'Plan')[0], state, core);
 
   const name = clip(params.name, HIRE_LIMITS.name) || agent?.name.slice(0, HIRE_LIMITS.name) || 'New employee';
   const role = clip(params.role, HIRE_LIMITS.role) || agent?.role.slice(0, HIRE_LIMITS.role) || 'Assistant';
@@ -273,8 +295,8 @@ export function buildHirePayload({ spec, state, params, job, idempotencyKey, sou
   const apps = uniqueStrings(Array.isArray(params.apps) ? params.apps : agent?.apps, HIRE_LIMITS.apps, 40);
 
   // When they work: the screen's own answer, else the hire button's.
-  const trigger = readTrigger(getPath(state, STATE_PATHS.trigger)) ?? readTrigger(params.trigger);
-  const written = snapTrigger(getPath(spec.state, STATE_PATHS.trigger));
+  const trigger = readTrigger(readPath(state, STATE_PATHS.trigger)) ?? readTrigger(params.trigger);
+  const written = snapTrigger(readPath(spec.state, STATE_PATHS.trigger));
   const steps: HireStep[] = routineSteps(
     (plan?.steps ?? []).filter((step) => step.title),
     written,
@@ -289,30 +311,32 @@ export function buildHirePayload({ spec, state, params, job, idempotencyKey, sou
     }));
   if (steps.length === 0) steps.push({ title: description || `Work as ${role.toLowerCase()}`, detail: '', role: 'agent' });
 
-  const askFirst = getPath(state, STATE_PATHS.askFirst);
+  const askFirst = readPath(state, STATE_PATHS.askFirst);
   const rules: HireEmployeePayload['rules'] = { ask_first: askFirst !== false, items: [] };
   const choices: HireEmployeePayload['choices'] = [];
   const inputs: HireEmployeePayload['inputs'] = [];
+  // Only what the owner can see: a control the screen hides is not sent.
+  const shown = shownIds(spec, state, core);
   for (const id of spec.order) {
     const element = spec.elements[id];
-    if (!element) continue;
+    if (!element || !shown.has(id)) continue;
     // A Toggle binds `checked`; a Choice and an Input bind `value`.
     const path = bindingPath(element.type === 'Toggle' ? element.props.checked : element.props.value);
     if (element.type === 'Toggle') {
       const key = path === STATE_PATHS.askFirst ? null : keyUnder(path, STATE_PATHS.rules);
-      const props = resolved('Toggle', element, state);
+      const props = resolved('Toggle', element, state, core);
       if (key && props && rules.items.length < HIRE_LIMITS.items) {
         rules.items.push({ key, label: props.label.slice(0, HIRE_LIMITS.label), value: props.checked });
       }
     } else if (element.type === 'Choice') {
       const key = keyUnder(path, STATE_PATHS.choices);
-      const props = resolved('Choice', element, state);
+      const props = resolved('Choice', element, state, core);
       if (key && props?.value && choices.length < HIRE_LIMITS.items) {
         choices.push({ key, label: props.label.slice(0, HIRE_LIMITS.label), value: props.value.slice(0, HIRE_LIMITS.value) });
       }
     } else if (element.type === 'Input') {
       const key = keyUnder(path, STATE_PATHS.inputs) ?? (path ? path.replace(/^\//, '').replace(/\//g, '.').slice(0, HIRE_LIMITS.key) : null);
-      const props = resolved('Input', element, state);
+      const props = resolved('Input', element, state, core);
       const value = props?.value.trim() ?? '';
       if (key && props && value && inputs.length < HIRE_LIMITS.items) {
         inputs.push({ key, label: props.label.slice(0, HIRE_LIMITS.label), value: value.slice(0, HIRE_LIMITS.value) });

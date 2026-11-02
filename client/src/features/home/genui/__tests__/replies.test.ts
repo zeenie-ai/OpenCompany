@@ -13,9 +13,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import * as core from '@json-render/core';
+import { bindingPath, readPath } from '@/lib/jsonRender/paths';
 import corpus from '../__fixtures__/replies.json';
 import { ACTION_TYPES, STATE_PATHS, isContainer } from '../catalog';
-import { bindingPath, getPath } from '../expressions';
 import { normalizeSpec, type NormalizedSpec } from '../normalize';
 import { parseReply } from '../parse';
 
@@ -31,7 +32,7 @@ const ELEMENT_KEYS = new Set(['type', 'props', 'children', 'visible', 'on']);
 
 function read(reply: string): { text: string; spec: NormalizedSpec | null } {
   const parsed = parseReply(reply);
-  return { text: parsed.text, spec: parsed.failed ? null : normalizeSpec(parsed.spec) };
+  return { text: parsed.text, spec: parsed.failed ? null : normalizeSpec(parsed.spec, core) };
 }
 
 function elements(spec: NormalizedSpec) {
@@ -94,7 +95,7 @@ describe('model reply corpus', () => {
       ([, element]) => element.type === 'Toggle' && bindingPath(element.props.checked) === STATE_PATHS.askFirst,
     );
     expect(askFirst).toHaveLength(1);
-    expect(typeof getPath(spec.state, STATE_PATHS.askFirst)).toBe('boolean');
+    expect(typeof readPath(spec.state, STATE_PATHS.askFirst)).toBe('boolean');
     // And says when they work: the routine's When row, else one Schedule.
     const plan = elements(spec).find(([, element]) => element.type === 'Plan');
     const schedule = elements(spec).filter(([, element]) => element.type === 'Schedule');
@@ -105,7 +106,7 @@ describe('model reply corpus', () => {
       expect(schedule).toHaveLength(1);
       expect(bindingPath(schedule[0][1].props.value)).toBe(STATE_PATHS.trigger);
     }
-    expect(getPath(spec.state, STATE_PATHS.trigger)).toMatchObject({ kind: expect.any(String) });
+    expect(readPath(spec.state, STATE_PATHS.trigger)).toMatchObject({ kind: expect.any(String) });
     expect(Object.keys(spec.elements).length).toBeLessThanOrEqual(16);
 
     // Laid out as the card: who they are, the routine, the rest, the footer.
@@ -127,8 +128,8 @@ describe('model reply corpus', () => {
     }
     if ('hireLabel' in want) expect(buttons(spec, 'hire_employee')[0][1].props.label).toBe(want.hireLabel);
     if ('refineHasNoParams' in want) expect(buttons(spec, 'refine')[0][1].on?.press.params).toBeUndefined();
-    if ('askFirstValue' in want) expect(getPath(spec.state, STATE_PATHS.askFirst)).toBe(want.askFirstValue);
-    if ('trigger' in want) expect(getPath(spec.state, STATE_PATHS.trigger)).toEqual(want.trigger);
+    if ('askFirstValue' in want) expect(readPath(spec.state, STATE_PATHS.askFirst)).toBe(want.askFirstValue);
+    if ('trigger' in want) expect(readPath(spec.state, STATE_PATHS.trigger)).toEqual(want.trigger);
     if ('togglesInRulesCard' in want) {
       const card = elements(spec).find(([, element]) => element.type === 'Card' && /rule/i.test(String(element.props.title)));
       const toggles = card?.[1].children.filter((child) => spec.elements[child].type === 'Toggle') ?? [];

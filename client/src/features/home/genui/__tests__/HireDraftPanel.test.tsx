@@ -42,6 +42,7 @@ vi.mock('../../data/connectors', () => ({
 
 vi.mock('../../ui/pillToast', () => ({ pillToast: vi.fn() }));
 
+import * as core from '@json-render/core';
 import corpus from '../__fixtures__/replies.json';
 import { EMPLOYEES_QUERY_KEY } from '../../data/employees';
 import { useHomeStore } from '../../state/homeStore';
@@ -56,7 +57,7 @@ const reply = replies.find((c) => c.name === 'clean minified reply')!.reply;
 
 function seedReadyDraft(text = reply) {
   const parsed = parseReply(text);
-  const spec = normalizeSpec(parsed.spec)!;
+  const spec = normalizeSpec(parsed.spec, core)!;
   useDraftStore.setState({
     status: 'ready',
     job: 'Answer WhatsApp',
@@ -191,10 +192,10 @@ describe('HireDraftPanel', () => {
     const hire = await hireButton();
     fireEvent.click(hire);
     fireEvent.click(hire);
+    await waitFor(() => expect(screen.getByText('Hiring your employee…')).toHaveAttribute('role', 'status'));
     const hires = sendRequest.mock.calls.filter(([type]) => type === 'hire_employee');
     expect(hires).toHaveLength(1);
     expect(hires[0][1]).toMatchObject({ name: 'Maya', rules: { ask_first: true } });
-    expect(screen.getByText('Hiring your employee…')).toHaveAttribute('role', 'status');
 
     await act(async () => {
       finish(hired());

@@ -114,6 +114,8 @@ export function useHire(collapse: () => Promise<void>) {
     async (params: Record<string, unknown>) => {
       const draft = useDraftStore.getState();
       if (!draft.spec || draft.status === 'working') return;
+      // Loaded already: the screen being pressed is drawn by json-render.
+      const core = await import('@json-render/core');
       const base = buildHirePayload({
         spec: draft.spec,
         state: draft.uiState,
@@ -121,6 +123,7 @@ export function useHire(collapse: () => Promise<void>) {
         job: draft.job,
         idempotencyKey: '',
         source: draft.source,
+        core,
       });
       const key = beginHire(`${draft.version}:${JSON.stringify(base)}`);
       if (!key) return;

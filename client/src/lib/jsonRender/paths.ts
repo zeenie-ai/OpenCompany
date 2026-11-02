@@ -61,6 +61,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The path a control writes to (`{"$bindState": "/path"}`), or null. */
+export function bindingPath(raw: unknown): string | null {
+  if (!isRecord(raw) || !('$bindState' in raw)) return null;
+  return parseStatePath(raw.$bindState) ? String(raw.$bindState) : null;
+}
+
 function childOf(value: unknown, key: string): unknown {
   if (Array.isArray(value)) {
     const index = Number(key);

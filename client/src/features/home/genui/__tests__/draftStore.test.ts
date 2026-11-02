@@ -24,7 +24,7 @@ import {
   triggerAppNames,
   useDraftStore,
 } from '../draftStore';
-import { getPath } from '../expressions';
+import { readPath } from '@/lib/jsonRender/paths';
 
 const GOOD_REPLY = (corpus as unknown as { name: string; reply: string }[]).find((c) => c.name === 'clean minified reply')!.reply;
 
@@ -220,7 +220,7 @@ describe('the screen’s trigger', () => {
     const send = vi.fn<Send>().mockResolvedValue({ success: true, reply: GOOD_REPLY, apps: { whatsapp } });
     await submitDraft(send, 'job');
     const state = useDraftStore.getState();
-    expect(getPath(state.uiState, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
+    expect(readPath(state.uiState, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
     expect(triggerAppNames(state.apps)).toEqual({ whatsapp: 'WhatsApp' });
   });
 
@@ -230,9 +230,9 @@ describe('the screen’s trigger', () => {
       .mockResolvedValue({ success: true, reply: GOOD_REPLY, apps: { whatsapp: { ...whatsapp, can_trigger: false } } });
     await submitDraft(send, 'job');
     const state = useDraftStore.getState();
-    expect(getPath(state.uiState, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
+    expect(readPath(state.uiState, STATE_PATHS.trigger)).toEqual({ kind: 'manual' });
     // What the model wrote stays the screen's starting point.
-    expect(getPath(state.spec!.state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
+    expect(readPath(state.spec!.state, STATE_PATHS.trigger)).toEqual({ kind: 'app_event', app: 'WhatsApp' });
   });
 });
 

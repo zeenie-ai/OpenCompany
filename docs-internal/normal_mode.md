@@ -381,9 +381,13 @@ The reply is a flat JSON UI spec in json-render's shape (catalogue
 `spec_version` 2): a Toggle binds `checked`, and a Button names its action in
 the element's `on.press` (`{action, params}`). The client parses, repairs and
 normalises it ([genui/](../client/src/features/home/genui/): `catalog.ts`,
-`parse.ts`, `normalize.ts`, `expressions.ts`) and json-render draws it from a
+`parse.ts`, `normalize.ts`) and json-render draws it from a
 fixed component catalogue (`registry.ts`, `views.tsx`, `HireScreen.tsx`,
-loaded lazily so json-render stays out of Home's first chunk). The normaliser
+loaded lazily so json-render stays out of Home's first chunk). Expressions
+outside the screen (the normaliser's trigger, the hire payload) are read with
+json-render's own `resolvePropValue` and `evaluateVisibility`, loaded with
+the reply (`await import('@json-render/core')`), so Hire reads values exactly
+as the screen shows them and sends only the controls it shows. The normaliser
 still reads the older shape a model may write (a Toggle's `value`, a
 Button's `action` / `actionParams` props), keeps the root a vertical stack,
 enforces a tree, lays the screen out as the setup card (below), guarantees one

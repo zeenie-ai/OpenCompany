@@ -32,13 +32,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { LiveUiContext, type GuardedComponentProps } from '@/lib/jsonRender';
+import { LiveUiContext, readPath, type GuardedComponentProps } from '@/lib/jsonRender';
 import { animate, RISE, stagger } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { Avatar, MicroLabel } from '../ui/primitives';
 import { RoutineRow, RoutineTimeline } from '../ui/routine';
 import { STATE_PATHS, type PROP_SCHEMAS, type PropsOf, type StepRole, type Tone } from './catalog';
-import { getPath } from './expressions';
 import { HireSpecContext } from './hireSpecContext';
 import {
   LAST_MONTH_DAY,
@@ -267,7 +266,7 @@ export function PlanView({ props, bindings }: ViewProps<'Plan'>) {
   const { writtenState, triggerApps } = useContext(HireSpecContext);
   const [, setTrigger] = useBoundProp<unknown>(props.trigger, bindings?.trigger);
   const current = snapTrigger(useStateValue<unknown>(STATE_PATHS.trigger));
-  const written = snapTrigger(getPath(writtenState, STATE_PATHS.trigger));
+  const written = snapTrigger(readPath(writtenState, STATE_PATHS.trigger));
   const appName = appNameOf(current, triggerApps);
   const steps = routineSteps(props.steps, written, current, appName);
   // A routine with no "When" step still says when they work, first.

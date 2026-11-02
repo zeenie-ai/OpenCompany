@@ -24,15 +24,17 @@
  */
 
 import { useMemo } from 'react';
+import type { StateModel } from '@json-render/core';
 import { z } from 'zod';
 import { create } from 'zustand';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
+// The file, not the index: this module is in Home's first chunk.
+import { isForbiddenSegment, readPath, writePath } from '@/lib/jsonRender/paths';
 import { appRefSchema } from '../data/schemas';
 import { SPIKE, spikeOrb } from '../orb/orb';
 import { STATE_PATHS } from './catalog';
-import { getPath, isForbiddenKey, setPath, type UiState } from './expressions';
 import { snapTrigger } from './hirePayload';
-import { normalizeSpec, type NormalizedSpec } from './normalize';
+import { normalizeSpec, type JsonRenderCore, type NormalizedSpec } from './normalize';
 import { parseReply } from './parse';
 
 export type DraftStatus = 'idle' | 'working' | 'ready' | 'failed';
@@ -104,7 +106,7 @@ export interface DraftState {
   /** The latest reply, read and made safe to render. */
   spec: NormalizedSpec | null;
   /** What the owner has set on the setup screen (toggles, choices, inputs). */
-  uiState: UiState;
+  uiState: StateModel;
   /** Apps the reply names, as the server resolved them: lower-cased name -> ref. */
   apps: Record<string, DraftApp>;
   /** Optional, ordinary-language description of the suggested helpers. */
@@ -187,7 +189,7 @@ function parseApps(raw: unknown): Record<string, DraftApp> {
   for (const [name, value] of Object.entries(raw)) {
     const key = name.trim().toLowerCase();
     const parsed = draftAppSchema.safeParse(value);
-    if (parsed.success && !isForbiddenKey(key)) out[key] = parsed.data;
+    if (parsed.success && !isForbiddenSegment(key)) out[key] = parsed.data;
   }
   return out;
 }
@@ -216,10 +218,10 @@ export function triggerAppNames(apps: Record<string, DraftApp>): Record<string, 
 
 /** The screen's trigger, unless it names an app that cannot start the
  *  work: then the owner messaging them, which is what Hire would build. */
-function fitTrigger(state: UiState, apps: Record<string, DraftApp>): UiState {
-  const trigger = snapTrigger(getPath(state, STATE_PATHS.trigger));
+function fitTrigger(state: StateModel, apps: Record<string, DraftApp>): StateModel {
+  const trigger = snapTrigger(readPath(state, STATE_PATHS.trigger));
   if (trigger.kind !== 'app_event' || (trigger.app && triggerAppNames(apps)[trigger.app.toLowerCase()])) return state;
-  return setPath(state, STATE_PATHS.trigger, { kind: 'manual' });
+  return writePath(state, STATE_PATHS.trigger, { kind: 'manual' });
 }
 
 function cancelOnServer(send: SendRequest, token: string | null): void {
@@ -243,12 +245,12 @@ export function failRequest(token: string, code: SetupErrorCode, request: Pendin
 
 /** Apply a reply if it belongs to the request still in flight. A reply
  *  with nothing renderable counts as a failure (`unparseable`). */
-export function acceptReply(token: string, response: SetupResponse, request: PendingRequest): boolean {
+export function acceptReply(token: string, response: SetupResponse, request: PendingRequest, core: JsonRenderCore): boolean {
   const state = useDraftStore.getState();
   if (state.token !== token) return false;
   const reply = typeof response.reply === 'string' ? response.reply : '';
   const parsed = parseReply(reply);
-  const spec = parsed.failed ? null : normalizeSpec(parsed.spec);
+  const spec = parsed.failed ? null : normalizeSpec(parsed.spec, core);
   if (!spec) return failRequest(token, 'unparseable', request);
   const turn: DraftTurn = { change: request.refine ? request.text : null, reply };
   const apps = parseApps(response.apps);
@@ -294,9 +296,13 @@ export async function submitDraft(send: SendRequest, raw: string, options: { ref
     ? { job, refine: text, history: state.turns.slice(-HISTORY_TURNS), draft_token: token }
     : { job, draft_token: token };
   try {
-    const response: SetupResponse | undefined = await send('generate_employee_setup', payload, SETUP_TIMEOUT_MS);
+    // json-render reads the reply's expressions; it loads while the model writes.
+    const [core, response]: [JsonRenderCore, SetupResponse | undefined] = await Promise.all([
+      import('@json-render/core'),
+      send('generate_employee_setup', payload, SETUP_TIMEOUT_MS),
+    ]);
     if (response?.success === false) failRequest(token, errorCode(response.error), request);
-    else acceptReply(token, response ?? {}, request);
+    else acceptReply(token, response ?? {}, request, core);
   } catch (error) {
     failRequest(token, isTimeout(error) ? 'timeout' : 'connection', request);
   }
@@ -347,7 +353,7 @@ export function setComposerInput(input: string): void {
 
 /** A control on the setup screen changed a value. */
 export function setDraftValue(path: string, value: unknown): void {
-  useDraftStore.setState((state) => ({ uiState: setPath(state.uiState, path, value) }));
+  useDraftStore.setState((state) => ({ uiState: writePath(state.uiState, path, value) }));
 }
 
 /**

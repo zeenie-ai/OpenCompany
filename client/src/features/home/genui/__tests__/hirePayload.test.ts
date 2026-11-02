@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import * as core from '@json-render/core';
+import { writePath } from '@/lib/jsonRender/paths';
 import corpus from '../__fixtures__/replies.json';
 import { STARTERS } from '../../hire/templates';
 import { STATE_PATHS } from '../catalog';
-import { resolveValue, setPath } from '../expressions';
 import {
   HIRE_PAYLOAD_KEYS,
   SCHEDULE_TIMES,
@@ -21,13 +22,13 @@ const replies = corpus as unknown as { name: string; reply: string }[];
 
 function specOf(name: string): NormalizedSpec {
   const parsed = parseReply(replies.find((c) => c.name === name)!.reply);
-  return normalizeSpec(parsed.spec)!;
+  return normalizeSpec(parsed.spec, core)!;
 }
 
 /** The hire button's params as json-render resolves them at the press. */
 function hireParams(spec: NormalizedSpec, state = spec.state) {
   const id = spec.order.find((key) => spec.elements[key].on?.press.action === 'hire_employee')!;
-  return resolveValue(spec.elements[id].on?.press.params ?? {}, state) as Record<string, unknown>;
+  return core.resolvePropValue(spec.elements[id].on?.press.params ?? {}, { stateModel: state }) as Record<string, unknown>;
 }
 
 describe('buildHirePayload', () => {
@@ -41,6 +42,7 @@ describe('buildHirePayload', () => {
       job: '  Answer WhatsApp and book visits  ',
       idempotencyKey: 'k1',
       source: { provider: 'openai', model: 'gpt-x' },
+      core,
     });
     expect(Object.keys(payload).every((key) => (HIRE_PAYLOAD_KEYS as readonly string[]).includes(key))).toBe(true);
     expect(payload).toMatchObject({
@@ -64,10 +66,10 @@ describe('buildHirePayload', () => {
   });
 
   it('follows the owner’s toggles and choices', () => {
-    let state = setPath(spec.state, STATE_PATHS.askFirst, false);
-    state = setPath(state, '/rules/hours', true);
-    state = setPath(state, '/choices/report', 'Weekly');
-    const payload = buildHirePayload({ spec, state, params: hireParams(spec, state), job: 'j', idempotencyKey: 'k' });
+    let state = writePath(spec.state, STATE_PATHS.askFirst, false);
+    state = writePath(state, '/rules/hours', true);
+    state = writePath(state, '/choices/report', 'Weekly');
+    const payload = buildHirePayload({ spec, state, params: hireParams(spec, state), job: 'j', idempotencyKey: 'k', core });
     expect(payload.rules.ask_first).toBe(false);
     expect(payload.rules.items).toEqual([{ key: 'hours', label: 'Only reply 9 to 6', value: true }]);
     expect(payload.choices[0].value).toBe('Weekly');
@@ -75,8 +77,8 @@ describe('buildHirePayload', () => {
 
   it('reads a reply in json-render’s shape the same way', () => {
     const shaped = specOf('json-render shape: on.press and checked');
-    const state = setPath(shaped.state, '/rules/hours', true);
-    const payload = buildHirePayload({ spec: shaped, state, params: hireParams(shaped, state), job: 'j', idempotencyKey: 'k' });
+    const state = writePath(shaped.state, '/rules/hours', true);
+    const payload = buildHirePayload({ spec: shaped, state, params: hireParams(shaped, state), job: 'j', idempotencyKey: 'k', core });
     expect(payload).toMatchObject({
       name: 'Maya',
       rules: { ask_first: true, items: [{ key: 'hours', label: 'Only reply 9 to 6', value: true }] },
@@ -87,8 +89,8 @@ describe('buildHirePayload', () => {
   });
 
   it('sends when they work as the owner left it, and the routine says so', () => {
-    const state = setPath(spec.state, STATE_PATHS.trigger, { kind: 'schedule', every: 'weekday', at: '09:00' });
-    const payload = buildHirePayload({ spec, state, params: hireParams(spec, state), job: 'j', idempotencyKey: 'k' });
+    const state = writePath(spec.state, STATE_PATHS.trigger, { kind: 'schedule', every: 'weekday', at: '09:00' });
+    const payload = buildHirePayload({ spec, state, params: hireParams(spec, state), job: 'j', idempotencyKey: 'k', core });
     // The screen's answer wins over the hire button's own trigger.
     expect(payload.trigger).toEqual({ kind: 'schedule', every: 'weekday', at: '09:00' });
     expect(payload.steps[0]).toEqual({ title: 'Every weekday at 09:00', detail: '', role: 'trigger' });
@@ -97,7 +99,7 @@ describe('buildHirePayload', () => {
 
   it('falls back to the agent card and a single step when the model left them out', () => {
     const bare = specOf('no hire or change button');
-    const payload = buildHirePayload({ spec: bare, state: bare.state, params: {}, job: 'posts', idempotencyKey: 'k' });
+    const payload = buildHirePayload({ spec: bare, state: bare.state, params: {}, job: 'posts', idempotencyKey: 'k', core });
     expect(payload.name).toBe('Sam');
     expect(payload.role).toBe('Social media helper');
     expect(payload.steps).toHaveLength(1);
@@ -107,13 +109,14 @@ describe('buildHirePayload', () => {
   });
 
   it('reads the hire button’s trigger when the screen has none, snapped, and clamps long values', () => {
-    const state = setPath(spec.state, STATE_PATHS.trigger, undefined);
+    const state = writePath(spec.state, STATE_PATHS.trigger, undefined);
     const payload = buildHirePayload({
       spec,
       state,
       params: { name: 'N'.repeat(80), trigger: { kind: 'sometimes', at: '25:99' } },
       job: 'j'.repeat(5000),
       idempotencyKey: 'k',
+      core,
     });
     expect(payload.name).toHaveLength(40);
     expect(payload.job).toHaveLength(2000);
@@ -124,8 +127,52 @@ describe('buildHirePayload', () => {
       params: { trigger: { kind: 'schedule', every: 'weekday', at: '09:30', app: 'Gmail' } },
       job: 'j',
       idempotencyKey: 'k',
+      core,
     });
     expect(timed.trigger).toEqual({ kind: 'schedule', every: 'weekday', at: '09:00' });
+  });
+
+  /** A screen with one rule toggle in the rules card, written as `toggle`. */
+  function ruleScreen(toggle: Record<string, unknown>) {
+    return normalizeSpec(
+      {
+        root: 'r',
+        state: { rules: { hours: true }, n: 5 },
+        elements: {
+          r: { type: 'Stack', props: { direction: 'vertical' }, children: ['a', 'g', 'h'] },
+          a: { type: 'AgentCard', props: { name: 'Maya', role: 'Receptionist', apps: [] }, children: [] },
+          g: { type: 'Card', props: { title: 'Ground rules' }, children: ['t'] },
+          t: { type: 'Toggle', children: [], ...toggle },
+          h: {
+            type: 'Button',
+            props: { label: 'Hire Maya', variant: 'primary' },
+            on: { press: { action: 'hire_employee', params: { name: 'Maya', role: 'Receptionist' } } },
+            children: [],
+          },
+        },
+      },
+      core,
+    )!;
+  }
+
+  it('reads a control’s expressions the way the screen does', () => {
+    const screen = ruleScreen({
+      props: {
+        label: { $cond: { $and: [{ $state: '/rules/hours' }, { $state: '/n', gt: 3 }] }, $then: 'Busy hours', $else: 'Quiet hours' },
+        checked: { $bindState: '/rules/hours' },
+      },
+    });
+    const payload = buildHirePayload({ spec: screen, state: screen.state, params: hireParams(screen), job: 'j', idempotencyKey: 'k', core });
+    expect(payload.rules.items).toEqual([{ key: 'hours', label: 'Busy hours', value: true }]);
+  });
+
+  it('sends only the controls the screen shows', () => {
+    const screen = ruleScreen({
+      props: { label: 'Only reply 9 to 6', checked: { $bindState: '/rules/hours' } },
+      visible: { $state: '/n', lt: 3 },
+    });
+    const payload = buildHirePayload({ spec: screen, state: screen.state, params: hireParams(screen), job: 'j', idempotencyKey: 'k', core });
+    expect(payload.rules.items).toEqual([]);
   });
 });
 
