@@ -119,8 +119,13 @@ async def run_temporal_lifecycle(
                 await wrapper.disconnect()
         await asyncio.sleep(_CONNECT_RETRY_SECONDS)
 
-    await _boot_reconcile(log)
+    # Bootstrap tenant clients BEFORE reconcile: the reconcile pass
+    # re-arms durable generations (schedules, listeners, controllers) via
+    # _client_for_namespace. With the old order (_boot_reconcile first)
+    # tenant namespaces weren't registered yet, so the re-arm either
+    # failed or silently landed in the default namespace (fail-open).
     await _bootstrap_tenant_clients(settings, log)
+    await _boot_reconcile(log)
     if getattr(settings, "multi_tenant_namespaces", False) and getattr(settings, "temporal_tenant_worker_pool", False):
         await _start_tenant_workers(settings, log, app_state)
     if owned:

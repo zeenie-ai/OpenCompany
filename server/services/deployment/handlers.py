@@ -110,9 +110,15 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     # the user account (e.g. investability), ignoring which org is currently
     # active — causing every deployment to land in that namespace regardless
     # of the UI-selected org.
+    # Explicit override first: _rearm_generation (and any server-side caller
+    # without a websocket) passes the namespace recorded on the control row
+    # so the re-arm lands in the same namespace as the original deploy.
+    _explicit_ns = data.get("temporal_namespace")
     from services.tenancy import resolve_namespace_from_state
     _ws_state = getattr(websocket, "state", None) if websocket is not None else None
-    if getattr(_ws_state, "active_namespace", None):
+    if _explicit_ns:
+        _deploy_namespace = str(_explicit_ns)
+    elif getattr(_ws_state, "active_namespace", None):
         _deploy_namespace = resolve_namespace_from_state(
             _ws_state, settings=container.settings()
         )
@@ -584,7 +590,7 @@ async def _start_controller(control, *, use_existing: bool = False) -> Optional[
     return getattr(handle, "result_run_id", None) or getattr(handle, "first_execution_run_id", None)
 
 
-def _client_for_namespace(namespace: str):
+def _client_for_namespace(namespace: str, *, strict: bool = False):
     """Return the Temporal client wrapper for ``namespace``.
 
     When ``MULTI_TENANT_NAMESPACES=false`` (the default) the container
@@ -594,9 +600,17 @@ def _client_for_namespace(namespace: str):
     When the flag is on, the per-namespace client registry is consulted.
     The registry holds one connected :class:`TemporalClientWrapper` per
     tenant namespace, populated by the lifecycle bootstrapper at startup.
-    ``get_or_fallback`` logs a warning and returns the default if the
-    namespace isn't registered yet (fail-open, consistent with the
-    two-phase provisioning model).
+
+    Fail-open (default): a registry miss falls back to the default
+    namespace client with a warning — consistent with the two-phase
+    provisioning model. Use for read paths where a wrong-namespace
+    result is merely empty.
+
+    Fail-closed (``strict=True``): a registry miss returns ``None``.
+    Callers MUST treat ``None`` as unavailable and either abort the
+    mutation or surface an error. Required for Temporal Schedule
+    mutations (create/delete/pause) where sweeping the wrong namespace
+    silently leaks the real schedule in its own namespace.
     """
     from core.container import container
 
@@ -608,9 +622,21 @@ def _client_for_namespace(namespace: str):
     if not namespace or namespace == default_ns:
         return container.temporal_client()
 
-    from services.temporal.client_registry import get_or_fallback
+    from services.temporal.client_registry import get_client_for_namespace
 
-    return get_or_fallback(namespace)
+    wrapper = get_client_for_namespace(namespace)
+    if wrapper is None and strict:
+        logger.warning(
+            "Tenant namespace not registered in client registry; fail-closed",
+            requested_namespace=namespace,
+            default_namespace=default_ns,
+        )
+        return None
+    if wrapper is None:
+        from services.temporal.client_registry import get_or_fallback
+
+        return get_or_fallback(namespace)
+    return wrapper
 
 
 def _controller_handle(control):
@@ -973,11 +999,17 @@ async def _set_cron_pause(
     *,
     paused: bool,
     strict: bool = False,
+    namespace: Optional[str] = None,
 ) -> int:
     from core.container import container
     from services.temporal.schedules import set_cron_schedules_paused
 
-    wrapper = container.temporal_client()
+    # Resolve the namespace explicitly from the caller's control row.
+    # The registry lookup is fail-closed for this mutation: silently
+    # sweeping ``default`` when the schedules live in a tenant namespace
+    # would leave cron producers firing (pause is a safety operation).
+    ns = namespace or "default"
+    wrapper = _client_for_namespace(ns, strict=strict)
     if wrapper is None or wrapper.client is None:
         if strict and container.settings().temporal_enabled:
             raise TemporalControlUnavailable("temporal_control_unavailable")
@@ -994,13 +1026,17 @@ async def _delete_cron_schedules(
     workflow_id: str,
     *,
     strict: bool = False,
+    namespace: Optional[str] = None,
 ) -> int:
     from core.container import container
     from services.temporal.schedules import (
         delete_cron_schedules_for_deployment,
     )
 
-    wrapper = container.temporal_client()
+    # Fail-closed namespace resolution (see _set_cron_pause): deleting
+    # against the wrong namespace would silently leak tenant schedules.
+    ns = namespace or "default"
+    wrapper = _client_for_namespace(ns, strict=strict)
     if wrapper is None or wrapper.client is None:
         if strict and container.settings().temporal_enabled:
             raise TemporalControlUnavailable("temporal_control_unavailable")
@@ -1117,6 +1153,7 @@ async def _reconcile_control(service: WorkflowControlService, control):
             control.workflow_id,
             paused=True,
             strict=True,
+            namespace=getattr(control, "temporal_namespace", None),
         )
         paused_triggers = await container.workflow_service().update_trigger_pause_status(
             control.workflow_id,
@@ -1137,6 +1174,7 @@ async def _reconcile_control(service: WorkflowControlService, control):
             control.workflow_id,
             paused=False,
             strict=True,
+            namespace=getattr(control, "temporal_namespace", None),
         )
         signalled = await _signal_generation_workflows(
             control,
@@ -1474,6 +1512,11 @@ async def _rearm_generation(control) -> None:
         "execution_id": control.execution_id,
         "root_execution_id": control.root_execution_id,
         "user_id": str(snapshot.get("owner_id") or "owner"),
+        # Explicit namespace override: this re-arm runs with websocket=None,
+        # so the handler's websocket/tenant-lookup resolution would fall
+        # back to the legacy 1:1 user mapping (or default) instead of the
+        # namespace recorded when the generation was originally deployed.
+        "temporal_namespace": getattr(control, "temporal_namespace", None) or "default",
     }
     deployed = await handle_deploy_workflow(deploy_data, None)
     if not deployed.get("success"):
@@ -1488,7 +1531,12 @@ async def _rearm_generation(control) -> None:
             control.workflow_id,
             paused=True,
         )
-        await _set_cron_pause(control.workflow_id, paused=True, strict=False)
+        await _set_cron_pause(
+            control.workflow_id,
+            paused=True,
+            strict=False,
+            namespace=getattr(control, "temporal_namespace", None),
+        )
         # The deploy handler just broadcast executing=true / status=running
         # on the wire; counter-broadcast the paused posture so a connected
         # client doesn't watch the workflow flip to running and never back.
@@ -1905,6 +1953,7 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         workflow_id,
         paused=True,
         strict=True,
+        namespace=getattr(control, "temporal_namespace", None),
     )
     paused_triggers = await container.workflow_service().update_trigger_pause_status(workflow_id, paused=True)
     signalled = await _signal_generation_workflows(
@@ -2012,6 +2061,7 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
         workflow_id,
         paused=False,
         strict=True,
+        namespace=getattr(control, "temporal_namespace", None),
     )
     signalled = await _signal_generation_workflows(
         control,
@@ -2097,6 +2147,7 @@ async def handle_reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
     deleted_schedules = await _delete_cron_schedules(
         workflow_id,
         strict=True,
+        namespace=getattr(current, "temporal_namespace", None),
     )
     cancelled = await handle_cancel_deployment(
         {"workflow_id": workflow_id},

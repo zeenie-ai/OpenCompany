@@ -603,6 +603,7 @@ def _boot_control(status: str, *, graph_nodes=None):
         controller_run_id="controller-run-1",
         status=status,
         revision=3,
+        temporal_namespace="addval-connect",
         graph_snapshot={
             "nodes": graph_nodes
             if graph_nodes is not None
@@ -737,11 +738,20 @@ async def test_rearm_restores_paused_posture_from_snapshot(monkeypatch):
     assert deploy_data["graphVersion"] == 0
     # Generation-scoped persistence, same contract as handle_start_workflow.
     assert deploy_data["session_id"] == "execution-1"
+    # The re-arm runs without a websocket, so it must carry the control
+    # row's namespace explicitly (otherwise the handler falls back to the
+    # legacy user→namespace 1:1 lookup or default).
+    assert deploy_data["temporal_namespace"] == "addval-connect"
     workflow_service.pause_deployment.assert_called_once_with("wf")
     workflow_service.update_trigger_pause_status.assert_awaited_once_with(
         "wf", paused=True
     )
-    cron_pause.assert_awaited_once_with("wf", paused=True, strict=False)
+    cron_pause.assert_awaited_once_with(
+        "wf",
+        paused=True,
+        strict=False,
+        namespace="addval-connect",
+    )
 
 
 @pytest.mark.asyncio

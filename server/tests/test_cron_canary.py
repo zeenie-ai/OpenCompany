@@ -697,3 +697,172 @@ async def test_schedule_pause_state_follows_workflow_control(paused):
         else:
             handle.unpause.assert_awaited_once()
             handle.pause.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Tenant-namespace resolution (schedule create/sweep must target the
+# deployment's own Temporal namespace, not container.temporal_client()).
+# Regression for: VTask cron schedule created in ``default`` while the
+# workflow was deployed in ``addval-connect`` — firings spawned runs in
+# the wrong namespace (missing credentials / failed child workflows).
+# ---------------------------------------------------------------------------
+
+
+def _tenant_manager(workflow_id: str, ns: str = "addval-connect"):
+    """Manager whose deployment state records a tenant namespace."""
+    mgr = _build_manager(workflow_id)
+    mgr._deployments[workflow_id].temporal_namespace = ns
+    return mgr
+
+
+def _patch_registry(monkeypatch, ns: str = "addval-connect"):
+    """Force multi_tenant_namespaces=True + a registered tenant wrapper."""
+    from core import container as container_mod
+
+    settings = MagicMock()
+    settings.multi_tenant_namespaces = True
+    settings.temporal_namespace = "default"
+    monkeypatch.setattr(container_mod.container, "settings", lambda: settings)
+
+    tenant_wrapper = MagicMock()
+    tenant_wrapper.client = MagicMock()
+    tenant_wrapper.client.list_schedules = AsyncMock(return_value=[])
+    from services.temporal import client_registry
+
+    monkeypatch.setattr(client_registry, "_registry", {ns: tenant_wrapper})
+    return tenant_wrapper
+
+
+class TestTenantNamespaceScheduleRouting:
+    @pytest.mark.asyncio
+    async def test_start_schedule_targets_tenant_namespace(self, monkeypatch):
+        """_start_canary_cron_schedule must NOT use the default-namespace
+        client when the deployment state records a tenant namespace."""
+        mgr = _tenant_manager("wf-1", "addval-connect")
+        tenant_wrapper = _patch_registry(monkeypatch)
+
+        from services.temporal import schedules
+
+        fake_create = AsyncMock(return_value="sched-1")
+        monkeypatch.setattr(schedules, "create_cron_schedule", fake_create)
+
+        await mgr._start_canary_cron_schedule(
+            _node("cron-1", "cronScheduler"),
+            "wf-1",
+            params={},
+            cron_expr="*/5 * * * *",
+            timezone="UTC",
+            frequency="minutes",
+            schedule_desc="Every 5 minutes",
+        )
+
+        # The schedule was created with the tenant namespace's client.
+        assert fake_create.await_args.args[0] is tenant_wrapper.client
+
+    @pytest.mark.asyncio
+    async def test_cancel_schedule_sweep_targets_tenant_namespace(self, monkeypatch):
+        mgr = _tenant_manager("wf-1", "addval-connect")
+        tenant_wrapper = _patch_registry(monkeypatch)
+
+        from services.temporal import schedules
+
+        fake_delete = AsyncMock(return_value=1)
+        monkeypatch.setattr(
+            schedules, "delete_cron_schedules_for_deployment", fake_delete
+        )
+
+        count = await mgr._cancel_canary_cron_schedules("wf-1")
+        assert count == 1
+        assert fake_delete.await_args.args[0] is tenant_wrapper.client
+
+    @pytest.mark.asyncio
+    async def test_cancel_listeners_sweep_targets_tenant_namespace(self, monkeypatch):
+        mgr = _tenant_manager("wf-1", "addval-connect")
+        tenant_wrapper = _patch_registry(monkeypatch)
+        tenant_wrapper.client.list_workflows = MagicMock(
+            return_value=MagicMock(async_iterator=iter([]))
+        )
+
+        cancelled = await mgr._cancel_canary_listeners("wf-1")
+        assert cancelled == 0
+        # The Visibility query ran against the tenant namespace client.
+        tenant_wrapper.client.list_workflows.assert_called_once()
+
+
+class TestFailClosedScheduleMutations:
+    @pytest.mark.asyncio
+    async def test_set_cron_pause_fail_closed_on_unregistered_namespace(
+        self, monkeypatch
+    ):
+        """strict=True + unregistered tenant namespace must raise instead
+        of silently sweeping ``default`` (fail-open repro'd the incident)."""
+        from core import container as container_mod
+        from services.deployment import handlers
+
+        settings = MagicMock()
+        settings.multi_tenant_namespaces = True
+        settings.temporal_namespace = "default"
+        settings.temporal_enabled = True
+        monkeypatch.setattr(container_mod.container, "settings", lambda: settings)
+        monkeypatch.setattr(
+            "services.temporal.client_registry._registry", {}
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            await handlers._set_cron_pause(
+                "wf-1", paused=True, strict=True, namespace="addval-connect"
+            )
+        assert "temporal_control_unavailable" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_set_cron_pause_passes_namespace_to_sweep(self, monkeypatch):
+        from core import container as container_mod
+        from services.deployment import handlers
+        from services.temporal import schedules
+
+        settings = MagicMock()
+        settings.multi_tenant_namespaces = True
+        settings.temporal_namespace = "default"
+        monkeypatch.setattr(container_mod.container, "settings", lambda: settings)
+
+        tenant_wrapper = MagicMock()
+        tenant_wrapper.client = MagicMock()
+        monkeypatch.setattr(
+            "services.temporal.client_registry._registry",
+            {"addval-connect": tenant_wrapper},
+        )
+
+        recorded: List[Dict[str, Any]] = []
+
+        async def fake_pause(client, workflow_id, *, paused, strict=False):
+            recorded.append({"client": client, "workflow_id": workflow_id})
+            return 1
+
+        monkeypatch.setattr(schedules, "set_cron_schedules_paused", fake_pause)
+
+        result = await handlers._set_cron_pause(
+            "wf-1", paused=True, strict=True, namespace="addval-connect"
+        )
+        assert result == 1
+        assert recorded[0]["client"] is tenant_wrapper.client
+
+
+class TestBootstrapOrdering:
+    def test_tenant_clients_bootstrap_before_reconcile(self):
+        """_bootstrap_tenant_clients must run BEFORE _boot_reconcile:
+        the reconcile pass re-arms durable generations via
+        _client_for_namespace, which requires tenant clients to be
+        registered already (otherwise the re-arm falls back to default)."""
+        import inspect
+
+        from services.temporal import lifecycle
+
+        src = inspect.getsource(lifecycle.run_temporal_lifecycle)
+        boot_pos = src.find("await _bootstrap_tenant_clients")
+        reconcile_pos = src.find("await _boot_reconcile")
+        assert boot_pos != -1, "bootstrap call missing from lifecycle"
+        assert reconcile_pos != -1, "reconcile call missing from lifecycle"
+        assert boot_pos < reconcile_pos, (
+            "bootstrap must precede reconcile so tenant namespaces are "
+            "registered before the re-arm pass runs"
+        )

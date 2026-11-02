@@ -46,6 +46,7 @@ def _control(
         controller_run_id="controller-run-1",
         status=status,
         revision=revision,
+        temporal_namespace="default",
         created_at=None,
         updated_at=None,
         terminal_reason=terminal_reason,
@@ -609,6 +610,7 @@ async def test_stable_state_is_not_published_when_strict_fanout_fails(
         "wf",
         paused=cron_paused,
         strict=True,
+        namespace="default",
     )
     fanout.assert_awaited_once_with(
         transitional,
@@ -850,7 +852,7 @@ async def test_reset_cleanup_failure_leaves_control_resetting(monkeypatch):
         "cancel_local",
         "terminate",
     ]
-    delete_schedules.assert_awaited_once_with("wf", strict=True)
+    delete_schedules.assert_awaited_once_with("wf", strict=True, namespace="default")
     cancel_deployment.assert_awaited_once_with(
         {"workflow_id": "wf"},
         None,
@@ -1074,7 +1076,7 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     assert result["deleted_schedules"] == 3
     assert result["local_cleanup_completed"] is False
     terminate.assert_awaited_once_with(resetting, strict=True)
-    delete_schedules.assert_awaited_once_with("wf", strict=True)
+    delete_schedules.assert_awaited_once_with("wf", strict=True, namespace="default")
     cancel_deployment.assert_awaited_once_with(
         {"workflow_id": "wf"},
         None,

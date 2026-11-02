@@ -922,10 +922,16 @@ class DeploymentManager:
         resource type (Temporal Schedules and Workflows have separate
         Visibility lists).
         """
-        from core.container import container
+        from services.deployment.handlers import _client_for_namespace
         from services.temporal.schedules import delete_cron_schedules_for_deployment
 
-        wrapper = container.temporal_client()
+        # Resolve the namespace from the deployment state so the sweep
+        # targets the same namespace the schedule was created in. Using
+        # container.temporal_client() here left tenant schedules invisible
+        # (leaking in their own namespace while we swept ``default``).
+        state = self._deployments.get(workflow_id)
+        ns = getattr(state, "temporal_namespace", None) or "default"
+        wrapper = _client_for_namespace(ns)
         if wrapper is None or wrapper.client is None:
             return 0
 
@@ -955,23 +961,30 @@ class DeploymentManager:
         Returns the Schedule id on success, ``None`` when Temporal isn't
         reachable so the caller falls back to APScheduler.
         """
-        from core.container import container
+        from services.deployment.handlers import _client_for_namespace
         from services.temporal.schedules import create_cron_schedule
 
         node_id = node["id"]
 
-        wrapper = container.temporal_client()
+        state = self._deployments.get(workflow_id)
+        if state is None:
+            raise RuntimeError(f"No deployment state for workflow {workflow_id}")
+
+        # Create the schedule in the deployment's tenant namespace, not
+        # always in ``default``. Previously the schedule was created via
+        # container.temporal_client() (always default), so tenant cron
+        # firings spawned runs in the wrong namespace (missing credentials,
+        # wrong worker pool, failed child workflows).
+        ns = getattr(state, "temporal_namespace", None) or "default"
+        wrapper = _client_for_namespace(ns)
         if wrapper is None or wrapper.client is None:
             logger.warning(
                 "Canary cron Schedule requested but Temporal not connected; " "falling back to APScheduler",
                 node_id=node_id,
                 workflow_id=workflow_id,
+                namespace=ns,
             )
             return None
-
-        state = self._deployments.get(workflow_id)
-        if state is None:
-            raise RuntimeError(f"No deployment state for workflow {workflow_id}")
 
         from services.temporal.executor import capture_temporal_routing_input
         from services.workflow_naming import node_label_slug
@@ -1037,9 +1050,14 @@ class DeploymentManager:
         sweep, AND its parent_close_policy=ABANDON means in-flight runs
         complete regardless.
         """
-        from core.container import container
+        from services.deployment.handlers import _client_for_namespace
 
-        wrapper = container.temporal_client()
+        # Sweep in the deployment's tenant namespace — tenant listeners
+        # were created via _client_for_namespace(state.temporal_namespace)
+        # so a default-namespace sweep would never find them (orphans).
+        state = self._deployments.get(workflow_id)
+        ns = getattr(state, "temporal_namespace", None) or "default"
+        wrapper = _client_for_namespace(ns)
         if wrapper is None or wrapper.client is None:
             return 0
 
