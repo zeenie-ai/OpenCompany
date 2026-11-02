@@ -603,6 +603,19 @@ async def test_boot_pending_transition_restores_collectors_without_blocking_othe
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sweep_fails", [False, True])
+async def test_boot_runs_an_interrupted_reset_once_more(monkeypatch, sweep_fails):
+    record = lifecycle(monkeypatch, "resetting")
+    boot_plane(monkeypatch, record)
+    if sweep_fails:
+        monkeypatch.setattr(handlers, "_terminate_generation_workflows",
+                            AsyncMock(side_effect=RuntimeError("Temporal is down")))
+    assert await handlers.reconcile_active_controls_on_boot() == 1
+    # A Reset that fails again leaves the row resetting, as before.
+    assert record.row.status == ("resetting" if sweep_fails else "reset")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("policy,stable", [("pause", "paused"), ("resume", "running")])
 async def test_boot_interrupted_resume_obeys_unclean_shutdown_policy(monkeypatch, policy, stable):
     record = lifecycle(monkeypatch, "resuming")

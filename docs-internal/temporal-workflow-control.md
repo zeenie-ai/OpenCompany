@@ -687,7 +687,9 @@ the control plane is hardened against Temporal's per-run event-history ceiling
   every active row, converges crash-stranded `starting` rows (controller alive
   with registered triggers, or a triggerless graph → `running`; alive-but-empty
   while the graph declares triggers → `failed` with the orphan controller
-  closed), and re-arms the process-local half of running/paused generations
+  closed), runs once more a Reset a crash left `resetting` (a failure leaves
+  the row `resetting` for the owner's Reset or the next boot), and re-arms the
+  process-local half of running/paused generations
   from the persisted graph snapshot — DeploymentManager runtime state,
   in-process collectors for non-canary trigger types, and the paused posture
   (admission, trigger pause flags, cron schedule pause). Re-arm is idempotent:

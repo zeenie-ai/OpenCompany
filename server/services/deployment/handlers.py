@@ -796,8 +796,8 @@ async def _query_controller_state(control) -> Optional[Dict[str, Any]]:
 
 # A missing controller is only actionable for a generation the database still
 # believes is alive. ``resetting`` is excluded deliberately: it already has an
-# explicit retry path through Reset, and auto-failing it here could race a
-# reset running concurrently in another request.
+# explicit retry path through Reset (boot runs it once too), and auto-failing
+# it here could race a reset running concurrently in another request.
 _MISSING_CONTROLLER_FAILS = frozenset(
     {"starting", "running", "pausing", "paused", "resuming"}
 )
@@ -1619,6 +1619,9 @@ async def reconcile_active_controls_on_boot() -> int:
        resumes it (``WORKFLOW_CONTROL_CRASH_RECOVERY=pause``, the
        default; ``resume`` restores them running). A clean
        ``company stop`` + start always restores deployments as they were.
+    5. Run once more a Reset the last process left ``resetting``. A
+       failure leaves the row ``resetting`` for the owner's Reset or the
+       next boot.
 
     Returns the number of rows processed; per-row failures are logged and
     skipped so one broken generation cannot block the rest.
@@ -1637,6 +1640,13 @@ async def reconcile_active_controls_on_boot() -> int:
     processed = 0
     for control in controls:
         try:
+            if control.status == "resetting":
+                # A Reset the last process did not finish: run it once more. A
+                # failure leaves the row resetting, as before.
+                await handle_reset_workflow({"workflow_id": control.workflow_id,
+                                             "expected_revision": control.revision}, None)
+                processed += 1
+                continue
             if _versioned_control(control) and control.status in {"pausing", "resuming"}:
                 # A checkpoint can remain open on admitted work for months.
                 # Its eventual completion must still restore local collectors,
