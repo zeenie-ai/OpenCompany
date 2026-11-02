@@ -29,6 +29,21 @@ repo's, the repo wins. Its README's Settings section predates the Settings
 redesign, so for Settings the prototype (`reference/OpenCompany Home.dc.html`)
 is the reference.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Approvals and external effects — Current implementation.**
+
+Approval waiting is implemented; activation for ordinary new generations remains pending AP.7.
+
+[![Approvals and external effects (Current implementation)](../docs/diagrams/architecture/11-approvals-effects-v1.png)](../docs/diagrams/architecture/11-approvals-effects-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/11-approvals-effects.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/11-approvals-effects.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Switching screens
 
 - **Flag**: `featureFlags.normalMode` ([lib/featureFlags.ts](../client/src/lib/featureFlags.ts))

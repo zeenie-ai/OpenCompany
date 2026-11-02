@@ -1,0 +1,38 @@
+%% Current implementation at 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial"}}}%%
+flowchart LR
+    modules["Node plugin modules"]
+    base["BaseNode registration"]
+    registry["Metadata + class registry"]
+    schemas["Input / output schemas"]
+    handlers["Executable handler registry"]
+    spec["NodeSpec assembly"]
+    endpoint["Schema / catalogue API"]
+    adapter["Frontend NodeSpec adapter"]
+    editor["Palette / canvas / parameters"]
+    executor["NodeExecutor"]
+    activities["Typed Temporal activities"]
+    workers["Worker queue registration"]
+    index["Capability index"]
+    modules -->|"recursive import discovery"| base
+    base -->|"register class / metadata"| registry
+    base -->|"register schema models"| schemas
+    base -->|"register handler"| handlers
+    registry -->|"metadata"| spec
+    schemas -->|"schemas"| spec
+    spec -->|"wire contract"| endpoint
+    endpoint -->|"fetch specs"| adapter
+    adapter -->|"render / configure"| editor
+    handlers -->|"runtime dispatch"| executor
+    registry -->|"declared plugin classes"| activities
+    activities -->|"activity / queue contracts"| workers
+    registry -->|"all types + class flags"| index
+    classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed;
+    class endpoint,adapter,editor client;
+    classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed;
+    class modules,base,registry,schemas,handlers,spec,executor service;
+    classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed;
+    class activities,workers temporal;
+    classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed;
+    class index state;
+    classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed;

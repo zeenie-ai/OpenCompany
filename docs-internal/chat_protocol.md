@@ -17,6 +17,21 @@ never streamed; and a draft waiting for the owner is an approval card that follo
 ([Approvals](#approvals)), so no run ends with AG-UI's `interrupt` outcome. A controlled generation can suspend
 and resume its existing run through workflow control without ending the chat run.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Chat and agent turns — Current implementation.**
+
+[![Chat and agent turns (Current implementation)](../docs/diagrams/architecture/08-chat-agent-turns-v1.png)](../docs/diagrams/architecture/08-chat-agent-turns-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/08-chat-agent-turns.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/08-chat-agent-turns.brief.md)
+
+Related views: [Frontend architecture](../docs/diagrams/architecture/04-frontend-architecture.brief.md).
+
+<!-- architecture-suite:end -->
+
 ## Concepts
 
 | Term | Meaning |

@@ -9,6 +9,19 @@ Source files:
 - `server/routers/websocket.py` - WebSocket endpoint and message handlers
 - `client/src/contexts/WebSocketContext.tsx` - frontend WebSocket provider with hooks
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Frontend architecture — Current implementation.**
+
+[![Frontend architecture (Current implementation)](../docs/diagrams/architecture/04-frontend-architecture-v1.png)](../docs/diagrams/architecture/04-frontend-architecture-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/04-frontend-architecture.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/04-frontend-architecture.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Why WebSocket-First
 
 Early iterations of OpenCompany used REST endpoints for most frontend-backend operations. That caused three recurring problems:

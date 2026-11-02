@@ -14,6 +14,21 @@ invocation and delegated work. The SDK driver has isolated worker capacity and
 parks during child waits. Existing native generations and other agent types
 retain the execution paths described below.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Chat and agent turns — Current implementation.**
+
+[![Chat and agent turns (Current implementation)](../docs/diagrams/architecture/08-chat-agent-turns-v1.png)](../docs/diagrams/architecture/08-chat-agent-turns-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/08-chat-agent-turns.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/08-chat-agent-turns.brief.md)
+
+Related views: [System context](../docs/diagrams/architecture/01-system-context.brief.md).
+
+<!-- architecture-suite:end -->
+
 ## Table of Contents
 
 1. [End-to-End Data Flow](#end-to-end-data-flow)

@@ -1,0 +1,69 @@
+{
+  "id": 5,
+  "title": "Workflow execution",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/05-workflow-execution-v1.png",
+  "mermaid": "docs/diagrams/architecture/05-workflow-execution.mmd",
+  "prompt": "docs/diagrams/architecture/05-workflow-execution.prompt.txt",
+  "brief": "docs/diagrams/architecture/05-workflow-execution.brief.md",
+  "sources": [
+    "server/services/workflow.py",
+    "server/services/temporal/workflow.py",
+    "server/services/node_executor.py",
+    "server/services/temporal/executor.py"
+  ],
+  "doc_targets": [
+    "docs-internal/DESIGN.md",
+    "docs-internal/TEMPORAL_ARCHITECTURE.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source-backed labels and directed relationships prepared before image generation.",
+      "Reviewed native generated image: all dispatch branches, frozen routing, eligible sequential route, output persistence and failure caveats present.",
+      "Three targeted ImageGen edits removed duplicated NodeExecutor and ambiguous operations/sequential routing; final routes remain separated.",
+      "Peer review requested a clearer AgentWorkflow input arrow. Two further targeted edits produced a top-entry agent/Pi input separated from rightward provider/result outputs; final selected image reviewed.",
+      "Coordinator final visual review: Verified final Agent/Pi input arrowheads and separate operations output paths; eligible sequential route and dispatch-error semantics retained."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "attempts": [
+      {
+        "type": "generate",
+        "artifact": "exec-c5d724f3-85a1-4216-b699-dd38de5cb7a0.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-1e85fdaf-76bd-40e4-b372-1b62445af38a.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-9da4a8f6-3a58-4c3c-a084-a485e39d9cb7.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-758866e7-9524-4831-a53d-5681a9b1eeb6.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-2c6d273b-a242-4434-a2dc-2eaae20dc489.png",
+        "review": "rejected: input/output routes shared a segment"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-7869894e-9bd1-4bb8-96c0-8e3b4f1f95de.png",
+        "review": "selected: agent inputs enter operations from top; outputs remain separate"
+      }
+    ],
+    "selected_artifact": "exec-7869894e-9bd1-4bb8-96c0-8e3b4f1f95de.png",
+    "dimensions": [
+      1672,
+      941
+    ]
+  }
+}

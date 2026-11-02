@@ -15,6 +15,19 @@ historical; the current control and queue contract is documented here and in
 [Temporal architecture](TEMPORAL_ARCHITECTURE.md). The original design is in the
 [archived execution RFC](ARCHIVE/temporal-execution-engine-rfc.md).
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Deployment and events — Current implementation.**
+
+[![Deployment and events (Current implementation)](../docs/diagrams/architecture/10-deployment-events-v1.png)](../docs/diagrams/architecture/10-deployment-events-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/10-deployment-events.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/10-deployment-events.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Status (2026-05-15)
 
 ### Shipped

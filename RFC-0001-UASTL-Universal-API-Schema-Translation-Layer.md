@@ -8,6 +8,19 @@
 
 ---
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](docs/diagrams/architecture/README.md).
+
+**UASTL connector and optimization architecture — Draft research proposal.**
+
+[![UASTL connector and optimization architecture (Draft research proposal)](docs/diagrams/architecture/15-uastl-v1.png)](docs/diagrams/architecture/15-uastl-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/15-uastl.mmd) · [Source evidence and limitations](docs/diagrams/architecture/15-uastl.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Abstract
 
 This RFC specifies a system — the **Universal API Schema Translation Layer (UASTL)** — that ingests arbitrary connector API specifications (OpenAPI 3.x, AsyncAPI, GraphQL SDL, raw provider YAML) and compiles them into a **standardized, LLM-optimized Python interface** that a language model can use to author structured, executable code for real-world digital tasks. The system addresses three converging problems: (1) the N×M explosion of API surface that an LLM must memorize to write correct integration code, (2) the fragility of LLM-generated API calls when auth, pagination, rate-limiting, and error envelopes vary per provider, and (3) the absence of a self-improving feedback loop that refines the LLM's code-generation prompts against execution outcomes.

@@ -30,6 +30,19 @@ controls offer **Open in new tab** for the page the browser shows, as the
 server last reported it (`page`), when it is an http(s) page; the link opens in
 the owner's own browser with `noopener noreferrer`.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Persistence and secrets — Current implementation.**
+
+[![Persistence and secrets (Current implementation)](../docs/diagrams/architecture/12-persistence-secrets-v1.png)](../docs/diagrams/architecture/12-persistence-secrets-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/12-persistence-secrets.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/12-persistence-secrets.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Full view
 
 The normal Browser and Mobile views fill the remaining Workspace height and

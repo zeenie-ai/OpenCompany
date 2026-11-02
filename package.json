@@ -121,6 +121,7 @@
     "test:nodes": "cd server && uv run pytest tests/nodes/ -v --cov=services.handlers --cov-report=term-missing",
     "docs:nodes": "python -m cli docs nodes",
     "docs:nodes:check": "python -m cli docs nodes --check",
+    "docs:architecture:check": "python scripts/architecture_diagrams.py check && bun scripts/check_architecture_mermaid.mjs",
     "deploy": "python -m cli deploy",
     "daemon:start": "python -m cli daemon start",
     "daemon:stop": "python -m cli daemon stop",

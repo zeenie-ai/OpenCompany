@@ -1,5 +1,20 @@
 # OpenCompany - Development Setup
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Local runtime — Current implementation.**
+
+[![Local runtime (Current implementation)](../docs/diagrams/architecture/02-local-runtime-v1.png)](../docs/diagrams/architecture/02-local-runtime-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/02-local-runtime.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/02-local-runtime.brief.md)
+
+Related views: [System context](../docs/diagrams/architecture/01-system-context.brief.md).
+
+<!-- architecture-suite:end -->
+
 ## Project Structure
 
 For the optional local Android emulator, see [Mobile Workspace setup](../docs/mobile-workspace.md). It requires Windows x64, working virtualization, one backend process with embedded workers, and explicit SDK license acceptance. Add **Mobile Agent** or the **Android** tool, save the workflow, then open **Workspace → Mobile**. After backend/plugin changes, restart the backend and refresh the frontend. See the guide's runtime-file notes before moving or deleting an existing phone installation.

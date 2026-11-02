@@ -1,0 +1,33 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial, sans-serif"}}}%%
+%% UNIMPLEMENTED SKETCH — DECISION PENDING; baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12
+flowchart LR
+    backend["Backend NodeSpec / existing contract"]:::current
+    adapter["NodeSpec adapter / existing"]:::current
+    switch["Current switch renderer"]:::current
+    registry["Proposed widget registry / tester + rank dispatch"]:::proposed
+    scalar["Inline scalar widgets"]:::proposed
+    collection["CollectionWidget / recursive collections"]:::proposed
+    code["CodeWidget / editor wrapper"]:::proposed
+    buffer["Local parameter edit buffer / existing"]:::current
+    form["Proposed RHF + zod bindings"]:::proposed
+    save["Existing save + node configuration"]:::current
+    backend -->|"schema + uiHints"| adapter
+    adapter -->|"current path"| switch
+    switch -->|"controlled values"| buffer
+    buffer -->|"save"| save
+    adapter -->|"proposed dispatch"| registry
+    registry -->|"match"| scalar
+    registry -->|"match"| collection
+    registry -->|"match"| code
+    scalar -->|"field binding"| form
+    collection -->|"field binding"| form
+    code -->|"field binding"| form
+    form -->|"save"| save
+
+classDef current fill:#1b1e25,stroke:#bd93f9,stroke-width:2px,color:#e8eaed;
+classDef proposed fill:#1b1e25,stroke:#f1fa8c,stroke-width:2px,stroke-dasharray:6 4,color:#e8eaed;
+classDef state fill:#1b1e25,stroke:#ff79c6,stroke-width:2px,stroke-dasharray:6 4,color:#e8eaed;
+classDef temporal fill:#1b1e25,stroke:#ffb86c,stroke-width:2px,color:#e8eaed;
+classDef external fill:#1b1e25,stroke:#50fa7b,stroke-width:2px,color:#e8eaed;
+classDef interface fill:#1b1e25,stroke:#8be9fd,stroke-width:2px,color:#e8eaed;
+classDef dormant fill:#1b1e25,stroke:#8be9fd,stroke-width:2px,stroke-dasharray:2 3,color:#e8eaed;

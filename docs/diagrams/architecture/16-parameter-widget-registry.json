@@ -1,0 +1,53 @@
+{
+  "id": 16,
+  "title": "Parameter widget-registry proposal",
+  "status": "sketch",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/16-parameter-widget-registry-v1.png",
+  "mermaid": "docs/diagrams/architecture/16-parameter-widget-registry.mmd",
+  "prompt": "docs/diagrams/architecture/16-parameter-widget-registry.prompt.txt",
+  "brief": "docs/diagrams/architecture/16-parameter-widget-registry.brief.md",
+  "sources": [
+    "docs-internal/frontend_architecture.md",
+    "client/src/components/ParameterRenderer.tsx",
+    "client/src/lib/nodeSpec.ts",
+    "client/src/adapters/nodeSpecToDescription.ts",
+    "client/src/hooks/useParameterPanel.ts",
+    "client/src/ParameterPanel.tsx"
+  ],
+  "doc_targets": [
+    "docs-internal/frontend_architecture.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source boundaries checked against the pinned baseline; proposed status retained.",
+      "Verified 10 unique components and 12 relationships, current useState edit buffer versus proposed RHF + zod bindings, existing NodeSpec and save boundaries, widget branches, future status and normal-width readability. The lower save box denotes the same existing save/configuration component. Cross-review corrected initial form-state assumption; no runtime change.",
+      "Coordinator final visual review: Final corrected current controlled edit buffer vs proposed RHF/zod widget bindings verified; existing backend/adapter/save remain current."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+    "attempts": [
+      {
+        "kind": "generate",
+        "artifact": "exec-84ebccfa-a2d7-4760-9dd4-83bde6de1089.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-484a9fc1-7ec7-43c9-ba68-c6e82c787b20.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-8f0f03d9-269b-46e9-8954-760408545983.png"
+      }
+    ],
+    "selected_artifact": "exec-8f0f03d9-269b-46e9-8954-760408545983.png",
+    "width": 1672,
+    "height": 941
+  }
+}

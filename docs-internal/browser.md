@@ -8,6 +8,19 @@ browser-use CLI for ordinary browser operations; people watch and control the
 same Chrome through the [Browser workspace](./browser_workspace.md). The old
 agent-browser driver and separate `browserHarness` node are retired.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Distributed deployment — Current implementation.**
+
+[![Distributed deployment (Current implementation)](../docs/diagrams/architecture/03-distributed-deployment-v1.png)](../docs/diagrams/architecture/03-distributed-deployment-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/03-distributed-deployment.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/03-distributed-deployment.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Execution paths
 
 | Path | Implementation | Lifetime |

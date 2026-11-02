@@ -1,0 +1,57 @@
+%% Current implementation at 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%% Detail panels use aliases of the same deployed components.
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial"}}}%%
+flowchart TB
+    subgraph main["Shared execution topology"]
+        client["Browser / client"]
+        subgraph backend["BACKEND REPLICA: ONE PROCESS"]
+            api["API / services"]
+            embedded["Embedded SDK workers"]
+        end
+        temporal["Shared external Temporal"]
+        standalone["Standalone generic workers: optional"]
+        postgres["Shared PostgreSQL"]
+        onepassword["1Password service account"]
+        files["Configured workspace storage"]
+        client -->|"HTTP / WebSocket"| api
+        api -->|"start / manage"| embedded
+        api -->|"submit workflows"| temporal
+        embedded -->|"poll / report"| temporal
+        standalone -->|"same namespace / queue"| temporal
+        api -->|"app state"| postgres
+        api -->|"secret bindings"| onepassword
+        api -->|"file references"| files
+    end
+    subgraph browser_detail["Browser ownership: same components, expanded view"]
+        owner["Browser owner worker: inside backend replica"]
+        profile["Owner-local browser + profile"]
+        postgres_alias["Shared PostgreSQL: same DB"]
+        temporal_alias["Shared external Temporal: same service"]
+        owner -->|"exclusive live owner"| profile
+        owner -->|"ownership / fencing"| postgres_alias
+        owner -->|"owner queue"| temporal_alias
+    end
+    subgraph relay_detail["Remote chat relay: same components, expanded view"]
+        standalone_alias["Standalone generic workers: same workers"]
+        relay["Selected chat event relay"]
+        api_relay_alias["Backend replica API: same backend"]
+        standalone_alias -->|"selected frames"| relay
+        relay -->|"authenticated relay"| api_relay_alias
+    end
+    subgraph mobile_detail["Shared mobile authorization: same backend, expanded view"]
+        api_mobile_alias["Backend replica API: same backend"]
+        owner_check["Installation-owner check"]
+        mobile["Owner-only mobile capability"]
+        api_mobile_alias --> owner_check
+        owner_check --> mobile
+    end
+    classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed;
+    classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed;
+    classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed;
+    classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed;
+    classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed;
+    class client,owner_check client;
+    class api,profile,relay,api_relay_alias,api_mobile_alias,mobile service;
+    class embedded,temporal,standalone,owner,temporal_alias,standalone_alias temporal;
+    class postgres,files,postgres_alias state;
+    class onepassword external;

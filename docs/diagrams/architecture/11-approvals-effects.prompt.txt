@@ -1,0 +1,55 @@
+Use case: infographic-diagram
+Asset type: source-backed OpenCompany maintainer architecture documentation
+Style: polished flat technical diagram, wide 16:9 landscape; charcoal background #101216, panels #1b1e25, text #e8eaed. Rounded rectangles, restrained accents, crisp orthogonal arrows with arrowheads and readable sans-serif type. Cyan client/interfaces, purple backend services, orange Temporal execution, pink durable state, green external systems. Generous spacing. Use no perspective, illustrations, decorative icons, logos, gradients or watermark. Show explicit textual status, never color alone. No file paths in the image.
+Typography: large precise labels, no extra invented text, no tiny prose. Every literal label below must be verbatim. Arrows must match the relationship list. Conditional arrows need the listed short label. Dashed arrows mean optional/conditional; solid arrows are ordinary control/data flow. Do not add reverse arrowheads or unlisted connections.
+
+Title (verbatim): "Approvals and external effects"
+Status badge (verbatim): "CURRENT"
+Footer (verbatim): "OpenCompany · source 56f0b397"
+Composition: Main path left to right: agent tool call→approval rules→allow/restrict or hold draft. The allowed branch has its own Allowed tool execution box which calls the external system and returns its result, bypassing the held-draft machinery. Hold leads through owner decision, Undo grace window, revision-fenced claim and one-attempt send to a three-outcome record. Add a dashed lower inset for implemented approval waiting, labeled rollout pending, which rejoins the same claim/send/outcome machinery. The ApprovalWorkflow wait and Implemented; rollout pending boxes and their edges must be dashed amber. Do not route every tool call through waiting.
+
+Exact component labels:
+- "Agent tool call" (service)
+- "Approval rules and tool capability" (service)
+- "Run or restrict" (service)
+- "Allowed tool execution" (service)
+- "Held approval draft" (state)
+- "Owner decision" (client)
+- "Undo grace window" (temporal)
+- "Revision-fenced send claim" (state)
+- "One-attempt tool activity" (temporal)
+- "External side effect" (external)
+- "sent / not_sent / unknown" (state)
+- "Agent result or continuation" (service)
+- "ApprovalWorkflow wait" (dormant)
+- "Implemented; rollout pending" (dormant)
+
+Required directed relationships:
+- Agent tool call → Approval rules and tool capability
+- Approval rules and tool capability → Run or restrict [allowed / restricted]
+- Run or restrict → Allowed tool execution [allowed call]
+- Allowed tool execution → External side effect
+- Allowed tool execution → Agent result or continuation [tool result]
+- Run or restrict → Agent result or continuation [restricted result]
+- Approval rules and tool capability → Held approval draft [asked send]
+- Held approval draft → Owner decision
+- Owner decision → Undo grace window [Send]
+- Undo grace window → Revision-fenced send claim [Undo window closes]
+- Revision-fenced send claim → One-attempt tool activity [claim still valid]
+- One-attempt tool activity → External side effect
+- One-attempt tool activity → sent / not_sent / unknown [record outcome]
+- sent / not_sent / unknown → Agent result or continuation
+- Implemented; rollout pending → ApprovalWorkflow wait [versioned waiting path]
+- Held approval draft → ApprovalWorkflow wait [when waiting is activated]
+- Owner decision → ApprovalWorkflow wait [decision update]
+- ApprovalWorkflow wait → Revision-fenced send claim [approved turn execution]
+
+Bottom callouts, verbatim, small but readable:
+- "Ordinary new generations do not activate approval_wait_version at this baseline."
+- "Approval handling is capability/rule dependent; legacy in-process agents may refuse rather than hold."
+- "Approved sends are not automatically retried; interrupted attempts can have outcome unknown."
+
+Accuracy requirements: all boxes and relationships above describe current code at the pinned commit. Do not draw proposed durable-inbox/Event OS architecture. Keep process, datastore, client and external-system categories distinct. No extra boxes or arrows. Avoid text overlap, clipped arrowheads, illegible tiny annotations and unlabeled shortcut paths.
+
+--- Targeted built-in ImageGen edit, attempt 2 ---
+Correct this approvals diagram precisely against the code. Change the purple "Allowed tool execution" label to "Allowed / restricted tool execution". Change its incoming arrow label from "allowed call" to "permitted call": restricted tools still execute with constrained settings. The horizontal shortcut currently labeled "restricted result" must instead be a refusal path: label it "refused call" and originate it at "Approval rules and tool capability", not at "Run or restrict". It still terminates at "Agent result or continuation". Keep the normal allowed/restricted execution path to External side effect and its tool-result return. In the legend change "Service (backend process)" to "Backend service", and "Dormant (optional)" to "Dormant (rollout pending)". Add small line jumps where the vertical One-attempt tool activity→External side effect arrow crosses the two independent return lines. Preserve the held-draft, owner, Undo, claim, one-attempt, outcome and dashed waiting machinery unchanged, including all callouts and source footer.

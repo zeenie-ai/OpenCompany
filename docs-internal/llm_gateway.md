@@ -4,6 +4,19 @@ OpenCompany's hosted LLM gateway is the stock open-source LiteLLM Proxy, deploye
 
 **Status:** the gateway is in `gateway/`; OpenCompany's side is `server/services/gateway/` and covers chat through ChatUnifier (agents, chat runs, employee setup, translate), OpenAI embeddings (long-term memory, the Embedding Generator), OpenAI speech (Text to Speech, Speech to Text, chat dictation), the vision tool, the RLM agent and Claude Code. Codex and the Gemini CLI stay on their own logins. `gateway/tests/test_gateway_contract.py` pins the contract below against the local stack; `server/tests/gateway/` covers OpenCompany's side.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**System context — Current implementation.**
+
+[![System context (Current implementation)](../docs/diagrams/architecture/01-system-context-v1.png)](../docs/diagrams/architecture/01-system-context-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/01-system-context.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/01-system-context.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## OpenCompany's side
 
 **On by default.**

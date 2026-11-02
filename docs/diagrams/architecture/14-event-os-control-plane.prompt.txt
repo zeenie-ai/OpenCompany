@@ -1,0 +1,65 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram, project documentation PNG
+Style: precise flat technical infographic, dark charcoal canvas #101216, panels #1b1e25, bright readable text #e8eaed. Restrained cyan interfaces, purple services, orange Temporal, pink data, green external systems. Proposed components use amber dashed outlines and explicit status words. No decorative 3D, no mascots, no logos, no visual metaphors.
+Composition: wide 16:9 landscape, generous spacing, large legible sans-serif text, clean orthogonal arrow routes with clear arrowheads, no crossing through labels. Keep exact box labels and edge directions below. Do not add components or relationships. Do not print source file paths in the image.
+
+Title (verbatim): "Event OS control plane and resource lifecycle"
+Status badge (verbatim): "PROPOSED — ACCEPTED ROADMAP"
+Footer (verbatim): "Phased per-generation rollout. Open RFC choices remain unresolved. No capacity guarantees are implied."
+Baseline caption: "Source baseline 56f0b397"
+Layout: Create three clearly separated panels: control and admission (left/center), execution and conditional approval (right), recovery and upgrades (bottom). Keep the existing/dormant ApprovalWorkflow visually distinct from proposed activation. Use compact but readable labels; preserve every arrow in the edge list.
+
+Exact components:
+- owner: "Owner intents" (interface)
+- intents: "Durable intent rows" (state)
+- deliverer: "Background intent deliverer" (proposed)
+- supervisor: "EmployeeSupervisorWorkflow / control + alarms + budget" (proposed)
+- classes: "Scheduling classes / owner, customer, internal, background" (proposed)
+- budget: "Daily budget ledger / holds + reset" (state)
+- admission: "Admission / fairness + resource gates" (proposed)
+- turn: "Turn execution" (temporal)
+- park: "Parked turns / explicit reason + release" (proposed)
+- alarm: "Durable alarms + schedules" (proposed)
+- approval: "ApprovalWorkflow / implemented, rollout pending" (dormant)
+- outbox: "Outbox + egress gates" (proposed)
+- truth: "App DB / authoritative recovery state" (state)
+- reconcile: "Reconcile entities + resources" (proposed)
+- fleet: "Per-owner instance upgrades" (proposed)
+- replay: "Checkpoint + replay + rollback gate" (proposed)
+- workers: "Version-compatible workers" (temporal)
+
+Exact directed relationships:
+- owner → intents: "commit intent"
+- intents → deliverer: "pending"
+- deliverer → supervisor: "stable-ID update"
+- supervisor → admission: "control state"
+- classes → admission: "reserved shares"
+- budget → admission: "holds"
+- admission → turn: "permit"
+- turn → park: "resource or provider wait"
+- park → admission: "release"
+- supervisor → alarm: "own deadlines"
+- alarm → admission: "wake"
+- turn → approval: "conditional wait"
+- approval → outbox: "decision consumed"
+- truth → reconcile: "recovery truth"
+- reconcile → supervisor: "re-arm"
+- reconcile → alarm: "restore"
+- fleet → replay: "upgrade check"
+- replay → workers: "poll after gate"
+- workers → turn: "execute"
+
+Legend: solid outline = implemented building block; dotted cyan = implemented, rollout pending; dashed amber/pink = proposed component; green = external. Category color does not change implementation status. All proposed views carry their status badge.
+Constraints: spell every label accurately, preserve directional arrowheads, no invented services, no additional arrows, no text smaller than necessary for normal documentation reading. Do not imply the whole proposed architecture is deployed.
+
+Exact additional generation instruction:
+Input image role: STYLE REFERENCE ONLY. Match its dark technical typography and clean outlined boxes. Use the exact facts above. IMPORTANT: all future data/state boxes have DASHED PINK outlines, proposed services have DASHED AMBER outlines, existing Turn execution and workers have solid orange outlines, and implemented-but-rollout-pending ApprovalWorkflow has a DOTTED CYAN outline. Every listed relationship is one-way, with an arrowhead only at its named target; no accidental bidirectional arrows. Use three spacious panels and prioritize accurate legible relationships over decoration.
+
+Generation history
+1. Built-in ImageGen generation with style reference 02-local-runtime-v1.png; artifact exec-f4d84130-8f32-4c15-9fa6-641bd00c463f.png.
+2. Built-in ImageGen edit; artifact exec-b75cc677-f953-40e3-a520-11fa34174593.png. Exact edit prompt:
+Correct only these six mistakes in this diagram. Preserve all component boxes, labels, source caption, footer, legend, layout and other arrows. (1) The 'holds' arrow starts at Daily budget ledger and must END ONLY at Admission / fairness + resource gates. It must NOT enter Durable alarms + schedules. Route it below the alarm box if necessary. (2) The 'release' arrow starts at Parked turns and must END at Admission / fairness + resource gates, NOT at Turn execution. Route it above the execution panel to reach Admission. (3) The 'conditional wait' arrow is ONE WAY from Turn execution DOWN to ApprovalWorkflow. Remove the upward arrowhead at Turn execution. (4) The 'execute' arrow starts at Version-compatible workers and must END at Turn execution, NOT ApprovalWorkflow. Route it up the far right outside the Outbox and Parked-turn boxes, then to the right edge of Turn execution. (5) The 'permit' arrow must be visibly connected from Admission's right edge to Turn execution's left edge; do not start it on the panel frame. (6) Change only the top-right PROPOSED status badge outline/text from green to amber, matching the accepted-roadmap proposal styling. No other changes and no bidirectional arrows.
+3. Built-in ImageGen edit; selected artifact exec-aa7e8be6-671f-48e1-a7de-0ea5ba7e11ef.png. Exact edit prompt:
+Fix only the detached 'permit' connector in this diagram. It must start on the RIGHT EDGE of the 'Admission / fairness + resource gates' box and end with its single arrowhead at the LEFT EDGE of 'Turn execution'. Currently it begins on the execution panel's left frame and is not connected to Admission. Add a clear continuous orthogonal path: from Admission's right edge roughly (1070,390), right to (1083,390), up to (1083,290), then right into Turn execution roughly (1183,290). Adjust those approximate coordinates to the image. The panel frame is never an endpoint. Keep the word 'permit' beside this connector. Preserve EVERY other arrow, component, label, status badge, footer, legend and layout exactly. Do not change holds, release, execute, conditional wait or their corrected endpoints.
+4. Built-in ImageGen edit after coordinator cross-review; selected artifact exec-91fb619c-0ce2-4c11-a913-7c2ccd9c1c80.png. Exact edit prompt:
+Make only a small spacing/routing correction to the far-right white 'execute' connector from Version-compatible workers to Turn execution. This connector must remain ONE WAY workers → Turn execution. It currently touches the RIGHT EDGE of the 'Outbox + egress gates' box and can look like a connection to Outbox. Ensure a clearly visible DARK GAP of at least 20 pixels between that entire connector and every edge of the Outbox box. You may make the Outbox box slightly narrower and move it a few pixels left to open this gap, or route the connector farther right while keeping it inside the image. Do not connect execute to Outbox or the panel border. Preserve the existing workers and Turn execution endpoints, and preserve all other arrows, words, components, status outlines, legend and footer exactly.

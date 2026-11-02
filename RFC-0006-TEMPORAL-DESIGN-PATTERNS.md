@@ -17,6 +17,19 @@
 - **Baseline:** HEAD 4f73cb10 (2026-10-24), temporalio 1.30.0, Temporal CLI pinned to v1.9.1 (server 1.32.0) for new installs. Line numbers are as of that commit and drift.
 - **Sources:** docs.temporal.io as of 2026-10-24 and temporalio/samples-python at 33f7dc29 (2026-10-22). See §2.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](docs/diagrams/architecture/README.md).
+
+**Event OS control plane and resource lifecycle — Proposed target · accepted roadmap.**
+
+[![Event OS control plane and resource lifecycle (Proposed target · accepted roadmap)](docs/diagrams/architecture/14-event-os-control-plane-v1.png)](docs/diagrams/architecture/14-event-os-control-plane-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/14-event-os-control-plane.mmd) · [Source evidence and limitations](docs/diagrams/architecture/14-event-os-control-plane.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## How to read this
 
 - **Owner:** §1 (summary), §3 (decisions), §24 (defaults chosen and what is still open).

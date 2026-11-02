@@ -1,0 +1,68 @@
+Use case: infographic-diagram
+Asset type: source-backed OpenCompany maintainer architecture documentation
+Style: polished flat technical diagram, wide 16:9 landscape; charcoal background #101216, panels #1b1e25, text #e8eaed. Rounded rectangles, restrained accents, crisp orthogonal arrows with arrowheads and readable sans-serif type. Cyan client/interfaces, purple backend services, orange Temporal execution, pink durable state, green external systems. Generous spacing. Use no perspective, illustrations, decorative icons, logos, gradients or watermark. Show explicit textual status, never color alone. No file paths in the image.
+Typography: large precise labels, no extra invented text, no tiny prose. Every literal label below must be verbatim. Arrows must match the relationship list. Conditional arrows need the listed short label. Dashed arrows mean optional/conditional; solid arrows are ordinary control/data flow. Do not add reverse arrowheads or unlisted connections.
+
+Title (verbatim): "Workflow execution"
+Status badge (verbatim): "CURRENT"
+Footer (verbatim): "OpenCompany · source 56f0b397"
+Composition: Three columns: admission at left, Temporal orchestration and three dispatch lanes across the center, plugin/provider work and durable results at right. Place the eligible sequential path in a lower inset, and a small dispatch-error exit beside TemporalExecutor.
+
+Exact component labels:
+- "Graph execution request" (client)
+- "WorkflowService" (service)
+- "Admission and routing" (service)
+- "TemporalExecutor" (temporal)
+- "MachinaWorkflow" (temporal)
+- "Typed or legacy activity" (temporal)
+- "AgentWorkflow" (temporal)
+- "PiCodingAgentWorkflow" (temporal)
+- "NodeExecutor" (service)
+- "Registered plugin" (service)
+- "Recorded model / tool operations" (temporal)
+- "Providers and tools" (external)
+- "Stored results and status" (state)
+- "Eligible sequential execution" (service)
+- "Error returned" (service)
+
+Required directed relationships:
+- Graph execution request → WorkflowService
+- WorkflowService → Admission and routing
+- Admission and routing → TemporalExecutor [Temporal selected]
+- TemporalExecutor → MachinaWorkflow
+- MachinaWorkflow → Typed or legacy activity [frozen dispatch]
+- MachinaWorkflow → AgentWorkflow [native agent]
+- MachinaWorkflow → PiCodingAgentWorkflow [recorded Pi runtime]
+- Typed or legacy activity → NodeExecutor
+- NodeExecutor → Registered plugin
+- Registered plugin → Providers and tools
+- AgentWorkflow → Recorded model / tool operations
+- PiCodingAgentWorkflow → Recorded model / tool operations
+- Recorded model / tool operations → Providers and tools
+- Registered plugin → Stored results and status [node outputs]
+- Recorded model / tool operations → Stored results and status [recorded results]
+- Admission and routing → Eligible sequential execution [eligible local path]
+- Eligible sequential execution → NodeExecutor
+- TemporalExecutor → Error returned [dispatch failure]
+
+Bottom callouts, verbatim, small but readable:
+- "Routing is frozen for a run; old histories retain their recorded dispatch."
+- "Redis parallel code is unreachable in shipped configurations."
+- "A Temporal dispatch failure returns an error; it does not rerun the graph locally."
+
+Accuracy requirements: all boxes and relationships above describe current code at the pinned commit. Do not draw proposed durable-inbox/Event OS architecture. Keep process, datastore, client and external-system categories distinct. No extra boxes or arrows. Avoid text overlap, clipped arrowheads, illegible tiny annotations and unlabeled shortcut paths.
+
+--- Targeted built-in ImageGen edit, attempt 2 ---
+Edit this OpenCompany Workflow execution diagram with one precise routing correction. Preserve the title, all labels, colors, boxes, source footer, callouts, and all valid arrows. There must be exactly ONE NodeExecutor box, the upper purple NodeExecutor between Typed or legacy activity and Registered plugin. REMOVE the duplicate NodeExecutor box in the lower sequential inset. Route the arrow from Eligible sequential execution directly to the ONE upper NodeExecutor using a clean outer bend which does not touch or pass behind Recorded model / tool operations. Remove every vertical connection from Recorded model / tool operations to NodeExecutor; those are not connected. Keep AgentWorkflow and PiCodingAgentWorkflow leading into Recorded model / tool operations, which connects only to Providers and tools and Stored results and status. Keep Typed or legacy activity → NodeExecutor → Registered plugin. Do not add any boxes, repeated labels, or unlisted arrow junctions.
+
+--- Targeted built-in ImageGen edit, attempt 3 ---
+Fix only the central routing ambiguity in this image. Move the orange "Recorded model / tool operations" box LEFT and DOWN into the empty space directly below AgentWorkflow / PiCodingAgentWorkflow, inside the Temporal orchestration panel. Reconnect those two agent workflows into that moved operations box. Route its output arrows separately to "Providers and tools" and "Stored results and status". The long path from "Eligible sequential execution" must pass well to the RIGHT of the moved operations box, and enter the upper "NodeExecutor" box, with at least 50 pixels of visible empty space between the sequential path and the operations box. There is NO edge of any kind between Recorded model / tool operations and NodeExecutor. The sequential path must never touch or pass behind the operations box. Keep exactly one NodeExecutor. Preserve all other labels, valid relationships, colors and callouts.
+
+--- Targeted built-in ImageGen edit, attempt 4 ---
+Make one surgical arrow removal. In this image, immediately LEFT of PiCodingAgentWorkflow, a white vertical downward arrow branches from its incoming [recorded Pi runtime] horizontal line into Recorded model / tool operations. REMOVE that small vertical branch and its downward arrowhead entirely. Keep the horizontal arrow into PiCodingAgentWorkflow. Keep the separate arrow from the BOTTOM of PiCodingAgentWorkflow into Recorded model / tool operations. Keep AgentWorkflow's right-side bent arrow into the operations box. There must be no direct MachinaWorkflow→Recorded model / tool operations bypass. Preserve every other label, box, color and relationship unchanged.
+
+--- Targeted built-in ImageGen edit, attempt 5 ---
+Make exactly one small arrowhead improvement to this image. The bent white line from AgentWorkflow goes right, down, then left into the RIGHT edge of the orange "Recorded model / tool operations" box. Add a clearly visible LEFT-POINTING arrowhead at that final entry into the operations box. This must unequivocally show AgentWorkflow → Recorded model / tool operations. Preserve every existing line, crossing gap, node, title, label, color and callout. Do not add any new connection, junction, box, duplicate label or other arrowhead.
+
+--- Targeted built-in ImageGen edit, attempt 6 ---
+Correct one input route with a clearer layout. The bent line leaving the RIGHT edge of AgentWorkflow must NOT enter Recorded model / tool operations through its right edge. Remove that entire right-edge input. Instead, reroute AgentWorkflow's line to JOIN the existing downward PiCodingAgentWorkflow→Recorded model / tool operations input line in the small gap BETWEEN the bottom of PiCodingAgentWorkflow and the TOP of Recorded model / tool operations. Both agent types must then enter the TOP of the operations box through one clearly visible DOWNWARD arrowhead. The only lines touching the RIGHT edge of the operations box must be its OUTGOING arrows to Providers and tools and Stored results and status. Keep those outgoing paths separate from the incoming agent path and the sequential route. Preserve all labels, box positions, colors, callouts, and every other relationship.

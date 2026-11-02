@@ -8,6 +8,19 @@ side of the deal, implemented in `server/core/approot.py`,
 `server/main.py`. The Electron side lives in `desktop/` and is documented in
 [desktop_app.md](./desktop_app.md).
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Local runtime — Current implementation.**
+
+[![Local runtime (Current implementation)](../docs/diagrams/architecture/02-local-runtime-v1.png)](../docs/diagrams/architecture/02-local-runtime-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/02-local-runtime.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/02-local-runtime.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Why this exists
 
 `company serve` used to be the only launcher. It sets the cwd to `server/`,

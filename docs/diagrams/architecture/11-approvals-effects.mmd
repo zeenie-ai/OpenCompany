@@ -1,0 +1,42 @@
+%% OpenCompany current architecture; baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%% Exact relationships and caveats: 11-approvals-effects.brief.md
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","primaryBorderColor":"#bd93f9","lineColor":"#9aa1ac","fontFamily":"Arial, sans-serif","fontSize":"18px"}}}%%
+flowchart LR
+  toolCall["Agent tool call"]:::service
+  rules["Approval rules and tool capability"]:::service
+  allow["Run or restrict"]:::service
+  allowed["Allowed / restricted tool execution"]:::service
+  draft["Held approval draft"]:::state
+  owner["Owner decision"]:::client
+  grace["Undo grace window"]:::temporal
+  claim["Revision-fenced send claim"]:::state
+  send["One-attempt tool activity"]:::temporal
+  external["External side effect"]:::external
+  outcome["sent / not_sent / unknown"]:::state
+  continue["Agent result or continuation"]:::service
+  wait["ApprovalWorkflow wait"]:::dormant
+  rollout["Implemented; rollout pending"]:::dormant
+  toolCall --> rules
+  rules -->|"allowed / restricted"| allow
+  allow -->|"permitted call"| allowed
+  allowed --> external
+  allowed -->|"tool result"| continue
+  rules -->|"refused call"| continue
+  rules -->|"asked send"| draft
+  draft --> owner
+  owner -->|"Send"| grace
+  grace -->|"Undo window closes"| claim
+  claim -->|"claim still valid"| send
+  send --> external
+  send -->|"record outcome"| outcome
+  outcome --> continue
+  rollout -.->|"versioned waiting path"| wait
+  draft -.->|"when waiting is activated"| wait
+  owner -.->|"decision update"| wait
+  wait -.->|"approved turn execution"| claim
+  classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed,stroke-width:2px
+  classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed,stroke-width:2px
+  classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed,stroke-width:2px
+  classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed,stroke-width:2px
+  classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed,stroke-width:2px
+  classDef dormant fill:#1b1e25,stroke:#f1fa8c,color:#e8eaed,stroke-width:2px,stroke-dasharray:6 4
