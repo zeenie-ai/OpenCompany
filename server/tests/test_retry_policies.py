@@ -146,6 +146,63 @@ class TestQueuePagingRetry:
         assert policies == ["QUEUE_PAGING_RETRY"] * 3
 
 
+class TestCompensationRetry:
+    """1b.20: compensations and failure records retry until they land."""
+
+    def test_cleanup_and_bookkeeping_policies_are_unlimited(self):
+        from datetime import timedelta
+
+        from temporalio.common import RetryPolicy
+        from services.temporal._retry_policies import BOOKKEEPING_RETRY, DELEGATION_CLEANUP_RETRY
+
+        unlimited = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_interval=timedelta(seconds=30),
+                                maximum_attempts=0)
+        # No non-retryable list: a cleanup that fails is still retried.
+        assert DELEGATION_CLEANUP_RETRY == unlimited
+        assert BOOKKEEPING_RETRY == unlimited
+
+    def test_bookkeeping_policy_has_one_definition(self):
+        from services.temporal import _retry_policies, approval_workflow, approved_tool_call_workflow
+
+        assert approval_workflow.BOOKKEEPING_RETRY is _retry_policies.BOOKKEEPING_RETRY
+        assert approved_tool_call_workflow.BOOKKEEPING_RETRY is _retry_policies.BOOKKEEPING_RETRY
+        assert "BOOKKEEPING_RETRY" in _retry_policies.__all__
+
+    @pytest.mark.parametrize(
+        ("rel_path", "expected"),
+        [("services/temporal/employee_job_workflow.py", {None: ["BOOKKEEPING_RETRY"] * 2}),
+         # The runtime closure's record. The no-assignments decision (a computed
+         # activity id) keeps 3 attempts: its activity can raise errors that would loop.
+         ("services/temporal/agent_workflow.py",
+          {"employee-runtime-failed": ["BOOKKEEPING_RETRY"], "computed": ["AGENT_ACTIVITY_RETRY"]})],
+    )
+    def test_job_failure_records_use_it(self, rel_path, expected):
+        import ast
+        import pathlib
+
+        tree = ast.parse((pathlib.Path(__file__).resolve().parent.parent / rel_path).read_text(encoding="utf-8"))
+        policies: dict = {}
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "execute_activity"
+                    and node.args and isinstance(node.args[0], ast.Constant)
+                    and node.args[0].value == "employee.job.failed"):
+                keywords = {keyword.arg: keyword.value for keyword in node.keywords}
+                activity_id = keywords.get("activity_id")
+                name = activity_id.value if isinstance(activity_id, ast.Constant) else (activity_id and "computed")
+                policies.setdefault(name, []).append(keywords["retry_policy"].id)
+        assert policies == expected
+
+    def test_every_compensation_activity_is_registered(self):
+        # An unregistered cleanup activity would now retry for ever.
+        from services.temporal.agent_activities import collect_agent_activities
+        from services.temporal.pi_inline_delegation import collect_pi_inline_activities
+
+        registered = {getattr(fn, "__temporal_activity_definition").name
+                      for fn in [*collect_agent_activities(), *collect_pi_inline_activities()]}
+        assert {"agent.cancel_delegation", "agent.release_subagent_permit", "employee.job.failed",
+                "coding.inline_delegation_status"} <= registered
+
+
 class TestNoDuplicatedInlineRetryPolicy:
     """Workflow files must import the shared constant — not re-type
     ``RetryPolicy(initial_interval=..., maximum_interval=..., maximum_attempts=N)``
@@ -156,6 +213,7 @@ class TestNoDuplicatedInlineRetryPolicy:
     _WORKFLOW_FILES = (
         "services/temporal/workflow.py",
         "services/temporal/agent_workflow.py",
+        "services/temporal/employee_job_workflow.py",
         "services/temporal/polling_trigger_workflow.py",
         "services/temporal/trigger_listener_workflow.py",
         "nodes/scheduler/cron_scheduler/_workflow.py",

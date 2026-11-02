@@ -105,17 +105,30 @@ LLM_STEP_RETRY: RetryPolicy = RetryPolicy(
 
 # Terminal-cleanup policy for delegated-task teardown (persisting a
 # cancellation, releasing a subagent permit). These run while the workflow
-# is already unwinding, so giving up early leaks a permit or leaves a task
-# row stuck in a non-terminal state — a durable, user-visible defect that a
-# later retry genuinely can fix. Hence a longer budget than the 3-attempt
-# default. Deliberately NOT carrying ``non_retryable_error_types``: the
-# cleanup activities are idempotent by construction and a NodeUserError here
-# means the cleanup itself is broken, which should still be retried while
-# the worker is alive.
+# is already unwinding, so giving up leaks a permit or leaves a task row
+# stuck in a non-terminal state, a durable defect that a later attempt can
+# fix. The activities are idempotent, so they retry until they land.
+# Deliberately NOT carrying ``non_retryable_error_types``: a NodeUserError
+# here means the cleanup itself is broken, which is still retried while the
+# worker is alive. A cleanup that keeps failing holds its workflow (and,
+# inside an admitted action, Stop's drain); the ``activity_retry``
+# interceptor shows it as an attention item after attempt 10, and a Reset
+# terminates it and closes its rows (RFC-0006 §10.2).
 DELEGATION_CLEANUP_RETRY: RetryPolicy = RetryPolicy(
     initial_interval=timedelta(seconds=1),
     maximum_interval=timedelta(seconds=30),
-    maximum_attempts=10,
+    maximum_attempts=0,
+)
+
+
+# Idempotent bookkeeping that records an outcome (an approved call's record,
+# a job's failure record): the row must not stay "sending" or "running", so
+# it retries until it lands. No non-retryable list, for the same reason as
+# above; the same alert and the same Reset backstop apply.
+BOOKKEEPING_RETRY: RetryPolicy = RetryPolicy(
+    initial_interval=timedelta(seconds=1),
+    maximum_interval=timedelta(seconds=30),
+    maximum_attempts=0,
 )
 
 
@@ -197,6 +210,7 @@ __all__ = [
     "QUICK_ACTIVITY_RETRY",
     "LLM_STEP_RETRY",
     "DELEGATION_CLEANUP_RETRY",
+    "BOOKKEEPING_RETRY",
     "PERMIT_WAIT_RETRY",
     "REVIEWED_DELIVERY_RETRY",
     "QUEUE_PAGING_RETRY",

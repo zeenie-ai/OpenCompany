@@ -25,9 +25,9 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ActivityError, is_cancelled_exception
 
+from services.temporal._retry_policies import BOOKKEEPING_RETRY
+
 BOOKKEEPING_TIMEOUT = timedelta(seconds=30)
-#: Bookkeeping retries until it lands: the row must not stay "sending".
-BOOKKEEPING_RETRY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_interval=timedelta(seconds=30), maximum_attempts=0)
 SEND_TIMEOUT = timedelta(minutes=10)
 SEND_HEARTBEAT = timedelta(minutes=2)
 #: Never retried: a retry could send it twice.

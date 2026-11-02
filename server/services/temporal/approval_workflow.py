@@ -24,7 +24,8 @@ from typing import Any, Dict
 
 from temporalio import workflow
 
-from services.temporal.approved_tool_call_workflow import BOOKKEEPING_RETRY, BOOKKEEPING_TIMEOUT
+from services.temporal._retry_policies import BOOKKEEPING_RETRY
+from services.temporal.approved_tool_call_workflow import BOOKKEEPING_TIMEOUT
 
 #: The shortest wait between two reads.
 MIN_WAIT = timedelta(seconds=1)

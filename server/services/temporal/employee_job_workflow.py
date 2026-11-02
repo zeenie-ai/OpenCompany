@@ -3,10 +3,9 @@ from datetime import timedelta
 import asyncio
 from typing import Any
 from temporalio import workflow, activity
-from temporalio.common import RetryPolicy
 from temporalio.exceptions import is_cancelled_exception
 from services.temporal._exits import is_workflow_bug
-from services.temporal._retry_policies import REVIEWED_DELIVERY_RETRY
+from services.temporal._retry_policies import BOOKKEEPING_RETRY, REVIEWED_DELIVERY_RETRY
 from services.temporal.execution_control import ExecutionControl
 
 
@@ -130,13 +129,14 @@ class EmployeeJobWorkflow:
             if is_workflow_bug(exc):
                 raise
             # Cancellation must leave a durable terminal job record too.
-            # Shield this short cleanup from the parent's cancellation.
+            # Shield this short cleanup from the parent's cancellation. The
+            # record retries until it lands, and never overwrites a delivery.
             await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": isinstance(exc, asyncio.CancelledError) or is_cancelled_exception(exc)},
-                start_to_close_timeout=timedelta(seconds=60), retry_policy=RetryPolicy(maximum_attempts=3)))
+                start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING_RETRY))
             raise
         if not result.get("success"):
             await workflow.execute_activity("employee.job.failed", context,
-                start_to_close_timeout=timedelta(seconds=60), retry_policy=RetryPolicy(maximum_attempts=3))
+                start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING_RETRY)
             return result
         delivery = {**context, "outputs": {**context.get("outputs", {}), context["node_id"]: result.get("result", {})}}
         if self._execution_control.enabled:

@@ -668,7 +668,7 @@ The other ten support skills and durable delegation (17 `agent.*` activities in 
 | `agent.skill.clear` | Clears the agent's turn-scoped skill state. |
 | `agent.begin_delegation` | Idempotently persists and claims a direct delegation before child startup. |
 | `agent.queue_delegation` | Persists a team task before it waits for a root-wide concurrency permit. |
-| `agent.cancel_delegation` | Cancels a queued/running delegated task and records the cancellation idempotently. |
+| `agent.cancel_delegation` | Cancels a queued/running delegated task and records the cancellation idempotently. A task with no row answers `absent`. |
 | `agent.acquire_subagent_permit` | Heartbeats while polling the durable root coordinator for a subagent permit. |
 | `agent.release_subagent_permit` | Idempotently releases a root-wide subagent permit. |
 | `agent.register_task_execution` | Persists the runner and child Temporal identities for trace inspection. |
@@ -969,6 +969,7 @@ Trigger nodes that aren't the firing trigger are:
 | `AgentWorkflow` LLM-step activity fails | `LLM_STEP_RETRY` retries without limit (`maximum_attempts=0`, 5 s → 5 min backoff; `services/temporal/_retry_policies.py`) unless the provider error category is non-retryable (invalid_request, authentication, ...). Provider SDK retries stay disabled so Temporal owns the retry schedule and `retry_after` hints. |
 | Worker crashes mid-execution | Workflow state replays from history; an unfinished Activity retries according to its timeout/retry policy on an eligible worker. Completed recorded work is not explicitly rescheduled by Resume. A node or tool call that is not safe to repeat (`services/approvals/repeats.py`) is not run again: its later attempt answers that it may have happened, and the owner gets a card (`tool_calls.redo_refusal` and `record_unknown`); a graph node's answer carries `requires_user_action`, so its employee pauses at once. |
 | A node/tool Activity times out | Temporal applies the scheduled retry policy. Graph timeout/heartbeat defaults and version 1 agent-tool/plugin options differ as described above. |
+| A compensation or failure record fails (a delegation's cancel, a permit release, `coding.inline_delegation_status`, an approved call's bookkeeping, a job's `employee.job.failed`) | `DELEGATION_CLEANUP_RETRY` and `BOOKKEEPING_RETRY` retry without limit (1 s to 30 s). The activities are idempotent, so a row is never left `running` or `sending` by an outage. One that keeps failing shows as a `stuck_retry` attention item on Home after attempt 10, and a Reset terminates it and closes its rows. The no-assignments decision and `agent.finish_delegation` keep 3 attempts: their activities can raise errors a retry never fixes. |
 | All retries exhausted | Workflow receives failure, stops execution |
 
 ## File Structure
@@ -1000,7 +1001,7 @@ server/services/temporal/
 ├── workspace_task_activities.py  # reset_workspace_task_runtime (activity workspace_tasks.reset_runtime)
 ├── schedules.py         # Temporal Schedule creation for cronScheduler
 ├── search_attributes.py # EVENT_SEARCH_ATTRIBUTES (7 custom SAs, incl. ControlEventTypes)
-├── _retry_policies.py   # DEFAULT_ACTIVITY_RETRY / QUICK_ACTIVITY_RETRY / LLM_STEP_RETRY / PERMIT_WAIT_RETRY / ...
+├── _retry_policies.py   # DEFAULT_ACTIVITY_RETRY / QUICK_ACTIVITY_RETRY / LLM_STEP_RETRY / PERMIT_WAIT_RETRY / DELEGATION_CLEANUP_RETRY / BOOKKEEPING_RETRY / ...
 ├── _interceptors.py     # ObservabilityWorkerInterceptor (activity_retry log, stuck_retry attention items, workflow_start logs)
 ├── plugin_registry.py   # Temporal plugin registry
 ├── worker.py            # TemporalWorkerManager + TemporalWorkerPool

@@ -2210,7 +2210,10 @@ async def queue_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 @activity.defn(name="agent.cancel_delegation")
 async def cancel_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Persist cancellation as a terminal state without failure requeueing."""
+    """Persist cancellation as a terminal state without failure requeueing.
+
+    A task with no row answers ``absent``: it retries without limit
+    (``DELEGATION_CLEANUP_RETRY``), and a retry would never change that."""
     from services.agent_team import get_agent_team_service
 
     team_id = str(payload.get("team_id") or "")
@@ -2228,6 +2231,13 @@ async def cancel_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     service = get_agent_team_service()
     task = await service.cancel_delegation(team_id, task_id, reason)
     if task is None:
+        # A cancel can come before agent.queue_delegation wrote the row (a lead
+        # parked while stopped): there is nothing to cancel. A failed write
+        # leaves the row, so it still raises and is retried.
+        if await service.database.get_durable_team_task(team_id, task_id) is None:
+            logger.info("agent.cancel_delegation: task %s has no row in team %s", task_id, team_id)
+            return {"team_id": team_id, "team_task_id": task_id, "status": "absent",
+                    "cancelled": False, "cancellation_applied": False, "reason": None}
         raise RuntimeError("Failed to cancel delegated team task")
 
     status = str(task.get("status") or "")
@@ -2590,9 +2600,9 @@ def collect_agent_activities() -> List[Any]:
         # Scheduled unconditionally by the cancellation-unwind paths in
         # AgentWorkflow/DelegatedTaskWorkflow. Its absence here left
         # agent.cancel_delegation.v1 unregistered, so every cancelled
-        # delegation burned DELEGATION_CLEANUP_RETRY (10 attempts) against
-        # an unknown activity type and the failure was swallowed, leaving
-        # team task rows non-terminal.
+        # delegation retried against an unknown activity type, leaving team
+        # task rows non-terminal; DELEGATION_CLEANUP_RETRY now retries without
+        # limit, so a missing registration would hang the unwind.
         cancel_agent_delegation,
         acquire_subagent_permit,
         release_subagent_permit,

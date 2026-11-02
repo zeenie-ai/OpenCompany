@@ -27,7 +27,9 @@ Operations:
 A Reset cancels the workflow's open jobs, queued ones included, and a queued
 job of a generation that has ended (reset, failed or gone) is cancelled
 instead of started. A manual canvas run's job has no generation and is never
-refused this way.
+refused this way. A job's failure record (`employee.job.failed`) retries
+without limit (`BOOKKEEPING_RETRY`), so a database outage cannot leave a
+failed job `running`.
 
 `operation`, `lead_node_id` and `delivery_node_ids` are server-controlled
 configuration. Models can supply only the mission when this node is a tool.

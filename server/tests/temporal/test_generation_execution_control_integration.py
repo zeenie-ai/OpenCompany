@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from temporalio import activity, workflow
 from temporalio.api.enums.v1 import EventType
+from temporalio.exceptions import ApplicationError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer, Worker
 
@@ -79,7 +80,8 @@ async def _deliver(context: dict) -> dict:
 
 @activity.defn(name="employee.job.failed")
 async def _fail_job(_context: dict) -> dict:
-    raise AssertionError("A successful controlled job must not fail")
+    # Non-retryable: the record's policy retries without limit (1b.20).
+    raise ApplicationError("A successful controlled job must not fail", non_retryable=True)
 
 
 @workflow.defn(name="AgentWorkflow", sandboxed=False)

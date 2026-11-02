@@ -64,6 +64,7 @@ from services.tool_output import bound_tool_output, tool_output_is_capped
 
 from ._exits import is_workflow_bug
 from ._retry_policies import (
+    BOOKKEEPING_RETRY,
     BROWSER_TASK_CLAIM_RETRY,
     BROWSER_TASK_CLEANUP_RETRY,
     DEFAULT_ACTIVITY_RETRY,
@@ -962,7 +963,7 @@ class AgentWorkflow:
         async def fail_job(cancelled=False):
             if runtime_v2:
                 await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": cancelled, "runtime_admission": True},
-                    activity_id="employee-runtime-failed", start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=AGENT_ACTIVITY_RETRY))
+                    activity_id="employee-runtime-failed", start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY))
         bug = False
         try:
             result = await self._run_impl(context)
