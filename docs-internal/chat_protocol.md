@@ -327,8 +327,8 @@ newer version wins in place.
   label (`kind: "action"`, the press in `meta.ui_event`), starts a run of kind `action`, and sends the employee the
   line `[ui-event]{"ui_id", "element", "label", "action", "params"}[/ui-event]`. A press while the employee is still
   answering is held back with a notice. `ui_event_rejected` says why one does not fit.
-- **Sanitising.** json-render 0.21 does not guard state paths (`setByPath` descends into `__proto__`), does not
-  validate props against the catalog, and supports `watch` (actions fired by state changes), `repeat`, `$computed`
+- **Sanitising.** json-render 0.21.4 does not guard every state path (its state store writes through any segment,
+  and nothing refuses `constructor` or `prototype`), does not validate props against the catalog, and supports `watch` (actions fired by state changes), `repeat`, `$computed`
   and an action binding's `confirm`, `onSuccess` and `onError` (the last two set state or run further actions).
   Both sides therefore (the client in `client/src/lib/jsonRender/`):
   - refuse `__proto__`, `constructor` and `prototype` path segments everywhere (`$state`, `$bindState`, `$template`,

@@ -1,8 +1,8 @@
 /**
  * Making a generated UI safe to hand to json-render.
  *
- * json-render 0.21 does not guard state paths (its setByPath descends into
- * `__proto__`), does not check props against the catalog, and runs element
+ * json-render 0.21.4 does not guard every state path (its state store writes
+ * through any segment), does not check props against the catalog, and runs element
  * features a model should never reach: `watch` (actions fired by state
  * changes), `repeat`, `slots`, `$computed`, and an action binding's
  * `confirm`, `onSuccess` and `onError` (the last two set state or run

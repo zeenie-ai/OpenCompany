@@ -2,12 +2,13 @@
  * State paths in a generated UI: JSON Pointers (RFC 6901) such as
  * "/rules/askFirst", the form json-render reads.
  *
- * json-render 0.21 reads a path with plain property access and writes with
- * a setByPath that descends into `__proto__`, so a path written by a model
- * could reach an object's prototype. Every path a spec, a patch or a
- * control uses goes through `parseStatePath` first. It refuses
- * `__proto__`, `constructor` and `prototype` segments (after unescaping
- * `~1` and `~0`), paths with no segments, and paths deeper than
+ * json-render 0.21.4 reads own properties only and its patch helpers skip
+ * `__proto__`, but its state store writes through any segment
+ * (`immutableSetByPath`) and nothing refuses `constructor` or `prototype`,
+ * so a path written by a model could still reach a prototype. Every path a
+ * spec, a patch or a control uses goes through `parseStatePath` first. It
+ * refuses `__proto__`, `constructor` and `prototype` segments (after
+ * unescaping `~1` and `~0`), paths with no segments, and paths deeper than
  * MAX_PATH_SEGMENTS; empty segments ("/a//b/") are skipped, as the setup
  * screen always has. `readPath` and `writePath` apply the same rule, read
  * own properties only, and copy along the path on a write, keeping arrays
