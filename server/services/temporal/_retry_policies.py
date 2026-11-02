@@ -180,6 +180,12 @@ QUEUE_PAGING_RETRY: RetryPolicy = RetryPolicy(
 )
 
 
+# The circuit breaker (``workflow_control.pause_on_failure``) runs once: its
+# failure streak is not keyed by run, so a retry could count one failed run
+# twice, while a lost attempt only misses a count.
+BREAKER_COUNT_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
+
+
 # Keep the existing Browser task policies unchanged for Temporal replay.
 # A busy claim fails immediately; cleanup must wait for its owner to return.
 BROWSER_TASK_CLAIM_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
@@ -214,6 +220,7 @@ __all__ = [
     "PERMIT_WAIT_RETRY",
     "REVIEWED_DELIVERY_RETRY",
     "QUEUE_PAGING_RETRY",
+    "BREAKER_COUNT_RETRY",
     "BROWSER_TASK_CLAIM_RETRY",
     "BROWSER_TASK_CLEANUP_RETRY",
     "frozen_retry_policy",

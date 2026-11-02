@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Set
 from temporalio import workflow
 
 from ._exits import is_workflow_bug
-from ._retry_policies import DEFAULT_ACTIVITY_RETRY, QUICK_ACTIVITY_RETRY
+from ._retry_policies import BREAKER_COUNT_RETRY, DEFAULT_ACTIVITY_RETRY, QUICK_ACTIVITY_RETRY
 from .execution_control import ExecutionControl
 
 # ``conditions`` is pure -- ``re`` + comparisons, no IO, no clock, no
@@ -324,7 +324,7 @@ class MachinaWorkflow:
                     **recovery,
                 },
                 start_to_close_timeout=timedelta(seconds=30),
-                retry_policy=QUICK_ACTIVITY_RETRY,
+                retry_policy=BREAKER_COUNT_RETRY,
             )
         except Exception as exc:  # noqa: BLE001 — cosmetic relative to the run result
             workflow.logger.warning(f"pause-on-failure activity failed (non-fatal): {exc}")

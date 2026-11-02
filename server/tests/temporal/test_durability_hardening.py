@@ -1334,6 +1334,7 @@ async def test_machina_failure_schedules_the_circuit_breaker_activity(monkeypatc
     async def capture_activity(name, payload, **kwargs):
         captured["name"] = name
         captured["payload"] = payload
+        captured["retry_policy"] = kwargs["retry_policy"]
 
     monkeypatch.setattr(temporal_workflow, "execute_activity", capture_activity)
 
@@ -1348,6 +1349,8 @@ async def test_machina_failure_schedules_the_circuit_breaker_activity(monkeypatc
         "workflow_id": "wf",
         "reason": "credential expired",
     }
+    # 1b.24: one attempt, so a retry never counts the same failed run twice.
+    assert captured["retry_policy"].maximum_attempts == 1
 
     # Manual run (no pre-executed trigger) -> never pauses a deployment.
     captured.clear()
