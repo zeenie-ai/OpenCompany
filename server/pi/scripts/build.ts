@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {mkdir,mkdtemp,copyFile,readFile,writeFile,rm,rename,readdir} from "node:fs/promises";
 import {dirname,join,resolve,sep} from "node:path";
 import {fileURLToPath} from "node:url";
+import {tarBinary} from "./tar.ts";
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const dist=join(root,"dist");
@@ -20,7 +21,7 @@ try {
   if (sdk.version!=="1.1.0") throw new Error("Pi distribution SDK version differs from its pin");
   const archive=join(runtime,"runtime.tgz");
   let tar:ReturnType<typeof Bun.spawn>;
-  try {tar=Bun.spawn(["tar","-czf",archive,"-C",runtime,"index.js","package.json","node_modules"],{stdout:"inherit",stderr:"inherit"});}
+  try {tar=Bun.spawn([tarBinary(),"-czf",archive,"-C",runtime,"index.js","package.json","node_modules"],{stdout:"inherit",stderr:"inherit"});}
   catch {throw new Error("Building the Pi runtime requires tar (Windows bsdtar or Unix tar)");}
   if (await tar.exited!==0) throw new Error("Pi runtime archive creation failed");
   const bytes=await readFile(archive);

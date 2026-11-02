@@ -5,6 +5,7 @@ import {dirname,join,resolve,sep} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
 import {captureProcess,smokeHost,within} from "./process-helpers.ts";
+import {tarBinary} from "../scripts/tar.ts";
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const manifestPath=join(root,"dist","runtime-manifest.json");
@@ -24,7 +25,7 @@ describe.skipIf(!await Bun.file(manifestPath).exists())("production archive",()=
     // server/pi/node_modules, root node_modules or any development workspace.
     buildRoot=await realpath(tmpdir());
     isolated=await realpath(await mkdtemp(join(buildRoot,"opencompany-pi-offline-")));
-    const unpack=await captureProcess(["tar","-xzf",archive,"-C",isolated],"Offline runtime archive extraction",25000);
+    const unpack=await captureProcess([tarBinary(),"-xzf",archive,"-C",isolated],"Offline runtime archive extraction",25000);
     expect(unpack.exitCode,`Archive extraction failed: ${unpack.stderr}`).toBe(0);
     for (const platform of ["darwin-arm64","darwin-x64","linux-x64","win32-x64"]) {
       const binary=join(isolated,"node_modules","@esbuild",platform,platform.startsWith("win32-") ? "esbuild.exe" : "bin/esbuild");
