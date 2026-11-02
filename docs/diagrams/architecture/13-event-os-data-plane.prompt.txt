@@ -1,0 +1,54 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram, project documentation PNG
+Style: precise flat technical infographic, dark charcoal canvas #101216, panels #1b1e25, bright readable text #e8eaed. Restrained cyan interfaces, purple services, orange Temporal, pink data, green external systems. Proposed components use amber dashed outlines and explicit status words. No decorative 3D, no mascots, no logos, no visual metaphors.
+Composition: wide 16:9 landscape, generous spacing, large legible sans-serif text, clean orthogonal arrow routes with clear arrowheads, no crossing through labels. Keep exact box labels and edge directions below. Do not add components or relationships. Do not print source file paths in the image.
+
+Title (verbatim): "Event OS data plane and source migration"
+Status badge (verbatim): "PROPOSED — ACCEPTED ROADMAP"
+Footer (verbatim): "Migration: current → shadow → durable sources → legacy retirement. Unknown effects require explicit resolution."
+Baseline caption: "Source baseline 56f0b397"
+Layout: Use two horizontal bands: ingress through conversation execution across the upper two-thirds; effect/outbox delivery below, with the atomic consuming-save return clearly visible. Add the migration strip in a separated footer. Proposed data-plane components use dashed amber or pink outlines; Turn child is an existing execution building block.
+
+Exact components:
+- drivers: "Drivers / chat / webhooks" (external)
+- verify: "Verify, cap, normalize, dedupe" (proposed)
+- ingress: "Durable ingress / app DB commit" (state)
+- ack: "Acknowledge producer" (interface)
+- router: "DB router / subscriptions + sequence" (proposed)
+- stream: "Conversation stream / deliveries + cursors" (state)
+- relay: "Bounded relay / known workflow ID" (proposed)
+- entity: "ConversationWorkflow / one turn at a time" (proposed)
+- turn: "Turn child / Machina + agent execution" (temporal)
+- history: "History + consumed cursor / atomic save" (state)
+- outbox: "Durable outbox" (state)
+- gate: "Approval / token / claim gate" (proposed)
+- send: "Sender activity / sent, failed, unknown" (proposed)
+- provider: "External provider" (external)
+
+Exact directed relationships:
+- drivers → verify: "input"
+- verify → ingress: "append"
+- ingress → ack: "after commit"
+- ingress → router: "accepted rows"
+- router → stream: "route + sequence"
+- stream → relay: "pending batch"
+- relay → entity: "Signal-With-Start"
+- entity → turn: "admit one turn"
+- turn → history: "consume + persist"
+- history → stream: "advance consumed cursor"
+- turn → outbox: "enqueue effect"
+- outbox → gate: "eligible row"
+- gate → send: "permitted claim"
+- send → provider: "idempotent or at-most-once"
+- send → outbox: "record result"
+
+Legend: solid outline = implemented building block; dotted cyan = implemented, rollout pending; dashed amber/pink = proposed component; green = external. Category color does not change implementation status. All proposed views carry their status badge.
+Constraints: spell every label accurately, preserve directional arrowheads, no invented services, no additional arrows, no text smaller than necessary for normal documentation reading. Do not imply the whole proposed architecture is deployed.
+
+Exact additional generation instruction:
+Input image role: style reference only. Match its dark technical typography, colored outlines, simple boxes and readable arrows; replace its subject completely with this proposed data-plane diagram. All facts, components and arrows come only from the exact specification above.
+
+Generation history
+1. Built-in ImageGen generation, style reference: 02-local-runtime-v1.png; artifact exec-18dfcda8-4994-491e-beb6-49ca36ac2b56.png.
+2. Built-in ImageGen edit; selected artifact exec-ec758888-4b27-4373-b717-b9ed0dbd81a0.png. Exact edit prompt:
+Edit this diagram only to correct status encoding and one arrowhead. Preserve every word, box, layout, color family, footer, and all other arrows. 1) Four pink datastore components—Durable ingress / app DB commit; Conversation stream / deliveries + cursors; History + consumed cursor / atomic save; Durable outbox—are PROPOSED and must have clearly DASHED PINK outlines, matching the legend's proposed-component encoding. They are not solid implemented boxes. 2) The bottom 'record result' relationship must be ONE WAY from Sender activity to Durable outbox. Remove the arrowhead pointing upward into Sender activity; retain only the arrowhead entering Durable outbox. Keep the other sender→provider arrow unchanged. Do not add any content.

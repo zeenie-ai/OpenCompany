@@ -1,0 +1,39 @@
+%% OpenCompany current architecture; baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%% Exact relationships and caveats: 08-chat-agent-turns.brief.md
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","primaryBorderColor":"#bd93f9","lineColor":"#9aa1ac","fontFamily":"Arial, sans-serif","fontSize":"18px"}}}%%
+flowchart LR
+  ui["Chat UI"]:::client
+  admit["Authorized chat admission"]:::service
+  ledger["Chat messages and ChatRun ledger"]:::state
+  event["Workflow event signal"]:::temporal
+  trigger["Controller and trigger listener"]:::temporal
+  graphRun["MachinaWorkflow"]:::temporal
+  agent["AgentWorkflow"]:::temporal
+  step["Model / tool activities"]:::temporal
+  provider["Model provider and tools"]:::external
+  context["Conversation persistence"]:::state
+  hub["Backend live chat hub"]:::service
+  subscriber["Subscribed UI and resync"]:::client
+  relay["Standalone-worker relay"]:::service
+  internal["Authenticated /ws/internal"]:::client
+  ui -->|"send_chat_message"| admit
+  admit -->|"persist admission"| ledger
+  admit -->|"deliver admitted run"| event
+  event --> trigger
+  trigger --> graphRun
+  graphRun -->|"native agent path"| agent
+  agent --> step
+  step --> provider
+  agent -->|"save turn"| context
+  step -->|"local run events"| hub
+  ledger -->|"run lifecycle events"| hub
+  hub -->|"bounded live stream"| subscriber
+  step -->|"remote worker only"| relay
+  relay -->|"selected frames"| internal
+  internal --> hub
+  classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed,stroke-width:2px
+  classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed,stroke-width:2px
+  classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed,stroke-width:2px
+  classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed,stroke-width:2px
+  classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed,stroke-width:2px
+  classDef dormant fill:#1b1e25,stroke:#f1fa8c,color:#e8eaed,stroke-width:2px,stroke-dasharray:6 4

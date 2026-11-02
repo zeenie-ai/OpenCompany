@@ -1,0 +1,74 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram in a consistent technical suite.
+Style: polished flat vector-like technical drawing, wide landscape 16:9, opaque charcoal background #101216, boxes #1b1e25, off-white text #e8eaed. Cyan #8be9fd for clients/interfaces, purple #bd93f9 for application services, orange #ffb86c for Temporal runtime, pink #ff79c6 for data, green #50fa7b for external dependencies. Use large crisp sans-serif labels, spacious layout, clear orthogonal directional arrows, distinct process/store boundaries, restrained color and no decoration. No 3D, no logos, no invented components or arrows. Render all quoted labels verbatim. Source paths are provenance only; do not draw code paths as tiny text. Use the short edge labels specified. Aim for readability at ordinary documentation width.
+
+Title (verbatim): "OpenCompany · Frontend architecture"
+Subtitle (verbatim): "Current implementation · 56f0b397"
+
+Composition: Use three vertical zones: React shell/screens on the left, distinct client-state and transport adapters in the middle, backend on the right. Keep UI state and server-state Query cache separate. The WebSocketContext fans out to Query cache bridge, status stores, chat subscribers and console/terminal consumers. It does not make AppShell subscribe to every live frame. Draw shell effects as a small app-wide sync lane.
+
+Exact component labels and semantic colors:
+- "React root providers" (client)
+- "AppShell" (client)
+- "Home employee interface" (client)
+- "Dev workflow canvas" (client)
+- "Zustand UI / graph state" (state)
+- "TanStack Query cache" (state)
+- "REST request adapters" (client)
+- "WebSocketContext" (client)
+- "Backend API / WS" (service)
+- "Workflow / node status stores" (state)
+- "Chat run / session subscribers" (client)
+- "Console / terminal consumers" (client)
+- "Shell synchronization effects" (client)
+
+Required directional relationships (from → to, with exact short edge label):
+- "React root providers" → "AppShell": "mount"
+- "AppShell" → "Home employee interface": "lazy screen"
+- "AppShell" → "Dev workflow canvas": "lazy screen"
+- "Zustand UI / graph state" → "Home employee interface": "UI state"
+- "Zustand UI / graph state" → "Dev workflow canvas": "graph / UI state"
+- "TanStack Query cache" → "Home employee interface": "server state"
+- "TanStack Query cache" → "Dev workflow canvas": "catalogue / specs"
+- "Home employee interface" → "REST request adapters": "REST operations"
+- "Dev workflow canvas" → "REST request adapters": "REST operations"
+- "REST request adapters" → "Backend API / WS": "HTTP"
+- "Home employee interface" → "WebSocketContext": "commands / subscriptions"
+- "Dev workflow canvas" → "WebSocketContext": "commands / subscriptions"
+- "WebSocketContext" → "Backend API / WS": "WebSocket"
+- "WebSocketContext" → "TanStack Query cache": "cache bridge"
+- "WebSocketContext" → "Workflow / node status stores": "status updates"
+- "WebSocketContext" → "Chat run / session subscribers": "chat frames / resync"
+- "WebSocketContext" → "Console / terminal consumers": "live output"
+- "AppShell" → "Shell synchronization effects": "own app-wide effects"
+- "Shell synchronization effects" → "Workflow / node status stores": "workflow identity / reconnect sync"
+
+Architecture constraints (do not add them all as small prose; honor them in topology and brief callouts):
+- React root mounts persisted Query state, theme, auth and WebSocket providers. AppShell owns common effects/dialogs and lazily selects Home or the Dev canvas.
+- Zustand UI/graph state and TanStack Query server-state cache are distinct. The diagram does not imply all state is persisted or that decrypted credentials are persisted in browser storage.
+- Transport is mixed REST, WebSocket commands/subscriptions and feature-specific polling. It is not a universal WebSocket-only architecture.
+- WebSocket cache/status bridges update selected consumers. AppShell intentionally avoids subscribing to the high-frequency context value.
+- useCurrentWorkflowSync owns workflow identity propagation and reconnect/switch status refresh across both screens.
+- Chat delivery uses session/run subscriptions and resynchronization. Console/terminal event retention is not equivalent to the durable chat ledger.
+- NodeSpec/backend catalogue data drive the current editor. The current parameter renderer remains switch-based; the widget registry is a separate proposal.
+
+Footer (verbatim): "UI state, server cache and live event streams are distinct. Current transport combines REST, WebSocket and scoped polling."
+
+Use a concise legend: Client/interface, Application service, Temporal, State, External dependency. This is a current-implementation diagram, not a proposed deployment. Do not add cloud containers, databases, bypass routes or security guarantees absent from the specified relationships.
+
+Provenance: code baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12. Sources: client/src/main.tsx; client/src/App.tsx; client/src/app/AppShell.tsx; client/src/app/ShellModeSwitch.tsx; client/src/app/useCurrentWorkflowSync.ts; client/src/lib/queryClient.ts; client/src/lib/queryPersist.ts; client/src/store/useAppStore.ts; client/src/contexts/WebSocketContext.tsx; client/src/features/chat/index.ts; docs-internal/frontend_architecture.md; docs-internal/status_broadcaster.md. Do not print source paths in the image.
+
+
+Generation style reference: docs/diagrams/architecture/02-local-runtime-v1.png
+
+Exact appended generation instructions:
+Input image is a STYLE REFERENCE ONLY. Match its typography, charcoal background and colored outlines; facts come only from this diagram's own labels and edges. Do not reproduce the full architecture-constraints prose in the image. Prefer one compact footer and at most two short callouts. Keep exact component labels large. Draw all required directions faithfully; do not collapse a component into a surrounding group title if it has its own incoming/outgoing arrows. Do not add arrows. Space crossings clearly.
+
+
+Targeted edit prompt:
+Correct two arrow-routing mistakes in this frontend diagram, preserving typography, palette, all boxes, title, footer and other relationships. REST request adapters must connect DIRECTLY to Backend API / WS by an arrow labeled HTTP. Remove the incorrect REST request adapters→WebSocketContext arrow entirely. Route the direct HTTP arrow around the WebSocketContext box without touching it or forming a junction. WebSocketContext keeps its separate direct WebSocket arrow to Backend API / WS. TanStack Query cache must have two distinct outgoing arrows: server state→Home employee interface; catalogue / specs→Dev workflow canvas. Ensure the catalogue/specs arrow actually terminates at the Dev canvas, not the Home box or a transport arrow. Preserve the WebSocketContext→TanStack Query cache arrow labeled cache bridge, and all commands/subscriptions, status, chat and console output relationships. No extra arrows.
+
+
+
+Final cross-review correction prompt (selected output):
+Make ONE precise connector correction to this diagram. Preserve every box, label, palette, typography and every existing arrow including the separate direct REST HTTP bypass and cache bridge. The horizontal output fan-out line above Workflow / node status stores, Chat run / session subscribers and Console / terminal consumers must be visibly connected to WebSocketContext. Add a clear solid vertical connector from the BOTTOM of the WebSocketContext box to this horizontal fan-out line, with a visible T junction at the bus. Its three existing outgoing arrowheads must remain on the status stores, chat subscribers and console consumers. Route the connector so a crossing of the separate REST HTTP line is visibly a crossing, not a junction. All three output arrows must unambiguously originate at WebSocketContext. No other changes.

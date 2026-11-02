@@ -1,0 +1,73 @@
+{
+  "id": 3,
+  "title": "Distributed deployment",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/03-distributed-deployment-v1.png",
+  "mermaid": "docs/diagrams/architecture/03-distributed-deployment.mmd",
+  "prompt": "docs/diagrams/architecture/03-distributed-deployment.prompt.txt",
+  "brief": "docs/diagrams/architecture/03-distributed-deployment.brief.md",
+  "sources": [
+    "server/core/config.py",
+    "server/services/temporal/lifecycle.py",
+    "server/services/temporal/worker.py",
+    "server/services/browser_owners.py",
+    "server/services/credentials/preflight.py",
+    "server/services/credentials/onepassword.py",
+    "server/services/chat/relay.py",
+    "server/nodes/mobile/_node.py",
+    "docs-internal/browser.md",
+    "docs-internal/docker.md"
+  ],
+  "doc_targets": [
+    "docs-internal/TEMPORAL_ARCHITECTURE.md",
+    "docs-internal/browser.md",
+    "docs-internal/credentials_encryption.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source and image reviewed: explicit API/backend process, separate owner-local browser resources, service workflow submission distinct from SDK polling, external shared stores, generic-worker limits, selected-frame relay and prerequisites. First generation corrected before selection.",
+      "Final regeneration uses same-component alias panels: owner\u2192Postgres/profile/owner queue; worker\u2192relay\u2192API; API\u2192owner check\u2192mobile. Main submit/poll origins and process boundaries are distinct. Rejected dense layouts retained in provenance.",
+      "Coordinator final visual review: Verified final simplified topology and explicit ownership, authenticated relay and mobile authorization insets; aliases identify reused components."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "attempts": [
+      {
+        "operation": "generate",
+        "artifact": "exec-cd6facde-3568-44cb-999a-81efbfe2b490.png",
+        "selected": false,
+        "style_reference": "02-local-runtime-v1.png"
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-1cc0b432-c75b-4d2d-8c0e-8a6f01490874.png",
+        "selected": false,
+        "style_reference": "02-local-runtime-v1.png"
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-63ac6c42-534e-4a76-8094-a1a22cb2b681.png",
+        "selected": false,
+        "reason": "Owner path fixed; relay/mobile endpoints remained ambiguous."
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-c3e70053-6edf-4293-acdc-217c3e9ce6e6.png",
+        "selected": false,
+        "reason": "Endpoint-only edit still ambiguous; layout rejected."
+      },
+      {
+        "operation": "generate",
+        "artifact": "exec-f363f46f-12c4-4a51-85a5-2046fe01c8c7.png",
+        "selected": true,
+        "style_reference": "02-local-runtime-v1.png",
+        "reason": "Main topology and explicit same-component alias detail panels."
+      }
+    ]
+  }
+}

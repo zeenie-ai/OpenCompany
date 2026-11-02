@@ -16,6 +16,21 @@ and quiesces the driver. Resume replays recorded model/tool receipts. Parent
 drivers park during delegated child waits so a single driver slot can serve
 nested Coding Agents. Native histories retain their recorded execution path.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Deployment and events — Current implementation.**
+
+[![Deployment and events (Current implementation)](../docs/diagrams/architecture/10-deployment-events-v1.png)](../docs/diagrams/architecture/10-deployment-events-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/10-deployment-events.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/10-deployment-events.brief.md)
+
+Related views: [Independent-node execution](../docs/diagrams/architecture/06-independent-node-execution.brief.md).
+
+<!-- architecture-suite:end -->
+
 ## Control lifecycle
 
 - **Start** creates the first generation and deploys its snapshotted graph.

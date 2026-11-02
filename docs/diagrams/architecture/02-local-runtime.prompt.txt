@@ -1,0 +1,27 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram, view 02 of a consistent suite.
+Primary request: Draw the current LOCAL RUNTIME as a precise, highly readable, polished technical system-design diagram. Wide landscape 16:9 composition, flat vector-like boxes and orthogonal directional arrows. No photorealism, no 3D, no decorative motifs or logos. Opaque charcoal background #101216, box fill #1b1e25, off-white text #e8eaed. Cyan #8be9fd for clients/interfaces, purple #bd93f9 for application services, orange #ffb86c for Temporal runtime, pink #ff79c6 for state. Large sans-serif labels, generous spacing, restrained accents, crisp arrowheads. Text must be verbatim and readable at ordinary documentation width. Do not add labels or arrows not specified below.
+
+Title (verbatim): "OpenCompany · Local runtime"
+Subtitle (verbatim): "Current implementation · 56f0b397"
+
+Main diagram, left to right:
+Left client box "Browser / Electron" connects by arrow labeled "HTTP / WebSocket" to a large boundary titled "ONE BACKEND PROCESS".
+Below the client, a smaller "company start" box connects by "launch" arrow to the backend boundary.
+Inside ONE BACKEND PROCESS, show three boxes: "API + WebSocket + built SPA", "Application services", "Embedded SDK workers". Arrows go API to services, then services to workers labeled "start and manage". These three boxes are inside one process boundary; never depict the workers as separate servers.
+To the right, outside that process boundary, show "Temporal server child". Application services connect to it by an arrow labeled "submit workflows". The embedded SDK workers connect to it by a distinct arrow labeled "poll / report". These connections use gRPC. Temporal server child alone connects downward to a separate cylinder "Temporal history SQLite".
+Below the backend, show three distinct application state boxes/cylinders: "Application database", "Encrypted credentials", "Workspaces + packages". Application services connect to each. Do not merge the application database with Temporal history.
+Show one optional-runtime box "Lazy sidecars" connected only from application services by an arrow labeled "on demand". Its smaller second line is "Bun JS · WhatsApp · optional browser".
+
+Bottom strip of three small, clearly separated VARIANT callouts (not additional required infrastructure):
+"Development" / "Vite proxies API / WS to the backend"
+"Electron" / "Launches or attaches to the same backend"
+"Single-image Docker" / "Same runtime · /data volume · app port only"
+The strip explains variants; it must not introduce any client-to-store or client-to-Temporal arrows.
+
+Footer (verbatim): "SDK workers share the backend process. Temporal history and application state are separate."
+Small legend: "Client / interface" cyan; "Application service" purple; "Temporal" orange; "State" pink.
+
+Critical invariants: One backend process; Temporal server is a separate backend-owned local child; SDK workers stay inside the backend; lazy sidecars are optional/on-demand. No Redis, no load balancer, no Kubernetes, no external worker fleet in this LOCAL view. No direct client-to-store connections. No external ports or made-up throughput numbers. Vite is development-only. Docker is a supported optional single-container host, not a multi-service compose stack. Keep every arrow clear and each storage cylinder distinct.
+
+Provenance: current code at 56f0b397d0b313ec550791c1e2772525a9f7cf12. Sources: cli/commands/start.py; cli/commands/dev.py; server/main.py; server/services/temporal/lifecycle.py; server/services/temporal/_runtime.py; server/core/paths.py; desktop/src/main/backend.ts; client/vite.config.js; docker-compose.yml; docker/entrypoint.sh; docker/Dockerfile. These source paths are generation evidence; do not print them inside the image.

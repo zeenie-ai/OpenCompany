@@ -1,0 +1,53 @@
+Use case: infographic-diagram
+Asset type: source-backed OpenCompany maintainer architecture documentation
+Style: polished flat technical diagram, wide 16:9 landscape; charcoal background #101216, panels #1b1e25, text #e8eaed. Rounded rectangles, restrained accents, crisp orthogonal arrows with arrowheads and readable sans-serif type. Cyan client/interfaces, purple backend services, orange Temporal execution, pink durable state, green external systems. Generous spacing. Use no perspective, illustrations, decorative icons, logos, gradients or watermark. Show explicit textual status, never color alone. No file paths in the image.
+Typography: large precise labels, no extra invented text, no tiny prose. Every literal label below must be verbatim. Arrows must match the relationship list. Conditional arrows need the listed short label. Dashed arrows mean optional/conditional; solid arrows are ordinary control/data flow. Do not add reverse arrowheads or unlisted connections.
+
+Title (verbatim): "Independent-node execution"
+Status badge (verbatim): "CURRENT"
+Footer (verbatim): "OpenCompany · source 56f0b397"
+Composition: Four clearly separated horizontal entry lanes, with no implication that one entry universally supports every node. Top: Canvas Run through WebSocket and WorkflowService into NodeExecutor for ordinary nodes, with a distinct new-Coding-Agent Pi workflow branch from WorkflowService to Activity or agent child. Second: graph admission into MachinaWorkflow with activity or agent-child dispatch. Third: agent tool call into the trusted connected-tool dispatcher and plugin boundary. Bottom: authenticated Workspace task through saved-node authorization/eligibility, durable controller, then invocation. Share only the registered-plugin destination where valid.
+
+Exact component labels:
+- "Canvas single-node Run" (client)
+- "WebSocket handler" (service)
+- "WorkflowService" (service)
+- "NodeExecutor" (service)
+- "Graph execution" (client)
+- "MachinaWorkflow" (temporal)
+- "Activity or agent child" (temporal)
+- "Agent tool call" (client)
+- "Trusted tool dispatch" (service)
+- "Registered plugin boundary" (service)
+- "Workspace task REST" (client)
+- "Saved-node authorization" (service)
+- "Workspace-task eligibility" (service)
+- "WorkspaceTaskControllerWorkflow" (temporal)
+- "NodeInvocationWorkflow" (temporal)
+
+Required directed relationships:
+- Canvas single-node Run → WebSocket handler
+- WebSocket handler → WorkflowService
+- WorkflowService → NodeExecutor [ordinary nodes]
+- WorkflowService → Activity or agent child [new Coding Agent: Pi workflow]
+- NodeExecutor → Registered plugin boundary
+- Graph execution → MachinaWorkflow [Temporal admission]
+- MachinaWorkflow → Activity or agent child
+- Activity or agent child → Registered plugin boundary [runtime-specific]
+- Agent tool call → Trusted tool dispatch
+- Trusted tool dispatch → Registered plugin boundary [connected tool scope]
+- Workspace task REST → Saved-node authorization
+- Saved-node authorization → Workspace-task eligibility
+- Workspace-task eligibility → WorkspaceTaskControllerWorkflow [enabled and capable]
+- WorkspaceTaskControllerWorkflow → NodeInvocationWorkflow [deduplicated submission]
+- NodeInvocationWorkflow → Activity or agent child [recorded task dispatch]
+
+Bottom callouts, verbatim, small but readable:
+- "Independent does not mean every node accepts direct Workspace tasks."
+- "Saved-node identity, capability, graph connections and credentials remain prerequisites."
+- "Workspace submissions are epoch-fenced and deduplicated by their controller."
+
+Accuracy requirements: all boxes and relationships above describe current code at the pinned commit. Do not draw proposed durable-inbox/Event OS architecture. Keep process, datastore, client and external-system categories distinct. No extra boxes or arrows. Avoid text overlap, clipped arrowheads, illegible tiny annotations and unlabeled shortcut paths.
+
+--- Targeted built-in ImageGen edit, attempt 2 ---
+Keep this diagram unchanged except two precise presentation fixes. In the legend change "Backend service (process)" to "Backend service"; these purple boxes are modules within a backend, not separate OS processes. At the crossing where the vertical NodeInvocationWorkflow→Activity or agent child arrow crosses the horizontal Trusted tool dispatch→Registered plugin boundary arrow, add a small bridge/jump in the vertical line to make it unmistakable that there is NO junction or connection between those two paths. Preserve all arrow directions, labels, boxes, source footer and callouts.

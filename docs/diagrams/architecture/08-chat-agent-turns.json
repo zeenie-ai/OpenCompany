@@ -1,0 +1,48 @@
+{
+  "id": 8,
+  "title": "Chat and agent turns",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/08-chat-agent-turns-v1.png",
+  "mermaid": "docs/diagrams/architecture/08-chat-agent-turns.mmd",
+  "prompt": "docs/diagrams/architecture/08-chat-agent-turns.prompt.txt",
+  "brief": "docs/diagrams/architecture/08-chat-agent-turns.brief.md",
+  "sources": [
+    "server/services/chat/handlers.py",
+    "server/services/chat/ledger.py",
+    "server/services/chat/events.py",
+    "server/services/temporal/agent_workflow.py",
+    "server/services/chat/hub.py",
+    "server/services/chat/relay.py"
+  ],
+  "doc_targets": [
+    "docs-internal/chat_protocol.md",
+    "docs-internal/agent_architecture.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source-backed labels and directed relationships prepared before image generation.",
+      "Native and documentation-width review: durable message/ChatRun ledger, conversation persistence and live hub are visibly separate.",
+      "Admitted-run dispatch, native agent model/tool path, bounded stream and standalone-worker selected-frame relay match the source brief.",
+      "Coordinator final visual review: Verified admission ledger/persistence separated from live hub and selected remote relay; native turn scope."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "attempts": [
+      {
+        "type": "generate",
+        "artifact": "exec-bb2eeb23-eb5f-45ce-917f-917af8d0a30d.png"
+      }
+    ],
+    "selected_artifact": "exec-bb2eeb23-eb5f-45ce-917f-917af8d0a30d.png",
+    "dimensions": [
+      1672,
+      941
+    ]
+  }
+}

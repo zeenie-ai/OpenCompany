@@ -1,0 +1,62 @@
+Use case: infographic-diagram
+Asset type: source-backed OpenCompany maintainer architecture documentation
+Style: polished flat technical diagram, wide 16:9 landscape; charcoal background #101216, panels #1b1e25, text #e8eaed. Rounded rectangles, restrained accents, crisp orthogonal arrows with arrowheads and readable sans-serif type. Cyan client/interfaces, purple backend services, orange Temporal execution, pink durable state, green external systems. Generous spacing. Use no perspective, illustrations, decorative icons, logos, gradients or watermark. Show explicit textual status, never color alone. No file paths in the image.
+Typography: large precise labels, no extra invented text, no tiny prose. Every literal label below must be verbatim. Arrows must match the relationship list. Conditional arrows need the listed short label. Dashed arrows mean optional/conditional; solid arrows are ordinary control/data flow. Do not add reverse arrowheads or unlisted connections.
+
+Title (verbatim): "Deployment and events"
+Status badge (verbatim): "CURRENT"
+Footer (verbatim): "OpenCompany · source 56f0b397"
+Composition: Three entry lanes across the top: verified push/webhook events, provider polling workflow, and Temporal Schedule/cron workflow, all leading to graph execution through their correct routes. In the lower half show durable generation/control and the lifecycle chain: Start→Running→Stopping/drain→Stopped→Resume→Running; Reset archives the generation and returns Ready, and a later Start creates a new generation. Keep event delivery and lifecycle controls visibly distinct.
+
+Exact component labels:
+- "Verified push / webhook" (external)
+- "WorkflowEvent dispatch" (service)
+- "Controller / trigger listener" (temporal)
+- "Polling workflow and activity" (temporal)
+- "Temporal Schedule and cron workflow" (temporal)
+- "MachinaWorkflow" (temporal)
+- "Generation and graph snapshot" (state)
+- "WorkflowControlWorkflow" (temporal)
+- "Start" (client)
+- "Running" (service)
+- "Stop gates new work" (client)
+- "Drain admitted work" (temporal)
+- "Stopped" (service)
+- "Resume same continuation" (client)
+- "Reset and archive" (client)
+- "Ready for next Start" (service)
+
+Required directed relationships:
+- Verified push / webhook → WorkflowEvent dispatch
+- WorkflowEvent dispatch → Controller / trigger listener [Visibility and signals]
+- Controller / trigger listener → MachinaWorkflow [admitted event]
+- Polling workflow and activity → MachinaWorkflow [matching poll result]
+- Temporal Schedule and cron workflow → MachinaWorkflow [scheduled run]
+- Start → Generation and graph snapshot [allocate generation]
+- Generation and graph snapshot → WorkflowControlWorkflow [snapshot and revision]
+- WorkflowControlWorkflow → Controller / trigger listener [trigger lifecycle]
+- WorkflowControlWorkflow → Polling workflow and activity [polling gates]
+- WorkflowControlWorkflow → Temporal Schedule and cron workflow [pause / resume schedules]
+- Start → Running [setup acknowledged]
+- Running → Stop gates new work
+- Stop gates new work → Drain admitted work
+- Drain admitted work → Stopped [acknowledged drain]
+- Stopped → Resume same continuation
+- Resume same continuation → Running [same generation]
+- Running → Reset and archive
+- Stopped → Reset and archive
+- Reset and archive → Ready for next Start [cancel resources and archive]
+- Ready for next Start → Start [new generation]
+
+Bottom callouts, verbatim, small but readable:
+- "Current dispatch is fail-soft Visibility + signals, without a durable event inbox."
+- "Stop retains admitted work and buffered events; Resume releases the same continuation."
+- "Reset revision-guards cleanup and requires a later Start for the next generation."
+
+Accuracy requirements: all boxes and relationships above describe current code at the pinned commit. Do not draw proposed durable-inbox/Event OS architecture. Keep process, datastore, client and external-system categories distinct. No extra boxes or arrows. Avoid text overlap, clipped arrowheads, illegible tiny annotations and unlabeled shortcut paths.
+
+--- Targeted built-in ImageGen edit, attempt 2 ---
+One architecture correction only. The upward arrow labeled "polling gates" currently leaves WorkflowControlWorkflow and incorrectly terminates at MachinaWorkflow. Remove that arrow. Draw "polling gates" from WorkflowControlWorkflow to the box "Polling workflow and activity" instead, using a clean bent route around MachinaWorkflow, with no touching or junction at MachinaWorkflow. Preserve Polling workflow and activity→MachinaWorkflow labeled matching poll result. Keep every other arrow, all lifecycle states, labels, colors, callouts and footer unchanged. Show line jumps wherever this new gate route crosses another independent line.
+
+--- Targeted built-in ImageGen edit, attempt 3 ---
+Preserve the diagram, with one line-crossing clarification. The vertical "polling gates" route from WorkflowControlWorkflow up to Polling workflow and activity crosses the horizontal "scheduled run" arrow just to the right of MachinaWorkflow. Add a small bridge/jump to the vertical polling-gates line at that crossing so it clearly does not join the scheduled-run arrow. Ensure its lower short segment touches the right edge of WorkflowControlWorkflow rather than floating. Do not change any labels, arrow endpoints, states, boxes or other lines.

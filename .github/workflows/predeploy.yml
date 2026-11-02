@@ -21,6 +21,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: bun install --frozen-lockfile
+      - name: Architecture Mermaid syntax
+        run: bun scripts/check_architecture_mermaid.mjs
       - run: bun run build
       - name: Lint client
         run: bun run --filter react-flow-client lint

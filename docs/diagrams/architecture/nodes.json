@@ -1,0 +1,4488 @@
+{
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "count": 157,
+  "nodes": [
+    {
+      "type": "agentBuilder",
+      "name": "Agent Builder",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "add_skill",
+        "add_subagent",
+        "add_tool",
+        "apply_update",
+        "create_workflow",
+        "inspect_canvas",
+        "inspect_node",
+        "plan_update",
+        "read_doc",
+        "search_docs"
+      ],
+      "source": "server/nodes/tool/agent_builder/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/agentBuilder.md"
+    },
+    {
+      "type": "aiAgent",
+      "name": "AI Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/ai_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_agents/aiAgent.md"
+    },
+    {
+      "type": "ai_employee",
+      "name": "AI Employee",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/ai_employee/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/ai_employee.md"
+    },
+    {
+      "type": "airplaneModeControl",
+      "name": "Airplane Mode",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/airplane_mode_control/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/airplaneModeControl.md"
+    },
+    {
+      "type": "android_agent",
+      "name": "Android Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/android_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/android_agent.md"
+    },
+    {
+      "type": "android_tool",
+      "name": "Android",
+      "family": "tool",
+      "groups": [
+        "tool"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": true,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/mobile/_tool.py",
+      "card": "docs-internal/node-logic-flows/mobile/android_tool.md"
+    },
+    {
+      "type": "anthropicChatModel",
+      "name": "Claude",
+      "family": "model",
+      "groups": [
+        "model",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "anthropic"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/anthropic_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/anthropicChatModel.md"
+    },
+    {
+      "type": "apifyActor",
+      "name": "Apify Actor",
+      "family": "api",
+      "groups": [
+        "api",
+        "scraper",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "apify"
+      ],
+      "operations": [
+        "run"
+      ],
+      "source": "server/nodes/scraper/apify_actor/__init__.py",
+      "card": "docs-internal/node-logic-flows/web_automation/apifyActor.md"
+    },
+    {
+      "type": "appLauncher",
+      "name": "App Launcher",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/app_launcher/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/appLauncher.md"
+    },
+    {
+      "type": "appList",
+      "name": "App List",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/app_list/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/appList.md"
+    },
+    {
+      "type": "approvalGate",
+      "name": "Approval",
+      "family": "workflow",
+      "groups": [
+        "workflow"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [],
+      "operations": [
+        "request"
+      ],
+      "source": "server/nodes/workflow/approval_gate/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/approvalGate.md"
+    },
+    {
+      "type": "audioAutomation",
+      "name": "Audio Automation",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/audio_automation/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/audioAutomation.md"
+    },
+    {
+      "type": "autonomous_agent",
+      "name": "Autonomous Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/autonomous_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/autonomous_agent.md"
+    },
+    {
+      "type": "awsAction",
+      "name": "AWS",
+      "family": "deployment",
+      "groups": [
+        "deployment",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "aws"
+      ],
+      "operations": [
+        "call",
+        "ec2_instance_describe",
+        "ec2_instance_start",
+        "ec2_instance_stop",
+        "ec2_instances_list",
+        "list_operations",
+        "s3_delete",
+        "s3_download",
+        "s3_list",
+        "s3_upload",
+        "whoami"
+      ],
+      "source": "server/nodes/aws/aws_action.py",
+      "card": "docs-internal/node-logic-flows/cli_integrations/awsAction.md"
+    },
+    {
+      "type": "batteryMonitor",
+      "name": "Battery Monitor",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/battery_monitor/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/batteryMonitor.md"
+    },
+    {
+      "type": "bluetoothAutomation",
+      "name": "Bluetooth Automation",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/bluetooth_automation/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/bluetoothAutomation.md"
+    },
+    {
+      "type": "braveSearch",
+      "name": "Brave Search",
+      "family": "search",
+      "groups": [
+        "search",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "brave_search"
+      ],
+      "operations": [
+        "search"
+      ],
+      "source": "server/nodes/search/brave_search/__init__.py",
+      "card": "docs-internal/node-logic-flows/search/braveSearch.md"
+    },
+    {
+      "type": "browser",
+      "name": "Browser",
+      "family": "browser",
+      "groups": [
+        "browser",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "browser",
+      "credentials": [],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/browser/browser/__init__.py",
+      "card": "docs-internal/node-logic-flows/web_automation/browser.md"
+    },
+    {
+      "type": "browser_agent",
+      "name": "Browser AI Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": true,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/browser_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/browser_agent.md"
+    },
+    {
+      "type": "calculatorTool",
+      "name": "Calculator",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "calculate"
+      ],
+      "source": "server/nodes/tool/calculator_tool/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/calculatorTool.md"
+    },
+    {
+      "type": "cameraControl",
+      "name": "Camera",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/camera_control/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/cameraControl.md"
+    },
+    {
+      "type": "canvas",
+      "name": "Canvas",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "display"
+      ],
+      "source": "server/nodes/tool/canvas/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/canvas.md"
+    },
+    {
+      "type": "cerebrasChatModel",
+      "name": "Cerebras",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "cerebras"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/cerebras_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/cerebrasChatModel.md"
+    },
+    {
+      "type": "chatAgent",
+      "name": "Zeenie",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/chat_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_agents/chatAgent.md"
+    },
+    {
+      "type": "chatHistory",
+      "name": "Chat History",
+      "family": "chat",
+      "groups": [
+        "chat"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "read"
+      ],
+      "source": "server/nodes/chat/chat_history/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/chatHistory.md"
+    },
+    {
+      "type": "chatReply",
+      "name": "Reply in Chat",
+      "family": "chat",
+      "groups": [
+        "chat"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "reply"
+      ],
+      "source": "server/nodes/chat/chat_reply/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/chatReply.md"
+    },
+    {
+      "type": "chatSend",
+      "name": "Chat Send",
+      "family": "chat",
+      "groups": [
+        "chat"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/chat/chat_send/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/chatSend.md"
+    },
+    {
+      "type": "chatTrigger",
+      "name": "Chat Trigger",
+      "family": "utility",
+      "groups": [
+        "utility",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/trigger/chat_trigger/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/chatTrigger.md"
+    },
+    {
+      "type": "chatUi",
+      "name": "Show UI",
+      "family": "chat",
+      "groups": [
+        "chat",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "show"
+      ],
+      "source": "server/nodes/chat/chat_ui/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/chatUi.md"
+    },
+    {
+      "type": "claude_code_agent",
+      "name": "Claude Code",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/claude_code_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/claude_code_agent.md"
+    },
+    {
+      "type": "cloudflareAction",
+      "name": "Cloudflare",
+      "family": "deployment",
+      "groups": [
+        "deployment",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "cloudflare"
+      ],
+      "operations": [
+        "custom",
+        "dns_record_create",
+        "dns_record_delete",
+        "dns_record_edit",
+        "dns_records_list",
+        "graphql_query",
+        "search_commands",
+        "whoami",
+        "zones_list"
+      ],
+      "source": "server/nodes/cloudflare/cloudflare_action.py",
+      "card": "docs-internal/node-logic-flows/cli_integrations/cloudflareAction.md"
+    },
+    {
+      "type": "codex_agent",
+      "name": "Codex",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/codex_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/codex_agent.md"
+    },
+    {
+      "type": "coding_agent",
+      "name": "Coding Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/coding_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/coding_agent.md"
+    },
+    {
+      "type": "console",
+      "name": "Console",
+      "family": "utility",
+      "groups": [
+        "utility"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "log"
+      ],
+      "source": "server/nodes/utility/console/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/console.md"
+    },
+    {
+      "type": "consumer_agent",
+      "name": "Consumer Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/consumer_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/consumer_agent.md"
+    },
+    {
+      "type": "context",
+      "name": "Context",
+      "family": "memory",
+      "groups": [
+        "memory"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "policy"
+      ],
+      "source": "server/nodes/context/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_agents/context.md"
+    },
+    {
+      "type": "crawleeScraper",
+      "name": "Web Scraper",
+      "family": "scraper",
+      "groups": [
+        "scraper",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "browser",
+      "credentials": [],
+      "operations": [
+        "scrape"
+      ],
+      "source": "server/nodes/scraper/crawlee_scraper/__init__.py",
+      "card": "docs-internal/node-logic-flows/web_automation/crawleeScraper.md"
+    },
+    {
+      "type": "cronScheduler",
+      "name": "Cron Scheduler",
+      "family": "scheduler",
+      "groups": [
+        "scheduler",
+        "trigger",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "triggers-poll",
+      "credentials": [],
+      "operations": [
+        "trigger"
+      ],
+      "source": "server/nodes/scheduler/cron_scheduler/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/cronScheduler.md"
+    },
+    {
+      "type": "currentTimeTool",
+      "name": "Current Time",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "now"
+      ],
+      "source": "server/nodes/tool/current_time_tool/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/currentTimeTool.md"
+    },
+    {
+      "type": "dataSource",
+      "name": "Data",
+      "family": "tool",
+      "groups": [
+        "tool"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "data"
+      ],
+      "source": "server/nodes/tool/data_source/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/dataSource.md"
+    },
+    {
+      "type": "deepseekChatModel",
+      "name": "DeepSeek",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "deepseek"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/deepseek_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/deepseekChatModel.md"
+    },
+    {
+      "type": "detectLanguage",
+      "name": "Detect Language",
+      "family": "language",
+      "groups": [
+        "language",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "sarvam",
+        "openai"
+      ],
+      "operations": [
+        "detect"
+      ],
+      "source": "server/nodes/translate/detect_language.py",
+      "card": "docs-internal/node-logic-flows/language/detectLanguage.md"
+    },
+    {
+      "type": "deviceStateAutomation",
+      "name": "Device State",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/device_state_automation/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/deviceStateAutomation.md"
+    },
+    {
+      "type": "discordAction",
+      "name": "Discord API",
+      "family": "discord",
+      "groups": [
+        "discord"
+      ],
+      "plugin_bases": [
+        "AccountScopedNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "rest-api",
+      "credentials": [
+        "discord"
+      ],
+      "operations": [
+        "add_reaction",
+        "create_thread",
+        "custom",
+        "delete_message",
+        "download_attachments",
+        "edit_message",
+        "execute_webhook",
+        "get_channel",
+        "get_message",
+        "interaction_respond",
+        "list_channels",
+        "list_guilds",
+        "list_messages",
+        "pin_message"
+      ],
+      "source": "server/nodes/discord/discord_action.py",
+      "card": "docs-internal/node-logic-flows/discord/discordAction.md"
+    },
+    {
+      "type": "discordInteraction",
+      "name": "Discord Interaction",
+      "family": "discord",
+      "groups": [
+        "discord",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "discord"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/discord/discord_interaction.py",
+      "card": "docs-internal/node-logic-flows/discord/discordInteraction.md"
+    },
+    {
+      "type": "discordReceive",
+      "name": "Discord Receive",
+      "family": "discord",
+      "groups": [
+        "discord",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "discord"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/discord/discord_receive.py",
+      "card": "docs-internal/node-logic-flows/discord/discordReceive.md"
+    },
+    {
+      "type": "discordSend",
+      "name": "Discord Send",
+      "family": "discord",
+      "groups": [
+        "discord"
+      ],
+      "plugin_bases": [
+        "AccountScopedNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "messaging",
+      "credentials": [
+        "discord"
+      ],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/discord/discord_send.py",
+      "card": "docs-internal/node-logic-flows/discord/discordSend.md"
+    },
+    {
+      "type": "documentParser",
+      "name": "Document Parser",
+      "family": "document",
+      "groups": [
+        "document"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "parse"
+      ],
+      "source": "server/nodes/document/document_parser/__init__.py",
+      "card": "docs-internal/node-logic-flows/document/documentParser.md"
+    },
+    {
+      "type": "dodoPaymentsAction",
+      "name": "Dodo Payments",
+      "family": "payments",
+      "groups": [
+        "payments",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "dodo_payments"
+      ],
+      "operations": [
+        "call",
+        "cancel_subscription",
+        "change_subscription_plan",
+        "create_checkout_session",
+        "create_customer",
+        "create_customer_portal_link",
+        "create_refund",
+        "get_customer",
+        "get_payment",
+        "get_product",
+        "get_subscription",
+        "list_customers",
+        "list_disputes",
+        "list_operations",
+        "list_payments",
+        "list_products",
+        "list_refunds",
+        "list_subscriptions"
+      ],
+      "source": "server/nodes/dodo_payments/dodo_payments_action.py",
+      "card": "docs-internal/node-logic-flows/dodo_payments/dodoPaymentsAction.md"
+    },
+    {
+      "type": "dodoPaymentsReceive",
+      "name": "Dodo Payments Receive",
+      "family": "payments",
+      "groups": [
+        "payments",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "WebhookTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "dodo_payments"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/dodo_payments/dodo_payments_receive.py",
+      "card": "docs-internal/node-logic-flows/dodo_payments/dodoPaymentsReceive.md"
+    },
+    {
+      "type": "duckduckgoSearch",
+      "name": "DuckDuckGo Search",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai",
+        "search"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "search"
+      ],
+      "source": "server/nodes/search/duckduckgo_search/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/duckduckgoSearch.md"
+    },
+    {
+      "type": "emailRead",
+      "name": "Email Read",
+      "family": "email",
+      "groups": [
+        "email",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [],
+      "operations": [
+        "query"
+      ],
+      "source": "server/nodes/email/email_read/__init__.py",
+      "card": "docs-internal/node-logic-flows/email/emailRead.md"
+    },
+    {
+      "type": "emailReceive",
+      "name": "Email Receive",
+      "family": "email",
+      "groups": [
+        "email",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "PollingTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-poll",
+      "credentials": [],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/email/email_receive/__init__.py",
+      "card": "docs-internal/node-logic-flows/email/emailReceive.md"
+    },
+    {
+      "type": "emailSend",
+      "name": "Email Send",
+      "family": "email",
+      "groups": [
+        "email",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/email/email_send/__init__.py",
+      "card": "docs-internal/node-logic-flows/email/emailSend.md"
+    },
+    {
+      "type": "embeddingGenerator",
+      "name": "Embedding Generator",
+      "family": "document",
+      "groups": [
+        "document"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "embed"
+      ],
+      "source": "server/nodes/document/embedding_generator/__init__.py",
+      "card": "docs-internal/node-logic-flows/document/embeddingGenerator.md"
+    },
+    {
+      "type": "employeeJob",
+      "name": "Team work",
+      "family": "workflow",
+      "groups": [
+        "workflow"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "deliver",
+        "intake",
+        "submit"
+      ],
+      "source": "server/nodes/workflow/employee_job/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow/employeeJob.md"
+    },
+    {
+      "type": "employeeJobSource",
+      "name": "Original email",
+      "family": "workflow",
+      "groups": [
+        "workflow"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "read"
+      ],
+      "source": "server/nodes/workflow/employee_job_source/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow/employeeJobSource.md"
+    },
+    {
+      "type": "environmentalSensors",
+      "name": "Environmental Sensors",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/environmental_sensors/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/environmentalSensors.md"
+    },
+    {
+      "type": "fileDownloader",
+      "name": "File Downloader",
+      "family": "document",
+      "groups": [
+        "document"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "download"
+      ],
+      "source": "server/nodes/document/file_downloader/__init__.py",
+      "card": "docs-internal/node-logic-flows/document/fileDownloader.md"
+    },
+    {
+      "type": "fileHandler",
+      "name": "File Handler",
+      "family": "text",
+      "groups": [
+        "text"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "wrap"
+      ],
+      "source": "server/nodes/text/file_handler/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/fileHandler.md"
+    },
+    {
+      "type": "fileModify",
+      "name": "File Modify",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "modify"
+      ],
+      "source": "server/nodes/filesystem/file_modify/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/fileModify.md"
+    },
+    {
+      "type": "fileRead",
+      "name": "File Read",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "read"
+      ],
+      "source": "server/nodes/filesystem/file_read/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/fileRead.md"
+    },
+    {
+      "type": "fsSearch",
+      "name": "FS Search",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "search"
+      ],
+      "source": "server/nodes/filesystem/fs_search/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/fsSearch.md"
+    },
+    {
+      "type": "gallery",
+      "name": "Gallery",
+      "family": "filesystem",
+      "groups": [
+        "filesystem"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "list"
+      ],
+      "source": "server/nodes/filesystem/gallery/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/gallery.md"
+    },
+    {
+      "type": "gcloudAction",
+      "name": "Google Cloud",
+      "family": "deployment",
+      "groups": [
+        "deployment",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "gcloud"
+      ],
+      "operations": [
+        "auth_list",
+        "compute_instance_describe",
+        "compute_instance_start",
+        "compute_instance_stop",
+        "compute_instances_list",
+        "config_list",
+        "custom",
+        "projects_list",
+        "run_deploy",
+        "run_service_describe",
+        "run_services_list",
+        "set_project",
+        "storage_cp",
+        "storage_ls",
+        "storage_rm"
+      ],
+      "source": "server/nodes/gcloud/gcloud_action.py",
+      "card": "docs-internal/node-logic-flows/cli_integrations/gcloudAction.md"
+    },
+    {
+      "type": "geminiChatModel",
+      "name": "Gemini",
+      "family": "model",
+      "groups": [
+        "model",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "gemini"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/gemini_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/geminiChatModel.md"
+    },
+    {
+      "type": "githubAction",
+      "name": "GitHub",
+      "family": "vcs",
+      "groups": [
+        "vcs",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "github"
+      ],
+      "operations": [
+        "custom",
+        "issue_create",
+        "issue_list",
+        "pr_create",
+        "pr_list",
+        "pr_merge",
+        "repo_clone"
+      ],
+      "source": "server/nodes/github/github_action.py",
+      "card": "docs-internal/node-logic-flows/cli_integrations/githubAction.md"
+    },
+    {
+      "type": "gmaps_create",
+      "name": "Map Create",
+      "family": "location",
+      "groups": [
+        "location",
+        "service"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [
+        "google_maps"
+      ],
+      "operations": [
+        "create"
+      ],
+      "source": "server/nodes/location/gmaps_create/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/gmaps_create.md"
+    },
+    {
+      "type": "gmaps_locations",
+      "name": "Geocoding",
+      "family": "location",
+      "groups": [
+        "location",
+        "service",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google_maps"
+      ],
+      "operations": [
+        "geocode"
+      ],
+      "source": "server/nodes/location/gmaps_locations/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/gmaps_locations.md"
+    },
+    {
+      "type": "gmaps_nearby_places",
+      "name": "Nearby Places",
+      "family": "location",
+      "groups": [
+        "location",
+        "service",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google_maps"
+      ],
+      "operations": [
+        "nearby"
+      ],
+      "source": "server/nodes/location/gmaps_nearby_places/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/gmaps_nearby_places.md"
+    },
+    {
+      "type": "googleCalendar",
+      "name": "Calendar",
+      "family": "google",
+      "groups": [
+        "google",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/google/calendar/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleCalendar.md"
+    },
+    {
+      "type": "googleContacts",
+      "name": "Contacts",
+      "family": "google",
+      "groups": [
+        "google",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/google/contacts/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleContacts.md"
+    },
+    {
+      "type": "googleDrive",
+      "name": "Drive",
+      "family": "google",
+      "groups": [
+        "google",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/google/drive/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleDrive.md"
+    },
+    {
+      "type": "googleGmail",
+      "name": "Gmail",
+      "family": "google",
+      "groups": [
+        "google",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "read",
+        "search",
+        "send"
+      ],
+      "source": "server/nodes/google/gmail/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleGmail.md"
+    },
+    {
+      "type": "googleGmailReceive",
+      "name": "Gmail Receive",
+      "family": "google",
+      "groups": [
+        "google",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "PollingTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-poll",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/google/gmail_receive/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleGmailReceive.md"
+    },
+    {
+      "type": "googleSheets",
+      "name": "Sheets",
+      "family": "google",
+      "groups": [
+        "google",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/google/sheets/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleSheets.md"
+    },
+    {
+      "type": "googleTasks",
+      "name": "Tasks",
+      "family": "google",
+      "groups": [
+        "google",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "google"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/google/tasks/__init__.py",
+      "card": "docs-internal/node-logic-flows/google_workspace/googleTasks.md"
+    },
+    {
+      "type": "groqChatModel",
+      "name": "Groq",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "groq"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/groq_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/groqChatModel.md"
+    },
+    {
+      "type": "httpRequest",
+      "name": "HTTP Request",
+      "family": "utility",
+      "groups": [
+        "utility",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "request"
+      ],
+      "source": "server/nodes/utility/http_request/__init__.py",
+      "card": "docs-internal/node-logic-flows/http_proxy/httpRequest.md"
+    },
+    {
+      "type": "httpScraper",
+      "name": "HTTP Scraper",
+      "family": "document",
+      "groups": [
+        "document"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "scrape"
+      ],
+      "source": "server/nodes/document/http_scraper/__init__.py",
+      "card": "docs-internal/node-logic-flows/document/httpScraper.md"
+    },
+    {
+      "type": "javascriptExecutor",
+      "name": "JavaScript Executor",
+      "family": "code",
+      "groups": [
+        "code",
+        "tool"
+      ],
+      "plugin_bases": [
+        "CodeExecutorBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "code-exec",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/code/javascript_executor/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/javascriptExecutor.md"
+    },
+    {
+      "type": "kimiChatModel",
+      "name": "Kimi",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "kimi"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/kimi_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/kimiChatModel.md"
+    },
+    {
+      "type": "lmstudioChatModel",
+      "name": "LM Studio",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "lmstudio"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/lmstudio_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/lmstudioChatModel.md"
+    },
+    {
+      "type": "location",
+      "name": "Location",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/location/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/location.md"
+    },
+    {
+      "type": "masterSkill",
+      "name": "Master Skill",
+      "family": "tool",
+      "groups": [
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "noop"
+      ],
+      "source": "server/nodes/skill/master_skill/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_agents/masterSkill.md"
+    },
+    {
+      "type": "mcpConnector",
+      "name": "Custom Connector",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "mcp"
+      ],
+      "operations": [
+        "call"
+      ],
+      "source": "server/nodes/mcp/mcp_connector.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/mcpConnector.md"
+    },
+    {
+      "type": "mediaControl",
+      "name": "Media Control",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/media_control/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/mediaControl.md"
+    },
+    {
+      "type": "mistralChatModel",
+      "name": "Mistral",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "mistral"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/mistral_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/mistralChatModel.md"
+    },
+    {
+      "type": "mobile_use_agent",
+      "name": "Mobile Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": true,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/mobile/_node.py",
+      "card": "docs-internal/node-logic-flows/mobile/mobile_use_agent.md"
+    },
+    {
+      "type": "montyExecutor",
+      "name": "Monty Executor",
+      "family": "code",
+      "groups": [
+        "code",
+        "tool"
+      ],
+      "plugin_bases": [
+        "CodeExecutorBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "code-exec",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/code/monty_executor/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/montyExecutor.md"
+    },
+    {
+      "type": "motionDetection",
+      "name": "Motion Detection",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/motion_detection/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/motionDetection.md"
+    },
+    {
+      "type": "msCalendar",
+      "name": "Outlook Calendar",
+      "family": "microsoft",
+      "groups": [
+        "microsoft",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "microsoft"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/microsoft/calendar/__init__.py",
+      "card": "docs-internal/node-logic-flows/microsoft/msCalendar.md"
+    },
+    {
+      "type": "msMail",
+      "name": "Outlook Mail",
+      "family": "microsoft",
+      "groups": [
+        "microsoft",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "microsoft"
+      ],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/microsoft/mail/__init__.py",
+      "card": "docs-internal/node-logic-flows/microsoft/msMail.md"
+    },
+    {
+      "type": "msMailReceive",
+      "name": "Outlook Mail Receive",
+      "family": "microsoft",
+      "groups": [
+        "microsoft",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "PollingTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-poll",
+      "credentials": [
+        "microsoft"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/microsoft/mail_receive/__init__.py",
+      "card": "docs-internal/node-logic-flows/microsoft/msMailReceive.md"
+    },
+    {
+      "type": "networkMonitor",
+      "name": "Network Monitor",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/network_monitor/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/networkMonitor.md"
+    },
+    {
+      "type": "ollamaChatModel",
+      "name": "Ollama",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "ollama"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/ollama_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/ollamaChatModel.md"
+    },
+    {
+      "type": "openaiChatModel",
+      "name": "OpenAI",
+      "family": "model",
+      "groups": [
+        "model",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "openai"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/openai_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/openaiChatModel.md"
+    },
+    {
+      "type": "openaiCompatibleChatModel",
+      "name": "OpenAI-compatible",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "openai_compatible"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/openai_compatible_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/openaiCompatibleChatModel.md"
+    },
+    {
+      "type": "openrouterChatModel",
+      "name": "OpenRouter",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "openrouter"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/openrouter_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/openrouterChatModel.md"
+    },
+    {
+      "type": "orchestrator_agent",
+      "name": "Orchestrator Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/orchestrator_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/orchestrator_agent.md"
+    },
+    {
+      "type": "payments_agent",
+      "name": "Payments Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/payments_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/payments_agent.md"
+    },
+    {
+      "type": "perplexitySearch",
+      "name": "Perplexity Search",
+      "family": "search",
+      "groups": [
+        "search",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "perplexity"
+      ],
+      "operations": [
+        "search"
+      ],
+      "source": "server/nodes/search/perplexity_search/__init__.py",
+      "card": "docs-internal/node-logic-flows/search/perplexitySearch.md"
+    },
+    {
+      "type": "processManager",
+      "name": "Process Manager",
+      "family": "utility",
+      "groups": [
+        "utility",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/utility/process_manager/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/processManager.md"
+    },
+    {
+      "type": "productivity_agent",
+      "name": "Productivity Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/productivity_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/productivity_agent.md"
+    },
+    {
+      "type": "proxyConfig",
+      "name": "Proxy Config",
+      "family": "proxy",
+      "groups": [
+        "proxy",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/proxy/proxy_config/__init__.py",
+      "card": "docs-internal/node-logic-flows/http_proxy/proxyConfig.md"
+    },
+    {
+      "type": "proxyRequest",
+      "name": "Proxy Request",
+      "family": "proxy",
+      "groups": [
+        "proxy",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "request"
+      ],
+      "source": "server/nodes/proxy/proxy_request/__init__.py",
+      "card": "docs-internal/node-logic-flows/http_proxy/proxyRequest.md"
+    },
+    {
+      "type": "proxyStatus",
+      "name": "Proxy Status",
+      "family": "proxy",
+      "groups": [
+        "proxy",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "status"
+      ],
+      "source": "server/nodes/proxy/proxy_status/__init__.py",
+      "card": "docs-internal/node-logic-flows/http_proxy/proxyStatus.md"
+    },
+    {
+      "type": "pythonExecutor",
+      "name": "Python Executor",
+      "family": "code",
+      "groups": [
+        "code",
+        "tool"
+      ],
+      "plugin_bases": [
+        "CodeExecutorBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "code-exec",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/code/python_executor/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/pythonExecutor.md"
+    },
+    {
+      "type": "rlm_agent",
+      "name": "RLM Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/rlm_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/rlm_agent.md"
+    },
+    {
+      "type": "sarvamChatModel",
+      "name": "Sarvam AI",
+      "family": "model",
+      "groups": [
+        "model"
+      ],
+      "plugin_bases": [
+        "ChatModelBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "model",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "sarvam"
+      ],
+      "operations": [
+        "chat"
+      ],
+      "source": "server/nodes/model/sarvam_chat_model/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_chat_models/sarvamChatModel.md"
+    },
+    {
+      "type": "screenControlAutomation",
+      "name": "Screen Control",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/screen_control_automation/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/screenControlAutomation.md"
+    },
+    {
+      "type": "serperSearch",
+      "name": "Serper Search",
+      "family": "search",
+      "groups": [
+        "search",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "serper"
+      ],
+      "operations": [
+        "search"
+      ],
+      "source": "server/nodes/search/serper_search/__init__.py",
+      "card": "docs-internal/node-logic-flows/search/serperSearch.md"
+    },
+    {
+      "type": "shell",
+      "name": "Shell",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/shell/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/shell.md"
+    },
+    {
+      "type": "simpleMemory",
+      "name": "Memory",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "memory"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "memory"
+      ],
+      "source": "server/nodes/tool/simple_memory/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_agents/simpleMemory.md"
+    },
+    {
+      "type": "socialReceive",
+      "name": "Social Receive",
+      "family": "social",
+      "groups": [
+        "social"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "normalize"
+      ],
+      "source": "server/nodes/social/social_receive/__init__.py",
+      "card": "docs-internal/node-logic-flows/telegram_social/socialReceive.md"
+    },
+    {
+      "type": "socialSend",
+      "name": "Social Send",
+      "family": "social",
+      "groups": [
+        "social",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/social/social_send/__init__.py",
+      "card": "docs-internal/node-logic-flows/telegram_social/socialSend.md"
+    },
+    {
+      "type": "social_agent",
+      "name": "Social Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/social_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/social_agent.md"
+    },
+    {
+      "type": "speechToText",
+      "name": "Speech to Text",
+      "family": "language",
+      "groups": [
+        "language",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "openai",
+        "groq",
+        "deepgram",
+        "sarvam"
+      ],
+      "operations": [
+        "transcribe"
+      ],
+      "source": "server/nodes/speech/speech_to_text.py",
+      "card": "docs-internal/node-logic-flows/language/speechToText.md"
+    },
+    {
+      "type": "start",
+      "name": "Start",
+      "family": "workflow",
+      "groups": [
+        "workflow"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "start",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "emit"
+      ],
+      "source": "server/nodes/workflow/start/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/start.md"
+    },
+    {
+      "type": "stripeAction",
+      "name": "Stripe",
+      "family": "payments",
+      "groups": [
+        "payments",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "stripe"
+      ],
+      "operations": [
+        "run"
+      ],
+      "source": "server/nodes/stripe/stripe_action.py",
+      "card": "docs-internal/node-logic-flows/stripe/stripeAction.md"
+    },
+    {
+      "type": "stripeReceive",
+      "name": "Stripe Receive",
+      "family": "payments",
+      "groups": [
+        "payments",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "WebhookTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "stripe"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/stripe/stripe_receive.py",
+      "card": "docs-internal/node-logic-flows/stripe/stripeReceive.md"
+    },
+    {
+      "type": "systemInfo",
+      "name": "System Info",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/system_info/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/systemInfo.md"
+    },
+    {
+      "type": "taskManager",
+      "name": "Task Manager",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "manage"
+      ],
+      "source": "server/nodes/tool/task_manager/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/taskManager.md"
+    },
+    {
+      "type": "taskTrigger",
+      "name": "Task Completed",
+      "family": "trigger",
+      "groups": [
+        "trigger",
+        "workflow"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/trigger/task_trigger/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/taskTrigger.md"
+    },
+    {
+      "type": "task_agent",
+      "name": "Task Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/task_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/task_agent.md"
+    },
+    {
+      "type": "teamMonitor",
+      "name": "Team Monitor",
+      "family": "utility",
+      "groups": [
+        "utility"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "monitor"
+      ],
+      "source": "server/nodes/utility/team_monitor/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/teamMonitor.md"
+    },
+    {
+      "type": "telegramReceive",
+      "name": "Telegram Receive",
+      "family": "social",
+      "groups": [
+        "social",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "telegram"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/telegram/telegram_receive.py",
+      "card": "docs-internal/node-logic-flows/telegram_social/telegramReceive.md"
+    },
+    {
+      "type": "telegramSend",
+      "name": "Telegram Send",
+      "family": "social",
+      "groups": [
+        "social"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "messaging",
+      "credentials": [
+        "telegram"
+      ],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/telegram/telegram_send.py",
+      "card": "docs-internal/node-logic-flows/telegram_social/telegramSend.md"
+    },
+    {
+      "type": "textChunker",
+      "name": "Text Chunker",
+      "family": "document",
+      "groups": [
+        "document"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "chunk"
+      ],
+      "source": "server/nodes/document/text_chunker/__init__.py",
+      "card": "docs-internal/node-logic-flows/document/textChunker.md"
+    },
+    {
+      "type": "textGenerator",
+      "name": "Text Generator",
+      "family": "text",
+      "groups": [
+        "text"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "generate"
+      ],
+      "source": "server/nodes/text/text_generator/__init__.py",
+      "card": "docs-internal/node-logic-flows/chat_utility/textGenerator.md"
+    },
+    {
+      "type": "textToSpeech",
+      "name": "Text to Speech",
+      "family": "language",
+      "groups": [
+        "language",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "openai",
+        "elevenlabs",
+        "sarvam"
+      ],
+      "operations": [
+        "synthesize"
+      ],
+      "source": "server/nodes/speech/text_to_speech.py",
+      "card": "docs-internal/node-logic-flows/language/textToSpeech.md"
+    },
+    {
+      "type": "tikhubAction",
+      "name": "TikHub",
+      "family": "scraper",
+      "groups": [
+        "scraper",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "tikhub"
+      ],
+      "operations": [
+        "account",
+        "call",
+        "fetch_url",
+        "list_endpoints"
+      ],
+      "source": "server/nodes/scraper/tikhub_action/__init__.py",
+      "card": "docs-internal/node-logic-flows/web_automation/tikhubAction.md"
+    },
+    {
+      "type": "timer",
+      "name": "Timer",
+      "family": "scheduler",
+      "groups": [
+        "scheduler"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/scheduler/timer/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/timer.md"
+    },
+    {
+      "type": "tool_agent",
+      "name": "Tool Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/tool_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/tool_agent.md"
+    },
+    {
+      "type": "translateText",
+      "name": "Translate",
+      "family": "language",
+      "groups": [
+        "language",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "deepl",
+        "sarvam",
+        "openai"
+      ],
+      "operations": [
+        "translate"
+      ],
+      "source": "server/nodes/translate/translate_text.py",
+      "card": "docs-internal/node-logic-flows/language/translateText.md"
+    },
+    {
+      "type": "transliterateText",
+      "name": "Transliterate",
+      "family": "language",
+      "groups": [
+        "language",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "sarvam",
+        "openai"
+      ],
+      "operations": [
+        "transliterate"
+      ],
+      "source": "server/nodes/translate/transliterate_text.py",
+      "card": "docs-internal/node-logic-flows/language/transliterateText.md"
+    },
+    {
+      "type": "travel_agent",
+      "name": "Travel Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/travel_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/travel_agent.md"
+    },
+    {
+      "type": "twitterReceive",
+      "name": "Twitter Receive",
+      "family": "social",
+      "groups": [
+        "social",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "unavailable",
+      "availability_note": "Registered, but receive/poll implementation is unavailable; see its node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-poll",
+      "credentials": [
+        "twitter"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/twitter/twitter_receive/__init__.py",
+      "card": "docs-internal/node-logic-flows/twitter/twitterReceive.md"
+    },
+    {
+      "type": "twitterSearch",
+      "name": "Twitter Search",
+      "family": "social",
+      "groups": [
+        "social",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "twitter"
+      ],
+      "operations": [
+        "search"
+      ],
+      "source": "server/nodes/twitter/twitter_search/__init__.py",
+      "card": "docs-internal/node-logic-flows/twitter/twitterSearch.md"
+    },
+    {
+      "type": "twitterSend",
+      "name": "Twitter Send",
+      "family": "social",
+      "groups": [
+        "social",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [
+        "twitter"
+      ],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/twitter/twitter_send/__init__.py",
+      "card": "docs-internal/node-logic-flows/twitter/twitterSend.md"
+    },
+    {
+      "type": "twitterUser",
+      "name": "Twitter User",
+      "family": "social",
+      "groups": [
+        "social",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "twitter"
+      ],
+      "operations": [
+        "lookup"
+      ],
+      "source": "server/nodes/twitter/twitter_user/__init__.py",
+      "card": "docs-internal/node-logic-flows/twitter/twitterUser.md"
+    },
+    {
+      "type": "typescriptExecutor",
+      "name": "TypeScript Executor",
+      "family": "code",
+      "groups": [
+        "code",
+        "tool"
+      ],
+      "plugin_bases": [
+        "CodeExecutorBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "code-exec",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/code/typescript_executor/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/typescriptExecutor.md"
+    },
+    {
+      "type": "vectorStore",
+      "name": "Vector Store",
+      "family": "document",
+      "groups": [
+        "document"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "dispatch"
+      ],
+      "source": "server/nodes/document/vector_store/__init__.py",
+      "card": "docs-internal/node-logic-flows/document/vectorStore.md"
+    },
+    {
+      "type": "vercelAction",
+      "name": "Vercel",
+      "family": "deployment",
+      "groups": [
+        "deployment",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "vercel"
+      ],
+      "operations": [
+        "custom",
+        "deploy",
+        "inspect",
+        "list"
+      ],
+      "source": "server/nodes/vercel/vercel_action.py",
+      "card": "docs-internal/node-logic-flows/cli_integrations/vercelAction.md"
+    },
+    {
+      "type": "visionAnalyze",
+      "name": "Vision Analyze",
+      "family": "tool",
+      "groups": [
+        "tool"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "ai-heavy",
+      "credentials": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ],
+      "operations": [
+        "vision"
+      ],
+      "source": "server/nodes/vision/vision_analyze/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/visionAnalyze.md"
+    },
+    {
+      "type": "web_agent",
+      "name": "Web Agent",
+      "family": "agent",
+      "groups": [
+        "agent"
+      ],
+      "plugin_bases": [
+        "SpecializedAgentBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "agent",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "ai-heavy",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/agent/web_agent/__init__.py",
+      "card": "docs-internal/node-logic-flows/specialized_agents/web_agent.md"
+    },
+    {
+      "type": "webhookResponse",
+      "name": "Webhook Response",
+      "family": "utility",
+      "groups": [
+        "utility"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "rest-api",
+      "credentials": [],
+      "operations": [
+        "respond"
+      ],
+      "source": "server/nodes/utility/webhook_response/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/webhookResponse.md"
+    },
+    {
+      "type": "webhookTrigger",
+      "name": "Webhook Trigger",
+      "family": "trigger",
+      "groups": [
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/trigger/webhook_trigger/__init__.py",
+      "card": "docs-internal/node-logic-flows/workflow_triggers/webhookTrigger.md"
+    },
+    {
+      "type": "whatsappBusinessMedia",
+      "name": "WhatsApp Business Media",
+      "family": "whatsapp_business",
+      "groups": [
+        "whatsapp_business",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [
+        "whatsapp_business"
+      ],
+      "operations": [
+        "delete",
+        "download",
+        "get_url",
+        "upload"
+      ],
+      "source": "server/nodes/whatsapp_business/whatsapp_business_media.py",
+      "card": "docs-internal/node-logic-flows/whatsapp_business/whatsappBusinessMedia.md"
+    },
+    {
+      "type": "whatsappBusinessReceive",
+      "name": "WhatsApp Business Receive",
+      "family": "whatsapp_business",
+      "groups": [
+        "whatsapp_business",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "_WhatsAppBusinessTrigger",
+        "WebhookTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "whatsapp_business"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/whatsapp_business/whatsapp_business_receive.py",
+      "card": "docs-internal/node-logic-flows/whatsapp_business/whatsappBusinessReceive.md"
+    },
+    {
+      "type": "whatsappBusinessSend",
+      "name": "WhatsApp Business Send",
+      "family": "whatsapp_business",
+      "groups": [
+        "whatsapp_business",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [
+        "whatsapp_business"
+      ],
+      "operations": [
+        "list_templates",
+        "send_buttons",
+        "send_contacts",
+        "send_cta_url",
+        "send_list",
+        "send_location",
+        "send_media",
+        "send_reaction",
+        "send_template",
+        "send_text"
+      ],
+      "source": "server/nodes/whatsapp_business/whatsapp_business_send.py",
+      "card": "docs-internal/node-logic-flows/whatsapp_business/whatsappBusinessSend.md"
+    },
+    {
+      "type": "whatsappBusinessStatus",
+      "name": "WhatsApp Business Status",
+      "family": "whatsapp_business",
+      "groups": [
+        "whatsapp_business",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "_WhatsAppBusinessTrigger",
+        "WebhookTriggerNode",
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [
+        "whatsapp_business"
+      ],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/whatsapp_business/whatsapp_business_receive.py",
+      "card": "docs-internal/node-logic-flows/whatsapp_business/whatsappBusinessStatus.md"
+    },
+    {
+      "type": "whatsappDb",
+      "name": "WhatsApp DB",
+      "family": "whatsapp",
+      "groups": [
+        "whatsapp",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [],
+      "operations": [
+        "query"
+      ],
+      "source": "server/nodes/whatsapp/whatsapp_db.py",
+      "card": "docs-internal/node-logic-flows/whatsapp/whatsappDb.md"
+    },
+    {
+      "type": "whatsappReceive",
+      "name": "WhatsApp Receive",
+      "family": "whatsapp",
+      "groups": [
+        "whatsapp",
+        "trigger"
+      ],
+      "plugin_bases": [
+        "TriggerNode",
+        "BaseNode"
+      ],
+      "component_kind": "trigger",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": false,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "triggers-event",
+      "credentials": [],
+      "operations": [
+        "wait"
+      ],
+      "source": "server/nodes/whatsapp/whatsapp_receive.py",
+      "card": "docs-internal/node-logic-flows/whatsapp/whatsappReceive.md"
+    },
+    {
+      "type": "whatsappSend",
+      "name": "WhatsApp Send",
+      "family": "whatsapp",
+      "groups": [
+        "whatsapp",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "messaging",
+      "credentials": [],
+      "operations": [
+        "send"
+      ],
+      "source": "server/nodes/whatsapp/whatsapp_send.py",
+      "card": "docs-internal/node-logic-flows/whatsapp/whatsappSend.md"
+    },
+    {
+      "type": "wifiAutomation",
+      "name": "WiFi Automation",
+      "family": "android",
+      "groups": [
+        "android",
+        "service"
+      ],
+      "plugin_bases": [
+        "AndroidServiceBase",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": false,
+      "task_queue": "android",
+      "credentials": [],
+      "operations": [
+        "invoke"
+      ],
+      "source": "server/nodes/android/wifi_automation/__init__.py",
+      "card": "docs-internal/node-logic-flows/android/wifiAutomation.md"
+    },
+    {
+      "type": "writeTodos",
+      "name": "Write Todos",
+      "family": "tool",
+      "groups": [
+        "tool",
+        "ai"
+      ],
+      "plugin_bases": [
+        "ToolNode",
+        "BaseNode"
+      ],
+      "component_kind": "tool",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "hidden",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "write"
+      ],
+      "source": "server/nodes/tool/write_todos/__init__.py",
+      "card": "docs-internal/node-logic-flows/ai_tools/writeTodos.md"
+    }
+  ],
+  "retired": [
+    {
+      "type": "browserHarness",
+      "availability": "retired",
+      "card": "docs-internal/node-logic-flows/web_automation/browserHarness.md",
+      "note": "Migration reference; absent from the registry."
+    }
+  ]
+}

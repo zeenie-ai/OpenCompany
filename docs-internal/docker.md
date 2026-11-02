@@ -17,6 +17,19 @@ authorization from an unrelated host terminal is insufficient.
 | `docker/entrypoint.sh` | Writes the server secrets on first start, then runs uvicorn directly, the way the desktop shell does. |
 | `docker-compose.yml` | One service, one named volume, the port published on this machine only. |
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Local runtime — Current implementation.**
+
+[![Local runtime (Current implementation)](../docs/diagrams/architecture/02-local-runtime-v1.png)](../docs/diagrams/architecture/02-local-runtime-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/02-local-runtime.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/02-local-runtime.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Quick start
 
 From the repository root:

@@ -4,6 +4,21 @@ Locally entered API keys, OAuth tokens, and other local secrets in OpenCompany a
 
 This document covers local encryption, the separate OAuth and API-key stores, the single-point-of-access rule, and the legacy multi-backend abstraction. Approved 1Password sources use a separate runtime-resolution path through the same `AuthService`; see [1Password credentials](onepassword_credentials.md) for setup and supported providers.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Persistence and secrets — Current implementation.**
+
+[![Persistence and secrets (Current implementation)](../docs/diagrams/architecture/12-persistence-secrets-v1.png)](../docs/diagrams/architecture/12-persistence-secrets-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/12-persistence-secrets.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/12-persistence-secrets.brief.md)
+
+Related views: [Distributed deployment](../docs/diagrams/architecture/03-distributed-deployment.brief.md).
+
+<!-- architecture-suite:end -->
+
 ## Credential-source boundary
 
 | Source | Saved state | Runtime access |

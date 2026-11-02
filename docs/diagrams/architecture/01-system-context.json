@@ -1,0 +1,48 @@
+{
+  "id": 1,
+  "title": "System context",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/01-system-context-v1.png",
+  "mermaid": "docs/diagrams/architecture/01-system-context.mmd",
+  "prompt": "docs/diagrams/architecture/01-system-context.prompt.txt",
+  "brief": "docs/diagrams/architecture/01-system-context.brief.md",
+  "sources": [
+    "server/main.py",
+    "cli/commands/start.py",
+    "desktop/src/main/backend.ts",
+    "server/services/llm/unifier.py",
+    "server/services/handlers/tools.py",
+    "server/services/credentials/onepassword.py",
+    "server/services/events/dispatch.py",
+    "server/nodes/mobile/_node.py",
+    "gateway/README.md",
+    "server/config/llm_defaults.json"
+  ],
+  "doc_targets": [
+    "CONTRIBUTING.md",
+    "docs-internal/SETUP.md",
+    "docs-internal/agent_architecture.md",
+    "docs-internal/llm_gateway.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Code-backed source brief verified; ImageGen graph labels, arrow directions, optional Gateway branch, event ingress and local capability boundaries visually inspected. Primary graph remains legible at documentation width; detailed notes also available in the brief.",
+      "Coordinator final visual review: Verified native/Gateway optional alternatives, external ingress vs local capabilities, no required app Redis."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "attempts": [
+      {
+        "operation": "generate",
+        "artifact": "exec-99b2b491-d863-4c7a-b84d-05fdf246337b.png",
+        "selected": true,
+        "style_reference": "02-local-runtime-v1.png"
+      }
+    ]
+  }
+}

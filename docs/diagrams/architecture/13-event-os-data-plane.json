@@ -1,0 +1,53 @@
+{
+  "id": 13,
+  "title": "Event OS data plane and source migration",
+  "status": "accepted-roadmap",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/13-event-os-data-plane-v1.png",
+  "mermaid": "docs/diagrams/architecture/13-event-os-data-plane.mmd",
+  "prompt": "docs/diagrams/architecture/13-event-os-data-plane.prompt.txt",
+  "brief": "docs/diagrams/architecture/13-event-os-data-plane.brief.md",
+  "sources": [
+    "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+    "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md",
+    "RFC-0007-APPROVALS-ON-TEMPORAL.md",
+    "docs-internal/plugin_system.md",
+    "server/services/events/dispatch.py",
+    "server/services/deployment/control.py",
+    "server/nodes/google/gmail_receive/__init__.py",
+    "server/nodes/email/email_receive/__init__.py",
+    "server/nodes/stripe/_source.py"
+  ],
+  "doc_targets": [
+    "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+    "docs-internal/plugin_system.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source boundaries checked against the pinned baseline; proposed status retained.",
+      "Verified all 14 components and 15 directed relationships, durable-commit acknowledgement, atomic consuming save, one-way result recording, proposed datastore outlines, migration strip, and explicit unknown-effect caveat. One ImageGen edit corrected proposed datastore status and the result-recording arrowhead.",
+      "Coordinator final visual review: Verified commit-before-acknowledge, separate future stream/relay/outbox and atomic cursor/history feedback; proposed status."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+    "attempts": [
+      {
+        "kind": "generate",
+        "artifact": "exec-18dfcda8-4994-491e-beb6-49ca36ac2b56.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-ec758888-4b27-4373-b717-b9ed0dbd81a0.png"
+      }
+    ],
+    "selected_artifact": "exec-ec758888-4b27-4373-b717-b9ed0dbd81a0.png",
+    "width": 1672,
+    "height": 941
+  }
+}

@@ -4,6 +4,25 @@ Post-migration (2026-04-14). Single source of truth for the current frontend.
 
 > The pre-migration audit / research / RFC docs (`frontend_architecture_analysis.md`, `frontend_component_functionality_and_design.md`, `frontend_system_design_rfc.md`, `frontend_ui_framework_research.md`, `frontend_ui_stack_recommendation.md`) were deleted on 2026-04-14 — they're preserved in git history under commit `4cb3dd9` if you ever need to reference them. The migration log lives at [ui_migration_plan.md](./ARCHIVE/ui_migration_plan.md).
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Frontend architecture — Current implementation.**
+
+[![Frontend architecture (Current implementation)](../docs/diagrams/architecture/04-frontend-architecture-v1.png)](../docs/diagrams/architecture/04-frontend-architecture-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/04-frontend-architecture.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/04-frontend-architecture.brief.md)
+
+**Parameter widget-registry proposal — Unimplemented refactor sketch.**
+
+[![Parameter widget-registry proposal (Unimplemented refactor sketch)](../docs/diagrams/architecture/16-parameter-widget-registry-v1.png)](../docs/diagrams/architecture/16-parameter-widget-registry-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/16-parameter-widget-registry.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/16-parameter-widget-registry.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## TL;DR
 
 - **React 19 + Vite 7**, type-checked by **TypeScript 7** (the native Go compiler, exact-pinned `7.0.2` in the **root** `devDependencies`). The client keeps `typescript@^5.9.3` only because typescript-eslint's peer range excludes 6/7 — it is not the gate. With the **React Compiler** (`babel-plugin-react-compiler@1.0.0`, `target: '19'`, scoped to all of `src/` except `components/ui/`).

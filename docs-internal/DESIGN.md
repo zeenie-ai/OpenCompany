@@ -1,5 +1,18 @@
 # Execution Engine Design Document
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Workflow execution — Current implementation.**
+
+[![Workflow execution (Current implementation)](../docs/diagrams/architecture/05-workflow-execution-v1.png)](../docs/diagrams/architecture/05-workflow-execution-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/05-workflow-execution.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/05-workflow-execution.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Overview
 
 The OpenCompany execution engine implements a robust workflow orchestration system combining industry-standard patterns from **Netflix Conductor**, **Prefect 3.0**, **Temporal**, and **Redis Streams**. This document details the architectural decisions, design patterns, and standards used.

@@ -12,6 +12,19 @@ Private utility instances may repeat a node type; their IDs and bindings stay
 separate. This does not restrict intentional custom wiring in existing Dev
 graphs.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Teams and context — Current implementation.**
+
+[![Teams and context (Current implementation)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/09-teams-context.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/09-teams-context.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Runtime model
 
 1. `build_teammate_descriptors()` expands connected agents into stable

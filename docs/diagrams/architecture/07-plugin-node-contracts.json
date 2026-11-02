@@ -1,0 +1,68 @@
+{
+  "id": 7,
+  "title": "Plugin and node contracts",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/07-plugin-node-contracts-v1.png",
+  "mermaid": "docs/diagrams/architecture/07-plugin-node-contracts.mmd",
+  "prompt": "docs/diagrams/architecture/07-plugin-node-contracts.prompt.txt",
+  "brief": "docs/diagrams/architecture/07-plugin-node-contracts.brief.md",
+  "sources": [
+    "server/nodes/__init__.py",
+    "server/services/plugin/base.py",
+    "server/services/node_registry.py",
+    "server/services/node_spec.py",
+    "server/routers/schemas.py",
+    "server/services/node_executor.py",
+    "server/services/temporal/plugin_activities.py",
+    "server/services/temporal/worker.py",
+    "client/src/lib/nodeSpec.ts",
+    "client/src/adapters/nodeSpecToDescription.ts",
+    "docs-internal/plugin_system.md"
+  ],
+  "doc_targets": [
+    "docs-internal/plugin_system.md",
+    "docs-internal/node_creation.md",
+    "server/nodes/README.md",
+    "CONTRIBUTING.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Reviewed registration/UI/runtime edges. Corrected typed-activity source to class registry, removed invented NodeExecutor-to-registration edge, and marked capability index documentation-only.",
+      "Cross-review: capability docs index reads registry metadata and class flags directly; NodeSpec-to-index edge and obsolete duplicate line removed.",
+      "Coordinator final visual review: Verified registry/class flags\u2192docs-only capability index, separate NodeSpec editor contract, declared activity registration."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "attempts": [
+      {
+        "operation": "generate",
+        "artifact": "exec-fa54f97e-a7bf-4ce7-987e-e9517e4971e2.png",
+        "selected": false,
+        "style_reference": "02-local-runtime-v1.png"
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-9fa63ebc-3c2d-4255-834d-32c05f293e4f.png",
+        "selected": false,
+        "style_reference": "02-local-runtime-v1.png"
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-61e8da8d-74af-4d71-8037-f6a0c409679f.png",
+        "selected": false,
+        "reason": "Corrected documentation exporter source; subsequent cleanup removed obsolete dangling line."
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-8858e64c-0fd1-4bf5-ac43-4e03f1955429.png",
+        "selected": true,
+        "reason": "Cross-review: capability docs index reads registry metadata and class flags directly; NodeSpec-to-index edge and obsolete duplicate line removed."
+      }
+    ]
+  }
+}

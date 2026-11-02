@@ -1,0 +1,49 @@
+{
+  "id": 9,
+  "title": "Teams and context",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/09-teams-context-v1.png",
+  "mermaid": "docs/diagrams/architecture/09-teams-context.mmd",
+  "prompt": "docs/diagrams/architecture/09-teams-context.prompt.txt",
+  "brief": "docs/diagrams/architecture/09-teams-context.brief.md",
+  "sources": [
+    "server/nodes/tool/task_manager/__init__.py",
+    "server/services/handlers/tools.py",
+    "server/services/temporal/agent_workflow.py",
+    "server/services/agent_context/conversation.py",
+    "docs-internal/agent_context_flow.md",
+    "docs-internal/agent_teams.md"
+  ],
+  "doc_targets": [
+    "docs-internal/agent_teams.md",
+    "docs-internal/agent_context_flow.md",
+    "docs-internal/agent_delegation.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source-backed labels and directed relationships prepared before image generation.",
+      "Reviewed delegation queue, connected-teammate authorization, persist-before-taskTrigger and lead-review loop against the brief.",
+      "Context load/save/review continuity, explicit Memory, scoped skills/files and Reset/new-generation boundaries remain distinct and legible.",
+      "Coordinator final visual review: Verified durable delegated task lifecycle, connected teammate constraint, lead review, opt-in Context vs explicit Memory and generation reset."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "attempts": [
+      {
+        "type": "generate",
+        "artifact": "exec-fbc87ff4-13b3-4911-97a8-db9b21f61fad.png"
+      }
+    ],
+    "selected_artifact": "exec-fbc87ff4-13b3-4911-97a8-db9b21f61fad.png",
+    "dimensions": [
+      1672,
+      941
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram in a consistent technical suite.
+Style: polished flat vector-like technical drawing, wide landscape 16:9, opaque charcoal background #101216, boxes #1b1e25, off-white text #e8eaed. Cyan #8be9fd for clients/interfaces, purple #bd93f9 for application services, orange #ffb86c for Temporal runtime, pink #ff79c6 for data, green #50fa7b for external dependencies. Use large crisp sans-serif labels, spacious layout, clear orthogonal directional arrows, distinct process/store boundaries, restrained color and no decoration. No 3D, no logos, no invented components or arrows. Render all quoted labels verbatim. Source paths are provenance only; do not draw code paths as tiny text. Use the short edge labels specified. Aim for readability at ordinary documentation width.
+
+Title (verbatim): "OpenCompany · System context"
+Subtitle (verbatim): "Current implementation · 56f0b397"
+
+Composition: Place people/clients on the left; one central OpenCompany boundary; external model/tool/API capabilities on the right. Gateway is a visibly OPTIONAL branch to model providers, alongside direct native provider calls. Browser/mobile runtime is an owned capability, not an interchangeable external cloud service. Keep incoming event sources distinct from outgoing operations.
+
+Exact component labels and semantic colors:
+- "Person" (client)
+- "Browser / Electron" (client)
+- "OpenCompany CLI" (client)
+- "OpenCompany" (service)
+- "Model providers" (external)
+- "Optional LLM Gateway" (external)
+- "Integration APIs" (external)
+- "MCP / SDK / CLI tools" (external)
+- "Browser / mobile runtime" (service)
+- "Optional 1Password" (external)
+- "Configured event sources" (external)
+
+Required directional relationships (from → to, with exact short edge label):
+- "Person" → "Browser / Electron": "interact"
+- "Person" → "OpenCompany CLI": "launch / operate"
+- "Browser / Electron" → "OpenCompany": "HTTP / WebSocket"
+- "OpenCompany CLI" → "OpenCompany": "launch / commands"
+- "OpenCompany" → "Model providers": "native provider calls"
+- "OpenCompany" → "Optional LLM Gateway": "supported gateway routes"
+- "Optional LLM Gateway" → "Model providers": "vendor API calls"
+- "OpenCompany" → "Integration APIs": "configured operations"
+- "OpenCompany" → "MCP / SDK / CLI tools": "tool adapters"
+- "OpenCompany" → "Browser / mobile runtime": "owned local capabilities"
+- "OpenCompany" → "Optional 1Password": "resolve approved references"
+- "Configured event sources" → "OpenCompany": "configured event ingress"
+
+Architecture constraints (do not add them all as small prose; honor them in topology and brief callouts):
+- The browser and Electron shell share the API/SPA backend. The CLI launches or operates OpenCompany; it is not a second Node.js API backend.
+- Direct model-provider calls and supported optional Gateway routes coexist. Gateway is a separate stock LiteLLM deployment with its own infrastructure; its Redis is not the application execution engine.
+- Integration APIs use per-install credentials. Gateway support does not imply it proxies every tool API or provider.
+- MCP/SDK/CLI are adapter contracts, not proof that every arbitrary external operation works. Browser and mobile capabilities retain local/runtime/owner prerequisites.
+- 1Password is optional in local installations and required in supported distributed credential mode. Configured event ingress includes provider-specific polling, webhooks and schedules; registered-but-unavailable nodes are not depicted as working ingress.
+
+Footer (verbatim): "Capabilities are configured per installation. Optional Gateway and tool services have separate prerequisites."
+
+Use a concise legend: Client/interface, Application service, Temporal, State, External dependency. This is a current-implementation diagram, not a proposed deployment. Do not add cloud containers, databases, bypass routes or security guarantees absent from the specified relationships.
+
+Provenance: code baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12. Sources: server/main.py; cli/commands/start.py; desktop/src/main/backend.ts; server/services/llm/unifier.py; server/services/handlers/tools.py; server/services/credentials/onepassword.py; server/services/events/dispatch.py; server/nodes/mobile/_node.py; gateway/README.md; server/config/llm_defaults.json. Do not print source paths in the image.
+
+
+Input image role: STYLE REFERENCE ONLY. Match the typography, charcoal background, restrained colored outlines and readable spacing of the provided local-runtime diagram. Do not copy any local-runtime components or relationships absent from this prompt.
+Reference image: docs/diagrams/architecture/02-local-runtime-v1.png

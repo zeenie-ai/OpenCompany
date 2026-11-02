@@ -15,20 +15,24 @@ See [SETUP.md](docs-internal/SETUP.md) for environment setup and [SCRIPTS.md](do
 
 ## System Overview
 
-[![System Overview](docs/diagrams/system-overview.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/system-overview.svg)
+[![Local runtime](docs/diagrams/architecture/02-local-runtime-v1.png)](docs/diagrams/architecture/02-local-runtime-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/02-local-runtime.mmd) · [Source evidence](docs/diagrams/architecture/02-local-runtime.brief.md)
 
 At a glance:
 
-- **140+ workflow nodes** across 33 populated palette groups (34 registered in `server/nodes/groups.py`) (live count: `len(services.node_registry.NODE_METADATA)` *after* importing `nodes` — a bare `server/nodes/**/__init__.py` glob both over-counts helper packages and under-counts groups that hold several node types in one package)
+- **157 registered node types** at the diagram baseline `56f0b397`; the [capability index](docs/diagrams/architecture/NODES.md) is exported from the live registry and records execution eligibility and exceptions.
 - **Native LLM providers**: 11 cloud providers, Ollama and LM Studio, plus any number of user-named OpenAI-compatible endpoints (llama.cpp, vLLM, a LiteLLM proxy) added in the Credentials Modal with no code. One standalone chat-model node per provider except xAI, which agent nodes select directly, plus `openaiCompatibleChatModel` for a named endpoint
 - **Specialized AI agents** with the Agent Teams delegation pattern — SSOT is the `AI_AGENT_TYPES` frozenset in `server/constants.py`, which spans the base/specialized/team-lead agents plus the CLI-backed (`claude_code_agent`, `rlm_agent`) variants; `codex_agent` is a sibling CLI-agent plugin
-- **WebSocket-first API** replacing most REST endpoints (live handler count = `MESSAGE_HANDLERS` + plugin registries)
+- **Mixed REST and WebSocket interfaces** with durable records, live subscriptions and polling where required; the frontend/event-delivery view identifies their separate roles
 - **Built-in skills**, editable in-UI with SKILL.md defaults on disk (live count: `find server/skills -name SKILL.md | wc -l`)
 - **Execution routing**: durable Temporal execution, with a sequential path for eligible runs when Temporal is explicitly disabled or no Temporal executor is wired
 
 ## How Workflows Execute
 
-[![Execution Flow](docs/diagrams/execution-flow.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/execution-flow.svg)
+[![Workflow execution](docs/diagrams/architecture/05-workflow-execution-v1.png)](docs/diagrams/architecture/05-workflow-execution-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/05-workflow-execution.mmd) · [Source evidence](docs/diagrams/architecture/05-workflow-execution.brief.md)
 
 [WorkflowService](server/services/workflow.py) is a thin facade that selects Temporal when the run requests/enables it and its executor is wired. Eligible runs use a sequential walk when Temporal is explicitly disabled or the executor is absent. A failure after Temporal dispatch returns an error; it does not replay the work locally. Managed employee teams and new Pi Coding Agent runs require Temporal. Every run has an isolated `ExecutionContext` with no shared global state. Nodes are scheduled continuously — when any node completes, its newly-ready dependents start immediately (`FIRST_COMPLETED` pattern) instead of waiting for a whole layer to finish.
 
@@ -43,7 +47,9 @@ Deep dives: [DESIGN.md](docs-internal/DESIGN.md) - [TEMPORAL_ARCHITECTURE.md](do
 
 ## AI Agent System
 
-[![AI Agent Routing](docs/diagrams/ai-agent-routing.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/ai-agent-routing.svg)
+[![Chat and agent turns](docs/diagrams/architecture/08-chat-agent-turns-v1.png)](docs/diagrams/architecture/08-chat-agent-turns-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/08-chat-agent-turns.mmd) · [Source evidence](docs/diagrams/architecture/08-chat-agent-turns.brief.md)
 
 Direct chat completions and native agent turns use the native SDK layer in [services/llm/](server/services/llm/) through `ChatUnifier`. The shared `run_native_agent_loop` consumes lossless native messages and provider-neutral `AgentToolSpec` definitions; Groq, Cerebras, xAI, DeepSeek, Kimi, Mistral, the local servers and every named OpenAI-compatible endpoint ride the OpenAI-compatible client with provider-specific `base_url` values. LangChain has been removed; Temporal histories recorded before the native cutover are refused rather than replayed. Team leads (`orchestrator_agent`, `ai_employee`) receive an intrinsic Task Manager and may assign only agents connected to their `input-teammates` handle. Delegate descriptors stay internal. `task_manager(assign_task)` persists and returns `queued`; Temporal hands work to a detached `DelegatedTaskWorkflow`, while legacy execution reuses the same durable task record. Completion emits `taskTrigger` with owning execution context for a separate lead review. The RLM Agent uses a REPL-based recursive language model pattern. Long-running activities remain alive through activity heartbeats.
 
@@ -51,24 +57,30 @@ Deep dives: [agent_architecture.md](docs-internal/agent_architecture.md) - [nati
 
 ## More Diagrams
 
-Fourteen source-backed architecture and product-panel diagrams live next to the ones above in [docs/diagrams/](docs/diagrams/). Each carries the source files it was drawn from in its `<desc>`.
+The [maintainer architecture suite](docs/diagrams/architecture/README.md) contains twelve current-code views
+and four separately labeled proposal views, all with ImageGen PNGs, editable Mermaid and source evidence.
 
-| Diagram | What it shows |
-|---|---|
-| [System context](docs/diagrams/system-context.svg) | Who uses OpenCompany and which external capabilities it orchestrates |
-| [Runtime and trust topology](docs/diagrams/runtime-trust-topology.svg) | Browser, desktop and CLI clients, the authenticated REST / WebSocket / MCP / webhook surfaces, Temporal and the lazy sidecars |
-| [Workflow execution routing](docs/diagrams/workflow-execution-routing.svg) | Temporal, parallel and sequential branches converging on the NodeExecutor pipeline |
-| [Durable deployment and events](docs/diagrams/durable-deployment-events.svg) | Generation snapshots, WorkflowControlWorkflow, push / poll / cron triggers, CloudEvents dispatch |
-| [Plugin, agent and team composition](docs/diagrams/plugin-agent-team-composition.svg) | How plugins become chat-model and agent nodes, assemble context, skills and tools, and form teams |
-| [Persistence and secret plane](docs/diagrams/persistence-secret-plane.svg) | workflow.db versus the encrypted credentials.db boundary |
-| [Workspace anatomy](docs/diagrams/workspace-anatomy.svg) | Immutable id to mutable slug directories, contained I/O, CLI worktrees and materialized skills |
-| [Node configuration anatomy](docs/diagrams/node-configuration-anatomy.svg) | The Input / Parameters / Output modal, local draft, save-before-run and correlated output |
-| [Credentials architecture](docs/diagrams/credentials-architecture.svg) | Server-owned catalogue, WebSocket handlers, AuthService and encrypted storage |
-| [Team operations](docs/diagrams/team-operations.svg) | Task Manager lifecycle from blocked and queued through submission, review and finish |
-| [Agent context versus memory](docs/diagrams/agent-context-memory.svg) | The stored conversation (RFC-0002) beside the explicit Memory tool |
-| [Master Skill editor](docs/diagrams/master-skill-editor.svg) | Skill sources, the catalogue and instruction panes, expansion and runtime badges |
-| [Workspace files](docs/diagrams/workspace-files.svg) | The Gallery node panel: WebSocket listing, HTTP content and the FileRef output |
-| [Runtime observability dock](docs/diagrams/runtime-observability-dock.svg) | Chat, Console and Terminal producers, retention and the dock UI |
+| View | Diagram | Status | Editable source and provenance |
+|---|---|---|---|
+| 01 | [System context](docs/diagrams/architecture/01-system-context-v1.png) | current | [Mermaid](docs/diagrams/architecture/01-system-context.mmd) · [Evidence](docs/diagrams/architecture/01-system-context.brief.md) · [Prompt](docs/diagrams/architecture/01-system-context.prompt.txt) |
+| 02 | [Local runtime](docs/diagrams/architecture/02-local-runtime-v1.png) | current | [Mermaid](docs/diagrams/architecture/02-local-runtime.mmd) · [Evidence](docs/diagrams/architecture/02-local-runtime.brief.md) · [Prompt](docs/diagrams/architecture/02-local-runtime.prompt.txt) |
+| 03 | [Distributed deployment](docs/diagrams/architecture/03-distributed-deployment-v1.png) | current | [Mermaid](docs/diagrams/architecture/03-distributed-deployment.mmd) · [Evidence](docs/diagrams/architecture/03-distributed-deployment.brief.md) · [Prompt](docs/diagrams/architecture/03-distributed-deployment.prompt.txt) |
+| 04 | [Frontend architecture](docs/diagrams/architecture/04-frontend-architecture-v1.png) | current | [Mermaid](docs/diagrams/architecture/04-frontend-architecture.mmd) · [Evidence](docs/diagrams/architecture/04-frontend-architecture.brief.md) · [Prompt](docs/diagrams/architecture/04-frontend-architecture.prompt.txt) |
+| 05 | [Workflow execution](docs/diagrams/architecture/05-workflow-execution-v1.png) | current | [Mermaid](docs/diagrams/architecture/05-workflow-execution.mmd) · [Evidence](docs/diagrams/architecture/05-workflow-execution.brief.md) · [Prompt](docs/diagrams/architecture/05-workflow-execution.prompt.txt) |
+| 06 | [Independent-node execution](docs/diagrams/architecture/06-independent-node-execution-v1.png) | current | [Mermaid](docs/diagrams/architecture/06-independent-node-execution.mmd) · [Evidence](docs/diagrams/architecture/06-independent-node-execution.brief.md) · [Prompt](docs/diagrams/architecture/06-independent-node-execution.prompt.txt) |
+| 07 | [Plugin and node contracts](docs/diagrams/architecture/07-plugin-node-contracts-v1.png) | current | [Mermaid](docs/diagrams/architecture/07-plugin-node-contracts.mmd) · [Evidence](docs/diagrams/architecture/07-plugin-node-contracts.brief.md) · [Prompt](docs/diagrams/architecture/07-plugin-node-contracts.prompt.txt) |
+| 08 | [Chat and agent turns](docs/diagrams/architecture/08-chat-agent-turns-v1.png) | current | [Mermaid](docs/diagrams/architecture/08-chat-agent-turns.mmd) · [Evidence](docs/diagrams/architecture/08-chat-agent-turns.brief.md) · [Prompt](docs/diagrams/architecture/08-chat-agent-turns.prompt.txt) |
+| 09 | [Teams and context](docs/diagrams/architecture/09-teams-context-v1.png) | current | [Mermaid](docs/diagrams/architecture/09-teams-context.mmd) · [Evidence](docs/diagrams/architecture/09-teams-context.brief.md) · [Prompt](docs/diagrams/architecture/09-teams-context.prompt.txt) |
+| 10 | [Deployment and events](docs/diagrams/architecture/10-deployment-events-v1.png) | current | [Mermaid](docs/diagrams/architecture/10-deployment-events.mmd) · [Evidence](docs/diagrams/architecture/10-deployment-events.brief.md) · [Prompt](docs/diagrams/architecture/10-deployment-events.prompt.txt) |
+| 11 | [Approvals and external effects](docs/diagrams/architecture/11-approvals-effects-v1.png) | current | [Mermaid](docs/diagrams/architecture/11-approvals-effects.mmd) · [Evidence](docs/diagrams/architecture/11-approvals-effects.brief.md) · [Prompt](docs/diagrams/architecture/11-approvals-effects.prompt.txt) |
+| 12 | [Persistence and secrets](docs/diagrams/architecture/12-persistence-secrets-v1.png) | current | [Mermaid](docs/diagrams/architecture/12-persistence-secrets.mmd) · [Evidence](docs/diagrams/architecture/12-persistence-secrets.brief.md) · [Prompt](docs/diagrams/architecture/12-persistence-secrets.prompt.txt) |
+| 13 | [Event OS data plane and source migration](docs/diagrams/architecture/13-event-os-data-plane-v1.png) | accepted-roadmap | [Mermaid](docs/diagrams/architecture/13-event-os-data-plane.mmd) · [Evidence](docs/diagrams/architecture/13-event-os-data-plane.brief.md) · [Prompt](docs/diagrams/architecture/13-event-os-data-plane.prompt.txt) |
+| 14 | [Event OS control plane and resource lifecycle](docs/diagrams/architecture/14-event-os-control-plane-v1.png) | accepted-roadmap | [Mermaid](docs/diagrams/architecture/14-event-os-control-plane.mmd) · [Evidence](docs/diagrams/architecture/14-event-os-control-plane.brief.md) · [Prompt](docs/diagrams/architecture/14-event-os-control-plane.prompt.txt) |
+| 15 | [UASTL connector and optimization architecture](docs/diagrams/architecture/15-uastl-v1.png) | draft | [Mermaid](docs/diagrams/architecture/15-uastl.mmd) · [Evidence](docs/diagrams/architecture/15-uastl.brief.md) · [Prompt](docs/diagrams/architecture/15-uastl.prompt.txt) |
+| 16 | [Parameter widget-registry proposal](docs/diagrams/architecture/16-parameter-widget-registry-v1.png) | sketch | [Mermaid](docs/diagrams/architecture/16-parameter-widget-registry.mmd) · [Evidence](docs/diagrams/architecture/16-parameter-widget-registry.brief.md) · [Prompt](docs/diagrams/architecture/16-parameter-widget-registry.prompt.txt) |
+
+Earlier SVG and product-panel URLs remain available in the [asset index](docs/diagrams/README.md).
+Use the new source-backed suite for current execution and deployment boundaries.
 
 ## Repository Map
 
@@ -92,7 +104,9 @@ Fourteen source-backed architecture and product-panel diagrams live next to the 
 
 ## How to Contribute Features
 
-[![Node Anatomy](docs/diagrams/node-anatomy.svg)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/node-anatomy.svg)
+[![Plugin and node contracts](docs/diagrams/architecture/07-plugin-node-contracts-v1.png)](docs/diagrams/architecture/07-plugin-node-contracts-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/07-plugin-node-contracts.mmd) · [Source evidence](docs/diagrams/architecture/07-plugin-node-contracts.brief.md)
 
 The diagram above shows the full lifecycle of a workflow node: one self-contained Python plugin folder that auto-registers on import and renders itself on the frontend with zero TypeScript edits. Use these recipes as a starting point:
 

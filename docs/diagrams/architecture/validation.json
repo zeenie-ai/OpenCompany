@@ -1,0 +1,36 @@
+{
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "generator": "built-in ImageGen",
+  "documentation": {
+    "passed": 931,
+    "seconds": 11.27
+  },
+  "backend": {
+    "passed": 157,
+    "seconds": 0.8,
+    "includes": "plugin, NodeSpec, shipped skills and live-registry coverage"
+  },
+  "mermaid": {
+    "passed": 16,
+    "version": "11.16.1"
+  },
+  "assets": {
+    "pairs": 16,
+    "registered_node_types": 157,
+    "primary_families": 31,
+    "original_png_megabytes": 27.57
+  },
+  "main_drift_review": {
+    "main_commit": "07e6d4c2c273c3693d2d0e3a84e04cdbafe68642",
+    "changed_paths": [
+      "server/tests/temporal/test_pi_nested_control.py",
+      "server/tests/temporal/test_pi_worker_recovery.py"
+    ],
+    "runtime_or_documentation_changes": []
+  },
+  "isolation": {
+    "branch": "docs/architecture-diagrams",
+    "main_worktree_modified": false
+  },
+  "full_application_regression_suite_run": false
+}
