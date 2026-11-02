@@ -1021,8 +1021,12 @@ if __name__ == "__main__":
     # Allow running worker standalone
     # Usage: python -m services.temporal.worker
     from core.config import Settings
+    from core.env_defaults import apply_file_defaults_to_environ
     from core.logging import configure_logging
 
+    # main.py does this for the embedded worker: the template's ports reach
+    # the network policy a node's fetch checks.
+    apply_file_defaults_to_environ()
     # The embedded worker logs through main.py's configuration; a standalone
     # one needs its own (levels, and the filters on the SDK's loggers).
     configure_logging(Settings())

@@ -88,6 +88,7 @@ flowchart TD
 ## Decision Logic
 
 - **Validation**: `url` empty -> raises `RuntimeError('URL is required')` (surfaced via the error envelope by `BaseNode.execute()`).
+- **Network policy**: before the proxy choice, `resolved_url_block_reason(url, fetch_policy())` (`services/netpolicy.py`) checks the URL and every address its host resolves to. OpenCompany's own ports on this machine (the `*_PORT` settings, and the Browser's and Android's live ports), cloud metadata and non-http(s) schemes raise `NodeUserError("Cannot request <url>: <reason>.")`. The owner's own network and other loopback ports stay reachable.
 - **Branches**:
   - `use_proxy=true` -> `_resolve_proxy_url` attempts a lookup; proxy errors are swallowed and the request falls back to a direct call.
   - Body handling depends on `method` and the type / JSON-parseability of `body` (str-JSON -> `json`, str-non-JSON -> `content`, non-str -> `json`).

@@ -35,7 +35,7 @@ from ._egress import EgressProxy
 from ._host import sandbox_disabled, shm_small
 from ._install_bu import get_browser_use_installer
 from ._install_chrome import get_chrome_installer
-from services.netpolicy import NetPolicy, local_addresses, own_ports_from_env
+from services.netpolicy import NetPolicy, local_addresses, own_ports_from_env, register_port_source
 from ._profiles import Profile, profile_dir, user_data_dir
 from ._session import BrowserSession, ControlState, ProfileController
 from ._system_browser import version_major
@@ -118,6 +118,7 @@ class BrowserRuntime:
         self._reaper: Optional[asyncio.Task] = None
         self._own_ports: FrozenSet[int] = own_ports_from_env()
         self._local_addresses = local_addresses()
+        register_port_source(self._blocked_ports)  # a node's own fetch never reaches them either
 
     # -- settings --------------------------------------------------------------
 

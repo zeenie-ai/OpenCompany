@@ -101,6 +101,12 @@ class HttpRequestNode(ActionNode):
         log = get_logger(__name__)
         if not params.url:
             raise RuntimeError("URL is required")
+        # Before the proxy choice: a failed proxy falls back to a direct request.
+        from services.netpolicy import fetch_policy, resolved_url_block_reason
+
+        reason = await resolved_url_block_reason(params.url, fetch_policy())
+        if reason:
+            raise NodeUserError(f"Cannot request {params.url}: {reason}.")
 
         proxy_url = await _resolve_proxy_url(params.url, params.use_proxy, params.model_dump())
         log.info("[HTTP Request] Executing", node_id=ctx.node_id, method=params.method, url=params.url, proxy=bool(proxy_url))

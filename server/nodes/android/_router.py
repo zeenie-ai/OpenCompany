@@ -8,10 +8,15 @@ from typing import Dict, Any
 
 from ._dispatcher import AndroidService
 from core.logging import get_logger
+from services.netpolicy import register_port_source
 from services.plugin.deps import get_android_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/android", tags=["android"])
+
+# Local ends of the ADB forwards: a node's own fetch never reaches them.
+_forwarded_ports: set[int] = set()
+register_port_source(lambda: _forwarded_ports)
 
 # USB, emulator, TCP and wireless-debugging serials. The first character
 # must be alphanumeric so a device ID cannot look like a command-line flag.
@@ -141,6 +146,7 @@ async def setup_port_forwarding(
         )
 
         if result.returncode == 0:
+            _forwarded_ports.add(int(local_port))
             logger.info(f"[Android] Port forwarding setup: {device_id} tcp:{local_port} -> tcp:{device_port}")
             return {
                 "success": True,

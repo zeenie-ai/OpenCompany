@@ -109,6 +109,23 @@ def test_the_dev_server_passes_the_pin_dynamic_config_on_every_start(tmp_path):
     ]
 
 
+def test_the_dev_server_pins_its_http_and_metrics_ports(tmp_path, monkeypatch):
+    # Unpinned, each takes a random free port the network policy cannot refuse (1b.33).
+    for key in ("TEMPORAL_HTTP_PORT", "TEMPORAL_METRICS_PORT"):
+        monkeypatch.delenv(key, raising=False)
+    settings = SimpleNamespace(
+        temporal_graceful_shutdown_seconds=5, temporal_sqlite_path="temporal.db", temporal_frontend_grpc_port=7233,
+        temporal_ui_port=8233, temporal_namespace="default", _resolve_under_data=lambda path: str(tmp_path / path),
+    )
+    runtime = _runtime.TemporalServerRuntime(settings=settings)
+    runtime._binaries = {"temporal": tmp_path / "temporal"}
+
+    argv = runtime.argv()
+
+    assert argv[argv.index("--http-port") + 1] == "5684"
+    assert argv[argv.index("--metrics-port") + 1] == "5685"
+
+
 def test_fetch_verifies_the_pinned_archive_into_its_versioned_folder(tmp_path, monkeypatch):
     monkeypatch.setattr(_install, "_cache_dir", lambda: tmp_path)
     monkeypatch.setattr(_install.platform, "system", lambda: "Linux")

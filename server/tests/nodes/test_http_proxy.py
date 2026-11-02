@@ -11,6 +11,7 @@ so `useProxy=true` branches route through a test-controlled proxy URL.
 
 from __future__ import annotations
 
+import ipaddress
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -61,6 +62,29 @@ def _pricing_with_proxy_config() -> MagicMock:
 
 class TestHttpRequest:
     URL = "https://api.example.com/data"
+
+    @pytest.fixture(autouse=True)
+    def public_dns(self, monkeypatch):
+        # The node checks where a URL resolves (services/netpolicy.py); no real lookup.
+        monkeypatch.setattr("services.netpolicy.resolve_addresses",
+                            AsyncMock(return_value=[ipaddress.ip_address("93.184.216.34")]))
+
+    @pytest.mark.parametrize("url", ["http://127.0.0.1:5684/api/v1/namespaces", "http://169.254.169.254/latest/meta-data/"])
+    async def test_refuses_opencompanys_own_ports_and_cloud_metadata(self, harness, monkeypatch, url):
+        monkeypatch.setenv("TEMPORAL_HTTP_PORT", "5684")
+        result = await harness.execute("httpRequest", {"method": "GET", "url": url})
+
+        harness.assert_envelope(result, success=False)
+        assert "never reachable" in result["error"]
+
+    @respx.mock
+    async def test_reaches_another_loopback_port(self, harness):
+        url = "http://127.0.0.1:65000/health"
+        respx.get(url).mock(return_value=httpx.Response(200, json={"ok": True}))
+
+        result = await harness.execute("httpRequest", {"method": "GET", "url": url})
+
+        harness.assert_envelope(result, success=True)
 
     @respx.mock
     async def test_happy_path_no_proxy(self, harness):

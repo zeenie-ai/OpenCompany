@@ -66,3 +66,14 @@ def test_the_fetch_policy_refuses_the_configured_ports(monkeypatch):
     policy = fetch_policy()
     assert 5999 in policy.blocked_local_ports
     assert policy.allow_private_network
+
+
+def test_a_local_model_servers_port_is_not_ours():
+    # Ollama's port: agents may reach a local model server.
+    assert netpolicy.own_ports_from_env({"AI_PROXY_DEFAULT_PORT": "11434", "PORT": "5678"}) == frozenset({5678})
+
+
+def test_the_fetch_policy_refuses_a_plugins_live_ports(monkeypatch):
+    # The Browser's Chromes and proxies, Android's ADB forwards (1b.33).
+    monkeypatch.setattr(netpolicy, "_port_sources", [lambda: {9222}, lambda: [8888]])
+    assert {9222, 8888} <= fetch_policy().blocked_local_ports

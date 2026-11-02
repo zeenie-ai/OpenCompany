@@ -11,9 +11,11 @@ Callers:
 What they reach is untrusted, and an agent follows untrusted instructions
 (prompt injection), so these stay out of reach:
 
-- **OpenCompany itself**: its ports on this machine (the app, the code
-  sidecar, the WhatsApp bridge, Temporal) and the managed Chromes' debugging
-  ports. Refused on every address of this host, always.
+- **OpenCompany itself**: its configured ports on this machine (the app, the
+  code sidecar, the WhatsApp bridge, Temporal) and the ports a plugin opens
+  while it runs (the managed Chromes' debugging and egress-proxy ports,
+  Android's ADB forwards; :func:`register_port_source`). Refused on every
+  address of this host, always.
 - **Cloud metadata** (``169.254.169.254`` and friends), which hands out the
   VM's credentials. Link-local is refused always.
 - **The private network**, unless the policy allows it (the Browser node's
@@ -22,7 +24,8 @@ What they reach is untrusted, and an agent follows untrusted instructions
   protected ports above.
 
 Pure functions, except :func:`local_addresses`, which reads this machine's
-interface addresses (no network), and :func:`resolve_addresses`, a DNS lookup.
+interface addresses (no network), :func:`resolve_addresses`, a DNS lookup,
+and :func:`fetch_policy`, which also reads the plugins' live ports.
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ import ipaddress
 import os
 import socket
 from dataclasses import dataclass, field
-from typing import FrozenSet, Iterable, List, Optional, Tuple, Union
+from typing import Callable, FrozenSet, Iterable, List, Optional, Tuple, Union
 from urllib.parse import urlsplit
 
 IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
@@ -61,6 +64,20 @@ class NetPolicy:
     private_network_hint: str = ""
 
 
+#: ``*_PORT`` variables that name someone else's server: a local model
+#: server's port (Ollama's), which agents may reach.
+_NOT_OWN_PORT_KEYS = frozenset({"AI_PROXY_DEFAULT_PORT"})
+
+#: Plugins' live ports, read when a policy is built (:func:`register_port_source`).
+_port_sources: List[Callable[[], Iterable[int]]] = []
+
+
+def register_port_source(source: Callable[[], Iterable[int]]) -> None:
+    """Add a plugin's live ports (the Browser's Chromes and proxies,
+    Android's ADB forwards) to the ports a fetch may never reach."""
+    _port_sources.append(source)
+
+
 def own_ports_from_env(environ: Optional[dict] = None) -> FrozenSet[int]:
     """Every port OpenCompany is configured to listen on.
 
@@ -70,6 +87,8 @@ def own_ports_from_env(environ: Optional[dict] = None) -> FrozenSet[int]:
     env = environ if environ is not None else os.environ
     ports = set()
     for key, value in env.items():
+        if key in _NOT_OWN_PORT_KEYS:
+            continue
         if key == "PORT" or key.endswith("_PORT"):
             try:
                 port = int(str(value).strip())
@@ -206,7 +225,9 @@ def url_block_reason(url: str, policy: NetPolicy) -> Optional[str]:
 def fetch_policy() -> NetPolicy:
     """The policy for a URL a node downloads itself: the owner's own network
     is allowed, OpenCompany's own ports and cloud metadata never are."""
-    return NetPolicy(allow_private_network=True, blocked_local_ports=own_ports_from_env(), local_addresses=local_addresses())
+    live = {int(port) for source in _port_sources for port in source()}
+    return NetPolicy(allow_private_network=True, blocked_local_ports=own_ports_from_env() | frozenset(live),
+                     local_addresses=local_addresses())
 
 
 async def resolve_addresses(host: str, port: int) -> List[IPAddress]:
@@ -265,6 +286,7 @@ __all__ = [
     "local_addresses",
     "own_ports_from_env",
     "parse_allowed_domains",
+    "register_port_source",
     "resolve_addresses",
     "resolved_url_block_reason",
     "url_block_reason",

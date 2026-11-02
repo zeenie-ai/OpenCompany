@@ -123,7 +123,10 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         #                    sweep (default false) is the one exception,
         #                    and a database from another server minor is
         #                    deleted in ``_pre_spawn`` instead of opened.
-        #   --metrics-port   0 disables the Prometheus endpoint
+        #   --http-port      HTTP API port (TEMPORAL_HTTP_PORT)
+        #   --metrics-port   Prometheus port (TEMPORAL_METRICS_PORT). Unset or
+        #                    0, either flag picks a random free port, which
+        #                    the network policy could not refuse.
         #   --log-level      warn keeps the supervisor log readable
         #   --namespace      default namespace bootstrapped at start
         #   --dynamic-config-value  the pin's dynamic_config
@@ -151,6 +154,7 @@ class TemporalServerRuntime(BaseProcessSupervisor):
         #                    WAL is durable and synchronous=NORMAL is
         #                    WAL-safe (no corruption). See SQLite WAL
         #                    docs + https://docs.temporal.io/cli/server.
+        from core.env_defaults import env_int
         from services.temporal._install import cli_pin
 
         dynamic_config: list[str] = []
@@ -166,8 +170,10 @@ class TemporalServerRuntime(BaseProcessSupervisor):
             str(self.settings.temporal_ui_port),
             "--db-filename",
             str(self._sqlite_path),
+            "--http-port",
+            str(env_int("TEMPORAL_HTTP_PORT")),
             "--metrics-port",
-            "0",
+            str(env_int("TEMPORAL_METRICS_PORT")),
             "--log-level",
             "warn",
             "--namespace",
