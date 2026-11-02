@@ -122,8 +122,17 @@ async def test_a_pre_patch_history_schedules_no_record(fakes):
 
 
 def test_every_worker_registers_the_activity():
-    source = (Path(__file__).parents[2] / "services" / "temporal" / "worker.py").read_text(encoding="utf-8")
-    assert source.count("record_run_completion_activity") == source.count("pause_workflow_on_failure_activity") == 6
+    # Every main-queue worker registers this one list (1b.36).
+    from unittest.mock import MagicMock
+    from services.temporal import worker
+    from services.temporal.activities import pause_workflow_on_failure_activity, record_run_completion_activity
+
+    def name(fn):
+        return getattr(fn, "__temporal_activity_definition").name
+
+    registered = {name(fn) for fn in worker._main_queue_activities(
+        MagicMock(), worker.NodeExecutionActivities(MagicMock()).execute_node_activity)}
+    assert {name(record_run_completion_activity), name(pause_workflow_on_failure_activity)} <= registered
 
 
 async def test_the_activity_records_through_the_run_store(monkeypatch):

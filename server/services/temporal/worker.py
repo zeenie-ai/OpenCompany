@@ -17,7 +17,7 @@ References:
 
 import asyncio
 from datetime import timedelta
-from typing import Optional
+from typing import Any, Optional
 
 import aiohttp
 from opentelemetry import trace
@@ -208,31 +208,6 @@ class TemporalWorkerManager:
         # orchestrator schedules AgentWorkflow as a child workflow
         # for the 15 migrating agent types when
         # ``temporal_agent_workflow_enabled`` is on.
-        from services.temporal.plugin_activities import (
-            collect_plugin_activities,
-            collect_polling_activities,
-        )
-        from services.temporal.agent_activities import collect_agent_activities
-        from services.temporal.pi_activities import collect_pi_activities, PiControlActivities
-        from services.temporal.pi_inline_delegation import collect_pi_inline_activities
-        from services.temporal.workspace_task_activities import reset_workspace_task_runtime
-        from services.chat.activities import CHAT_RUN_ACTIVITIES
-        from services.approvals.activities import APPROVAL_ACTIVITIES
-        from services.temporal.activities import (
-            broadcast_trigger_status_activity,
-            evaluate_trigger_filter_activity,
-            load_persisted_workflow_graph_activity,
-            pause_workflow_on_failure_activity,
-            record_run_completion_activity,
-            store_node_output_activity,
-        )
-
-        per_type = _generic_plugin_activities()
-        from services.temporal.browser_task_activities import HISTORY_ACTIVITIES, BROWSER_OWNER_ACTIVITIES
-        from core.config import Settings
-        local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
-        agent_activities = [*collect_agent_activities(), *collect_pi_activities(), *collect_pi_inline_activities(), *PiControlActivities(self.client).activities()]
-        polling_activities = collect_polling_activities()
         # Plugin-owned workflow classes (e.g. cron's
         # CronTriggerWorkflow) self-register a SimplePlugin via
         # services.temporal.plugin_registry.register_temporal_plugin
@@ -241,6 +216,7 @@ class TemporalWorkerManager:
         # / interceptors into the effective worker configuration —
         # the framework worker stays plugin-agnostic.
         plugin_list = temporal_plugins()
+        main_queue = _main_queue_activities(self.client, self._activities.execute_node_activity)
 
         # The Worker() constructor derives its default build id by
         # MD5-hashing the bytecode of every module in sys.modules
@@ -269,24 +245,7 @@ class TemporalWorkerManager:
             task_queue=self.task_queue,
             plugins=plugin_list,
             workflows=_framework_workflows(),
-            activities=[
-                self._activities.execute_node_activity,
-                *ExecutionControlActivities(self.client).activities(),
-                broadcast_trigger_status_activity,
-                evaluate_trigger_filter_activity,
-                load_persisted_workflow_graph_activity,
-                pause_workflow_on_failure_activity,
-                record_run_completion_activity,
-                reset_workspace_task_runtime,
-                *HISTORY_ACTIVITIES,
-                *local_browser_activities,
-                *CHAT_RUN_ACTIVITIES,
-                *APPROVAL_ACTIVITIES,
-                store_node_output_activity,
-                *per_type,
-                *agent_activities,
-                *polling_activities,
-            ],
+            activities=main_queue,
             # Allow concurrent activity execution for parallel branches
             max_concurrent_activities=self.pool_size,
             max_concurrent_workflow_tasks=10,
@@ -310,9 +269,7 @@ class TemporalWorkerManager:
         )
         logger.info(
             "Registered Temporal activities",
-            legacy=1,
-            per_type=len(per_type),
-            agent=len(agent_activities),
+            activities=len(main_queue),
             task_queue=self.task_queue,
         )
         return worker
@@ -681,6 +638,54 @@ def _generic_plugin_activities() -> list:
     return collect_plugin_activities(include_types=[kind for kind in registered_node_classes() if kind != "browser"])
 
 
+def _main_queue_activities(client: Client, execute_node_activity: Any) -> list:
+    """Every activity a main-queue worker registers. The manager, the
+    standalone worker and ``create_worker`` all use this one list (and the
+    Temporal plugins), so a task on the main queue finds its activity on
+    whichever of them polls it."""
+    from core.config import Settings
+    from services.approvals.activities import APPROVAL_ACTIVITIES
+    from services.chat.activities import CHAT_RUN_ACTIVITIES
+    from services.temporal.activities import (
+        broadcast_trigger_status_activity,
+        evaluate_trigger_filter_activity,
+        load_persisted_workflow_graph_activity,
+        pause_workflow_on_failure_activity,
+        record_run_completion_activity,
+        store_node_output_activity,
+    )
+    from services.temporal.agent_activities import collect_agent_activities
+    from services.temporal.browser_task_activities import BROWSER_OWNER_ACTIVITIES, HISTORY_ACTIVITIES
+    from services.temporal.pi_activities import PiControlActivities, collect_pi_activities
+    from services.temporal.pi_inline_delegation import collect_pi_inline_activities
+    from services.temporal.plugin_activities import collect_polling_activities
+    from services.temporal.workspace_task_activities import reset_workspace_task_runtime
+
+    # In a cluster only the Browser's owner queue runs a process-local browser.
+    local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
+    return [
+        execute_node_activity,
+        *ExecutionControlActivities(client).activities(),
+        broadcast_trigger_status_activity,
+        evaluate_trigger_filter_activity,
+        load_persisted_workflow_graph_activity,
+        pause_workflow_on_failure_activity,
+        record_run_completion_activity,
+        reset_workspace_task_runtime,
+        *HISTORY_ACTIVITIES,
+        *local_browser_activities,
+        *CHAT_RUN_ACTIVITIES,
+        *APPROVAL_ACTIVITIES,
+        store_node_output_activity,
+        *_generic_plugin_activities(),
+        *collect_agent_activities(),
+        *collect_pi_activities(),
+        *collect_pi_inline_activities(),
+        *PiControlActivities(client).activities(),
+        *collect_polling_activities(),
+    ]
+
+
 class BrowserOwnerWorkerPool(TemporalWorkerPool):
     """The backend alone polls its physical owner queue, independently of pool flags."""
 
@@ -846,39 +851,7 @@ async def run_standalone_worker(
     # Create shared session and activities
     session = await create_shared_session(pool_size)
     activities = NodeExecutionActivities(session)
-
-    from services.temporal.activities import (
-        broadcast_trigger_status_activity,
-        evaluate_trigger_filter_activity,
-        load_persisted_workflow_graph_activity,
-        pause_workflow_on_failure_activity,
-        record_run_completion_activity,
-        store_node_output_activity,
-    )
-    from services.temporal.agent_activities import collect_agent_activities
-    from services.temporal.pi_activities import collect_pi_activities, PiControlActivities
-    from services.temporal.pi_inline_delegation import collect_pi_inline_activities
-    from services.temporal.workspace_task_activities import reset_workspace_task_runtime
-    from services.chat.activities import CHAT_RUN_ACTIVITIES
-    from services.approvals.activities import APPROVAL_ACTIVITIES
-    from services.temporal.agent_workflow import (
-        AgentWorkflow,
-        DelegatedTaskWorkflow,
-    )
-    from services.temporal.plugin_activities import (
-        collect_plugin_activities,
-    )
-
-    registered_agent_activities = [
-        *collect_agent_activities(),
-        *collect_pi_activities(),
-        *collect_pi_inline_activities(),
-        *PiControlActivities(client).activities(),
-    ]
-    registered_plugin_activities = _generic_plugin_activities()
-    from services.temporal.browser_task_activities import HISTORY_ACTIVITIES, BROWSER_OWNER_ACTIVITIES
-    from core.config import Settings
-    local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
+    main_queue_activities = _main_queue_activities(client, activities.execute_node_activity)
 
     # No socket follows a chat here: its events go to the backend's hub.
     from services.chat.relay import start_relay, stop_relay
@@ -891,24 +864,9 @@ async def run_standalone_worker(
         worker = Worker(
             client,
             task_queue=task_queue,
+            plugins=temporal_plugins(),
             workflows=_framework_workflows(),
-            activities=[
-                activities.execute_node_activity,
-                *ExecutionControlActivities(client).activities(),
-                broadcast_trigger_status_activity,
-                evaluate_trigger_filter_activity,
-                load_persisted_workflow_graph_activity,
-                pause_workflow_on_failure_activity,
-                record_run_completion_activity,
-                reset_workspace_task_runtime,
-                *HISTORY_ACTIVITIES,
-                *local_browser_activities,
-                *CHAT_RUN_ACTIVITIES,
-                *APPROVAL_ACTIVITIES,
-                store_node_output_activity,
-                *registered_plugin_activities,
-                *registered_agent_activities,
-            ],
+            activities=main_queue_activities,
             max_concurrent_activities=pool_size,
             max_concurrent_workflow_tasks=10,
             graceful_shutdown_timeout=_graceful_shutdown_timeout(),
@@ -957,60 +915,12 @@ async def create_worker(
         session = await create_shared_session()
 
     activities = NodeExecutionActivities(session)
-    from services.temporal.activities import (
-        broadcast_trigger_status_activity,
-        evaluate_trigger_filter_activity,
-        load_persisted_workflow_graph_activity,
-        pause_workflow_on_failure_activity,
-        record_run_completion_activity,
-        store_node_output_activity,
-    )
-    from services.temporal.agent_activities import collect_agent_activities
-    from services.temporal.pi_activities import collect_pi_activities, PiControlActivities
-    from services.temporal.pi_inline_delegation import collect_pi_inline_activities
-    from services.temporal.workspace_task_activities import reset_workspace_task_runtime
-    from services.chat.activities import CHAT_RUN_ACTIVITIES
-    from services.approvals.activities import APPROVAL_ACTIVITIES
-    from services.temporal.agent_workflow import (
-        AgentWorkflow,
-        DelegatedTaskWorkflow,
-    )
-    from services.temporal.plugin_activities import (
-        collect_plugin_activities,
-    )
-
-    registered_agent_activities = [
-        *collect_agent_activities(),
-        *collect_pi_activities(),
-        *collect_pi_inline_activities(),
-        *PiControlActivities(client).activities(),
-    ]
-    registered_plugin_activities = _generic_plugin_activities()
-    from services.temporal.browser_task_activities import HISTORY_ACTIVITIES, BROWSER_OWNER_ACTIVITIES
-    from core.config import Settings
-    local_browser_activities = [] if getattr(Settings(), "distributed_mode", False) is True else BROWSER_OWNER_ACTIVITIES
-
     return Worker(
         client,
         task_queue=task_queue,
+        plugins=temporal_plugins(),
         workflows=_framework_workflows(),
-        activities=[
-            activities.execute_node_activity,
-            *ExecutionControlActivities(client).activities(),
-            broadcast_trigger_status_activity,
-            evaluate_trigger_filter_activity,
-            load_persisted_workflow_graph_activity,
-            pause_workflow_on_failure_activity,
-            record_run_completion_activity,
-            reset_workspace_task_runtime,
-            *HISTORY_ACTIVITIES,
-            *local_browser_activities,
-            *CHAT_RUN_ACTIVITIES,
-            *APPROVAL_ACTIVITIES,
-            store_node_output_activity,
-            *registered_plugin_activities,
-            *registered_agent_activities,
-        ],
+        activities=_main_queue_activities(client, activities.execute_node_activity),
         max_concurrent_activities=100,
         max_concurrent_workflow_tasks=10,
         graceful_shutdown_timeout=_graceful_shutdown_timeout(),

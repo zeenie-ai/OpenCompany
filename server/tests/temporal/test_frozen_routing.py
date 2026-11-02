@@ -211,6 +211,9 @@ async def test_create_worker_registers_plugin_and_pause_activities(
 
     assert plugin_activity in captured["activities"]
     assert pause_workflow_on_failure_activity in captured["activities"]
+    # The same registration as the manager's (1b.36): the cron workflow
+    # arrives through the plugins.
+    assert captured["plugins"] == worker_module.temporal_plugins()
 
 
 @pytest.mark.asyncio
@@ -294,6 +297,7 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
 
     assert plugin_activity in captured["activities"]
     assert pause_workflow_on_failure_activity in captured["activities"]
+    assert captured["plugins"] == worker_module.temporal_plugins()
     session.close.assert_awaited_once()
     unifier.aclose.assert_awaited_once()
     database.startup.assert_awaited_once()

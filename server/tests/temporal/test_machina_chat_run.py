@@ -182,10 +182,12 @@ async def test_a_pre_patch_history_schedules_neither_activity(fakes):
 
 
 def test_every_worker_registers_the_activities():
-    source = (Path(__file__).parents[2] / "services" / "temporal" / "worker.py").read_text(encoding="utf-8")
-    assert source.count("*CHAT_RUN_ACTIVITIES") == 3
+    from unittest.mock import MagicMock
     from services.chat.activities import CHAT_RUN_ACTIVITIES
+    from services.temporal import worker
 
+    # Every main-queue worker registers this one list (1b.36).
+    assert all(fn in worker._main_queue_activities(MagicMock(), MagicMock()) for fn in CHAT_RUN_ACTIVITIES)
     names = sorted(getattr(fn, "__temporal_activity_definition").name for fn in CHAT_RUN_ACTIVITIES)
     assert names == ["chat_run.finish", "chat_run.start"]
 

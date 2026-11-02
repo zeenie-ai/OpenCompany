@@ -102,13 +102,15 @@ async def _scenarios() -> None:
 def test_every_worker_registers_the_workflow_and_its_activities() -> None:
     """Every Worker construction carries the send workflow and both its
     activities (the scenarios above pin the names the workflow schedules)."""
+    from unittest.mock import MagicMock
+
     from services.approvals.activities import APPROVAL_ACTIVITIES
     from services.temporal import worker
     from services.temporal.approved_tool_call_workflow import ApprovedToolCallWorkflow
 
     assert ApprovedToolCallWorkflow in worker._framework_workflows()
-    source = (Path(__file__).parents[2] / "services" / "temporal" / "worker.py").read_text(encoding="utf-8")
-    assert source.count("*APPROVAL_ACTIVITIES") == 3
+    # Every main-queue worker registers this one list (1b.36).
+    assert all(fn in worker._main_queue_activities(MagicMock(), MagicMock()) for fn in APPROVAL_ACTIVITIES)
     names = sorted(getattr(fn, "__temporal_activity_definition").name for fn in APPROVAL_ACTIVITIES)
     assert names == ["approvals.claim_send", "approvals.read", "approvals.record_outcome"]
 
