@@ -75,9 +75,9 @@ flowchart TD
     D0[setup_service returns params] --> D1[fetch_ids: GET base/mailFolders/folder/messages $select $top 25 + $filter or $orderby]
     D1 -- baseline_only --> D2[return events empty, seen_ids = current]
     D1 --> D3[new_ids = current - prior_seen]
-    D3 --> D4[per id: fetch_detail GET base/messages/id $select -> _summarize + id]
-    D4 --> D5[post_emit: mark read if mark_as_read, failures logged]
-    D5 --> D6[return events, seen_ids = current]
+    D3 --> D4[per id, oldest first, within the byte and time budget: fetch_detail GET base/messages/id $select -> _summarize + id]
+    D4 --> D5[post_emit for emitted events: mark read if mark_as_read, failures logged]
+    D5 --> D6[return events, seen_ids = current - deferred]
   end
   subgraph canvas Run: execute override
     C0[broadcast waiting status] --> C1[baseline fetch_ids, failure treated as empty]

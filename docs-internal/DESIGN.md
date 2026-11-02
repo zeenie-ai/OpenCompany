@@ -193,6 +193,26 @@ always-broken because it passes review.
 See [media_transport.md](./media_transport.md) for the measurements and the
 API.
 
+### 5. Changes that span systems
+
+A change that touches more than one system (the database, Temporal, a
+provider) has no shared transaction, so it follows these rules (RFC-0006
+§10.1):
+
+- **One local transaction plus an outbox** where possible: write the change
+  and the intent to act in one database transaction, and let a worker carry
+  the intent out (a workflow save and its Context archive intents).
+- **Irreversible effects go last**, after every step that can still fail.
+- **A saga only where several systems change**: each step has a
+  compensation, and the compensations run last in, first out, each on its
+  own (a failed Start, `services/deployment/handlers._undo_failed_start`).
+- **An effect that cannot be compensated** (a sent message, a refund) is
+  guarded before it happens by an Undo window and a claim at a revision.
+  After it, an unclear outcome is reported as `unknown`, never undone by a
+  compensating "unsend" (`services/approvals`).
+- **An owner's action writes an intent and answers at once**; a deliverer
+  applies it (an approved send, Safe Apply's `recover_applies`).
+
 ---
 
 ## Design Patterns

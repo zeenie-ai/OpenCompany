@@ -601,7 +601,7 @@ Queue distribution (live count via
 
 | Queue | Use case | Default concurrency |
 |---|---|---|
-| `ai-heavy` | LLM agent loops | 4 |
+| `ai-heavy` | Chat-model, embedding and vision calls; agents run as one activity (an AgentWorkflow's LLM steps use the main queue) | 4 |
 | `rest-api` | Lightweight HTTP / Google / Twitter | 50 |
 | `machina-default` | Catch-all | 20 |
 | `android` | ADB / relay ops | 10 |

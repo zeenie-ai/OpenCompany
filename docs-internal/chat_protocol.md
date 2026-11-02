@@ -71,7 +71,7 @@ internal socket, load the workflow, and compare its owner with the socket's exec
   are batched before they are published (see [Streaming, steps and Stop](#streaming-steps-and-stop)), not merged in
   the queue.
 - Publishers call `publish_run_event` (`services/chat/hub.py`), which delivers in-process. A standalone worker
-  (`python -m services.temporal.worker`) has no sockets, so it relays instead; see
+  (`python -m services.temporal.worker`, distributed mode only) has no sockets, so it relays instead; see
   [Standalone workers](#standalone-workers).
 - `chat.updated` remains an identity-only broadcast (`{workflow_id, session_id, role}`) that tells every open thread
   to refetch `get_chat_messages`: after a message is added, after a clear, and when a run ends (`role` null), since
@@ -383,7 +383,8 @@ newer version wins in place.
   follows the resumed delivery window; running expiry counts from the later of run start and Resume. Stop does
   not move controlled runs into the legacy `stopping` state, so they bypass grace-period cancellation. A running
   run past `runs.max_running_s`, controlled or not, has its workflow cancelled before it ends `timed_out`, unless
-  its generation is paused or a turn of it waits for the owner. Temporal
+  a turn of it waits for the owner, or it is controlled and its generation is `pausing`, `paused` or `resuming`
+  (a legacy generation's pause does not exempt it). Temporal
   closure checks follow the current Workflow ID and compare execution chains across continue-as-new.
 
 ## Streaming, steps and Stop

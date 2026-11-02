@@ -185,8 +185,9 @@ group). The Electron shell waits 75 s (`STOP_TIMEOUT_MS`,
 The backend's deadline, `SHUTDOWN_DEADLINE_SECONDS` (65 s), covers the CLI's
 shutdown allowance (`backend_shutdown_grace_seconds`, `cli/_common.py`) at
 the shell's `TEMPORAL_GRACEFUL_SHUTDOWN_SECONDS=10`: 5 s of connection
-drain, 10 s for each of the three Temporal stops (worker pool, manager
-worker, dev server) and 30 s for the rest. A slow teardown therefore ends in
+drain, three 10 s Temporal windows (the worker pool and the manager worker
+drain together in one, the dev server stops in the next, and the third is
+headroom) and 30 s for the rest. A slow teardown therefore ends in
 the backend's own deadline, not the shell's tree-kill. The order matters
 because a kill before the plugin hooks run skips `mark_clean_shutdown`, and
 the next launch then treats the quit as a crash and pauses running

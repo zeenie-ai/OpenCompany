@@ -106,7 +106,7 @@ Lifecycle requests have a five-minute acknowledgement window, and a timed-out
 request is treated as successful when the immediate authoritative resync
 already reports its requested stable state. Transitional Pause, Resume, and
 Reset states expose an explicit retry rather than trapping the toolbar in a
-permanent spinner.
+permanent spinner; the boot also runs a Reset left `resetting` once more.
 
 Version 1 status reads return transitional state promptly. They start or reuse
 one supervised reconciliation task for the control revision instead of waiting
@@ -114,17 +114,23 @@ for its checkpoint. A disconnected socket cancels only its local waiter; the
 supervised transition and durable admission fence remain. Reset retires older
 local checkpoint polling and reports the newer control state to those waiters.
 
-No request waits on the engine without a bound
-(`services/temporal/update_calls.bounded_update`). A version 1 Stop or Resume
+The requests a person waits on are bounded
+(`services/temporal/update_calls.bounded_update`); a version 0 Pause or
+Resume Update, a transition's own Updates and status Queries are not. A
+version 1 Stop or Resume
 answers within 10 s (`_TRANSITION_ANSWER_SECONDS`): while its drain still
 runs, the answer is `success: true` with `transition_pending: true` and the
 `pausing` or `resuming` state, the drain goes on in its task, and its
 `workflow_control_status` broadcast carries the outcome. Reset waits up to
 240 s for the Workspace task controller's cleanup; past that it answers
 `workflow_control_transition_pending` and the row stays `resetting` until the
-same Reset runs again. Safe Apply waits 30 s for each controller Update and
+same Reset runs again: Dev's Retry Reset, or the next boot, which runs it once
+more (Home has no Retry). Safe Apply waits 30 s for each controller Update and
 otherwise answers `waiting`; `recover_applies` finishes it once its claim's
-lease lapses.
+lease lapses. If the first pause Update of "Stop work and apply" is the one
+still pending, the apply answers `waiting` before it stops any work, and
+`recover_applies` finishes it without the stop: it then waits for current
+work, as a plain apply does.
 
 ## Acknowledged Stop for new generations
 
@@ -513,7 +519,8 @@ state. Every successful **Start** atomically creates a
 **Reset** reaches `ready` only after durable executions and schedules are gone,
 the generation data scope is archived, and node/runtime state has been reset.
 If any cleanup step fails, the control remains `resetting`; retrying Reset
-resumes cleanup instead of falsely completing or skipping it. Reset does not
+(the owner's Retry Reset in Dev, or the boot, which runs it once more) resumes
+cleanup instead of falsely completing or skipping it. Reset does not
 delete outputs, tasks, traces, or the graph snapshot; open team tasks and
 requests are cancelled, not deleted. The toolbar returns to
 **Start**. The next Start creates a new generation, execution ID, Temporal
@@ -706,7 +713,9 @@ the control plane is hardened against Temporal's per-run event-history ceiling
   with registered triggers, or a triggerless graph → `running`; alive-but-empty
   while the graph declares triggers → `failed` with the orphan controller
   closed), runs once more a Reset a crash left `resetting` (a failure leaves
-  the row `resetting` for the owner's Reset or the next boot), and re-arms the
+  the row `resetting` for the owner's Reset or the next boot; the Reset runs
+  inline, so a slow one, whose Workspace step can take 240 s, delays the rows
+  after it and the dev-server watchdog), and re-arms the
   process-local half of running/paused generations
   from the persisted graph snapshot — DeploymentManager runtime state,
   in-process collectors for non-canary trigger types, and the paused posture
@@ -767,12 +776,15 @@ and Resume.
   fixes the cause and Resumes, instead of the trigger firing into the same
   error indefinitely. The breaker trips only after
   **`WORKFLOW_CONTROL_PAUSE_ON_FAILURE_THRESHOLD`** (default `3`) failed
-  runs inside the rolling
-  **`WORKFLOW_CONTROL_PAUSE_ON_FAILURE_WINDOW_SECONDS`** (default `600`)
-  — one node hiccup on one firing (missing config, transient API error)
-  never pauses a deployment; `1` restores pause-on-the-first-failure. The
-  streak lives in the durable cache table keyed by the generation (Reset /
-  Start begins fresh), Resume resets it, and tripping clears it. Only
+  runs, each within
+  **`WORKFLOW_CONTROL_PAUSE_ON_FAILURE_WINDOW_SECONDS`** (default `600`) of
+  the one before: a longer gap starts the count again, and a success does
+  not reset it. One node hiccup on one firing (missing config, transient
+  API error) never pauses a deployment; `1` restores
+  pause-on-the-first-failure. The streak lives in the durable cache table
+  keyed by the generation (Reset / Start begins fresh), Resume resets it,
+  and tripping clears it. The activity runs once (`BREAKER_COUNT_RETRY`), so
+  a retry cannot count a run twice. Only
   deployment-spawned runs qualify (they carry a `_pre_executed` firing
   trigger; a failed manual canvas run never pauses a live deployment), and
   every knob is evaluated on the activity side so flipping config never
