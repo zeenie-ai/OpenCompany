@@ -47,15 +47,19 @@ async def test_undo_is_too_late_once_the_draft_went(harness):
     assert stored.consumed_at is not None and stored.status == "approved"
 
 
-async def test_restore_brings_a_discarded_draft_back_while_it_can(harness):
+async def test_restore_brings_a_discarded_draft_back_while_it_can(harness, monkeypatch):
     task = asyncio.ensure_future(run_gate(harness))
     (row,) = await pending(harness)
+    # A wide window, so the restore lands inside it even on a slow runner.
+    monkeypatch.setattr(decisions, "RESTORE_SECONDS", 30)
     discarded = await decide(harness, row.id, "discard", key="d1")
     assert discarded["approval"]["status"] == "discarded" and "restore_until" in discarded["approval"]
     restored = await decide(harness, row.id, "restore", key="r1")
     assert restored["approval"]["status"] == "pending"
     assert not task.done()
     await until_waiting(row.id)
+    # The gate waits the second discard out, so it gets the short window again.
+    monkeypatch.setattr(decisions, "RESTORE_SECONDS", 0.2)
     await decide(harness, row.id, "discard", key="d2")
     result = (await asyncio.wait_for(task, 5))["result"]
     assert result["approved"] is False and result["status"] == "discarded"
