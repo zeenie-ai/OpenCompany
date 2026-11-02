@@ -88,8 +88,8 @@ def backend_shutdown_grace_seconds(cfg: Config) -> float:
 
     ``preflight``/``load_config`` has already merged the env files into
     ``os.environ``, matching the backend's Settings without importing its
-    dependencies. The pool, manager worker, and local Temporal runtime
-    currently stop sequentially, each with the configured grace window.
+    dependencies. The workers drain together (one grace window), then the
+    local Temporal runtime stops (another); the third window is headroom.
     Other plugin/resource cleanup gets an additional bounded allowance.
     """
     temporal_grace = 0

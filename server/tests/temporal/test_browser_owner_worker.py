@@ -65,6 +65,40 @@ async def test_stop_closes_partial_manager_session_before_worker_started():
     assert manager._session is None
 
 
+async def test_stop_drains_every_worker_together():
+    """1b.37: the Pi pool, the owner pool and the main worker drain at once.
+    One after the other, their grace windows added up."""
+    import asyncio
+    from services.temporal.worker import TemporalWorkerManager
+    entered, timed_out, everyone = [], [], asyncio.Event()
+
+    async def drain(name):
+        entered.append(name)
+        if len(entered) == 3:
+            everyone.set()
+        try:
+            await asyncio.wait_for(everyone.wait(), 1)  # a stop that waited its turn times out here
+        except asyncio.TimeoutError:
+            timed_out.append(name)
+            raise
+
+    async def worker_run():
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            await drain("main")
+            raise
+
+    manager = TemporalWorkerManager(client=MagicMock())
+    manager._pi_driver_pool = SimpleNamespace(stop=lambda: drain("pi"))
+    manager._browser_pool = SimpleNamespace(stop=lambda: drain("owner"))
+    manager._worker_task = asyncio.create_task(worker_run())
+    await asyncio.sleep(0)
+    await manager.stop()
+    assert sorted(entered) == ["main", "owner", "pi"] and timed_out == []
+    assert (manager._worker_task, manager._pi_driver_pool, manager._browser_pool) == (None, None, None)
+
+
 def test_owner_registration_uses_plugin_types_and_generic_workers_exclude_browser(monkeypatch):
     from services.temporal import worker, plugin_activities
     from services import node_registry, browser_owners

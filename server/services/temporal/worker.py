@@ -363,24 +363,20 @@ class TemporalWorkerManager:
                 logger.error(f"Temporal worker rebuild failed; will retry: {build_exc}")
 
     async def stop(self) -> None:
-        """Stop the Temporal worker and cleanup resources."""
-        if self._pi_driver_pool is not None:
-            await self._pi_driver_pool.stop()
-            self._pi_driver_pool = None
-        if self._browser_pool is not None:
-            await self._browser_pool.stop()
-            self._browser_pool = None
+        """Stop the Temporal worker and cleanup resources. The Pi driver pool,
+        the Browser owner pool and the main worker drain together: one after
+        the other, their grace windows added up."""
         logger.info("Stopping Temporal worker")
-
+        stops = [pool.stop() for pool in (self._pi_driver_pool, self._browser_pool) if pool is not None]
         if self._worker_task:
             self._worker_task.cancel()
-            try:
-                await self._worker_task
-            except asyncio.CancelledError:
-                pass
-            except Exception as exc:
-                logger.warning("Worker task already failed during shutdown: %s", type(exc).__name__)
-            self._worker_task = None
+            stops.append(self._worker_task)
+        for result in await asyncio.gather(*stops, return_exceptions=True):
+            if isinstance(result, Exception):
+                logger.warning("A worker failed while stopping: %s", type(result).__name__)
+        self._pi_driver_pool = None
+        self._browser_pool = None
+        self._worker_task = None
 
         # Close shared session
         if self._session and not self._session.closed:

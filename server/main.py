@@ -457,24 +457,19 @@ async def lifespan(app: FastAPI):
             pass
     _startup_log("Lifespan shutdown: temporal lifecycle task cancelled")
 
-    # Stop the per-queue worker pool first (activity-only workers), then
-    # the manager worker that also hosts workflows.
-    pool = getattr(app.state, "temporal_pool", None)
-    if pool is not None:
-        try:
-            await pool.stop()
-            logger.info("Temporal worker pool stopped")
-        except Exception as exc:
-            logger.warning(f"Temporal worker pool stop raised: {exc}")
-
-    # Stop Temporal worker if it successfully started.
-    worker_manager = getattr(app.state, "temporal_worker_manager", None)
-    if worker_manager is not None:
-        try:
-            await worker_manager.stop()
-            logger.info("Temporal worker stopped")
-        except Exception as exc:
-            logger.warning(f"Temporal worker stop raised: {exc}")
+    # Stop the per-queue worker pool and the manager worker together: each
+    # drains for up to its grace window, and one after the other the windows
+    # added up past the CLI's stop budget.
+    stops = [(name, target.stop()) for name, target in (
+        ("Temporal worker pool", getattr(app.state, "temporal_pool", None)),
+        ("Temporal worker", getattr(app.state, "temporal_worker_manager", None)),
+    ) if target is not None]
+    results = await asyncio.gather(*(stop for _, stop in stops), return_exceptions=True)
+    for (name, _), result in zip(stops, results):
+        if isinstance(result, BaseException):
+            logger.warning(f"{name} stop raised: {result}")
+        else:
+            logger.info(f"{name} stopped")
 
     # Disconnect Temporal client.
     if settings.temporal_enabled:
