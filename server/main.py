@@ -434,6 +434,9 @@ async def lifespan(app: FastAPI):
     _startup_log("All services initialized")
     from services.employees.activation import recovery_loop
     employee_recovery_task = asyncio.create_task(recovery_loop(container.database()), name="employee-activation-recovery")
+    # Logs when the event loop is blocked; started after startup's own work.
+    from services.loop_watchdog import watch_loop_lag
+    loop_watchdog_task = asyncio.create_task(watch_loop_lag(), name="loop-lag-watchdog")
     _startup_log("Application startup complete")
     yield
 
@@ -441,8 +444,10 @@ async def lifespan(app: FastAPI):
     # pre-/post-logger channel used at boot) so a stalled teardown is
     # diagnosable from the desktop shell's captured stdout.
     _startup_log("Lifespan shutdown begin")
+    # First, so teardown's own blocking work is not reported as lag.
+    loop_watchdog_task.cancel()
     employee_recovery_task.cancel()
-    await asyncio.gather(employee_recovery_task, return_exceptions=True)
+    await asyncio.gather(employee_recovery_task, loop_watchdog_task, return_exceptions=True)
     # Stop WebSocket logging handler
     shutdown_websocket_logging()
     _startup_log("Lifespan shutdown: ws logging stopped")
