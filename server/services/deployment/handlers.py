@@ -3,8 +3,9 @@
 Extracted from ``routers/websocket.py`` (Wave 13.2). The 5 handlers
 below cover the deployment lifecycle:
 
-  - ``deploy_workflow`` — start a continuously-running workflow with
-    triggers + per-workflow locking.
+  - ``deploy_workflow`` — arm a live controlled generation's triggers
+    (Start's own step and the boot re-arm) with per-workflow locking;
+    refused without a live generation.
   - ``cancel_deployment`` — cancel a running deployment, drain its
     listeners, unlock the workflow.
   - ``get_deployment_status`` — snapshot of in-flight deployments.
@@ -274,9 +275,6 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     if not nodes:
         return {"success": False, "error": "No nodes provided"}
 
-    if not workflow_id:
-        return {"success": False, "error": "workflow_id is required for deployment"}
-
     # Pre-deploy validation gate. Deploy never honors a force-override —
     # a broken workflow running on a schedule is far worse than a failed
     # one-shot manual run.
@@ -295,12 +293,11 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
             "report": deploy_report,
         }
 
-    # A generation's deploy writes no parameter rows. Start saved them before
-    # it created the generation, and the restart re-arm passes the
-    # generation's sanitized snapshot, which would replace each saved row and
-    # erase its secrets (a webhook's header value among them) and any edit
-    # saved while paused.
-
+    # No parameter rows are written here. Start saved them before it created
+    # the generation, and the restart re-arm passes the generation's
+    # sanitized snapshot, which would replace each saved row and erase its
+    # secrets (a webhook's header value among them) and any edit saved while
+    # paused.
     if workflow_service.is_workflow_deployed(workflow_id):
         status = workflow_service.get_deployment_status(workflow_id)
         return {
@@ -810,14 +807,16 @@ async def _fail_missing_controller(service: WorkflowControlService, control):
     ``begin_generation`` refuses to open a new generation unless the latest
     one is ``reset``, the workflow could never be started again.
 
-    Under the default ``WORKFLOW_CONTROL_MISSING_CONTROLLER=pause``, live
-    states converge to ``paused``: a killed workflow (terminated in the
-    Temporal UI, crashed server, retention-deleted execution) stays
-    user-recoverable — Resume rebuilds the controller from the durable
-    row + graph snapshot — whereas ``failed`` forces a Reset that
-    archives conversation state. ``fail`` preserves the legacy
-    Reset-only behaviour; ``starting`` rows always fail (nothing durable
-    is running yet).
+    A version 0 generation, under the default
+    ``WORKFLOW_CONTROL_MISSING_CONTROLLER=pause``, converges from a live
+    state to ``paused``: a killed workflow (terminated in the Temporal UI,
+    crashed server, retention-deleted execution) stays user-recoverable —
+    Resume rebuilds the controller from the durable row + graph snapshot —
+    whereas ``failed`` forces a Reset that archives conversation state.
+    ``fail`` preserves the legacy Reset-only behaviour. A version 1
+    generation (every new Start) fails closed whatever the policy: its
+    admissions and cron stay held, and it needs Reset, then Start.
+    ``starting`` rows always fail (nothing durable is running yet).
     """
     if control.status not in _MISSING_CONTROLLER_FAILS:
         return control
@@ -1593,30 +1592,32 @@ async def _pause_for_recovery(service: WorkflowControlService, control, *, reaso
 async def reconcile_active_controls_on_boot() -> int:
     """Converge every active durable control after a backend restart.
 
-    Responsibilities per active row:
+    Responsibilities per active row, in the order they are checked:
 
-    1. Run the same lazy :func:`_reconcile_control` used by status reads
+    1. Run once more, inline, a Reset the last process left ``resetting``.
+       A failure leaves the row ``resetting`` for the owner's Reset or the
+       next boot. A slow one (its Workspace step can take 240 s) delays the
+       rows after it and the dev-server watchdog, which starts after this
+       pass.
+    2. Run the same lazy :func:`_reconcile_control` used by status reads
        (finishes interrupted pause/resume transitions, converges rows
        whose controller vanished).
-    2. Converge ``starting`` rows — the one state the lazy path never
+    3. Converge ``starting`` rows — the one state the lazy path never
        touches while its controller exists, so a crash mid-start used to
        wedge the workflow behind a permanent ``workflow_start_pending``.
        Boot is the only moment guaranteed free of a concurrent in-process
        start, which is why this lives here and not in the lazy path.
-    3. Re-arm the process-local half of running/paused generations from
+    4. Re-arm the process-local half of running/paused generations from
        the persisted graph snapshot: the controller and its Temporal
        children survive a restart on their own, but DeploymentManager
        state (runtime counts, admission, pause fan-in) and in-process
        collectors for non-canary trigger types die with the process and
        previously stayed dead while the row reported ``running`` forever.
-    4. After an UNCLEAN shutdown (kill / crash — dirty-bit marker), pause
+    5. After an UNCLEAN shutdown (kill / crash — dirty-bit marker), pause
        every generation still ``running`` so the user consciously
        resumes it (``WORKFLOW_CONTROL_CRASH_RECOVERY=pause``, the
        default; ``resume`` restores them running). A clean
        ``company stop`` + start always restores deployments as they were.
-    5. Run once more a Reset the last process left ``resetting``. A
-       failure leaves the row ``resetting`` for the owner's Reset or the
-       next boot.
 
     Returns the number of rows processed; per-row failures are logged and
     skipped so one broken generation cannot block the rest.
@@ -2751,7 +2752,8 @@ async def _reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[st
 
 
 def _pause_on_failure_threshold() -> int:
-    """Failures within the rolling window required to trip the breaker.
+    """Failed runs that trip the breaker, each within the window of the one
+    before (``_bump_failure_streak``).
 
     Default 3 — a single node hiccup on one firing (missing config,
     transient API error) must never pause a live deployment; only a
@@ -2767,7 +2769,8 @@ def _pause_on_failure_threshold() -> int:
 
 
 def _pause_on_failure_window_seconds() -> float:
-    """Rolling window for the failure streak; older failures age out."""
+    """The longest gap between two failed runs that still continues a
+    streak; a longer gap starts a new one."""
     from core.container import container
 
     try:
@@ -2786,7 +2789,11 @@ def _failure_streak_key(control) -> str:
 
 
 async def _bump_failure_streak(database, control, *, window_seconds: float) -> int:
-    """Increment the rolling-window failure counter and return it.
+    """Count this failed run into the streak and return the count.
+
+    A failure within ``window_seconds`` of the previous one continues the
+    streak; a longer gap starts a new streak at 1. A success never resets
+    it; Resume and a trip clear it (``_clear_failure_streak``).
 
     State lives in the durable cache table (value is a JSON blob; the
     TTL doubles as the window so stale streaks age out even if the
@@ -2833,8 +2840,9 @@ async def pause_generation_on_failure(
     deployment lands ``paused`` so the user fixes the cause and Resumes.
 
     Trips only after ``WORKFLOW_CONTROL_PAUSE_ON_FAILURE_THRESHOLD``
-    failed runs inside the rolling window — small things (one node
-    failing on one firing) never pause the deployment. Gated on
+    failed runs, each within ``WORKFLOW_CONTROL_PAUSE_ON_FAILURE_WINDOW_SECONDS``
+    of the one before — small things (one node failing on one firing)
+    never pause the deployment. Gated on
     ``WORKFLOW_CONTROL_PAUSE_ON_FAILURE`` (default true) and applies
     only to a generation currently ``running`` — direct manual runs,
     legacy uncontrolled deployments, and already-paused generations are

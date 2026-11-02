@@ -22,7 +22,7 @@ class TaskQueue:
 
     DEFAULT = "machina-default"  # catch-all
     REST_API = "rest-api"  # lightweight HTTP calls (gmail, brave, twitter)
-    AI_HEAVY = "ai-heavy"  # long-running LLM + agent loops
+    AI_HEAVY = "ai-heavy"  # model, embedding and vision calls; agents run as one activity (AgentWorkflow's LLM steps use the main queue)
     CODE_EXEC = "code-exec"  # python/js/ts sandboxed execution
     TRIGGERS_POLL = "triggers-poll"  # polling triggers (long-lived)
     TRIGGERS_EVENT = "triggers-event"  # event-waiter triggers (long-lived)

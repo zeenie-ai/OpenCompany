@@ -2,8 +2,10 @@
 
 One row per thing, keyed ``<kind>:<ref>``: ``stuck_retry`` and
 ``<Temporal workflow id>:<activity id>`` for an activity that keeps
-retrying. Every sighting touches it, and Home shows the items seen in the
-last hour, so a row stranded by a Reset or a deletion drops off by itself.
+retrying; ``stuck_runs`` and ``temporal`` while runs keep failing their
+workflow tasks. Every sighting touches it, and Home shows the items seen in
+the last hour, so a row stranded by a Reset or a deletion drops off by
+itself.
 """
 
 from __future__ import annotations

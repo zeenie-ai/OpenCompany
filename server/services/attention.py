@@ -155,6 +155,7 @@ _register()
 
 __all__ = [
     "STUCK_RETRY",
+    "STUCK_RUNS",
     "WINDOW",
     "attention_lifecycle",
     "handle_list_attention_items",

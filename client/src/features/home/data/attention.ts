@@ -1,7 +1,7 @@
 /**
  * Home's attention items (server: services/attention.py): work that keeps
- * retrying past its limit, open until it gets through and dropped an hour
- * after it was last seen. Read through `list_attention_items`, again on each
+ * retrying past its limit, or runs stuck on failing workflow tasks, open
+ * until it clears and dropped an hour after it was last seen. Read through `list_attention_items`, again on each
  * `attention_lifecycle` broadcast (identity only), and once a minute, since
  * nothing announces the drop-off.
  */
@@ -13,7 +13,8 @@ import { useWebSocketActions } from '@/contexts/WebSocketContext';
 
 export interface AttentionItem {
   id: string;
-  /** `stuck_retry`: an activity still retrying past its limit. */
+  /** `stuck_retry`: an activity still retrying past its limit; `stuck_runs`:
+   * runs whose workflow tasks keep failing. */
   kind: string;
   /** Sightings since it opened. */
   count: number;

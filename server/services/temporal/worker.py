@@ -451,7 +451,7 @@ class TemporalWorkerPool:
         return self.DEFAULT_RATE_LIMIT.get(queue)
 
     # Wave 18.4: queues whose workloads are too unpredictable for fixed
-    # slot counts. LLM turns range 2s-5min; browser sessions idle then
+    # slot counts. Model calls range 2s-5min; browser sessions idle then
     # spike on page render. The resource-based supplier targets 80%
     # host CPU + memory instead — per the worker-performance docs it
     # "can provide reasonable performance without the need for
@@ -770,8 +770,8 @@ async def run_standalone_worker(
     enabling horizontal scaling across multiple machines.
 
     Example:
-        # Start multiple workers for horizontal scaling
-        python -m services.temporal.worker
+        # Start more workers for horizontal scaling (distributed mode only)
+        DISTRIBUTED_MODE=true python -m services.temporal.worker
 
     Args:
         server_address: Temporal server address. Defaults to

@@ -243,9 +243,8 @@ async def _start_execution_engine(
         raise
     app_state.temporal_worker_manager = manager
     container.temporal_client().worker_manager = manager
-    if pool is not None:
-        app_state.temporal_pool = pool
-        log(f"[Temporal] Worker pool started ({len(pool.queues)} queues)")
+    app_state.temporal_pool = pool
+    log(f"[Temporal] Worker pool started ({len(pool.queues)} queues)")
 
 
 async def _boot_reconcile(log: Callable[[str], None]) -> None:

@@ -129,10 +129,10 @@ class TemporalClientWrapper:
                 self._client = client
                 logger.info(f"Connected to Temporal server at {self.server_address}")
                 # Wave 12 A4: idempotently register the event-framework
-                # Search Attributes. Failure here is non-fatal — the
-                # framework still works without them, dispatch.emit just
-                # falls back to broadcast-only routing instead of
-                # signalling consumers.
+                # Search Attributes. A failure here is logged, not raised,
+                # but it is not harmless: a start that sets an unregistered
+                # attribute fails (every controller sets EventWorkflowId),
+                # and dispatch.emit's Visibility query finds no consumers.
                 try:
                     from services.temporal.search_attributes import (
                         register_search_attributes,

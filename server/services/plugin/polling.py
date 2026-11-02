@@ -28,10 +28,12 @@ Mirrors the existing ``setup_polling_trigger`` consumer in
 
 Per-cycle error isolation: a transient ``Exception`` from
 ``fetch_ids`` or ``fetch_detail`` logs at ERROR and the loop sleeps
-to the next interval. Permanent errors (auth revoked, account
-deleted) currently keep retrying indefinitely with the same log
-line; ``tenacity``-backed classification is a follow-up extension
-point documented inline.
+to the next interval. In this in-process loop, permanent errors (auth
+revoked, account deleted) keep retrying every cycle with the same log
+line. The Temporal poll activity (``as_poll_activity``) instead turns a
+credential ``PermissionError`` that names its provider into a
+non-retryable ``NodeUserError``, and caps one cycle's results by bytes
+and by time (1b.17, 1b.18).
 
 Out of scope (commit-stage)
 ---------------------------

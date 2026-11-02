@@ -1,6 +1,7 @@
 """The chat run watchdog (services/chat/watchdog.py): sweeps at once when it
 starts and then every interval, survives a failing sweep, stops cleanly, asks
-Temporal whether a run's workflow has closed, and cancels a stopped run's."""
+Temporal whether a run's workflow has closed, and cancels a run's workflow
+(the ledger asks it to for a stopped run and a timed-out one)."""
 
 from __future__ import annotations
 

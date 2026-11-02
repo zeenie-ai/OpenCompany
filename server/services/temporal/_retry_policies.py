@@ -186,8 +186,10 @@ QUEUE_PAGING_RETRY: RetryPolicy = RetryPolicy(
 BREAKER_COUNT_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
 
 
-# Keep the existing Browser task policies unchanged for Temporal replay.
-# A busy claim fails immediately; cleanup must wait for its owner to return.
+# The Browser task policies, as they were. Replay does not compare a retry
+# policy (CLAUDE.md, the durability contract), so they may change; they are
+# kept for their behaviour: a busy claim fails immediately, and cleanup must
+# wait for its owner to return.
 BROWSER_TASK_CLAIM_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=1)
 BROWSER_TASK_CLEANUP_RETRY: RetryPolicy = RetryPolicy(maximum_attempts=0)
 

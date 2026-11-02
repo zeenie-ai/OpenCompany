@@ -539,10 +539,10 @@ async def _broadcast_trigger_idle(
     message — matches the legacy collector/processor transition so FE
     shows a firing pulse instead of a stuck "waiting" indicator.
 
-    ``retry_policy=None`` (Temporal default = unlimited retries) is the
-    replay-compatibility shape for pre-patch histories; new executions
-    pass the bounded policy so a dead broadcaster cannot wedge the
-    serialized spawn loop.
+    ``retry_policy=None`` (Temporal default = unlimited retries) is what
+    pre-patch histories ran with; new executions pass the bounded policy so
+    a dead broadcaster cannot wedge the serialized spawn loop. Replay does
+    not compare the policy itself, only the patch marker that chooses it.
     """
     kwargs: Dict[str, Any] = {"start_to_close_timeout": _STATUS_ACTIVITY_TIMEOUT}
     if retry_policy is not None:

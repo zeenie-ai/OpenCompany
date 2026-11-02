@@ -1,7 +1,8 @@
 /**
- * One line under the Home header while work keeps retrying past its limit
- * (data/attention.ts). It speaks of tasks, not employees: an item names a
- * Temporal activity. Nothing shows while nothing is open.
+ * One line under the Home header while work keeps retrying past its limit,
+ * or runs are stuck on failing workflow tasks (data/attention.ts). It speaks
+ * of tasks and runs, not employees: an item names a Temporal activity, or
+ * the engine as a whole. Nothing shows while nothing is open.
  */
 
 import { TriangleAlert } from 'lucide-react';

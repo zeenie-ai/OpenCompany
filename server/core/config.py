@@ -185,10 +185,10 @@ class Settings(BaseSettings):
         default=True,
         env="EVENT_FRAMEWORK_ENABLED",
     )
-    # Wave 16: per-queue activity routing. When True, main.py starts a
-    # TemporalWorkerPool (one activity-only Worker per plugin-declared
-    # task queue) alongside the TemporalWorkerManager, and
-    # MachinaWorkflow._resolve_activity returns cls.task_queue so
+    # Wave 16: per-queue activity routing. The Temporal lifecycle always
+    # starts a TemporalWorkerPool (one activity-only Worker per
+    # plugin-declared task queue) beside the TemporalWorkerManager. When
+    # True, MachinaWorkflow._resolve_activity returns cls.task_queue so
     # per-type activities land on their specialised pool worker.
     #
     # Wave 16.4: default flipped to True — per-queue routing is the
@@ -317,8 +317,10 @@ class Settings(BaseSettings):
     )
     # "pause" | "fail": convergence for a live generation whose controller
     # execution vanished (terminated in the Temporal UI, killed, deleted).
-    # "pause" keeps it user-resumable — Resume rebuilds the controller from
-    # the durable row; "fail" preserves the legacy Reset-only behaviour.
+    # For a version 0 generation, "pause" keeps it user-resumable — Resume
+    # rebuilds the controller from the durable row; "fail" preserves the
+    # legacy Reset-only behaviour. A version 1 generation (every new Start)
+    # fails closed either way and needs Reset, then Start.
     workflow_control_missing_controller: str = Field(
         default="pause",
         env="WORKFLOW_CONTROL_MISSING_CONTROLLER",
@@ -330,8 +332,9 @@ class Settings(BaseSettings):
         default=True,
         env="WORKFLOW_CONTROL_PAUSE_ON_FAILURE",
     )
-    # The breaker trips only after this many failed runs inside the rolling
-    # window below — one node hiccup on one firing (missing config,
+    # The breaker trips only after this many failed runs, each within the
+    # window below of the one before (a longer gap starts the count again;
+    # a success does not) — one node hiccup on one firing (missing config,
     # transient API error) never pauses a deployment. 1 = pause on the
     # first failure.
     workflow_control_pause_on_failure_threshold: int = Field(

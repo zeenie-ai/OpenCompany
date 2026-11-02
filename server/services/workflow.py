@@ -862,16 +862,9 @@ class WorkflowService:
             generation: Durable workflow-control generation
             user_id: Authenticated server-owned user identity
         """
+        # Only handle_deploy_workflow calls this, for a live generation of a
+        # normalized (version 2) graph; it refuses anything else (1b.46).
         manager = self._get_deployment_manager()
-        if int(graph_version or 0) < 2 or int(generation or 0) <= 0:
-            return await manager.deploy(
-                nodes,
-                edges,
-                session_id,
-                status_callback,
-                workflow_id,
-                user_id=user_id,
-            )
         return await manager.deploy(
             nodes, edges, session_id, status_callback, workflow_id, graph_version, generation,
             user_id=user_id,

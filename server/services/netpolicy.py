@@ -3,19 +3,22 @@
 Callers:
 - the agent's browser (``nodes/browser``): each navigation, and the egress
   proxy on the addresses it resolved itself;
-- the custom MCP connectors (``nodes/mcp_connector``): the server the owner
-  added, on every address its host resolves to;
-- nodes that download a URL they were given, such as a WhatsApp media URL
-  or a Google Drive upload's source (:func:`resolved_url_block_reason`).
+- the custom MCP connectors (``nodes/mcp``): the server the owner added, on
+  every address its host resolves to;
+- nodes that fetch a URL they were given: the HTTP request node, a WhatsApp
+  media URL, a Google Drive upload's source (:func:`resolved_url_block_reason`
+  with :func:`fetch_policy`).
 
 What they reach is untrusted, and an agent follows untrusted instructions
 (prompt injection), so these stay out of reach:
 
 - **OpenCompany itself**: its configured ports on this machine (the app, the
-  code sidecar, the WhatsApp bridge, Temporal) and the ports a plugin opens
-  while it runs (the managed Chromes' debugging and egress-proxy ports,
-  Android's ADB forwards; :func:`register_port_source`). Refused on every
-  address of this host, always.
+  code sidecar, the WhatsApp bridge, Temporal), refused on every address of
+  this host for every caller. The ports a plugin opens while it runs (the
+  managed Chromes' debugging and egress-proxy ports, Android's ADB
+  forwards; :func:`register_port_source`) join them in :func:`fetch_policy`;
+  the Browser refuses its own, and the MCP connectors check only the
+  configured ports.
 - **Cloud metadata** (``169.254.169.254`` and friends), which hands out the
   VM's credentials. Link-local is refused always.
 - **The private network**, unless the policy allows it (the Browser node's

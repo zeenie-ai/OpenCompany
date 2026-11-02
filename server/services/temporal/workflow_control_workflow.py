@@ -864,6 +864,8 @@ class WorkflowControlWorkflow:
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:  # per-poll isolation
+                    # A bug in workflow code is swallowed here too: the poll
+                    # task's arms stay unguarded (1b.13, _exits).
                     workflow.logger.error(f"Controlled polling trigger failed: {exc}")
                 self._maybe_request_rollover()
                 continue
@@ -875,7 +877,7 @@ class WorkflowControlWorkflow:
                 )
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 — per-poll isolation; swallows a workflow bug too
                 workflow.logger.error(f"Controlled polling trigger failed: {exc}")
                 self._maybe_request_rollover()
                 continue
@@ -913,7 +915,8 @@ class WorkflowControlWorkflow:
                 except Exception as spawn_exc:  # noqa: BLE001 — per-event isolation
                     # A failed spawn must not silently kill this poll task
                     # (the trigger would stop firing forever while the
-                    # controller still reported Running).
+                    # controller still reported Running). A bug in workflow
+                    # code is swallowed here too (1b.13 left these arms).
                     workflow.logger.error(
                         f"Controlled polling spawn failed for event.id={event_id}: {spawn_exc}"
                     )

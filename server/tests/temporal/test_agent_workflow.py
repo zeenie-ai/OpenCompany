@@ -1266,9 +1266,10 @@ class TestAgentContinueAsNew:
         # test_rollover_guards_transcript_size) so the CAN argument stays
         # under Temporal's payload error limit.
         carried = source[source.index("_RESUME_MARKER:") :][:700]
-        # The conversation key is deliberately NOT carried: prepare_payload
-        # recomputes it deterministically from the descriptor on every run,
-        # resumed or fresh.
+        # The conversation key is not a field of the resume marker:
+        # prepare_payload recomputes it from the descriptor on every run. It
+        # still rides inside the carried prepared_payload (1b.19 drops only
+        # its seed keys).
         for required in (
             '"transcript"',
             '"usage"',
