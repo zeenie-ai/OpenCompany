@@ -246,11 +246,12 @@ dependencies = [
 # ``uv sync`` keeps it installed by default in contributor checkouts.
 docs = [
     "beautifulsoup4>=4.12.0",
-    # Security floor: <6.21.1 carries seven advisories where a crafted PDF
-    # loops forever or exhausts memory (among them GHSA-39mj-jf6j-2qj3 and
-    # GHSA-cgf9-327m-v77c) and one on unvalidated JPEG data
-    # (GHSA-5hx5-vpf9-5wcv). Do not lower without checking them.
-    "pypdf>=6.21.1",
+    # Security floor: <6.21.4 carries advisories where a crafted PDF loops
+    # forever or exhausts memory (among them GHSA-39mj-jf6j-2qj3,
+    # GHSA-cgf9-327m-v77c, GHSA-5849-834g-hvw5 and GHSA-cggf-277g-3q54) and
+    # one on unvalidated JPEG data (GHSA-5hx5-vpf9-5wcv). Do not lower
+    # without checking them.
+    "pypdf>=6.21.4",
 ]
 local-embeddings = [
     # Optional because the model + torch stack is large. The embedding node and
