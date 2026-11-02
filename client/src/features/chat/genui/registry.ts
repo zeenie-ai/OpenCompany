@@ -1,18 +1,21 @@
 /**
- * The chat's generated UI for json-render: the catalogue (catalog.ts's
- * CHAT_CATALOG) and its registry, a guarded component for each of the
- * twelve types (views.tsx drawn through lib/jsonRender/guard.tsx, which reads
- * each element's props through the catalogue's forgiving schema first and
- * holds it to the parents it may appear under).
+ * The chat's generated UI for json-render: the catalogue and its registry,
+ * a guarded component for each of the twelve types (views.tsx drawn through
+ * lib/jsonRender/guard.tsx, which reads each element's props through the
+ * catalogue's forgiving schema first and holds it to the parents it may
+ * appear under). What each layout may hold is the server's manifest
+ * (server/config/chat_genui_catalog.json `children`).
  *
  * Defined here, not in catalog.ts, because this module loads only with a
- * generated UI (ChatUi), and json-render with it.
+ * generated UI (ChatUi), and json-render and the manifest with it.
  */
 
 import { defineCatalog } from '@json-render/core';
 import { defineRegistry, schema } from '@json-render/react';
 import { guarded } from '@/lib/jsonRender';
-import { CHAT_CATALOG, CHAT_PROP_SCHEMAS, allowedParents } from './catalog';
+import { catalogOf } from '@/lib/jsonRender/catalog';
+import { components } from '../../../../../server/config/chat_genui_catalog.json';
+import { CHAT_PROP_SCHEMAS, type ChatComponentType } from './catalog';
 import {
   BarChartView,
   ButtonView,
@@ -28,7 +31,21 @@ import {
   ToggleView,
 } from './views';
 
-export const chatCatalog = defineCatalog(schema, CHAT_CATALOG);
+/** What each layout may hold: any component, or only these. */
+const LAYOUTS: Record<string, string | readonly string[]> = Object.fromEntries(
+  Object.entries(components).flatMap(([type, component]) => ('children' in component ? [[type, component.children]] : [])),
+);
+
+/** The parents a component may sit under (null: the root). */
+export function allowedParents(type: ChatComponentType): (string | null)[] {
+  const parents: (string | null)[] = [null];
+  for (const [layout, children] of Object.entries(LAYOUTS)) {
+    if (children === 'any' || (Array.isArray(children) && children.includes(type))) parents.push(layout);
+  }
+  return parents;
+}
+
+export const chatCatalog = defineCatalog(schema, catalogOf(CHAT_PROP_SCHEMAS, Object.keys(LAYOUTS)));
 
 export const { registry: chatRegistry } = defineRegistry(chatCatalog, {
   components: {

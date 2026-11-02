@@ -390,10 +390,11 @@ Hire button, one change button and the "Ask me before sending anything" toggle
 `$computed` and an action's `confirm`. That glue is shared with the chat's
 generated replies in [lib/jsonRender/](../client/src/lib/jsonRender/)
 (sanitising, the per-element guard that reads props through the catalogue's
-forgiving schema, the paced reveal, the guarded state store). The server
-mirrors the catalogue in
-[config/genui_catalog.json](../server/config/genui_catalog.json);
-`server/tests/test_genui_catalog_sync.py` keeps the two in step, and a shared
+forgiving schema, the paced reveal, the guarded state store). The vocabulary
+itself is [config/genui_catalog.json](../server/config/genui_catalog.json),
+which the server writes the prompt from and the client imports (`catalog.ts`,
+`hirePayload.ts`); `genui/__tests__/catalog.test.ts` holds the prop schemas to
+its components and props, and a shared
 corpus of model replies in both shapes (`genui/__fixtures__/replies.json`) is
 parsed the same way on both sides. Only what `genui/index.ts` exports
 (`HireDraftPanel`, `useHireComposer`, `useStarterHire`, `DraftMessagePreview`)

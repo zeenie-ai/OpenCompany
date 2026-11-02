@@ -1,13 +1,12 @@
 /**
  * The setup screen's vocabulary: the components and actions a model may
  * use when it describes a new employee, and what each component's props
- * look like once resolved. The screen is drawn by json-render; HIRE_CATALOG
- * below is this vocabulary in the shape its defineCatalog takes.
- *
- * The server writes the model's prompt from server/config/genui_catalog.json;
- * tests/test_genui_catalog_sync.py reads the literal lists in this file off
- * disk and checks they match that manifest, so keep them plain `[...] as
- * const` literals.
+ * look like once resolved. The vocabulary is
+ * server/config/genui_catalog.json, which the server writes the model's
+ * prompt from; the lists below are imported from it, and a test holds the
+ * prop schemas to its components and props. The screen is drawn by
+ * json-render; HIRE_CATALOG is the vocabulary in the shape its
+ * defineCatalog takes.
  *
  * Prop schemas are forgiving by design: a model's odd value degrades that
  * one prop (a default, a clamped string) instead of failing the element.
@@ -16,107 +15,49 @@
  */
 
 import { z } from 'zod';
-
-export const COMPONENT_TYPES = [
-  'Stack',
-  'Grid',
-  'Card',
-  'Heading',
-  'Text',
-  'Metric',
-  'Badge',
-  'Plan',
-  'Schedule',
-  'AgentCard',
-  'List',
-  'Draft',
-  'Progress',
-  'Toggle',
-  'Choice',
-  'Input',
-  'Button',
-  'Divider',
-] as const;
-export type ComponentType = (typeof COMPONENT_TYPES)[number];
+import { block, catalogOf, line, listOf, optionalLine, scalar } from '@/lib/jsonRender/catalog';
+import {
+  action_aliases,
+  actions,
+  ask_first_label,
+  container_types,
+  control_types,
+  limits,
+  state_paths,
+  step_roles,
+  tones,
+} from '../../../../../server/config/genui_catalog.json';
+import type { RoutineRole } from '../ui/routine';
 
 /** Components that lay out children; every other component is a leaf. */
-export const CONTAINER_TYPES = ['Stack', 'Grid', 'Card'] as const;
+export const CONTAINER_TYPES: readonly string[] = container_types;
 
 /** Controls that write to UI state through `{"$bindState": "/path"}`.
  *  Schedule writes one too, but the normalizer places it itself. */
-export const CONTROL_TYPES = ['Toggle', 'Choice', 'Input'] as const;
+export const CONTROL_TYPES: readonly string[] = control_types;
 
-export const ACTION_TYPES = ['setState', 'hire_employee', 'refine', 'connect_app', 'open_connectors'] as const;
-export type ActionType = (typeof ACTION_TYPES)[number];
+export type ActionType = keyof typeof actions;
+export const ACTION_TYPES = Object.keys(actions) as ActionType[];
 
 /** Old action names the model sometimes uses, and what they mean now. */
-export const ACTION_ALIASES: Readonly<Record<string, ActionType>> = { ask: 'refine' };
+export const ACTION_ALIASES = action_aliases as Readonly<Record<string, ActionType>>;
 
-export const TONES = ['agent', 'model', 'tool', 'trigger', 'workflow', 'neutral'] as const;
-export type Tone = (typeof TONES)[number];
+export const TONES: readonly string[] = tones;
+export type Tone = string;
 
-export const STEP_ROLES = ['trigger', 'agent', 'tool', 'workflow'] as const;
-export type StepRole = (typeof STEP_ROLES)[number];
+export type StepRole = RoutineRole;
+export const STEP_ROLES = step_roles as readonly StepRole[];
 
 /** Where the setup screen keeps what the owner decides. */
-export const STATE_PATHS = {
-  rules: '/rules',
-  askFirst: '/rules/askFirst',
-  choices: '/choices',
-  inputs: '/inputs',
-  trigger: '/trigger',
-} as const;
+export const STATE_PATHS = state_paths;
 
-export const ASK_FIRST_LABEL = 'Ask me before sending anything';
+export const ASK_FIRST_LABEL = ask_first_label;
 
-export const LIMITS = {
-  maxElements: 16,
-  maxReplyChars: 65536,
-  maxLine: 120,
-  maxText: 400,
-  maxBody: 2000,
-  maxSteps: 6,
-  maxItems: 8,
-  maxOptions: 4,
-  maxApps: 6,
-  maxInput: 200,
-  maxIdLength: 40,
-} as const;
+export const LIMITS = limits;
 
 // ----- prop schemas (resolved values) -----
 
-function clampLine(value: string, max: number): string {
-  const flat = value.replace(/\s+/g, ' ').trim();
-  return flat.length > max ? `${flat.slice(0, max - 1).trimEnd()}…` : flat;
-}
-
-function clampBlock(value: string, max: number): string {
-  const trimmed = value.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed;
-}
-
-const scalar = z.union([z.string(), z.number(), z.boolean()]).transform(String);
-
-/** A one-line string, whitespace collapsed and clamped; '' when unusable. */
-const line = (max: number = LIMITS.maxLine) => scalar.catch('').transform((s) => clampLine(s, max));
-/** A string that keeps its line breaks (message bodies). */
-const block = (max: number) => scalar.catch('').transform((s) => clampBlock(s, max));
-const optionalLine = (max: number = LIMITS.maxLine) => line(max).optional().catch(undefined);
-
-const tone = z.enum(TONES).optional().catch(undefined);
-
-function listOf<T extends z.ZodType>(item: T, max: number) {
-  return z
-    .array(z.unknown())
-    .catch([])
-    .transform((items) =>
-      items
-        .map((raw) => item.safeParse(raw))
-        .filter((result) => result.success)
-        .map((result) => result.data as z.output<T>)
-        .slice(0, max),
-    );
-}
+const tone = z.enum(tones).optional().catch(undefined);
 
 const planStep = z.object({
   title: line(60),
@@ -126,7 +67,7 @@ const planStep = z.object({
 });
 
 const listItem = z.object({
-  title: line(),
+  title: line(LIMITS.maxLine),
   detail: optionalLine(LIMITS.maxText),
   meta: optionalLine(40),
   tone,
@@ -138,10 +79,10 @@ export const PROP_SCHEMAS = {
     gap: z.enum(['sm', 'md', 'lg']).catch('md'),
   }),
   Grid: z.object({ columns: z.coerce.number().pipe(z.union([z.literal(2), z.literal(3)])).catch(2) }),
-  Card: z.object({ title: optionalLine(), subtitle: optionalLine(LIMITS.maxText), tone }),
-  Heading: z.object({ text: line() }),
+  Card: z.object({ title: optionalLine(LIMITS.maxLine), subtitle: optionalLine(LIMITS.maxText), tone }),
+  Heading: z.object({ text: line(LIMITS.maxLine) }),
   Text: z.object({ text: block(LIMITS.maxText), muted: z.boolean().catch(false) }),
-  Metric: z.object({ label: line(60), value: line(40), hint: optionalLine(), tone }),
+  Metric: z.object({ label: line(60), value: line(40), hint: optionalLine(LIMITS.maxLine), tone }),
   Badge: z.object({ label: line(40), tone }),
   // `trigger`: bound to /trigger by the normaliser (the When row's Change); the model never writes it.
   Plan: z.object({ title: optionalLine(60), steps: listOf(planStep, LIMITS.maxSteps), trigger: z.unknown().optional() }),
@@ -158,7 +99,7 @@ export const PROP_SCHEMAS = {
   Draft: z.object({
     channel: optionalLine(30),
     to: optionalLine(80),
-    subject: optionalLine(),
+    subject: optionalLine(LIMITS.maxLine),
     body: block(LIMITS.maxBody),
   }),
   Progress: z.object({
@@ -166,15 +107,15 @@ export const PROP_SCHEMAS = {
     value: z.coerce.number().catch(0).transform((v) => Math.max(0, Math.min(100, Number.isFinite(v) ? v : 0))),
     tone,
   }),
-  Toggle: z.object({ label: line(), description: optionalLine(LIMITS.maxText), checked: z.boolean().catch(false) }),
+  Toggle: z.object({ label: line(LIMITS.maxLine), description: optionalLine(LIMITS.maxText), checked: z.boolean().catch(false) }),
   Choice: z.object({
-    label: line(),
+    label: line(LIMITS.maxLine),
     options: listOf(line(40), LIMITS.maxOptions).transform((options) => [...new Set(options.filter(Boolean))]),
     value: optionalLine(40),
   }),
   Input: z.object({
-    label: line(),
-    placeholder: optionalLine(),
+    label: line(LIMITS.maxLine),
+    placeholder: optionalLine(LIMITS.maxLine),
     value: scalar.catch('').transform((s) => s.slice(0, LIMITS.maxInput)),
   }),
   // What it runs is the element's on.press, which json-render resolves at the press.
@@ -183,50 +124,34 @@ export const PROP_SCHEMAS = {
     variant: z.enum(['primary', 'secondary']).catch('secondary'),
   }),
   Divider: z.object({}),
-} satisfies Record<ComponentType, z.ZodType>;
+};
+
+export type ComponentType = keyof typeof PROP_SCHEMAS;
 
 export type PropsOf<T extends ComponentType> = z.output<(typeof PROP_SCHEMAS)[T]>;
 
 export function isComponentType(value: unknown): value is ComponentType {
-  return typeof value === 'string' && (COMPONENT_TYPES as readonly string[]).includes(value);
+  return typeof value === 'string' && Object.hasOwn(PROP_SCHEMAS, value);
 }
 
 export function isContainer(type: ComponentType): boolean {
-  return (CONTAINER_TYPES as readonly string[]).includes(type);
+  return CONTAINER_TYPES.includes(type);
 }
 
 export function isControl(type: ComponentType): boolean {
-  return (CONTROL_TYPES as readonly string[]).includes(type);
+  return CONTROL_TYPES.includes(type);
 }
 
 /** The action a Button runs, with old names mapped; null when unknown. */
 export function actionOf(value: unknown): ActionType | null {
   if (typeof value !== 'string') return null;
-  const name = Object.prototype.hasOwnProperty.call(ACTION_ALIASES, value) ? ACTION_ALIASES[value] : value;
-  return (ACTION_TYPES as readonly string[]).includes(name) ? (name as ActionType) : null;
-}
-
-// ----- the catalogue as json-render takes it -----
-
-type HireCatalogComponents = {
-  [T in ComponentType]: { props: (typeof PROP_SCHEMAS)[T]; slots?: string[] };
-};
-
-function catalogComponents(): HireCatalogComponents {
-  const components: Partial<Record<ComponentType, { props: z.ZodType; slots?: string[] }>> = {};
-  for (const type of COMPONENT_TYPES) {
-    components[type] = isContainer(type) ? { props: PROP_SCHEMAS[type], slots: ['default'] } : { props: PROP_SCHEMAS[type] };
-  }
-  return components as HireCatalogComponents;
+  const name = Object.hasOwn(ACTION_ALIASES, value) ? ACTION_ALIASES[value] : value;
+  return Object.hasOwn(actions, name) ? (name as ActionType) : null;
 }
 
 /**
- * What json-render's defineCatalog takes for the setup screen: every
- * component with its props schema, containers with their children (the
- * default slot). registry.ts defines the catalogue from it there, beside
- * the renderer, because this file is in Home's first chunk and json-render
- * loads only with the screen. No actions are declared: the screen's
- * handlers come from Home when it renders (actions.ts), and setState is
- * json-render's own.
+ * What json-render's defineCatalog takes for the setup screen. registry.ts
+ * defines the catalogue from it there, beside the renderer, because this
+ * file is in Home's first chunk and json-render loads only with the screen.
  */
-export const HIRE_CATALOG = { components: catalogComponents(), actions: {} };
+export const HIRE_CATALOG = catalogOf(PROP_SCHEMAS, CONTAINER_TYPES);

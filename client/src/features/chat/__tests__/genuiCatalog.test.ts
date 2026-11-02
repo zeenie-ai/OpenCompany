@@ -1,71 +1,25 @@
 /**
- * The chat catalogue (genui/catalog.ts) against the server's manifest
- * (server/config/chat_genui_catalog.json), which the server checks every
- * spec against: the same components, roles, children, bound props, events,
- * actions and limits. The server's tests read this side the same way.
+ * The chat catalogue's prop schemas (genui/catalog.ts) against the server's
+ * manifest (server/config/chat_genui_catalog.json), which the server checks
+ * every spec against: a schema for each of its components, in its order,
+ * reading every prop it declares.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  BIND_PROPS,
-  CHAT_ACTIONS,
-  CHAT_COMPONENT_TYPES,
-  CHAT_LIMITS,
-  CHAT_PROP_SCHEMAS,
-  COMPONENT_CHILDREN,
-  COMPONENT_EVENTS,
-  COMPONENT_ROLES,
-  allowedParents,
-} from '../genui/catalog';
-
-interface ManifestComponent {
-  role: string;
-  children?: 'any' | string[];
-  bind?: string;
-  events?: string[];
-  props: { properties?: Record<string, unknown> };
-}
-
-const manifest = JSON.parse(readFileSync(resolve(__dirname, '../../../../../server/config/chat_genui_catalog.json'), 'utf-8')) as {
-  limits: Record<string, number>;
-  components: Record<string, ManifestComponent>;
-  actions: Record<string, unknown>;
-};
+import manifest from '../../../../../server/config/chat_genui_catalog.json';
+import { CHAT_PROP_SCHEMAS } from '../genui/catalog';
+import { allowedParents } from '../genui/registry';
 
 describe('the chat catalogue', () => {
-  it('has the manifest’s components, in its order', () => {
-    expect([...CHAT_COMPONENT_TYPES]).toEqual(Object.keys(manifest.components));
-  });
-
-  it('agrees on roles, children, bound props and events', () => {
-    for (const type of CHAT_COMPONENT_TYPES) {
-      const component = manifest.components[type];
-      expect(COMPONENT_ROLES[type], type).toBe(component.role);
-      expect((COMPONENT_CHILDREN as Record<string, unknown>)[type] ?? null, type).toEqual(component.children ?? null);
-      expect((BIND_PROPS as Record<string, unknown>)[type] ?? null, type).toBe(component.bind ?? null);
-      expect((COMPONENT_EVENTS as Record<string, unknown>)[type] ?? null, type).toEqual(component.events ?? null);
-    }
+  it('has a schema for each of the manifest’s components, in its order', () => {
+    expect(Object.keys(CHAT_PROP_SCHEMAS)).toEqual(Object.keys(manifest.components));
   });
 
   it('reads every prop the manifest declares', () => {
-    for (const type of CHAT_COMPONENT_TYPES) {
-      const declared = Object.keys(manifest.components[type].props.properties ?? {}).sort();
-      expect(Object.keys(CHAT_PROP_SCHEMAS[type].shape).sort(), type).toEqual(declared);
+    for (const [type, component] of Object.entries(manifest.components)) {
+      const declared = Object.keys(component.props.properties ?? {}).sort();
+      expect(Object.keys(CHAT_PROP_SCHEMAS[type as keyof typeof CHAT_PROP_SCHEMAS].shape).sort(), type).toEqual(declared);
     }
-  });
-
-  it('agrees on actions and limits', () => {
-    expect([...CHAT_ACTIONS].sort()).toEqual(Object.keys(manifest.actions).sort());
-    expect(CHAT_LIMITS).toEqual({
-      maxElements: manifest.limits.max_elements,
-      maxDepth: manifest.limits.max_depth,
-      maxBytes: manifest.limits.max_bytes,
-      maxChildren: manifest.limits.max_children,
-      maxIdLength: manifest.limits.max_id_length,
-      maxPathSegments: manifest.limits.max_path_segments,
-    });
   });
 
   it('places a component only where a layout may hold it', () => {

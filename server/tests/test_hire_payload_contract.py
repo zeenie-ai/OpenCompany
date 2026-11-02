@@ -33,9 +33,12 @@ def test_payload_keys_match_the_request_model(source):
     assert _ts_list(source, "HIRE_PAYLOAD_KEYS") == list(HireEmployeeRequest.model_fields)
 
 
-def test_trigger_choices_match(source):
+def test_trigger_choices_match():
+    """The client's trigger kinds are the manifest's (config/genui_catalog.json)."""
+    from services.employees.genui_catalog import load_genui_catalog
+
     kinds = HireTrigger.model_fields["kind"].annotation.__args__
-    assert tuple(_ts_list(source, "TRIGGER_KINDS")) == kinds
+    assert tuple(load_genui_catalog()["trigger"]["kinds"]) == kinds
 
 
 def test_caps_match(source):

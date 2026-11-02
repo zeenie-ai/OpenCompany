@@ -1,9 +1,8 @@
 """The setup-screen vocabulary (``config/genui_catalog.json``), loaded once.
 
 The prompt is generated from it and the reply salvage check reads its
-lists; the client's renderer keeps the same lists in
-``client/src/features/home/genui/catalog.ts`` (checked by
-``tests/test_genui_catalog_sync.py``).
+lists; the client's renderer imports the same file
+(``client/src/features/home/genui/catalog.ts``).
 """
 
 from __future__ import annotations

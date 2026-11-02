@@ -6,12 +6,13 @@
  * The server builds the workflow from this (services/employees/builder.py)
  * and never takes node types from it. `HIRE_PAYLOAD_KEYS` must match the
  * server's HireEmployeeRequest; tests/test_hire_payload_contract.py reads it
- * off disk and checks. The trigger lists match config/genui_catalog.json,
- * and the times and weekdays are the builder's own
+ * off disk and checks. The trigger lists are server/config/genui_catalog.json's,
+ * whose times and weekdays are the builder's own
  * (tests/test_genui_catalog_sync.py), so a schedule shown here is the one
  * that runs.
  */
 
+import { trigger as triggerLists } from '../../../../../server/config/genui_catalog.json';
 import type { Starter } from '../hire/templates';
 import { PROP_SCHEMAS, STATE_PATHS, STEP_ROLES, type ComponentType, type PropsOf, type StepRole } from './catalog';
 import { bindingPath, getPath, resolveValue, type UiState } from './expressions';
@@ -33,26 +34,12 @@ export const HIRE_PAYLOAD_KEYS = [
   'source',
 ] as const;
 
-export const TRIGGER_KINDS = ['app_event', 'schedule', 'manual'] as const;
-export const SCHEDULE_EVERY = ['hour', 'day', 'weekday', 'week', 'month'] as const;
+export const TRIGGER_KINDS: readonly string[] = triggerLists.kinds;
+export const SCHEDULE_EVERY: readonly string[] = triggerLists.every;
 /** When a schedule can run, in the owner's time zone. */
-export const SCHEDULE_TIMES = [
-  '00:00',
-  '02:00',
-  '04:00',
-  '06:00',
-  '08:00',
-  '09:00',
-  '10:00',
-  '12:00',
-  '14:00',
-  '16:00',
-  '18:00',
-  '20:00',
-  '22:00',
-] as const;
+export const SCHEDULE_TIMES: readonly string[] = triggerLists.times;
 /** The days a weekly schedule can run on, in week order. */
-export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+export const WEEKDAYS: readonly string[] = triggerLists.days;
 /** The last day of the month a monthly schedule can run on (every month has one). */
 export const LAST_MONTH_DAY = 28;
 

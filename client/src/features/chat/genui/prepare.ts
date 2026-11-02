@@ -13,18 +13,20 @@
 
 import type { ActionBinding, Spec, UIElement } from '@json-render/core';
 import { DEFAULT_SANITIZE_LIMITS, sanitizeSpec, type SanitizeLimits } from '@/lib/jsonRender/sanitize';
-import { CHAT_LIMITS, isChatComponentType } from './catalog';
+import { limits } from '../../../../../server/config/chat_genui_catalog.json';
+import { isChatComponentType } from './catalog';
 
 /** The keys a pressed button adds to its action's params. */
 export const PRESS_ELEMENT = '__oc_element';
 export const PRESS_LABEL = '__oc_label';
 
+/** The server's limits (server/config/chat_genui_catalog.json). */
 export const CHAT_SANITIZE_LIMITS: SanitizeLimits = {
   ...DEFAULT_SANITIZE_LIMITS,
-  maxElements: CHAT_LIMITS.maxElements,
-  maxChildren: CHAT_LIMITS.maxChildren,
-  maxIdLength: CHAT_LIMITS.maxIdLength,
-  maxPathSegments: CHAT_LIMITS.maxPathSegments,
+  maxElements: limits.max_elements,
+  maxChildren: limits.max_children,
+  maxIdLength: limits.max_id_length,
+  maxPathSegments: limits.max_path_segments,
 };
 
 function tagged(binding: ActionBinding, id: string, label: unknown): ActionBinding {

@@ -1,5 +1,5 @@
 {
-  "_comment": "Normal mode's setup-screen vocabulary: what a model may use when it writes a new employee's setup screen. The prompt (services/employees/setup_prompt.py) is generated from this file; the client's renderer (client/src/features/home/genui/catalog.ts, hirePayload.ts) must list the same components, actions, tones, roles, state paths, limits and trigger lists, which tests/test_genui_catalog_sync.py checks. A component marked `inserted` is added by the client's normalizer, never by the model, so the prompt leaves it out. `trigger.times` are the times a schedule can run at (services/employees/builder.py SCHEDULE_TIMES). spec_version 2 is json-render's shape: a Toggle binds `checked`, and a Button's action is the element's `on.press` ({action, params}); the client still reads the older `value` and `action`/`actionParams` a model may write.",
+  "_comment": "Normal mode's setup-screen vocabulary: what a model may use when it writes a new employee's setup screen. The prompt (services/employees/setup_prompt.py) is generated from this file, and the client's renderer imports its lists (client/src/features/home/genui/catalog.ts, hirePayload.ts); a client test holds the renderer's prop schemas to these components and props. A component marked `inserted` is added by the client's normalizer, never by the model, so the prompt leaves it out. `trigger.times` are the times a schedule can run at and `trigger.days` the days, in week order (services/employees/builder.py SCHEDULE_TIMES and WEEKDAYS, checked by tests/test_genui_catalog_sync.py). spec_version 2 is json-render's shape: a Toggle binds `checked`, and a Button's action is the element's `on.press` ({action, params}); the client still reads the older `value` and `action`/`actionParams` a model may write.",
   "spec_version": 2,
   "components": {
     "Stack": {
@@ -101,7 +101,8 @@
   "trigger": {
     "kinds": ["app_event", "schedule", "manual"],
     "every": ["hour", "day", "weekday", "week", "month"],
-    "times": ["00:00", "02:00", "04:00", "06:00", "08:00", "09:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"]
+    "times": ["00:00", "02:00", "04:00", "06:00", "08:00", "09:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"],
+    "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
   },
   "limits": {
     "maxElements": 16,
