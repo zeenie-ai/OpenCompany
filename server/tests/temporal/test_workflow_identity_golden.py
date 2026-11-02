@@ -38,9 +38,9 @@ def _new_types(golden: dict) -> set[str]:
 def test_workflow_command_identities_match_release_or_explicit_patch_entry():
     golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
     current = identity_snapshot()
-    if current == golden["identities"]:
-        return
     before, after = digest(golden["identities"]), digest(current)
+    if before == after:
+        return
     entries = [entry for entry in golden.get("patch_entries", []) if entry["before"] == before and entry["after"] == after]
     assert entries, "Temporal activity names/child IDs/markers changed: add a reviewed versioning patch entry and replay N-1 histories"
     from services.temporal.workflow import GENERATION_FLAGS

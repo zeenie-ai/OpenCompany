@@ -828,7 +828,10 @@ keep that release's command identities:
     live `patch` marker that guards the change, or the `new_types` it adds
     (a new type has no recorded history to break), or the generation
     `flags` (`workflow.GENERATION_FLAGS`) that gate it for new generations
-    only;
+    only. The comparison and the digests (`workflow_identities.digest`) use
+    each snippet's parsed AST, not its `ast.unparse` text, because 3.12 patch
+    releases quote nested f-strings differently and CI runs a newer one than
+    a local checkout may;
   - a patched marker vanishes before a release has shipped it as
     `deprecate_patch` (RFC-0005 §24.3);
   - a handler is renamed or removed;

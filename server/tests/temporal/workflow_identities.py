@@ -110,5 +110,32 @@ def identity_snapshot(source_root: Path = SERVER) -> dict:
     return result
 
 
+def _parsed(text: str) -> str:
+    """A snippet's AST. ``ast.unparse`` quotes nested f-strings differently
+    across 3.12 patch releases (3.12.8 writes ``f'{d['k']}'``, 3.12.15
+    ``f"{d['k']}"``), so a snapshot recorded on one would not match on another."""
+    try:
+        return ast.dump(ast.parse(text))
+    except SyntaxError:
+        return text
+
+
+def _sorted(items: list) -> list:
+    return sorted(items, key=lambda item: json.dumps(item, sort_keys=True))
+
+
+def canonical(snapshot: dict) -> dict:
+    """The snapshot as parsed code, the same on every 3.12 interpreter."""
+    return {
+        module: {
+            "commands": _sorted([{key: value if key == "command" else _parsed(value) for key, value in item.items()}
+                                 for item in entry["commands"]]),
+            "identifier_helpers": sorted(_parsed(text) for text in entry["identifier_helpers"]),
+            "id_bindings": _sorted([{name: _parsed(text) for name, text in item.items()} for item in entry["id_bindings"]]),
+        }
+        for module, entry in snapshot.items()
+    }
+
+
 def digest(snapshot: dict) -> str:
-    return hashlib.sha256(json.dumps(snapshot, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(canonical(snapshot), sort_keys=True).encode()).hexdigest()
