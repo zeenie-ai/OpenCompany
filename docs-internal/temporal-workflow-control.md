@@ -282,7 +282,10 @@ Updates check the existing history-pressure signal and wake the main loop to
 continue-as-new, even when no events or polls occur. The Update handler never
 performs the rollover itself. This accounts for [per-execution Update limits](https://docs.temporal.io/evaluate/cloud/limits#per-workflow-execution-update-limits)
 in addition to event-history growth. Existing revisions, membership and events
-carry into the next run; replay tests cover pre-marker histories.
+carry into the next run; replay tests cover pre-marker histories. The pinned
+server suggests continue-as-new at 90% of the Update limit, and
+`test_controller_update_limit_integration.py` checks against it that the
+controller rolls over before the limit refuses an Update.
 
 Employee Safe Apply keeps its producer-only admission pause. Its compatibility
 string Resume can reopen producers only while the versioned participant is
