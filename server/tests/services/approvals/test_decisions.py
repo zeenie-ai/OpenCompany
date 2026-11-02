@@ -10,19 +10,23 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.approvals import rules, store
+from services.approvals import decisions, rules, store
 from tests.services.approvals.test_approval_gate import PARAMS, ctx, decide, pending, run_gate, until_waiting
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_undo_brings_a_sent_draft_back_and_the_gate_keeps_waiting(harness):
+async def test_undo_brings_a_sent_draft_back_and_the_gate_keeps_waiting(harness, monkeypatch):
     task = asyncio.ensure_future(run_gate(harness))
     (row,) = await pending(harness)
+    # A wide window, so the undo lands inside it even on a slow runner.
+    monkeypatch.setattr(decisions, "UNDO_SECONDS", 30)
     sent = await decide(harness, row.id, "send", key="s1")
     assert sent["approval"]["status"] == "approved" and "undo_until" in sent["approval"]
     undone = await decide(harness, row.id, "undo", key="u1")
     assert undone["success"] is True and undone["approval"]["status"] == "pending"
+    # The second send goes after the short window again.
+    monkeypatch.setattr(decisions, "UNDO_SECONDS", 0.2)
     await asyncio.sleep(0.3)
     assert not task.done(), "the gate let an undone draft through"
     await until_waiting(row.id)
@@ -89,11 +93,13 @@ async def test_only_an_effect_card_is_dismissed_and_it_is_never_sent(harness):
     assert (await store.get(harness.database, send.id)).status == "failed"
 
 
-async def test_a_repeated_decision_key_changes_nothing(harness):
+async def test_a_repeated_decision_key_changes_nothing(harness, monkeypatch):
+    # The undo must land inside the window; this test never waits it out.
+    monkeypatch.setattr(decisions, "UNDO_SECONDS", 30)
     task = asyncio.ensure_future(run_gate(harness))
     (row,) = await pending(harness)
     await decide(harness, row.id, "send", key="same")
-    await decide(harness, row.id, "undo", key="undo")
+    assert (await decide(harness, row.id, "undo", key="undo"))["approval"]["status"] == "pending"
     # The send's key again: no new send, the draft stays waiting.
     again = await decide(harness, row.id, "send", key="same")
     assert again["idempotent"] is True and again["approval"]["status"] == "pending"
