@@ -232,8 +232,10 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     async def plugin_activity(_payload):
         return None
 
-    # A standalone worker runs only in distributed mode (1b.35).
-    monkeypatch.setattr("core.config.Settings", lambda: MagicMock(distributed_mode=True))
+    # A standalone worker runs only in distributed mode (1b.35), on the
+    # backend's own namespace and queue.
+    monkeypatch.setattr("core.config.Settings", lambda: MagicMock(
+        distributed_mode=True, temporal_namespace="tenant-ns", temporal_task_queue="tenant-queue"))
     monkeypatch.setattr(
         plugin_activities,
         "collect_plugin_activities",
@@ -250,11 +252,8 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
         lambda: timedelta(seconds=1),
     )
     monkeypatch.setattr(worker_module, "create_runtime", lambda: MagicMock())
-    monkeypatch.setattr(
-        worker_module.Client,
-        "connect",
-        AsyncMock(return_value=MagicMock()),
-    )
+    connect = AsyncMock(return_value=MagicMock())
+    monkeypatch.setattr(worker_module.Client, "connect", connect)
 
     session = MagicMock(closed=False)
     session.close = AsyncMock()
@@ -298,6 +297,8 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     assert plugin_activity in captured["activities"]
     assert pause_workflow_on_failure_activity in captured["activities"]
     assert captured["plugins"] == worker_module.temporal_plugins()
+    assert connect.await_args.kwargs["namespace"] == "tenant-ns"
+    assert captured["task_queue"] == "tenant-queue"
     session.close.assert_awaited_once()
     unifier.aclose.assert_awaited_once()
     database.startup.assert_awaited_once()

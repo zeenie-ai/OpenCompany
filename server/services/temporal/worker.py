@@ -760,8 +760,8 @@ async def create_pi_driver_worker(client: Client) -> Worker:
 
 async def run_standalone_worker(
     server_address: str | None = None,
-    namespace: str = "default",
-    task_queue: str = "machina-tasks",
+    namespace: str | None = None,
+    task_queue: str | None = None,
     pool_size: int = 100,
 ) -> None:
     """Run the Temporal worker as a standalone process.
@@ -779,8 +779,10 @@ async def run_standalone_worker(
             via ``core.env_defaults``) so a bare
             ``python -m services.temporal.worker`` dials the same server
             as the backend.
-        namespace: Temporal namespace
-        task_queue: Task queue to poll
+        namespace: Temporal namespace. Defaults to ``TEMPORAL_NAMESPACE``,
+            as the backend's own worker reads it.
+        task_queue: Task queue to poll. Defaults to ``TEMPORAL_TASK_QUEUE``,
+            the queue the backend starts its work on.
         pool_size: Connection pool size
 
     Only in distributed mode (``DISTRIBUTED_MODE``). Otherwise the backend's
@@ -789,9 +791,12 @@ async def run_standalone_worker(
     """
     from core.config import Settings
 
-    if getattr(Settings(), "distributed_mode", False) is not True:
+    settings = Settings()
+    if getattr(settings, "distributed_mode", False) is not True:
         raise RuntimeError("The standalone worker runs only in distributed mode (DISTRIBUTED_MODE=true); "
                            "otherwise the backend's embedded worker runs every task.")
+    namespace = namespace or settings.temporal_namespace
+    task_queue = task_queue or settings.temporal_task_queue
     if server_address is None:
         from core.env_defaults import env_value
 
@@ -836,12 +841,10 @@ async def run_standalone_worker(
         logger.error(f"Could not connect to Temporal server at {server_address} after 5 attempts")
         return
 
-    from core.config import Settings
-    # Pi checkpoint Activities always use the shared database, including a
-    # standalone local worker. Initialize its tables before either queue polls.
+    # Pi checkpoint Activities use the shared database. Initialize its tables
+    # before either queue polls.
     from core.container import container
-    if getattr(Settings(), "distributed_mode", False) is True:
-        import nodes  # noqa: F401 -- populate the native plugin registry
+    import nodes  # noqa: F401 -- populate the native plugin registry
     await container.database().startup()
     # Context pressure relief runs here without the backend's lifespan. Its
     # Activity resolves the shared compactor, which needs the same native
