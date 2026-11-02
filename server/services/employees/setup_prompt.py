@@ -18,21 +18,26 @@ additions:
   Toggle binds ``checked``, and a Button names its action in the element's
   ``on.press`` (``{"action", "params"}``) beside its props.
 
-The component and action lines come from config/genui_catalog.json, which
-the client's renderer is held to; a component the client inserts itself
-(``inserted``) is not offered to the model. The server writes every
-message, the "The job: " and "Change the setup: " prefixes included; the
-client only sends the owner's words and the earlier replies.
+The catalogue rules are ``config/genui_prompt.txt``, written from
+config/genui_catalog.json by json-render's catalog.prompt()
+(client/src/lib/jsonRender/prompts.ts, `bun run genui:prompts`); a component
+the client inserts itself (``inserted``) is not offered to the model. The
+server writes every message, the "The job: " and "Change the setup: "
+prefixes included; the client only sends the owner's words and the earlier
+replies.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence
+from functools import lru_cache
+from pathlib import Path
+from typing import List, Optional, Sequence
 
 from services.employees.context import SetupContext, render_context_block
-from services.employees.genui_catalog import load_genui_catalog
 from services.llm.protocol import Message
+
+PROMPT_PATH = Path(__file__).resolve().parents[2] / "config" / "genui_prompt.txt"
 
 PREAMBLE = (
     "You set up AI employees inside OpenCompany, an operating system where non-technical people hire AI "
@@ -52,66 +57,14 @@ HISTORY_EARLIER_PAIRS = 2
 HISTORY_MAX_CHARS = 40_000
 
 
-def catalog_prompt(catalog: Optional[Dict[str, Any]] = None) -> str:
-    c = catalog or load_genui_catalog()
-    paths = c["state_paths"]
-    ask_first = c["ask_first_label"]
-    kinds = "|".join(f'"{kind}"' for kind in c["trigger"]["kinds"])
-    every = "|".join(f'"{value}"' for value in c["trigger"]["every"])
-    times = "|".join(f'"{value}"' for value in c["trigger"]["times"])
-    lines = [
-        'Reply ONLY with a JSON object, no code fences: {"text": string, "spec": UISpec}.',
-        '"text": one short, warm sentence introducing the new employee by name.',
-        '"spec" is the new employee\'s setup screen. Root is a vertical Stack with, in order:',
-        "1) AgentCard — a friendly first name, a plain job title as role, one-sentence description, apps they "
-        'use, status "ready".',
-        '2) Plan titled "Their routine" with 3-5 steps; the first step has role "trigger" (e.g. "When a message '
-        'arrives", "Every weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app '
-        'names it in "app".',
-        f'3) Card titled "Ground rules" containing 2-3 Toggles bound to state under "{paths["rules"]}" through '
-        f'"checked" (always include "{ask_first}" bound to "{paths["askFirst"]}", true in "state") and optionally '
-        f'one Choice bound under "{paths["choices"]}" (e.g. how often to report).',
-        '4) If a needed app is not connected: a Card with tone "trigger" saying so, with a Button whose on.press '
-        "runs connect_app.",
-        '5) A horizontal Stack with Button "Hire {name}" (primary, on.press {"action": "hire_employee", "params": '
-        '{name, role, apps, trigger, sendsVia}}) and Button "Change something" (secondary, on.press {"action": '
-        '"refine"}).',
-        f'"trigger" is {{"kind": {kinds}, "app"?, "every"?: {every}, "at"?: {times}, "day"?}}: '
-        '"app_event" when a new message or email in an app starts the work, "schedule" for routine work at set '
-        'times, "manual" when the owner gives them work by messaging them. "at" is the owner\'s local time; "day" '
-        'is a weekday name for "week", or a day of the month from 1 to 28 for "month". "sendsVia" is the app they '
-        "answer or report through.",
-        'UISpec is flat: {"root": id, "state": {initial values}, "elements": {id: {"type", "props", "children": '
-        '[ids], "visible"?: condition, "on"?: {"press": {"action", "params"?}}}}}. Max 12 elements. Every child id '
-        "must exist.",
-        'Each element looks like {"type":"Text","props":{"text":"…"},"children":[]} — all component props go '
-        'INSIDE "props". A Button\'s action goes in "on", beside "props": '
-        '{"type":"Button","props":{"label":"…"},"on":{"press":{"action":"refine"}},"children":[]}.',
-        'Every Stack and Card MUST list its child ids in "children" — elements not listed as someone\'s child are '
-        "not shown.",
-        'Keep it compact: single-line minified JSON, no code fences, short ids ("a","b","c"…), every string under '
-        "70 characters, descriptions one short line, step details under 8 words.",
-        "Components (use ONLY these):",
-    ]
-    lines += [
-        f"- {name} {spec['props']} — {spec['description']}"
-        for name, spec in c["components"].items()
-        if not spec.get("inserted")
-    ]
-    lines.append(f"Tones: {', '.join(c['tones'])}.")
-    lines.append(
-        'Dynamic props: {"$state":"/path"}, {"$template":"Reports ${/freq}"}, '
-        '{"$cond":{"$state":"/x","eq":"y"},"$then":a,"$else":b}. Conditions: {"$state":"/path"} with optional '
-        '"eq" or "not":true.'
-    )
-    lines.append('Actions (the "action" of a Button\'s on.press, with these "params"):')
-    lines += [f"- {name} {description}" for name, description in c["actions"].items()]
-    lines.append("When asked to change the setup, return the full updated JSON in the same format.")
-    return "\n".join(lines)
+@lru_cache(maxsize=1)
+def catalog_prompt() -> str:
+    """The catalogue rules (``config/genui_prompt.txt``)."""
+    return PROMPT_PATH.read_text(encoding="utf-8")
 
 
-def system_prompt(context: SetupContext, catalog: Optional[Dict[str, Any]] = None) -> str:
-    return f"{PREAMBLE}\n\n{catalog_prompt(catalog)}\n\n{render_context_block(context)}"
+def system_prompt(context: SetupContext) -> str:
+    return f"{PREAMBLE}\n\n{catalog_prompt()}\n\n{render_context_block(context)}"
 
 
 @dataclass
@@ -148,11 +101,10 @@ def build_messages(
     *,
     change: Optional[str] = None,
     history: Sequence[HistoryTurn] = (),
-    catalog: Optional[Dict[str, Any]] = None,
 ) -> List[Message]:
     """The whole conversation. Roles alternate: the first kept reply answers
     the job message even when earlier turns were dropped."""
-    messages = [Message(role="system", content=system_prompt(context, catalog)), Message(role="user", content=JOB_PREFIX + job)]
+    messages = [Message(role="system", content=system_prompt(context)), Message(role="user", content=JOB_PREFIX + job)]
     if change:
         kept = trim_history(history)
         if kept:

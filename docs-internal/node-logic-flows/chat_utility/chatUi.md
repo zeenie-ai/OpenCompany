@@ -32,12 +32,15 @@ No main input or output: it runs only when the agent calls it.
 |------|------|---------|----------|-------------|
 | `spec` | object | - | yes | The interface as json-render's flat spec `{root, state, elements}`. A JSON string is read as the object it encodes (some providers send object arguments as strings). |
 
-The tool description is generated from
+The tool description is written from
 [`server/config/chat_genui_catalog.json`](../../../server/config/chat_genui_catalog.json)
-by `services/genui/spec.py` `describe_catalog`: the components with their
-props, which prop each input binds, what each layout may hold, the state and
-condition syntax, the actions and the limits. `tool_schema_locked` pins it
-against stale persisted ToolSchema rows.
+by json-render's `catalog.prompt()` with our template
+(`client/src/lib/jsonRender/prompts.ts`, `bun run genui:prompts`) into
+`server/config/chat_genui_prompt.txt`, which `services/genui/spec.py`
+`describe_catalog` reads: the components with their props, which prop each
+input binds, what each layout may hold, the state and condition syntax, the
+actions and the limits. A client test fails while the file is stale.
+`tool_schema_locked` pins it against stale persisted ToolSchema rows.
 
 ## Outputs (handles)
 

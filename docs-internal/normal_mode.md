@@ -337,7 +337,10 @@ Help in browser), else the first on the team.
 ([services/employees/setup.py](../server/services/employees/setup.py)):
 
 - **The server builds every message** ([setup_prompt.py](../server/services/employees/setup_prompt.py)):
-  a preamble, the component catalogue, and a context block
+  a preamble, the component catalogue (`config/genui_prompt.txt`, written
+  from `config/genui_catalog.json` by json-render's `catalog.prompt()` with
+  our template: `client/src/lib/jsonRender/prompts.ts`, `bun run
+  genui:prompts`), and a context block
   ([context.py](../server/services/employees/context.py)) with the connected
   and connectable apps, the team's names, the owner profile, the local time and
   whether an AI model is set up. A change request carries the latest reply

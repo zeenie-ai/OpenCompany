@@ -33,6 +33,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 CATALOG_PATH = Path(__file__).resolve().parents[2] / "config" / "chat_genui_catalog.json"
+#: The show_ui tool's description, written from the catalog by json-render's
+#: catalog.prompt() (client/src/lib/jsonRender/prompts.ts, `bun run genui:prompts`).
+PROMPT_PATH = CATALOG_PATH.with_name("chat_genui_prompt.txt")
 
 FORBIDDEN_SEGMENTS = frozenset({"__proto__", "constructor", "prototype"})
 #: Element ids json-render can key on (client/src/lib/jsonRender/sanitize.ts).
@@ -487,76 +490,12 @@ def check_spec(raw: Any, catalog: Optional[Mapping[str, Any]] = None) -> Checked
 # ----- the tool description --------------------------------------------------
 
 
-def _type_text(schema: Mapping[str, Any]) -> str:
-    if "enum" in schema:
-        return "|".join(json.dumps(value) for value in schema["enum"])
-    kind = schema.get("type")
-    if isinstance(kind, list):
-        return "|".join(kind)
-    if kind == "array":
-        items = schema.get("items") or {}
-        if items.get("type") == "object":
-            return f"[{_object_text(items)}]"
-        return f"[{_type_text(items)}]"
-    if kind == "object":
-        return _object_text(schema)
-    return str(kind or "any")
-
-
-def _object_text(schema: Mapping[str, Any]) -> str:
-    required = set(schema.get("required") or [])
-    parts = []
-    for name, prop in (schema.get("properties") or {}).items():
-        mark = "" if name in required else "?"
-        parts.append(f"{name}{mark}: {_type_text(prop)}")
-    return "{" + ", ".join(parts) + "}"
-
-
-def describe_catalog(catalog: Optional[Mapping[str, Any]] = None) -> str:
-    """The show_ui tool's description, from the catalog. The same catalog
-    always gives the same text, byte for byte."""
-    catalog = catalog or load_catalog()
-    limits = catalog["limits"]
-    lines = [
-        "Show the owner a small interface inside your reply: a choice to make, a short form, numbers, a chart, "
-        "buttons. Use it when that says it better than words; otherwise just answer. Write your reply as usual: "
-        "the interface shows under it.",
-        "",
-        "The spec is json-render's flat shape: {\"root\": \"<id>\", \"state\": {...}, \"elements\": {\"<id>\": "
-        "{\"type\": \"<Component>\", \"props\": {...}, \"children\": [\"<id>\", ...], \"visible\": <condition>, "
-        "\"on\": {\"press\": {\"action\": \"<name>\", \"params\": {...}}}}}}. Element ids are letters, digits and _.:-.",
-        "",
-        "Components:",
-    ]
-    for name, component in catalog["components"].items():
-        role = component["role"]
-        children = component.get("children")
-        held = ""
-        if children == "any":
-            held = "; holds any components"
-        elif children:
-            held = "; holds " + ", ".join(children)
-        bind = f"; binds {component['bind']}" if component.get("bind") else ""
-        lines.append(f"- {name} ({role}{held}{bind}): {component['description']} Props: {_object_text(component['props'])}.")
-    lines += [
-        "",
-        "State: an input reads and writes its bound prop with {\"$bindState\": \"/path\"}; any prop may read the "
-        "state with {\"$state\": \"/path\"} or {\"$template\": \"Hi ${/name}\"}. Put each bound value in \"state\" "
-        "first. visible: {\"$state\": \"/path\"} (truthy), with \"eq\"/\"neq\": value, or \"not\": true; a list "
-        "means all of them.",
-        "",
-        "Actions (on.press of a Button; params may read the state with {\"$state\": \"/path\"}, read at the press):",
-    ]
-    for name, action in (catalog.get("actions") or {}).items():
-        lines.append(f"- {name} {_object_text(action.get('params') or {})}: {action['description']}")
-    lines += [
-        f"- {catalog['custom_actions']}",
-        "",
-        f"Limits: at most {limits['max_elements']} elements, nested at most {limits['max_depth']} deep, "
-        f"{limits['max_children']} children each, {limits['max_bytes']} bytes. A spec that breaks a rule is refused "
-        "with every reason; write it again.",
-    ]
-    return "\n".join(lines)
+@lru_cache(maxsize=1)
+def describe_catalog() -> str:
+    """The show_ui tool's description (``config/chat_genui_prompt.txt``),
+    written from the catalog by json-render's catalog.prompt(); the same
+    catalog always gives the same text, byte for byte."""
+    return PROMPT_PATH.read_text(encoding="utf-8")
 
 
 __all__ = [

@@ -1,0 +1,26 @@
+Show the owner a small interface inside your reply: a choice to make, a short form, numbers, a chart, buttons. Use it when that says it better than words; otherwise just answer. Write your reply as usual: the interface shows under it.
+
+The spec is json-render's flat shape: {"root": "<id>", "state": {...}, "elements": {"<id>": {"type": "<Component>", "props": {...}, "children": ["<id>", ...], "visible": <condition>, "on": {"press": {"action": "<name>", "params": {...}}}}}}. Element ids are letters, digits and _.:-.
+
+Components:
+- Stack (layout; holds any components): A column of elements, top to bottom. Use it as the root. Props: {gap?: "sm"|"md"}.
+- Row (layout; holds Button): Buttons side by side. Props: {gap?: "sm"|"md"}.
+- Card (layout; holds Select, Toggle, TextField, Text): A titled panel of fields and text. Props: {title: string, description?: string}.
+- SlotPicker (input; binds value): Pick one of a few times; its value is the picked option's id. Props: {label: string, hint?: string, value?: string, options: [{id: string, time: string, detail?: string, recommended?: boolean, unavailable?: boolean, note?: string}]}.
+- Select (input; binds value): Pick one of two to six short options. Props: {label: string, value?: string, options: [string]}.
+- Toggle (input; binds checked): An on/off choice. Props: {label: string, hint?: string, checked?: boolean}.
+- TextField (input; binds value): A short line of text the owner types. Props: {label: string, placeholder?: string, value?: string}.
+- Text (display): A sentence or short paragraph. Props: {text: string}.
+- StatGrid (display): A few numbers side by side, each with an optional change. Props: {items: [{label: string, value: string|number, delta?: string, tone?: "up"|"down"}]}.
+- BarChart (display): Horizontal bars comparing a few values. Props: {title: string, bars: [{label: string, value: number}]}.
+- Callout (display): A highlighted note: info, warning, danger or success. Props: {tone: "info"|"warning"|"danger"|"success", text: string}.
+- Button (action): Runs the action in its "on": {"press": {"action", "params"}}. Props: {label: string, variant?: "primary"|"secondary"}.
+
+State: an input reads and writes its bound prop with {"$bindState": "/path"}; any prop may read the state with {"$state": "/path"} or {"$template": "Hi ${/name}"}. Put each bound value in "state" first. visible: {"$state": "/path"} (truthy), with "eq"/"neq": value, or "not": true; a list means all of them.
+
+Actions (on.press of a Button; params may read the state with {"$state": "/path"}, read at the press):
+- ask {text: string}: Sends params.text as the owner's next message. It is sent at once only when it is the button's label; otherwise it goes into the message box for the owner to send.
+- setState {statePath: string, value?: any}: Sets params.statePath to params.value in this UI's state, without telling you.
+- Any other action name (a letter, then letters, digits or _) comes back to you as the owner's next turn, [ui-event]{...}[/ui-event], naming the element, the action and its params with $state values read at the press.
+
+Limits: at most 24 elements, nested at most 6 deep, 12 children each, 16384 bytes. A spec that breaks a rule is refused with every reason; write it again.

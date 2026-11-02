@@ -309,8 +309,10 @@ newer version wins in place.
   spec `{root, state, elements}`. `services/genui/spec.py` checks it against `server/config/chat_genui_catalog.json`
   (JSON Schema per component, which prop each input binds, what each layout may hold, the limits): a spec that
   breaks a rule fails the call with every reason, so the model writes it again; unknown types, unreachable elements,
-  stray fields and props are left out and reported back. The tool's description is generated from the same manifest,
-  byte for byte the same for the same file, and a test on each side reads the other's catalogue. The checked spec is
+  stray fields and props are left out and reported back. The tool's description is written from the same manifest by
+  json-render's `catalog.prompt()` with our template (`client/src/lib/jsonRender/prompts.ts`, `bun run
+  genui:prompts`) into `server/config/chat_genui_prompt.txt`, which the server reads; a client test fails while that
+  file is stale. The client imports the manifest itself, and a client test holds its prop schemas to it. The checked spec is
   saved as a `ui` part and streamed as `activity.snapshot` (empty spec) followed by one `activity.delta` per patch:
   `add /root`, `add /state`, then `add /elements/<id>` in depth-first order (`services/genui/patches.py`, matching
   the handoff's `*.patches.jsonl` line for line). Only the agent answering the owner's chat message can show UI; a

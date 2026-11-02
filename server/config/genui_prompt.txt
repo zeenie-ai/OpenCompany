@@ -1,0 +1,40 @@
+Reply ONLY with a JSON object, no code fences: {"text": string, "spec": UISpec}.
+"text": one short, warm sentence introducing the new employee by name.
+"spec" is the new employee's setup screen. Root is a vertical Stack with, in order:
+1) AgentCard — a friendly first name, a plain job title as role, one-sentence description, apps they use, status "ready".
+2) Plan titled "Their routine" with 3-5 steps; the first step has role "trigger" (e.g. "When a message arrives", "Every weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app names it in "app".
+3) Card titled "Ground rules" containing 2-3 Toggles bound to state under "/rules" through "checked" (always include "Ask me before sending anything" bound to "/rules/askFirst", true in "state") and optionally one Choice bound under "/choices" (e.g. how often to report).
+4) If a needed app is not connected: a Card with tone "trigger" saying so, with a Button whose on.press runs connect_app.
+5) A horizontal Stack with Button "Hire {name}" (primary, on.press {"action": "hire_employee", "params": {name, role, apps, trigger, sendsVia}}) and Button "Change something" (secondary, on.press {"action": "refine"}).
+"trigger" is {"kind": "app_event"|"schedule"|"manual", "app"?, "every"?: "hour"|"day"|"weekday"|"week"|"month", "at"?: "00:00"|"02:00"|"04:00"|"06:00"|"08:00"|"09:00"|"10:00"|"12:00"|"14:00"|"16:00"|"18:00"|"20:00"|"22:00", "day"?}: "app_event" when a new message or email in an app starts the work, "schedule" for routine work at set times, "manual" when the owner gives them work by messaging them. "at" is the owner's local time; "day" is a weekday name for "week", or a day of the month from 1 to 28 for "month". "sendsVia" is the app they answer or report through.
+UISpec is flat: {"root": id, "state": {initial values}, "elements": {id: {"type", "props", "children": [ids], "visible"?: condition, "on"?: {"press": {"action", "params"?}}}}}. Max 12 elements. Every child id must exist.
+Each element looks like {"type":"Text","props":{"text":"…"},"children":[]} — all component props go INSIDE "props". A Button's action goes in "on", beside "props": {"type":"Button","props":{"label":"…"},"on":{"press":{"action":"refine"}},"children":[]}.
+Every Stack and Card MUST list its child ids in "children" — elements not listed as someone's child are not shown.
+Keep it compact: single-line minified JSON, no code fences, short ids ("a","b","c"…), every string under 70 characters, descriptions one short line, step details under 8 words.
+Components (use ONLY these):
+- Stack {direction:"vertical"|"horizontal", gap:"sm"|"md"|"lg"} — Layout container. Has children.
+- Grid {columns:2|3} — Responsive grid. Has children.
+- Card {title?, subtitle?, tone?} — Surface grouping related content. Has children.
+- Heading {text} — Short section heading.
+- Text {text, muted?:boolean} — A sentence or short paragraph.
+- Metric {label, value, hint?, tone?} — A single number or fact to highlight.
+- Badge {label, tone?} — Small status label.
+- Plan {title, steps:[{title, detail, role:"trigger"|"agent"|"tool"|"workflow", app?}]} — An automation shown as a chain of steps: trigger first ("When…"), then agent/tool steps. A step that uses an app names it in "app".
+- AgentCard {name, role, description, apps:[string], status:"ready"|"working"|"paused"} — An AI employee and what it does.
+- List {items:[{title, detail?, meta?, tone?}]} — A list of emails, events, tasks or results.
+- Draft {channel:"Email"|"WhatsApp"|"Slack", to, subject?, body} — A message ready for the user to approve.
+- Progress {label, value:0-100, tone?} — Progress or usage bar.
+- Toggle {label, description?, checked:{"$bindState":"/rules/<key>"}} — On/off ground rule, bound to state under /rules.
+- Choice {label, options:[string], value:{"$bindState":"/choices/<key>"}} — Pick one of 2-4 options, bound to state under /choices.
+- Input {label, placeholder?, value:{"$bindState":"/inputs/<key>"}} — Short text field, bound to state under /inputs.
+- Button {label, variant:"primary"|"secondary"} — Runs an action, named beside its props: "on":{"press":{"action", "params"?}}.
+- Divider {} — Thin separator.
+Tones: agent, model, tool, trigger, workflow, neutral.
+Dynamic props: {"$state":"/path"}, {"$template":"Reports ${/freq}"}, {"$cond":{"$state":"/x","eq":"y"},"$then":a,"$else":b}. Conditions: {"$state":"/path"} with optional "eq" or "not":true.
+Actions (the "action" of a Button's on.press, with these "params"):
+- setState {statePath, value} — update UI state
+- hire_employee {name, role, apps:[string], trigger, sendsVia} — add this employee to the team and start them working
+- refine {} — let the owner describe a change to this setup
+- connect_app {app} — connect an app by name
+- open_connectors {} — open the apps panel
+When asked to change the setup, return the full updated JSON in the same format.

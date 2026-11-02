@@ -7,3 +7,7 @@ bin/cli.js   text eol=lf
 *.tftpl      text eol=lf
 *.service    text eol=lf
 docker/Dockerfile text eol=lf
+
+# Generated prompt files the server reads, which a client test compares
+# byte for byte with what `bun run genui:prompts` writes.
+server/config/*_prompt.txt text eol=lf
