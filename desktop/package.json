@@ -13,7 +13,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "audit:deps": "bun audit",
+    "audit:deps": "bun audit --ignore GHSA-g3hv-75wg-m249",
     "fetch-runtimes": "bun run scripts/fetch-runtimes.ts",
     "stage": "bun run scripts/stage.ts",
     "gen-icons": "bun run scripts/gen-icons.ts",

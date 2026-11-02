@@ -359,8 +359,15 @@ the latest checks instead.
 GitHub's dependency graph does not read `bun.lock`; it sees only the ranges
 in each `package.json`, so no Dependabot alert ever covers a resolved JS
 version. `bun run audit:deps` is the check: `predeploy.yml` runs it at the
-root and in `desktop/` (`bun audit` reads the lockfile). Both audits have no
-exclusions and fail on any advisory.
+root and in `desktop/` (`bun audit` reads the lockfile). Both audits fail on
+any advisory but one, ignored since 2026-11-02: GHSA-g3hv-75wg-m249,
+minimatch's glob-pattern denial of service. It is fixed only in minimatch 11,
+which no consumer accepts yet (eslint, `@eslint/config-array` and
+typescript-estree pin 10.x; Electron Builder's chain needs 3.x to 10.x), and
+it needs an attacker-supplied pattern, while every consumer is lint or build
+tooling matching this repository's own patterns. Drop the `--ignore` from
+both `audit:deps` scripts once eslint, typescript-eslint and Electron Builder
+accept minimatch 11.0.1 or later.
 
 The desktop chain Electron Builder → app-builder-lib → @electron/get 3.1.0
 → got → cacheable-request uses `http-cache-semantics`. To address
