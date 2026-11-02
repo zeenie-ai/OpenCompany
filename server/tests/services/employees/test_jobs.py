@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from models.employees import EmployeeJob
 from models.database import TeamTask
-from services.employees.jobs import deliver_job, bind_job_team
+from services.employees.jobs import deliver_job, bind_job_team, dispatch_job, job_progress
 from services.plugin import NodeContext
 
 @pytest.fixture
@@ -228,3 +228,71 @@ async def test_a_refusal_keeps_a_resets_cancelled(database, runtime):
     runtime.execute.side_effect = refuse_after_reset
     assert (await deliver_job(database, context(), lead_node_id="lead"))["state"] == "cancelled"
     assert (await saved(database)).state == "cancelled"
+
+
+# 1b.21: a job that a Reset or an Apply closed stays closed.
+@pytest.fixture
+async def dispatcher(database, monkeypatch):
+    start = AsyncMock()
+    monkeypatch.setattr("core.container.container", SimpleNamespace(
+        temporal_client=lambda: SimpleNamespace(client=SimpleNamespace(start_workflow=start)),
+        settings=lambda: SimpleNamespace(temporal_task_queue="employees")))
+    monkeypatch.setattr("services.employees.team_runtime.team_runtime_error", lambda **_kwargs: None)
+    monkeypatch.setattr("services.employees.events.employee_changed_now", lambda _workflow_id: None)
+    monkeypatch.setattr(database, "get_workflow", AsyncMock(return_value=SimpleNamespace(data={})))
+    return start
+
+async def queued(database, *, generation=4, status=None):
+    from models.database import WorkflowControlExecution
+    source = {"nodes": [{"id": "lead", "type": "ai_employee"}], "edges": [], "parameters": {"lead": {}},
+        "session_id": "7", "user_id": "owner", "generation": generation}
+    async with database.reserved_session() as session:
+        session.add(EmployeeJob(id="job", workflow_id="7", origin_execution_id="origin", lead_node_id="lead", source=source, mission="Mission"))
+        if status:
+            session.add(WorkflowControlExecution(id=f"workflow-control:7:{generation}", workflow_id="7", generation=generation,
+                execution_id="origin", root_execution_id="origin", status=status, idempotency_key="start", graph_hash="admitted"))
+        await session.commit()
+
+@pytest.mark.parametrize("status", ["reset", "resetting", "failed", None])
+async def test_a_job_of_an_ended_generation_is_cancelled_not_started(database, dispatcher, status):
+    await queued(database, status=status)  # None: the generation has no row
+    assert await dispatch_job(database, "job") is False
+    assert (await saved(database)).state == "cancelled"
+    dispatcher.assert_not_awaited()
+
+@pytest.mark.parametrize("generation, status", [(4, "running"), (4, "paused"), (0, None)])
+async def test_a_job_of_a_live_generation_or_a_manual_run_starts(database, dispatcher, generation, status):
+    await queued(database, generation=generation, status=status)
+    assert await dispatch_job(database, "job") is True
+    dispatcher.assert_awaited_once()
+    assert dispatcher.await_args.args[0] == "EmployeeJobWorkflow"
+    assert (await saved(database)).state == "running"
+
+@pytest.mark.parametrize("approved", [True, False])
+async def test_a_job_closed_during_its_gate_wait_sends_nothing_more(database, runtime, approved):
+    await install(database)
+
+    async def close_during_the_wait(**_kwargs):
+        async with database.reserved_session() as session:
+            (await session.get(EmployeeJob, "job")).state = "cancelled"
+            await session.commit()
+        return {"success": True, "result": {"approved": approved}}
+
+    runtime.execute.side_effect = close_during_the_wait
+    assert await deliver_job(database, context(), lead_node_id="lead") == {"delivered": False, "state": "cancelled", "job_id": "job"}
+    assert runtime.execute.await_count == 1
+    row = await saved(database)
+    assert row.state == "cancelled" and row.delivery["completed"] == ["gate"]
+
+@pytest.mark.parametrize("state, inflight, message", [
+    ("cancelled", "gate", "This request was stopped."),
+    ("delivering", "gate", "Their result is ready for you to check before sending."),
+    # An external send's mark stays for the owner to resolve.
+    ("cancelled", "send", "The send was interrupted. Check whether it arrived before trying again."),
+])
+async def test_progress_shows_the_gate_line_only_while_the_job_is_open(database, state, inflight, message):
+    await install(database, inflight=inflight)  # its lease has expired
+    async with database.reserved_session() as session:
+        (await session.get(EmployeeJob, "job")).state = state
+        await session.commit()
+    assert (await job_progress(database, "7"))["message"] == message

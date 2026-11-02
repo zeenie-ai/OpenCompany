@@ -205,8 +205,22 @@ async def bind_job_team(database: Any, *, workflow_id: str, lead_node_id: str, e
             await session.commit()
 
 
+async def _generation_ended(database: Any, job: EmployeeJob) -> bool:
+    """Whether the controlled generation a job came from no longer lives (reset,
+    resetting, failed, or none). A manual run's job (generation 0) has no
+    generation to end."""
+    generation = int(job.source.get("generation") or 0)
+    if generation <= 0:
+        return False
+    from services.deployment.control import LIVE_STATES
+    control = await database.get_workflow_control_generation(job.workflow_id, generation)
+    return control is None or control.status not in LIVE_STATES
+
+
 async def dispatch_job(database: Any, job_id: str) -> bool:
-    """Start a stable Temporal identity. Restart/retry reattaches to that run."""
+    """Start a stable Temporal identity. Restart/retry reattaches to that run.
+    A job whose generation was reset or replaced is cancelled instead: the
+    controller it would run under is gone."""
     from core.container import container
     from services.employees.team_runtime import team_runtime_error
     if team_runtime_error():
@@ -220,6 +234,16 @@ async def dispatch_job(database: Any, job_id: str) -> bool:
     if not job or job.state != "queued":
         return False
     if await database.get_workflow(job.workflow_id) is None:
+        return False
+    if await _generation_ended(database, job):
+        # Cancelled, or the recovery loop would retry it for ever.
+        async with database.reserved_session() as session:
+            row = await session.get(EmployeeJob, job.id)
+            if row and row.state == "queued":
+                row.state, row.updated_at = "cancelled", _now()
+                await session.commit()
+        from services.employees.events import employee_changed_now
+        employee_changed_now(job.workflow_id)
         return False
     from temporalio.exceptions import WorkflowAlreadyStartedError
     from temporalio.common import WorkflowIDReusePolicy
@@ -354,11 +378,18 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
             async with database.reserved_session() as session:
                 current = await session.get(EmployeeJob, job.id)
                 current.delivery = {**current.delivery, "completed": completed}
-                current.state = "delivered" if len(completed) == len(pending) else "delivering"
+                cancelled = current.state == "cancelled"  # a Reset or an Apply ended it meanwhile
+                if not cancelled:
+                    current.state = "delivered" if len(completed) == len(pending) else "delivering"
                 await session.commit()
+            if cancelled:
+                return {"delivered": False, "state": "cancelled", "job_id": job.id}
             continue
         async with database.reserved_session() as session:
             current = await session.get(EmployeeJob, job.id)
+            if current.state == "cancelled":
+                # A Reset or an Apply ended this job: send nothing more.
+                return {"delivered": False, "state": "cancelled", "job_id": job.id}
             # Only one delivery invocation claims this sink.
             if current.delivery.get("claim_token") != claim or current.delivery.get("inflight") or node_id in current.delivery.get("completed", []):
                 return {"delivered": False, "state": "delivery_needs_review", "job_id": job.id}
@@ -419,11 +450,15 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
                 raise RuntimeError("The delivery claim changed while sending the result")
             current.delivery = {**current.delivery, "inflight": None, "completed": completed,
                 "outputs": {**current.delivery.get("outputs", {}), node_id: restored[node_id]}}
-            current.state = "delivered" if len(completed) == len(pending) else "delivering"
+            cancelled = current.state == "cancelled"  # a Reset or an Apply ended it meanwhile
+            if not cancelled:
+                current.state = "delivered" if len(completed) == len(pending) else "delivering"
             if current.state == "delivered":
                 current.delivery = {**current.delivery, "claim_token": None, "lease_until": None}
             current.updated_at = _now()
             await session.commit()
+        if cancelled:
+            return {"delivered": False, "state": "cancelled", "job_id": job.id}
     return {"delivered": True, "state": "delivered", "job_id": job.id}
 
 
@@ -437,7 +472,8 @@ async def job_progress(database: Any, workflow_id: str) -> dict | None:
     lease = job.delivery.get("lease_until")
     expired = not lease or datetime.fromisoformat(lease) <= _now()
     state = "delivery_needs_review" if inflight and expired and node_types.get(inflight) not in {"approvalGate", "chatReply"} else job.state
-    if inflight and node_types.get(inflight) == "approvalGate":
+    # A terminal job answers its own state even with a gate mark left behind.
+    if inflight and node_types.get(inflight) == "approvalGate" and job.state not in {"failed", "cancelled"}:
         return {"request_id": job.id, "state": "waiting_for_approval", "message": "Their result is ready for you to check before sending."}
     messages = {"queued": "Your request is saved. The team will start when they are ready.",
                 "running": "The team is starting your request.", "working": "The team is working on your request and checking the result.",

@@ -297,6 +297,54 @@ async def test_live_claim_serializes_handoffs_and_renews_lease(harness, monkeypa
         await first
 
 
+async def test_close_open_work_leaves_nothing_for_apply_to_wait_on(harness, monkeypatch):
+    # 1b.21: Reset closes the generation's open work as Stop work does, and its
+    # queued requests too.
+    import services.chat.ledger as ledger
+    monkeypatch.setattr(ledger, "live_runs", AsyncMock(return_value=[]))
+    harness.container.workflow_service().get_deployment_status = lambda _id: {"active_runs": 0}
+    harness.client.list_workflows = lambda **_kwargs: EmptyAsync()
+    closed_tasks, kept_tasks = ("pending", "blocked", "queued", "running"), ("submitted", "accepted", "failed", "cancelled")
+    open_jobs, kept_jobs = ("running", "working", "delivering", "delivery_queued", "queued"), ("delivered", "failed", "cancelled", "delivery_needs_review")
+    async with harness.database.get_session() as session:
+        session.add(AgentTeam(id="team", workflow_id="7", team_lead_node_id="7:aiAgent:1"))
+        session.add(AgentTeam(id="done-team", workflow_id="7", team_lead_node_id="7:aiAgent:1", status="completed"))
+        for status in (*closed_tasks, *kept_tasks):
+            session.add(TeamTask(id=f"task-{status}", team_id="team", title="Research", created_by="7:aiAgent:1", workflow_id="7", status=status))
+        for state in (*open_jobs, *kept_jobs):
+            delivery = {"inflight": "send"} if state == "delivering" else {}
+            session.add(EmployeeJob(id=f"job-{state}", workflow_id="7", origin_execution_id=f"origin-{state}", lead_node_id="7:aiAgent:1",
+                                    team_id="team", state=state, delivery=delivery))
+        await session.commit()
+    assert await REAL_ACTIVE(harness.database, "7")
+    for _ in range(2):  # idempotent: Reset may run again
+        await safe_apply.close_open_work(harness.database, "7", reason="The workflow was reset",
+                                         job_states=(*safe_apply.OPEN_JOB_STATES, "queued"))
+    assert not await REAL_ACTIVE(harness.database, "7")
+    async with harness.database.get_session() as session:
+        assert (await session.get(AgentTeam, "team")).status == "dissolved"
+        assert (await session.get(AgentTeam, "done-team")).status == "completed"
+        for status in closed_tasks:
+            assert (await session.get(TeamTask, f"task-{status}")).status == "cancelled"
+        for status in kept_tasks:
+            assert (await session.get(TeamTask, f"task-{status}")).status == status
+        for state in open_jobs:
+            assert (await session.get(EmployeeJob, f"job-{state}")).state == "cancelled"
+        for state in kept_jobs:
+            assert (await session.get(EmployeeJob, f"job-{state}")).state == state
+        # The in-flight send mark is kept for the owner to resolve.
+        assert (await session.get(EmployeeJob, "job-delivering")).delivery["inflight"] == "send"
+
+
+async def test_stop_work_keeps_queued_requests(harness):
+    async with harness.database.get_session() as session:
+        session.add(EmployeeJob(id="job-queued", workflow_id="7", origin_execution_id="origin", lead_node_id="7:aiAgent:1", state="queued"))
+        await session.commit()
+    await safe_apply.close_open_work(harness.database, "7", reason="The owner stopped work to apply new abilities")
+    async with harness.database.get_session() as session:
+        assert (await session.get(EmployeeJob, "job-queued")).state == "queued"
+
+
 def _hang_on(harness, monkeypatch, hangs):
     """1b.15: the controller never answers the Updates ``hangs`` picks."""
     import services.deployment.handlers as handlers

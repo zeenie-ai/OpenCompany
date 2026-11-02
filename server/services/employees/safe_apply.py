@@ -23,10 +23,36 @@ def _send(handle, name: str, argument, update_id: str):
     return bounded_update(handle.execute_update(name, argument, id=update_id), UPDATE_SECONDS)
 
 
+#: Jobs in these states are work in flight: Apply waits for them, and Stop work
+#: and Reset close them.
+OPEN_JOB_STATES = ("running", "working", "delivering", "delivery_queued")
+
+
+async def close_open_work(database, workflow_id, *, reason: str, job_states=OPEN_JOB_STATES) -> None:
+    """Cancel the workflow's open team tasks and jobs, and dissolve its active teams.
+
+    A run that is stopped or terminated closes none of its own records, and
+    Apply waits on them. Rows in a final state are kept, and so is a job's
+    in-flight send mark, for the owner to resolve."""
+    async with database.get_session() as session:
+        teams = (await session.execute(select(AgentTeam).where(AgentTeam.workflow_id == workflow_id, AgentTeam.status == "active"))).scalars().all()
+    for team in teams:
+        for task in await database.get_team_tasks(team.id):
+            if task.get("status") in {"pending", "blocked", "queued", "running"}:
+                await database.cancel_team_task(team.id, task["id"], reason)
+        await database.update_team_status(team.id, "dissolved")
+    async with database.reserved_session() as session:
+        jobs = (await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == workflow_id, EmployeeJob.state.in_(job_states)))).scalars().all()
+        for job in jobs:
+            job.state = "cancelled"
+            job.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+
 async def _active(database, workflow_id):
     async with database.get_session() as session:
         team = (await session.execute(select(AgentTeam.id).where(AgentTeam.workflow_id == workflow_id, AgentTeam.status == "active"))).first()
-        job = (await session.execute(select(EmployeeJob.id).where(EmployeeJob.workflow_id == workflow_id, EmployeeJob.state.in_(["running", "working", "delivering", "delivery_queued"])))).first()
+        job = (await session.execute(select(EmployeeJob.id).where(EmployeeJob.workflow_id == workflow_id, EmployeeJob.state.in_(OPEN_JOB_STATES)))).first()
     from core.container import container
     from services.chat.ledger import live_runs
     if team or job or await live_runs(database, workflow_id):
@@ -147,19 +173,8 @@ async def _apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str
             task.cancel()
         # Durable work records must reflect the explicitly requested stop;
         # otherwise recovery would wait forever for a cancelled execution.
-        async with database.get_session() as session:
-            teams = (await session.execute(select(AgentTeam).where(AgentTeam.workflow_id == workflow_id, AgentTeam.status == "active"))).scalars().all()
-        for team in teams:
-            for task in await database.get_team_tasks(team.id):
-                if task.get("status") in {"pending", "blocked", "queued", "running"}:
-                    await database.cancel_team_task(team.id, task["id"], "The owner stopped work to apply new abilities")
-            await database.update_team_status(team.id, "dissolved")
-        async with database.reserved_session() as session:
-            jobs = (await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == workflow_id, EmployeeJob.state.in_(["running", "working", "delivering", "delivery_queued"])))).scalars().all()
-            for job in jobs:
-                job.state = "cancelled"
-                job.updated_at = datetime.now(timezone.utc)
-            await session.commit()
+        # Queued requests are kept: they start after the apply.
+        await close_open_work(database, workflow_id, reason="The owner stopped work to apply new abilities")
     if await _active(database, workflow_id):
         return {"success": True, "activation_state": "waiting", "message": "Finishing current work before applying the new abilities."}
     claim = uuid.uuid4().hex

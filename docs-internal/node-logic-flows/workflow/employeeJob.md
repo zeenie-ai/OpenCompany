@@ -21,7 +21,13 @@ Operations:
   that refuses cleanly ends the job failed, and a failed job is never
   delivered again. In a v1 graph `deliver` runs as the node's own activity
   under the plugin's default policy, 3 attempts of up to 24 h each, so it
-  re-attaches only within those.
+  re-attaches only within those. A job that a Reset or "Stop work and apply"
+  cancels sends nothing more, even when its approval wait ends afterwards.
+
+A Reset cancels the workflow's open jobs, queued ones included, and a queued
+job of a generation that has ended (reset, failed or gone) is cancelled
+instead of started. A manual canvas run's job has no generation and is never
+refused this way.
 
 `operation`, `lead_node_id` and `delivery_node_ids` are server-controlled
 configuration. Models can supply only the mission when this node is a tool.

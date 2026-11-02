@@ -51,7 +51,8 @@ async def runtime(monkeypatch):
              {"id": "talk", "type": "chatAgent"}, {"id": "chat", "type": "chatReply"}]
     edges = [{"source": "coding", "target": "parent", "targetHandle": "input-teammates"}]
     parameters = {node["id"]: {"model": "admitted-model"} for node in nodes}
-    admitted = SimpleNamespace(graph_snapshot={"nodes": nodes, "edges": edges, "parameters": parameters})
+    # A live generation: dispatch_job cancels a job of an ended one (1b.21).
+    admitted = SimpleNamespace(graph_snapshot={"nodes": nodes, "edges": edges, "parameters": parameters}, status="running")
     database = SimpleNamespace(
         get_workflow_control_generation=AsyncMock(return_value=admitted),
         get_session=session, reserved_session=session,

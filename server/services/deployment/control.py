@@ -18,6 +18,11 @@ logger = get_logger(__name__)
 # lives beside the model so the terminate-sweep guard shares it.
 ACTIVE_STATES = WORKFLOW_CONTROL_ACTIVE_STATES
 
+# A generation in one of these states still lives: work admitted under it may
+# start. Not `resetting`, which ACTIVE_STATES includes: a generation being reset
+# admits nothing more.
+LIVE_STATES = frozenset({"starting", "running", "pausing", "paused", "resuming"})
+
 
 def _graph_hash(nodes: list[dict], edges: list[dict]) -> str:
     value = json.dumps({"nodes": nodes, "edges": edges}, sort_keys=True, separators=(",", ":"), default=str)

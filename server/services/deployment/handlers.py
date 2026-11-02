@@ -2643,6 +2643,12 @@ async def _reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[st
     cleaned_browser_tasks = await cleanup_generation_browser_tasks(
         service.database, wrapper.client if wrapper is not None else None, current,
     )
+    # A terminated run closes none of its own records: close the generation's
+    # team work and open requests here, or the next Apply waits on them. Late,
+    # so a delivery activity the sweep stopped has had time to see its cancel.
+    from services.employees.safe_apply import OPEN_JOB_STATES, close_open_work
+    await close_open_work(service.database, workflow_id, reason="The workflow was reset",
+                          job_states=(*OPEN_JOB_STATES, "queued"))
     workspace = await _reset_workspace_tasks(workflow_id, service.database, current, data)
 
     archived = await service.database.update_workflow_run_data_scope(

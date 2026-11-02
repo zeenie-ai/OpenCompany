@@ -29,8 +29,9 @@ nested Coding Agents. Native histories retain their recorded execution path.
   nodes.
 - **Reset** revision-guards the old generation, closes controller and local
   admission, removes Temporal cron schedules, cancels local compatibility
-  resources, and then performs a final strict execution sweep and resets the
-  workflow's [Workspace tasks](#workspace-tasks) before archiving the old
+  resources, and then performs a final strict execution sweep, cancels the
+  workflow's open team work and employee requests, and resets the workflow's
+  [Workspace tasks](#workspace-tasks) before archiving the old
   generation. It leaves the control state `ready`; the user must press
   **Start** to create the next generation.
 
@@ -137,6 +138,18 @@ input and generation, then awaits the browser owner's cleanup receipt before
 archiving the generation. Browser operations and shared profile startup are
 settled before releasing ownership. Failed cleanup leaves `resetting` for retry;
 claims belonging to another generation or direct Workspace tasks are preserved.
+
+Generation Reset then closes the workflow's open team work in the database
+(`services/employees/safe_apply.close_open_work`, which "Stop work and apply"
+also uses): it dissolves the active teams, cancels their pending, blocked,
+queued and running tasks, and cancels the employee requests that are queued or
+in progress. The terminated runs close none of these records themselves, and
+Apply would wait on them for ever. Teams carry no generation, so the close is
+workflow-wide. A request whose send has an unknown outcome
+(`delivery_needs_review`) is kept for the owner, and so is a request's in-flight
+send mark. A queued request of a generation that has ended is cancelled instead
+of started (`services/employees/jobs.dispatch_job`), and a request closed while
+its delivery waits for approval sends nothing more.
 
 ### Stop and Resume acknowledgement sequence
 
@@ -470,7 +483,8 @@ state. Every successful **Start** atomically creates a
 the generation data scope is archived, and node/runtime state has been reset.
 If any cleanup step fails, the control remains `resetting`; retrying Reset
 resumes cleanup instead of falsely completing or skipping it. Reset does not
-delete outputs, tasks, traces, or the graph snapshot. The toolbar returns to
+delete outputs, tasks, traces, or the graph snapshot; open team tasks and
+requests are cancelled, not deleted. The toolbar returns to
 **Start**. The next Start creates a new generation, execution ID, Temporal
 controller, and empty runtime namespace from the then-current saved canvas.
 Historical scopes therefore remain queryable without leaking state into the

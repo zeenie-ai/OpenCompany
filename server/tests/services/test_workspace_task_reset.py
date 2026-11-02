@@ -122,6 +122,7 @@ async def test_a_pending_workspace_cleanup_keeps_a_generation_resetting(monkeypa
     monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(return_value=0))
     monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
+    monkeypatch.setattr("services.employees.safe_apply.close_open_work", AsyncMock(return_value=None))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(side_effect=UpdatePending("no answer in 240 s")))
     monkeypatch.setattr(handlers, "_control_payload", AsyncMock(side_effect=lambda row, **_: {"state": row.status}))
     monkeypatch.setattr(runtime_state, "archive_and_reset_node_state", archive)
@@ -203,6 +204,11 @@ async def test_generation_reset_waits_for_workspace_before_archive_and_final_res
     monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(side_effect=terminate))
     monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
+
+    async def close_open_work(*_args, **_kwargs):
+        order.append("close:work")
+
+    monkeypatch.setattr("services.employees.safe_apply.close_open_work", close_open_work)
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", workspace)
     monkeypatch.setattr(runtime_state, "archive_and_reset_node_state", archive)
     notices = broadcaster(monkeypatch, order)
@@ -227,7 +233,7 @@ async def test_generation_reset_waits_for_workspace_before_archive_and_final_res
         assert result["success"] is True and result["state"] == "ready"
         assert order[-7:] == ["workspace:start", "workspace:done", "archive:scope", "archive:nodes",
                               "db:reset", "workflow_runtime_reset", "control:reset"]
-        assert order.index("terminate:graph") < order.index("workspace:start")
+        assert order.index("terminate:graph") < order.index("close:work") < order.index("workspace:start")
         assert notices.broadcast.await_args.args[0]["cancelled_workspace_tasks"] == 2
 
 

@@ -62,7 +62,9 @@ stopped generation or drain reviews while Stop/held Resume closes admission.
 It replaces future snapshots without Reset, preserving Context,
 memory, chats, files, approvals and queued events. Paused employees stay
 paused. “Stop work and apply” is the explicit interruption path. The editor's
-Reset continues to clear execution state as before.
+Reset continues to clear execution state, and it also cancels the team's open
+tasks and requests, queued ones included, which the terminated runs can no
+longer close.
 
 Conversion requires an owner review of a recognizable template graph and
 keeps a full configuration snapshot. Custom graphs require Dev review.

@@ -6172,7 +6172,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 | Id | Fix | § |
 |---|---|---|
 | 1b.20 | Compensations retry until they land: delegation cleanup (`DELEGATION_CLEANUP_RETRY`, now unlimited) and job failure (`BOOKKEEPING_RETRY`, moved to `_retry_policies.py`). `cancel_agent_delegation` answers `absent` for a missing row. The run record stays best-effort | 10.2 |
-| 1b.21 | Reset closes teams, team tasks and employee jobs (`close_open_work`, shared with Stop work). `dispatch_job` refuses a job of an ended generation, and the delivery claim refuses a cancelled job. It ships in the same release as 1b.20 | 10.2 |
+| 1b.21 | Reset closes teams, team tasks and employee jobs (`close_open_work`, shared with Stop work). `dispatch_job` cancels a job of an ended generation instead of starting it, and a delivery keeps a cancelled job cancelled and sends nothing more. It ships in the same release as 1b.20 | 10.2 |
 | 1b.22 | Start's compensation runs in reverse order, each step in its own try and logged, and fails the row last. A Start whose socket drops finishes on its own | 10.2 |
 | 1b.23 | Boot reconcile finishes a Reset that a crash interrupted | 10.2 |
 | 1b.24 | The pause-on-failure breaker counts each run once | 11.8 |

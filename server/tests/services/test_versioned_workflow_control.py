@@ -160,6 +160,7 @@ def lifecycle(monkeypatch, state="running"):
     monkeypatch.setattr(handlers, "_signal_controller", AsyncMock())
     monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(return_value=3))
     monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
+    monkeypatch.setattr("services.employees.safe_apply.close_open_work", AsyncMock(return_value=None))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(return_value={"cancelled": 0}))
     monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(handlers, "_clear_failure_streak", AsyncMock())
@@ -320,6 +321,22 @@ async def test_browser_cleanup_failure_keeps_resetting_and_scope_unarchived(monk
     assert record.row.status == "resetting"
     handlers._terminate_generation_workflows.assert_awaited_once()
     cleanup.assert_awaited_once()
+    handlers._reset_workspace_tasks.assert_not_awaited()
+    record.service.database.update_workflow_run_data_scope.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reset_closes_open_work_and_a_failed_close_keeps_resetting(monkeypatch):
+    # 1b.21: a terminated run closes none of its own records, so Reset does.
+    record = lifecycle(monkeypatch)
+    close = AsyncMock(side_effect=RuntimeError("database is locked"))
+    monkeypatch.setattr("services.employees.safe_apply.close_open_work", close)
+    result = await handlers.handle_reset_workflow({"workflow_id": "canvas", "expected_revision": 2}, None)
+    assert result == {"success": False, "error": "database is locked"}
+    assert record.row.status == "resetting"
+    assert close.await_args.args == (record.service.database, "canvas")
+    assert close.await_args.kwargs["reason"] == "The workflow was reset"
+    assert "queued" in close.await_args.kwargs["job_states"]
     handlers._reset_workspace_tasks.assert_not_awaited()
     record.service.database.update_workflow_run_data_scope.assert_not_awaited()
 

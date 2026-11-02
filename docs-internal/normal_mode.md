@@ -850,8 +850,10 @@ the workflow's conversations and the chat nodes (`chatTrigger`, `chatReply`)
 clear its thread through the same `reset_execution_state` hook, so Talk and
 the editor's chat pane never show a conversation the agent no longer has.
 It also drops messages queued while paused and cancels the drafts waiting
-for the owner. Deleting the workflow deletes its thread (a workflow-deleted
-hook `chatReply` registers).
+for the owner. It cancels the team's open tasks and requests too, so a later
+Apply has nothing to wait on, and a queued request of the ended generation is
+cancelled instead of started. Deleting the workflow deletes its thread (a
+workflow-deleted hook `chatReply` registers).
 
 `pending_changes` is true while a generation is live (starting, running,
 pausing, paused, resuming) and the saved graph, put through Start's own
