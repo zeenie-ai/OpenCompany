@@ -3,7 +3,7 @@
 
 > **Current-state reading rule:** defect lists, measurements and code sketches below are anchored to their cited baseline commits. Some fixes have since landed. Use the [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md), current runtime references and recorded generation flags for shipped behavior; proposed paths and later rollout phases remain designs until implemented. This audit does not change the accepted owner decisions.
 
-Status: Draft. Owner decisions recorded in §17 (2026-10-16 and 2026-10-23); Q15 was answered on 2026-10-24 by RFC-0006's T14; Q5, Q9, Q11 and Q13 are still open. The event path is designed in RFC-0005. RFC-0006 corrected this RFC on 2026-10-24 (§22).
+Status: Draft. Owner decisions recorded in §17 (2026-10-16 and 2026-10-23); Q15 was answered on 2026-10-24 by RFC-0006's T14; Q5, Q9, Q11 and Q13 are still open. The event path is designed in RFC-0005. RFC-0006 corrected this RFC on 2026-10-24 (§22), and on 2026-11-03 RFC-0005 Phase 1b added notes on what it built (§22).
 Created: 2026-10-16
 Scope: `server/services/temporal/`, `server/services/deployment/` (control, recovery, Reset), `server/services/events/dispatch.py`, `server/services/plugin/{base,scaling,polling}.py`, `server/nodes/scheduler/cron_scheduler/`, `server/nodes/workflow/approval_gate/`, `server/routers/webhook.py`, the Temporal CLI packaging (`server/services/temporal/_install.py`, `docker/Dockerfile`, the desktop shell), `server/tests/temporal/`, `.env.template` (`TEMPORAL_*`)
 Relationship: builds on [TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md) and [temporal-workflow-control.md](./docs-internal/temporal-workflow-control.md), which stay normative until a phase here lands. Corrects one CLAUDE.md durability rule (§8.5). Does not change RFC-0002.
@@ -207,7 +207,7 @@ Ranked. "Replay impact" says whether the fix changes the commands a workflow emi
 - *Fix (D18).* Set `envelope.workflow_id`. *Replay impact:* none.
 
 **H12. Cleanup is skipped on failure, cancellation and Reset, and Reset misses Pi inline runners.**
-- *What happens.* Agent children start with the default parent close policy, TERMINATE (`workflow.py:820-828`; `employee_job_workflow.py:117`, `:120`; `agent_workflow.py:593-597` for the teammate child of `DelegatedTaskWorkflow`, `:1728-1732` for direct delegates). When an uncontrolled run fails, MachinaWorkflow stops without cancelling its running handles (`workflow.py:905-908`); the children are then terminated by policy. Reset terminates every execution it finds instead of cancelling it (`services/deployment/handlers.py:992-994`, `:2591`), and termination never reaches workflow code. That skips `DelegatedTaskWorkflow`'s delegation cancellation and permit release (`agent_workflow.py:627-725`), AgentWorkflow's `employee.job.failed` and browser-claim release (`:834-856`) and delegation cleanup (`:1506-1554`), EmployeeJobWorkflow's failure marker and MachinaWorkflow's unregister. Reset compensates browser claims and Workspace tasks, but it releases a browser claim only while the terminated execution is still retained (24 h on the dev server) and only for its own generation. A manual canvas Run's claim, or one older than retention, is never released: it keeps the profile `BrowserBusy` for every other task and defers a deleted employee's profile cleanup (RFC-0006 §6.2). Nothing sweeps team tasks, subagent permits or employee jobs; those leftovers stay "active" without blocking the next generation. This fits the open "Reset leaves team tasks and permits" bug. Separately, `PiInlineDelegationWorkflow` is started from a tool handler with no search attributes (`services/handlers/tools.py:378-386`, `pi_inline_delegation.py:219-226`), so it is its own root and neither Reset query finds it (`handlers.py:844-900`). It registers in the controller's `live_roots`, which Reset never reads, so inline Claude Code or RLM delegations to a Coding Agent survive Reset and workflow deletion.
+- *What happens.* Agent children start with the default parent close policy, TERMINATE (`workflow.py:820-828`; `employee_job_workflow.py:117`, `:120`; `agent_workflow.py:593-597` for the teammate child of `DelegatedTaskWorkflow`, `:1728-1732` for direct delegates). When an uncontrolled run fails, MachinaWorkflow stops without cancelling its running handles (`workflow.py:905-908`); the children are then terminated by policy. Reset terminates every execution it finds instead of cancelling it (`services/deployment/handlers.py:992-994`, `:2591`), and termination never reaches workflow code. That skips `DelegatedTaskWorkflow`'s delegation cancellation and permit release (`agent_workflow.py:627-725`), AgentWorkflow's `employee.job.failed` and browser-claim release (`:834-856`) and delegation cleanup (`:1506-1554`), EmployeeJobWorkflow's failure marker and MachinaWorkflow's unregister. Reset compensates browser claims and Workspace tasks, but it releases a browser claim only while the terminated execution is still retained (24 h on the dev server) and only for its own generation. A manual canvas Run's claim, or one older than retention, is never released: it keeps the profile `BrowserBusy` for every other task and defers a deleted employee's profile cleanup (RFC-0006 §6.2). Nothing sweeps team tasks, subagent permits or employee jobs; those leftovers stay "active", and Apply waits on them. This fits the open "Reset leaves team tasks and permits" bug. Built in 1b.21 (a6f9af68): Reset cancels the workflow's open team tasks and its open and queued employee jobs (`safe_apply.close_open_work`). It releases no permits; the next acquire on a root reclaims a lease older than 3 hours. Separately, `PiInlineDelegationWorkflow` is started from a tool handler with no search attributes (`services/handlers/tools.py:378-386`, `pi_inline_delegation.py:219-226`), so it is its own root and neither Reset query finds it (`handlers.py:844-900`). It registers in the controller's `live_roots`, which Reset never reads, so inline Claude Code or RLM delegations to a Coding Agent survive Reset and workflow deletion.
 - *Rule.* "In most cases, canceling is preferable because it allows the Workflow to finish gracefully" (https://docs.temporal.io/develop/python/workflows/cancellation); "Prefer Cancellation" (https://docs.temporal.io/encyclopedia/workflow/cancellation-and-termination).
 - *Fix (D9).* `REQUEST_CANCEL` with `WAIT_CANCELLATION_COMPLETED` for agent children; cancel and drain on cancellation, and on failure start nothing new while running nodes finish (§8.4); Reset cancels, waits a bounded grace period, then terminates stragglers, acts on `live_roots`, and closes team tasks, employee jobs and permits (§8.4); start the Pi runner with `EventWorkflowId` like its siblings. *Replay impact:* the parent close policy is not compared on replay (§8.5); the new cancel commands in MachinaWorkflow are (patch gate); Reset and the Pi start options are client side.
 
@@ -352,7 +352,7 @@ Use the rate of attempts, not cumulative counts, and do not use `worker_task_slo
 
 ### 7.2 Stuck executions
 
-Set `system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute` (server 1.30.1+). The server then sets `TemporalReportedProblems` after five consecutive workflow-task failures. Boot reconcile and the deployment status view query `TemporalReportedProblems IN ('category=WorkflowTaskFailed','category=WorkflowTaskTimedOut')` and show "needs attention" instead of "running".
+Set `system.numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute` (server 1.30.1+). The server then sets `TemporalReportedProblems` after five consecutive workflow-task failures. Boot reconcile and the deployment status view query `TemporalReportedProblems IN ('category=WorkflowTaskFailed','category=WorkflowTaskTimedOut')` and show "needs attention" instead of "running". Built differently in 1b.38b (77c1a3aa): `temporal_cli.json` sets the value to 5, and the dev-server watchdog counts such runs every 5 minutes into one instance-wide `stuck_runs` attention item, which Home shows as one line. There is no per-deployment status and no boot query.
 
 ### 7.3 Labels in the Web UI (D14)
 
@@ -411,7 +411,7 @@ The control plane is in good shape (§4.1). Changes:
 - Agent children: `parent_close_policy=ParentClosePolicy.REQUEST_CANCEL`, `cancellation_type=ChildWorkflowCancellationType.WAIT_CANCELLATION_COMPLETED`.
 - MachinaWorkflow: on cancellation, cancel every handle in `running` and drain them within a bound, then finish. On failure, start nothing new and let running nodes finish, as controlled runs already do (RFC-0006 §6.3).
 - Workflow loops: never let `except Exception` swallow cancellation; check `is_cancelled_exception(e)` and re-raise (H8).
-- Reset: signal, cancel, wait a bounded grace period (for example 30 s), then terminate what is left; keep the existing database sweeps as the backstop. No sweep exists for team tasks, employee jobs or permits, so Reset must close them (1b.21; RFC-0006 §10.2).
+- Reset: signal, cancel, wait a bounded grace period (for example 30 s), then terminate what is left; keep the existing database sweeps as the backstop. No sweep exists for team tasks, employee jobs or permits, so Reset must close them (1b.21; RFC-0006 §10.2). Built in 1b.21 (a6f9af68) for team tasks and employee jobs; permits are not released.
 
 ### 8.5 What needs a patch (corrects CLAUDE.md)
 
@@ -459,7 +459,7 @@ See M1 and §11.1. Short term: a lint that flags known blocking calls (`requests
 | Own-permit re-acquire | 3 attempts of 1 h | `PERMIT_WAIT_RETRY` |
 | Employee delivery | Three 31-day activity sites, 3 attempts each; a retry within the 2-minute delivery lease strands the draft (M4) | Interim: a retry re-attaches to its own lease, with unlimited retries (1b.9). Then a workflow wait (D13): RFC-0005 Phase 7's ApprovalWorkflow (RFC-0006 §9.6) |
 
-Add `PayloadSizeError` to `NON_RETRYABLE_ERROR_TYPES`. This holds for SDK 1.30.0; 1.34.0 removes that Python type, so recheck after the upgrade (RFC-0006 §16.3). Plugin exceptions are converted to returned results inside the activity (`plugin/base.py:683-761`), so plugin retry policies never see an HTTP 5xx or 429. The owner decides whether graph nodes retry transient errors (§17); if so, plugins raise a typed retryable error and keep returning envelopes for user errors.
+Add `PayloadSizeError` to `NON_RETRYABLE_ERROR_TYPES`. This holds for SDK 1.30.0; 1.34.0 removes that Python type, so recheck after the upgrade (RFC-0006 §16.3). Built in 1b.26 (444c70a5) for Core's type, `PayloadsTooLarge`. Plugin exceptions are converted to returned results inside the activity (`plugin/base.py:683-761`), so plugin retry policies never see an HTTP 5xx or 429. The owner decides whether graph nodes retry transient errors (§17); if so, plugins raise a typed retryable error and keep returning envelopes for user errors.
 
 ### 9.3 Cancellation and heartbeats
 
@@ -586,7 +586,7 @@ Already right: errors are classified, Retry-After drives `next_retry_delay`, pro
 ### 13.4 History growth
 
 - Keep transcripts in history: they travel in LLM-step inputs, bounded by the byte budget, compaction and continue-as-new, as T6 (RFC-0006 §3.1) decides. Passing them by reference is not planned.
-- Trim the continue-as-new input: drop the seed conversation, memory content and parameter snapshot, and keep `tools`, which the resumed run reads. Continue-as-new input is not compared on replay, so this needs no patch; it is item 1b.19 of RFC-0005 Phase 1b (RFC-0006 §16.8).
+- Trim the continue-as-new input: drop the seed conversation, memory content and parameter snapshot, and keep `tools`, which the resumed run reads. Continue-as-new input is not compared on replay, so this needs no patch; it is item 1b.19 of RFC-0005 Phase 1b (RFC-0006 §16.8), built in 675375dc.
 - No byte-based rollover check: every rollover check reads `is_continue_as_new_suggested()` first, and the server suggests continue-as-new at 4,096 events or 4 MiB.
 
 ### 13.5 Human in the loop
@@ -644,7 +644,7 @@ The cookbook's shape is a signal or Update that sets state, plus `workflow.wait_
 4. Cron overlap (owner choice).
 5. Polling: `post_emit` after record, per-cycle ids.
 6. D12 and D13 per the owner's answers.
-7. AgentWorkflow: nothing remains here. Transcripts stay in history, as T6 (RFC-0006 §3.1) decides, and the trimmed continue-as-new input needs no patch, so it moved to RFC-0005 Phase 1b as item 1b.19 (§13.4).
+7. AgentWorkflow: nothing remains here. Transcripts stay in history, as T6 (RFC-0006 §3.1) decides, and the trimmed continue-as-new input needs no patch, so it moved to RFC-0005 Phase 1b as item 1b.19 (§13.4), built in 675375dc.
 
 **Phase 3: features.** Web UI labels; BENIGN; LLM class queues with fixed slots (§11.3); Priority for chat; heartbeat checkpoints; the sandbox for small workflows; the operator runbook with activity operations. There is no eager-start experiment for chat runs: they start as children or by Signal-With-Start, and neither can be eager (§4.2).
 
@@ -681,16 +681,16 @@ The owner answered on 2026-10-16. Further answers came on 2026-10-23 while desig
 | AG2 | Starting with a database created by another server minor, or by no recorded server, deletes it and starts empty (owner, 2026-10-23) |
 | AG3 | Retention is set to the configured value after namespace creation (integration test) |
 | AG4 | A metrics endpoint or buffer exists; the alert table's signals are emitted in a test run |
-| AG5 | `TemporalReportedProblems` turns a failing workflow task into "needs attention" in the status view |
+| AG5 | `TemporalReportedProblems` turns a failing workflow task into "needs attention" in the status view. Built differently in 1b.38b: one `stuck_runs` attention line on Home, with no status view (§7.2) |
 | AG6 | CI replays every fixture of the previous release with the production workflow list and fails on any error |
 | AG7 | The golden identity test fails when an activity name, child id format or marker changes without a patch entry |
 | AG8 | The determinism lint passes for every workflow module |
-| AG9 | Every activity call site has an explicit retry policy. No policy on a paid or side-effecting call is unlimited without a time budget; the LLM step and compaction are the one declared exception in generations without RFC-0005 Phase 5's step budget (`scheduler_version=1`), as T18 (RFC-0006 §3.1) decides. Every unlimited policy (bookkeeping, compensations, queue paging, permit waits, RFC-0006 T7's poll activities, sends and deliveries made at-most-once by their claim) is declared and idempotent, and all but the polls and permit waits, whose retries are planned, are covered by the retry alert (§7.1; RFC-0006 §11.1) |
+| AG9 | Every activity call site has an explicit retry policy. No policy on a paid or side-effecting call is unlimited without a time budget; the LLM step and compaction are the one declared exception in generations without RFC-0005 Phase 5's step budget (`scheduler_version=1`), as T18 (RFC-0006 §3.1) decides. Every unlimited policy (bookkeeping, compensations, queue paging, permit waits, the approval gate's wait for the owner, the Pi driver's turn, RFC-0006 T7's poll activities, sends and deliveries made at-most-once by their claim) is declared and idempotent. The retry alert covers all of them except the planned retries: T7's polls, and the permit waits, approval gate and Pi driver that `PLANNED_WAITS` lists (`services/temporal/_interceptors.py`, 1b.30) (§7.1; RFC-0006 §11.1) |
 | AG10 | A cancelled node activity is recorded as Cancelled (ActivityEnvironment test) |
 | AG11 | A webhook without the configured header gets 401; one over the size cap gets 413 |
 | AG12 | An event accepted 10 ms after the generation's Start committed is delivered to its controller once the generation runs (no Visibility on the path). "Started" means the Start commit (RFC-0006 §7.2) |
 | AG13 | A slow cron run causes the next tick to be skipped (or, if the owner chooses overlap, the policy says so) |
-| AG14 | A standalone worker with a different registration refuses to start |
+| AG14 | A standalone worker with a different registration refuses to start. Built differently: 1b.36 (d379ab3e) gives the embedded manager, the standalone worker and `create_worker` one main-queue registration, so there is nothing to compare, and 1b.35 (032953de) refuses a standalone worker unless `DISTRIBUTED_MODE=true` |
 | AG15 | Every query string in the repo runs against the pinned server (contract test) |
 | AG16 | The upgrade from the previous release keeps a paused generation resumable (end-to-end, with the pinned CLI) |
 | AG17 | Restarting the backend twice starts no second start-node run for a running or paused generation |
@@ -773,3 +773,13 @@ Releases: https://github.com/temporalio/sdk-python/releases (1.25.0 to 1.34.0), 
 - §13.3: Retry-After is honoured for at most 5 minutes per retry; a longer wait than the step budget parks the turn.
 - §17 Q15: answered by T14 (start anyway, mark "needs Reset"; a failed readiness check still rolls back).
 - Each change, with its evidence, is listed in RFC-0006 §21.
+
+**2026-11-03, RFC-0005 Phase 1b (1b.45)**
+
+Notes on what Phase 1b built, at each place it changed a design here:
+
+- §5 H12 and §8.4: Reset cancels open team tasks and employee jobs (1b.21); it releases no permits.
+- §7.2 and AG5: a `stuck_runs` attention item on Home instead of a status view (1b.38b).
+- §9.2: `PayloadsTooLarge` is non-retryable (1b.26).
+- §13.4 and §16 Phase 2 item 7: the carry trim is built (1b.19).
+- §18 AG9: the approval gate and the Pi driver are planned retries too. AG14: one registration (1b.36) and the standalone guard (1b.35) instead of a divergence check.

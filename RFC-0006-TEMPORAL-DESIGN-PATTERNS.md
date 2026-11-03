@@ -3,7 +3,7 @@
 
 > **Current-state reading rule:** defect lists, measurements and code sketches below are anchored to their cited baseline commits. Some fixes have since landed. Use the [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md), current runtime references and recorded generation flags for shipped behavior; proposed paths and later rollout phases remain designs until implemented. This audit does not change the accepted owner decisions.
 
-- **Status:** Draft, 2026-10-24. Owner decisions T1-T20 are in §3.1. The amendments to RFC-0005 listed in §20 and the corrections to RFC-0004 listed in §21 were made in the same commit. On 2026-10-25 the Phase 1b plan was simplified (§22.2), and RFC-0007 amended §9.6 and §22.5.
+- **Status:** Draft, 2026-10-24. Owner decisions T1-T20 are in §3.1. The amendments to RFC-0005 listed in §20 and the corrections to RFC-0004 listed in §21 were made in the same commit. On 2026-10-25 the Phase 1b plan was simplified (§22.2), and RFC-0007 amended §9.6 and §22.5. Phase 1b's docs pass (1b.45, 2026-11-02 and 2026-11-03) added notes wherever Phase 1b built something differently.
 - **Created:** 2026-10-24
 - **Scope:**
   - every Temporal workflow and activity in `server/services/temporal/` and `server/nodes/scheduler/cron_scheduler/`;
@@ -161,11 +161,11 @@ One row per entry in §6 to §19. Priority P1 means Phase 1b (the ids are listed
 | 8.3 | Continue-As-New | Adopted with deviations | P2 | Slim controller carry, cancellation fix, rollover at the first boot of each release; slim agent carry (1b.19) |
 | 8.4 | Updatable Timer | Planned in RFC-0005 (follows, misses details) | P2 | One timer over absolute deadlines; no zero timeouts; no sub-second windows; one instance-wide upkeep sweep |
 | 9.1 | External interaction (overview) | Not applicable (selection guide) | P3 | "Where each wait goes" (§5 rule 2) |
-| 9.2 | Polling External Services | Adopted with deviations | P1 | Heartbeats and bounded attempts (1b.17); one retried poll activity per trigger in Phase 3 (T7) |
+| 9.2 | Polling External Services | Adopted with deviations | P1 | Bounded attempts, without heartbeats (1b.17); one retried poll activity per trigger in Phase 3 (T7) |
 | 9.3 | Long-Running Activity | Adopted with deviations | P1 | Activities re-raise cancellation (1b.2); long waits fit one attempt (1b.4, dropped); checkpoint external job ids |
 | 9.4 | Delayed Start | Not applicable | P3 | No adoption; never `start_delay` on ids addressed by Signal-With-Start |
 | 9.5 | Delayed Callback (webhooks) | Misused (Timer node; webhooks until Phase 2) | P1 | Timer node fixes (1b.8); a durable Timer behind a flag; the Phase 2 inbox for webhooks |
-| 9.6 | Approval | Misused (the wait) | P1 | Reviewed delivery re-attaches (1b.9); approved sends wait while stopped (1b.5); stranded drafts expire (1b.10); ApprovalWorkflow for all four waits (Phase 7) |
+| 9.6 | Approval | Misused (the wait) | P1 | Reviewed delivery re-attaches (1b.9); approved sends wait while stopped (1b.5); stranded drafts expire (1b.10); ApprovalWorkflow for held tool calls (RFC-0007, AP.4a and AP.4b), then the gate and delivery (Phase 7) |
 | 10.1 | Distributed transactions (overview) | Adopted with deviations | P1 | The transaction rule in DESIGN.md (1b.45) |
 | 10.2 | Saga | Adopted with deviations | P1 | Compensations retry until they land (1b.20); Reset closes everything it started (1b.21); Start's compensation in reverse (1b.22); interrupted Resets finish (1b.23) |
 | 10.3 | Early Return | Adopted with deviations | P1 | A bounded Workspace Update-with-Start (1b.15); later behind the T10 deliverer |
@@ -190,9 +190,9 @@ One row per entry in §6 to §19. Priority P1 means Phase 1b (the ids are listed
 | 14.2 | Local Activities | Missing and beneficial | P2 | AgentWorkflow progress broadcasts as best-effort local activities (`progress_local_version=1`, after SDK 1.34.0); new types schedule no UI-only activity |
 | 14.3 | Early Return + Local Activities | Adopted with deviations (Workspace tasks); Not applicable (chat) | P3 | Only if measured |
 | 14.4 | Eager Workflow Start | Not applicable | P3 | Do not adopt |
-| 15.1 | Worker configuration (overview) | Adopted with deviations | P1 | A placement axis and one worker builder (1b.36) |
+| 15.1 | Worker configuration (overview) | Adopted with deviations | P1 | A placement axis; one main-queue registration (1b.36) |
 | 15.2 | Worker-Specific Task Queues | Adopted with deviations; process affinity missing | P1 | The pool always polls (1b.34); the standalone guard (1b.35); an instance queue before the T8 split |
-| 15.3 | Activity Dependency Injection | Adopted with deviations | P1 | One worker builder (1b.36) |
+| 15.3 | Activity Dependency Injection | Adopted with deviations | P1 | One main-queue registration (1b.36); no worker builder |
 
 ### 4.2 AI agents, best practices, samples and Nexus
 
@@ -251,7 +251,7 @@ One row per entry in §6 to §19. Priority P1 means Phase 1b (the ids are listed
 | 18.12 | Worker processes | Planned in RFC-0005 (follows) | P2 | Second process on hosted tier S (T8) |
 | 18.13 | Worker versioning | Not applicable | P3 | Declined for topology |
 | 18.14 | Long-running activities | Adopted with deviations | P1 | Cancellation (1b.2); heartbeat interval from the timeout |
-| 18.15 | Asynchronous activity completion | Not applicable | P2 | Human waits move to an Update plus a timer (Phase 7) |
+| 18.15 | Asynchronous activity completion | Not applicable | P2 | Human waits move to ApprovalWorkflow, a nudge Signal plus a timer: held tool calls since RFC-0007, the gate and delivery in Phase 7 |
 | 18.16 | Resource pool | Adopted with deviations | P3 | Reset releases permits (planned for 1b.21, not built there; the age reclaim still frees them) |
 | 18.17 | Interpreters and batches | Adopted correctly | P3 | None |
 | 18.18 | Codecs, external storage, converters | Not applicable | P3 | References first; a codec only with an owner decision (RFC-0004 Q13) |
@@ -292,7 +292,7 @@ These rules distil the patterns in §6 to §19 into checks a reviewer can apply 
 ### 5.2 Workflow code
 
 3. **Determinism is checked, not assumed.**
-   - The 14 existing types run unsandboxed (`sandboxed=False`). A determinism lint covers their workflow code: the methods of `@workflow.defn` classes and the helpers they call, not activities that share the module. It checks for no I/O, no wall clock, no unseeded randomness, no `asyncio.wait` or `asyncio.as_completed` (their ordering is not deterministic; `workflow.wait` and `workflow.as_completed` are), and no command-issuing code in a signal handler.
+   - The 14 existing types and RFC-0007's ApprovalWorkflow run unsandboxed (`sandboxed=False`). A determinism lint covers their workflow code: the methods of `@workflow.defn` classes and the helpers they call, not activities that share the module. It checks for no I/O, no wall clock, no unseeded randomness, no `asyncio.wait` or `asyncio.as_completed` (their ordering is not deterministic; `workflow.wait` and `workflow.as_completed` are), and no command-issuing code in a signal handler. That lint was 1b.40, dropped on 2026-10-25, so today only the replay gate checks this.
    - New RFC-0005 types run in the sandbox, passing through only side-effect-free leaf modules. (§17.18)
 4. **Cleanup runs only when the workflow is really exiting.**
    - Code that issues commands in `finally`, `except Exception` or `except BaseException` first re-raises a workflow bug (`is_workflow_bug`). Otherwise a bug records cleanup commands, marks rows failed, and makes the fixed release fail replay.
@@ -300,7 +300,7 @@ These rules distil the patterns in §6 to §19 into checks a reviewer can apply 
 5. **Every child start states its policies.**
    - Each child start passes `parent_close_policy`, `cancellation_type` and `id_reuse_policy` explicitly.
    - Agent children use `REQUEST_CANCEL` with `WAIT_CANCELLATION_COMPLETED`; per-event runs use `ABANDON`.
-   - A lint rejects a child start without them. (§6.2)
+   - A lint was to reject a child start without them (1b.40, dropped on 2026-10-25). (§6.2)
 6. **Know what replay compares.**
    - On replay Temporal compares only a command's kind, its activity or child type, and its id.
    - Changing timeouts, retry policies, task queues or a parent close policy needs no patch.
@@ -322,7 +322,7 @@ These rules distil the patterns in §6 to §19 into checks a reviewer can apply 
 13. **Every client-side Update call that a request or a loop waits on runs under a deadline** (`update_calls.bounded_update`, 1b.15); a background transition's own Updates may wait. `rpc_timeout` bounds one request only: after the Update is accepted, `execute_update` waits for the outcome without it. (§7.3; corrects RFC-0004 §8.2)
 14. **Owner actions go through intents** (T10).
     - Stop, Resume, approval decisions, Interrupt, Start and Apply write an intent row and answer at once.
-    - A background deliverer sends the Update by workflow id, with a stable id and a per-attempt deadline, until it is applied.
+    - A background deliverer sends the Update by workflow id, with a stable id and a per-attempt deadline, until it is applied. An approval decision is the exception (RFC-0007 §4.6): the request writes the row and nudges the waiting `ApprovalWorkflow` with a Signal, and the chat watchdog nudges again until the decision is read.
     - No request path waits on Temporal (RFC-0005 I2). (§7.3, §10.2)
 15. **Updates carry absolute values and a revision.**
     - Handlers are idempotent by revision across continue-as-new, because Update-id dedupe works only within one run.
@@ -331,16 +331,16 @@ These rules distil the patterns in §6 to §19 into checks a reviewer can apply 
 ### 5.4 Activities, retries and side effects
 
 16. **Named retry policies only.**
-    - Every activity call site uses a shared policy constant; a lint rejects inline policies.
+    - Every activity call site uses a shared policy constant. A lint rejects inline policies in the workflow modules `server/tests/test_retry_policies.py` lists; the lint for every module was 1b.41, dropped on 2026-10-25.
     - A paid or side-effecting call never retries without a time budget.
     - One exception: the LLM step and compaction on generations without `scheduler_version=1` (RFC-0005 Phase 5) keep unlimited retries, under the retry alert (1b.30). A budget without parking would fail their turns (T18).
-    - An unlimited policy is otherwise allowed only for idempotent bookkeeping, compensations, queue paging, permit waits, T7's poll activities (each retry is the next poll), and sends and deliveries made at-most-once by their claim (the egress outbox; reviewed delivery's `inflight` mark, 1b.9). Each is declared, and the retry alert covers all of them except the planned retries of polls and permit waits. (§11.1; rewords RFC-0004 AG9)
+    - An unlimited policy is otherwise allowed only for idempotent bookkeeping, compensations, queue paging, permit waits, the approval gate's wait for the owner, the Pi driver's turn, T7's poll activities (each retry is the next poll), and sends and deliveries made at-most-once by their claim (the egress outbox; reviewed delivery's `inflight` mark, 1b.9). Each is declared, and the retry alert covers all of them except the planned retries: T7's polls, and the permit waits, approval gate and Pi driver that `PLANNED_WAITS` lists (1b.30). (§11.1; rewords RFC-0004 AG9)
 17. **Classify every failure.**
     - User and configuration errors fail fast as non-retryable: `NodeUserError`, permission errors, `PayloadsTooLarge` (Core's type since SDK 1.31; `PayloadSizeError` before) and bugs inside the LLM step.
     - Rate limits retry as BENIGN with the provider's `next_retry_delay`.
-    - Planned retries (T7's poll attempts, permit waits) are BENIGN and excluded from retry alerts. (§11.4, §11.5, §11.7)
-18. **Side effects declare their class** (T13, E12).
-    - Every operation that changes something outside OpenCompany declares `read_only`, `idempotent` (a provider key, or a natural key) or `unsafe`.
+    - Planned retries (T7's poll attempts, permit waits, the approval gate, the Pi driver) are BENIGN and excluded from retry alerts. (§11.4, §11.5, §11.7)
+18. **Side effects say whether they may repeat** (T13, E12).
+    - One service table, `services/approvals/repeats.py`, lists the calls that may run again: they change nothing outside, or make the same change again. Every other call that changes something outside OpenCompany is `unsafe`. No plugin declares anything (1b.1a, on the owner's direction of 2026-10-25).
     - An `unsafe` call runs under a claim guard: if an attempt broke off after the provider might have acted, the next attempt records `unknown` and tells the employee instead of calling again.
     - This applies to graph nodes and tool calls alike, sends included. (§11.2, §16)
 19. **Cancellation reaches the code.**
@@ -369,6 +369,7 @@ These rules distil the patterns in §6 to §19 into checks a reviewer can apply 
 25. **One worker builder.**
     - Every Worker, embedded, standalone, test or recorder, comes from one function.
     - That function makes dependencies ready before polling, registers from one list (`workflow_registry.py`), and checks the registration against what workflows schedule.
+    - Built narrower in 1b.36 (d379ab3e): one main-queue registration (`_main_queue_activities`, `temporal_plugins()`) serves the embedded manager, the standalone worker and `create_worker`. There is no builder function and no registration check.
     - The pool always polls the queues frozen runs can target.
     - Activities bound to the backend process run on the instance queue (T8). (§15)
 26. **Every limit we rely on has a real-server test.** That includes Updates per run, history size and continue-as-new suggestions. Every change to workflow code passes the N-1 replay gate and the golden identity test. (§12.1, §17.17)
@@ -873,7 +874,7 @@ class ConversationWorkflow:
 - **Budgets in practice.** A fired push run costs the controller 1 Signal, 2 Updates and about 40 history events; a cron firing costs 4 Updates and about 22 events (fixtures `controller_push.json`, `cron_schedule.json`). The server suggests continue-as-new at 4,096 events or 4 MiB by default, so a controller rolls over after about 100 push runs (200 Updates) or about 190 cron firings (about 750 Updates), far below 2,000. The tightest budget is 10 in flight; whether an eleventh concurrent register fails its run was not verified (the server's error code for that limit is not in the downloaded sources).
 - **Owner actions today.** Stop and Resume already write an intent row first: the generation row moves to `pausing` or `resuming` with a new revision, a background task runs the transition (`handlers.py:98-105`), and `_reconcile_control` re-drives a stale one when the next status read or the boot pass calls it (`:1223-1238`). The socket handler then waits for that task (`:134-158`). An approval decision commits by compare-and-swap, then starts the send workflow from the request path and reverts the decision if Temporal is unavailable (`server/services/approvals/handlers.py:139-159`); `recover_sends` restarts sends that never started (`server/services/approvals/reconcile.py:76-89`). A pending approval draft keeps Stop in `pausing`: every node activity, an approval gate included, is admitted as an action (`server/services/temporal/workflow.py:865-868`), reviewed delivery is one too (`server/services/temporal/employee_job_workflow.py:132-136`), and `wait_for_checkpoint` waits until no action is admitted (`server/services/temporal/execution_control.py:114-119`); hence "A checkpoint can remain open on admitted work for months" (`handlers.py:1601-1602`).
 
-**Verdict:** Adopted with deviations. The control plane is the docs' pattern almost verbatim; the gaps are the client-side rules (deadlines, stable ids) and validator placement in two newer workflows. RFC-0005's supervisor, `interrupt_turn` and ApprovalWorkflow `decide` are Planned in RFC-0005 (follows the docs): validators and Updates as the page describes, but RFC-0005 never says who sends them, and sending them from a request path would break its own I2. T10 settles the sender.
+**Verdict:** Adopted with deviations. The control plane is the docs' pattern almost verbatim; the gaps are the client-side rules (deadlines, stable ids) and validator placement in two newer workflows. RFC-0005's supervisor, `interrupt_turn` and ApprovalWorkflow `decide` are Planned in RFC-0005 (follows the docs): validators and Updates as the page describes, but RFC-0005 never says who sends them, and sending them from a request path would break its own I2. T10 settles the sender. RFC-0007 (2026-10-25) dropped `decide`: ApprovalWorkflow takes a `nudge` Signal and re-reads the row.
 
 **Recommendation:**
 1. **R1. Bound every Update call.** Built narrower in 1b.15 (03504492): the helper is `bounded_update(call, seconds)`, and it bounds the Updates a request waits on. The socket's Stop and Resume answer within 10 s, a Workspace submit waits 15 s and its reset 240 s, and safe-apply waits 30 s. A transition's own Updates stay unbounded, and the 10-in-flight refusal is not mapped. The design follows: a helper `execute_update_bounded` (new `server/services/temporal/update_calls.py`, sketch) wraps each app-process call in `asyncio.timeout`: about 15 seconds for Workspace Update-With-Start, 30 seconds for controller and safe-apply calls. On expiry it raises `UpdatePending`: the durable intent row or the deterministic id makes a retry safe. `_finish_versioned_transition` treats `UpdatePending` like today's pending branch (keep the intent and the closed admission). Safe-apply treats it as "leave the claim for `recover_applies`" and must not run its rollback Updates. The socket waiter in `_await_versioned_transition` waits at most 10 seconds, then answers with the pending snapshot while the shielded task continues. A Workspace submission (`_controller_update`, `server/services/node_invocations.py:44-74`) answers "submitted, still pending: check the task list" when its deadline passes, and also when the server refuses the Update because 10 are already in flight (that error's code was not verified). Submitting again is safe: the run id derives from the caller's `submission_id` (`node_invocations.py:182`), and the controller deduplicates by run id and fingerprint (`workspace_tasks_workflow.py:89-94`).
@@ -901,9 +902,9 @@ class ConversationWorkflow:
    - Handlers stay idempotent by revision, because Update-id dedupe is per run and the supervisor continues as new daily and is rebuilt in a new run after a loss (T20).
    - Long handlers, such as the supervisor's Stop barrier that fans out to every live turn, use `start_update(wait_for_stage=ACCEPTED)` and fetch `result()` later by id.
    - T12: Stop completes while an approval draft waits. A decision taken while the employee is stopped is delivered at once, so the owner sees it recorded, and its send waits for Resume. Today that means the send is not started while the generation is paused (1b.5), and the Stop checkpoint stops counting approval waits; §9.6 carries both changes.
-   - Today's code moves toward it without versioning: Stop and Resume answer after the bounded wait of R1, and a periodic sweep re-drives stale `pausing` and `resuming` rows instead of waiting for the next status read; an approval decision no longer reverts when Temporal is down, because `recover_sends` restarts sends that never started, and 1b.6 (§10.2) runs it from the 10-second recovery loop instead of once per process.
+   - Today's code moves toward it without versioning: Stop and Resume answer after the bounded wait of R1, and a periodic sweep re-drives stale `pausing` and `resuming` rows instead of waiting for the next status read; an approval decision no longer reverts when Temporal is down, because `recover_sends` restarts sends that never started, and since 1b.5 (which absorbed 1b.6) it runs every round of the chat watchdog instead of once per process.
    - Versioning: none (client code, and the new supervisor and ApprovalWorkflow types).
-   - When: P2, RFC-0005 Phases 4 (supervisor, Interrupt) and 7 (ApprovalWorkflow), plus the no-versioning steps above with §9.6. Effort M.
+   - When: P2, RFC-0005 Phases 4 (supervisor, Interrupt) and 7 (ApprovalWorkflow for the gate and delivery; it arrived for held tool calls with RFC-0007 AP.4a), plus the no-versioning steps above with §9.6. Effort M.
    - Risk: the owner sees "applying" for as long as Temporal or the target is down; the deliverer must surface a stuck intent as an attention item.
 
 **Remarks:**
@@ -1581,7 +1582,7 @@ An activity is recorded Cancelled only when it raises the cancellation. Nothing 
 **Recommendation:**
 1. **Node activities re-raise cancellation** (RFC-0004 D9 and H2; 1b.2). In `NodeExecutor` (`server/services/node_executor.py:231-239`), on the Temporal path, re-raise `CancelledError` after cleanup. When `activity.cancellation_details()` reports `worker_shutdown`, raise `ApplicationError(type="NodeWaitInterrupted")` instead, which the wrapper passes on as a retryable failure (`base.py:1398-1400`). A cancel during a send then becomes `unknown`: `ApprovedToolCallWorkflow` sees an `ActivityError` and records `broke_off`, whose outcome is `unknown` (`server/services/approvals/execution.py:148-155`), so the owner's Retry asks for confirmation; a retried graph or tool send meets the redo guard (1b.1, §11.2). Versioning: none (activity body; old histories keep their recorded results). When: P1, Phase 1b (1b.2). Effort S-M. Test: RFC-0004 gate AG10, and a time-skipping `ApprovedToolCallWorkflow` run whose send is cancelled records `unknown`. Risk: agent tool calls use `WAIT_CANCELLATION_COMPLETED` (`agent_workflow.py:145-156`) and will see a Cancelled `ActivityError` where they now see a failed result; check the tool-result path (`agent_workflow.py:2574-2628`) and the pause-on-failure streak.
 2. **Long waits fit one attempt.** Dropped on 2026-10-25 (1b.4, §22.2). A shared helper `attempt_deadline()` in `server/services/plugin/` returns `info.started_time + info.start_to_close_timeout` minus a 60-second margin, or None outside an activity. The Timer node (§9.5 item 1) and the Apify node refuse, with `NodeUserError`, a wait or actor timeout that would end after it. It applies on every path, because the helper reads the attempt's own timeout; no branch on the path. Together with 1b.3 (§11.2: the legacy tool path honours each plugin's declared retry policy and timeouts), a long actor run as a tool costs at most one paid run. Versioning: none. When: P1, Phase 1b (1b.4; the Timer part is 1b.8). Effort S.
-3. **Poll heartbeats**: §9.2 item 3 (P1, Phase 1b, 1b.17).
+3. **Poll attempt deadlines**: §9.2 item 3 (P1, Phase 1b, 1b.17, built without heartbeats).
 4. **Checkpoint external job ids** (§5 rule 20). Start the Apify run with `actor(...).start()`, save its run id in a database row keyed by the activity's identity and in the heartbeat details before waiting, and on a retry wait on that run (`run(run_id).wait_for_finish()`) instead of starting another. The row is the durable record: heartbeat details alone are lost when the activity is scheduled again after a rollover, and rows survive a Temporal rebuild (I10). The plugin beat loop, which today overwrites the details every 30 s with a status string, must repeat the run id instead. This makes the retry idempotent, as T13 requires for redoing a side-effecting call (1b.1, §11.2). Versioning: none. When: P2, RFC-0005 Phase 7. Effort M.
 5. **Progress heartbeats and resumption tests.** Plugins that can report progress heartbeat on progress instead of the fixed 30-second beat, so a hung body is caught by the heartbeat timeout; add `ActivityEnvironment` tests for resume after a crash. When: P3. Effort M.
 
@@ -2074,7 +2075,7 @@ class TaskManagerNode(ToolNode):
 1. **Make the tree a test.** `server/tests/test_retry_policies.py` iterates every module behind `server/services/temporal/workflow_registry.py` and fails on:
    - an activity call with no explicit `retry_policy`;
    - an inline `RetryPolicy(...)` (shared constants from `_retry_policies.py` only; add `BOOKKEEPING_RETRY` and `QUEUE_PAGING_RETRY` there);
-   - an unlimited policy that is neither bounded by `schedule_to_close_timeout` nor on the declared allowlist of §5 rule 16: idempotent bookkeeping, compensations, queue paging, permit waits, T7's poll activities (each retry is the next poll), and calls a claim makes at-most-once (egress sends; reviewed delivery's `REVIEWED_DELIVERY_RETRY` through its `inflight` mark, 1b.9), with the retry alert (§11.7) covering all but the planned retries of polls and permit waits; plus the LLM step and compaction on generations without `scheduler_version=1`, which keep unlimited retries under the retry alert (T18, §11.3).
+   - an unlimited policy that is neither bounded by `schedule_to_close_timeout` nor on the declared allowlist of §5 rule 16: idempotent bookkeeping, compensations, queue paging, permit waits, the approval gate's wait for the owner, the Pi driver's turn, T7's poll activities (each retry is the next poll), and calls a claim makes at-most-once (egress sends; reviewed delivery's `REVIEWED_DELIVERY_RETRY` through its `inflight` mark, 1b.9), with the retry alert (§11.7) covering all but the planned retries of T7's polls and of the permit waits, approval gate and Pi driver that `PLANNED_WAITS` lists (1b.30); plus the LLM step and compaction on generations without `scheduler_version=1`, which keep unlimited retries under the retry alert (T18, §11.3).
    - Replace the five modules' inline policies with the constants, and give `store_node_output_activity` and the graph-load activity an explicit `BOOKKEEPING_RETRY` (both are idempotent database calls).
    - Versioning: none (options; the replay corpus stays green). When: Phase 1b (1b.41), dropped on 2026-10-25; the constants came with 1b.9, 1b.16 and 1b.20. Effort S.
    - Risk: the constants carry the shared non-retryable list, so `NodeUserError` and `InvalidEvent` now fail fast where three attempts were spent. That is the intent.
@@ -3566,7 +3567,7 @@ activity) and "dependencies ready before polling" are implicit in the one embedd
 construction keeps its own registration.
 
 **Recommendation:**
-1. **A placement axis and one worker builder** (§15.2 rec. 3, Phase 4; §15.3 rec. 1, Phase 1b, 1b.36), both before
+1. **A placement axis and one worker builder** (§15.2 rec. 3, Phase 4; §15.3 rec. 1, of which 1b.36 built only one registration), both before
    any second process (T8).
 2. **Size the sticky cache from the resident entity count.** RFC-0005 adds a supervisor per employee (§8.4 replaces
    its 5-minute upkeep timer with one instance-wide sweep) and owner conversations that passivate only after 24 h,
@@ -3575,7 +3576,7 @@ construction keeps its own registration.
    the resident count or accept the replay; RAM is the trade-off. *Versioning:* none. *When:* measured in Phase 4,
    confirmed by EG14; the tier defaults are written in RFC-0005 Phase 9a (§17.9 item 3). *Effort:* S.
 3. **One queue-name source:** Schedules and legacy listeners take `settings.temporal_task_queue`. Unique worker
-   identities (append host and process id) come with the worker builder (§15.3 rec. 1, 1b.36). *Versioning:* none
+   identities (append host and process id) come with the worker builder (§15.3 rec. 1; not built in 1b.36). *Versioning:* none
    (start options). *When:* P3. *Effort:* S.
 4. **Stop workers with `Worker.shutdown()`** (RFC-0004 §11.5), which also drains affinity queues gracefully (§15.2):
    Phase 1b (1b.37, §17.9).
@@ -3873,7 +3874,9 @@ registration.
    The check runs in CI first. At runtime the embedded (desktop) worker logs an ERROR and keeps running, and the
    standalone and tier S worker processes refuse to start (RFC-0004 AG14). *Versioning:* none (worker setup).
    *When:* Phase 1b (1b.36). *Effort:* M. *Risk:* a check that refused at desktop boot would strand the owner, hence
-   the split by role.
+   the split by role. Built narrower in 1b.36 (d379ab3e): one main-queue registration (`_main_queue_activities`,
+   `temporal_plugins()`) serves the embedded manager, the standalone worker and `create_worker`. There is no builder
+   function and no check, and 56f0b397 reads namespace and queue from the settings in `run_standalone_worker`.
 2. **Freeze MachinaWorkflow's dispatch.** New generations carry a per-node dispatch map (activity name, version,
    queue, retry policy, placement) computed at Start or by an activity, never by workflow code, so workflow code
    stops reading the plugin registry. Old generations keep the registry read until Reset. *Versioning:*
@@ -4605,7 +4608,7 @@ async def _step_or_park(self, llm_payload: dict, iteration: int) -> dict:
 **Recommendation:**
 1. Set retention to 7 days (RFC-0004 D4, RFC-0005 §25.1). In `TemporalClientWrapper.connect` (`client.py`), after the existing `describe_namespace` call, compare the namespace's `workflow_execution_retention_ttl` with a new `TEMPORAL_RETENTION_DAYS` setting (default 7 in `.env.template`) and call `workflow_service.update_namespace` when they differ. Versioning: none. When: deferred to RFC-0005 Phases 5 and 9a, as decided on 2026-10-23 (RFC-0004 D4; T17); the wrong comment at `.env.template:147-150` is corrected now (17.13 item 1). Effort S. Risk: the first boot after the change lets the server delete closed runs older than 7 days; retention applies only to runs that close afterwards.
 2. Register the seven search attributes when the namespace is created: add `--search-attribute <Name>=Keyword` for each to the argv in `_runtime.py`, built from the same list as `search_attributes.py`. The flag applies only when the namespace is created, so the operator call stays for databases created before the change, including those the fresh-start release creates (RFC-0004 §6.6), and its failure should stop Temporal startup with the reason, because every start depends on the attributes. Versioning: none. When: deferred with item 1 to RFC-0005 Phases 5 and 9a (RFC-0004 D4; T17). Effort S. Risk: a registration failure then blocks the engine instead of failing every start later.
-3. The standalone worker reads `TEMPORAL_NAMESPACE` and `TEMPORAL_TASK_QUEUE` like the embedded one: the one worker builder reads both from settings for every Worker (§15.3, 1b.36). Versioning: none. When: Phase 1b (1b.36). Effort: in 1b.36.
+3. The standalone worker reads `TEMPORAL_NAMESPACE` and `TEMPORAL_TASK_QUEUE` like the embedded one: the one worker builder reads both from settings for every Worker (§15.3, 1b.36). Versioning: none. When: Phase 1b (1b.36). Effort: in 1b.36. Built in 56f0b397 without a builder: `run_standalone_worker` defaults both from the settings.
 4. Tier L: the deploy logic creates the namespace with `temporal operator namespace create --retention 7d` and registers the search attributes before workers start. Versioning: none. When: RFC-0005 Phase 9c. Effort S.
 5. Keep the name `default`. Renaming buys nothing inside a dedicated server and moves every id. When: never.
 
@@ -5195,7 +5198,7 @@ async def runs_that_cannot_replay(client) -> dict[str, list[str]]:
 
    Versioning: none. When: Phase 1b (1b.40), after the bug guard (1b.13), without which the exit-cleanup rule fails on today's tree. Every child start states its policies explicitly: today's for agent children, until the cancellation lane ships 1b.12 (§6.1). Effort S. Risk: false positives; an explicit allow comment with a reason. Test: `server/tests/temporal/test_workflow_lint.py` passes on the tree (RFC-0004 AG8) and fails on seeded violations: an `asyncio.wait` in a workflow module, a child start without `parent_close_policy`, an `execute_activity` in a `@workflow.signal` handler, and command-issuing cleanup in `finally`. <!-- docs-lint: ignore; proposed path in an unshipped design, not a current implementation citation. -->
 2. Every new RFC-0005 type (ConversationWorkflow, EmployeeSupervisorWorkflow, ApprovalWorkflow, ScheduleFireWorkflow and PollWorkflow, T7's poll workflow) is sandboxed: no `sandboxed=False`, app modules imported through `imports_passed_through()`, tests run with `RAISE_ON_UNINTENTIONAL_PASSTHROUGH`, production keeps the default warning policy, and a golden test asserts new types are sandboxed. Everything a sandboxed type imports must sit in packages without import side effects; `services.temporal`'s `__init__` registers handlers, so shared contracts live in a leaf package such as RFC-0005's `services/bus/`. Versioning: new types. When: with each new type, from RFC-0005 Phase 3 (PollWorkflow) and Phase 4. Effort S. Risk: a restricted call on a rare path fails that run's workflow task; tests with the RAISE policy find most of them first. RFC-0007's ApprovalWorkflow arrives in Phase 1b, before this rule takes effect, and lives in `services/temporal`, whose `__init__` has import side effects; it runs unsandboxed like the 14 existing types (RFC-0007 §4.6), and item 3 covers it with them.
-3. Sandbox the small existing types (ApprovedToolCallWorkflow, NodeInvocationWorkflow, EmployeeJobDeliveryWorkflow, CronTriggerWorkflow) once the corpus replays green under the sandboxed runner; the large types stay unsandboxed until their imports are free of side effects. Turning the sandbox on changes no commands, but replay every fixture under it first. Until then all 14 existing types stay unsandboxed under the determinism lint (1b.40). When: later. Effort M.
+3. Sandbox the small existing types (ApprovedToolCallWorkflow, NodeInvocationWorkflow, EmployeeJobDeliveryWorkflow, CronTriggerWorkflow) once the corpus replays green under the sandboxed runner; the large types stay unsandboxed until their imports are free of side effects. Turning the sandbox on changes no commands, but replay every fixture under it first. Until then all 14 existing types stay unsandboxed; the determinism lint (1b.40) was dropped on 2026-10-25. When: later. Effort M.
 
 **Remarks:**
 - The sandbox re-imports non-passed-through modules for every run; passthrough avoids that cost. Measure workflow-task latency (`[TMPRL1104]`, metrics) before and after.
@@ -6022,7 +6025,7 @@ Temporal Nexus connects workflows across namespaces through named services, endp
 | 4 | Canvas Run of a graph | `client.execute_workflow(MachinaWorkflow.run, id="<slug>-<uuid8>")` (`server/services/temporal/executor.py:126-127`, `:181-194`) | No: multi-node orchestration |
 | 5 | Single-node Run from the parameter panel | In process, with no Temporal (`server/routers/websocket.py:446`, `server/services/workflow.py:202-298`); its context carries a callback (`get_output_fn`, `:237`); only the Coding Agent starts a workflow (`:367`) | No: a test run that must work with Temporal off |
 | 6 | EmployeeJobDeliveryWorkflow | One activity: `employee.job.resolve_delivery`, 31 days, 2-minute heartbeat, 3 attempts (`server/services/temporal/employee_job_workflow.py:149-157`); started with `id=resolution_id` and `REJECT_DUPLICATE` (`server/services/employees/delivery_resolution.py:94-98`); started again by a 10-second recovery loop that begins at boot (`server/services/employees/activation.py:55-72`) | In shape today; not after RFC-0005 Phase 7, when §9.6 makes its 31-day wait an ApprovalWorkflow child |
-| 7 | ApprovedToolCallWorkflow | Sleep to the Undo deadline, claim, send once, record the outcome with unlimited retry (`approved_tool_call_workflow.py:36-80`) | No: the `unknown` record after a broken send needs an owner; RFC-0005 §17.5 replaces it with ApprovalWorkflow |
+| 7 | ApprovedToolCallWorkflow | Sleep to the Undo deadline, claim, send once, record the outcome with unlimited retry (`approved_tool_call_workflow.py:36-80`) | No: the `unknown` record after a broken send needs an owner; RFC-0005 §17.5 planned to replace it with ApprovalWorkflow, and RFC-0007 keeps it for drafts and Retry |
 | 8 | RFC-0005's ScheduleFireWorkflow | One activity started by a Schedule (RFC-0005 §15) | Must stay a workflow: Schedules cannot start standalone activities, and the docs say to "schedule a Workflow that invokes the Activity" |
 | 9 | RFC-0005's `egress.send` | An activity inside the turn, FIFO per thread (RFC-0005 §17.2, §17.4) | No: the order per thread comes from running inside the turn |
 
@@ -6535,7 +6538,7 @@ Each was chosen under T4 (reliability first). The alternative is named where one
 - **T11's scope:** agent turns. A graph run without an agent still fails; its input is dead-lettered and replayed from the failed node. (§11.8)
 - **Retry alert threshold:** 8 attempts for LLM steps and compaction, 10 elsewhere. (§11.7)
 - **Unlimited policies:** compensations, queue paging and bookkeeping retry without limit, 1 s to 30 s apart. Each is declared and covered by the retry alert. (§11.1)
-- **Idempotent:** means a second attempt after a broken-off one is safe. Every non-read-only plugin declares its class, and the default is `unsafe`. (§11.2)
+- **Idempotent:** means a second attempt after a broken-off one is safe. `services/approvals/repeats.py` lists the calls that are (1b.1a); any other call is `unsafe`. (§11.2)
 - **Graph-node sends:** on a later attempt they answer `SendOutcomeUnknown`, rather than running with one attempt, so the outcome is recorded explicitly. (§11.2)
 
 **Capacity**

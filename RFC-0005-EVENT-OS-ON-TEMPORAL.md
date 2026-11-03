@@ -515,7 +515,7 @@ Ids use the immutable workflow id, never the slug. Every new type:
 - uses `@workflow.init`;
 - has signal handlers that only buffer;
 - continues as new only from the main loop, after `workflow.all_handlers_finished()`;
-- runs in the sandbox, passing through only side-effect-free leaf modules (RFC-0006 §17.18);
+- runs in the sandbox, passing through only side-effect-free leaf modules (RFC-0006 §17.18); RFC-0007's ApprovalWorkflow is the exception and runs unsandboxed (RFC-0006 §17.18 item 2);
 - cleans up only on exit exceptions, never on a bug in workflow code (RFC-0006 §18.2);
 - keeps one live timer over named absolute deadlines, and never waits with a timeout of zero or less (RFC-0006 §8.4);
 - schedules no UI-only activities: progress broadcasts become best-effort local activities (RFC-0006 §14.2);
@@ -1286,7 +1286,7 @@ Phase 1b's items were done on 2026-11-02, apart from AP.7. Test-only fixes (a34f
   - every live controller is asked to roll over at the first boot of each release;
   - polls: jitter up to 10% of the interval (at most 30 s), failures doubling the interval to 1 hour, "driver down" after 5 failures, pages of 50 items or 512 KB;
   - one approval reminder, 24 h before expiry;
-  - LLM steps (Phase 5, new generations): attempts of 10 min for cloud and 30 min for local endpoints, budgets of 15 and 45 min, a park probe every 15 min, a park limit of 7 days;
+  - LLM steps (Phase 5, new generations): attempts of 10 min for cloud and 30 min for local endpoints (the 30-minute local attempts already ship for every generation, 1b.25), budgets of 15 and 45 min, a park probe every 15 min, a park limit of 7 days;
   - park reasons: the employee's daily budget, provider billing, quota, authentication, permission and the step budget's expiry; account and billing parks also pause the employee;
   - priority keys: owner-started work at 1, cron, polls and Start-node runs at 4, entities by lane;
   - no schedule-to-start timeouts; fixed slots per class queue; sends on their own `egress` queue;
