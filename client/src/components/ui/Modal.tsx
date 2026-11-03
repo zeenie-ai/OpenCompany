@@ -67,8 +67,7 @@ interface ModalProps {
   /** Focus lifecycle for programmatically opened dialogs without a DialogTrigger. */
   onOpenAutoFocus?: React.ComponentProps<typeof DialogPrimitive.Content>['onOpenAutoFocus'];
   onCloseAutoFocus?: React.ComponentProps<typeof DialogPrimitive.Content>['onCloseAutoFocus'];
-  /** Esc reaches this first; `event.preventDefault()` keeps the dialog open
-   *  (the Welcome guide steps back from a provider page instead). */
+  /** Esc reaches this first; `event.preventDefault()` keeps the dialog open. */
   onEscapeKeyDown?: React.ComponentProps<typeof DialogPrimitive.Content>['onEscapeKeyDown'];
 }
 

@@ -7,9 +7,8 @@
  * The shell owns what spans views: the employee broadcasts that keep the
  * team current, the line for work that keeps retrying (header/AttentionLine),
  * the orb behind the content, the Workspace dock on the
- * right, the Settings dialog, the Welcome guide (onboarding/, which
- * opens over the hire view on first launch) and, once the guide is
- * finished, the Get started checklist. Connection actions open the app shell's
+ * right, the Settings dialog and the Get started checklist
+ * (onboarding/). Connection actions open the app shell's
  * shared credentials dialog. Switching views scrolls to the top and plays
  * the view swap.
  *
@@ -30,7 +29,6 @@ import { AttentionLine } from './header/AttentionLine';
 import { HomeHeader } from './header/HomeHeader';
 import { HireView } from './hire/HireView';
 import { GetStartedChecklist } from './onboarding/GetStartedChecklist';
-import { WelcomeGuide } from './onboarding/WelcomeGuide';
 import { SPIKE, spikeOrb } from './orb/orb';
 import { OrbStage } from './orb/OrbStage';
 import { HomeSettings } from './settings/HomeSettings';
@@ -114,7 +112,6 @@ export default function HomeShell() {
       </main>
       <WorkspaceDock onConnect={openConnect} />
       <HomeSettings onConnect={openConnect} />
-      <WelcomeGuide />
       <GetStartedChecklist />
     </div>
   );

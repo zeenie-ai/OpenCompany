@@ -95,8 +95,8 @@ client/src/
 │
 ├── features/home/           # Normal mode (see docs-internal/normal_mode.md)
 │   ├── HomeShell.tsx        # Sidebar + header + current view + Workspace dock + Settings + orb stage,
-│   │                        # plus the Welcome guide and the Get started checklist
-│   ├── onboarding/          # Welcome guide (3 steps) + Get started checklist (docs-internal/onboarding.md)
+│   │                        # plus the Get started checklist
+│   ├── onboarding/          # Get started checklist (docs-internal/onboarding.md)
 │   ├── sidebar/ header/ hire/ employee/ settings/ approvals/ data/ state/ ui/
 │   ├── workspace/           # Home Workspace dock; shared live Browser tab, lazy Canvas tab
 │   ├── genui/               # Setup-screen pipeline; only its index.ts is importable (ESLint)
@@ -129,9 +129,9 @@ client/src/
 │   │
 │   ├── credentials/         # EXEMPLAR SUBSYSTEM — see "Credentials" section below
 │   │   ├── CredentialsModal.tsx    # Shared app-level browser + provider dialogs
-│   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings and the Welcome guide
+│   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings
 │   │   ├── AddConnectorForm.tsx    # The page's Add form: a custom MCP connector's URL, name and sign-in
-│   │   ├── ProviderPage.tsx        # One provider's page: back, key link, PanelRenderer (dialog + guide)
+│   │   ├── ProviderPage.tsx        # One provider's page: back, key link, PanelRenderer (the dialog's second layer)
 │   │   ├── aiProviderLinks.ts      # Where to get each AI provider's key
 │   │   ├── catalogue.ts           # Shared catalogue ordering + category visibility
 │   │   ├── PanelRenderer.tsx       # Lazy-loads panel by kind
@@ -427,8 +427,8 @@ components/credentials/catalogueAdapter.ts  (hydrate JSON -> ProviderConfig)
             │
             ▼
 components/credentials/CredentialsModal.tsx (one AppShell host)
-   ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings and the Welcome guide)
-   └─ ProviderPage.tsx         (one provider; the Welcome guide shows it inline)
+   ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings)
+   └─ ProviderPage.tsx         (one provider)
       └─ PanelRenderer.tsx     (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles/McpConnector)
 ```
 
@@ -449,13 +449,13 @@ components/credentials/CredentialsModal.tsx (one AppShell host)
 **Anchor cache contracts at the prefix root via `setQueryDefaults`, not per-call options.** `PersistQueryClientProvider` hydrates entries from localStorage with the QueryClient's *default* options, so per-call `staleTime: FOREVER` does not stop `gcTime: 5min` eviction on hydration. Every persisted prefix must have a matching `queryClient.setQueryDefaults(['<prefix>'], { staleTime: FOREVER, gcTime: FOREVER })` declaration in [client/src/lib/queryClient.ts](../client/src/lib/queryClient.ts). The persisted set is `['nodeSpec']`, `['nodeGroups']`; both carry `setQueryDefaults`. `['skillContent']` and `['credentialValues']` carry `setQueryDefaults` for in-memory longevity only and are intentionally absent from the persistor whitelist. The persistor whitelist in [client/src/lib/queryPersist.ts](../client/src/lib/queryPersist.ts) must mirror it; a string in the whitelist that doesn't match a real query key (the prior `'pluginCatalogue'` typo) is silently dead. `credentialCatalogue` is intentionally NOT in either list — it has its own `idb-keyval` warm-start. `credentialValues` keeps `gcTime: FOREVER` for the in-memory cache so the credentials form survives idle, but it is intentionally NOT persisted (OWASP — see "Persistence layers" above).
 
 **Component rules:**
-- Normal and Dev use the same connector cards and provider dialogs. `openCredentials({ providerId?, categoryId?, intent? })` defaults to management; guided connection intent closes on a selected provider's disconnected-to-connected transition. Connected cards expose Manage and Disconnect. Every entry point uses the app-level host, including Home's AI setup action, except the Welcome guide's Connect step: it renders the same provider page ([components/credentials/ProviderPage.tsx](../client/src/components/credentials/ProviderPage.tsx), which the host shows as its second layer) in place of its list, with its own heading, and returns to the list when the model connects.
+- Normal and Dev use the same connector cards and provider dialogs. `openCredentials({ providerId?, categoryId?, intent? })` defaults to management; guided connection intent closes on a selected provider's disconnected-to-connected transition. Connected cards expose Manage and Disconnect. Every entry point uses the app-level host, including Home's AI setup action; the host shows a provider's page ([components/credentials/ProviderPage.tsx](../client/src/components/credentials/ProviderPage.tsx)) as its second layer.
 - The host derives `showTechnicalSections` from effective `useShellMode()` (including the Home-disabled fallback). Provider defaults, usage and rate limits mount only in Dev. Required authentication fields, callback URLs and setup help remain available in both modes; normal-mode saves never clear advanced values.
 - The shared catalogue waits for credential-category visibility before mounting a provider form, including direct targets. Missing or disabled targets show an unavailable state. The credential panel is keyed by provider ID, never mode: switching mode preserves connection drafts, while switching providers resets transient errors and secret reveal state.
 - `PanelRenderer` lazy-loads each panel type so the initial JS payload doesn't grow linearly with provider count.
 - Panels are config-driven: `StatusCard`, `ActionBar`, `FieldRenderer`, `OAuthConnect` consume `ProviderConfig` fields rather than hand-coding per-provider JSX.
 - Exception: EmailPanel has conditional `custom` IMAP/SMTP fields that the simple schema can't express — it gets a dedicated zod schema and RHF form. That's the boundary where config-driven hands off to hand-written.
-- Custom MCP connectors are cards the server builds, one per saved connector (`kind: 'mcp'`, with an `mcp` block: server, address, sign-in kind, tools, pending change). The browser's Add (`CatalogLayout.primaryAction`, off in the Welcome guide via `customConnectors={false}`) opens `AddConnectorForm`; after `mcp_connector_add` it refetches the catalogue, then opens the new card's page. The same form is the page of the MCP server card (`mcp` in `credential_providers.json`, `kind: 'mcpAdd'`, Custom category, never connected itself): `McpAddPanel` hands the saved connector to the host through the panel's `onOpen`, and ProviderPage opens its page once the refetched catalogue holds it (the credentials dialog passes `onOpen`). `McpConnectorPanel` sends each command with `CREDENTIAL_PROBE_REQUEST_TIMEOUT` and waits for the refetched catalogue before re-enabling, so it shows only what the server holds; Remove leaves the page through the panel's `onLeave` (ProviderPage's Back). See [MCP Connectors](./mcp_connectors.md).
+- Custom MCP connectors are cards the server builds, one per saved connector (`kind: 'mcp'`, with an `mcp` block: server, address, sign-in kind, tools, pending change). The browser's Add (`CatalogLayout.primaryAction`, which a host can turn off with `customConnectors={false}`) opens `AddConnectorForm`; after `mcp_connector_add` it refetches the catalogue, then opens the new card's page. The same form is the page of the MCP server card (`mcp` in `credential_providers.json`, `kind: 'mcpAdd'`, Custom category, never connected itself): `McpAddPanel` hands the saved connector to the host through the panel's `onOpen`, and ProviderPage opens its page once the refetched catalogue holds it (the credentials dialog passes `onOpen`). `McpConnectorPanel` sends each command with `CREDENTIAL_PROBE_REQUEST_TIMEOUT` and waits for the refetched catalogue before re-enabling, so it shows only what the server holds; Remove leaves the page through the panel's `onLeave` (ProviderPage's Back). See [MCP Connectors](./mcp_connectors.md).
 
 ## ParameterRenderer (current implementation and planned refactor)
 

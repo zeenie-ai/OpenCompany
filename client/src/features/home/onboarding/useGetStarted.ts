@@ -11,9 +11,9 @@
  *   (`approval_lifecycle` decided as approved, heard while Home is open).
  *   Latched (`getting_started_approved_draft`).
  *
- * Each latch is written once: the saved flag guards it. The card shows once
- * the Welcome guide is finished, until the owner hides it (Settings > Help
- * shows it again).
+ * Each latch is written once: the saved flag guards it. The card shows from
+ * the owner's first visit until they hide it (Settings > Help shows it
+ * again).
  */
 
 import { useEffect } from 'react';
@@ -84,7 +84,7 @@ export function useGetStarted() {
     'connect-ai': {
       done: hasAi,
       sub: ai ? `${ai.name} is connected` : 'OpenAI, Anthropic, Gemini or a local model',
-      act: () => home().openGuide('connect'),
+      act: () => home().openConnectAI(),
     },
     hire: {
       done: first !== null,
@@ -105,7 +105,7 @@ export function useGetStarted() {
   const rows: GetStartedRow[] = GET_STARTED_ITEMS.map((item) => ({ ...item, ...state[item.id] }));
 
   return {
-    visible: isSuccess && Boolean(settings?.onboarding_completed) && !settings?.getting_started_dismissed,
+    visible: isSuccess && !settings?.getting_started_dismissed,
     rows,
     doneCount: rows.filter((row) => row.done).length,
     dismiss: () => save({ getting_started_dismissed: true }),

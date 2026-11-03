@@ -3,8 +3,8 @@
  * puts its job in the composer for the owner to read, change and send;
  * while the composer still holds that job as written, the chip shows as
  * picked and, given `onHireNow`, offers to hire the starter as it stands
- * ("Hire now"). The Welcome guide shows the chips alone. Coloured by node
- * role, the same palette the employee avatars use.
+ * ("Hire now"). Coloured by node role, the same palette the employee
+ * avatars use.
  */
 
 import { ActionButton } from '@/components/ui/action-button';

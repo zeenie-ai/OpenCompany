@@ -1,5 +1,5 @@
 /** One labelled row of a Settings page: title and detail, its control on the
- *  right (Profile's switches, Help's replay). */
+ *  right (Profile's switches, Help's Show button). */
 
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';

@@ -11,7 +11,7 @@
  *   when the page is opened on one;
  * - Discover shows DISCOVER_LIMIT cards until "Show all" (`discoverLimit`
  *   changes the cap; null shows everything);
- * - `variant="embedded"` fits a narrower host (the Welcome guide's step):
+ * - `variant="embedded"` fits a narrower host:
  *   a smaller title and a shorter search box;
  * - a card offers remove only with `onRemove`, and a switch only with
  *   `onToggle`;

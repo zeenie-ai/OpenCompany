@@ -3,7 +3,7 @@
  * and apps, status) and offers New conversation, which asks first; the
  * owner renames them and changes their photo there; the Normal/Dev switch
  * opens that employee's workflow there, and elsewhere what the editor last
- * had.
+ * had. It has no Guide button.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -176,14 +176,17 @@ describe('HomeHeader', () => {
     expect(screen.queryByRole('button', { name: 'Change Maya’s photo' })).not.toBeInTheDocument();
   });
 
-  it('opens the Welcome guide at its first step', () => {
-    useHomeStore.setState({
-      view: { kind: 'hire' },
-      guide: { open: false, step: 'connect', furthest: 1, checked: true, provider: null, pendingDraft: false },
-    });
-    wrap(<HomeHeader title="New employee" employee={null} scrolled={false} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Guide' }));
-    expect(useHomeStore.getState().guide).toMatchObject({ open: true, step: 'welcome', furthest: 1 });
+  it('offers no Guide button, while hiring or on an employee’s page', () => {
+    useHomeStore.setState({ view: { kind: 'hire' } });
+    const hiring = wrap(<HomeHeader title="New employee" employee={null} scrolled={false} />);
+    expect(screen.getByRole('heading', { name: 'New employee' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /guide/i })).not.toBeInTheDocument();
+    hiring.unmount();
+
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    expect(screen.getByRole('heading', { name: 'Maya' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /guide/i })).not.toBeInTheDocument();
   });
 
   it('opens what the editor last had from the hire view', () => {

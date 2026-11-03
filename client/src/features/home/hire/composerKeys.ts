@@ -4,8 +4,7 @@
  * testable on its own. Which Enter sends is lib/composerKeys.ts.
  */
 
-/** Create's label: busy, editing the draft, or `idle` (the Welcome guide
- *  says "Create their setup"). */
+/** Create's label: busy, editing the draft, or `idle`. */
 export function createLabel(working: boolean, refining: boolean, idle = 'Create employee'): string {
   if (working) return 'Creating…';
   return refining ? 'Update' : idle;

@@ -80,9 +80,9 @@ Approval waiting is implemented; activation for ordinary new generations remains
 
 | Folder | Contents |
 |---|---|
-| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the Get started checklist, the connect dialog, the orb's stage, and under an employee's page a line saying whether they ask first |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Guide pill (opens the Welcome guide), the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
-| `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist in the corner (connect a model, hire, say hello, approve a first draft) until it is hidden ([onboarding.md](./onboarding.md)) |
+| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Get started checklist, the connect dialog, the orb's stage, and under an employee's page a line saying whether they ask first |
+| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `onboarding/` | The Get started checklist in the corner (connect a model, hire, say hello, approve a first draft), from the owner's first visit until it is hidden; Settings > Help shows it again ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
 | `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
@@ -92,7 +92,7 @@ Approval waiting is implemented; activation for ordinary new generations remains
 | `data/` | zod-parsed queries for employees, connectors and the profile; `employeeCache.ts`, the team's query keys and `removeEmployee` (shared with the app store's delete); `talk.ts`, Turn on Talk, Apply and the retry note (the thread itself is the shared chat's); `presentation.ts` maps server state to pills, actions and the message box's mode without deriving new rules |
 | `orb/` | The 3D orb (below) |
 | `ui/` | Small shared pieces (avatar, status dot and pill, app mark), the pill toast, and `useAutoGrow` (the composer's and the message box's growing text area) |
-| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Welcome guide (`guide`), new hires' first days (`firstDays`), the last hire's notice, the Workspace dock, one-shot glow and pulse signals; `openConnectAI` opens the app's credentials dialog on the AI category |
+| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, new hires' first days (`firstDays`), the last hire's notice, the Workspace dock, one-shot glow and pulse signals; `openConnectAI` opens the app's credentials dialog on the AI category |
 
 Status comes from the server: an employee summary is `working` (control
 `starting`, `running` or `resuming`), `ready` (never started, or reset),
@@ -603,13 +603,8 @@ Dev (`components/credentials/ProviderPage.tsx`). Featured providers keep the
 key-page links and hints from `components/credentials/aiProviderLinks.ts`.
 Successful guided connection closes the flow; Manage stays open after
 saving. These actions serve setup's `no_ai_provider`, hire/start's
-`needs_ai`, and the employee's Connect an AI model action.
-
-The Welcome guide's step 2 is the other way in ([onboarding.md](./onboarding.md)):
-the same browser cut to AI models, with the provider page shown in place of
-the list. A pill says "{Provider} is connected" and the step returns to the
-list; when step 3's job was waiting for a model, connecting one finishes the
-guide and sends it.
+`needs_ai`, the employee's Connect an AI model action and the Get started
+checklist's Connect an AI model step ([onboarding.md](./onboarding.md)).
 
 ## Talk
 
@@ -1030,9 +1025,8 @@ changing page clears it.
   number of employees, "In your sidebar now". A count that can't be read
   shows a dash, never a zero. A page picked in the nav slides in from 14px
   to the right (`slideSettingsPage`) before its blocks stagger in.
-- **Help**: Welcome guide · Replay, which closes Settings and opens the guide
-  at its first step, and Get started checklist · Show, which brings the
-  hidden checklist back ([onboarding.md](./onboarding.md)).
+- **Help**: Get started checklist · Show, which closes Settings and brings
+  the hidden checklist back ([onboarding.md](./onboarding.md)).
 - **Skills**: the owner's library, which is the user-skills table. Each row is
   on (`is_active`) or off for employees hired from now on.
   - *Discover* lists the built-in `server/skills/employee/` folder. These are
@@ -1078,7 +1072,6 @@ changing page clears it.
   once the catalogue holds it. That page tests the connection, refreshes the
   tools (a change waits for Accept), sets each tool on or off and to ask
   first, and removes the connector. See [MCP Connectors](./mcp_connectors.md).
-  The Welcome guide's AI model step has no Add.
 
 **The catalog page** ([settings/CatalogLayout.tsx](../client/src/features/home/settings/CatalogLayout.tsx)).
 The implementation is shared in `components/catalog/`; Home paths are compatibility exports.
@@ -1170,7 +1163,7 @@ growing a saved employee: `tests/services/employees/`
 `tests/services/test_workflow_context_archive_outbox.py` (a late save or read
 cannot re-create a deleted workflow). Client:
 `features/home/**/__tests__` (including `employeeChat.test.tsx`,
-`homeHeader.test.tsx`, `connectAI.test.ts`, `welcomeGuide.test.tsx`,
+`homeHeader.test.tsx`, `connectAI.test.ts`, `getStarted.test.tsx`,
 `employee/__tests__/FirstDay.test.tsx`), `features/chat/__tests__` (the
 shared chat: turns, drafts, the pane against a fake server),
 `stores/__tests__/chatRunStore.test.ts`, `lib/agui/__tests__`, `app/__tests__`,

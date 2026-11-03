@@ -1,6 +1,5 @@
 /** One app-level host for browsing, connecting and managing credentials.
- *  The Welcome guide's Connect step shows the same provider page inline
- *  (ProviderPage); every other entry point opens this dialog. */
+ *  Every provider page (ProviderPage) opens in this dialog. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';

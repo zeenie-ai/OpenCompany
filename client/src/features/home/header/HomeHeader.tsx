@@ -30,7 +30,6 @@ import { useHomeStore } from '../state/homeStore';
 import { Avatar, StatusPill } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
 import { WorkspaceButton } from '../workspace/WorkspaceButton';
-import { GuideButton } from './GuideButton';
 import { NewConversationButton } from './NewConversationButton';
 
 /** "Receptionist · WhatsApp, Google Calendar". */
@@ -188,7 +187,6 @@ export function HomeHeader({ title, employee, scrolled }: { title: string; emplo
       {employee ? <Identity employee={employee} /> : <h2 className="truncate px-1.5 text-lead font-semibold text-fg-default">{title}</h2>}
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {employee && employee.talk.state === 'on' && <NewConversationButton employee={employee} />}
-        <GuideButton />
         <WorkspaceButton />
         <ModeToggle workflowId={employeeId} />
         <ThemeButton />

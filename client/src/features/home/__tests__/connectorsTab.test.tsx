@@ -154,8 +154,8 @@ describe('ConnectorsTab', () => {
     expect(screen.queryByText('OpenAI')).not.toBeInTheDocument();
   });
 
-  // The browser takes other words, an embedded size and no cap for the
-  // Welcome guide; Settings keeps the defaults.
+  // The browser takes other words, an embedded size and no cap from its host
+  // (CredentialsBrowser's own tests); Settings keeps the defaults.
   it('keeps its own words, and shows the top eight on Discover until Show all', () => {
     providers = Array.from({ length: 10 }, (_, i) => provider({ id: `app${i}`, name: `App ${i}`, kind: 'apiKey', consumer_category: 'messages' }));
     render(ui());

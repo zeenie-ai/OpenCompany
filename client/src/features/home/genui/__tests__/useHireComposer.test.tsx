@@ -80,7 +80,7 @@ describe('useHireComposer', () => {
   });
 });
 
-describe('useJobComposer (the Welcome guide’s box)', () => {
+describe('useJobComposer (the job box alone)', () => {
   it('puts a chip’s job in the box without taking Home’s focus', () => {
     const { result } = renderHook(() => useJobComposer());
     act(() => result.current.pick('A receptionist who answers WhatsApp'));
@@ -112,7 +112,7 @@ describe('useJobComposer (the Welcome guide’s box)', () => {
   });
 });
 
-describe('useSendJob (the Welcome guide’s finish)', () => {
+describe('useSendJob', () => {
   it('sends what the box holds when called, as a new job', async () => {
     sendRequest.mockResolvedValue({ success: true, reply: GOOD_REPLY });
     const { result } = renderHook(() => useSendJob());

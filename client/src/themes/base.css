@@ -168,7 +168,7 @@
   --text-row: 13.5px;
   --text-lead: 15px;
   --text-title: 22px;
-  --text-headline: 28px;     /* onboarding headings: the guide's welcome, a new hire's arrival */
+  --text-headline: 28px;     /* onboarding headings: a new hire's arrival */
   --text-hero: 36px;
   --tracking-hero: -0.025em;
   --leading-hero: 1.15;
@@ -187,8 +187,6 @@
   --w-settings: 1040px;
   --h-settings: 760px;
   --w-settings-nav: 224px;
-  --w-guide: 940px;          /* the Welcome guide dialog */
-  --h-guide: 620px;
 
   /* ── Chat (Home Talk and Dev's console Chat pane share it) — design
    * handoff design_handoff_opencompany_home/chat (2026-10-03). Loop
