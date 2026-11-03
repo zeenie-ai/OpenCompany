@@ -30,10 +30,10 @@ provider layer and the shared `ChatModelParams`.
 | `prompt` | string | `""` | yes | - | User message |
 | `system_prompt` | string | `""` | no | - | System prompt |
 | `model` | string | `""` (injected) | no | - | `kimi-k3` default; `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` also supported |
-| `temperature` | number\|null | `null` | no | - | K2.6 / K2.7 Code (+ `-highspeed`) force 0.6; K3 uses the supplied/default value clamped to 0-1 |
+| `temperature` | number\|null | `null` | no | - | Shared schema field; accepted but not sent, because Moonshot fixes every model's temperature |
 | `max_tokens` | number\|null | `null` (model ceiling) | no | - | Up to 131,072 for K3; lower model-specific ceilings for K2 tiers |
 | `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
-| `thinking_enabled` | boolean | `false` (Params default) | no | - | When false/unset, the native provider explicitly disables the K2 tiers' thinking defaults |
+| `thinking_enabled` | boolean | `false` (Params default) | no | - | When false/unset, the native provider explicitly disables K2.6's default thinking; no effect on K2.7 Code (+ `-highspeed`), which always thinks, or on K3, which always reasons |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('kimi', 'default')` |
 
 (Kimi uses the shared `ChatModelParams` unchanged; field names are snake_case, unknown keys ignored.)
@@ -73,9 +73,9 @@ flowchart TD
   D -- no --> X[error envelope]
   D -- yes --> E[detect_ai_provider -> 'kimi']
   E --> F[Preserve opaque provider model ID]
-  F --> G[native_resolve_temperature<br/>applies configured per-model policy]
+  F --> G[native_resolve_temperature<br/>clamps to 0-1]
   G --> H[ChatUnifier.chat -> registry.get_provider kimi<br/>OpenAI SDK w/ Moonshot base_url]
-  H --> I[provider.chat]
+  H --> I[provider.chat<br/>sends no temperature]
   I --> J[success envelope]
   H -- Exception --> X
 ```
@@ -84,8 +84,8 @@ flowchart TD
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'kimi' in node_type.lower()`. Ordering guarantees it lands in the kimi lane before groq / openrouter / anthropic / gemini.
-- **Temperature policy**: K2.5, K2.6, and K2.7 Code are fixed at 0.6 by configuration. K3 uses the supplied/default value clamped to Kimi's 0-1 range.
-- **Thinking defaults**: Moonshot's K2.5/K2.6/K2.7 models can default to thinking, so the native provider explicitly sends `thinking={"type":"disabled"}` unless the request enables thinking. This keeps ordinary chat and tool-call parsing deterministic.
+- **Temperature policy**: no Kimi request carries a temperature, whether it comes from this node or an agent, direct or through the hosted gateway. Moonshot fixes every model's temperature (1.0 for K3 and K2.7 Code; for K2.6, 1.0 with thinking and 0.6 without) and answers any other value with a 400; its [model page](https://platform.kimi.ai/docs/api/models-overview) says not to pass one. The kimi block's `supported_params` in `llm_defaults.json` leaves out `temperature`, so `OpenAIProvider._model_policy` sends none.
+- **Thinking defaults**: K2.6 thinks by default at Moonshot, so the native provider explicitly sends `thinking={"type":"disabled"}` unless the request enables thinking. This keeps ordinary chat and tool-call parsing deterministic. K2.7 Code (+ `-highspeed`) always thinks and Moonshot rejects disabling it, so nothing is sent and the thinking toggle has no effect; K3 always reasons and takes no thinking parameter.
 - **Native path**: uses the OpenAI SDK with Moonshot base_url from `llm_defaults.json`.
 - **Model ID handling**: only the UI-only `[FREE] ` decoration is stripped. The remaining model ID is preserved.
 
@@ -106,8 +106,8 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **K2 temperature is non-configurable**: any user-supplied value is overridden to 0.6 for the configured K2 tiers; this does not apply to K3.
-- **Default application behavior is thinking off** for K2.5/K2.6/K2.7 unless the request explicitly enables it.
+- **Temperature is non-configurable**: any user-supplied value is accepted and dropped for every Kimi model, K3 included; Moonshot applies its own.
+- **Default application behavior is thinking off** for K2.6 unless the request explicitly enables it. K2.7 Code always thinks and K3 always reasons, whatever the toggle says.
 - **K3 capacity**: 1,048,576-token context and 131,072-token output. K2 tiers use 262,144-token context with model-specific 32K or 96K output ceilings.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 

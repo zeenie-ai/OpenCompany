@@ -26,6 +26,23 @@ def _usage(**overrides):
     return SimpleNamespace(**values)
 
 
+def _chat_completion():
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content="ok",
+                    reasoning_content=None,
+                    refusal=None,
+                    tool_calls=None,
+                ),
+                finish_reason="stop",
+            )
+        ],
+        usage=_usage(),
+    )
+
+
 def test_openai_preserves_malformed_arguments_and_reasoning_continuation():
     with patch("openai.AsyncOpenAI"):
         from services.llm.providers.openai import OpenAIProvider
@@ -616,20 +633,7 @@ async def test_compat_provider_policy_applies_kimi_and_groq_quirks():
 
         kimi = OpenAIProvider("key", provider_name="kimi")
         kimi._client.chat.completions.create = AsyncMock(
-            return_value=SimpleNamespace(
-                choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(
-                            content="ok",
-                            reasoning_content=None,
-                            refusal=None,
-                            tool_calls=None,
-                        ),
-                        finish_reason="stop",
-                    )
-                ],
-                usage=_usage(),
-            )
+            return_value=_chat_completion()
         )
         await kimi.chat(
             [Message(role="user", content="hi")],
@@ -637,7 +641,7 @@ async def test_compat_provider_policy_applies_kimi_and_groq_quirks():
             temperature=0.1,
         )
         kimi_params = kimi._client.chat.completions.create.call_args.kwargs
-        assert kimi_params["temperature"] == 0.6
+        assert "temperature" not in kimi_params
         assert kimi_params["extra_body"]["thinking"] == {"type": "disabled"}
         assert "max_tokens" in kimi_params
 
@@ -663,6 +667,42 @@ async def test_compat_provider_policy_applies_kimi_and_groq_quirks():
         assert gpt_oss_params["model"] == "openai/gpt-oss-120b"
         assert gpt_oss_params["reasoning_effort"] == "high"
         assert "extra_body" not in gpt_oss_params
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "thinking_enabled", [False, True], ids=["thinking-off", "thinking-on"]
+)
+@pytest.mark.parametrize(
+    "model",
+    ["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"],
+)
+async def test_kimi_requests_carry_no_temperature(model, thinking_enabled):
+    """Issue #152: Kimi requests carry no temperature, and only K2.6 gets thinking disabled."""
+    with patch("openai.AsyncOpenAI"):
+        from services.llm.providers.openai import OpenAIProvider
+
+        kimi = OpenAIProvider("key", provider_name="kimi")
+    kimi._client.chat.completions.create = AsyncMock(
+        return_value=_chat_completion()
+    )
+
+    await kimi.chat(
+        [Message(role="user", content="hi")],
+        model=model,
+        temperature=0.7,
+        thinking=ThinkingConfig(enabled=thinking_enabled),
+    )
+    params = kimi._client.chat.completions.create.call_args.kwargs
+    assert "temperature" not in params
+    # Moonshot defaults K2.6 to thinking on, and refuses to turn thinking
+    # off on the K2.7 code models.
+    expected_thinking = (
+        {"type": "disabled"}
+        if model == "kimi-k2.6" and not thinking_enabled
+        else None
+    )
+    assert params.get("extra_body", {}).get("thinking") == expected_thinking
 
 
 @pytest.mark.asyncio

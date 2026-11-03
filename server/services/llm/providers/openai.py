@@ -231,11 +231,7 @@ class OpenAIProvider:
         else:
             params["max_tokens"] = max_tokens
         if policy["temperature_allowed"]:
-            params["temperature"] = (
-                policy["fixed_temperature"]
-                if policy["fixed_temperature"] is not None
-                else temperature
-            )
+            params["temperature"] = temperature
 
         if thinking and thinking.enabled:
             thinking_type = policy["thinking_type"]
@@ -899,12 +895,6 @@ class OpenAIProvider:
             and (is_reasoning or is_configured_thinking_model)
         )
 
-        fixed_temperature = None
-        for prefix, value in config.get("fixed_temperature", {}).items():
-            if model.startswith(prefix):
-                fixed_temperature = float(value)
-                break
-
         supported = set(config.get("supported_params", ()))
         temperature_allowed = not is_reasoning and not openai_reasoning_capable
         if supported and "temperature" not in supported:
@@ -950,7 +940,6 @@ class OpenAIProvider:
                 and thinking.enabled
                 and thinking_type == "effort"
             ),
-            "fixed_temperature": fixed_temperature,
             "thinking_default_on": default_on,
             "thinking_type": thinking_type,
         }
