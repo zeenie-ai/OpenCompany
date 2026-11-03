@@ -4481,8 +4481,22 @@
     {
       "type": "browserHarness",
       "availability": "retired",
-      "card": "docs-internal/node-logic-flows/web_automation/browserHarness.md",
-      "note": "Migration reference; absent from the registry."
+      "card": "docs-internal/node-logic-flows/web_automation/browserHarness.md"
+    },
+    {
+      "type": "vertex_managed_agent",
+      "availability": "retired",
+      "source": "server/tests/nodes/test_unavailable_nodes.py"
+    },
+    {
+      "type": "vertex_agent_admin",
+      "availability": "retired",
+      "source": "server/tests/nodes/test_unavailable_nodes.py"
+    },
+    {
+      "type": "vertexCloudTool",
+      "availability": "retired",
+      "source": "server/tests/nodes/test_unavailable_nodes.py"
     }
   ]
 }

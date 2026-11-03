@@ -1,0 +1,20 @@
+{
+  "local_main_base": "43b7d762e337f2753fa13ce1341ea35746328669",
+  "documentation_branch_head": "5a223b7b52bc2e7d0c6840777609e63dd3925278",
+  "integration": "Local app main only; no GitHub main update or Mintlify deployment.",
+  "preserved": "All newer committed main work is retained. Other sessions\u2019 dirty files are excluded from the merge delta.",
+  "deferred": [
+    {
+      "path": "docs-internal/agent_teams.md",
+      "reason": "Another session has active lease/attempt documentation edits here. Retain main\u2019s committed version and leave their working bytes untouched. The independent legacy-bridge prose correction is retained on the source branch and in the task patch."
+    }
+  ],
+  "architecture_scope": "Generation baseline 56f0b397 and public-source revalidation 07e6d4c2 remain explicit. This merge does not certify unpublished runtime additions on local main as public architecture.",
+  "checks": {
+    "source_navigation_paths": 886,
+    "live_registry_contract": 1,
+    "asset_pairs": 16,
+    "registered_nodes": 157,
+    "mermaid_version": "11.16.1"
+  }
+}

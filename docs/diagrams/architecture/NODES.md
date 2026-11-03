@@ -333,3 +333,5 @@ Regenerate with the backend Python environment: `python scripts/architecture_dia
 
 See the [core](../../../docs-internal/audits/CORE_NODES.md) and
 [integration](../../../docs-internal/audits/INTEGRATION_NODES.md) audits for node-specific constraints.
+
+- `vertex_managed_agent`, `vertex_agent_admin` and `vertexCloudTool` are retired and absent from the registry. Saved workflows report unknown-node errors; see the [regression contract](../../../server/tests/nodes/test_unavailable_nodes.py).

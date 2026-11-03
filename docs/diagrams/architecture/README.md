@@ -1,6 +1,9 @@
 # Architecture and system design
 
-Code baseline: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. Audience: OpenCompany maintainers.
+Original generation baseline: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. Audience: OpenCompany maintainers.
+
+Current views were revalidated against public main `07e6d4c2c273c3693d2d0e3a84e04cdbafe68642`;
+see the [public revalidation record](public-revalidation.json). The original generation baseline is preserved.
 
 Twelve implemented-architecture views and four separately labeled proposal views share a dark visual style.
 The PNGs were generated with built-in ImageGen, then checked against the editable Mermaid and source briefs.

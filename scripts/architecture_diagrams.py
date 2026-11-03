@@ -89,7 +89,10 @@ def export_nodes(root: Path = ROOT) -> None:
         retired_card = retired[0].relative_to(root).as_posix()
     data = {"source_commit": commit, "count": len(rows), "nodes": rows,
             "retired": [{"type": "browserHarness", "availability": "retired",
-                         "card": retired_card, "note": "Migration reference; absent from the registry."}]}
+                         "card": retired_card, "note": "Migration reference; absent from the registry."},
+                        *[{"type": node_type, "availability": "retired",
+                           "source": "server/tests/nodes/test_unavailable_nodes.py"}
+                          for node_type in ("vertex_managed_agent", "vertex_agent_admin", "vertexCloudTool")]]}
     (directory / "nodes.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     lines = ["# Registered-node capability index", "",
         f"Source-backed declaration snapshot: `{commit}`. **{len(rows)} registered types**.", "",
@@ -119,6 +122,8 @@ def export_nodes(root: Path = ROOT) -> None:
     lines += ["## Unavailable and retired", "",
         "- `twitterReceive` remains registered but unavailable; its row is not a working ingress promise.",
         f"- [`browserHarness`](../../../{retired_card}) is retired and absent from the registry.", "",
+        "- `vertex_managed_agent`, `vertex_agent_admin` and `vertexCloudTool` are retired; saved workflows",
+        "  report unknown-node errors. See the [regression contract](../../../server/tests/nodes/test_unavailable_nodes.py).", "",
         "See the [core](../../../docs-internal/audits/CORE_NODES.md) and",
         "[integration](../../../docs-internal/audits/INTEGRATION_NODES.md) audits for node-specific constraints.", ""]
     (directory / "NODES.md").write_text("\n".join(lines), encoding="utf-8")
@@ -192,7 +197,7 @@ def validate_node_index(root: Path, data: dict, expected_nodes: list[dict] | Non
     for row in data.get("retired", []):
         if row["type"] in types or row["availability"] != "retired":
             raise ValueError("Retired node incorrectly listed as registered")
-        safe_path(root, row["card"])
+        safe_path(root, row.get("card") or row["source"])
 
 
 def check(root: Path = ROOT) -> None:

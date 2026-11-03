@@ -1,6 +1,6 @@
 # Browser (`browser`)
 
-The Browser node launches installed Chrome/Edge/Chromium in a dedicated OpenCompany profile, rendered headless in the workspace UI by default, and exposes that profile to the live browser workspace. `BROWSER_RUNTIME=testing` explicitly selects Chrome for Testing; `BROWSER_HEADLESS=false` additionally opens a desktop window. It never attaches to a personal browser profile. It runs as a workflow step or as the agent tool named `browser`. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
+The Browser node launches installed Chrome/Edge/Chromium in a dedicated OpenCompany profile, rendered headless in the workspace UI by default, and exposes that profile to the live browser workspace. `BROWSER_RUNTIME=testing` explicitly selects Chrome for Testing; `BROWSER_HEADLESS=false` additionally opens a desktop window. It never attaches to a personal browser profile. Its agent-tool name is `browser`; direct and graph execution have the result-contract limitation below. The old `agent-browser` integration and separate `browserHarness` node have been replaced.
 
 See [native browser architecture](../../browser.md) for runtime installation, profile storage, networking and lifecycle, and [browser workspace](../../browser_workspace.md) for the viewer and UI protocol.
 
@@ -9,6 +9,23 @@ reasoning loop. It is a separate agent node; the Browser tool keeps its viewer,
 profile, policy and output contracts. [Node creation](../../node_creation.md#browser-ai-agent-creation)
 documents the shared atomic recipe, and [deployment](../../browser_agent_deployment.md)
 documents native Workspace tasks and distributed ownership.
+
+## Execution result limitation
+
+`BrowserNode` is a `ToolNode`: a successful operation returns a flat tool
+payload, rather than the action envelope's `success` field. Agent tool callers
+consume that tool contract. The typed activity interprets it for status and
+broadcasting but returns the original payload; `MachinaWorkflow` still tests
+`result.get("success")`. Direct `NodeExecutor` output storage also uses that
+test. A browser operation can therefore take effect while these graph/direct
+paths fail to recognize its success or store the expected output. Do not
+describe the standalone Browser node as a generally working workflow step.
+
+This is distinct from the Browser AI Agent's native Workspace-task admission.
+See [`ToolNode`](../../../server/services/plugin/tool.py),
+[`BaseNode.as_activity`](../../../server/services/plugin/base.py),
+[`NodeExecutor`](../../../server/services/node_executor.py), and
+[`MachinaWorkflow`](../../../server/services/temporal/workflow.py).
 
 ## Implementation map
 
