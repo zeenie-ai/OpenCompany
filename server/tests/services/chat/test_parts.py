@@ -1,8 +1,9 @@
 """What a chat run's tools show in its reply (services/chat/parts.py): a UI
 is saved on the run and streamed as patches; the reply carries it once
 saved, also when the run wrote nothing; snapshots fold the stream; a button
-press is checked against the UI it came from and reaches the employee as a
-[ui-event] line; what the owner sets is kept on the reply."""
+press is checked against the UI it came from, keeps the values its button
+writes out, and reaches the employee as a [ui-event] line; what the owner
+sets is kept on the reply."""
 
 from __future__ import annotations
 
@@ -139,6 +140,16 @@ async def test_a_press_is_checked_against_its_ui(database, hub):
     assert json.loads(line[len("[ui-event]"):-len("[/ui-event]")]) == {
         "ui_id": part_id, "element": "hold", "label": "Hold this slot for 15 min", "action": "holdSlot", "params": {"slot": "s3"},
     }
+
+
+def test_a_press_keeps_what_its_button_writes_out():
+    """A param the button writes out is the saved value, whatever the press
+    says or leaves out; one read from the state is what the press sends."""
+    params = {"plan": "gold", "at": {"$state": "/at"}}
+    button = {"type": "Button", "props": {"label": "Confirm"}, "on": {"press": {"action": "confirmPlan", "params": params}}}
+    part = {"spec": check_spec({"root": "root", "state": {}, "elements": {"root": {"type": "Stack", "children": ["go"]}, "go": button}}).spec}
+    assert parts.check_ui_event(part, "go", "confirmPlan", {"plan": "free", "at": "9am"})["params"] == {"plan": "gold", "at": "9am"}
+    assert parts.check_ui_event(part, "go", "confirmPlan", {"at": "9am"})["params"] == {"plan": "gold", "at": "9am"}
 
 
 async def test_what_the_owner_sets_is_kept_on_the_ui(database, hub):

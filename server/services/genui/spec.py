@@ -119,6 +119,18 @@ def _expression_key(value: Any) -> Optional[str]:
     return None
 
 
+def has_expression(value: Any) -> bool:
+    """Whether ``value`` reads the state anywhere inside it: a param that
+    does is resolved at the press, one that does not is fixed by the spec."""
+    if _expression_key(value):
+        return True
+    if isinstance(value, dict):
+        return any(has_expression(item) for item in value.values())
+    if isinstance(value, list):
+        return any(has_expression(item) for item in value)
+    return False
+
+
 def _describe(error: Any) -> str:
     where = "/".join(str(part) for part in error.absolute_path)
     return f"{where}: {error.message}" if where else error.message
@@ -507,5 +519,6 @@ __all__ = [
     "canonical_path",
     "check_spec",
     "describe_catalog",
+    "has_expression",
     "load_catalog",
 ]

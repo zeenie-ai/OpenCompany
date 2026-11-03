@@ -36,6 +36,7 @@ from sqlmodel import select
 from core.logging import get_logger
 from models.chat import ChatRun, ChatRunPart
 from models.database import ChatMessage
+from services.genui.spec import has_expression
 
 logger = get_logger(__name__)
 
@@ -321,7 +322,9 @@ async def find_ui_part(database: Any, session_id: str, part_id: str) -> Optional
 def check_ui_event(part: Mapping[str, Any], element_id: Any, action: Any, params: Any) -> Dict[str, Any]:
     """A button press, checked against the interface it came from: the
     element is a Button whose press runs ``action``, and the params name only
-    what its binding declares. Returns ``{label, params}``."""
+    what its binding declares. A param the binding writes out is the saved
+    value whatever the press says; one read from the state is the press's.
+    Returns ``{label, params}``."""
     elements = (part.get("spec") or {}).get("elements") or {}
     element = elements.get(element_id) if isinstance(element_id, str) else None
     if not isinstance(element, dict) or element.get("type") != "Button":
@@ -333,12 +336,13 @@ def check_ui_event(part: Mapping[str, Any], element_id: Any, action: Any, params
         params = {}
     if not isinstance(params, dict) or _size(params) > _MAX_EVENT_BYTES:
         raise UiRefused("the press carries more than its button declares")
-    declared = set((binding.get("params") or {}).keys())
-    extra = sorted(set(params) - declared)
+    declared = binding.get("params") or {}
+    extra = sorted(set(params) - set(declared))
     if extra:
         raise UiRefused(f"the button does not send {', '.join(extra)}")
+    fixed = {key: value for key, value in declared.items() if not has_expression(value)}
     label = (element.get("props") or {}).get("label")
-    return {"label": label if isinstance(label, str) else "", "params": dict(params)}
+    return {"label": label if isinstance(label, str) else "", "params": {**params, **fixed}}
 
 
 def ui_event_message(*, part_id: str, element_id: str, label: str, action: str, params: Mapping[str, Any]) -> str:
