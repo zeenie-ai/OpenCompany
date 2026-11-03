@@ -7,7 +7,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { PanelLeft, Plus, Settings, X } from 'lucide-react';
 import { OcLogo } from '@/components/brand/Logo';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -252,14 +251,16 @@ export function HomeSidebar() {
           <PanelLeft className="size-4.25" strokeWidth={1.75} />
         </Button>
       </div>
-      <ActionButton
-        intent="run"
+      {/* Neutral, not an action intent: Home colours only state (status
+          dots) and role (avatars), and `run` means Start. */}
+      <Button
+        variant="quiet"
         onClick={() => showHire({ focus: true })}
-        className="h-9.5 w-full justify-start gap-2.5 rounded-row px-3"
+        className="h-9.5 w-full justify-start gap-2.5 rounded-row border-border-default px-3 font-semibold text-fg-default"
       >
         <Plus aria-hidden className="size-4" />
         New employee
-      </ActionButton>
+      </Button>
       <TeamList />
       <ProfileRow />
     </aside>
