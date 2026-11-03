@@ -22,8 +22,8 @@ AICliService.run_batch(provider, tasks, *, node_id, workflow_id, workspace_dir)
         │ asyncio.gather under Semaphore(max_parallel, default 5)
         │
         ├──► claude (registered session pool) → ClaudeSessionPool via _run_pooled_turn
-        │       run_pooled():   git worktree add <workspace>/<node>/wt_session (bound)
-        │                       or wt_<run>_<i> per task (ephemeral, removed after the batch)
+        │       run_pooled():   git worktree add --force --detach <workspace>/<node>/wt_session (bound)
+        │                       or wt_<run>_<i> per task (ephemeral, removed after the batch); no branch
         │       pool.acquire(): cold spawn over stdio pipes, or warm reuse
         │                       argv: --mcp-config <json> (MCP bearer) ... --ide (no lockfile written)
         │                       env:  the backend's os.environ + CLAUDE_CONFIG_DIR + OPENCOMPANY_PARENT_RUN_ID

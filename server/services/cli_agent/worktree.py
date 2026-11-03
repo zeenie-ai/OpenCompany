@@ -1,8 +1,8 @@
 """Per-workflow git worktrees for CLI agent sessions.
 
-Every CLI session runs inside a worktree branched off the repo that
-contains the workflow workspace, never in the repo root itself. That keeps
-one workflow's edits off another's checkout and gives a pooled session a
+Every CLI session runs inside a worktree of the repo that contains the
+workflow workspace, never in the repo root itself. That keeps one
+workflow's edits off another's checkout and gives a pooled session a
 stable, workflow-owned cwd. The ``git worktree add`` / ``remove`` calls
 lived in ``AICliSession``; they are shared here so the session pool path
 uses the same commands.
@@ -11,20 +11,29 @@ uses the same commands.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import anyio
 from services.process_environment import without_onepassword_environment
 
 
-async def add_worktree(repo_root: Path, worktree_dir: Path, branch: str) -> Path:
-    """Create ``worktree_dir`` as a new worktree of ``repo_root`` on a new
-    ``branch``. Reuses an existing worktree directory as-is. Raises
-    ``RuntimeError`` with git's stderr on failure."""
+async def add_worktree(repo_root: Path, worktree_dir: Path, branch: Optional[str] = None) -> Path:
+    """Create ``worktree_dir`` as a worktree of ``repo_root``: on a new
+    ``branch`` when one is given, otherwise detached at the repo's HEAD.
+    Reuses an existing worktree directory as-is. Raises ``RuntimeError``
+    with git's stderr on failure.
+
+    A detached worktree adds no branch to the repo, so a folder removed by
+    a data reset or a worktree cleanup leaves no branch behind to block the
+    next run, and two OpenCompany data folders sharing one repo never ask
+    for the same branch name. ``--force`` lets git reuse a path it still
+    lists after the folder is gone."""
     if worktree_dir.exists():
         return worktree_dir
     worktree_dir.parent.mkdir(parents=True, exist_ok=True)
+    target = [str(worktree_dir), "-b", branch] if branch else ["--force", "--detach", str(worktree_dir)]
     proc = await anyio.run_process(
-        ["git", "-C", str(repo_root), "worktree", "add", str(worktree_dir), "-b", branch],
+        ["git", "-C", str(repo_root), "worktree", "add", *target],
         check=False,
         env=without_onepassword_environment(),
     )

@@ -11,6 +11,7 @@ tests cover:
 
 from __future__ import annotations
 
+import re
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -287,9 +288,11 @@ async def test_run_batch_registers_mcp_batch_on_happy_path(monkeypatch):
     from services.cli_agent import worktree as worktree_mod
 
     added: list = []
+    branches: list = []
 
-    async def fake_add(repo_root, worktree_dir, branch):  # noqa: ANN001
+    async def fake_add(repo_root, worktree_dir, branch=None):  # noqa: ANN001
         added.append(worktree_dir)
+        branches.append(branch)
         return worktree_dir
 
     monkeypatch.setattr(worktree_mod, "add_worktree", fake_add)
@@ -327,6 +330,8 @@ async def test_run_batch_registers_mcp_batch_on_happy_path(monkeypatch):
         ],
         connected_skill_names=["duckduckgo-search-skill"],
         ai_service=tool_builder,
+        # A started run's id, shared by every run of its generation.
+        execution_id="wf_happy:execution:1",
     )
 
     text = _logger_messages(svc_logger, mcp_logger)
@@ -344,8 +349,44 @@ async def test_run_batch_registers_mcp_batch_on_happy_path(monkeypatch):
     # Unbound run: the ephemeral pooled session is torn down after the batch.
     assert len(terminated) == 1
     assert terminated[0].startswith("ccode_test_happy:")
-    # It ran in its own worktree under the workspace, never in the repo root.
+    # Keyed by its own batch, not by the generation's execution id.
+    assert "wf_happy:execution:1" not in terminated[0]
+    # It ran in its own detached worktree under the workspace, never in the
+    # repo root, named without the execution id's colons.
     assert len(added) == 1
     assert added[0].parent == workspace / "ccode_test_happy"
-    assert added[0].name.startswith("wt_")
+    assert re.fullmatch(r"wt_[0-9a-f]{8}_0", added[0].name)
+    assert branches == [None]
     assert worktree_mod.remove_worktree.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_worktree_releases_the_batch_token(monkeypatch):
+    """The pool adopts a batch's MCP token only when it spawns a session, so
+    a worktree that cannot be created must release the token itself."""
+    from services.cli_agent import factory as factory_mod
+    from services.cli_agent import mcp_server as mcp_mod
+    from services.cli_agent import service as svc_mod
+    from services.cli_agent import worktree as worktree_mod
+
+    monkeypatch.setattr(svc_mod, "logger", MagicMock())
+    monkeypatch.setattr(mcp_mod, "logger", MagicMock())
+    pool = SimpleNamespace(terminate=AsyncMock())
+    monkeypatch.setattr(factory_mod, "get_session_pool", lambda name: pool)
+    monkeypatch.setattr(svc_mod, "get_session_pool", lambda name: pool)
+    monkeypatch.setattr(worktree_mod, "add_worktree", AsyncMock(side_effect=RuntimeError("git worktree add failed")))
+    monkeypatch.setattr(worktree_mod, "remove_worktree", AsyncMock())
+    before = set(mcp_mod._active_tokens)
+
+    with pytest.raises(RuntimeError, match="git worktree add failed"):
+        await get_ai_cli_service().run_batch(
+            "claude",
+            tasks=[ClaudeTaskSpec(prompt="ping")],
+            node_id="ccode_test_worktree_fails",
+            workflow_id="wf_worktree_fails",
+            workspace_dir=Path(__file__).resolve().parents[3],  # server/, inside a git repo
+            broadcaster=None,
+            execution_id="wf_worktree_fails:execution:1",
+        )
+
+    assert set(mcp_mod._active_tokens) == before

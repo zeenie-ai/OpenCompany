@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import secrets
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -375,12 +376,13 @@ class AICliService:
         #     is idempotent).
         # A provider that registered a session pool from its plugin folder
         # (``register_session_pool``) runs pooled; the service never names
-        # providers. Every pooled session runs in a git worktree under the
-        # workflow workspace, branched off ``resolved_repo_root`` — the same
+        # providers. Every pooled session runs in a git worktree of
+        # ``resolved_repo_root`` under the workflow workspace — the same
         # isolation the per-task ``AICliSession`` path uses — so the repo
-        # root itself is never the CLI's cwd. Bound sessions keep one
-        # stable worktree per agent node; ephemeral tasks get their own and
-        # drop it afterwards.
+        # root itself is never the CLI's cwd. The worktree is detached, so
+        # it adds no branch to that repo (see ``add_worktree``). Bound
+        # sessions keep one stable worktree per agent node; ephemeral tasks
+        # get their own and drop it afterwards.
         session_pool = get_session_pool(provider_name)
         use_pool = session_pool is not None
         bound_key = (
@@ -395,11 +397,13 @@ class AICliService:
 
         async def run_pooled(task: BaseAICliTaskSpec, session_key: Any, worktree_name: str) -> SessionResult:
             async with sem:
-                cwd = await add_worktree(
-                    resolved_repo_root,
-                    worktree_parent / f"wt_{worktree_name}",
-                    f"opencompany/{safe_path_component(node_id, 'node')}-{worktree_name}",
-                )
+                try:
+                    cwd = await add_worktree(resolved_repo_root, worktree_parent / f"wt_{worktree_name}")
+                except BaseException:
+                    # The pool has not adopted this batch's token yet, and the
+                    # finally below leaves pool tokens to the pool.
+                    unregister_batch(token)
+                    raise
                 return await self._run_pooled_turn(
                     task=task,
                     session_key=session_key,
@@ -418,8 +422,11 @@ class AICliService:
             if use_pool and bound_key is not None:
                 results = [await run_pooled(task_list[0], bound_key, "session")]
             elif use_pool:
-                run_tag = str(turn_execution_id)[:8]
-                ephemeral = [(f"{node_id}:{turn_execution_id}:{i}", f"{run_tag}_{i}") for i in range(len(task_list))]
+                # A fresh tag per batch. The execution id is shared by every
+                # run of a generation, so concurrent runs would share a pool
+                # session, and its colons are not allowed in a folder name.
+                run_tag = secrets.token_hex(4)
+                ephemeral = [(f"{node_id}:{run_tag}:{i}", f"{run_tag}_{i}") for i in range(len(task_list))]
                 try:
                     results = await asyncio.gather(
                         *(run_pooled(t, key, name) for t, (key, name) in zip(task_list, ephemeral)),

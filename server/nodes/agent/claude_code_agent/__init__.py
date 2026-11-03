@@ -312,9 +312,10 @@ class ClaudeCodeAgentNode(ActionNode):
         # spawn, and memory / conversation persistence live in AICliService.
         # The project_key is derived from cwd (`[^a-zA-Z0-9-] -> -`),
         # so memory continuity needs only a STABLE cwd across runs.
-        # `AICliService.run_batch` gives every bound run the same git
-        # worktree, `<workspace>/<node>/wt_session`, branched off the
-        # resolved repo root; the repo root itself is never the cwd.
+        # `AICliService.run_batch` gives every bound run the same detached
+        # git worktree of the resolved repo root,
+        # `<workspace>/<node>/wt_session`; the repo root itself is never
+        # the cwd.
         #
         # Continuity: when memory is wired, resume the UUID the previous
         # successful run persisted on the memory node (``last_session_id``,
