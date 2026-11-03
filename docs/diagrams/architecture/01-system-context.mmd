@@ -1,0 +1,34 @@
+%% Current implementation at 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial"}}}%%
+flowchart LR
+    user["Person"]
+    browser["Browser / Electron"]
+    cli["OpenCompany CLI"]
+    app["OpenCompany"]
+    models["Model providers"]
+    gateway["Optional LLM Gateway"]
+    apis["Integration APIs"]
+    mcp["MCP / SDK / CLI tools"]
+    devices["Browser / mobile runtime"]
+    secrets["Optional 1Password"]
+    events["Configured event sources"]
+    user -->|"interact"| browser
+    user -->|"launch / operate"| cli
+    browser -->|"HTTP / WebSocket"| app
+    cli -->|"launch / commands"| app
+    app -->|"native provider calls"| models
+    app -->|"supported gateway routes"| gateway
+    gateway -->|"vendor API calls"| models
+    app -->|"configured operations"| apis
+    app -->|"tool adapters"| mcp
+    app -->|"owned local capabilities"| devices
+    app -->|"resolve approved references"| secrets
+    events -->|"configured event ingress"| app
+    classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed;
+    class user,browser,cli client;
+    classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed;
+    class app,devices service;
+    classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed;
+    classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed;
+    classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed;
+    class models,gateway,apis,mcp,secrets,events external;

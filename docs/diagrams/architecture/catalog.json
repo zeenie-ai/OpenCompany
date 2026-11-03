@@ -1,0 +1,1261 @@
+{
+  "schema_version": 1,
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "mermaid_version": "11.16.1",
+  "generator": "built-in ImageGen",
+  "hash_normalization": "Text uses LF line endings; PNG uses original bytes",
+  "node_index": "docs/diagrams/architecture/nodes.json",
+  "diagrams": [
+    {
+      "id": 1,
+      "title": "System context",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/01-system-context-v1.png",
+      "mermaid": "docs/diagrams/architecture/01-system-context.mmd",
+      "prompt": "docs/diagrams/architecture/01-system-context.prompt.txt",
+      "brief": "docs/diagrams/architecture/01-system-context.brief.md",
+      "sources": [
+        "server/main.py",
+        "cli/commands/start.py",
+        "desktop/src/main/backend.ts",
+        "server/services/llm/unifier.py",
+        "server/services/handlers/tools.py",
+        "server/services/credentials/onepassword.py",
+        "server/services/events/dispatch.py",
+        "server/nodes/mobile/_node.py",
+        "gateway/README.md",
+        "server/config/llm_defaults.json"
+      ],
+      "doc_targets": [
+        "CONTRIBUTING.md",
+        "docs-internal/SETUP.md",
+        "docs-internal/agent_architecture.md",
+        "docs-internal/llm_gateway.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Code-backed source brief verified; ImageGen graph labels, arrow directions, optional Gateway branch, event ingress and local capability boundaries visually inspected. Primary graph remains legible at documentation width; detailed notes also available in the brief.",
+          "Coordinator final visual review: Verified native/Gateway optional alternatives, external ingress vs local capabilities, no required app Redis."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "attempts": [
+          {
+            "operation": "generate",
+            "artifact": "exec-99b2b491-d863-4c7a-b84d-05fdf246337b.png",
+            "selected": true,
+            "style_reference": "02-local-runtime-v1.png"
+          }
+        ],
+        "mode": "built-in",
+        "selected_artifact": "exec-99b2b491-d863-4c7a-b84d-05fdf246337b.png"
+      },
+      "sha256": {
+        "image": "14e83baf063fe40b25435c39f4945d1f26252c139f740d84a61f090343eb0454",
+        "mermaid": "3985e86e7b23b936137bf1db9aa09e28ec98c6fbdddede0523e9cdec0b416472",
+        "prompt": "e417c0d35732faf458228932f8f20201f94d0fafbbbfc1cbb85cd58cda2b953a",
+        "brief": "1b0e9a6bdb9d1a6b1d632e57ca01fe9aa860cd3563e8bfee46bd5dcd919990d9"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/main.py": "b6ed7af0e6ed709601a2bb167645b5114b5cee33b8424b912a6494d11b6dd225",
+        "cli/commands/start.py": "34e7cca1322071ff90ea8667906d0b8b05768541a8d8a6437001a73625f71735",
+        "desktop/src/main/backend.ts": "a693e976997f03182ae47623a02892af784367d9ce3fb8797fb4862feb7c9bd3",
+        "server/services/llm/unifier.py": "9507219475751bee2d7b562e97e2f0327b745269a44e60ddaed8aa4169b09b43",
+        "server/services/handlers/tools.py": "32b9ef4be7994881dfd5cbdc535892db8ad4d49231e87837c4de4042f8312228",
+        "server/services/credentials/onepassword.py": "13f49a92abfa29583b0198d31130048f2f34650369baba8f24a956199dd27ea8",
+        "server/services/events/dispatch.py": "d8923960820ca3bd2a37b432db0530165b539c2324f2e8313e0f14745bde113f",
+        "server/nodes/mobile/_node.py": "af43344e874c8524f375dd790f43325d6ed2f187f4ef4792916b11ca9459d705",
+        "gateway/README.md": "22464107a58977d2c54f98d36ccb1fc1909ff6fd3535ace53e2837f3674fa573",
+        "server/config/llm_defaults.json": "a61b6c12cfd548adf3ab420f4c2bf70a95070fdd04217cdb964076fd16a5defb"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 2,
+      "title": "Local runtime",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/02-local-runtime-v1.png",
+      "mermaid": "docs/diagrams/architecture/02-local-runtime.mmd",
+      "prompt": "docs/diagrams/architecture/02-local-runtime.prompt.txt",
+      "brief": "docs/diagrams/architecture/02-local-runtime.brief.md",
+      "sources": [
+        "cli/commands/start.py",
+        "cli/commands/dev.py",
+        "server/main.py",
+        "server/services/temporal/lifecycle.py",
+        "server/services/temporal/_runtime.py",
+        "server/core/paths.py",
+        "desktop/src/main/backend.ts",
+        "client/vite.config.js",
+        "docker-compose.yml",
+        "docker/entrypoint.sh",
+        "docker/Dockerfile"
+      ],
+      "doc_targets": [
+        "docs-internal/SETUP.md",
+        "docs-internal/TEMPORAL_ARCHITECTURE.md",
+        "docs-internal/docker.md",
+        "docs-internal/desktop_host_contract.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Baseline code confirms process, history-store and Docker boundaries; pilot generated by coordinator.",
+          "Coordinator inspected pilot and targeted edit: workflow submission starts at Application services; worker poll/report stays separate; data and sidecars remain outside backend process.",
+          "Coordinator final visual review: Corrected pilot verified: submission/service and poll/worker origins, separate storage and sidecars."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "attempts": [
+          {
+            "kind": "generate",
+            "artifact": "exec-73e57354-60af-4cef-867b-e2c8f9abb32e.png",
+            "selected": false
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-1f951978-3b8f-4ccd-9a86-2b9544027cd9.png",
+            "prompt": "docs/diagrams/architecture/02-local-runtime.edit-01.prompt.txt",
+            "selected": true
+          }
+        ],
+        "mode": "built-in",
+        "selected_artifact": "exec-1f951978-3b8f-4ccd-9a86-2b9544027cd9.png"
+      },
+      "sha256": {
+        "image": "8ee44b0c6dd4929c0f216dc1d6d5e4c4322383b120fb138dc5770127da34ec82",
+        "mermaid": "13260ff53da5549ed9aef93acdae5bbbeb982cc1d4694d0317991c6376e58fb7",
+        "prompt": "9f05891fa1b8778703485f327c4410e3682ddfe067b153e49c87942a49d0ae6c",
+        "brief": "29a3ed6064ed097b949c9c703100bea221290a549223ce97d1f7d224e46b6129"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "cli/commands/start.py": "34e7cca1322071ff90ea8667906d0b8b05768541a8d8a6437001a73625f71735",
+        "cli/commands/dev.py": "a733a70e6468f96fc954f8c1dcb0777d851bb230bd2c0f7f87e735a3a87d1d56",
+        "server/main.py": "b6ed7af0e6ed709601a2bb167645b5114b5cee33b8424b912a6494d11b6dd225",
+        "server/services/temporal/lifecycle.py": "71c6be21f04a6192a930e6976b2466d14aa213510138ccc212e008b87cf51165",
+        "server/services/temporal/_runtime.py": "5f56b687213c1a4749deb3118216b8ec119feefaa3c4be8f9adff9e1aba4edcf",
+        "server/core/paths.py": "010a7d9452d622d0a63e59ffab3ba9833ae96d0cce8b0193eda8782bf7cdfbd7",
+        "desktop/src/main/backend.ts": "a693e976997f03182ae47623a02892af784367d9ce3fb8797fb4862feb7c9bd3",
+        "client/vite.config.js": "8950193204e2f852186172af04c0ea2b6211e3caf6d399fa83bc757439fc7770",
+        "docker-compose.yml": "2273af735c0f135524fd466c9e2c327c0bbf6fc13ca4ec7aa5888816eb7ee25e",
+        "docker/entrypoint.sh": "43a7f3d31d7bd71448c4553f0c0d90e2098e73fd527d2df283d3bdabf0375872",
+        "docker/Dockerfile": "e4393808f5fea25f331bd08ee3a3957fec61cf0a7611dd30c90786ad9b8ca61a"
+      },
+      "extra_prompt_sha256": {
+        "docs/diagrams/architecture/02-local-runtime.edit-01.prompt.txt": "507181b268b0c2f27784596fd52a3aff6ac585cef4474ca27f25b13249ca20ce"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Distributed deployment",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/03-distributed-deployment-v1.png",
+      "mermaid": "docs/diagrams/architecture/03-distributed-deployment.mmd",
+      "prompt": "docs/diagrams/architecture/03-distributed-deployment.prompt.txt",
+      "brief": "docs/diagrams/architecture/03-distributed-deployment.brief.md",
+      "sources": [
+        "server/core/config.py",
+        "server/services/temporal/lifecycle.py",
+        "server/services/temporal/worker.py",
+        "server/services/browser_owners.py",
+        "server/services/credentials/preflight.py",
+        "server/services/credentials/onepassword.py",
+        "server/services/chat/relay.py",
+        "server/nodes/mobile/_node.py",
+        "docs-internal/browser.md",
+        "docs-internal/docker.md"
+      ],
+      "doc_targets": [
+        "docs-internal/TEMPORAL_ARCHITECTURE.md",
+        "docs-internal/browser.md",
+        "docs-internal/credentials_encryption.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source and image reviewed: explicit API/backend process, separate owner-local browser resources, service workflow submission distinct from SDK polling, external shared stores, generic-worker limits, selected-frame relay and prerequisites. First generation corrected before selection.",
+          "Final regeneration uses same-component alias panels: owner\u2192Postgres/profile/owner queue; worker\u2192relay\u2192API; API\u2192owner check\u2192mobile. Main submit/poll origins and process boundaries are distinct. Rejected dense layouts retained in provenance.",
+          "Coordinator final visual review: Verified final simplified topology and explicit ownership, authenticated relay and mobile authorization insets; aliases identify reused components."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "attempts": [
+          {
+            "operation": "generate",
+            "artifact": "exec-cd6facde-3568-44cb-999a-81efbfe2b490.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-1cc0b432-c75b-4d2d-8c0e-8a6f01490874.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-63ac6c42-534e-4a76-8094-a1a22cb2b681.png",
+            "selected": false,
+            "reason": "Owner path fixed; relay/mobile endpoints remained ambiguous."
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-c3e70053-6edf-4293-acdc-217c3e9ce6e6.png",
+            "selected": false,
+            "reason": "Endpoint-only edit still ambiguous; layout rejected."
+          },
+          {
+            "operation": "generate",
+            "artifact": "exec-f363f46f-12c4-4a51-85a5-2046fe01c8c7.png",
+            "selected": true,
+            "style_reference": "02-local-runtime-v1.png",
+            "reason": "Main topology and explicit same-component alias detail panels."
+          }
+        ],
+        "mode": "built-in",
+        "selected_artifact": "exec-f363f46f-12c4-4a51-85a5-2046fe01c8c7.png"
+      },
+      "sha256": {
+        "image": "40183bb5f30975f6577949e2dfcf9ee9b7aa61f3c064c764dd48120784c48373",
+        "mermaid": "06cd18798e70851ac57e038206a690837c0a57916ff754de5ccf64c9aa7e7a1d",
+        "prompt": "e4548afd377650d1017edd0bcefa826e98324042f2c29e3d64140753dc61c79d",
+        "brief": "1f96fa887104ba246d092cfefcf4ce9ee973d316e5cdc447aad72f801fcc21fc"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/core/config.py": "b18a8028c39e6b475e52a2876f8dc8f96130d40a5d2f76d101bd91b4332f314e",
+        "server/services/temporal/lifecycle.py": "71c6be21f04a6192a930e6976b2466d14aa213510138ccc212e008b87cf51165",
+        "server/services/temporal/worker.py": "4cba1ca86cac20d39a3738fd8888dc874b7ff05ea47b19b5f9031f304bac7a59",
+        "server/services/browser_owners.py": "c3307b3b2a45a8e5416edf5aaf22155fd332efaa1a601e5acc6a3e65f475859a",
+        "server/services/credentials/preflight.py": "1c975e75d2c1c97c72d1184dfcdc843a30caf107c0605770423cf96dbfb0ffa6",
+        "server/services/credentials/onepassword.py": "13f49a92abfa29583b0198d31130048f2f34650369baba8f24a956199dd27ea8",
+        "server/services/chat/relay.py": "5739f3845f04d52bad084ef9b5c4d9f0543fecfc10f4d4247a7b34503d089eeb",
+        "server/nodes/mobile/_node.py": "af43344e874c8524f375dd790f43325d6ed2f187f4ef4792916b11ca9459d705",
+        "docs-internal/browser.md": "f381fb12702c0a3ab374ccb21a2a6644219ab04446f03819156e8fdf9630d2ef",
+        "docs-internal/docker.md": "c598cb7e573e77a5c51e22d9b381b4146078b62724e9fbcbac41eab4b3cdb96f"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 4,
+      "title": "Frontend architecture",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/04-frontend-architecture-v1.png",
+      "mermaid": "docs/diagrams/architecture/04-frontend-architecture.mmd",
+      "prompt": "docs/diagrams/architecture/04-frontend-architecture.prompt.txt",
+      "brief": "docs/diagrams/architecture/04-frontend-architecture.brief.md",
+      "sources": [
+        "client/src/main.tsx",
+        "client/src/App.tsx",
+        "client/src/app/AppShell.tsx",
+        "client/src/app/ShellModeSwitch.tsx",
+        "client/src/app/useCurrentWorkflowSync.ts",
+        "client/src/lib/queryClient.ts",
+        "client/src/lib/queryPersist.ts",
+        "client/src/store/useAppStore.ts",
+        "client/src/contexts/WebSocketContext.tsx",
+        "client/src/features/chat/index.ts",
+        "docs-internal/frontend_architecture.md",
+        "docs-internal/status_broadcaster.md"
+      ],
+      "doc_targets": [
+        "docs-internal/frontend_architecture.md",
+        "docs-internal/status_broadcaster.md",
+        "docs-internal/chat_protocol.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Reviewed all labels and transport/state arrows. Corrected direct REST-to-backend HTTP path and distinct Query-cache-to-Home/editor feeds; WS fanout and shell synchronization retained.",
+          "Cross-review correction: WebSocketContext now explicitly feeds the status/chat/console fan-out, with a non-junction bridge across direct HTTP; REST and Query cache paths unchanged.",
+          "Coordinator final visual review: Verified explicit WebSocketContext\u2192output fan-out connection, HTTP crossing bridge, separate REST and cache paths."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "attempts": [
+          {
+            "operation": "generate",
+            "artifact": "exec-466eb8d3-4ccb-4255-b626-0b8b955d0666.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-a02c6edd-4122-4cfd-8fba-aef0fb4c75aa.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-874c4b6e-7960-48d2-b0bc-d527030ef45c.png",
+            "selected": true,
+            "reason": "Cross-review correction: WebSocketContext now explicitly feeds the status/chat/console fan-out, with a non-junction bridge across direct HTTP; REST and Query cache paths unchanged."
+          }
+        ],
+        "mode": "built-in",
+        "selected_artifact": "exec-874c4b6e-7960-48d2-b0bc-d527030ef45c.png"
+      },
+      "sha256": {
+        "image": "f4b4eec10e0c4c3ce9b0aeff249ad3590e5e242613a9f71e3e99bdbcac22b3a1",
+        "mermaid": "3d67de9dfd9f4a084d2623c740af0ce79e96c23364e2bcdde10925769a90175a",
+        "prompt": "a1b96b49852a1ef4ca604bc6ae7d13d3de762475d1069515d05a3571a3f495d2",
+        "brief": "ff1cb19887a038ca071e08e7f30ba3407fac9d0c1fe8282e57f7d3d4f77a913f"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "client/src/main.tsx": "c376fef885a8f226a4bf24d0133311a196f225a969291819f714b5f75736b90e",
+        "client/src/App.tsx": "708345e2c162d0439260cf14fe68abfeae5b711c214404b2ce4a24f230196d28",
+        "client/src/app/AppShell.tsx": "4dd1b192c89ee61841f55c4a3ce4a16d1728ff0ade583821411b971baf5cac3c",
+        "client/src/app/ShellModeSwitch.tsx": "ed4d3d247c4bdfc38ba13005bd9ff2cad2fdfa47ea0cd7f244deb3b5885da585",
+        "client/src/app/useCurrentWorkflowSync.ts": "31b52190d451588a63f7dc01115221c8af80feedb9ac5ea24e897764e7b7b2f6",
+        "client/src/lib/queryClient.ts": "f6c24700317f7a82725a92dfeeef5f701fb4afe1b1eeca6530a9678e8a179fa3",
+        "client/src/lib/queryPersist.ts": "3db7a59778bdabf93b3da537ae35ba6bcf2feb639bf3b66e51916748f36f0292",
+        "client/src/store/useAppStore.ts": "9deb293df2f0a5eb72d65a7999f5bbadeb6b20d7e5088e83229d41344140def9",
+        "client/src/contexts/WebSocketContext.tsx": "8c4e6fcd5018de6dc9fb145e885c88418b559eb0bdc6cf2db1ff47a09f0299fb",
+        "client/src/features/chat/index.ts": "0941e04b937cd30c1757f311ca2ca1325a52924ab9c2515a444bb441dbcf496b",
+        "docs-internal/frontend_architecture.md": "8a9bb86893fc917f282aa4cdfaeaeac7bd033e0c0dcce565ca4fa94f8d0eff6b",
+        "docs-internal/status_broadcaster.md": "9b4e28b1f7e0bfaf5678262f90d0583384f9118332792fea6f83c0f5a10ab8af"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 5,
+      "title": "Workflow execution",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/05-workflow-execution-v1.png",
+      "mermaid": "docs/diagrams/architecture/05-workflow-execution.mmd",
+      "prompt": "docs/diagrams/architecture/05-workflow-execution.prompt.txt",
+      "brief": "docs/diagrams/architecture/05-workflow-execution.brief.md",
+      "sources": [
+        "server/services/workflow.py",
+        "server/services/temporal/workflow.py",
+        "server/services/node_executor.py",
+        "server/services/temporal/executor.py"
+      ],
+      "doc_targets": [
+        "docs-internal/DESIGN.md",
+        "docs-internal/TEMPORAL_ARCHITECTURE.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source-backed labels and directed relationships prepared before image generation.",
+          "Reviewed native generated image: all dispatch branches, frozen routing, eligible sequential route, output persistence and failure caveats present.",
+          "Three targeted ImageGen edits removed duplicated NodeExecutor and ambiguous operations/sequential routing; final routes remain separated.",
+          "Peer review requested a clearer AgentWorkflow input arrow. Two further targeted edits produced a top-entry agent/Pi input separated from rightward provider/result outputs; final selected image reviewed.",
+          "Coordinator final visual review: Verified final Agent/Pi input arrowheads and separate operations output paths; eligible sequential route and dispatch-error semantics retained."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "attempts": [
+          {
+            "type": "generate",
+            "artifact": "exec-c5d724f3-85a1-4216-b699-dd38de5cb7a0.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-1e85fdaf-76bd-40e4-b372-1b62445af38a.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-9da4a8f6-3a58-4c3c-a084-a485e39d9cb7.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-758866e7-9524-4831-a53d-5681a9b1eeb6.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-2c6d273b-a242-4434-a2dc-2eaae20dc489.png",
+            "review": "rejected: input/output routes shared a segment"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-7869894e-9bd1-4bb8-96c0-8e3b4f1f95de.png",
+            "review": "selected: agent inputs enter operations from top; outputs remain separate"
+          }
+        ],
+        "selected_artifact": "exec-7869894e-9bd1-4bb8-96c0-8e3b4f1f95de.png",
+        "dimensions": [
+          1672,
+          941
+        ]
+      },
+      "sha256": {
+        "image": "baffd4d74821c7d22c34a23faeb36c810202d6a66d1f2506a5546ea888df2976",
+        "mermaid": "d44feede1174c9d57a7f557f854d3e44e339b7375356c8c30bae9ca8aa8a4573",
+        "prompt": "519143f821932777434ec5947d903fb5fb2700d7281453a2db40ae781473e636",
+        "brief": "ec473276f96528cbb3a14941cbab6550136b5d4ebcad56148680adfe7d9a0f2a"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/services/workflow.py": "0d458ab5f68564c1a533acee52435ffba06f0c4055fe17ace06a11db4d4a32e6",
+        "server/services/temporal/workflow.py": "09ba19006f8ff77262d38c2172d0d2663a6ec114a242a1569a73688e41761e2e",
+        "server/services/node_executor.py": "c24ec4ceb8d322388ed78810a6c03d2f5d24daed056bc508e15d4fb96ac762ba",
+        "server/services/temporal/executor.py": "cf09a93152bc24e40451128dbd98b911a2db40b556e4e0db760d90882d4bdcdc"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 6,
+      "title": "Independent-node execution",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/06-independent-node-execution-v1.png",
+      "mermaid": "docs/diagrams/architecture/06-independent-node-execution.mmd",
+      "prompt": "docs/diagrams/architecture/06-independent-node-execution.prompt.txt",
+      "brief": "docs/diagrams/architecture/06-independent-node-execution.brief.md",
+      "sources": [
+        "server/routers/websocket.py",
+        "server/services/workflow.py",
+        "server/services/handlers/tools.py",
+        "server/services/node_invocations.py",
+        "server/services/temporal/node_invocation.py",
+        "server/services/temporal/workspace_tasks_workflow.py"
+      ],
+      "doc_targets": [
+        "docs-internal/plugin_system.md",
+        "docs-internal/node_creation.md",
+        "docs-internal/temporal-workflow-control.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source-backed labels and directed relationships prepared before image generation.",
+          "Native review: four entry modes remain distinct; ordinary Canvas nodes and new Coding Agent Pi exception both shown.",
+          "Saved-node authorization/eligibility and controller-owned deduplication remain explicit.",
+          "One targeted edit corrected service/process legend and added a line jump separating tool and Workspace execution paths.",
+          "Coordinator final visual review: Verified canvas Coding Agent\u2192Pi exception, graph/tool and Workspace task lanes, only declared eligible saved targets."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "attempts": [
+          {
+            "type": "generate",
+            "artifact": "exec-03a2f01c-d875-4527-8c4f-07c6e9aa1c75.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-401300e4-932d-4868-86ef-90ed67d9541b.png"
+          }
+        ],
+        "selected_artifact": "exec-401300e4-932d-4868-86ef-90ed67d9541b.png",
+        "dimensions": [
+          1672,
+          941
+        ]
+      },
+      "sha256": {
+        "image": "833f78986a6f084051f216546c8fccc8c74646fb654a056e009133d4076a9e74",
+        "mermaid": "0beecf325b5b8de6b70d7699d38afcae85c0f937fe352bc510acac2746f908e0",
+        "prompt": "fe953f239539b12ce09910df4ac7e28f99a2461741d08020cc83e7a2345dca1b",
+        "brief": "0418a16bc56c437b8cffeaf555c71ad490582e94ccddf83f3462ce7fdd557c25"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/routers/websocket.py": "482bc4586cb1a6b92640a014c531230e426069586e6aff3b8d0da54cdb103f95",
+        "server/services/workflow.py": "0d458ab5f68564c1a533acee52435ffba06f0c4055fe17ace06a11db4d4a32e6",
+        "server/services/handlers/tools.py": "32b9ef4be7994881dfd5cbdc535892db8ad4d49231e87837c4de4042f8312228",
+        "server/services/node_invocations.py": "7d1e12a1db7a6c819773ce6af310a6ab055983b2ce8e007c83a271c70db3c2cb",
+        "server/services/temporal/node_invocation.py": "0c378ffef23f282594f1f0cdbf4d6c0919e1177a12df90b14d2cd0cee8877bc6",
+        "server/services/temporal/workspace_tasks_workflow.py": "93e341bb6864a08774d868da2904ee4f92ae009e662321d110bcd8fdbc9da8b3"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 7,
+      "title": "Plugin and node contracts",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/07-plugin-node-contracts-v1.png",
+      "mermaid": "docs/diagrams/architecture/07-plugin-node-contracts.mmd",
+      "prompt": "docs/diagrams/architecture/07-plugin-node-contracts.prompt.txt",
+      "brief": "docs/diagrams/architecture/07-plugin-node-contracts.brief.md",
+      "sources": [
+        "server/nodes/__init__.py",
+        "server/services/plugin/base.py",
+        "server/services/node_registry.py",
+        "server/services/node_spec.py",
+        "server/routers/schemas.py",
+        "server/services/node_executor.py",
+        "server/services/temporal/plugin_activities.py",
+        "server/services/temporal/worker.py",
+        "client/src/lib/nodeSpec.ts",
+        "client/src/adapters/nodeSpecToDescription.ts",
+        "docs-internal/plugin_system.md"
+      ],
+      "doc_targets": [
+        "docs-internal/plugin_system.md",
+        "docs-internal/node_creation.md",
+        "server/nodes/README.md",
+        "CONTRIBUTING.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Reviewed registration/UI/runtime edges. Corrected typed-activity source to class registry, removed invented NodeExecutor-to-registration edge, and marked capability index documentation-only.",
+          "Cross-review: capability docs index reads registry metadata and class flags directly; NodeSpec-to-index edge and obsolete duplicate line removed.",
+          "Coordinator final visual review: Verified registry/class flags\u2192docs-only capability index, separate NodeSpec editor contract, declared activity registration."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "attempts": [
+          {
+            "operation": "generate",
+            "artifact": "exec-fa54f97e-a7bf-4ce7-987e-e9517e4971e2.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-9fa63ebc-3c2d-4255-834d-32c05f293e4f.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-61e8da8d-74af-4d71-8037-f6a0c409679f.png",
+            "selected": false,
+            "reason": "Corrected documentation exporter source; subsequent cleanup removed obsolete dangling line."
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-8858e64c-0fd1-4bf5-ac43-4e03f1955429.png",
+            "selected": true,
+            "reason": "Cross-review: capability docs index reads registry metadata and class flags directly; NodeSpec-to-index edge and obsolete duplicate line removed."
+          }
+        ],
+        "mode": "built-in",
+        "selected_artifact": "exec-8858e64c-0fd1-4bf5-ac43-4e03f1955429.png"
+      },
+      "sha256": {
+        "image": "1dca2d6d453dbe886c3a7c31ed39836bdd946c8ef7e454e8f5c64b3baa6a44c0",
+        "mermaid": "a2ba8900cf5a39cb02d58cf6aa63d78be220ad658ac6568a9784ea3b90940704",
+        "prompt": "c5de8e6bad43ea94e3e32bde9d438eeb9e47721dbc7e90abab14d06be7619609",
+        "brief": "7e68b0337e9e52540df440dd7510e4f37e051e8ecb695fa8cac7406faba3d7d1"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/nodes/__init__.py": "89fbb0a3f91c279b8788b592d219728ab5a227a4ab3a771493055e18714e4b13",
+        "server/services/plugin/base.py": "cb4d4cd3e7660e8fec4fe0c422e71e8c02da54a83c3f1f7af817c8f5fdfee1f4",
+        "server/services/node_registry.py": "ffcd5bb9ce685571c4df050db3106bc0587f6c4356f6be626222cfade28e9830",
+        "server/services/node_spec.py": "f063c1fc64fd0d3bd6b590d0055a9e4477ccf9697c9cfc031b47ef910dbc9f21",
+        "server/routers/schemas.py": "e96e8ff099114b5b406818b605721e3745999ffee9ebce66a741950144ac486d",
+        "server/services/node_executor.py": "c24ec4ceb8d322388ed78810a6c03d2f5d24daed056bc508e15d4fb96ac762ba",
+        "server/services/temporal/plugin_activities.py": "015fca58c4bd2657809a978b80f520a527084b2bd4bc57d82a6de664f7a82bb5",
+        "server/services/temporal/worker.py": "4cba1ca86cac20d39a3738fd8888dc874b7ff05ea47b19b5f9031f304bac7a59",
+        "client/src/lib/nodeSpec.ts": "0dfb3bc70609341b5b0bc9cd63107d0efe361f90f67311203a4f34e1455a9629",
+        "client/src/adapters/nodeSpecToDescription.ts": "4e5cd8b35c455af3821f0573f7ef5a3093842cb52ee8aac198dbdea1199e4cd5",
+        "docs-internal/plugin_system.md": "e590d32715daa1f78f0bfcdbf1d5b8fae73f735c100e6586b500e7b7dff855af"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 8,
+      "title": "Chat and agent turns",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/08-chat-agent-turns-v1.png",
+      "mermaid": "docs/diagrams/architecture/08-chat-agent-turns.mmd",
+      "prompt": "docs/diagrams/architecture/08-chat-agent-turns.prompt.txt",
+      "brief": "docs/diagrams/architecture/08-chat-agent-turns.brief.md",
+      "sources": [
+        "server/services/chat/handlers.py",
+        "server/services/chat/ledger.py",
+        "server/services/chat/events.py",
+        "server/services/temporal/agent_workflow.py",
+        "server/services/chat/hub.py",
+        "server/services/chat/relay.py"
+      ],
+      "doc_targets": [
+        "docs-internal/chat_protocol.md",
+        "docs-internal/agent_architecture.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source-backed labels and directed relationships prepared before image generation.",
+          "Native and documentation-width review: durable message/ChatRun ledger, conversation persistence and live hub are visibly separate.",
+          "Admitted-run dispatch, native agent model/tool path, bounded stream and standalone-worker selected-frame relay match the source brief.",
+          "Coordinator final visual review: Verified admission ledger/persistence separated from live hub and selected remote relay; native turn scope."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "attempts": [
+          {
+            "type": "generate",
+            "artifact": "exec-bb2eeb23-eb5f-45ce-917f-917af8d0a30d.png"
+          }
+        ],
+        "selected_artifact": "exec-bb2eeb23-eb5f-45ce-917f-917af8d0a30d.png",
+        "dimensions": [
+          1672,
+          941
+        ]
+      },
+      "sha256": {
+        "image": "a8459ed072f754682c5440919dc6c814125abd94807a312c49f1534b761b5d29",
+        "mermaid": "1694a5f1191200462c96b259a530793b0dbdc217cd82bc37cbfb0581be2e7c35",
+        "prompt": "c9b645ed83c3592b42548ebc895c7e72379bd17ec51a1a5adc517a9b18724bb9",
+        "brief": "e5f7a78e1cc2ab6c7bd9b96152d74b0c68ec946d72b7c72729ca8538c1b16fd8"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/services/chat/handlers.py": "d3435d438cace1318551f79b097a6e18cc035da91e5736449fc011413ab4ff0b",
+        "server/services/chat/ledger.py": "a4bcc93e4de6c604ce749290b608995124f9c5a2771bf1bab4781033be9aa0ec",
+        "server/services/chat/events.py": "6096c4f89fe7505579f83b3d2c673e31e87a45210e341ad440bc11f67365b548",
+        "server/services/temporal/agent_workflow.py": "8e46accdc39a4f125e53d6f9225527c30050887f03f544d7efb9ec5bf20887a2",
+        "server/services/chat/hub.py": "c513e3e0de1fe3e4d2bfb08feecb538e2f14b6fb02bf27a2beca9b2ab48b38b9",
+        "server/services/chat/relay.py": "5739f3845f04d52bad084ef9b5c4d9f0543fecfc10f4d4247a7b34503d089eeb"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 9,
+      "title": "Teams and context",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/09-teams-context-v1.png",
+      "mermaid": "docs/diagrams/architecture/09-teams-context.mmd",
+      "prompt": "docs/diagrams/architecture/09-teams-context.prompt.txt",
+      "brief": "docs/diagrams/architecture/09-teams-context.brief.md",
+      "sources": [
+        "server/nodes/tool/task_manager/__init__.py",
+        "server/services/handlers/tools.py",
+        "server/services/temporal/agent_workflow.py",
+        "server/services/agent_context/conversation.py",
+        "docs-internal/agent_context_flow.md",
+        "docs-internal/agent_teams.md"
+      ],
+      "doc_targets": [
+        "docs-internal/agent_teams.md",
+        "docs-internal/agent_context_flow.md",
+        "docs-internal/agent_delegation.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source-backed labels and directed relationships prepared before image generation.",
+          "Reviewed delegation queue, connected-teammate authorization, persist-before-taskTrigger and lead-review loop against the brief.",
+          "Context load/save/review continuity, explicit Memory, scoped skills/files and Reset/new-generation boundaries remain distinct and legible.",
+          "Coordinator final visual review: Verified durable delegated task lifecycle, connected teammate constraint, lead review, opt-in Context vs explicit Memory and generation reset."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "attempts": [
+          {
+            "type": "generate",
+            "artifact": "exec-fbc87ff4-13b3-4911-97a8-db9b21f61fad.png"
+          }
+        ],
+        "selected_artifact": "exec-fbc87ff4-13b3-4911-97a8-db9b21f61fad.png",
+        "dimensions": [
+          1672,
+          941
+        ]
+      },
+      "sha256": {
+        "image": "6ee09746783574d3e4817c2402a23eb967e7dfaf1b67eb26c2106838eea0b973",
+        "mermaid": "388a531cab8129c73f26b13faa41aeb9fe7cc60893539db6d677826fd32568f9",
+        "prompt": "3d5eaad85751bbada980322d349d6933d47deb3a6cd5cf4b3912ae8efada087f",
+        "brief": "53ab524e413676395d008c76efa50afa8bedaeb0b14cee1d1f67062cc8efddea"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/nodes/tool/task_manager/__init__.py": "5f1eba8d25c83d6cd8f985028974e6ecee5f16cffa303d783e9dc08c1760dd98",
+        "server/services/handlers/tools.py": "32b9ef4be7994881dfd5cbdc535892db8ad4d49231e87837c4de4042f8312228",
+        "server/services/temporal/agent_workflow.py": "8e46accdc39a4f125e53d6f9225527c30050887f03f544d7efb9ec5bf20887a2",
+        "server/services/agent_context/conversation.py": "1313c7e8eb8a5b283f8f31dbb98c63f9ee470e24cce8d72b4e1c7550b59bd337",
+        "docs-internal/agent_context_flow.md": "ba4ffe0e4fe06e3a05f78f4fe0680c52214ae128d2c069ac053884a4292baad8",
+        "docs-internal/agent_teams.md": "b0ee3ab3e76ee83f4bbfddd157431445d11c84607832ab9bb4e93a94a0ad9923"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 10,
+      "title": "Deployment and events",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/10-deployment-events-v1.png",
+      "mermaid": "docs/diagrams/architecture/10-deployment-events.mmd",
+      "prompt": "docs/diagrams/architecture/10-deployment-events.prompt.txt",
+      "brief": "docs/diagrams/architecture/10-deployment-events.brief.md",
+      "sources": [
+        "server/services/events/dispatch.py",
+        "server/services/temporal/trigger_listener_workflow.py",
+        "server/services/deployment/manager.py",
+        "server/services/temporal/schedules.py",
+        "server/services/temporal/workflow_control_workflow.py",
+        "server/services/deployment/control.py",
+        "docs-internal/temporal-workflow-control.md"
+      ],
+      "doc_targets": [
+        "docs-internal/event_framework.md",
+        "docs-internal/temporal-workflow-control.md",
+        "docs-internal/TEMPORAL_ARCHITECTURE.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source-backed labels and directed relationships prepared before image generation.",
+          "Reviewed push/webhook, poll and Temporal Schedule routes; generation snapshot/controller wiring and full Start/Stop/drain/Resume/Reset cycle remain distinct.",
+          "Two targeted edits corrected polling-gate endpoint and separated its crossing from scheduled-run delivery.",
+          "Current fail-soft event dispatch, buffered-work preservation and new-generation-after-Reset caveats are visible.",
+          "Coordinator final visual review: Verified push/poll/schedule ingress, generation snapshot/control, cooperative Stop/drain/Resume and separate Reset/new Start."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "attempts": [
+          {
+            "type": "generate",
+            "artifact": "exec-97548373-e669-4ecb-b86a-4cf5aa12cf94.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-22125559-7997-4d5b-ae73-88b065c42789.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-b1cbfad9-df06-492b-9977-215289f54102.png"
+          }
+        ],
+        "selected_artifact": "exec-b1cbfad9-df06-492b-9977-215289f54102.png",
+        "dimensions": [
+          1672,
+          941
+        ]
+      },
+      "sha256": {
+        "image": "222c57d239aaa8c8949f1a319ce38465e324bb0f0078e42f91f2da45f8a47137",
+        "mermaid": "36ca9a9e92c9f6a3f655c6d01c9f1121eb4dcf6a05018e6a31dc3ad33b6d62b6",
+        "prompt": "7cee8747768c257c923a6d2e127631c79c57e5ed158436235ba972260fe6eeb5",
+        "brief": "5e89a58ca6461eea0230672c3fde9353624c006b2f44e686ac912a1af6a99a33"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/services/events/dispatch.py": "d8923960820ca3bd2a37b432db0530165b539c2324f2e8313e0f14745bde113f",
+        "server/services/temporal/trigger_listener_workflow.py": "845252c3ac706fb8aa912e3cae960b100d2a4476710e244139ef5ee31a831f29",
+        "server/services/deployment/manager.py": "06d8cd751d5b45ab4d341c158423a1718a37e30487806b8d9f6b2a14ef8a79b2",
+        "server/services/temporal/schedules.py": "805dac25641d180a04ec592d050c633e707fa782784ab8b66d39f07ed8a6a477",
+        "server/services/temporal/workflow_control_workflow.py": "0d5c8bf73e218563377ac8d7e7cf3dfc5bc77eeafd38d2f5ba790042d09942c7",
+        "server/services/deployment/control.py": "7492c43c7037af47b2104136c544c79ff1c7f09f169165f02e4dcaff370f6e24",
+        "docs-internal/temporal-workflow-control.md": "e3e247ac0abddac73a1bb4e9e17038d126e5c1c81c503525a0ec4d70eb84bf6d"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 11,
+      "title": "Approvals and external effects",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/11-approvals-effects-v1.png",
+      "mermaid": "docs/diagrams/architecture/11-approvals-effects.mmd",
+      "prompt": "docs/diagrams/architecture/11-approvals-effects.prompt.txt",
+      "brief": "docs/diagrams/architecture/11-approvals-effects.brief.md",
+      "sources": [
+        "server/services/approvals/tool_calls.py",
+        "server/services/approvals/decisions.py",
+        "server/services/temporal/approved_tool_call_workflow.py",
+        "server/services/temporal/approval_workflow.py",
+        "server/services/deployment/control.py",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md"
+      ],
+      "doc_targets": [
+        "docs-internal/normal_mode.md",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source-backed labels and directed relationships prepared before image generation.",
+          "Native review: allowed/restricted execution and explicit refusal return are separate from draft approval, owner Send, Undo grace, revision claim and one-attempt execution.",
+          "Cross-checked _restricted: constrained settings still execute, so corrected first image's restricted-result bypass to an explicit refusal path.",
+          "Implemented ApprovalWorkflow waiting remains dashed amber and marked rollout pending; new-generation activation caveat is explicit.",
+          "Legend avoids equating service modules with OS processes; line bridges separate side-effect calls from result/refusal paths.",
+          "Coordinator final visual review: Verified allowed/restricted execution and refusal separate from held draft, undo/revision claim, one-attempt send and sent/not_sent/unknown; waiting remains dormant."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "attempts": [
+          {
+            "type": "generate",
+            "artifact": "exec-7731b326-840b-43cd-b31b-3025d46ec408.png"
+          },
+          {
+            "type": "edit",
+            "artifact": "exec-50c8ac6a-e55f-4231-8726-29d5467f2568.png"
+          }
+        ],
+        "selected_artifact": "exec-50c8ac6a-e55f-4231-8726-29d5467f2568.png",
+        "dimensions": [
+          1672,
+          941
+        ]
+      },
+      "sha256": {
+        "image": "78430b9fcf844034be2d4f7c09c014fbd6b4c6f23fcf555d930ab3a51fbbbc72",
+        "mermaid": "e2c3111870fa0f1d67c38b348bb32fc57e3dcff45d3b5e64a97a2d95580bae2c",
+        "prompt": "fb6dacb6c47c5dacf4c0ccc882adb1a60a012289cde55f812ee8b0803a11345c",
+        "brief": "4b371633d59c068b22e0a89dcc571e4360bc216eadd8bf9e620bb08cfb0bbb92"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/services/approvals/tool_calls.py": "0a34c69dbeb9a69f121222c6fa62c88d8759c66999b898239a229c7a927aeec4",
+        "server/services/approvals/decisions.py": "8978425422f3662f22d2e7326377fdfe3836a4120389b96c5cd3d5389ea2c3da",
+        "server/services/temporal/approved_tool_call_workflow.py": "b13f682e52dfda53f1be7cb0e736673bc4540e5df8d9f95f7ac3f2ceec55c7f4",
+        "server/services/temporal/approval_workflow.py": "aeec3353083cbacaa434327cdbcab8f408aaaae0d764b7a5f678d901823c498d",
+        "server/services/deployment/control.py": "7492c43c7037af47b2104136c544c79ff1c7f09f169165f02e4dcaff370f6e24",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md": "231a7ceea43de83c2ffb58ad14a89bfdfbc1a966cbece81ef96b8a28bece353f"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 12,
+      "title": "Persistence and secrets",
+      "status": "current",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/12-persistence-secrets-v1.png",
+      "mermaid": "docs/diagrams/architecture/12-persistence-secrets.mmd",
+      "prompt": "docs/diagrams/architecture/12-persistence-secrets.prompt.txt",
+      "brief": "docs/diagrams/architecture/12-persistence-secrets.brief.md",
+      "sources": [
+        "server/core/paths.py",
+        "server/core/config.py",
+        "server/core/database.py",
+        "server/core/encryption.py",
+        "server/services/auth.py",
+        "server/services/credentials/sources.py",
+        "server/services/credentials/onepassword.py",
+        "server/services/credentials/preflight.py",
+        "server/services/temporal/_runtime.py",
+        "server/nodes/browser/_profiles.py",
+        "docs-internal/browser_workspace.md",
+        "docs-internal/credentials_encryption.md"
+      ],
+      "doc_targets": [
+        "docs-internal/credentials_encryption.md",
+        "docs-internal/browser_workspace.md",
+        "docs-internal/TEMPORAL_ARCHITECTURE.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Reviewed separate application/Temporal/credential stores, metadata-only references, external secret resolution, workspace/profile/package boundaries and authenticated external-operation endpoint. Corrected omitted endpoint and clarified logical region name.",
+          "Coordinator final visual review: Verified app DB vs Temporal history and credential ciphertext/reference split, resolved credential to local caller, workspace/browser/package ownership."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "attempts": [
+          {
+            "operation": "generate",
+            "artifact": "exec-e1a904d1-a20c-40ea-86a9-748b20c6e3ce.png",
+            "selected": false,
+            "style_reference": "02-local-runtime-v1.png"
+          },
+          {
+            "operation": "edit",
+            "artifact": "exec-f96ad17e-7d4a-4ace-bf13-3a6d614a2955.png",
+            "selected": true,
+            "style_reference": "02-local-runtime-v1.png"
+          }
+        ],
+        "mode": "built-in",
+        "selected_artifact": "exec-f96ad17e-7d4a-4ace-bf13-3a6d614a2955.png"
+      },
+      "sha256": {
+        "image": "038ecefc3065a48218ab684f10a26d0fe43f9a0f99d6d06317d34c2c1e795aa8",
+        "mermaid": "790557afa2b1125bc388a6b189a752a6a69078f2dff34f9711301efa4926771d",
+        "prompt": "f3e52d1e246bd2ed6721d6879d9902f4406ddcb66c2f76774045495a67a5d876",
+        "brief": "c8a250cb5107ad84db55e09f307aa8af72c3f0ba6c54c2cb2f79088ffc8b6851"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "server/core/paths.py": "010a7d9452d622d0a63e59ffab3ba9833ae96d0cce8b0193eda8782bf7cdfbd7",
+        "server/core/config.py": "b18a8028c39e6b475e52a2876f8dc8f96130d40a5d2f76d101bd91b4332f314e",
+        "server/core/database.py": "dc1316e391de9275025d804d9e1fc6442a273e4eca9971468b700af8dd2bf56e",
+        "server/core/encryption.py": "9d3b1c06df9c58bd38d5efa52e514544e53633e21cb9fd795c06bfd4538a8cb4",
+        "server/services/auth.py": "99919fe546a527c5d696e6d840dddcb1a760b3b5b5f7fb6a856781c72564f393",
+        "server/services/credentials/sources.py": "5b4e9743cf5c0fb8c8f056e4f2aa84671e8cdbdb7eb28fadd61cababe4adf448",
+        "server/services/credentials/onepassword.py": "13f49a92abfa29583b0198d31130048f2f34650369baba8f24a956199dd27ea8",
+        "server/services/credentials/preflight.py": "1c975e75d2c1c97c72d1184dfcdc843a30caf107c0605770423cf96dbfb0ffa6",
+        "server/services/temporal/_runtime.py": "5f56b687213c1a4749deb3118216b8ec119feefaa3c4be8f9adff9e1aba4edcf",
+        "server/nodes/browser/_profiles.py": "cf22d509ea40d0c2684eb669568ebc82eef61bc3ce816067787eb95026c6f648",
+        "docs-internal/browser_workspace.md": "8c02c073965956e4aa373f676821d1d0738b6276961b5d43c92d25ca23829fbe",
+        "docs-internal/credentials_encryption.md": "59f806c3b00f559c4633a4dcc1e9c32025effb2fbade51569269543b9a3ef78a"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 13,
+      "title": "Event OS data plane and source migration",
+      "status": "accepted-roadmap",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/13-event-os-data-plane-v1.png",
+      "mermaid": "docs/diagrams/architecture/13-event-os-data-plane.mmd",
+      "prompt": "docs/diagrams/architecture/13-event-os-data-plane.prompt.txt",
+      "brief": "docs/diagrams/architecture/13-event-os-data-plane.brief.md",
+      "sources": [
+        "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+        "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md",
+        "docs-internal/plugin_system.md",
+        "server/services/events/dispatch.py",
+        "server/services/deployment/control.py",
+        "server/nodes/google/gmail_receive/__init__.py",
+        "server/nodes/email/email_receive/__init__.py",
+        "server/nodes/stripe/_source.py"
+      ],
+      "doc_targets": [
+        "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+        "docs-internal/plugin_system.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source boundaries checked against the pinned baseline; proposed status retained.",
+          "Verified all 14 components and 15 directed relationships, durable-commit acknowledgement, atomic consuming save, one-way result recording, proposed datastore outlines, migration strip, and explicit unknown-effect caveat. One ImageGen edit corrected proposed datastore status and the result-recording arrowhead.",
+          "Coordinator final visual review: Verified commit-before-acknowledge, separate future stream/relay/outbox and atomic cursor/history feedback; proposed status."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+        "attempts": [
+          {
+            "kind": "generate",
+            "artifact": "exec-18dfcda8-4994-491e-beb6-49ca36ac2b56.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-ec758888-4b27-4373-b717-b9ed0dbd81a0.png"
+          }
+        ],
+        "selected_artifact": "exec-ec758888-4b27-4373-b717-b9ed0dbd81a0.png",
+        "width": 1672,
+        "height": 941
+      },
+      "sha256": {
+        "image": "93770c05c216b37d9cdc07c426e798ee0b4878b8b8015b4bde0123530e591d9b",
+        "mermaid": "fdc3ce6e7e7bd2b3a7d88edfb5de4cbe72949869a8c3edd3a120c290aa71dbe8",
+        "prompt": "96a44cd34cbdafb628375f96757390b8c1208e267586b9001c993787ea9e2356",
+        "brief": "39a802249933a29cffc84be68a0b173a853874bda19e69ea03e36e85c83989f3"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "RFC-0005-EVENT-OS-ON-TEMPORAL.md": "19c8c9606c34a4b41edfe6481c044c5b290a62cce22eeceb00f5f0e1c2e85089",
+        "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md": "66e955f204c38712ec9f2722b20fd473733407325212a784baad651317feb1f6",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md": "231a7ceea43de83c2ffb58ad14a89bfdfbc1a966cbece81ef96b8a28bece353f",
+        "docs-internal/plugin_system.md": "e590d32715daa1f78f0bfcdbf1d5b8fae73f735c100e6586b500e7b7dff855af",
+        "server/services/events/dispatch.py": "d8923960820ca3bd2a37b432db0530165b539c2324f2e8313e0f14745bde113f",
+        "server/services/deployment/control.py": "7492c43c7037af47b2104136c544c79ff1c7f09f169165f02e4dcaff370f6e24",
+        "server/nodes/google/gmail_receive/__init__.py": "39c4494ce95c54f0d36e49b92c29b1a90b31d730cc630d151e5003f07ddbc24d",
+        "server/nodes/email/email_receive/__init__.py": "17766f4a3faddf738d958a96734f1807a98706d825a2d661567ebee9f32a0aaf",
+        "server/nodes/stripe/_source.py": "5df0acb2423bc7c0b2e15890f47d71ff04cd643a1f4235605d53000310dcb936"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 14,
+      "title": "Event OS control plane and resource lifecycle",
+      "status": "accepted-roadmap",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/14-event-os-control-plane-v1.png",
+      "mermaid": "docs/diagrams/architecture/14-event-os-control-plane.mmd",
+      "prompt": "docs/diagrams/architecture/14-event-os-control-plane.prompt.txt",
+      "brief": "docs/diagrams/architecture/14-event-os-control-plane.brief.md",
+      "sources": [
+        "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+        "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md",
+        "server/services/deployment/control.py",
+        "server/services/temporal/workflow_registry.py"
+      ],
+      "doc_targets": [
+        "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+        "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source boundaries checked against the pinned baseline; proposed status retained.",
+          "Verified all 17 components and 19 directed relationships, budget/admission holds, parked-turn release, conditional approval, workers-to-turn execution, recovery re-arming, upgrade gating, proposed versus dormant status, and readable native/documentation scale. Two ImageGen edits corrected wrong arrow endpoints, one detached permit connector, and proposal badge color.",
+          "Coordinator cross-review requested a visible gap between the workers-to-turn execute connector and Outbox. Third ImageGen edit narrowed Outbox to preserve the intended endpoint and remove the apparent junction.",
+          "Coordinator final visual review: Final corrected routing gap verified: workers\u2192turn connector has visible dark separation from future Outbox."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+        "attempts": [
+          {
+            "kind": "generate",
+            "artifact": "exec-f4d84130-8f32-4c15-9fa6-641bd00c463f.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-b75cc677-f953-40e3-a520-11fa34174593.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-aa7e8be6-671f-48e1-a7de-0ea5ba7e11ef.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-91fb619c-0ce2-4c11-a913-7c2ccd9c1c80.png"
+          }
+        ],
+        "selected_artifact": "exec-91fb619c-0ce2-4c11-a913-7c2ccd9c1c80.png",
+        "width": 1672,
+        "height": 941
+      },
+      "sha256": {
+        "image": "07fc29f148b839f43db175c5591e5ffe3feed9227337341ff533fd7d42f301d2",
+        "mermaid": "cc69b99a2fd95a21926c6cdc16e5e1a59de56b3ed1b4125443d1a8c8291c44f2",
+        "prompt": "077ae9b7c105acc5d6c8345af25d81e81c58b512a2bae3ce03445870e63551e2",
+        "brief": "8eb505f3a1a23d2d80cbc53bdb9ee384848d57f4e4a42343297a3d7bb4a030c0"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "RFC-0005-EVENT-OS-ON-TEMPORAL.md": "19c8c9606c34a4b41edfe6481c044c5b290a62cce22eeceb00f5f0e1c2e85089",
+        "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md": "66e955f204c38712ec9f2722b20fd473733407325212a784baad651317feb1f6",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md": "231a7ceea43de83c2ffb58ad14a89bfdfbc1a966cbece81ef96b8a28bece353f",
+        "server/services/deployment/control.py": "7492c43c7037af47b2104136c544c79ff1c7f09f169165f02e4dcaff370f6e24",
+        "server/services/temporal/workflow_registry.py": "43faf0d775df7782900e45041a7a7db54012dcb96193e16074c2481e118f03da"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 15,
+      "title": "UASTL connector and optimization architecture",
+      "status": "draft",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/15-uastl-v1.png",
+      "mermaid": "docs/diagrams/architecture/15-uastl.mmd",
+      "prompt": "docs/diagrams/architecture/15-uastl.prompt.txt",
+      "brief": "docs/diagrams/architecture/15-uastl.brief.md",
+      "sources": [
+        "RFC-0001-UASTL-Universal-API-Schema-Translation-Layer.md",
+        "server/services/credentials/sources.py",
+        "server/services/llm/__init__.py"
+      ],
+      "doc_targets": [
+        "RFC-0001-UASTL-Universal-API-Schema-Translation-Layer.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source boundaries checked against the pinned baseline; proposed status retained.",
+          "Verified all 13 components and 14 directed relationships, host-side API proxy boundary, sandbox alternatives, trace/metric/GEPA feedback, draft status, proposed datastore outlines, and readable native/documentation scale. One ImageGen edit corrected retrieval-index status and input/state badges.",
+          "Coordinator final visual review: Verified Draft status, schema/stub/retrieval/codegen chain, sandbox alternatives and external broker, captured trace\u2192metric\u2192GEPA\u2192prompt feedback."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+        "attempts": [
+          {
+            "kind": "generate",
+            "artifact": "exec-f6186238-59d4-4d06-803b-ecafcda8fcfb.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-26256664-af16-43cb-a9d2-1a474603b3ca.png"
+          }
+        ],
+        "selected_artifact": "exec-26256664-af16-43cb-a9d2-1a474603b3ca.png",
+        "width": 1672,
+        "height": 941
+      },
+      "sha256": {
+        "image": "dbc72f3382de8f21dde379d350aa62fed9f6e79873330b7f1b2b271b42b5a61e",
+        "mermaid": "444b4fe81db3ffc6fe4506f7ef8e165fcbb6e877f8d8bca0133a6f5078b7dbf8",
+        "prompt": "9bc0e829566b681fb94a7ab5e0f39a11b6f79adb2cbd5033e92f9ee79cd2f543",
+        "brief": "3118dfc87a22f21d40b17c3c87bb404cba65bff12106dda2ee86dd6c29e656f1"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "RFC-0001-UASTL-Universal-API-Schema-Translation-Layer.md": "0e4202ea874716973611b184bae7a29cb4701cab85ab38145fbdb1c544db6441",
+        "server/services/credentials/sources.py": "5b4e9743cf5c0fb8c8f056e4f2aa84671e8cdbdb7eb28fadd61cababe4adf448",
+        "server/services/llm/__init__.py": "a299ff4a286cb3935d5bdc96ee88dd255cb2c340db5ee073a8801fc8f0a44799"
+      },
+      "extra_prompt_sha256": {}
+    },
+    {
+      "id": 16,
+      "title": "Parameter widget-registry proposal",
+      "status": "sketch",
+      "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+      "image": "docs/diagrams/architecture/16-parameter-widget-registry-v1.png",
+      "mermaid": "docs/diagrams/architecture/16-parameter-widget-registry.mmd",
+      "prompt": "docs/diagrams/architecture/16-parameter-widget-registry.prompt.txt",
+      "brief": "docs/diagrams/architecture/16-parameter-widget-registry.brief.md",
+      "sources": [
+        "docs-internal/frontend_architecture.md",
+        "client/src/components/ParameterRenderer.tsx",
+        "client/src/lib/nodeSpec.ts",
+        "client/src/adapters/nodeSpecToDescription.ts",
+        "client/src/hooks/useParameterPanel.ts",
+        "client/src/ParameterPanel.tsx"
+      ],
+      "doc_targets": [
+        "docs-internal/frontend_architecture.md"
+      ],
+      "review": {
+        "source": "passed",
+        "visual": "passed",
+        "notes": [
+          "Source boundaries checked against the pinned baseline; proposed status retained.",
+          "Verified 10 unique components and 12 relationships, current useState edit buffer versus proposed RHF + zod bindings, existing NodeSpec and save boundaries, widget branches, future status and normal-width readability. The lower save box denotes the same existing save/configuration component. Cross-review corrected initial form-state assumption; no runtime change.",
+          "Coordinator final visual review: Final corrected current controlled edit buffer vs proposed RHF/zod widget bindings verified; existing backend/adapter/save remain current."
+        ],
+        "coordinator": "passed"
+      },
+      "generation": {
+        "tool": "image_gen__imagegen",
+        "mode": "built-in",
+        "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+        "attempts": [
+          {
+            "kind": "generate",
+            "artifact": "exec-84ebccfa-a2d7-4760-9dd4-83bde6de1089.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-484a9fc1-7ec7-43c9-ba68-c6e82c787b20.png"
+          },
+          {
+            "kind": "edit",
+            "artifact": "exec-8f0f03d9-269b-46e9-8954-760408545983.png"
+          }
+        ],
+        "selected_artifact": "exec-8f0f03d9-269b-46e9-8954-760408545983.png",
+        "width": 1672,
+        "height": 941
+      },
+      "sha256": {
+        "image": "097dae263fdc4e434957201a70038501edd3c4b2be399c76e1b92b4ec4e1e0c1",
+        "mermaid": "e1bb92b6e2cf67ec1881ff53e445bec08a771acc3cfbad53d3f4e5af869b6073",
+        "prompt": "da406915e7b13e788c2995c85062b1eb3cc029a88335f31c5d0d85da0e789859",
+        "brief": "10b97f17dc3015b4f0720b66b4014aec32ad52da0406ad4d7dbd0e772ddad22a"
+      },
+      "image_dimensions": [
+        1672,
+        941
+      ],
+      "reviewed_source_sha256": {
+        "docs-internal/frontend_architecture.md": "8a9bb86893fc917f282aa4cdfaeaeac7bd033e0c0dcce565ca4fa94f8d0eff6b",
+        "client/src/components/ParameterRenderer.tsx": "53379ee3818d0fb4d2c11cc84724a70c4586072d338da8b9e947457bcfb3c0de",
+        "client/src/lib/nodeSpec.ts": "0dfb3bc70609341b5b0bc9cd63107d0efe361f90f67311203a4f34e1455a9629",
+        "client/src/adapters/nodeSpecToDescription.ts": "4e5cd8b35c455af3821f0573f7ef5a3093842cb52ee8aac198dbdea1199e4cd5",
+        "client/src/hooks/useParameterPanel.ts": "32ced6b246b0b6b6bb65e21dec432f885222413ed6056bd6a966bce9b4196da1",
+        "client/src/ParameterPanel.tsx": "0151ea951823f247ed34dbab7d342597f33d3377fc87554651a68decc24b7e38"
+      },
+      "extra_prompt_sha256": {}
+    }
+  ]
+}

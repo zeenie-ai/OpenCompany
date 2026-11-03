@@ -1,0 +1,116 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram in a consistent technical suite.
+Style: polished flat vector-like technical drawing, wide landscape 16:9, opaque charcoal background #101216, boxes #1b1e25, off-white text #e8eaed. Cyan #8be9fd for clients/interfaces, purple #bd93f9 for application services, orange #ffb86c for Temporal runtime, pink #ff79c6 for data, green #50fa7b for external dependencies. Use large crisp sans-serif labels, spacious layout, clear orthogonal directional arrows, distinct process/store boundaries, restrained color and no decoration. No 3D, no logos, no invented components or arrows. Render all quoted labels verbatim. Source paths are provenance only; do not draw code paths as tiny text. Use the short edge labels specified. Aim for readability at ordinary documentation width.
+
+Title (verbatim): "OpenCompany · Distributed deployment"
+Subtitle (verbatim): "Current implementation · 56f0b397"
+
+Composition: Draw a prominent backend-replica process boundary containing the backend, embedded SDK workers and browser-owner worker. Place shared PostgreSQL and shared external Temporal outside it. Generic standalone workers are separate from backend replicas and never connect to the owner-local browser/profile. Put a dashed OPTIONAL callout around generic standalone workers. A short bottom requirements strip carries the configuration prerequisites.
+
+Exact component labels and semantic colors:
+- "Browser / client" (client)
+- "Backend replica" (service)
+- "Embedded SDK workers" (temporal)
+- "Browser owner worker" (temporal)
+- "Shared external Temporal" (temporal)
+- "Shared PostgreSQL" (state)
+- "Standalone generic workers" (temporal)
+- "Owner-local browser + profile" (service)
+- "1Password service account" (external)
+- "Configured workspace storage" (state)
+- "Selected chat event relay" (service)
+- "Owner-only mobile capability" (service)
+
+Required directional relationships (from → to, with exact short edge label):
+- "Browser / client" → "Backend replica": "HTTP / WebSocket"
+- "Backend replica" → "Shared external Temporal": "submit workflows"
+- "Embedded SDK workers" → "Shared external Temporal": "poll / report"
+- "Standalone generic workers" → "Shared external Temporal": "same namespace / queue"
+- "Backend replica" → "Shared PostgreSQL": "application state"
+- "Browser owner worker" → "Shared PostgreSQL": "ownership / fencing metadata"
+- "Browser owner worker" → "Shared external Temporal": "owner-specific queue"
+- "Browser owner worker" → "Owner-local browser + profile": "exclusive live owner"
+- "Backend replica" → "1Password service account": "approved secret bindings"
+- "Standalone generic workers" → "1Password service account": "approved secret bindings"
+- "Backend replica" → "Configured workspace storage": "workspace references"
+- "Standalone generic workers" → "Configured workspace storage": "configured file access"
+- "Standalone generic workers" → "Selected chat event relay": "chat + selected lifecycle frames"
+- "Selected chat event relay" → "Backend replica": "authenticated internal relay"
+- "Backend replica" → "Owner-only mobile capability": "installation-owner check"
+
+Architecture constraints (do not add them all as small prose; honor them in topology and brief callouts):
+- Distributed mode requires shared PostgreSQL, external Temporal, native-agent and per-type dispatch, unique browser replica identity/trusted origin, one backend process per replica, and 1Password service-account authentication.
+- Standalone workers refuse local mode and default to the same configured Temporal address, namespace and task queue as the backend. Generic workers exclude process-local Browser activities.
+- Shared database rows contain browser ownership, route and fencing metadata, not live sockets or daemon state. The original owner retains the browser/profile. Owner loss is not automatic transfer to another machine.
+- Cross-worker file access requires an explicitly suitable workspace-storage arrangement. This diagram does not imply PostgreSQL contains workspace file bytes.
+- Distributed credential preflight rejects inline, OAuth, CLI-managed and unsupported machine-local connections. Not every local integration can be moved to generic workers.
+- The remote relay transports chat-run events and selected lifecycle broadcasts. It is not a universal durable event bus.
+- The shared mobile capability requires installation-owner authorization and Android runtime/queue prerequisites. It is not an arbitrary browser-owner replica task.
+- Single-container Docker is a separate supported local recipe. Merely scaling Compose does not establish this distributed configuration.
+
+Footer (verbatim): "Required: shared Postgres + external Temporal + unique owner identity + 1Password. Browser ownership is process-affine."
+
+Use a concise legend: Client/interface, Application service, Temporal, State, External dependency. This is a current-implementation diagram, not a proposed deployment. Do not add cloud containers, databases, bypass routes or security guarantees absent from the specified relationships.
+
+Provenance: code baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12. Sources: server/core/config.py; server/services/temporal/lifecycle.py; server/services/temporal/worker.py; server/services/browser_owners.py; server/services/credentials/preflight.py; server/services/credentials/onepassword.py; server/services/chat/relay.py; server/nodes/mobile/_node.py; docs-internal/browser.md; docs-internal/docker.md. Do not print source paths in the image.
+
+
+Generation style reference: docs/diagrams/architecture/02-local-runtime-v1.png
+
+Exact appended generation instructions:
+Input image is a STYLE REFERENCE ONLY: match its charcoal, typography and colored outlines. Facts must come solely from this diagram prompt. Do not reproduce the long architecture-constraints prose in the image. Instead use a compact bottom requirements strip containing exactly: "Shared PostgreSQL", "External Temporal", "Unique browser owner", "1Password service account". Keep owner-affine resources and the optional generic workers visually separate. No extra arrows.
+
+
+Targeted edit prompt:
+Edit this distributed-deployment diagram to correct the LEFT replica topology and arrow origins only. Preserve its title, palette, typography, optional generic-worker box, outside data/service boxes, bottom requirements strip and all labels. The large left purple boundary must be titled 'REPLICA HOST'. Within it, draw a smaller distinct boundary 'ONE BACKEND PROCESS'. Inside that smaller boundary place an explicit purple box labeled 'Backend replica' on the left, and the existing 'Embedded SDK workers' and 'Browser owner worker' boxes to its right. The Browser/client arrow must enter the Backend replica box. Submission must originate from the Backend replica box and go to Shared external Temporal, labeled 'submit workflows'. Poll/report must originate only from Embedded SDK workers to Shared external Temporal. The owner-specific queue remains Browser owner worker to Shared external Temporal. Below the smaller process boundary, but inside REPLICA HOST, retain 'Owner-local browser + profile', connected only from Browser owner worker by 'exclusive live owner'. This represents owner-local child browser processes and profile files, not another in-process SDK worker. The Backend replica box alone originates arrows 'application state' to Shared PostgreSQL, 'approved secret bindings' to 1Password, 'workspace references' to workspace storage, and 'installation-owner check' to owner-only mobile capability. Browser owner worker separately connects 'ownership / fencing metadata' to Shared PostgreSQL. Selected chat event relay connects to Backend replica labeled 'authenticated internal relay'. Keep standalone generic workers connected only to Shared external Temporal, 1Password, configured workspace storage, and Selected chat event relay. Never connect generic workers to browser/profile. Do not add any other arrows. Keep paths spaced, unambiguous arrowheads and readable labels.
+
+
+
+Rejected endpoint edit
+Correct exactly THREE arrow endpoints in this distributed deployment diagram. Keep all boxes, process/host boundaries, other arrows, palette, labels and typography unchanged. 1. Remove the old ownership / fencing metadata path that appears to start from the Backend replica box. Redraw it starting explicitly on the BOTTOM-LEFT BORDER of Browser owner worker, routing below the backend-process boundary to avoid crossing through the Backend replica box, and terminating with an arrowhead on Shared PostgreSQL. Label ownership / fencing metadata. It must not touch the Backend replica box at all. 2. Selected chat event relay must connect explicitly TO the Backend replica API box, not to REPLICA HOST border. Remove the current arrow that stops at the host border. Route a continuous line from the TOP of Selected chat event relay around Owner-local browser + profile, through the host/process boundary, terminating with one arrowhead on the BOTTOM of Backend replica. Label authenticated internal relay. 3. The installation-owner check arrow must be one-way from Backend replica TO Owner-only mobile capability. Keep the arrowhead at Mobile and remove any reverse arrowhead pointing into Backend replica on this owner-check path. Keep the relay and mobile paths separate, never joined. The remaining application-state/secret/workspace, submit/poll, owner-queue and standalone-worker routes must stay unchanged. No additional relationships.
+
+
+
+Rejected precision edit
+Make only TWO white-line endpoint fixes in this exact diagram; all other pixels/components/labels remain unchanged. Image coordinates are approximately1672x941. The ownership/fencing path now correctly starts at Browser owner worker and goes to PostgreSQL: PRESERVE IT. Fix A: the installation-owner-check path runs from Backend replica bottom near(x518,y366), then via(x704,y435) to Mobile near(x823,y614). Remove the UPWARD arrowhead at(x518,y366). It must be a plain line start there and have its ONLY arrowhead at Mobile pointing DOWN. Fix B: the authenticated-internal-relay path incorrectly stops on the replica-host lower border and points DOWN into Selected chat event relay. Remove its downward arrowhead at the TOP of the relay near(x1020,y615). That is the PLAIN START of an outgoing line. Route the line upward from relay top, then LEFT along y550 to x650, UP to y415, LEFT to x575, then UP into the BOTTOM of the Backend replica box at approximately(x575,y366). Place its ONLY arrowhead there pointing UP into Backend replica. It must not stop at the host/process border. Relay path and Mobile path must remain separate; at any crossing use a small bridge to show no junction. The two Backend box ports are DISTINCT: plain outgoing Mobile line at x518, incoming Relay arrowhead at x575. Preserve all labels including authenticated internal relay and installation-owner check. Do not create any other arrowheads or relationships.
+
+
+
+SELECTED REGENERATION: main topology and alias panels
+Use case: infographic-diagram
+Draw a NEW precise OpenCompany maintainer system-design diagram, wide landscape16:9, using the attached LOCAL-RUNTIME image for STYLE ONLY. Charcoal#101216 background, dark#1b1e25 cards, large offwhite#e8eaed sans-serif labels, cyan clients/interfaces, purple services/processes, orange Temporal workers/runtime, pink state, green external dependencies. Flat clear technical drawing. Title "OpenCompany · Distributed deployment". Subtitle "Current implementation · 56f0b397". Avoid crossing or overlapping arrows. Do not copy facts from the style image.
+
+Use FOUR SEPARATE, CLEARLY LABELED PANELS. Components repeated in detail panels are ALIASES of the main components, not additional deployed services. Each detail panel has a short "Same components, expanded view" subtitle.
+
+UPPER MAIN PANEL (about55% height), title "Shared execution topology":
+A cyan "Browser / client" points via "HTTP / WebSocket" to a purple boundary "BACKEND REPLICA · ONE PROCESS".
+Inside that boundary draw two DISTINCT boxes: purple "API / services" and orange "Embedded SDK workers". API/services→workers has label "start / manage".
+Outside and to the right draw orange "Shared external Temporal". A direct arrow FROM API/services TO Shared external Temporal is labeled "submit workflows". A DISTINCT arrow FROM Embedded SDK workers TO Shared external Temporal is labeled "poll / report".
+At far right draw a DASHED optional boundary containing orange "Standalone generic workers". One arrow FROM standalone workers TO Shared external Temporal is labeled "same namespace / queue".
+Below API/services inside this upper panel draw THREE DISTINCT state/dependency boxes outside the process boundary: pink "Shared PostgreSQL", green "1Password service account", pink "Configured workspace storage". Three simple API/services outgoing arrows connect to them, labeled "app state", "secret bindings", "file references". Use spaced vertical paths. Do not connect these state boxes to each other.
+Small upper-panel callout: "Generic workers exclude Browser. Cross-worker files require configured storage."
+
+LOWER LEFT PANEL, title "Browser ownership", subtitle "Same components, expanded view":
+One orange box "Browser owner worker" (small second line "inside backend replica").
+This owner worker has exactly THREE outgoing arrows, drawn with independent paths:
+1. owner worker→purple "Owner-local browser + profile", labeled "exclusive live owner".
+2. owner worker→pink "Shared PostgreSQL", labeled "ownership / fencing".
+3. owner worker→orange "Shared external Temporal", labeled "owner queue".
+Keep these arrows wholly inside the browser-ownership panel. No generic-worker arrows enter it.
+
+LOWER MIDDLE PANEL, title "Remote chat relay", subtitle "Same components, expanded view":
+A simple LEFT-TO-RIGHT chain of THREE boxes:
+orange "Standalone generic workers" → purple "Selected chat event relay" → purple "Backend replica API".
+The first arrow is labeled "selected frames"; the SECOND arrow is labeled "authenticated relay".
+Both arrowheads point RIGHT. NO reverse arrowheads. No line leaves this panel.
+Small caption "Chat + selected lifecycle frames only".
+
+LOWER RIGHT PANEL, title "Shared mobile authorization", subtitle "Same backend, expanded view":
+A simple LEFT-TO-RIGHT chain of THREE boxes:
+purple "Backend replica API" → cyan "Installation-owner check" → purple "Owner-only mobile capability".
+Both arrowheads point RIGHT. NO reverse arrowheads. No line leaves this panel.
+Small caption "Android runtime and queue prerequisites apply".
+
+BOTTOM FOOTER: "Distributed mode requires shared Postgres, external Temporal, unique browser-owner identity and 1Password. Browser resources remain owner-local."
+Small legend for colored node categories.
+Critical: arrows remain INSIDE each detail panel; alias panels must NOT connect to one another or to the upper panel. The same services may be repeated as explicitly labeled detail aliases. This isolation of detail flows is intentional. Every relationship above is directional exactly as specified. Do not join mobile authorization to remote chat relay. Do not draw owner metadata from API/services; the ownership inset shows it originating ONLY at Browser owner worker. No Redis execution dependency, no load balancer, no Kubernetes, no direct client-to-store access.

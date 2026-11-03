@@ -1,0 +1,219 @@
+{
+  "app_runtime_sha": "07e6d4c2c273c3693d2d0e3a84e04cdbafe68642",
+  "original_generation_sha": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "current_views": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "result": "revalidated; original PNG bytes retained",
+  "runtime_diff": [
+    "server/tests/temporal/test_pi_nested_control.py",
+    "server/tests/temporal/test_pi_worker_recovery.py"
+  ],
+  "runtime_changes": false,
+  "focused_corrections": [
+    "Safe Apply and Turn on Talk preservation versus explicit interruption/reset",
+    "Legacy Task Manager bridge prerequisites",
+    "Browser flat result limitation",
+    "Legacy owner scope and team Context/Memory qualifications"
+  ],
+  "proposed_views": "13-16 retain their roadmap/draft/sketch status; excluded from Mintlify",
+  "checks": {
+    "documentation_tests": 915,
+    "relevant_contract_tests": 18,
+    "mermaid_sources": 16,
+    "mermaid_version": "11.16.1",
+    "registered_nodes": 157,
+    "agent_tool_eligible": 112,
+    "workspace_task_eligible": 3,
+    "retired_types": 4,
+    "architecture_fixture_tests": 9
+  },
+  "scope": "Documentation, canonical assets and documentation validation only; no runtime or production dependency changes.",
+  "source_revalidation": [
+    {
+      "id": 1,
+      "status": "passed",
+      "source_sha256": {
+        "server/main.py": "b6ed7af0e6ed709601a2bb167645b5114b5cee33b8424b912a6494d11b6dd225",
+        "cli/commands/start.py": "34e7cca1322071ff90ea8667906d0b8b05768541a8d8a6437001a73625f71735",
+        "desktop/src/main/backend.ts": "a693e976997f03182ae47623a02892af784367d9ce3fb8797fb4862feb7c9bd3",
+        "server/services/llm/unifier.py": "9507219475751bee2d7b562e97e2f0327b745269a44e60ddaed8aa4169b09b43",
+        "server/services/handlers/tools.py": "32b9ef4be7994881dfd5cbdc535892db8ad4d49231e87837c4de4042f8312228",
+        "server/services/credentials/onepassword.py": "13f49a92abfa29583b0198d31130048f2f34650369baba8f24a956199dd27ea8",
+        "server/services/events/dispatch.py": "d8923960820ca3bd2a37b432db0530165b539c2324f2e8313e0f14745bde113f",
+        "server/nodes/mobile/_node.py": "af43344e874c8524f375dd790f43325d6ed2f187f4ef4792916b11ca9459d705",
+        "gateway/README.md": "22464107a58977d2c54f98d36ccb1fc1909ff6fd3535ace53e2837f3674fa573",
+        "server/config/llm_defaults.json": "a61b6c12cfd548adf3ab420f4c2bf70a95070fdd04217cdb964076fd16a5defb"
+      }
+    },
+    {
+      "id": 2,
+      "status": "passed",
+      "source_sha256": {
+        "cli/commands/start.py": "34e7cca1322071ff90ea8667906d0b8b05768541a8d8a6437001a73625f71735",
+        "cli/commands/dev.py": "a733a70e6468f96fc954f8c1dcb0777d851bb230bd2c0f7f87e735a3a87d1d56",
+        "server/main.py": "b6ed7af0e6ed709601a2bb167645b5114b5cee33b8424b912a6494d11b6dd225",
+        "server/services/temporal/lifecycle.py": "71c6be21f04a6192a930e6976b2466d14aa213510138ccc212e008b87cf51165",
+        "server/services/temporal/_runtime.py": "5f56b687213c1a4749deb3118216b8ec119feefaa3c4be8f9adff9e1aba4edcf",
+        "server/core/paths.py": "010a7d9452d622d0a63e59ffab3ba9833ae96d0cce8b0193eda8782bf7cdfbd7",
+        "desktop/src/main/backend.ts": "a693e976997f03182ae47623a02892af784367d9ce3fb8797fb4862feb7c9bd3",
+        "client/vite.config.js": "8950193204e2f852186172af04c0ea2b6211e3caf6d399fa83bc757439fc7770",
+        "docker-compose.yml": "2273af735c0f135524fd466c9e2c327c0bbf6fc13ca4ec7aa5888816eb7ee25e",
+        "docker/entrypoint.sh": "43a7f3d31d7bd71448c4553f0c0d90e2098e73fd527d2df283d3bdabf0375872",
+        "docker/Dockerfile": "e4393808f5fea25f331bd08ee3a3957fec61cf0a7611dd30c90786ad9b8ca61a"
+      }
+    },
+    {
+      "id": 3,
+      "status": "passed",
+      "source_sha256": {
+        "server/core/config.py": "b18a8028c39e6b475e52a2876f8dc8f96130d40a5d2f76d101bd91b4332f314e",
+        "server/services/temporal/lifecycle.py": "71c6be21f04a6192a930e6976b2466d14aa213510138ccc212e008b87cf51165",
+        "server/services/temporal/worker.py": "4cba1ca86cac20d39a3738fd8888dc874b7ff05ea47b19b5f9031f304bac7a59",
+        "server/services/browser_owners.py": "c3307b3b2a45a8e5416edf5aaf22155fd332efaa1a601e5acc6a3e65f475859a",
+        "server/services/credentials/preflight.py": "1c975e75d2c1c97c72d1184dfcdc843a30caf107c0605770423cf96dbfb0ffa6",
+        "server/services/credentials/onepassword.py": "13f49a92abfa29583b0198d31130048f2f34650369baba8f24a956199dd27ea8",
+        "server/services/chat/relay.py": "5739f3845f04d52bad084ef9b5c4d9f0543fecfc10f4d4247a7b34503d089eeb",
+        "server/nodes/mobile/_node.py": "af43344e874c8524f375dd790f43325d6ed2f187f4ef4792916b11ca9459d705",
+        "docs-internal/browser.md": "f381fb12702c0a3ab374ccb21a2a6644219ab04446f03819156e8fdf9630d2ef",
+        "docs-internal/docker.md": "c598cb7e573e77a5c51e22d9b381b4146078b62724e9fbcbac41eab4b3cdb96f"
+      }
+    },
+    {
+      "id": 4,
+      "status": "passed",
+      "source_sha256": {
+        "client/src/main.tsx": "c376fef885a8f226a4bf24d0133311a196f225a969291819f714b5f75736b90e",
+        "client/src/App.tsx": "708345e2c162d0439260cf14fe68abfeae5b711c214404b2ce4a24f230196d28",
+        "client/src/app/AppShell.tsx": "4dd1b192c89ee61841f55c4a3ce4a16d1728ff0ade583821411b971baf5cac3c",
+        "client/src/app/ShellModeSwitch.tsx": "ed4d3d247c4bdfc38ba13005bd9ff2cad2fdfa47ea0cd7f244deb3b5885da585",
+        "client/src/app/useCurrentWorkflowSync.ts": "31b52190d451588a63f7dc01115221c8af80feedb9ac5ea24e897764e7b7b2f6",
+        "client/src/lib/queryClient.ts": "f6c24700317f7a82725a92dfeeef5f701fb4afe1b1eeca6530a9678e8a179fa3",
+        "client/src/lib/queryPersist.ts": "3db7a59778bdabf93b3da537ae35ba6bcf2feb639bf3b66e51916748f36f0292",
+        "client/src/store/useAppStore.ts": "9deb293df2f0a5eb72d65a7999f5bbadeb6b20d7e5088e83229d41344140def9",
+        "client/src/contexts/WebSocketContext.tsx": "8c4e6fcd5018de6dc9fb145e885c88418b559eb0bdc6cf2db1ff47a09f0299fb",
+        "client/src/features/chat/index.ts": "0941e04b937cd30c1757f311ca2ca1325a52924ab9c2515a444bb441dbcf496b",
+        "docs-internal/frontend_architecture.md": "8a9bb86893fc917f282aa4cdfaeaeac7bd033e0c0dcce565ca4fa94f8d0eff6b",
+        "docs-internal/status_broadcaster.md": "9b4e28b1f7e0bfaf5678262f90d0583384f9118332792fea6f83c0f5a10ab8af"
+      }
+    },
+    {
+      "id": 5,
+      "status": "passed",
+      "source_sha256": {
+        "server/services/workflow.py": "0d458ab5f68564c1a533acee52435ffba06f0c4055fe17ace06a11db4d4a32e6",
+        "server/services/temporal/workflow.py": "09ba19006f8ff77262d38c2172d0d2663a6ec114a242a1569a73688e41761e2e",
+        "server/services/node_executor.py": "c24ec4ceb8d322388ed78810a6c03d2f5d24daed056bc508e15d4fb96ac762ba",
+        "server/services/temporal/executor.py": "cf09a93152bc24e40451128dbd98b911a2db40b556e4e0db760d90882d4bdcdc"
+      }
+    },
+    {
+      "id": 6,
+      "status": "passed",
+      "source_sha256": {
+        "server/routers/websocket.py": "482bc4586cb1a6b92640a014c531230e426069586e6aff3b8d0da54cdb103f95",
+        "server/services/workflow.py": "0d458ab5f68564c1a533acee52435ffba06f0c4055fe17ace06a11db4d4a32e6",
+        "server/services/handlers/tools.py": "32b9ef4be7994881dfd5cbdc535892db8ad4d49231e87837c4de4042f8312228",
+        "server/services/node_invocations.py": "7d1e12a1db7a6c819773ce6af310a6ab055983b2ce8e007c83a271c70db3c2cb",
+        "server/services/temporal/node_invocation.py": "0c378ffef23f282594f1f0cdbf4d6c0919e1177a12df90b14d2cd0cee8877bc6",
+        "server/services/temporal/workspace_tasks_workflow.py": "93e341bb6864a08774d868da2904ee4f92ae009e662321d110bcd8fdbc9da8b3"
+      }
+    },
+    {
+      "id": 7,
+      "status": "passed",
+      "source_sha256": {
+        "server/nodes/__init__.py": "89fbb0a3f91c279b8788b592d219728ab5a227a4ab3a771493055e18714e4b13",
+        "server/services/plugin/base.py": "cb4d4cd3e7660e8fec4fe0c422e71e8c02da54a83c3f1f7af817c8f5fdfee1f4",
+        "server/services/node_registry.py": "ffcd5bb9ce685571c4df050db3106bc0587f6c4356f6be626222cfade28e9830",
+        "server/services/node_spec.py": "f063c1fc64fd0d3bd6b590d0055a9e4477ccf9697c9cfc031b47ef910dbc9f21",
+        "server/routers/schemas.py": "e96e8ff099114b5b406818b605721e3745999ffee9ebce66a741950144ac486d",
+        "server/services/node_executor.py": "c24ec4ceb8d322388ed78810a6c03d2f5d24daed056bc508e15d4fb96ac762ba",
+        "server/services/temporal/plugin_activities.py": "015fca58c4bd2657809a978b80f520a527084b2bd4bc57d82a6de664f7a82bb5",
+        "server/services/temporal/worker.py": "4cba1ca86cac20d39a3738fd8888dc874b7ff05ea47b19b5f9031f304bac7a59",
+        "client/src/lib/nodeSpec.ts": "0dfb3bc70609341b5b0bc9cd63107d0efe361f90f67311203a4f34e1455a9629",
+        "client/src/adapters/nodeSpecToDescription.ts": "4e5cd8b35c455af3821f0573f7ef5a3093842cb52ee8aac198dbdea1199e4cd5",
+        "docs-internal/plugin_system.md": "e590d32715daa1f78f0bfcdbf1d5b8fae73f735c100e6586b500e7b7dff855af"
+      }
+    },
+    {
+      "id": 8,
+      "status": "passed",
+      "source_sha256": {
+        "server/services/chat/handlers.py": "d3435d438cace1318551f79b097a6e18cc035da91e5736449fc011413ab4ff0b",
+        "server/services/chat/ledger.py": "a4bcc93e4de6c604ce749290b608995124f9c5a2771bf1bab4781033be9aa0ec",
+        "server/services/chat/events.py": "6096c4f89fe7505579f83b3d2c673e31e87a45210e341ad440bc11f67365b548",
+        "server/services/temporal/agent_workflow.py": "8e46accdc39a4f125e53d6f9225527c30050887f03f544d7efb9ec5bf20887a2",
+        "server/services/chat/hub.py": "c513e3e0de1fe3e4d2bfb08feecb538e2f14b6fb02bf27a2beca9b2ab48b38b9",
+        "server/services/chat/relay.py": "5739f3845f04d52bad084ef9b5c4d9f0543fecfc10f4d4247a7b34503d089eeb"
+      }
+    },
+    {
+      "id": 9,
+      "status": "passed",
+      "source_sha256": {
+        "server/nodes/tool/task_manager/__init__.py": "5f1eba8d25c83d6cd8f985028974e6ecee5f16cffa303d783e9dc08c1760dd98",
+        "server/services/handlers/tools.py": "32b9ef4be7994881dfd5cbdc535892db8ad4d49231e87837c4de4042f8312228",
+        "server/services/temporal/agent_workflow.py": "8e46accdc39a4f125e53d6f9225527c30050887f03f544d7efb9ec5bf20887a2",
+        "server/services/agent_context/conversation.py": "1313c7e8eb8a5b283f8f31dbb98c63f9ee470e24cce8d72b4e1c7550b59bd337",
+        "docs-internal/agent_context_flow.md": "ba4ffe0e4fe06e3a05f78f4fe0680c52214ae128d2c069ac053884a4292baad8",
+        "docs-internal/agent_teams.md": "79a819ab9e02c9603f4c96085b56d10ced66fe369d0c6d3a835165eab76d45e6"
+      }
+    },
+    {
+      "id": 10,
+      "status": "passed",
+      "source_sha256": {
+        "server/services/events/dispatch.py": "d8923960820ca3bd2a37b432db0530165b539c2324f2e8313e0f14745bde113f",
+        "server/services/temporal/trigger_listener_workflow.py": "845252c3ac706fb8aa912e3cae960b100d2a4476710e244139ef5ee31a831f29",
+        "server/services/deployment/manager.py": "06d8cd751d5b45ab4d341c158423a1718a37e30487806b8d9f6b2a14ef8a79b2",
+        "server/services/temporal/schedules.py": "805dac25641d180a04ec592d050c633e707fa782784ab8b66d39f07ed8a6a477",
+        "server/services/temporal/workflow_control_workflow.py": "0d5c8bf73e218563377ac8d7e7cf3dfc5bc77eeafd38d2f5ba790042d09942c7",
+        "server/services/deployment/control.py": "7492c43c7037af47b2104136c544c79ff1c7f09f169165f02e4dcaff370f6e24",
+        "docs-internal/temporal-workflow-control.md": "e3e247ac0abddac73a1bb4e9e17038d126e5c1c81c503525a0ec4d70eb84bf6d"
+      }
+    },
+    {
+      "id": 11,
+      "status": "passed",
+      "source_sha256": {
+        "server/services/approvals/tool_calls.py": "0a34c69dbeb9a69f121222c6fa62c88d8759c66999b898239a229c7a927aeec4",
+        "server/services/approvals/decisions.py": "8978425422f3662f22d2e7326377fdfe3836a4120389b96c5cd3d5389ea2c3da",
+        "server/services/temporal/approved_tool_call_workflow.py": "b13f682e52dfda53f1be7cb0e736673bc4540e5df8d9f95f7ac3f2ceec55c7f4",
+        "server/services/temporal/approval_workflow.py": "aeec3353083cbacaa434327cdbcab8f408aaaae0d764b7a5f678d901823c498d",
+        "server/services/deployment/control.py": "7492c43c7037af47b2104136c544c79ff1c7f09f169165f02e4dcaff370f6e24",
+        "RFC-0007-APPROVALS-ON-TEMPORAL.md": "231a7ceea43de83c2ffb58ad14a89bfdfbc1a966cbece81ef96b8a28bece353f"
+      }
+    },
+    {
+      "id": 12,
+      "status": "passed",
+      "source_sha256": {
+        "server/core/paths.py": "010a7d9452d622d0a63e59ffab3ba9833ae96d0cce8b0193eda8782bf7cdfbd7",
+        "server/core/config.py": "b18a8028c39e6b475e52a2876f8dc8f96130d40a5d2f76d101bd91b4332f314e",
+        "server/core/database.py": "dc1316e391de9275025d804d9e1fc6442a273e4eca9971468b700af8dd2bf56e",
+        "server/core/encryption.py": "9d3b1c06df9c58bd38d5efa52e514544e53633e21cb9fd795c06bfd4538a8cb4",
+        "server/services/auth.py": "99919fe546a527c5d696e6d840dddcb1a760b3b5b5f7fb6a856781c72564f393",
+        "server/services/credentials/sources.py": "5b4e9743cf5c0fb8c8f056e4f2aa84671e8cdbdb7eb28fadd61cababe4adf448",
+        "server/services/credentials/onepassword.py": "13f49a92abfa29583b0198d31130048f2f34650369baba8f24a956199dd27ea8",
+        "server/services/credentials/preflight.py": "1c975e75d2c1c97c72d1184dfcdc843a30caf107c0605770423cf96dbfb0ffa6",
+        "server/services/temporal/_runtime.py": "5f56b687213c1a4749deb3118216b8ec119feefaa3c4be8f9adff9e1aba4edcf",
+        "server/nodes/browser/_profiles.py": "cf22d509ea40d0c2684eb669568ebc82eef61bc3ce816067787eb95026c6f648",
+        "docs-internal/browser_workspace.md": "8c02c073965956e4aa373f676821d1d0738b6276961b5d43c92d25ca23829fbe",
+        "docs-internal/credentials_encryption.md": "59f806c3b00f559c4633a4dcc1e9c32025effb2fbade51569269543b9a3ef78a"
+      }
+    }
+  ],
+  "source_drift_note": "The original catalogue preserves generation fingerprints. normal_mode.md now clarifies owner scope, Memory and safe lifecycle actions; current diagram boundaries are unchanged and revalidated here."
+}

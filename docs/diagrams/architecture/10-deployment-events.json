@@ -1,0 +1,59 @@
+{
+  "id": 10,
+  "title": "Deployment and events",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/10-deployment-events-v1.png",
+  "mermaid": "docs/diagrams/architecture/10-deployment-events.mmd",
+  "prompt": "docs/diagrams/architecture/10-deployment-events.prompt.txt",
+  "brief": "docs/diagrams/architecture/10-deployment-events.brief.md",
+  "sources": [
+    "server/services/events/dispatch.py",
+    "server/services/temporal/trigger_listener_workflow.py",
+    "server/services/deployment/manager.py",
+    "server/services/temporal/schedules.py",
+    "server/services/temporal/workflow_control_workflow.py",
+    "server/services/deployment/control.py",
+    "docs-internal/temporal-workflow-control.md"
+  ],
+  "doc_targets": [
+    "docs-internal/event_framework.md",
+    "docs-internal/temporal-workflow-control.md",
+    "docs-internal/TEMPORAL_ARCHITECTURE.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source-backed labels and directed relationships prepared before image generation.",
+      "Reviewed push/webhook, poll and Temporal Schedule routes; generation snapshot/controller wiring and full Start/Stop/drain/Resume/Reset cycle remain distinct.",
+      "Two targeted edits corrected polling-gate endpoint and separated its crossing from scheduled-run delivery.",
+      "Current fail-soft event dispatch, buffered-work preservation and new-generation-after-Reset caveats are visible.",
+      "Coordinator final visual review: Verified push/poll/schedule ingress, generation snapshot/control, cooperative Stop/drain/Resume and separate Reset/new Start."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "attempts": [
+      {
+        "type": "generate",
+        "artifact": "exec-97548373-e669-4ecb-b86a-4cf5aa12cf94.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-22125559-7997-4d5b-ae73-88b065c42789.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-b1cbfad9-df06-492b-9977-215289f54102.png"
+      }
+    ],
+    "selected_artifact": "exec-b1cbfad9-df06-492b-9977-215289f54102.png",
+    "dimensions": [
+      1672,
+      941
+    ]
+  }
+}

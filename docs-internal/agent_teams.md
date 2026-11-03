@@ -12,6 +12,19 @@ Private utility instances may repeat a node type; their IDs and bindings stay
 separate. This does not restrict intentional custom wiring in existing Dev
 graphs.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Teams and context — Current implementation.**
+
+[![Teams and context (Current implementation)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/09-teams-context.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/09-teams-context.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Runtime model
 
 1. `build_teammate_descriptors()` expands connected agents into stable
@@ -40,8 +53,9 @@ graphs.
    selected teammate after persistence but are hidden from the lead's LLM.
 5. Temporal and legacy execution share the durable task lifecycle and use the
    same precreated task ID; neither path creates a second tracking record.
-   The legacy path does not currently start the teammate; see
-   "Known limitations" below.
+   The legacy bridge can start the teammate with that same precreated task
+   when its trusted config carries `ai_service` and `database`; see the
+   execution-path qualifications below.
 
 ## Topology
 
@@ -180,16 +194,22 @@ execution tasks. Its Done count includes accepted tasks, not submitted work.
 
 `mark_done` is a deprecated alias for `accept_task` and never deletes history.
 
-## Known limitations
+## Execution-path qualifications
 
-- **Off Temporal, Task Manager does not start teammates.** `assign_task`,
-  `retry_task` and `reassign_task` persist the task as `queued` and return a
-  `delegation_request`, which only `AgentWorkflow` consumes. The in-process
-  branch in `_execute_task_manager` needs `ai_service` and `database` in its
-  config, and the plugin tool path in `services/handlers/tools.py` does not
-  pass them. So when the lead runs in-process (`AIService.execute_agent` /
-  `execute_chat_agent`) rather than as an `AgentWorkflow`, the task stays
-  queued and no teammate runs it.
+- **Legacy execution depends on its bridge context.** Task Manager persists
+  the task before returning a trusted scheduling envelope. `assign_task`
+  calls `_execute_delegated_agent` immediately when `ai_service` and
+  `database` are supplied, reusing the precreated task ID. The tool bridge
+  supplies that context on its supported in-process path; it is incorrect
+  to describe every off-Temporal assignment as inert. Without a consumer or
+  the required trusted context, merely persisting a queued row does not
+  start a teammate. Managed employee teams retain their Temporal prerequisite;
+  the legacy bridge does not provide Temporal control/recovery guarantees.
+
+See the legacy assignment regression in
+[`test_task_manager_delegation_bridge.py`](../server/tests/nodes/test_task_manager_delegation_bridge.py)
+and the implementation in
+[`Task Manager`](../server/nodes/tool/task_manager/__init__.py).
 
 ## Key files
 

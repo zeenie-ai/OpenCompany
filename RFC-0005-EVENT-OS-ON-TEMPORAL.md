@@ -20,6 +20,25 @@
   - Until a phase lands, [event_framework.md](./docs-internal/event_framework.md), [chat_protocol.md](./docs-internal/chat_protocol.md), [temporal-workflow-control.md](./docs-internal/temporal-workflow-control.md) and [TEMPORAL_ARCHITECTURE.md](./docs-internal/TEMPORAL_ARCHITECTURE.md) stay normative for what it covers.
 - **Baseline:** HEAD a8e390ca (2026-10-23), temporalio 1.30.0, Temporal CLI unpinned. Line numbers are as of that date and drift; those changed on 2026-10-24 follow RFC-0006's baseline, HEAD 4f73cb10. Figures marked *est.* are unmeasured and are confirmed by the gates in §26.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](docs/diagrams/architecture/README.md).
+
+**Event OS data plane and source migration — Proposed target · accepted roadmap.**
+
+[![Event OS data plane and source migration (Proposed target · accepted roadmap)](docs/diagrams/architecture/13-event-os-data-plane-v1.png)](docs/diagrams/architecture/13-event-os-data-plane-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/13-event-os-data-plane.mmd) · [Source evidence and limitations](docs/diagrams/architecture/13-event-os-data-plane.brief.md)
+
+**Event OS control plane and resource lifecycle — Proposed target · accepted roadmap.**
+
+[![Event OS control plane and resource lifecycle (Proposed target · accepted roadmap)](docs/diagrams/architecture/14-event-os-control-plane-v1.png)](docs/diagrams/architecture/14-event-os-control-plane-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/14-event-os-control-plane.mmd) · [Source evidence and limitations](docs/diagrams/architecture/14-event-os-control-plane.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## How to read this
 
 - **Owner:** §1, §3 (decisions), §25 (defaults chosen and what is still open).

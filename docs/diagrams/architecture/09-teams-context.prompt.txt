@@ -1,0 +1,49 @@
+Use case: infographic-diagram
+Asset type: source-backed OpenCompany maintainer architecture documentation
+Style: polished flat technical diagram, wide 16:9 landscape; charcoal background #101216, panels #1b1e25, text #e8eaed. Rounded rectangles, restrained accents, crisp orthogonal arrows with arrowheads and readable sans-serif type. Cyan client/interfaces, purple backend services, orange Temporal execution, pink durable state, green external systems. Generous spacing. Use no perspective, illustrations, decorative icons, logos, gradients or watermark. Show explicit textual status, never color alone. No file paths in the image.
+Typography: large precise labels, no extra invented text, no tiny prose. Every literal label below must be verbatim. Arrows must match the relationship list. Conditional arrows need the listed short label. Dashed arrows mean optional/conditional; solid arrows are ordinary control/data flow. Do not add reverse arrowheads or unlisted connections.
+
+Title (verbatim): "Teams and context"
+Status badge (verbatim): "CURRENT"
+Footer (verbatim): "OpenCompany · source 56f0b397"
+Composition: Main left-to-right loop: lead turn → Task Manager → durable task record → delegated workflow → connected teammate → persisted result → taskTrigger → lead review. Beneath this loop, put opt-in Context, explicit Memory and materialized Skills/Workspace as three separate resources with only their listed edges. Make the queued return a short feedback arrow from Task Manager to lead.
+
+Exact component labels:
+- "Lead agent turn" (service)
+- "Task Manager" (service)
+- "Durable task records" (state)
+- "DelegatedTaskWorkflow" (temporal)
+- "Connected teammate" (service)
+- "Persisted task outcome" (state)
+- "taskTrigger" (temporal)
+- "Lead review and acceptance" (service)
+- "Opt-in Context conversation" (state)
+- "Explicit Memory tool" (service)
+- "Skills and workspace files" (state)
+- "Generation control" (temporal)
+
+Required directed relationships:
+- Lead agent turn → Task Manager [assign_task]
+- Task Manager → Durable task records [persist and queue]
+- Task Manager → Lead agent turn [returns queued]
+- Durable task records → DelegatedTaskWorkflow [Temporal execution]
+- DelegatedTaskWorkflow → Connected teammate [authorized teammate]
+- Connected teammate → Persisted task outcome
+- Persisted task outcome → taskTrigger [terminal event after persistence]
+- taskTrigger → Lead review and acceptance [new lead firing]
+- Lead review and acceptance → Task Manager [accept / retry / finish]
+- Opt-in Context conversation → Lead agent turn [load conversation]
+- Lead agent turn → Opt-in Context conversation [save each turn]
+- Opt-in Context conversation → Lead review and acceptance [continue same conversation]
+- Lead agent turn → Explicit Memory tool [explicit remember / recall]
+- Skills and workspace files → Lead agent turn [instructions and files]
+- Skills and workspace files → Connected teammate [scoped workspace]
+- Generation control → Durable task records [lifecycle admission]
+- Generation control → Opt-in Context conversation [Reset uses new generation]
+
+Bottom callouts, verbatim, small but readable:
+- "Only agents connected to input-teammates can be assigned."
+- "Context is a plain conversation keyed by workflow, generation and agent node."
+- "Memory is an explicit tool; it does not automatically preserve conversation continuity."
+
+Accuracy requirements: all boxes and relationships above describe current code at the pinned commit. Do not draw proposed durable-inbox/Event OS architecture. Keep process, datastore, client and external-system categories distinct. No extra boxes or arrows. Avoid text overlap, clipped arrowheads, illegible tiny annotations and unlabeled shortcut paths.

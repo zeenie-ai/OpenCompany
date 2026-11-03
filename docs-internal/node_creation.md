@@ -6,6 +6,27 @@ This guide is a fast index for adding a new node to OpenCompany. The
 deep technical details live in [`plugin_system.md`](./plugin_system.md);
 this file picks the right entry point based on what you're adding.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Independent-node execution — Current implementation.**
+
+[![Independent-node execution (Current implementation)](../docs/diagrams/architecture/06-independent-node-execution-v1.png)](../docs/diagrams/architecture/06-independent-node-execution-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/06-independent-node-execution.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/06-independent-node-execution.brief.md)
+
+**Plugin and node contracts — Current implementation.**
+
+[![Plugin and node contracts (Current implementation)](../docs/diagrams/architecture/07-plugin-node-contracts-v1.png)](../docs/diagrams/architecture/07-plugin-node-contracts-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/07-plugin-node-contracts.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/07-plugin-node-contracts.brief.md)
+
+[Complete registered-node capability index](../docs/diagrams/architecture/NODES.md) includes eligibility, unavailable nodes and retired migration references.
+
+<!-- architecture-suite:end -->
+
 ## Decision tree
 
 ### Browser AI Agent creation

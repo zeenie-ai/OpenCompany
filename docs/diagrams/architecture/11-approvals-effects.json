@@ -1,0 +1,54 @@
+{
+  "id": 11,
+  "title": "Approvals and external effects",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/11-approvals-effects-v1.png",
+  "mermaid": "docs/diagrams/architecture/11-approvals-effects.mmd",
+  "prompt": "docs/diagrams/architecture/11-approvals-effects.prompt.txt",
+  "brief": "docs/diagrams/architecture/11-approvals-effects.brief.md",
+  "sources": [
+    "server/services/approvals/tool_calls.py",
+    "server/services/approvals/decisions.py",
+    "server/services/temporal/approved_tool_call_workflow.py",
+    "server/services/temporal/approval_workflow.py",
+    "server/services/deployment/control.py",
+    "RFC-0007-APPROVALS-ON-TEMPORAL.md"
+  ],
+  "doc_targets": [
+    "docs-internal/normal_mode.md",
+    "RFC-0007-APPROVALS-ON-TEMPORAL.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source-backed labels and directed relationships prepared before image generation.",
+      "Native review: allowed/restricted execution and explicit refusal return are separate from draft approval, owner Send, Undo grace, revision claim and one-attempt execution.",
+      "Cross-checked _restricted: constrained settings still execute, so corrected first image's restricted-result bypass to an explicit refusal path.",
+      "Implemented ApprovalWorkflow waiting remains dashed amber and marked rollout pending; new-generation activation caveat is explicit.",
+      "Legend avoids equating service modules with OS processes; line bridges separate side-effect calls from result/refusal paths.",
+      "Coordinator final visual review: Verified allowed/restricted execution and refusal separate from held draft, undo/revision claim, one-attempt send and sent/not_sent/unknown; waiting remains dormant."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "attempts": [
+      {
+        "type": "generate",
+        "artifact": "exec-7731b326-840b-43cd-b31b-3025d46ec408.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-50c8ac6a-e55f-4231-8726-29d5467f2568.png"
+      }
+    ],
+    "selected_artifact": "exec-50c8ac6a-e55f-4231-8726-29d5467f2568.png",
+    "dimensions": [
+      1672,
+      941
+    ]
+  }
+}

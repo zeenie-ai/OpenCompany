@@ -29,6 +29,21 @@ repo's, the repo wins. Its README's Settings section predates the Settings
 redesign, so for Settings the prototype (`reference/OpenCompany Home.dc.html`)
 is the reference.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Approvals and external effects — Current implementation.**
+
+Approval waiting is implemented; activation for ordinary new generations remains pending AP.7.
+
+[![Approvals and external effects (Current implementation)](../docs/diagrams/architecture/11-approvals-effects-v1.png)](../docs/diagrams/architecture/11-approvals-effects-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/11-approvals-effects.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/11-approvals-effects.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Switching screens
 
 - **Flag**: `featureFlags.normalMode` ([lib/featureFlags.ts](../client/src/lib/featureFlags.ts))
@@ -754,16 +769,18 @@ sending and drafts belong to the chat (wire and client rules in
   what the employee remembers of it (`clear_chat_messages`).
 - **Turn on Talk**: an employee whose `talk.state` is `off` (hired before
   Talk, or built in Dev mode) shows Turn on Talk where the box would be. An
-  `AlertDialog` confirms first, since it restarts them, and says so when
-  drafts are waiting (a restart cancels them). `unsupported` gets a note that
+  `AlertDialog` confirms that Talk can wait for current work to finish;
+  existing conversations and drafts waiting for approval stay in place.
+  `unsupported` gets a note that
   their setup has no way to answer. Either way their main action still shows
   while they are not running, beside a line that says only their state
   ("{Name} isn't running.", "{Name} is paused."; `stateNoticeText`).
 - **Pending changes**: while `pending_changes` is true, a notice above the box
-  reads "{Name} has new abilities for this conversation. Apply to make them
-  part of all their work (restarts {name} and clears this conversation)."
+  reads "{Name} has new abilities saved. Apply them after current work
+  finishes. Their conversations and pending approvals stay in place."
   Its Apply (`ActionButton intent="config"`) calls
-  `apply_employee_changes`.
+  `apply_employee_changes`. The separate **Stop work and apply** action
+  explicitly interrupts active work; it is not the default Apply behavior.
 - **Asking first**: under the box, a line says whether the employee asks
   before sending anything on the owner's behalf (the summary's `asks_first`).
 
@@ -1164,9 +1181,12 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 - OAuth sign-in is not opened ahead of the request, so a browser may block
   the popup.
 - Each waiting draft holds one `triggers-event` worker slot.
-- Billing has no plans, payment method or invoices: no billing account sits
-  behind OpenCompany. A deleted employee's runs leave the month's count,
-  because deleting a workflow deletes its run records.
+- The self-hosted Home Billing page is local usage reporting: it has no plan
+  purchase, payment-method or invoice controls. This does not describe the
+  separate paid hosted Pro and Max offerings; their current terms are on
+  [official pricing](https://opencompany.sh/pricing/). A deleted employee's
+  runs leave the local month's count because workflow deletion removes its
+  run records.
 - Skill library changes reach only new hires: an employee keeps the skills it
   was hired with, and one hired before the library existed has none, until
   the owner asks them in Talk to add one. The library is shared across users
@@ -1182,16 +1202,24 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   installed Chrome, Edge or Chromium; the employee's first browser step
   reports it. An employee hired before the app existed has no browser;
   adding a Browser node in Dev mode gives it one.
-- With login on, an agent's Canvas writes land under the default owner:
-  its tool call carries no user id
-  ([agent_workflow.py](../server/services/temporal/agent_workflow.py)).
-  The Workspace reads the signed-in owner's board, so it shows nothing
-  there. This predates the Workspace and applies to the editor's Memory
-  and Data Source tools as well. Fixing it moves existing memories to a
-  different owner, so it needs its own change.
-- The talk agent has its own conversation: it cannot see the worker's
-  exchanges with customers or the text of its routine reports. The two share
-  Memory, the Canvas, the checklist and the skills.
+- Current workflow saves resolve the owner from the authenticated socket
+  ([workflow storage](../server/services/workflow_storage/handlers.py)); the
+  Temporal node relay forwards the trusted `user_id`
+  ([workflow router](../server/routers/workflow.py)). Canvas, Context and
+  Memory panels authorize their saved workflow/node scope against that owner.
+  The previous blanket login-enabled empty-panel failure is not the current
+  contract. Older data saved under another owner can still be absent from
+  the signed-in account and requires a separate data/ownership review; this
+  documentation change does not migrate it.
+- The contact has its own conversation. Current team hires also allocate
+  separate Context and, when enabled, Memory nodes to the contact, lead and
+  each specialist
+  ([team recipe](../server/services/employees/team_recipe.py)). App/research
+  tools move to the relevant specialists; the contact submits substantive
+  jobs rather than inheriting their tool catalog. Original single-agent
+  hires can share Memory, Canvas, checklist and skills between Talk and the
+  worker, and custom wiring can intentionally share Memory. Inspect the
+  saved bindings before assuming sender or member isolation.
 - A tool added from Talk works at once only in the talk agent's current run.
   The next message is a new run from the live generation's snapshot, which
   lacks it until the agent asks the Agent Builder for it again (that binds

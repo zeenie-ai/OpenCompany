@@ -1,0 +1,50 @@
+Provenance note: The initial generation prompt below contained a form-state assumption corrected after source cross-review. The final canonical graph is 16-parameter-widget-registry.mmd: current controlled edit buffer and proposed RHF + zod bindings are distinct. The complete corrective prompt is retained in attempt 3 below.
+
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram, project documentation PNG
+Style: precise flat technical infographic, dark charcoal canvas #101216, panels #1b1e25, bright readable text #e8eaed. Restrained cyan interfaces, purple services, orange Temporal, pink data, green external systems. Proposed components use amber dashed outlines and explicit status words. No decorative 3D, no mascots, no logos, no visual metaphors.
+Composition: wide 16:9 landscape, generous spacing, large legible sans-serif text, clean orthogonal arrow routes with clear arrowheads, no crossing through labels. Keep exact box labels and edge directions below. Do not add components or relationships. Do not print source file paths in the image.
+
+Title (verbatim): "Parameter widget-registry proposal"
+Status badge (verbatim): "UNIMPLEMENTED SKETCH — DECISION PENDING"
+Footer (verbatim): "Preserve credentials, uploads, drag/drop and save semantics. The production switch remains current."
+Baseline caption: "Source baseline 56f0b397"
+Layout: Separate two lanes: current shipped path on top, proposed replacement dispatch below. Reuse existing NodeSpec adapter and form-state boxes across the lanes. Dashed amber outlines mark registry/widgets; solid purple marks current components. The current lane must remain visibly current, not depicted as already removed.
+
+Exact components:
+- backend: "Backend NodeSpec / existing contract" (current)
+- adapter: "NodeSpec adapter / existing" (current)
+- switch: "Current switch renderer" (current)
+- registry: "Proposed widget registry / tester + rank dispatch" (proposed)
+- scalar: "Inline scalar widgets" (proposed)
+- collection: "CollectionWidget / recursive collections" (proposed)
+- code: "CodeWidget / editor wrapper" (proposed)
+- form: "RHF + zod form state / existing" (current)
+- save: "Existing save + node configuration" (current)
+
+Exact directed relationships:
+- backend → adapter: "schema + uiHints"
+- adapter → switch: "current path"
+- switch → form: "current rendering"
+- adapter → registry: "proposed dispatch"
+- registry → scalar: "match"
+- registry → collection: "match"
+- registry → code: "match"
+- scalar → form: "field binding"
+- collection → form: "field binding"
+- code → form: "field binding"
+- form → save: "save"
+
+Legend: solid outline = implemented building block; dotted cyan = implemented, rollout pending; dashed amber/pink = proposed component; green = external. Category color does not change implementation status. All proposed views carry their status badge.
+Constraints: spell every label accurately, preserve directional arrowheads, no invented services, no additional arrows, no text smaller than necessary for normal documentation reading. Do not imply the whole proposed architecture is deployed.
+
+
+Exact additional generation instruction:
+Input image role: STYLE REFERENCE ONLY. Match the reference's dark technical typography and clean outlined boxes. This is an UNIMPLEMENTED SKETCH. Two lanes must be explicit: current adapter → current switch renderer → existing form state → existing save, and proposed adapter → tester/rank registry → three proposed widget boxes → the SAME existing form state. No direct registry→current-switch arrow. Current backend NodeSpec, adapter, form state and save are implemented with solid outlines. Only registry/widgets use dashed amber outlines. All listed arrows are one-way. Keep the complete sketch badge and preservation footer legible.
+
+Generation history
+1. Built-in ImageGen generation with style reference 02-local-runtime-v1.png; artifact exec-84ebccfa-a2d7-4760-9dd4-83bde6de1089.png.
+2. Built-in ImageGen edit; selected artifact exec-484a9fc1-7ec7-43c9-ba68-c6e82c787b20.png. Exact edit prompt:
+Correct only internal-component colors and repeated-component identity in this widget-registry sketch. Preserve every arrow, all component positions, status badge, lane headings, footer and other labels. Change Backend NodeSpec's outline from green to solid PURPLE, matching NodeSpec adapter: Backend NodeSpec is internal implemented software, not external. Change BOTH Existing save + node configuration box outlines from orange to solid PURPLE: saving is an existing application path, not a Temporal worker. In the LOWER proposed lane only, change the form box text to 'Same RHF + zod form state / existing' and the save box text to 'Same save + node configuration / existing'. These lower boxes are aliases of the existing components in the current lane, not newly created forms or save paths. Keep the three proposed widget outlines dashed amber. No other changes.
+3. Built-in ImageGen edit after runtime source cross-review; selected artifact exec-8f0f03d9-269b-46e9-8954-760408545983.png. Exact edit prompt:
+Correct a factual current-versus-proposed form-state distinction in this diagram, changing only the following boxes and one edge label. Preserve all layout, arrows, other components, badge, legend and footer. In the UPPER CURRENT lane, replace 'RHF + zod form state / existing' with 'Local parameter edit buffer / existing', keeping that box SOLID PURPLE. Change the arrow label into that upper box from 'current rendering' to 'controlled values'. Current ParameterRenderer uses a controlled edit buffer, not RHF. In the LOWER PROPOSED lane, replace 'Same RHF + zod form state / existing' with 'Proposed RHF + zod bindings'. This lower binding box must have a DASHED AMBER outline with a small PROPOSED badge, matching the proposed widgets. It is a proposed new binding layer, not an alias of the current edit buffer. Keep all three widget→binding arrows and the binding→same existing save arrow. Existing NodeSpec and save/config boxes remain solid purple. Do not add any arrows or make any other change.

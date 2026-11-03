@@ -1,0 +1,54 @@
+{
+  "id": 6,
+  "title": "Independent-node execution",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/06-independent-node-execution-v1.png",
+  "mermaid": "docs/diagrams/architecture/06-independent-node-execution.mmd",
+  "prompt": "docs/diagrams/architecture/06-independent-node-execution.prompt.txt",
+  "brief": "docs/diagrams/architecture/06-independent-node-execution.brief.md",
+  "sources": [
+    "server/routers/websocket.py",
+    "server/services/workflow.py",
+    "server/services/handlers/tools.py",
+    "server/services/node_invocations.py",
+    "server/services/temporal/node_invocation.py",
+    "server/services/temporal/workspace_tasks_workflow.py"
+  ],
+  "doc_targets": [
+    "docs-internal/plugin_system.md",
+    "docs-internal/node_creation.md",
+    "docs-internal/temporal-workflow-control.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source-backed labels and directed relationships prepared before image generation.",
+      "Native review: four entry modes remain distinct; ordinary Canvas nodes and new Coding Agent Pi exception both shown.",
+      "Saved-node authorization/eligibility and controller-owned deduplication remain explicit.",
+      "One targeted edit corrected service/process legend and added a line jump separating tool and Workspace execution paths.",
+      "Coordinator final visual review: Verified canvas Coding Agent\u2192Pi exception, graph/tool and Workspace task lanes, only declared eligible saved targets."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "attempts": [
+      {
+        "type": "generate",
+        "artifact": "exec-03a2f01c-d875-4527-8c4f-07c6e9aa1c75.png"
+      },
+      {
+        "type": "edit",
+        "artifact": "exec-401300e4-932d-4868-86ef-90ed67d9541b.png"
+      }
+    ],
+    "selected_artifact": "exec-401300e4-932d-4868-86ef-90ed67d9541b.png",
+    "dimensions": [
+      1672,
+      941
+    ]
+  }
+}

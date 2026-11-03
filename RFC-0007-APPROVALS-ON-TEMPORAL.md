@@ -25,6 +25,27 @@
     - `SYNTHESIS.md`.
   - `approvals-check/`: the check against the code, eight reports (C1 to C8, one per area) and `SYNTHESIS.md`.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](docs/diagrams/architecture/README.md).
+
+**Approvals and external effects — Current implementation.**
+
+Approval waiting is implemented; activation for ordinary new generations remains pending AP.7.
+
+[![Approvals and external effects (Current implementation)](docs/diagrams/architecture/11-approvals-effects-v1.png)](docs/diagrams/architecture/11-approvals-effects-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/11-approvals-effects.mmd) · [Source evidence and limitations](docs/diagrams/architecture/11-approvals-effects.brief.md)
+
+**Event OS control plane and resource lifecycle — Proposed target · accepted roadmap.**
+
+[![Event OS control plane and resource lifecycle (Proposed target · accepted roadmap)](docs/diagrams/architecture/14-event-os-control-plane-v1.png)](docs/diagrams/architecture/14-event-os-control-plane-v1.png)
+
+[Editable Mermaid](docs/diagrams/architecture/14-event-os-control-plane.mmd) · [Source evidence and limitations](docs/diagrams/architecture/14-event-os-control-plane.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Implementation status
 
 At the documentation audit baseline, `ApprovalWorkflow` is registered by

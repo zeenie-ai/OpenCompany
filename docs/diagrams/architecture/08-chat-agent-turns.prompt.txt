@@ -1,0 +1,49 @@
+Use case: infographic-diagram
+Asset type: source-backed OpenCompany maintainer architecture documentation
+Style: polished flat technical diagram, wide 16:9 landscape; charcoal background #101216, panels #1b1e25, text #e8eaed. Rounded rectangles, restrained accents, crisp orthogonal arrows with arrowheads and readable sans-serif type. Cyan client/interfaces, purple backend services, orange Temporal execution, pink durable state, green external systems. Generous spacing. Use no perspective, illustrations, decorative icons, logos, gradients or watermark. Show explicit textual status, never color alone. No file paths in the image.
+Typography: large precise labels, no extra invented text, no tiny prose. Every literal label below must be verbatim. Arrows must match the relationship list. Conditional arrows need the listed short label. Dashed arrows mean optional/conditional; solid arrows are ordinary control/data flow. Do not add reverse arrowheads or unlisted connections.
+
+Title (verbatim): "Chat and agent turns"
+Status badge (verbatim): "CURRENT"
+Footer (verbatim): "OpenCompany · source 56f0b397"
+Composition: Left-to-right durable turn path on the upper two thirds, with clearly separate pink durable ledger below admission and cyan live-delivery path below execution. Put the standalone-worker relay as a dashed optional inset joining the backend live hub, never as the persistent store.
+
+Exact component labels:
+- "Chat UI" (client)
+- "Authorized chat admission" (service)
+- "Chat messages and ChatRun ledger" (state)
+- "Workflow event signal" (temporal)
+- "Controller and trigger listener" (temporal)
+- "MachinaWorkflow" (temporal)
+- "AgentWorkflow" (temporal)
+- "Model / tool activities" (temporal)
+- "Model provider and tools" (external)
+- "Conversation persistence" (state)
+- "Backend live chat hub" (service)
+- "Subscribed UI and resync" (client)
+- "Standalone-worker relay" (service)
+- "Authenticated /ws/internal" (client)
+
+Required directed relationships:
+- Chat UI → Authorized chat admission [send_chat_message]
+- Authorized chat admission → Chat messages and ChatRun ledger [persist admission]
+- Authorized chat admission → Workflow event signal [deliver admitted run]
+- Workflow event signal → Controller and trigger listener
+- Controller and trigger listener → MachinaWorkflow
+- MachinaWorkflow → AgentWorkflow [native agent path]
+- AgentWorkflow → Model / tool activities
+- Model / tool activities → Model provider and tools
+- AgentWorkflow → Conversation persistence [save turn]
+- Model / tool activities → Backend live chat hub [local run events]
+- Chat messages and ChatRun ledger → Backend live chat hub [run lifecycle events]
+- Backend live chat hub → Subscribed UI and resync [bounded live stream]
+- Model / tool activities → Standalone-worker relay [remote worker only]
+- Standalone-worker relay → Authenticated /ws/internal [selected frames]
+- Authenticated /ws/internal → Backend live chat hub
+
+Bottom callouts, verbatim, small but readable:
+- "Durable rows are the record; live hub state is process/epoch scoped."
+- "Remote relay carries chat events and selected lifecycle frames, not a universal event bus."
+- "Native AgentWorkflow is shown here; graph dispatch also supports Pi and plugin-specific paths."
+
+Accuracy requirements: all boxes and relationships above describe current code at the pinned commit. Do not draw proposed durable-inbox/Event OS architecture. Keep process, datastore, client and external-system categories distinct. No extra boxes or arrows. Avoid text overlap, clipped arrowheads, illegible tiny annotations and unlabeled shortcut paths.

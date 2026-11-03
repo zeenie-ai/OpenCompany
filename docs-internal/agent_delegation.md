@@ -15,6 +15,19 @@ How memory, parameters, and execution context flow when one AI agent delegates w
 > them special is the fire-and-forget background task and the
 > `{"status": "delegated"}` lifecycle opt-out documented there).
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Teams and context — Current implementation.**
+
+[![Teams and context (Current implementation)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/09-teams-context.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/09-teams-context.brief.md)
+
+<!-- architecture-suite:end -->
+
 ## Overview
 
 AI Agents can delegate tasks to other agents connected to their `input-tools` handle. The parent agent's LLM decides when to call the child agent by invoking a `delegate_to_<agent>` tool.

@@ -1,0 +1,46 @@
+{
+  "id": 15,
+  "title": "UASTL connector and optimization architecture",
+  "status": "draft",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/15-uastl-v1.png",
+  "mermaid": "docs/diagrams/architecture/15-uastl.mmd",
+  "prompt": "docs/diagrams/architecture/15-uastl.prompt.txt",
+  "brief": "docs/diagrams/architecture/15-uastl.brief.md",
+  "sources": [
+    "RFC-0001-UASTL-Universal-API-Schema-Translation-Layer.md",
+    "server/services/credentials/sources.py",
+    "server/services/llm/__init__.py"
+  ],
+  "doc_targets": [
+    "RFC-0001-UASTL-Universal-API-Schema-Translation-Layer.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source boundaries checked against the pinned baseline; proposed status retained.",
+      "Verified all 13 components and 14 directed relationships, host-side API proxy boundary, sandbox alternatives, trace/metric/GEPA feedback, draft status, proposed datastore outlines, and readable native/documentation scale. One ImageGen edit corrected retrieval-index status and input/state badges.",
+      "Coordinator final visual review: Verified Draft status, schema/stub/retrieval/codegen chain, sandbox alternatives and external broker, captured trace\u2192metric\u2192GEPA\u2192prompt feedback."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+    "attempts": [
+      {
+        "kind": "generate",
+        "artifact": "exec-f6186238-59d4-4d06-803b-ecafcda8fcfb.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-26256664-af16-43cb-a9d2-1a474603b3ca.png"
+      }
+    ],
+    "selected_artifact": "exec-26256664-af16-43cb-a9d2-1a474603b3ca.png",
+    "width": 1672,
+    "height": 941
+  }
+}

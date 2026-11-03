@@ -12,6 +12,21 @@ and [Node creation](../../docs-internal/node_creation.md#temporal-execution-and-
 
 ---
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../../docs/diagrams/architecture/README.md).
+
+**Plugin and node contracts — Current implementation.**
+
+[![Plugin and node contracts (Current implementation)](../../docs/diagrams/architecture/07-plugin-node-contracts-v1.png)](../../docs/diagrams/architecture/07-plugin-node-contracts-v1.png)
+
+[Editable Mermaid](../../docs/diagrams/architecture/07-plugin-node-contracts.mmd) · [Source evidence and limitations](../../docs/diagrams/architecture/07-plugin-node-contracts.brief.md)
+
+[Complete registered-node capability index](../../docs/diagrams/architecture/NODES.md) includes eligibility, unavailable nodes and retired migration references.
+
+<!-- architecture-suite:end -->
+
 ## Five-minute recipe
 
 ```python

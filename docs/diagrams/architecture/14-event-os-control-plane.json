@@ -1,0 +1,59 @@
+{
+  "id": 14,
+  "title": "Event OS control plane and resource lifecycle",
+  "status": "accepted-roadmap",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/14-event-os-control-plane-v1.png",
+  "mermaid": "docs/diagrams/architecture/14-event-os-control-plane.mmd",
+  "prompt": "docs/diagrams/architecture/14-event-os-control-plane.prompt.txt",
+  "brief": "docs/diagrams/architecture/14-event-os-control-plane.brief.md",
+  "sources": [
+    "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+    "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md",
+    "RFC-0007-APPROVALS-ON-TEMPORAL.md",
+    "server/services/deployment/control.py",
+    "server/services/temporal/workflow_registry.py"
+  ],
+  "doc_targets": [
+    "RFC-0005-EVENT-OS-ON-TEMPORAL.md",
+    "RFC-0006-TEMPORAL-DESIGN-PATTERNS.md",
+    "RFC-0007-APPROVALS-ON-TEMPORAL.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Source boundaries checked against the pinned baseline; proposed status retained.",
+      "Verified all 17 components and 19 directed relationships, budget/admission holds, parked-turn release, conditional approval, workers-to-turn execution, recovery re-arming, upgrade gating, proposed versus dormant status, and readable native/documentation scale. Two ImageGen edits corrected wrong arrow endpoints, one detached permit connector, and proposal badge color.",
+      "Coordinator cross-review requested a visible gap between the workers-to-turn execute connector and Outbox. Third ImageGen edit narrowed Outbox to preserve the intended endpoint and remove the apparent junction.",
+      "Coordinator final visual review: Final corrected routing gap verified: workers\u2192turn connector has visible dark separation from future Outbox."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "mode": "built-in",
+    "style_reference": "docs/diagrams/architecture/02-local-runtime-v1.png",
+    "attempts": [
+      {
+        "kind": "generate",
+        "artifact": "exec-f4d84130-8f32-4c15-9fa6-641bd00c463f.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-b75cc677-f953-40e3-a520-11fa34174593.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-aa7e8be6-671f-48e1-a7de-0ea5ba7e11ef.png"
+      },
+      {
+        "kind": "edit",
+        "artifact": "exec-91fb619c-0ce2-4c11-a913-7c2ccd9c1c80.png"
+      }
+    ],
+    "selected_artifact": "exec-91fb619c-0ce2-4c11-a913-7c2ccd9c1c80.png",
+    "width": 1672,
+    "height": 941
+  }
+}

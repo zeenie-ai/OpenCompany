@@ -1,0 +1,53 @@
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram, project documentation PNG
+Style: precise flat technical infographic, dark charcoal canvas #101216, panels #1b1e25, bright readable text #e8eaed. Restrained cyan interfaces, purple services, orange Temporal, pink data, green external systems. Proposed components use amber dashed outlines and explicit status words. No decorative 3D, no mascots, no logos, no visual metaphors.
+Composition: wide 16:9 landscape, generous spacing, large legible sans-serif text, clean orthogonal arrow routes with clear arrowheads, no crossing through labels. Keep exact box labels and edge directions below. Do not add components or relationships. Do not print source file paths in the image.
+
+Title (verbatim): "UASTL connector and optimization architecture"
+Status badge (verbatim): "DRAFT RESEARCH PROPOSAL"
+Footer (verbatim): "Draft only. Sandbox and evaluation alternatives remain open; current credentials and runtime are unchanged."
+Baseline caption: "Source baseline 56f0b397"
+Layout: Show compilation and execution left-to-right in the top band. Put the sandbox and external host broker in distinct boundaries; API requests go sandbox → broker → external APIs, never broker → sandbox with secrets. Draw the trace → metrics → GEPA → selected prompts feedback loop across the lower band, returning to code generation. Label the sandbox box as alternatives, not three mandatory runtime services.
+
+Exact components:
+- specs: "API specifications / OpenAPI, AsyncAPI, GraphQL, YAML" (external)
+- compiler: "Schema compiler / ConnectorCIR" (proposed)
+- stubs: "Typed connector stubs" (proposed)
+- index: "Retrieval index" (state)
+- task: "Natural-language task" (interface)
+- codegen: "DSPy code generation" (proposed)
+- sandbox: "Sandbox alternatives / E2B, Modal or Pyodide" (proposed)
+- broker: "Host credential broker / proposed proxy" (proposed)
+- apis: "External APIs + browser targets" (external)
+- traces: "Execution traces / code, HTTP, screenshots, output" (state)
+- metrics: "Decomposed metrics + critique" (proposed)
+- gepa: "GEPA reflection + evaluation" (proposed)
+- prompts: "Selected prompt versions" (state)
+
+Exact directed relationships:
+- specs → compiler: "parse + normalize"
+- compiler → stubs: "generate"
+- stubs → index: "index"
+- index → codegen: "retrieve relevant stubs"
+- task → codegen: "task"
+- codegen → sandbox: "execute program"
+- sandbox → broker: "proxied API request"
+- broker → apis: "inject auth + forward"
+- sandbox → apis: "browser interaction"
+- sandbox → traces: "capture"
+- traces → metrics: "score"
+- metrics → gepa: "training feedback"
+- gepa → prompts: "select"
+- prompts → codegen: "improved prompt"
+
+Legend: solid outline = implemented building block; dotted cyan = implemented, rollout pending; dashed amber/pink = proposed component; green = external. Category color does not change implementation status. All proposed views carry their status badge.
+Constraints: spell every label accurately, preserve directional arrowheads, no invented services, no additional arrows, no text smaller than necessary for normal documentation reading. Do not imply the whole proposed architecture is deployed.
+
+
+Exact additional generation instruction:
+Input image role: STYLE REFERENCE ONLY. Match the reference's dark technical typography and clean outlined boxes. This is a DRAFT RESEARCH PROPOSAL. All UASTL-specific boxes, including pink data boxes, must have dashed amber or dashed pink outlines. Keep host credential broker OUTSIDE the sandbox. The proxied API path is sandbox → host broker → external APIs; never draw a credential arrow into the sandbox. Browser interaction is a separate sandbox → external-target arrow. All listed arrows are one-way. Keep sandbox choices visibly labeled alternatives. Render the GEPA feedback loop clearly and preserve all exact labels.
+
+Generation history
+1. Built-in ImageGen generation with style reference 02-local-runtime-v1.png; artifact exec-f6186238-59d4-4d06-803b-ecafcda8fcfb.png.
+2. Built-in ImageGen edit; selected artifact exec-26256664-af16-43cb-a9d2-1a474603b3ca.png. Exact edit prompt:
+Correct only status encoding in this UASTL draft diagram. Preserve every label, arrow, component position, footer, badge and all other styling. The 'Retrieval index' box is a PROPOSED datastore: change its solid purple outline to a clearly DASHED PINK outline, matching Execution traces and Selected prompt versions. Its small badge should say PROPOSED, not STATE. The 'Execution traces' and 'Selected prompt versions' badges should also say PROPOSED rather than STATE, retaining their dashed pink outlines. The 'Natural-language task' is an INPUT, not an implemented UASTL software component: change its small badge from IMPLEMENTED to INPUT. No other changes. Every UASTL-specific component must remain visibly proposed.

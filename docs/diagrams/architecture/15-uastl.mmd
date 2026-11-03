@@ -1,0 +1,38 @@
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial, sans-serif"}}}%%
+%% DRAFT RESEARCH PROPOSAL; baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12
+flowchart LR
+    specs["API specifications / OpenAPI, AsyncAPI, GraphQL, YAML"]:::external
+    compiler["Schema compiler / ConnectorCIR"]:::proposed
+    stubs["Typed connector stubs"]:::proposed
+    index["Retrieval index"]:::state
+    task["Natural-language task"]:::interface
+    codegen["DSPy code generation"]:::proposed
+    sandbox["Sandbox alternatives / E2B, Modal or Pyodide"]:::proposed
+    broker["Host credential broker / proposed proxy"]:::proposed
+    apis["External APIs + browser targets"]:::external
+    traces["Execution traces / code, HTTP, screenshots, output"]:::state
+    metrics["Decomposed metrics + critique"]:::proposed
+    gepa["GEPA reflection + evaluation"]:::proposed
+    prompts["Selected prompt versions"]:::state
+    specs -->|"parse + normalize"| compiler
+    compiler -->|"generate"| stubs
+    stubs -->|"index"| index
+    index -->|"retrieve relevant stubs"| codegen
+    task -->|"task"| codegen
+    codegen -->|"execute program"| sandbox
+    sandbox -->|"proxied API request"| broker
+    broker -->|"inject auth + forward"| apis
+    sandbox -->|"browser interaction"| apis
+    sandbox -->|"capture"| traces
+    traces -->|"score"| metrics
+    metrics -->|"training feedback"| gepa
+    gepa -->|"select"| prompts
+    prompts -->|"improved prompt"| codegen
+
+classDef current fill:#1b1e25,stroke:#bd93f9,stroke-width:2px,color:#e8eaed;
+classDef proposed fill:#1b1e25,stroke:#f1fa8c,stroke-width:2px,stroke-dasharray:6 4,color:#e8eaed;
+classDef state fill:#1b1e25,stroke:#ff79c6,stroke-width:2px,stroke-dasharray:6 4,color:#e8eaed;
+classDef temporal fill:#1b1e25,stroke:#ffb86c,stroke-width:2px,color:#e8eaed;
+classDef external fill:#1b1e25,stroke:#50fa7b,stroke-width:2px,color:#e8eaed;
+classDef interface fill:#1b1e25,stroke:#8be9fd,stroke-width:2px,color:#e8eaed;
+classDef dormant fill:#1b1e25,stroke:#8be9fd,stroke-width:2px,stroke-dasharray:2 3,color:#e8eaed;

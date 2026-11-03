@@ -1,0 +1,62 @@
+{
+  "id": 4,
+  "title": "Frontend architecture",
+  "status": "current",
+  "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
+  "image": "docs/diagrams/architecture/04-frontend-architecture-v1.png",
+  "mermaid": "docs/diagrams/architecture/04-frontend-architecture.mmd",
+  "prompt": "docs/diagrams/architecture/04-frontend-architecture.prompt.txt",
+  "brief": "docs/diagrams/architecture/04-frontend-architecture.brief.md",
+  "sources": [
+    "client/src/main.tsx",
+    "client/src/App.tsx",
+    "client/src/app/AppShell.tsx",
+    "client/src/app/ShellModeSwitch.tsx",
+    "client/src/app/useCurrentWorkflowSync.ts",
+    "client/src/lib/queryClient.ts",
+    "client/src/lib/queryPersist.ts",
+    "client/src/store/useAppStore.ts",
+    "client/src/contexts/WebSocketContext.tsx",
+    "client/src/features/chat/index.ts",
+    "docs-internal/frontend_architecture.md",
+    "docs-internal/status_broadcaster.md"
+  ],
+  "doc_targets": [
+    "docs-internal/frontend_architecture.md",
+    "docs-internal/status_broadcaster.md",
+    "docs-internal/chat_protocol.md"
+  ],
+  "review": {
+    "source": "passed",
+    "visual": "passed",
+    "notes": [
+      "Reviewed all labels and transport/state arrows. Corrected direct REST-to-backend HTTP path and distinct Query-cache-to-Home/editor feeds; WS fanout and shell synchronization retained.",
+      "Cross-review correction: WebSocketContext now explicitly feeds the status/chat/console fan-out, with a non-junction bridge across direct HTTP; REST and Query cache paths unchanged.",
+      "Coordinator final visual review: Verified explicit WebSocketContext\u2192output fan-out connection, HTTP crossing bridge, separate REST and cache paths."
+    ],
+    "coordinator": "passed"
+  },
+  "generation": {
+    "tool": "image_gen__imagegen",
+    "attempts": [
+      {
+        "operation": "generate",
+        "artifact": "exec-466eb8d3-4ccb-4255-b626-0b8b955d0666.png",
+        "selected": false,
+        "style_reference": "02-local-runtime-v1.png"
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-a02c6edd-4122-4cfd-8fba-aef0fb4c75aa.png",
+        "selected": false,
+        "style_reference": "02-local-runtime-v1.png"
+      },
+      {
+        "operation": "edit",
+        "artifact": "exec-874c4b6e-7960-48d2-b0bc-d527030ef45c.png",
+        "selected": true,
+        "reason": "Cross-review correction: WebSocketContext now explicitly feeds the status/chat/console fan-out, with a non-junction bridge across direct HTTP; REST and Query cache paths unchanged."
+      }
+    ]
+  }
+}

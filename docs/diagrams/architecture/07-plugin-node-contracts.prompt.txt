@@ -1,0 +1,76 @@
+Current source correction: Capability index has one incoming edge from Metadata + class registry, labeled all types + class flags. The documentation exporter reads metadata/class declarations directly. It does not consume NodeSpec assembly. The chronological generation history below retains superseded attempts; the final correction governs the selected output.
+
+Use case: infographic-diagram
+Asset type: OpenCompany maintainer architecture diagram in a consistent technical suite.
+Style: polished flat vector-like technical drawing, wide landscape 16:9, opaque charcoal background #101216, boxes #1b1e25, off-white text #e8eaed. Cyan #8be9fd for clients/interfaces, purple #bd93f9 for application services, orange #ffb86c for Temporal runtime, pink #ff79c6 for data, green #50fa7b for external dependencies. Use large crisp sans-serif labels, spacious layout, clear orthogonal directional arrows, distinct process/store boundaries, restrained color and no decoration. No 3D, no logos, no invented components or arrows. Render all quoted labels verbatim. Source paths are provenance only; do not draw code paths as tiny text. Use the short edge labels specified. Aim for readability at ordinary documentation width.
+
+Title (verbatim): "OpenCompany · Plugin and node contracts"
+Subtitle (verbatim): "Current implementation · 56f0b397"
+
+Composition: Show authoring/discovery on the left, registry/schema contract in the middle, two clearly separated outgoing lanes: UI catalogue→adapter→editor above, handler/typed-activity execution below. The capability index is a sidecar documentation output from the live registries and NodeSpec; it is not a runtime service. No node equals a separately deployed service.
+
+Exact component labels and semantic colors:
+- "Node plugin modules" (service)
+- "BaseNode registration" (service)
+- "Metadata + class registry" (service)
+- "Input / output schemas" (service)
+- "Executable handler registry" (service)
+- "NodeSpec assembly" (service)
+- "Schema / catalogue API" (client)
+- "Frontend NodeSpec adapter" (client)
+- "Palette / canvas / parameters" (client)
+- "NodeExecutor" (service)
+- "Typed Temporal activities" (temporal)
+- "Worker queue registration" (temporal)
+- "Capability index" (state)
+
+Required directional relationships (from → to, with exact short edge label):
+- "Node plugin modules" → "BaseNode registration": "recursive import discovery"
+- "BaseNode registration" → "Metadata + class registry": "register class / metadata"
+- "BaseNode registration" → "Input / output schemas": "register schema models"
+- "BaseNode registration" → "Executable handler registry": "register handler"
+- "Metadata + class registry" → "NodeSpec assembly": "metadata"
+- "Input / output schemas" → "NodeSpec assembly": "schemas"
+- "NodeSpec assembly" → "Schema / catalogue API": "wire contract"
+- "Schema / catalogue API" → "Frontend NodeSpec adapter": "fetch specs"
+- "Frontend NodeSpec adapter" → "Palette / canvas / parameters": "render / configure"
+- "Executable handler registry" → "NodeExecutor": "runtime dispatch"
+- "Metadata + class registry" → "Typed Temporal activities": "declared plugin classes"
+- "Typed Temporal activities" → "Worker queue registration": "activity / queue contracts"
+- "Metadata + class registry" → "Capability index": "all registered types"
+- "NodeSpec assembly" → "Capability index": "capabilities / requirements"
+
+Architecture constraints (do not add them all as small prose; honor them in topology and brief callouts):
+- Recursive imports discover plugin modules. BaseNode subclasses register class, metadata, schemas and handlers; abstract kinds do not register as executable concrete nodes.
+- NodeSpec assembles the backend/editor contract from actual metadata and schemas. Current frontend adapters consume the live contract.
+- Handler-free configuration/context/visual nodes can still have catalogue metadata. Registration alone does not establish executable behavior.
+- Typed Temporal activities and queues derive from declared plugin classes. Workflow-shaped agent/Pi dispatch and specialized task admissions have additional contracts.
+- Workspace-task eligibility, trigger behavior, credentials and ownership prerequisites must be read per class. All registered types are documented in the companion index without claiming every type supports every admission.
+- Unavailable twitterReceive stays marked unavailable; retired browserHarness belongs to migration/history notes, not the working registry graph.
+- This is the current NodeSpec contract. The proposed frontend widget registry is a separate status-labeled view.
+
+Footer (verbatim): "One source contract feeds catalogue and execution. Registration does not imply every execution capability is supported."
+
+Use a concise legend: Client/interface, Application service, Temporal, State, External dependency. This is a current-implementation diagram, not a proposed deployment. Do not add cloud containers, databases, bypass routes or security guarantees absent from the specified relationships.
+
+Provenance: code baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12. Sources: server/nodes/__init__.py; server/services/plugin/base.py; server/services/node_registry.py; server/services/node_spec.py; server/routers/schemas.py; server/services/node_executor.py; server/services/temporal/plugin_activities.py; server/services/temporal/worker.py; client/src/lib/nodeSpec.ts; client/src/adapters/nodeSpecToDescription.ts; docs-internal/plugin_system.md. Do not print source paths in the image.
+
+
+Generation style reference: docs/diagrams/architecture/02-local-runtime-v1.png
+
+Exact appended generation instructions:
+Input image is a STYLE REFERENCE ONLY. Match its typography, charcoal background and colored outlines; facts come only from this diagram's own labels and edges. Do not reproduce the full architecture-constraints prose in the image. Prefer one compact footer and at most two short callouts. Keep exact component labels large. Draw all required directions faithfully; do not collapse a component into a surrounding group title if it has its own incoming/outgoing arrows. Do not add arrows. Space crossings clearly.
+
+
+Targeted edit prompt:
+Correct the typed-activity registration relationships in this plugin/node-contract diagram. Preserve all boxes, labels, palette, typography, overall layout, title and footer. The arrow labeled declared plugin classes must originate from Metadata + class registry and terminate at Typed Temporal activities. It must NOT originate from Input / output schemas. Remove the extra arrow between NodeExecutor and Typed Temporal activities entirely; these are separate catalogue/execution registration outputs in this view. Keep Executable handler registry→NodeExecutor labeled runtime dispatch. Keep Typed Temporal activities→Worker queue registration. Keep all other existing specified relationships. Change Capability index from a database cylinder to a plain pink-outlined documentation card with a small second line Docs only, since it is documentation generated from the registry, not another runtime database. No new arrows.
+
+
+
+Cross-review source correction prompt:
+Make exactly TWO relationship corrections in this plugin/node-contract diagram; preserve all other boxes, typography, title, footer and all other arrows. The Capability index Docs only card is generated directly from metadata/class declarations and flags. Relabel the existing Metadata + class registry→Capability index arrow to all types + class flags. REMOVE the horizontal NodeSpec assembly→Capability index arrow and its capabilities / requirements label entirely. Capability index must then have only ONE incoming arrow, from Metadata + class registry. Keep NodeSpec assembly feeding Schema / catalogue API, the separate metadata/schema feeds into NodeSpec, registry→Typed Temporal activities, and handler→NodeExecutor unchanged. No new arrows.
+
+
+
+Final cross-review correction prompt (selected output):
+One tiny cleanup only. Remove the OBSOLETE dangling horizontal line above Metadata + class registry and its text all registered types. That old line runs from above the registry toward the right and ends without an arrow; erase it completely. Preserve the NEW valid registry→Capability index arrow labeled all types + class flags. Preserve the independent vertical NodeSpec assembly→Schema / catalogue API wire-contract path, even where it crosses the erased line. Capability index must have exactly one incoming arrow from Metadata + class registry, and no dangling duplicate path. Do not change any other text, node, arrow, palette, layout or footer.

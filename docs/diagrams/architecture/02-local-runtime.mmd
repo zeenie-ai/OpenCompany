@@ -1,0 +1,40 @@
+%% OpenCompany current architecture at 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%% Process boundaries are architectural; each SDK worker is not an OS process.
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial"}}}%%
+flowchart LR
+    client["Browser / Electron"]
+    cli["company start"]
+    subgraph backend["ONE BACKEND PROCESS"]
+        api["API + WebSocket + built SPA"]
+        services["Application services"]
+        workers["Embedded SDK workers"]
+        api --> services
+        services -->|start and manage| workers
+    end
+    temporal["Temporal server child"]
+    history[("Temporal history SQLite")]
+    appdb[("Application database")]
+    secrets[("Encrypted credentials")]
+    files["Workspaces + packages"]
+    sidecars["Lazy sidecars"]
+    vite["Vite: development only"]
+    docker["Docker: same runtime in one container"]
+    client -->|HTTP / WebSocket| api
+    cli -->|launch| api
+    services -->|submit workflows| temporal
+    workers -->|poll / report| temporal
+    temporal --> history
+    services --> appdb
+    services --> secrets
+    services --> files
+    services -->|on demand| sidecars
+    vite -.->|proxy API / WS| api
+    docker -.->|hosts| api
+    classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed;
+    classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed;
+    classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed;
+    classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed;
+    class client,cli,vite client;
+    class api,services,sidecars,docker service;
+    class workers,temporal temporal;
+    class history,appdb,secrets,files state;

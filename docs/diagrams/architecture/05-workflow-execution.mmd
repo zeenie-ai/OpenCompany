@@ -1,0 +1,43 @@
+%% OpenCompany current architecture; baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%% Exact relationships and caveats: 05-workflow-execution.brief.md
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","primaryBorderColor":"#bd93f9","lineColor":"#9aa1ac","fontFamily":"Arial, sans-serif","fontSize":"18px"}}}%%
+flowchart LR
+  request["Graph execution request"]:::client
+  service["WorkflowService"]:::service
+  route["Admission and routing"]:::service
+  executor["TemporalExecutor"]:::temporal
+  machina["MachinaWorkflow"]:::temporal
+  activity["Typed or legacy activity"]:::temporal
+  agent["AgentWorkflow"]:::temporal
+  pi["PiCodingAgentWorkflow"]:::temporal
+  node["NodeExecutor"]:::service
+  plugin["Registered plugin"]:::service
+  operations["Recorded model / tool operations"]:::temporal
+  external["Providers and tools"]:::external
+  results["Stored results and status"]:::state
+  sequential["Eligible sequential execution"]:::service
+  error["Error returned"]:::service
+  request --> service
+  service --> route
+  route -->|"Temporal selected"| executor
+  executor --> machina
+  machina -->|"frozen dispatch"| activity
+  machina -->|"native agent"| agent
+  machina -->|"recorded Pi runtime"| pi
+  activity --> node
+  node --> plugin
+  plugin --> external
+  agent --> operations
+  pi --> operations
+  operations --> external
+  plugin -->|"node outputs"| results
+  operations -->|"recorded results"| results
+  route -->|"eligible local path"| sequential
+  sequential --> node
+  executor -->|"dispatch failure"| error
+  classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed,stroke-width:2px
+  classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed,stroke-width:2px
+  classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed,stroke-width:2px
+  classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed,stroke-width:2px
+  classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed,stroke-width:2px
+  classDef dormant fill:#1b1e25,stroke:#f1fa8c,color:#e8eaed,stroke-width:2px,stroke-dasharray:6 4

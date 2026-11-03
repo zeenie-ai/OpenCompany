@@ -1,0 +1,43 @@
+%% Current implementation at 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","lineColor":"#9aa1ac","fontFamily":"Arial"}}}%%
+flowchart LR
+    boot["React root providers"]
+    shell["AppShell"]
+    home["Home employee interface"]
+    editor["Dev workflow canvas"]
+    uistate["Zustand UI / graph state"]
+    query["TanStack Query cache"]
+    api["REST request adapters"]
+    ws["WebSocketContext"]
+    backend["Backend API / WS"]
+    status["Workflow / node status stores"]
+    chat["Chat run / session subscribers"]
+    dock["Console / terminal consumers"]
+    sync["Shell synchronization effects"]
+    boot -->|"mount"| shell
+    shell -->|"lazy screen"| home
+    shell -->|"lazy screen"| editor
+    uistate -->|"UI state"| home
+    uistate -->|"graph / UI state"| editor
+    query -->|"server state"| home
+    query -->|"catalogue / specs"| editor
+    home -->|"REST operations"| api
+    editor -->|"REST operations"| api
+    api -->|"HTTP"| backend
+    home -->|"commands / subscriptions"| ws
+    editor -->|"commands / subscriptions"| ws
+    ws -->|"WebSocket"| backend
+    ws -->|"cache bridge"| query
+    ws -->|"status updates"| status
+    ws -->|"chat frames / resync"| chat
+    ws -->|"live output"| dock
+    shell -->|"own app-wide effects"| sync
+    sync -->|"workflow identity / reconnect sync"| status
+    classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed;
+    class boot,shell,home,editor,api,ws,chat,dock,sync client;
+    classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed;
+    class backend service;
+    classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed;
+    classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed;
+    class uistate,query,status state;
+    classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed;

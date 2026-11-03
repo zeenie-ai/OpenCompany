@@ -1,0 +1,46 @@
+%% OpenCompany current architecture; baseline 56f0b397d0b313ec550791c1e2772525a9f7cf12
+%% Exact relationships and caveats: 10-deployment-events.brief.md
+%%{init: {"theme":"base","themeVariables":{"background":"#101216","primaryColor":"#1b1e25","primaryTextColor":"#e8eaed","primaryBorderColor":"#bd93f9","lineColor":"#9aa1ac","fontFamily":"Arial, sans-serif","fontSize":"18px"}}}%%
+flowchart LR
+  push["Verified push / webhook"]:::external
+  envelope["WorkflowEvent dispatch"]:::service
+  listener["Controller / trigger listener"]:::temporal
+  poll["Polling workflow and activity"]:::temporal
+  cron["Temporal Schedule and cron workflow"]:::temporal
+  graphRun["MachinaWorkflow"]:::temporal
+  db["Generation and graph snapshot"]:::state
+  control["WorkflowControlWorkflow"]:::temporal
+  start["Start"]:::client
+  running["Running"]:::service
+  stop["Stop gates new work"]:::client
+  drain["Drain admitted work"]:::temporal
+  stopped["Stopped"]:::service
+  resume["Resume same continuation"]:::client
+  reset["Reset and archive"]:::client
+  ready["Ready for next Start"]:::service
+  push --> envelope
+  envelope -->|"Visibility and signals"| listener
+  listener -->|"admitted event"| graphRun
+  poll -->|"matching poll result"| graphRun
+  cron -->|"scheduled run"| graphRun
+  start -->|"allocate generation"| db
+  db -->|"snapshot and revision"| control
+  control -->|"trigger lifecycle"| listener
+  control -->|"polling gates"| poll
+  control -->|"pause / resume schedules"| cron
+  start -->|"setup acknowledged"| running
+  running --> stop
+  stop --> drain
+  drain -->|"acknowledged drain"| stopped
+  stopped --> resume
+  resume -->|"same generation"| running
+  running --> reset
+  stopped --> reset
+  reset -->|"cancel resources and archive"| ready
+  ready -->|"new generation"| start
+  classDef client fill:#1b1e25,stroke:#8be9fd,color:#e8eaed,stroke-width:2px
+  classDef service fill:#1b1e25,stroke:#bd93f9,color:#e8eaed,stroke-width:2px
+  classDef temporal fill:#1b1e25,stroke:#ffb86c,color:#e8eaed,stroke-width:2px
+  classDef state fill:#1b1e25,stroke:#ff79c6,color:#e8eaed,stroke-width:2px
+  classDef external fill:#1b1e25,stroke:#50fa7b,color:#e8eaed,stroke-width:2px
+  classDef dormant fill:#1b1e25,stroke:#f1fa8c,color:#e8eaed,stroke-width:2px,stroke-dasharray:6 4

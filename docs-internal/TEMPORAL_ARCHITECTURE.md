@@ -6,6 +6,21 @@
 > continuation. The [original execution-engine RFC](ARCHIVE/temporal-execution-engine-rfc.md)
 > is historical design context; use the current docs and implementation for behavior.
 
+<!-- architecture-suite:start -->
+## Architecture diagrams
+
+Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
+
+**Distributed deployment — Current implementation.**
+
+[![Distributed deployment (Current implementation)](../docs/diagrams/architecture/03-distributed-deployment-v1.png)](../docs/diagrams/architecture/03-distributed-deployment-v1.png)
+
+[Editable Mermaid](../docs/diagrams/architecture/03-distributed-deployment.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/03-distributed-deployment.brief.md)
+
+Related views: [Local runtime](../docs/diagrams/architecture/02-local-runtime.brief.md) · [Workflow execution](../docs/diagrams/architecture/05-workflow-execution.brief.md) · [Deployment and events](../docs/diagrams/architecture/10-deployment-events.brief.md) · [Persistence and secrets](../docs/diagrams/architecture/12-persistence-secrets.brief.md).
+
+<!-- architecture-suite:end -->
+
 ## Overview
 
 Executable workflow nodes run as **Temporal Activities** or, for supported agents,
