@@ -10,15 +10,17 @@
  * binding (emit), which json-render resolves against the UI's state and
  * hands to the chat's action handlers (genui/actions.ts).
  *
- * Surfaces follow the handoff's token map: panels on `--bg-panel` with the
- * default border, the picked option in the tools tint, a primary button in
- * the run tint, a callout's tone in the save / config / stop / run tints.
+ * Surfaces follow the handoff's token map, where colour marks status and
+ * never a control (chat V2, colour pass of 4 Nov): panels on `--bg-panel`
+ * with the default border, a picked option on `--bg-active` with a stronger
+ * border, the primary button inverted, and a callout neutral with only its
+ * icon in the tone's ink. A stat's delta keeps the run / stop ink and a
+ * chart's bars the tools ink: a trend and data, not controls.
  */
 
 import { useBoundProp } from '@json-render/react';
 import { useId } from 'react';
 import { Check, CircleAlert, Info, TriangleAlert } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,10 +35,10 @@ type ViewProps<T extends ChatComponentType> = GuardedComponentProps<ChatPropsOf<
 const GAP = { sm: 'gap-2', md: 'gap-3' } as const;
 
 const CALLOUT = {
-  info: { surface: 'border-action-save-border bg-action-save-soft', ink: 'text-action-save-ink', Icon: Info },
-  warning: { surface: 'border-action-config-border bg-action-config-soft', ink: 'text-action-config-ink', Icon: TriangleAlert },
-  danger: { surface: 'border-action-stop-border bg-action-stop-soft', ink: 'text-action-stop-ink', Icon: CircleAlert },
-  success: { surface: 'border-action-run-border bg-action-run-soft', ink: 'text-action-run-ink', Icon: Check },
+  info: { ink: 'text-fg-muted', Icon: Info },
+  warning: { ink: 'text-action-config-ink', Icon: TriangleAlert },
+  danger: { ink: 'text-destructive', Icon: CircleAlert },
+  success: { ink: 'text-fg-muted', Icon: Check },
 } as const;
 
 const PANEL = 'rounded-xl border border-border-default bg-bg-panel';
@@ -98,16 +100,16 @@ export function SlotPickerView({ props, bindings, enterRef }: ViewProps<'SlotPic
               className={cn(
                 'relative flex min-w-0 flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors duration-(--dur-default)',
                 picked
-                  ? 'border-action-tools-border bg-action-tools-soft text-action-tools-ink'
+                  ? 'border-fg-default bg-bg-active text-fg-default'
                   : 'border-border-default bg-bg-panel text-fg-default hover:border-border-strong hover:bg-bg-hover',
                 option.unavailable && 'cursor-not-allowed opacity-55 hover:border-border-default hover:bg-bg-panel',
               )}
             >
               <span className="font-mono text-sm font-semibold">{option.time}</span>
-              {option.detail && <span className={cn('text-xs', picked ? 'text-action-tools-ink' : 'text-fg-muted')}>{option.detail}</span>}
+              {option.detail && <span className={cn('text-xs', picked ? 'text-fg-default' : 'text-fg-muted')}>{option.detail}</span>}
               {option.note && <span className="text-2xs text-fg-faint">{option.note}</span>}
               {option.recommended && !option.unavailable && (
-                <span className="absolute top-2 right-2 rounded-pill border border-action-run-border bg-action-run-soft px-1.5 font-mono text-2xs text-action-run-ink">
+                <span className="absolute top-2 right-2 rounded-pill border border-border-default bg-bg-active px-1.5 font-mono text-2xs text-fg-muted">
                   Best
                 </span>
               )}
@@ -161,7 +163,7 @@ export function ToggleView({ props, bindings, enterRef }: ViewProps<'Toggle'>) {
       <Switch
         id={id}
         size="md"
-        tone="run"
+        tone="ink"
         aria-label={props.label}
         aria-describedby={props.hint ? hintId : undefined}
         checked={props.checked}
@@ -182,7 +184,7 @@ export function TextFieldView({ props, bindings, enterRef }: ViewProps<'TextFiel
         maxLength={400}
         disabled={!bindings?.value}
         onChange={(event) => setValue(event.target.value)}
-        className="h-9 rounded-lg bg-bg-input px-3 text-sm font-normal text-fg-default"
+        className="h-9 rounded-lg bg-bg-input px-3 text-sm font-normal text-fg-default dark:bg-bg-input"
       />
     </label>
   );
@@ -252,7 +254,7 @@ export function CalloutView({ props, enterRef }: ViewProps<'Callout'>) {
   if (!props.text) return null;
   const tone = CALLOUT[props.tone];
   return (
-    <div ref={enterRef} role="note" className={cn('flex gap-2.5 rounded-xl border px-3.5 py-3 text-sm leading-normal', tone.surface)}>
+    <div ref={enterRef} role="note" className={cn(PANEL, 'flex gap-2.5 px-3.5 py-3 text-sm leading-normal')}>
       <tone.Icon aria-hidden className={cn('mt-0.5 size-3.75 shrink-0', tone.ink)} strokeWidth={2} />
       <span className="text-fg-default">{props.text}</span>
     </div>
@@ -266,9 +268,9 @@ export function ButtonView({ props, emit, enterRef }: ViewProps<'Button'>) {
   const press = () => emit('press');
   if (props.variant === 'primary') {
     return (
-      <ActionButton ref={enterRef} intent="run" onClick={press} className="h-8.5 rounded-lg px-3.5 whitespace-nowrap active:translate-y-px">
+      <Button ref={enterRef} variant="invert" onClick={press} className="h-8.5 rounded-lg px-3.5 font-semibold">
         {props.label}
-      </ActionButton>
+      </Button>
     );
   }
   return (
