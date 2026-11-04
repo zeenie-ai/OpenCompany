@@ -134,7 +134,7 @@ Live total = `len(MESSAGE_HANDLERS) + len(get_ws_handlers())` -- the `MESSAGE_HA
 | Node execution | `execute_node`, `execute_workflow`, `cancel_execution`, `get_node_output`, `clear_node_output` |
 | Triggers / events | `cancel_event_wait`, `get_active_waiters` |
 | Dead letter queue | `get_dlq_entries`, `get_dlq_entry`, `replay_dlq_entry`, `remove_dlq_entry`, `purge_dlq`, `get_dlq_stats` |
-| Deployment | `deploy_workflow` (Start's own step; refused without a live generation), `cancel_deployment`, `get_deployment_status`, `update_deployment_settings` |
+| Deployment | `deploy_workflow` (Start's own step; refused without a live generation; arms the graph the generation recorded, never the request's), `cancel_deployment`, `get_deployment_status`, `update_deployment_settings` |
 | AI operations | `execute_ai_node`, `get_ai_models` |
 | API keys | `validate_api_key`, `get_stored_api_key`, `save_api_key`, `delete_api_key` |
 | OAuth / CLI login flows | `claude_code_login`, `claude_code_logout` (plugin-registered from `nodes/agent/claude_code_agent/_handlers.py`), `twitter_oauth_login`, `twitter_logout`, `google_oauth_login`, `google_logout` |

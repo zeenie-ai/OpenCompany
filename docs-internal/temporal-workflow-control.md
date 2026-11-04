@@ -67,6 +67,14 @@ Once the `running` compare-and-swap commits, a status-broadcast/projection
 failure does not tear down that live generation; the failed request is recovered
 by the client's authoritative status resync.
 
+A deploy of a generation, whether Start's, the boot re-arm's, a controller
+rebuild's or a `deploy_workflow` command's, arms the nodes, edges and settings
+the generation's control row records (`graph_snapshot`, which Apply replaces in
+place) and reads none from the request. `cancel_deployment` leaves the control
+row as it was, so the generation stays live and a `deploy_workflow` sent after
+it arms that recorded graph again; it cannot register a node the generation
+never admitted.
+
 A failed Start undoes its steps last in first out
 (`services/deployment/handlers._undo_failed_start`): it cancels the local
 deployment, signals the controller `reset`, sweeps the generation's executions,

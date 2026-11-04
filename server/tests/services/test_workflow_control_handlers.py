@@ -1484,7 +1484,16 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
         lock_workflow=AsyncMock(return_value=True), unlock_workflow=AsyncMock(), update_node_status=AsyncMock(),
         update_workflow_status=AsyncMock(), update_deployment_status=AsyncMock(),
     )
-    live = SimpleNamespace(generation=1, status="running")
+    live = SimpleNamespace(generation=1, status="running", graph_snapshot={
+        "nodes": [
+            # A plan already on the lead is dropped; the employee's is deployed.
+            {"id": "wf:ai_employee:1", "type": "ai_employee",
+             "data": {"label": "Lead", "employee_recipe_version": 2, "employee_team_plan": {"version": 2, "lead_node_id": "forged"}}},
+            {"id": "wf:aiAgent:1", "type": "aiAgent", "data": {"label": "Talk"}},
+        ],
+        "edges": [],
+        "parameters": {},
+    })
     database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=live))
     monkeypatch.setattr("core.container.container", SimpleNamespace(workflow_service=lambda: workflow_service,
                                                                     database=lambda: database))
@@ -1493,21 +1502,7 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
     monkeypatch.setattr("services.employees.store.get_by_workflow", AsyncMock(return_value=SimpleNamespace(team_plan=plan)))
     monkeypatch.setattr(handlers, "_deployment_tasks", {})
 
-    result = await handlers.handle_deploy_workflow(
-        {
-            "workflow_id": "wf",
-            "nodes": [
-                # A plan the caller sends is dropped; the employee's is deployed.
-                {"id": "wf:ai_employee:1", "type": "ai_employee",
-                 "data": {"label": "Lead", "employee_recipe_version": 2, "employee_team_plan": {"version": 2, "lead_node_id": "forged"}}},
-                {"id": "wf:aiAgent:1", "type": "aiAgent", "data": {"label": "Talk"}},
-            ],
-            "edges": [],
-            "parameters_by_id": {},
-            "generation": 1,
-        },
-        None,
-    )
+    result = await handlers.handle_deploy_workflow({"workflow_id": "wf", "generation": 1}, None)
     await handlers._deployment_tasks["wf"]
 
     assert result["success"] is True
@@ -1525,21 +1520,69 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
 ])
 async def test_deploy_refuses_without_a_live_generation(monkeypatch, generation, latest, error):
     """1b.46: a deploy arms only a live controlled generation's triggers.
-    Anything else is refused before the lock and before any read or write."""
+    Anything else is refused before the lock."""
     broadcaster = SimpleNamespace(lock_workflow=AsyncMock())
     database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=latest))
     monkeypatch.setattr("core.container.container", SimpleNamespace(workflow_service=lambda: SimpleNamespace(),
                                                                     database=lambda: database))
     monkeypatch.setattr("services.status_broadcaster.get_status_broadcaster", lambda: broadcaster)
-    load = AsyncMock()
-    monkeypatch.setattr("services.workflow_context_migration.load_node_parameters", load)
 
-    result = await handlers.handle_deploy_workflow(
-        {"workflow_id": "wf", "nodes": [{"id": "n", "type": "start", "data": {}}], "edges": [],
-         "generation": generation},
-        None,
-    )
+    result = await handlers.handle_deploy_workflow({"workflow_id": "wf", "generation": generation}, None)
 
     assert result == {"success": False, "error": error}
     broadcaster.lock_workflow.assert_not_awaited()
-    load.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_deploy_after_cancel_arms_the_generation_snapshot_not_the_request(monkeypatch):
+    """cancel_deployment tears down the local deployment and leaves the
+    generation live, so any socket can send deploy_workflow next. That deploy
+    arms the graph and settings the generation recorded, never nodes, edges
+    or settings the request carries."""
+    admitted = {
+        "nodes": [{"id": "wf:chatTrigger:1", "type": "chatTrigger", "data": {"label": "Chat"}},
+                  {"id": "wf:console:1", "type": "console", "data": {"label": "Log"}}],
+        "edges": [{"id": "e1", "source": "wf:chatTrigger:1", "target": "wf:console:1"}],
+        "parameters": {"wf:console:1": {"label": "admitted"}},
+    }
+    live = SimpleNamespace(generation=1, status="running", graph_snapshot=admitted)
+    deployed_now = {"wf": True}
+
+    async def cancel(workflow_id):
+        deployed_now[workflow_id] = False
+        return {"success": True, "cancelled_listener_node_ids": []}
+
+    workflow_service = SimpleNamespace(
+        is_workflow_deployed=lambda workflow_id: deployed_now[workflow_id],
+        cancel_deployment=AsyncMock(side_effect=cancel),
+        deploy_workflow=AsyncMock(return_value={"success": True, "triggers_setup": [], "deployment_id": "deployment"}),
+    )
+    broadcaster = SimpleNamespace(
+        lock_workflow=AsyncMock(return_value=True), unlock_workflow=AsyncMock(), update_node_status=AsyncMock(),
+        update_workflow_status=AsyncMock(), update_deployment_status=AsyncMock(), clear_node_status=AsyncMock(),
+    )
+    database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=live))
+    monkeypatch.setattr("core.container.container", SimpleNamespace(workflow_service=lambda: workflow_service,
+                                                                    database=lambda: database))
+    monkeypatch.setattr("services.status_broadcaster.get_status_broadcaster", lambda: broadcaster)
+    monkeypatch.setattr("services.workflow_validator.validate_workflow", AsyncMock(return_value={"errors": []}))
+    monkeypatch.setattr(handlers, "_deployment_tasks", {})
+
+    assert (await handlers.handle_cancel_deployment({"workflow_id": "wf"}, None))["success"] is True
+    result = await handlers.handle_deploy_workflow(
+        {
+            "workflow_id": "wf",
+            "generation": 1,
+            "nodes": [*admitted["nodes"], {"id": "wf:webhookTrigger:1", "type": "webhookTrigger", "data": {"label": "Sent"}}],
+            "edges": [*admitted["edges"], {"id": "e2", "source": "wf:webhookTrigger:1", "target": "wf:console:1"}],
+            "parameters_by_id": {"wf:console:1": {"label": "sent"}, "wf:webhookTrigger:1": {"path": "sent"}},
+        },
+        None,
+    )
+    await handlers._deployment_tasks["wf"]
+
+    assert result["success"] is True
+    deployed = workflow_service.deploy_workflow.await_args.kwargs
+    assert [node["id"] for node in deployed["nodes"]] == ["wf:chatTrigger:1", "wf:console:1"]
+    assert [(edge["source"], edge["target"]) for edge in deployed["edges"]] == [("wf:chatTrigger:1", "wf:console:1")]
+    assert deployed["parameter_snapshot"] == admitted["parameters"]

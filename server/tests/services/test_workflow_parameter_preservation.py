@@ -228,10 +228,13 @@ async def test_repeated_reads_are_stable(patched_handlers):
     assert first == second == {"session_id": "support"}
 
 
-def live_generation(database, monkeypatch):
-    """A deploy arms only a live controlled generation (1b.46)."""
+def live_generation(database, monkeypatch, nodes, parameters=None):
+    """A deploy arms only a live controlled generation (1b.46), with the
+    graph and settings the generation recorded."""
+    snapshot = {"nodes": nodes, "edges": [], "parameters": parameters or {}}
     monkeypatch.setattr(database, "get_latest_workflow_control",
-                        AsyncMock(return_value=SimpleNamespace(generation=1, status="running")), raising=False)
+                        AsyncMock(return_value=SimpleNamespace(generation=1, status="running", graph_snapshot=snapshot)),
+                        raising=False)
 
 
 @pytest.mark.asyncio
@@ -266,17 +269,11 @@ async def test_failed_deploy_validation_does_not_rekey_parameters(recording_db, 
     )
 
     await recording_db.save_node_parameters("legacy-node", {"prompt": "keep me"})
-    live_generation(recording_db, monkeypatch)
+    live_generation(recording_db, monkeypatch,
+                    [{"id": "legacy-node", "type": "console", "position": {"x": 0, "y": 0}, "data": {}}],
+                    {"legacy-node": {"prompt": "keep me"}})
 
-    result = await deployment_handlers.handle_deploy_workflow(
-        {
-            "workflow_id": "1",
-            "nodes": [{"id": "legacy-node", "type": "console", "position": {"x": 0, "y": 0}, "data": {}}],
-            "edges": [],
-            "generation": 1,
-        },
-        _caller(),
-    )
+    result = await deployment_handlers.handle_deploy_workflow({"workflow_id": "1", "generation": 1}, _caller())
 
     assert result["success"] is False
     assert result["error"] == "validation_failed"
@@ -325,19 +322,12 @@ async def test_restart_rearm_keeps_saved_node_secrets(recording_db, monkeypatch)
     node_id = "1:webhookTrigger:1"
     saved = {"path": "orders", "header_name": "X-Token", "header_value": "kept-secret"}
     await recording_db.save_node_parameters(node_id, saved)
-    live_generation(recording_db, monkeypatch)
+    live_generation(recording_db, monkeypatch,
+                    [{"id": node_id, "type": "webhookTrigger", "position": {"x": 0, "y": 0}, "data": {}}],
+                    # The generation's snapshot: no secrets.
+                    {node_id: {"path": "orders", "header_name": "X-Token"}})
 
-    result = await deployment_handlers.handle_deploy_workflow(
-        {
-            "workflow_id": "1",
-            "nodes": [{"id": node_id, "type": "webhookTrigger", "position": {"x": 0, "y": 0}, "data": {}}],
-            "edges": [],
-            # The generation's snapshot, as the re-arm passes it: no secrets.
-            "parameters_by_id": {node_id: {"path": "orders", "header_name": "X-Token"}},
-            "generation": 1,
-        },
-        None,
-    )
+    result = await deployment_handlers.handle_deploy_workflow({"workflow_id": "1", "generation": 1}, None)
     await deployment_handlers._deployment_tasks["1"]
 
     assert result["success"] is True
@@ -346,7 +336,7 @@ async def test_restart_rearm_keeps_saved_node_secrets(recording_db, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_start_hands_deploy_a_snapshot_without_secrets(recording_db, monkeypatch):
+async def test_deploy_hands_runs_a_snapshot_without_secrets(recording_db, monkeypatch):
     """A generation's runs carry its copy of the nodes' settings into
     Temporal, so the copy keeps no secret; each node gets its saved ones
     back when it runs (RFC-0006 1b.31). The saved rows stay as they are."""
@@ -384,22 +374,14 @@ async def test_start_hands_deploy_a_snapshot_without_secrets(recording_db, monke
     http = {"url": "https://api.example/orders", "headers": {"Authorization": "Bearer saved", "Accept": "application/json"}}
     await recording_db.save_node_parameters(trigger_id, trigger)
     await recording_db.save_node_parameters(http_id, http)
-    live_generation(recording_db, monkeypatch)
+    # Settings with their secrets, as a generation started before Start
+    # sanitized its snapshot recorded them.
+    live_generation(recording_db, monkeypatch, [
+        {"id": trigger_id, "type": "webhookTrigger", "position": {"x": 0, "y": 0}, "data": {}},
+        {"id": http_id, "type": "httpRequest", "position": {"x": 200, "y": 0}, "data": {}},
+    ], {trigger_id: trigger, http_id: http})
 
-    result = await deployment_handlers.handle_deploy_workflow(
-        {
-            "workflow_id": "1",
-            "nodes": [
-                {"id": trigger_id, "type": "webhookTrigger", "position": {"x": 0, "y": 0}, "data": {}},
-                {"id": http_id, "type": "httpRequest", "position": {"x": 200, "y": 0}, "data": {}},
-            ],
-            "edges": [],
-            # The saved settings, as Start passes them.
-            "parameters_by_id": {trigger_id: trigger, http_id: http},
-            "generation": 1,
-        },
-        None,
-    )
+    result = await deployment_handlers.handle_deploy_workflow({"workflow_id": "1", "generation": 1}, None)
     await deployment_handlers._deployment_tasks["1"]
 
     assert result["success"] is True
