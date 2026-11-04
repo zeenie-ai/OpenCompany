@@ -50,9 +50,10 @@ class CodexAgentParams(AgentRuntimeParams):
         description="Legacy: single-prompt fallback used only when " "`tasks` is empty.",
         json_schema_extra={"rows": 4, "placeholder": "Or use the tasks array..."},
     )
-    model: str = Field(
-        default="gpt-5.2-codex",
-        description="Default model for tasks that don't override it.",
+    model: Optional[str] = Field(
+        default=None,
+        description="Optional model override for tasks. Leave blank to use Codex's configured or recommended model for your account.",
+        json_schema_extra={"placeholder": "Auto (Codex default)"},
     )
     sandbox: str = Field(
         default="workspace-write",

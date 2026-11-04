@@ -39,7 +39,7 @@ Standard `std_agent_handles()` topology.
 |------|------|---------|----------|---------------------|-------------|
 | `tasks` | `CodexTaskSpec[]` | `[]` | no | - | List of Codex tasks (max 5 concurrent) |
 | `prompt` | string | `""` | no | - | Single-prompt fallback used only when `tasks` is empty (4 rows) |
-| `model` | string | `gpt-5.2-codex` | no | - | Default model for tasks that don't override |
+| `model` | string or null | Auto | no | - | Optional model override; blank uses Codex's configured or account-recommended model |
 | `sandbox` | string | `workspace-write` | no | - | `read-only` / `workspace-write` / `danger-full-access` |
 | `ask_for_approval` | string | `never` | no | - | `untrusted` / `on-request` / `never` |
 | `system_prompt` | string\|null | `None` | no | - | System prompt (3 rows) |

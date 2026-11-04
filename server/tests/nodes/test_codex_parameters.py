@@ -36,6 +36,15 @@ def test_codex_populated_lists_keep_task_validation_and_credentials():
     assert params.allowed_credentials == ["openai"]
 
 
+@pytest.mark.parametrize("saved", [{}, {"model": None}, {"model": ""}])
+def test_codex_model_defaults_to_cli_auto(saved):
+    assert not CodexAgentParams.model_validate(saved).model
+
+
+def test_codex_explicit_model_is_preserved():
+    assert CodexAgentParams.model_validate({"model": "gpt-5.2-codex"}).model == "gpt-5.2-codex"
+
+
 @pytest.mark.parametrize(
     "field,value",
     [
@@ -122,6 +131,8 @@ async def test_cli_null_defaults_reach_prompt_execution(harness, node_type, prov
     tasks = list(args.kwargs["tasks"])
     assert len(tasks) == 1
     assert tasks[0].prompt == "Inspect the repository"
+    if provider == "codex":
+        assert tasks[0].model is None
     # Validation must not mutate a captured Temporal snapshot.
     assert saved["tasks"] is None
     assert saved["allowed_credentials"] is None

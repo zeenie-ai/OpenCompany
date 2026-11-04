@@ -29,7 +29,7 @@
     "auth_status_argv": ["codex", "login", "status"],
     "ide_lock_env_var": null,
     "ide_lockfile_dir": null,
-    "default_model": "gpt-5.2-codex",
+    "default_model": null,
     "default_sandbox": "workspace-write",
     "default_ask_for_approval": "never",
     "supports": [

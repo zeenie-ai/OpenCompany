@@ -32,6 +32,38 @@ _AUTH_ERROR_MARKERS = (
 )
 
 
+def _error_details(value: Any, depth: int = 0) -> Dict[str, Any]:
+    """Unwrap bounded CLI/API errors, including JSON serialized in message."""
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return {}
+        if depth < 6 and len(value) <= 16384:
+            try:
+                decoded = json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            else:
+                if isinstance(decoded, (dict, str)) and decoded != value:
+                    return _error_details(decoded, depth + 1)
+        return {"message": value[-2000:]}
+    if not isinstance(value, dict) or depth >= 6:
+        return {}
+
+    details: Dict[str, Any] = {}
+    code = value.get("code")
+    if isinstance(code, str) and code:
+        details["error_code"] = code[:100]
+    status = value.get("status")
+    if type(status) is int and 100 <= status <= 599:
+        details["status_code"] = status
+    nested = _error_details(value.get("error"), depth + 1)
+    details.update(nested)
+    if not details.get("message"):
+        details.update(_error_details(value.get("message"), depth + 1))
+    return details
+
+
 class OpenAICodexProvider:
     """Provider for the pinned Codex CLI's non-interactive surface."""
 
@@ -70,8 +102,12 @@ class OpenAICodexProvider:
         # `exec` has no --ask-for-approval flag. Override its documented
         # config directly instead of relying on interactive/TUI options.
         argv = [str(self.binary_path()), "exec", "--json", "-c", f"approval_policy={json.dumps(ask)}"]
-        model = task.model or defaults.get("default_model") or self._defaults.get("default_model", "gpt-5.2-codex")
-        argv += ["--model", model]
+        # A forced historic default can be unavailable to ChatGPT logins.
+        # With no explicit choice, let Codex apply its own config and account
+        # catalogue. Explicit task/config choices remain unchanged.
+        model = task.model or defaults.get("default_model") or self._defaults.get("default_model")
+        if isinstance(model, str) and model.strip():
+            argv += ["--model", model.strip()]
         sandbox = task.sandbox or defaults.get("default_sandbox", self._defaults.get("default_sandbox", "workspace-write"))
         argv += ["--sandbox", sandbox]
 
@@ -118,14 +154,20 @@ class OpenAICodexProvider:
         failed = next((event for event in reversed(events) if event.get("type") == "turn.failed"), None)
         success = exit_code == 0 and bool(completed) and failed is None
         error = None
+        error_data: Dict[str, Any] = {}
         if not success:
             failure = failed or next((event for event in reversed(events) if event.get("type") == "error"), {})
-            detail = failure.get("error") or failure.get("message")
-            if isinstance(detail, dict):
-                detail = detail.get("message")
-            error = detail if isinstance(detail, str) and detail else stderr.strip()[-2000:]
+            error_data = _error_details(failure)
+            if not error_data.get("message"):
+                error_data.update(_error_details(stderr))
+            error = error_data.get("message")
             if not error:
                 error = f"codex exited with code {exit_code}" if exit_code else "Codex stream ended without turn.completed"
+            if error_data.get("error_code") == "model_not_found" or (
+                "model" in error.lower() and "not supported" in error.lower() and "chatgpt account" in error.lower()
+            ):
+                advice = " Choose Auto or a model available to your Codex account."
+                error = error[: 2000 - len(advice)] + advice
 
         thread_id = next((event.get("thread_id") for event in events if event.get("type") == "thread.started"), None)
         tool_ids = {
@@ -144,7 +186,10 @@ class OpenAICodexProvider:
             "num_turns": len(completed) + int(failed is not None),
             "tool_calls": len(tool_ids),
             "canonical_usage": self.canonical_usage(events),
-            "provider_data": {"thread_id": thread_id} if thread_id else {},
+            "provider_data": {
+                **({"thread_id": thread_id} if thread_id else {}),
+                **{key: value for key, value in error_data.items() if key != "message"},
+            },
             "success": success,
             "error": error,
         }

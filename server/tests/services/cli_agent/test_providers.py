@@ -457,6 +457,25 @@ def codex_provider(monkeypatch):
 
 
 class TestCodexArgv:
+    def test_auto_does_not_force_a_model(self, codex_provider):
+        argv = codex_provider.interactive_argv(CodexTaskSpec(prompt="hello"), defaults={})
+        assert "--model" not in argv
+
+    def test_explicit_task_model_wins(self, codex_provider):
+        argv = codex_provider.interactive_argv(
+            CodexTaskSpec(prompt="hello", model="task-model"),
+            defaults={"default_model": "configured-model"},
+        )
+        assert argv[argv.index("--model") + 1] == "task-model"
+
+    def test_explicit_config_model_is_preserved(self, codex_provider):
+        argv = codex_provider.interactive_argv(CodexTaskSpec(prompt="hello"), defaults={"default_model": "configured-model"})
+        assert argv[argv.index("--model") + 1] == "configured-model"
+
+    def test_explicit_legacy_model_is_not_silently_substituted(self, codex_provider):
+        argv = codex_provider.interactive_argv(CodexTaskSpec(prompt="hello", model="gpt-5.2-codex"), defaults={})
+        assert argv[argv.index("--model") + 1] == "gpt-5.2-codex"
+
     def test_no_session_no_budget_no_turns(self, codex_provider):
         task = CodexTaskSpec(prompt="hello")
         argv = codex_provider.interactive_argv(task, defaults={})
@@ -559,6 +578,76 @@ class TestCodexEventReconstruction:
         )
         assert result["success"] is False
         assert result["error"] == "Authentication required"
+
+    @pytest.mark.parametrize("wrapper", ["message", "direct", "double-encoded"])
+    def test_unsupported_model_error_is_readable_and_actionable(self, codex_provider, wrapper):
+        message = "The 'gpt-5.2-codex' model is not supported when using Codex with a ChatGPT account."
+        serialized = json.dumps(
+            {
+                "type": "error",
+                "status": 400,
+                "error": {"type": "invalid_request_error", "message": message, "code": "model_not_found"},
+            }
+        )
+        detail = (
+            serialized
+            if wrapper == "direct"
+            else {
+                "message": json.dumps(serialized) if wrapper == "double-encoded" else serialized,
+            }
+        )
+        result = codex_provider.event_to_session_result(
+            [
+                {"type": "thread.started", "thread_id": "failed-thread"},
+                {"type": "turn.started"},
+                {"type": "turn.failed", "error": detail},
+            ],
+            "",
+            1,
+        )
+
+        assert result["success"] is False
+        assert result["response"] == ""
+        assert result["error"] == message + " Choose Auto or a model available to your Codex account."
+        assert result["provider_data"] == {
+            "thread_id": "failed-thread",
+            "error_code": "model_not_found",
+            "status_code": 400,
+        }
+        assert result["canonical_usage"].request_count == 0
+
+    def test_plain_or_malformed_errors_do_not_suggest_a_model_change(self, codex_provider):
+        message = '{"error": malformed provider response'
+        result = codex_provider.event_to_session_result(
+            [
+                {"type": "turn.failed", "error": {"message": message}},
+            ],
+            "",
+            1,
+        )
+        assert result["error"] == message
+        assert result["provider_data"] == {}
+
+    def test_nested_stderr_error_retains_status_without_changing_auth_guidance(self, codex_provider):
+        stderr = json.dumps({"status": 401, "error": {"code": "invalid_api_key", "message": "Invalid API key"}})
+        result = codex_provider.event_to_session_result([], stderr, 1)
+        assert result["success"] is False
+        assert result["error"] == "Invalid API key"
+        assert result["provider_data"] == {"error_code": "invalid_api_key", "status_code": 401}
+
+    def test_error_unwrapping_is_bounded(self, codex_provider):
+        detail = {"message": "x" * 20000}
+        for _ in range(20):
+            detail = {"error": detail}
+        result = codex_provider.event_to_session_result(
+            [
+                {"type": "turn.failed", "error": detail},
+            ],
+            "y" * 20000,
+            1,
+        )
+        assert result["success"] is False
+        assert result["error"] == "y" * 2000
 
     def test_incomplete_stream_is_failure(self, codex_provider):
         result = codex_provider.event_to_session_result([{"type": "turn.started"}], "", 0)
