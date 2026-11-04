@@ -13,6 +13,7 @@ no size cap. This exists so that is never the easy option.
 
 from __future__ import annotations
 
+import asyncio
 import mimetypes
 from pathlib import PurePosixPath
 from typing import Any, Dict, Optional
@@ -94,10 +95,17 @@ async def fetch_to_workspace(
             "container was probed. Download as 'file', then write with write_audio."
         )
 
+    async def check(request: httpx.Request) -> None:
+        # httpx runs request hooks before every request, so each redirect hop
+        # is checked too, by the name httpx connects to.
+        ok, reason = await asyncio.to_thread(is_public_url, str(request.url))
+        if not ok:
+            raise NodeUserError(f"Refusing to download from that URL: {reason}.")
+
     chunks: list[bytes] = []
     total = 0
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, event_hooks={"request": [check]}) as client:
             async with client.stream("GET", url, headers=headers or {}) as response:
                 if response.status_code >= 400:
                     # Read nothing further; the body of an error page is not

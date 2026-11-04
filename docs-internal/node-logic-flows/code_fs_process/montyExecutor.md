@@ -137,11 +137,12 @@ flowchart TD
 - **SSRF guard is best-effort**: `_is_public_url` (`services/net.py`) runs
   before every request, redirect hops included, resolves the host and rejects
   loopback / private / link-local / reserved / multicast / unspecified
-  addresses, but httpx re-resolves at request time so it is not TOCTOU-proof.
-  It differs from the `fetch_policy` the downloading nodes use: it refuses
-  the owner's own network and all of loopback, which `fetch_policy` allows,
-  but not `100.100.100.200` (Alibaba's metadata service) or OpenCompany's
-  ports on this host's public address, which `fetch_policy` refuses.
+  addresses and the shared address space `100.64.0.0/10` (Alibaba Cloud's
+  metadata service is `100.100.100.200`), but httpx re-resolves at request
+  time so it is not TOCTOU-proof. It differs from the `fetch_policy` the
+  downloading nodes use: it refuses the owner's own network and all of
+  loopback, which `fetch_policy` allows, but not OpenCompany's ports on this
+  host's public address, which `fetch_policy` refuses.
 - **Workspace capability requires a workspace**: requesting `workspace_read` /
   `workspace_write` without a `ctx.workspace_dir` raises `NodeUserError`.
 - **Missing wheel degrades gracefully**: a platform without a `pydantic-monty`

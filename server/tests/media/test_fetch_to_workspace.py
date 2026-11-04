@@ -182,6 +182,8 @@ class TestSsrfGuard:
             "file:///etc/passwd",
             "ftp://example.com/x",
             "not-a-url",
+            "http://a..b.example/x",  # getaddrinfo's codec raises UnicodeError
+            "http://[::1/x",  # urlparse raises ValueError
         ],
     )
     def test_blocked_targets_are_refused(self, tmp_path, url):
@@ -198,3 +200,37 @@ class TestSsrfGuard:
         with pytest.raises(NodeUserError) as exc:
             _run(fetch_to_workspace(secret, ctx=_ctx(tmp_path), stem="x"))
         assert "SUPERSECRET" not in str(exc.value)
+
+    def test_a_redirect_to_a_blocked_host_is_refused_at_that_hop(self, tmp_path, monkeypatch, stub_http):
+        from services.plugin import NodeUserError
+
+        def guard(url):
+            blocked = "169.254.169.254" in url
+            return (False, "blocked non-public address 169.254.169.254") if blocked else (True, "")
+
+        monkeypatch.setattr("services.net.is_public_url", guard)
+        sent = []
+
+        def handler(request):
+            sent.append(str(request.url))
+            if request.url.host == "files.example":
+                location = "http://169.254.169.254/latest/meta-data/?sig=SUPERSECRET"
+                return httpx.Response(302, headers={"location": location})
+            return httpx.Response(200, content=b"secret")
+
+        stub_http(handler)
+        with pytest.raises(NodeUserError, match="Refusing to download") as exc:
+            _run(fetch_to_workspace("https://files.example/a.jpg", ctx=_ctx(tmp_path), stem="x"))
+        assert sent == ["https://files.example/a.jpg"]
+        assert "SUPERSECRET" not in str(exc.value)
+
+    @pytest.mark.parametrize("url", ["http://100.100.100.200/latest/meta-data/",
+                                     "http://[::ffff:100.100.100.200]/latest/meta-data/"])
+    def test_the_shared_address_space_is_refused(self, tmp_path, stub_http, url):
+        # RFC 6598 space, where Alibaba Cloud serves its metadata: none of the
+        # ipaddress flags covers it, mapped into IPv6 or not.
+        from services.plugin import NodeUserError
+
+        stub_http(lambda _req: httpx.Response(200, content=b"secret"))
+        with pytest.raises(NodeUserError, match="Refusing to download"):
+            _run(fetch_to_workspace(url, ctx=_ctx(tmp_path), stem="x"))
