@@ -9,6 +9,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { stagger } from '@/lib/motion';
+import { cn } from '@/lib/utils';
 import { useConnectors } from '../data/connectors';
 import { useEmployeesQuery } from '../data/employees';
 import { useAnsweringCount } from '../data/liveTask';
@@ -67,7 +68,13 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
           data-intro
           className="m-0 flex items-center gap-2 font-mono text-xs font-medium tracking-label text-fg-muted uppercase"
         >
-          <span aria-hidden className="size-1.5 rounded-full bg-current text-status-working-dot shadow-pip" />
+          <span
+            aria-hidden
+            className={cn(
+              'size-1.5 rounded-full bg-current shadow-pip',
+              working > 0 ? 'text-status-working-dot' : 'text-status-paused-dot',
+            )}
+          />
           {greetingFor(new Date())}
           {name ? `, ${name}` : ''} · {working} working now
         </p>

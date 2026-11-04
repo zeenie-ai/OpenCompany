@@ -3,39 +3,20 @@
  * puts its job in the composer for the owner to read, change and send;
  * while the composer still holds that job as written, the chip shows as
  * picked and, given `onHireNow`, offers to hire the starter as it stands
- * ("Hire now"). The Welcome guide shows the chips alone. Coloured by node
- * role, the same palette the employee avatars use.
+ * ("Hire now"). The Welcome guide shows the chips alone. The chips and
+ * Hire now are neutral (onboarding v3): Home colours only state and role,
+ * and `run` means Start.
  */
 
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { ColorRole } from '../data/schemas';
 import { HIRE_TEMPLATES, type HireTemplate } from './templates';
 
-/** Soft role tint at rest, the action-strength tint on hover and when picked. */
-const CHIP_TONE: Record<ColorRole, { chip: string; dot: string }> = {
-  agent: {
-    chip: 'border-node-agent-border bg-node-agent-soft hover:border-node-agent-edge hover:bg-node-agent-fill aria-pressed:border-node-agent-edge aria-pressed:bg-node-agent-fill',
-    dot: 'bg-node-agent',
-  },
-  model: {
-    chip: 'border-node-model-border bg-node-model-soft hover:border-node-model-edge hover:bg-node-model-fill aria-pressed:border-node-model-edge aria-pressed:bg-node-model-fill',
-    dot: 'bg-node-model',
-  },
-  tool: {
-    chip: 'border-node-tool-border bg-node-tool-soft hover:border-node-tool-edge hover:bg-node-tool-fill aria-pressed:border-node-tool-edge aria-pressed:bg-node-tool-fill',
-    dot: 'bg-node-tool',
-  },
-  trigger: {
-    chip: 'border-node-trigger-border bg-node-trigger-soft hover:border-node-trigger-edge hover:bg-node-trigger-fill aria-pressed:border-node-trigger-edge aria-pressed:bg-node-trigger-fill',
-    dot: 'bg-node-trigger',
-  },
-  workflow: {
-    chip: 'border-node-workflow-border bg-node-workflow-soft hover:border-node-workflow-edge hover:bg-node-workflow-fill aria-pressed:border-node-workflow-edge aria-pressed:bg-node-workflow-fill',
-    dot: 'bg-node-workflow',
-  },
-};
+/** Muted at rest, the foreground on hover, a raised surface with a
+ *  foreground border when picked. The chip variant's lift and hover fill
+ *  are cancelled. */
+const CHIP =
+  'text-fg-muted hover:translate-y-0 hover:border-border-strong hover:bg-transparent hover:text-fg-default aria-pressed:border-fg-default aria-pressed:bg-bg-elevated aria-pressed:text-fg-default';
 
 export function TemplateChips({
   picked,
@@ -64,9 +45,8 @@ export function TemplateChips({
             disabled={disabled}
             aria-pressed={picked?.id === template.id}
             onClick={() => onPick(template)}
-            className={cn('font-medium', CHIP_TONE[template.role].chip)}
+            className={CHIP}
           >
-            <span aria-hidden className={cn('size-1.75 rounded-full', CHIP_TONE[template.role].dot)} />
             {template.label}
           </Button>
         ))}
@@ -74,9 +54,14 @@ export function TemplateChips({
       {picked && onHireNow && (
         <div className="mt-3 flex max-w-(--w-composer) flex-wrap items-center justify-center gap-x-3 gap-y-2 text-center">
           <span className="text-sm text-pretty text-fg-muted">{picked.summary}</span>
-          <ActionButton intent="run" disabled={disabled} onClick={() => onHireNow(picked)} className="rounded-pill">
+          <Button
+            variant="quiet"
+            disabled={disabled}
+            onClick={() => onHireNow(picked)}
+            className="rounded-pill border-border-default px-3.5 font-semibold text-fg-default"
+          >
             Hire now
-          </ActionButton>
+          </Button>
         </div>
       )}
     </>

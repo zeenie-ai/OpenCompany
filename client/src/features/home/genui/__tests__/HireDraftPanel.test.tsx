@@ -2,14 +2,15 @@
  * The draft panel end to end: the screen renders through json-render (its
  * code loads lazily, so the first look waits for it) as the setup card (who
  * they are with Discard beside it, the routine with Change on its When row,
- * the model's rules, then the footer strip), a double-clicked Hire
- * sends one request, a finished hire clears the draft and opens the new
- * employee's page (with what the hire said, and the AI connect dialog when
- * there is no model), "Change something" hands the composer the draft,
- * controls write back into the draft, changing when they work reaches the
- * hire, a reply in json-render's own shape works the same, the wait is
- * shown honestly with a way to cancel, and the spec inspector is for
- * developers only.
+ * the model's rules, then the footer strip) with neutral controls and Hire
+ * the one strong one, a double-clicked Hire sends one request, a finished
+ * hire clears the draft and opens the new employee's page (with what the
+ * hire said, and the AI connect dialog when there is no model), "Change
+ * something" hands the composer the draft, controls write back into the
+ * draft, changing when they work reaches the hire, a reply in json-render's
+ * own shape works the same, a failed setup says so on a neutral notice with
+ * Try again, the wait is shown honestly with a way to cancel, and the spec
+ * inspector is for developers only.
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -160,6 +161,13 @@ describe('HireDraftPanel', () => {
     const change = screen.getByRole('button', { name: 'Change something' });
     const hire = screen.getByRole('button', { name: 'Hire Maya' });
     expect(change.compareDocumentPosition(hire) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Neither switch has a status to show: both are ink, at the md size.
+    for (const name of ['Only reply 9 to 6', 'Ask before sending']) {
+      const toggle = screen.getByRole('switch', { name });
+      expect(toggle).toHaveAttribute('data-size', 'md');
+      expect(toggle).toHaveClass('data-checked:border-fg-default', 'data-checked:bg-fg-default');
+      expect(toggle.className).not.toMatch(/action-run/);
+    }
   });
 
   it('keeps the header for a card with no one to introduce', async () => {
@@ -299,6 +307,25 @@ describe('HireDraftPanel', () => {
     expect(useDraftStore.getState().refining).toBe(true);
   });
 
+  it('draws a button the model put in the card as neutral, and it still connects', async () => {
+    const setup = JSON.parse(reply);
+    setup.spec.elements.k = {
+      type: 'Button',
+      props: { label: 'Connect WhatsApp', variant: 'primary', action: 'connect_app', actionParams: { app: 'WhatsApp' } },
+      children: [],
+    };
+    setup.spec.elements.d.children.push('k');
+    seedReadyDraft(JSON.stringify(setup));
+    const { onConnect } = renderPanel();
+    const connect = await screen.findByRole('button', { name: 'Connect WhatsApp' });
+    // Primary or not, it stays quiet: Hire is the card's one strong control.
+    expect(connect).toHaveAttribute('data-variant', 'quiet');
+    expect(connect.className).not.toMatch(/action-/);
+    // WhatsApp is not connected in the catalogue, so its connect dialog opens.
+    fireEvent.click(connect);
+    expect(onConnect).toHaveBeenCalledWith('whatsapp');
+  });
+
   it('writes a toggle and a choice back into the draft', async () => {
     renderPanel();
     fireEvent.click(await screen.findByRole('switch', { name: 'Only reply 9 to 6' }));
@@ -314,6 +341,11 @@ describe('HireDraftPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Change' }));
     expect(screen.getByRole('button', { name: 'Done' })).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(screen.getByRole('radio', { name: 'On a schedule' }));
+    // The picked start reads as a raised surface, not an agent tint.
+    const schedule = screen.getByRole('radio', { name: 'On a schedule' });
+    expect(schedule).toHaveAttribute('data-state', 'on');
+    expect(schedule).toHaveClass('data-[state=on]:border-border-strong', 'data-[state=on]:bg-bg-active');
+    expect(schedule.className).not.toMatch(/node-agent/);
     fireEvent.click(screen.getByRole('radio', { name: 'Weekdays' }));
     // The routine's When row says it.
     expect(screen.getByText('Every weekday at 09:00')).toBeInTheDocument();
@@ -343,11 +375,36 @@ describe('HireDraftPanel', () => {
   it('opens the guided AI connect dialog from a setup that found no AI model', () => {
     useDraftStore.setState({ status: 'failed', failure: { code: 'no_ai_provider', text: 'Answer WhatsApp', refine: false } });
     renderPanel();
-    fireEvent.click(screen.getByRole('button', { name: 'Connect an AI model' }));
+    // A neutral notice: the attention dot is its one colour.
+    const alert = screen.getByRole('alert');
+    const connect = screen.getByRole('button', { name: 'Connect an AI model' });
+    expect(alert.className).not.toMatch(/node-|action-/);
+    expect(alert.querySelector('.bg-status-attention-dot')).not.toBeNull();
+    expect(connect.className).not.toMatch(/node-|action-/);
+    fireEvent.click(connect);
     expect(useShellDialogsStore.getState()).toMatchObject({
       credentialsOpen: true,
       credentialsOptions: { categoryId: 'ai', intent: 'connect' },
     });
+  });
+
+  it('offers Try again after any failure, in neutral colours', async () => {
+    useDraftStore.setState({ status: 'failed', failure: { code: 'timeout', text: 'Answer WhatsApp', refine: false } });
+    sendRequest.mockResolvedValue({ success: true, reply });
+    renderPanel();
+    expect(screen.getByRole('alert').className).not.toMatch(/node-|action-/);
+    expect(screen.queryByRole('button', { name: 'Connect an AI model' })).not.toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    expect(retry.className).not.toMatch(/node-|action-/);
+    await act(async () => {
+      fireEvent.click(retry);
+    });
+    expect(sendRequest).toHaveBeenCalledWith(
+      'generate_employee_setup',
+      expect.objectContaining({ job: 'Answer WhatsApp' }),
+      expect.any(Number),
+    );
+    await waitFor(() => expect(useDraftStore.getState().status).toBe('ready'));
   });
 
   it('shows how long the setup has taken, and Cancel hands the words back', () => {

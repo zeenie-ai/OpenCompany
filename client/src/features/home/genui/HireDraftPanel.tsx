@@ -19,13 +19,13 @@
 
 import { X } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { RingSpinner } from '@/components/ui/ring-spinner';
 import { animate, finished } from '@/lib/motion';
+import { cn } from '@/lib/utils';
 import { isConnected, useConnectors } from '../data/connectors';
 import { useHomeStore } from '../state/homeStore';
-import { MicroLabel } from '../ui/primitives';
+import { MicroLabel, StatusDot } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
 import type { ConnectCandidate, HireActionContext } from './actions';
 import { triggerAppNames, useDraftActions, useDraftStore, type DraftFailure } from './draftStore';
@@ -36,6 +36,10 @@ const HireScreen = lazy(loadHireScreen);
 
 /** After this long, the line says some models take a few minutes. */
 const SLOW_AFTER_SECONDS = 45;
+
+/** Cancel, Connect an AI model and Try again: neutral outlines, since Home
+ *  colours only state and role. */
+const NEUTRAL_BUTTON = 'h-8 rounded-row border-border-strong px-3.5 font-semibold text-fg-default';
 
 const FAILURE_DETAIL: Record<DraftFailure['code'], string> = {
   connection: 'The connection dropped part-way.',
@@ -77,11 +81,7 @@ function WorkingLine({ token, onCancel }: { token: string | null; onCancel: () =
         <span role="timer" aria-label="Time so far" className="font-mono text-xs text-fg-faint">
           {clockText(seconds)}
         </span>
-        <Button
-          variant="quiet"
-          onClick={onCancel}
-          className="ml-auto h-8 rounded-lg border-border-strong px-3.5 font-semibold text-fg-default"
-        >
+        <Button variant="quiet" onClick={onCancel} className={cn('ml-auto', NEUTRAL_BUTTON)}>
           Cancel
         </Button>
       </div>
@@ -95,14 +95,15 @@ function WorkingLine({ token, onCancel }: { token: string | null; onCancel: () =
   );
 }
 
+/** What went wrong, on a neutral card: the attention dot alone marks it
+ *  (onboarding v3 took the role tint off). */
 function FailureNotice({ failure, onRetry, onConnectAi }: { failure: DraftFailure; onRetry: () => void; onConnectAi: () => void }) {
-  const needsAi = failure.code === 'no_ai_provider';
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-3 rounded-card border border-node-trigger-border bg-node-trigger-soft px-3.5 py-3"
+      className="flex flex-wrap items-center gap-3 rounded-card border border-border-default bg-bg-elevated px-3.5 py-3"
     >
-      <span aria-hidden className="size-2 shrink-0 rounded-full bg-node-trigger" />
+      <StatusDot tone="attention" className="size-2 shrink-0" />
       <div className="flex min-w-50 flex-1 flex-col gap-0.5">
         <span className="text-base font-semibold text-fg-default">
           {failure.refine ? 'Couldn’t make that change' : 'Couldn’t finish setting this up'}
@@ -111,24 +112,14 @@ function FailureNotice({ failure, onRetry, onConnectAi }: { failure: DraftFailur
           {FAILURE_DETAIL[failure.code]} {failure.refine ? 'The last version is still here.' : 'Your description is saved.'}
         </span>
       </div>
-      {needsAi && (
-        <ActionButton intent="run" onClick={onConnectAi}>
+      {failure.code === 'no_ai_provider' && (
+        <Button variant="quiet" onClick={onConnectAi} className={NEUTRAL_BUTTON}>
           Connect an AI model
-        </ActionButton>
-      )}
-      {needsAi ? (
-        <Button
-          variant="quiet"
-          onClick={onRetry}
-          className="h-8 rounded-lg border-border-strong px-3.5 font-semibold text-fg-default"
-        >
-          Try again
         </Button>
-      ) : (
-        <ActionButton intent="stop" onClick={onRetry} className="rounded-lg">
-          Try again
-        </ActionButton>
       )}
+      <Button variant="quiet" onClick={onRetry} className={NEUTRAL_BUTTON}>
+        Try again
+      </Button>
     </div>
   );
 }
@@ -264,7 +255,7 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
           </p>
         )}
         {status === 'failed' && failure && (
-          <FailureNotice failure={failure} onRetry={() => void actions.retry()} onConnectAi={openConnectAI} />
+          <FailureNotice failure={failure} onRetry={() => void actions.retry()} onConnectAi={() => openConnectAI()} />
         )}
         {showSpec && spec && (
           <Suspense fallback={null}>

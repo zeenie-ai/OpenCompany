@@ -26,7 +26,6 @@
 import { Fragment, useContext, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useBoundProp, useStateValue } from '@json-render/react';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -508,7 +507,7 @@ export function ToggleView({ props, bindings, enterRef }: ViewProps<'Toggle'>) {
   if (inFooter) {
     return (
       <div ref={enterRef} className="flex items-center gap-2.5">
-        <Switch id={id} tone="run" checked={props.checked} onCheckedChange={setChecked} />
+        <Switch id={id} tone="ink" size="md" checked={props.checked} onCheckedChange={setChecked} />
         <label htmlFor={id} className="cursor-pointer text-sm text-fg-muted">
           {FOOTER_TOGGLE_LABEL}
         </label>
@@ -521,7 +520,7 @@ export function ToggleView({ props, bindings, enterRef }: ViewProps<'Toggle'>) {
         <span className="text-row font-medium text-fg-default">{props.label}</span>
         {props.description && <span className="text-meta text-fg-muted">{props.description}</span>}
       </div>
-      <Switch tone="run" aria-label={props.label} checked={props.checked} onCheckedChange={setChecked} />
+      <Switch tone="ink" size="md" aria-label={props.label} checked={props.checked} onCheckedChange={setChecked} />
     </div>
   );
 }
@@ -571,7 +570,9 @@ export function ButtonView({ props, emit, enterRef }: ViewProps<'Button'>) {
   const { inFooter } = useContext(HireSpecContext);
   const press = () => emit('press');
   // The footer's pair: a quiet "Change something", then the one strong
-  // control on the card, "Hire {name} →".
+  // control on the card, "Hire {name} →". A button in the card body is
+  // neutral even when primary ("Connect {App}", "Open apps"), so Hire
+  // stays the only strong one.
   if (inFooter) {
     return props.variant === 'primary' ? (
       <Button ref={enterRef} variant="invert" size="pill" onClick={press}>
@@ -582,18 +583,6 @@ export function ButtonView({ props, emit, enterRef }: ViewProps<'Button'>) {
       <Button ref={enterRef} variant="quiet" size="pill" onClick={press} className="px-3.5">
         {props.label}
       </Button>
-    );
-  }
-  if (props.variant === 'primary') {
-    return (
-      <ActionButton
-        ref={enterRef}
-        intent="run"
-        onClick={press}
-        className="h-8.5 self-start rounded-lg px-4 whitespace-nowrap active:translate-y-px"
-      >
-        {props.label}
-      </ActionButton>
     );
   }
   return (

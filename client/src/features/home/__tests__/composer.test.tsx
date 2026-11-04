@@ -3,7 +3,8 @@
  * a new line, Escape stops editing, and an Enter that confirms an IME
  * composition never sends. The starter chips put a job in the composer
  * rather than sending it, and offer to hire the starter as it stands while
- * the job is untouched. The hire notice shows once, on its employee's page.
+ * the job is untouched; the chips and Hire now are neutral. The hire notice
+ * shows once, on its employee's page.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -132,6 +133,20 @@ describe('TemplateChips', () => {
     expect(screen.getByText(receptionist.summary)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Hire now' }));
     expect(onHireNow).toHaveBeenCalledWith(receptionist);
+  });
+
+  it('draws neutral chips and a neutral Hire now', () => {
+    chips(receptionist);
+    for (const template of HIRE_TEMPLATES) {
+      const chip = screen.getByRole('button', { name: template.label });
+      expect(chip.className).not.toMatch(/node-|action-/);
+      expect(chip.querySelector('span')).toBeNull();
+    }
+    expect(screen.getByRole('button', { name: receptionist.label })).toHaveClass(
+      'aria-pressed:border-fg-default',
+      'aria-pressed:bg-bg-elevated',
+    );
+    expect(screen.getByRole('button', { name: 'Hire now' }).className).not.toMatch(/action-/);
   });
 
   it('shows the chips alone without Hire now (the Welcome guide)', () => {
