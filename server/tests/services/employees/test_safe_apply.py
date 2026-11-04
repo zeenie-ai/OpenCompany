@@ -345,6 +345,89 @@ async def test_stop_work_keeps_queued_requests(harness):
         assert (await session.get(EmployeeJob, "job-queued")).state == "queued"
 
 
+async def test_reset_cancels_a_waiting_apply_and_the_next_start_keeps_its_graph(harness):
+    # Uncancelled, recovery would apply the waiting Apply's snapshot over the
+    # graph the next Start runs, undoing the owner's edits made after Reset.
+    harness.active = True
+    assert (await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="old"))["activation_state"] == "waiting"
+    await safe_apply.cancel_applies(harness.database, "7")  # what Reset does
+    request = await _request(harness, "old")
+    assert request.state == "cancelled" and request.claim_token is None and request.lease_until is None
+    # The owner edits after Reset, then Starts: the new generation runs that graph.
+    edited = {**deepcopy(harness.after), "nodes": [*harness.after["nodes"], {"id": "7:clock:1", "type": "clock", "data": {"label": "Edited after Reset"}}]}
+    await harness.database.save_workflow("7", "Maya", "Maya_7", edited)
+    async with harness.database.reserved_session() as session:
+        (await session.get(WorkflowControlExecution, "control")).status = "reset"
+        session.add(WorkflowControlExecution(id="control-2", workflow_id="7", generation=2, execution_id="execution-2", root_execution_id="execution-2",
+                                             data_scope_id="scope-2", status="running", revision=3, idempotency_key="start-2", graph_hash="edited", graph_snapshot=edited))
+        await session.commit()
+    harness.active = False
+    sent = len(harness.updates)
+    await safe_apply.recover_applies(harness.database)
+    # Its own key answers without pausing anything.
+    assert (await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="old"))["error"] == "conflict"
+    assert len(harness.updates) == sent
+    assert (await harness.database.get_latest_workflow_control("7")).graph_snapshot == edited
+    assert (await _request(harness, "old")).state == "cancelled"
+    # Nor does it hold off the next Apply.
+    assert (await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="new"))["success"] is True
+
+
+async def test_an_apply_cancelled_while_it_waited_claims_nothing(harness, monkeypatch):
+    # Reset runs while the call checks for current work, as a recovery pass can.
+    async def reset_meanwhile(*_args):
+        await safe_apply.cancel_applies(harness.database, "7")
+        return False
+    monkeypatch.setattr(safe_apply, "_active", reset_meanwhile)
+    assert await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="raced") == {"success": False, "error": "conflict"}
+    assert not any(name == "replace_graph" for name, _ in harness.updates)
+    request = await _request(harness, "raced")
+    assert request.state == "cancelled" and request.claim_token is None
+    assert (await harness.database.get_latest_workflow_control("7")).graph_snapshot == harness.before
+
+
+async def test_an_apply_that_read_the_control_before_reset_creates_no_request(harness, monkeypatch):
+    # Reset runs all the way through its cancel while the call checks the graph,
+    # before the call saves its request: the next Start would apply that one.
+    async def reset_meanwhile(_database, _workflow_id, nodes):
+        async with harness.database.reserved_session() as session:
+            (await session.get(WorkflowControlExecution, "control")).status = "resetting"
+            await session.commit()
+        await safe_apply.cancel_applies(harness.database, "7")
+        return nodes
+    monkeypatch.setattr("services.employees.team_runtime.admit_team_plan", reset_meanwhile)
+    assert await safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="late") == {"success": False, "error": "conflict"}
+    assert await _request(harness, "late") is None
+    assert not harness.updates
+
+
+async def test_a_running_apply_loses_its_claim_to_reset_and_stops_without_a_rollback(harness, monkeypatch):
+    import services.deployment.handlers as handlers
+    entered, release = asyncio.Event(), asyncio.Event()
+    class SlowHandle(harness.Handle):
+        async def execute_update(self, name, argument, **kwargs):
+            result = await super().execute_update(name, argument, **kwargs)
+            if name == "replace_graph":
+                entered.set()
+                await release.wait()
+            return result
+    monkeypatch.setattr(handlers, "_controller_handle", lambda _control: SlowHandle())
+    running = asyncio.create_task(safe_apply.apply_saved_changes(harness.database, "7", owner_id="owner", key="running"))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=10)
+        await safe_apply.cancel_applies(harness.database, "7")
+        release.set()
+        assert (await running)["error"] == "conflict"
+    finally:
+        release.set()
+        await running
+    assert not any(":rollback" in (update_id or "") for _name, _argument, update_id in harness.update_ids)
+    request = await _request(harness, "running")
+    assert request.state == "cancelled" and request.claim_token is None and request.lease_until is None
+    assert (await harness.database.get_latest_workflow_control("7")).graph_snapshot == harness.before
+    assert harness.manager._deployments["7"].nodes == harness.before["nodes"]
+
+
 def _hang_on(harness, monkeypatch, hangs):
     """1b.15: the controller never answers the Updates ``hangs`` picks."""
     import services.deployment.handlers as handlers

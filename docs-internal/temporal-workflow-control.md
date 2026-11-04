@@ -185,6 +185,13 @@ send mark. A queued request of a generation that has ended is cancelled instead
 of started (`services/employees/jobs.dispatch_job`), and a request closed while
 its delivery waits for approval sends nothing more.
 
+Reset also cancels the workflow's apply requests that are still waiting or
+applying (`services/employees/safe_apply.cancel_applies`). Their snapshots were
+taken in the generation Reset ends: the next Start runs the graph saved by
+then, and `recover_applies` would otherwise apply the older snapshot over it. An
+apply still running loses its claim and stops without a rollback, and a call
+with a cancelled request's key answers `conflict`.
+
 ### Stop and Resume acknowledgement sequence
 
 The orchestration lives in

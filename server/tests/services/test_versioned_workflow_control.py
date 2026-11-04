@@ -161,6 +161,7 @@ def lifecycle(monkeypatch, state="running"):
     monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(return_value=3))
     monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
     monkeypatch.setattr("services.employees.safe_apply.close_open_work", AsyncMock(return_value=None))
+    monkeypatch.setattr("services.employees.safe_apply.cancel_applies", AsyncMock(return_value=None))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(return_value={"cancelled": 0}))
     monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(handlers, "_clear_failure_streak", AsyncMock())

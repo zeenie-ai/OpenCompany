@@ -1075,6 +1075,9 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     # The generation's open team work and requests are closed (1b.21).
     close_open_work = AsyncMock(return_value=None)
     monkeypatch.setattr("services.employees.safe_apply.close_open_work", close_open_work)
+    # So are its waiting Apply requests: the next Start must not apply them.
+    cancel_applies = AsyncMock(return_value=None)
+    monkeypatch.setattr("services.employees.safe_apply.cancel_applies", cancel_applies)
     monkeypatch.setattr(
         handlers,
         "_delete_cron_schedules",
@@ -1110,6 +1113,7 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     assert close_open_work.await_args.args[1:] == ("wf",)
     assert close_open_work.await_args.kwargs["reason"] == "The workflow was reset"
     assert "queued" in close_open_work.await_args.kwargs["job_states"]
+    cancel_applies.assert_awaited_once_with(database, "wf")
     assert result["terminated_executions"] == 2
     assert result["deleted_schedules"] == 3
     assert result["local_cleanup_completed"] is False

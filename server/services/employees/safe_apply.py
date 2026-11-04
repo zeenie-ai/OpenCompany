@@ -49,6 +49,21 @@ async def close_open_work(database, workflow_id, *, reason: str, job_states=OPEN
         await session.commit()
 
 
+async def cancel_applies(database, workflow_id) -> None:
+    """Cancel the workflow's waiting and applying apply requests.
+
+    Reset calls this: their snapshots were saved for the generation it ends,
+    and the next Start runs the graph saved by then. An apply still running
+    loses its claim and stops without a rollback."""
+    async with database.reserved_session() as session:
+        requests = (await session.execute(select(EmployeeApply).where(EmployeeApply.workflow_id == workflow_id, EmployeeApply.state.in_(["waiting", "applying"])))).scalars().all()
+        for request in requests:
+            request.state = "cancelled"
+            request.claim_token = None
+            request.lease_until = None
+        await session.commit()
+
+
 async def _active(database, workflow_id):
     async with database.get_session() as session:
         team = (await session.execute(select(AgentTeam.id).where(AgentTeam.workflow_id == workflow_id, AgentTeam.status == "active"))).first()
@@ -121,6 +136,11 @@ async def _apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str
     async with database.reserved_session() as session:
         request = await session.get(EmployeeApply, identifier)
         if request is None:
+            # Reset sets the control to resetting before it cancels the waiting
+            # applies, so a request it would miss is refused here.
+            current = await session.get(WorkflowControlExecution, control.id)
+            if current is None or current.status not in {"running", "paused"}:
+                return {"success": False, "error": "conflict"}
             waiting = (await session.execute(select(EmployeeApply).where(EmployeeApply.workflow_id == workflow_id, EmployeeApply.state.in_(["waiting", "applying"])))).first()
             if waiting:
                 return {"success": False, "error": "conflict"}
@@ -130,6 +150,9 @@ async def _apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str
             await session.commit()
         elif request.state == "applied":
             return {"success": True, "activation_state": "running" if request.resume_after else "paused"}
+        elif request.state == "cancelled":
+            # Reset or a team rollback cancelled it: its snapshot is never applied.
+            return {"success": False, "error": "conflict"}
         snapshot = deepcopy(request.snapshot)
     # Capture the owner's producer pause settings before the temporary
     # admission pause. Keep them durably across waiting and process restarts.
@@ -180,6 +203,9 @@ async def _apply_saved_changes(database: Any, workflow_id: str, *, owner_id: str
     claim = uuid.uuid4().hex
     async with database.reserved_session() as session:
         request = await session.get(EmployeeApply, identifier)
+        if request.state == "cancelled":
+            # Cancelled while this call waited, by Reset or a team rollback.
+            return {"success": False, "error": "conflict"}
         until = request.lease_until
         if until and until.tzinfo is None:
             until = until.replace(tzinfo=timezone.utc)

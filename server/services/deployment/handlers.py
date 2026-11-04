@@ -2698,9 +2698,13 @@ async def _reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[st
     # A terminated run closes none of its own records: close the generation's
     # team work and open requests here, or the next Apply waits on them. Late,
     # so a delivery activity the sweep stopped has had time to see its cancel.
-    from services.employees.safe_apply import OPEN_JOB_STATES, close_open_work
+    from services.employees.safe_apply import OPEN_JOB_STATES, cancel_applies, close_open_work
     await close_open_work(service.database, workflow_id, reason="The workflow was reset",
                           job_states=(*OPEN_JOB_STATES, "queued"))
+    # An Apply still waiting holds a snapshot of this generation. The next
+    # Start runs the graph saved by then, and recovery would apply the older
+    # snapshot over it.
+    await cancel_applies(service.database, workflow_id)
     workspace = await _reset_workspace_tasks(workflow_id, service.database, current, data)
 
     archived = await service.database.update_workflow_run_data_scope(

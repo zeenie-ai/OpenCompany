@@ -892,7 +892,9 @@ the editor's chat pane never show a conversation the agent no longer has.
 It also drops messages queued while paused and cancels the drafts waiting
 for the owner. It cancels the team's open tasks and requests too, so a later
 Apply has nothing to wait on, and a queued request of the ended generation is
-cancelled instead of started. Deleting the workflow deletes its thread (a
+cancelled instead of started. An Apply still waiting is cancelled as well: the
+next Start runs the graph saved by then, and that Apply's key answers
+`conflict`. Deleting the workflow deletes its thread (a
 workflow-deleted hook `chatReply` registers).
 
 `pending_changes` is true while a generation is live (starting, running,

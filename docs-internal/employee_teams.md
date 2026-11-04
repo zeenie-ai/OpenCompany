@@ -64,7 +64,8 @@ memory, chats, files, approvals and queued events. Paused employees stay
 paused. “Stop work and apply” is the explicit interruption path. The editor's
 Reset continues to clear execution state, and it also cancels the team's open
 tasks and requests, queued ones included, which the terminated runs can no
-longer close.
+longer close. It cancels an Apply still waiting too, so the next Start runs the
+graph saved by then.
 
 Conversion requires an owner review of a recognizable template graph and
 keeps a full configuration snapshot. Custom graphs require Dev review.
