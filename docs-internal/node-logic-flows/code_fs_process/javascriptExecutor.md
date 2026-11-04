@@ -5,7 +5,7 @@
 | **Category** | code_fs_process / code |
 | **Backend handler** | [`server/nodes/code/javascript_executor/__init__.py::JavaScriptExecutorNode.execute_op`](../../../server/nodes/code/javascript_executor/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("execute")`; base in [`_base.py`](../../../server/nodes/code/_base.py)) |
 | **Sidecar client** | [`server/nodes/code/_nodejs.py::get_nodejs_client`](../../../server/nodes/code/_nodejs.py) (singleton over [`server/nodes/code/_client.py::NodeJSClient`](../../../server/nodes/code/_client.py) — plugin-owned since July 2026; the old `nodejs_client.py` service module no longer exists) |
-| **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
+| **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py); the sidecar token in [`server/tests/nodes/test_js_executor_token.py`](../../../server/tests/nodes/test_js_executor_token.py) |
 | **Skill (if any)** | [`server/skills/coding_agent/javascript-skill/SKILL.md`](../../../server/skills/coding_agent/javascript-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `javascript_code` |
 
@@ -50,6 +50,17 @@ unless `NODEJS_EXECUTOR_URL` points at an external executor, asks the
 plugin-owned supervisor to `ensure_started()` the sidecar on the bun runtime
 (`OPENCOMPANY_BUN_BIN`, else `bun` on PATH).
 
+The sidecar runs whatever code it is sent, so every route but `/health`
+answers only requests carrying the token it was started with, in the
+`X-OpenCompany-Executor-Token` header (401 otherwise; it compares the
+header's bytes with the token's UTF-8 bytes). The runtime makes the token
+once per backend process (`NodeJSExecutorRuntime.token`; the operator's
+`NODEJS_EXECUTOR_TOKEN` wins when set), passes it to the sidecar it spawns as
+`NODEJS_EXECUTOR_TOKEN`, and the client sends it on every request. A token
+the runtime made goes only to the sidecar it started (see "A process this
+backend did not start" below). A sidecar started without a token refuses
+every such request.
+
 ## Outputs (handles)
 
 | Handle | Shape | Description |
@@ -76,9 +87,10 @@ flowchart TD
   B -- yes --> E[raise NodeUserError:<br/>No code provided]
   B -- no --> C[timeout_ms = timeout * 1000]
   C --> D[input_data = ctx.raw connected_outputs or {}<br/>inject workspace_dir]
-  D --> F[get_nodejs_client<br/>lazy singleton]
+  D --> F[acquire_client<br/>start or reuse the sidecar,<br/>lazy client singleton]
+  F -- port held by a process<br/>this backend did not start --> H1
   F --> G[client.execute<br/>POST /execute<br/>language=javascript]
-  G -- ClientConnectorError --> H1[raise NodeUserError<br/>JS executor unreachable on NODEJS_EXECUTOR_PORT]
+  G -- ClientConnectorError or 401 --> H1[raise NodeUserError<br/>JS executor unavailable]
   G -- success=false --> H2[raise NodeUserError<br/>error=result.error]
   G -- success=true --> I[Return dict<br/>output, console_output]
 ```
@@ -98,13 +110,20 @@ flowchart TD
 - **Sidecar down**: `aiohttp.ClientConnectorError` is caught and re-raised as a
   `NodeUserError` telling the LLM the JS executor is unreachable on
   `NODEJS_EXECUTOR_PORT` and to fall back to `python_executor`.
+- **Port held by another process**: `ensure_started()` raises `RuntimeError`
+  before any request is sent, and the plugin re-raises it the same way (see
+  "A process this backend did not start" below).
+- **Token refused**: a 401 (from an external executor, or a shared one started
+  with another token) makes the client raise `RuntimeError`, which the plugin
+  re-raises the same way, saying the executor refused this backend's token.
 
 ## Side Effects
 
 - **Database writes**: none.
 - **Broadcasts**: none from this handler.
 - **External API calls**: `POST http://localhost:${NODEJS_EXECUTOR_PORT}/execute`
-  (configurable via `NODEJS_EXECUTOR_URL`). Body:
+  (configurable via `NODEJS_EXECUTOR_URL`) with the
+  `X-OpenCompany-Executor-Token` header. Body:
   `{code, input_data, language: "javascript", timeout}`.
 - **File I/O**: none from Python; the sidecar may read/write user packages at
   `server/nodejs/user-packages/` (`bun add` via `/packages/install`).
@@ -123,7 +142,14 @@ flowchart TD
 - **Python packages**: `aiohttp`.
 - **Environment variables**: `NODEJS_EXECUTOR_URL`,
   `NODEJS_EXECUTOR_TIMEOUT`, `NODEJS_EXECUTOR_PORT`, `NODEJS_EXECUTOR_HOST`,
-  `NODEJS_EXECUTOR_BODY_LIMIT` (all read by the sidecar itself).
+  `NODEJS_EXECUTOR_BODY_LIMIT` (all read by the sidecar itself), and
+  `NODEJS_EXECUTOR_TOKEN`: the token the sidecar requires on every route but
+  `/health`. Unset, each backend process makes its own and gives it to the
+  sidecar it spawns. Set it, to the same value on both sides, for an external
+  executor (`NODEJS_EXECUTOR_URL`) or for several backend processes sharing
+  one sidecar, in their environment or an untracked env file (never a tracked
+  one such as `.env.template`). A sidecar started by hand needs it too, and
+  the header on each request.
 
 ## Edge cases & known limits
 
@@ -133,6 +159,19 @@ flowchart TD
 - **Sidecar down**: connection refused surfaces as
   `error="Cannot connect to host localhost:<NODEJS_EXECUTOR_PORT> ssl:default
   [Connect call failed]"` or similar aiohttp message. No automatic retry.
+- **A process this backend did not start**: `ensure_started()` leaves alone
+  any process already listening on `NODEJS_EXECUTOR_PORT`, whether a sidecar
+  an earlier backend left running (one that crashed while its sidecar kept
+  running), one started by hand or by another checkout, or any other program.
+  With `NODEJS_EXECUTOR_TOKEN` unset it sends that process nothing, because
+  the token made for this backend must reach only the sidecar it starts:
+  every JS/TS run fails with "port ... is held by a process this backend did
+  not start" until the process is stopped (`company stop` stops a sidecar
+  its own checkout left running; the backend then starts its own) or
+  `NODEJS_EXECUTOR_PORT` is changed. With `NODEJS_EXECUTOR_TOKEN` set, the
+  backend uses whatever listens there, which is how several processes share
+  one sidecar, and one started with another token answers 401. The backend
+  never kills a process it did not start.
 - **`workspace_dir` key collision**: user code cannot read an upstream
   `workspace_dir` from `input_data` - the handler always overwrites it.
 - **Timeout semantics**: the Python-side `timeout` is a ceiling on the

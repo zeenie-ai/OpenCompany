@@ -104,7 +104,7 @@ With the `browser` extra: Chrome refuses to run as root with its sandbox on, so 
 
 Those drop-ins apply to Debian's Chromium launcher. OpenCompany supplies its runtime launch flags and detects sandbox/shared-memory constraints. The image already sets `BROWSER_HEADLESS=true` for displayless operation; do not rely on the former agent-browser/Xvfb startup path.
 
-Leave `HOST` and `PORT` at their template values. The backend uses `HOST` to reach itself; the published bind comes from the entrypoint's `--host 0.0.0.0`. `PORT` is repeated in the Dockerfile's `EXPOSE` and the compose mapping, which do not follow a change made in `/data/opencompany.env`. Publish only the app port: the code sidecar, the WhatsApp bridge and Temporal listen on internal ports without authentication.
+Leave `HOST` and `PORT` at their template values. The backend uses `HOST` to reach itself; the published bind comes from the entrypoint's `--host 0.0.0.0`. `PORT` is repeated in the Dockerfile's `EXPOSE` and the compose mapping, which do not follow a change made in `/data/opencompany.env`. Publish only the app port: the WhatsApp bridge and Temporal listen on internal ports without authentication, and the code sidecar's `/health` answers anyone (it runs code only for requests carrying the token the backend started it with).
 
 ### Serving other machines
 

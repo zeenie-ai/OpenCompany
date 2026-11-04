@@ -265,7 +265,7 @@ Two findings are dismissed as by-design rather than fixed:
 
 | Query | Where | Why |
 |---|---|---|
-| `js/code-injection` | `server/nodejs/src/index.ts` `/execute` | That route **is** the JavaScript executor behind the `javascriptExecutor` / `typescriptExecutor` nodes, so evaluating request-supplied code is its purpose. It binds to localhost and is spawned and called only by the same-machine backend; `vm` is documented as not a security boundary. |
+| `js/code-injection` | `server/nodejs/src/index.ts` `/execute` | That route **is** the JavaScript executor behind the `javascriptExecutor` / `typescriptExecutor` nodes, so evaluating request-supplied code is its purpose. It binds to localhost, is spawned and called only by the same-machine backend, and runs code only for requests carrying the token the backend started it with (`NODEJS_EXECUTOR_TOKEN`); `vm` is documented as not a security boundary. |
 | `py/path-injection` | containment helpers | See above. |
 
 Inline `// codeql[...]` / `# codeql[...]` comments do **not** suppress

@@ -130,6 +130,7 @@ describe.skipIf(!staged || !runtimesStaged)("staged runtimes", () => {
   it("the bundled sidecar boots on the bundled bun with no node on PATH", async () => {
     const { spawn } = await import("node:child_process");
     const port = 5600 + Math.floor(Math.random() * 300);
+    const token = "staged-tree-test-token";
     const pathKey = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
     const strippedPath = (process.env[pathKey] ?? "")
       .split(process.platform === "win32" ? ";" : ":")
@@ -137,7 +138,13 @@ describe.skipIf(!staged || !runtimesStaged)("staged runtimes", () => {
       .join(process.platform === "win32" ? ";" : ":");
     const child = spawn(layout.bunBin, [join(APP_ROOT, "server", "nodejs", "dist", "index.js")], {
       cwd: join(APP_ROOT, "server", "nodejs"),
-      env: { ...process.env, [pathKey]: strippedPath, NODEJS_EXECUTOR_PORT: String(port), NODEJS_EXECUTOR_HOST: "127.0.0.1" },
+      env: {
+        ...process.env,
+        [pathKey]: strippedPath,
+        NODEJS_EXECUTOR_PORT: String(port),
+        NODEJS_EXECUTOR_HOST: "127.0.0.1",
+        NODEJS_EXECUTOR_TOKEN: token,
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
@@ -155,12 +162,21 @@ describe.skipIf(!staged || !runtimesStaged)("staged runtimes", () => {
         }
       }
       expect(ok, output).toBe(true);
+      const body = JSON.stringify({ code: "const n: number = 21; output = n * 2;", language: "typescript" });
+      // /execute runs code only for a request carrying the token the
+      // sidecar was started with.
+      const refused = await fetch(`http://127.0.0.1:${port}/execute`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(refused.status).toBe(401);
       // TypeScript is type-stripped by Bun.Transpiler inside the sidecar; a
       // Node-hosted sidecar would fail this with a SyntaxError.
       const res = await fetch(`http://127.0.0.1:${port}/execute`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: "const n: number = 21; output = n * 2;", language: "typescript" }),
+        headers: { "content-type": "application/json", "x-opencompany-executor-token": token },
+        body,
       });
       expect(((await res.json()) as { output: unknown }).output).toBe(42);
     } finally {

@@ -33,7 +33,9 @@ def executor_base_url() -> str:
 def get_nodejs_client(base_url: str | None = None, timeout: int = 30) -> NodeJSClient:
     global _client
     if _client is None:
-        _client = NodeJSClient(base_url or executor_base_url(), timeout)
+        _client = NodeJSClient(
+            base_url or executor_base_url(), timeout, token=get_nodejs_executor_runtime().token
+        )
     return _client
 
 

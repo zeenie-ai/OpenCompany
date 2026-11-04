@@ -73,9 +73,10 @@ flowchart TD
   B -- yes --> E[raise NodeUserError:<br/>No code provided]
   B -- no --> C[timeout_ms = timeout * 1000]
   C --> D[input_data = ctx.raw connected_outputs or {}<br/>inject workspace_dir]
-  D --> F[get_nodejs_client<br/>lazy singleton]
+  D --> F[acquire_client<br/>start or reuse the sidecar,<br/>lazy client singleton]
+  F -- port held by a process<br/>this backend did not start --> H1
   F --> G[client.execute<br/>POST /execute<br/>language=typescript]
-  G -- ClientConnectorError --> H1[raise NodeUserError<br/>TS executor unreachable on NODEJS_EXECUTOR_PORT]
+  G -- ClientConnectorError or 401 --> H1[raise NodeUserError<br/>TS executor unavailable]
   G -- success=false --> H2[raise NodeUserError<br/>error=result.error]
   G -- success=true --> I[Return dict<br/>output, console_output]
 ```
@@ -101,7 +102,9 @@ wire-level difference is the POST body's `language` field.
   the bun runtime (`Bun.Transpiler`), so no `tsx` and no TypeScript compiler
   are involved - and no type checking either.
 - **Python packages**: `aiohttp`.
-- **Environment variables**: `NODEJS_EXECUTOR_URL`, `NODEJS_EXECUTOR_TIMEOUT`.
+- **Environment variables**: `NODEJS_EXECUTOR_URL`, `NODEJS_EXECUTOR_TIMEOUT`,
+  `NODEJS_EXECUTOR_TOKEN` (the token the sidecar requires; see
+  [`javascriptExecutor`](./javascriptExecutor.md)).
 
 ## Edge cases & known limits
 

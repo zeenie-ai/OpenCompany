@@ -7,6 +7,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import vm from 'node:vm';
 import { execFileSync } from 'node:child_process';
+import { timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,16 @@ const HOST = process.env.NODEJS_EXECUTOR_HOST ?? 'localhost';
 const BODY_LIMIT = process.env.NODEJS_EXECUTOR_BODY_LIMIT ?? '10mb';
 const USER_PACKAGES_DIR = process.env.NODEJS_USER_PACKAGES_DIR ?? path.join(__dirname, '..', 'user-packages');
 
+// The token the backend started this process with (nodes/code/_runtime.py).
+// Every route but /health answers only requests that carry it, so neither
+// a web page reaching localhost nor a process that can only reach the port
+// can run code here. With no token set, every such request is refused.
+const TOKEN = Buffer.from(process.env.NODEJS_EXECUTOR_TOKEN ?? '');
+const TOKEN_HEADER = 'X-OpenCompany-Executor-Token';
+if (TOKEN.length === 0) {
+  console.warn('NODEJS_EXECUTOR_TOKEN is not set: every request but /health is refused');
+}
+
 // The runtime this process runs on is also the package manager for the
 // user-packages tree: `process.execPath` is bun, and `bun add` installs
 // from the npm registry with no node or npm on the machine.
@@ -39,7 +50,6 @@ const bunRuntime = (globalThis as {
 const bunVersion = bunRuntime?.version ?? null;
 
 const app = express();
-app.use(express.json({ limit: BODY_LIMIT }));
 
 // The package routes touch the filesystem and spawn `bun add`. The only
 // caller is the same-machine Python backend, so the ceiling is generous;
@@ -58,7 +68,8 @@ interface ExecuteRequest {
   timeout?: number;
 }
 
-// Health check
+// Health check. Open: it runs nothing and reports only versions, and the
+// readiness checks outside the backend poll it without a token.
 app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'healthy',
@@ -70,6 +81,26 @@ app.get('/health', (_req: Request, res: Response) => {
     node_version: process.version,
   });
 });
+
+function hasToken(req: Request): boolean {
+  // The HTTP parser hands header bytes to JS as latin1, so this recovers the
+  // bytes the client sent. The client sends the token as UTF-8, which is
+  // what TOKEN holds.
+  const presented = Buffer.from(req.get(TOKEN_HEADER) ?? '', 'latin1');
+  // timingSafeEqual needs equal lengths; an empty token matches nothing.
+  return TOKEN.length > 0 && presented.length === TOKEN.length && timingSafeEqual(presented, TOKEN);
+}
+
+// Before the body parser and every route below, so a request without the
+// token is refused before its body is read.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (hasToken(req)) {
+    next();
+    return;
+  }
+  res.status(401).json({ success: false, error: `Missing or wrong ${TOKEN_HEADER}` });
+});
+app.use(express.json({ limit: BODY_LIMIT }));
 
 // TypeScript is type-stripped by bun's own transpiler before it reaches the
 // vm context (which evaluates JavaScript only). Type annotations, interfaces
@@ -115,11 +146,12 @@ app.post('/execute', (req: Request, res: Response) => {
     // This service IS the sandboxed JS executor for the pythonExecutor /
     // javascriptExecutor workflow nodes. `vm` is not a security boundary
     // (per https://nodejs.org/api/vm.html#vmcreatecontextcontextobject-options);
-    // the deployment context is: server binds to localhost only (line 16,
-    // default 'localhost') and is invoked exclusively by the same-machine
-    // Python backend via NodeJSClient. Public network exposure is the
-    // operator's responsibility. CodeQL's js/code-injection finding on this
-    // line is by design and is dismissed on the repository as "won't fix".
+    // the deployment context is: server binds to localhost by default
+    // (NODEJS_EXECUTOR_HOST) and runs only requests carrying the token the
+    // backend started it with (TOKEN above), sent by NodeJSClient. Public
+    // network exposure is the operator's responsibility. CodeQL's
+    // js/code-injection finding on this line is by design and is dismissed
+    // on the repository as "won't fix".
     vm.runInContext(prepareSource(code, language), context, { timeout, filename: language === 'typescript' ? 'user-code.ts' : 'user-code.js' });
 
     res.json({
@@ -149,8 +181,8 @@ function ensureUserPackagesTree(): void {
 }
 
 // Install packages - package list from request.
-// Localhost-only service (see server.listen at the bottom); same trust
-// boundary as the /execute sandbox.
+// Same trust boundary as /execute: localhost by default (see app.listen at
+// the bottom), and only requests carrying the token.
 app.post('/packages/install', packageRouteLimiter, (req: Request, res: Response) => {
   const { packages } = req.body as { packages: string[] };
 
@@ -179,7 +211,7 @@ app.post('/packages/install', packageRouteLimiter, (req: Request, res: Response)
   }
 });
 
-// List packages — same localhost-only trust boundary as above. The tree's
+// List packages — same trust boundary as above. The tree's
 // own manifest is the source of truth (what `bun add` wrote), so no
 // package-manager listing command is needed.
 app.get('/packages', packageRouteLimiter, (_req: Request, res: Response) => {

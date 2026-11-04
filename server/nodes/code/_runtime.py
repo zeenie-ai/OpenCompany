@@ -14,7 +14,17 @@ Same :class:`BaseProcessSupervisor` idiom as ``nodes/whatsapp/_runtime``
 and ``services/temporal/_runtime`` — including the TCP probe-before-spawn
 from the Temporal runtime, so an externally managed executor (or one
 started by another backend process, e.g. a standalone Temporal worker)
-is detected and left alone.
+is detected and left alone; it is used only with a shared token (below).
+
+The sidecar runs whatever code it is sent, so every route but ``/health``
+answers only requests carrying the token it was started with
+(``NODEJS_EXECUTOR_TOKEN``). Each backend process makes its own random
+token unless the operator sets one, which is how an external executor, or
+several processes sharing one sidecar, authenticate. A token this process
+made goes only to the sidecar it started: when something else holds the
+port, :meth:`NodeJSExecutorRuntime.ensure_started` refuses instead of
+sending it a request, and never kills it. A sidecar started with another
+token answers 401, which the client reports (``_client.py``).
 
 Config is plugin-owned: the ``NODEJS_EXECUTOR_*`` env vars are read
 here directly (pushed into ``os.environ`` from ``.env`` by the CLI) —
@@ -25,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -33,6 +44,9 @@ from services._supervisor import BaseProcessSupervisor
 
 # Sub-second per-attempt probe — a stalled sidecar fails health fast.
 _PROBE_TIMEOUT_SECONDS = 1.0
+
+#: The variable the sidecar reads its token from (``server/nodejs/src/index.ts``).
+ENV_TOKEN = "NODEJS_EXECUTOR_TOKEN"
 
 
 async def _probe_tcp_port(port: int, host: str = "localhost") -> bool:
@@ -78,6 +92,12 @@ class NodeJSExecutorRuntime(BaseProcessSupervisor):
     terminate_grace_seconds = 5.0
     graceful_shutdown = sys.platform == "win32"
 
+    def __init__(self) -> None:
+        super().__init__()
+        # The operator's token when set, else one made for this process. The
+        # client sends it on every request (``_nodejs.get_nodejs_client``).
+        self.token = os.environ.get(ENV_TOKEN) or secrets.token_urlsafe(32)
+
     # ---- BaseProcessSupervisor overrides ---------------------------------
 
     async def _pre_spawn(self) -> None:
@@ -102,7 +122,7 @@ class NodeJSExecutorRuntime(BaseProcessSupervisor):
         return _sidecar_dir()
 
     def env(self) -> dict[str, str]:
-        return {**os.environ, "NODEJS_EXECUTOR_PORT": str(executor_port())}
+        return {**os.environ, "NODEJS_EXECUTOR_PORT": str(executor_port()), ENV_TOKEN: self.token}
 
     async def health_check(self) -> bool:
         if not self.is_running():
@@ -113,12 +133,23 @@ class NodeJSExecutorRuntime(BaseProcessSupervisor):
         """Start the sidecar unless something already serves the port,
         then wait until it accepts connections.
 
-        A listening port means a previously spawned instance (possibly by
-        another backend process) or an externally managed executor — both
-        are left alone. Idempotent like ``start()``.
+        A process this backend did not start (a sidecar an earlier backend
+        left running, one started by hand or by another backend process,
+        or any other program) is left alone and used only when the operator
+        set a shared ``NODEJS_EXECUTOR_TOKEN``. Otherwise this raises before
+        any request goes there, because the token made for this process
+        must reach only the sidecar it starts. Idempotent like ``start()``.
         """
         if await _probe_tcp_port(executor_port()):
-            return
+            if self.is_running() or os.environ.get(ENV_TOKEN):
+                return
+            raise RuntimeError(
+                f"port {executor_port()} (NODEJS_EXECUTOR_PORT) is held by a process "
+                "this backend did not start, so no code is sent there. Stop that "
+                "process (`company stop` stops a sidecar its checkout left running) "
+                "or set another NODEJS_EXECUTOR_PORT. Backend processes that share one "
+                f"executor need the same {ENV_TOKEN}."
+            )
         await self.start()
         for _ in range(50):  # ~15 s ceiling; the bundled sidecar boots in <2 s
             if await _probe_tcp_port(executor_port()):
