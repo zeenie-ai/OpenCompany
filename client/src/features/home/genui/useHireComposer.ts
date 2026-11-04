@@ -16,8 +16,8 @@ import { useDraftActions, useDraftStore } from './draftStore';
 
 /**
  * Send the box as a new job (never a change to the current draft). The box
- * is read when sending, so a caller that only sends does not re-render as
- * the job is typed.
+ * is read when sending, so a caller that only sends (the Welcome guide's
+ * finish) does not re-render as the job is typed.
  */
 export function useSendJob() {
   const actions = useDraftActions();
@@ -26,8 +26,8 @@ export function useSendJob() {
 
 /**
  * The job box alone, with no side effects: its text, whether a setup is
- * being written, picking a starter's job, and sending a new job. A composer
- * outside the hire view can use it, so the effects below stay mounted once
+ * being written, picking a starter's job, and sending a new job. The
+ * Welcome guide's composer uses it, so the effects below stay mounted once
  * (in the hire view) and picking a starter there takes no focus from Home.
  */
 export function useJobComposer() {

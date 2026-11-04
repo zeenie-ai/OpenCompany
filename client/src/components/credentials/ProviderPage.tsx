@@ -3,8 +3,8 @@
  * AI providers, what it is (description, publisher, Verified, connected or
  * not, runs on this computer), and its panel (PanelRenderer). The
  * credentials dialog shows it as its second layer, under its own title bar;
- * a host that shows it in place of the list can give it its own heading
- * (`showHeading`).
+ * the Welcome guide's Connect step shows it in place of the list, with its
+ * own heading (`showHeading`).
  *
  * Rows keep the panel's 20px inset (ApiKeyPanel pads itself by `p-5`), so
  * a host adds only its outer margin.

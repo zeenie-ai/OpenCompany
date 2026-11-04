@@ -1,9 +1,10 @@
 /**
  * The Get started checklist (onboarding handoff D): a card in Home's
- * bottom-right corner from the owner's first visit, whose four steps
+ * bottom-right corner once the Welcome guide is finished, whose four steps
  * tick themselves as the owner gets going (useGetStarted). A step not done
  * yet takes the owner there. The card folds to a "Get started · n/4" pill,
- * and hiding it says where it comes back (Settings > Help).
+ * and hiding it says where it comes back (Settings > Help). It stays out of
+ * the way while the guide is open.
  */
 
 import { Check, ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
@@ -12,6 +13,7 @@ import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 import { useGetStarted, type GetStartedRow } from './useGetStarted';
 
@@ -47,9 +49,10 @@ function Step({ row }: { row: GetStartedRow }) {
 }
 
 export function GetStartedChecklist() {
+  const guideOpen = useHomeStore((s) => s.guide.open);
   const { visible, rows, doneCount, dismiss } = useGetStarted();
   const [folded, setFolded] = useState(false);
-  if (!visible) return null;
+  if (!visible || guideOpen) return null;
 
   const total = rows.length;
   const allDone = doneCount === total;

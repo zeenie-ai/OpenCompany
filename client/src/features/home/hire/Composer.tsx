@@ -48,7 +48,7 @@ export interface ComposerProps {
   maxLength?: number;
   /** Create's label while idle (default "Create employee"). */
   idleLabel?: string;
-  /** No float shadow: the box sits inside a dialog. */
+  /** No float shadow: the box sits inside a dialog (the Welcome guide). */
   flat?: boolean;
 }
 

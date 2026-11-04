@@ -81,7 +81,8 @@ function toItem(provider: ConsumerProvider): CatalogItem {
   };
 }
 
-/** What the browser says. Settings > Connectors uses the defaults. */
+/** What the browser says. Settings > Connectors uses the defaults; the
+ *  Welcome guide's Connect step speaks of AI models. */
 export interface CredentialsBrowserCopy {
   title: string;
   searchPlaceholder: string;
@@ -105,12 +106,13 @@ export interface CredentialsBrowserProps {
   /** The host can share its query/visibility result without another hook. */
   catalogue?: CredentialsCatalogue;
   copy?: CredentialsBrowserCopy;
-  /** Passed to CatalogLayout. */
+  /** Passed to CatalogLayout (the Welcome guide embeds the browser). */
   variant?: 'page' | 'embedded';
   discoverLimit?: number | null;
   /** A provider on screen turned connected (after its card's glow starts). */
   onItemAdded?: (providerId: string) => void;
-  /** Offer Add for a custom connector (default). */
+  /** Offer Add for a custom connector (default). The Welcome guide's AI
+   *  model step turns it off. */
   customConnectors?: boolean;
 }
 

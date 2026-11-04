@@ -119,8 +119,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const setSoundEnabled = useAppStore((s) => s.setSoundEnabled);
 
   // Hydrate Dashboard's controlled state from the cached settings row
-  // exactly once per open. The query is shared with the other settings
-  // readers so cross-component reads stay in sync.
+  // exactly once per open. The query is shared with useOnboarding so
+  // cross-component reads stay in sync.
   useEffect(() => {
     if (!isOpen || !settingsQuery.data) return;
     onSettingsChange(fromServerRow(settingsQuery.data));

@@ -21,7 +21,7 @@ Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architect
 
 **On by default.**
 - `OPENCOMPANY_GATEWAY_ENABLED` (`gateway_enabled`, default `true`) lists the **Gateway** card, by OpenCompany, under AI models in Connectors. It is gated by `requires_setting` in `server/config/credential_providers.json`, honoured by `CredentialRegistry.get_all_providers`.
-- **Where it appears:** in normal mode, the Connect an AI model dialog (the credentials dialog on AI models) and Connectors; in dev mode, API Credentials. Both shells use the same `CredentialsBrowser`.
+- **Where it appears:** in normal mode, the Get Started guide's Connect an AI model step and Connectors; in dev mode, API Credentials. Both shells use the same `CredentialsBrowser`.
 - `OPENCOMPANY_GATEWAY_URL` (`gateway_url`) points at the gateway.
 - `false` hides the card and turns the routing off, so behaviour is exactly as without the gateway.
 - **Gateway source limitation:** this router currently reads its key from the local encrypted store on every call, and the credential card declares that a 1Password source is unsupported (`catalogue_extras`). Ordinary provider credential resolution can use approved per-call 1Password bindings; that capability has not been integrated into this gateway path. Distributed mode keeps the gateway off.

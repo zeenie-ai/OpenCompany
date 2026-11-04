@@ -141,10 +141,10 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   [lib/motion.ts](../client/src/lib/motion.ts), whose fallbacks mirror
   base.css. It also holds the onboarding presets: `RISE` / `rise(el)` (up from
   16px, scale .98, a 4px blur, `card-in` on the spring curve) and `shake(el)`
-  (-6, 5, -3, 2px, each swing on `--ease-shake`). The CSS loop beside them in
-  `animations.css` is `.opencompany-spinner-slow` (the `--dur-live-ring` pace),
-  drawn as a ring by `components/ui/ring-spinner.tsx`; it stops under reduced
-  motion.
+  (-6, 5, -3, 2px, each swing on `--ease-shake`). The CSS loops beside them in
+  `animations.css` are `.opencompany-caret-blink` (a hard on/off caret) and
+  `.opencompany-spinner-slow` (the `--dur-live-ring` pace), drawn as a ring by
+  `components/ui/ring-spinner.tsx`; both stop under reduced motion.
 - **Radii**: `--radius-row | card | panel | draft | composer`, multiples of each
   theme's `--radius-lg`, so square themes stay square. The Tailwind
   `rounded-sm/md/lg/xl` utilities do not follow themes: `index.css` computes
@@ -155,8 +155,10 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   `--tracking-hero`, `--leading-hero`; `headline` is 28px, the onboarding
   headings), and the Home layout constants (`--w-home-sidebar`,
   `--h-home-header`, `--w-composer`, the orb slot sizes `--size-orb-hire |
-  employee | connecting | login`, the Settings dialog size
-  `--w-settings`/`--h-settings`).
+  employee | connecting | login`, the Settings and Welcome guide dialog sizes
+  `--w-settings`/`--h-settings` and `--w-guide`/`--h-guide`). The guide's demo
+  stage is the `.home-welcome-stage` class in `index.css` (two washes of
+  `--node-agent-fill` and `--node-model-soft` over `--bg-app`).
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
   for the employee pills and dots. The dot is the raw role colour; light.css
   keeps the paused dot at the design's mid grey. `--shadow-pip`

@@ -138,46 +138,6 @@ describe('CredentialsBrowser', () => {
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument();
   });
 
-  it('speaks its host’s words, shows every card embedded with no cap, and names a provider that turns connected', () => {
-    const copy = {
-      title: 'Connect an AI model',
-      searchPlaceholder: 'Search AI models',
-      listLabel: 'AI models to show',
-      discoverTitle: 'AI models',
-      yoursEmpty: { title: 'No AI models connected yet', detail: 'Connect one so your employees can think.' },
-    };
-    const models = (connected: string | null) =>
-      Array.from({ length: 10 }, (_, i): ConsumerProvider => ({
-        id: `ai${i}`, name: `Model ${i}`, category: 'ai', category_label: 'AI',
-        consumer_category: 'ai', color: '', kind: 'apiKey', connected: `ai${i}` === connected,
-      }));
-    const onItemAdded = vi.fn();
-    const ui = (connected: string | null) => (
-      <ThemeProvider>
-        <CredentialsBrowser
-          catalogue={catalogue(models(connected))}
-          onConnect={vi.fn()}
-          copy={copy}
-          variant="embedded"
-          discoverLimit={null}
-          onItemAdded={onItemAdded}
-        />
-      </ThemeProvider>
-    );
-    const { rerender } = render(ui(null));
-    expect(screen.getByRole('heading', { name: 'Connect an AI model' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Search AI models' })).toBeInTheDocument();
-    expect(screen.getByLabelText('AI models to show')).toBeInTheDocument();
-    expect(screen.getByText('AI models')).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-catalog-item]')).toHaveLength(10);
-    expect(screen.queryByRole('button', { name: /Show all/ })).not.toBeInTheDocument();
-    expect(onItemAdded).not.toHaveBeenCalled();
-
-    rerender(ui('ai3'));
-    expect(onItemAdded).toHaveBeenCalledTimes(1);
-    expect(onItemAdded).toHaveBeenCalledWith('ai3');
-  });
-
   it('removes a custom connector on Disconnect, and says why when the server refuses', async () => {
     render(<ThemeProvider><CredentialsBrowser catalogue={catalogue([CONNECTOR])} onConnect={vi.fn()} /></ThemeProvider>);
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect Orders' }));

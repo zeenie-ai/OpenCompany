@@ -71,7 +71,7 @@ const PAGES: Page[] = [
     group: 'settings',
     label: 'Help',
     icon: CircleHelp,
-    keywords: 'checklist get started',
+    keywords: 'guide welcome tour replay checklist get started',
     render: ({ close }) => <HelpTab onDone={close} />,
   },
   {

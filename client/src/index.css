@@ -509,6 +509,19 @@ html {
 }
 
 /* ============================================================================
+ * Welcome guide (Home onboarding): the demo stage. Two soft washes over the
+ * app surface, the agent fill from the top right and the model tint from
+ * the bottom left (design handoff A1).
+ * ============================================================================ */
+
+.home-welcome-stage {
+  background:
+    radial-gradient(110% 80% at 100% 0%, var(--node-agent-fill), transparent 60%),
+    radial-gradient(100% 80% at 0% 100%, var(--node-model-soft), transparent 65%),
+    var(--bg-app);
+}
+
+/* ============================================================================
  * Theme switch (ThemeContext.setTheme with `reveal`).
  *
  * The circular reveal is a View Transition whose new root is clipped open

@@ -265,7 +265,8 @@ connector is no longer listed.
 
 - **Add** on the Connectors page (`CatalogLayout.primaryAction`) opens
   `AddConnectorForm`. After a save, the catalogue is refetched, then the new
-  connector's page opens.
+  connector's page opens. The Welcome guide's AI model step has no Add
+  (`customConnectors={false}`).
 - **Add** with Sign-in **OAuth** opens the server's sign-in page in a new
   tab and closes the form with a note: the connector's card shows once the
   owner signed in there.

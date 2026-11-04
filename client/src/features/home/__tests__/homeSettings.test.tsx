@@ -2,8 +2,7 @@
  * Settings: the nav search keeps the pages whose label or keywords match
  * and drops a group left empty; changing page clears the category a page
  * was opened on; Billing shows this month's tasks and the team size, and a
- * dash when the count can't be read; Help shows the hidden Get started
- * checklist again, and has no Welcome guide to replay.
+ * dash when the count can't be read.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -97,12 +96,13 @@ describe('HomeSettings', () => {
     expect(await screen.findByText('—')).toBeInTheDocument();
   });
 
-  it('has no Welcome guide to replay on Help, only the checklist to show', () => {
+  it('replays the Welcome guide from Help, closing Settings', async () => {
+    useHomeStore.setState({ guide: { open: false, step: 'first-hire', furthest: 2, checked: true, provider: null, pendingDraft: false } });
     useHomeStore.getState().openSettings('help');
     renderSettings();
-    expect(screen.getByRole('button', { name: 'Show' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Replay' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Welcome guide')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Replay' }));
+    expect(useHomeStore.getState().settingsOpen).toBe(false);
+    expect(useHomeStore.getState().guide).toMatchObject({ open: true, step: 'welcome', furthest: 2 });
   });
 
   it('shows the hidden Get started checklist again from Help, closing Settings', async () => {
@@ -113,14 +113,11 @@ describe('HomeSettings', () => {
     expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { getting_started_dismissed: false } });
   });
 
-  it('finds Help by searching for the checklist, and no longer for the guide', () => {
+  it('finds Help by searching for the guide', () => {
     useHomeStore.getState().openSettings();
     renderSettings();
-    const search = screen.getByRole('textbox', { name: 'Search settings' });
-    fireEvent.change(search, { target: { value: 'checklist' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search settings' }), { target: { value: 'guide' } });
     expect(screen.getByRole('tab', { name: 'Help' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Billing' })).not.toBeInTheDocument();
-    fireEvent.change(search, { target: { value: 'guide' } });
-    expect(screen.queryByRole('tab', { name: 'Help' })).not.toBeInTheDocument();
   });
 });
