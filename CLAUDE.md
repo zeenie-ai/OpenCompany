@@ -301,6 +301,8 @@ server/nodes/code/                # Executor plugins (javascript_executor, types
 | `/packages/install` | POST | Install npm-registry packages into user-packages via `bun add` (run through `process.execPath`, i.e. the sidecar's own bun). Rate-limited to 120 req/min |
 | `/packages` | GET | List installed packages from the user-packages dir's `package.json`. Rate-limited to 120 req/min, sharing the window with `/packages/install` |
 
+Every route but `/health` answers 401 unless the request carries `X-OpenCompany-Executor-Token` with the token the sidecar was started with (`NODEJS_EXECUTOR_TOKEN`), compared before the body is read. `nodes/code/_runtime.py` makes the token once per backend process (an operator-set `NODEJS_EXECUTOR_TOKEN` wins) and gives it only to the sidecar it spawns; when a process it did not start holds the port, the JS/TS nodes fail with a message saying so and send it nothing.
+
 **Environment Variables:**
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -309,6 +311,7 @@ server/nodes/code/                # Executor plugins (javascript_executor, types
 | `NODEJS_EXECUTOR_PORT` | see `.env.template` | Server port |
 | `NODEJS_EXECUTOR_HOST` | `localhost` | Server host |
 | `NODEJS_EXECUTOR_BODY_LIMIT` | `10mb` | Max request body size |
+| `NODEJS_EXECUTOR_TOKEN` | made per backend process | The token the sidecar requires on every route but `/health`. Set the same value in each process's environment (never in a tracked file) for an external executor (`NODEJS_EXECUTOR_URL`) or several backend processes sharing one sidecar |
 
 **Key Modules:**
 
@@ -1378,7 +1381,7 @@ if not settings or not settings.get("examples_loaded", False):
 1. Export a workflow from the UI (File > Export)
 2. Copy the JSON file to `<repo>/.opencompany/workflows/` (git-tracked seed location)
 3. Edit the `id` and `name` fields as needed
-4. Delete `~/.opencompany/workflow.db` (or set `examples_loaded=false` in DB)
+4. Stop the app and delete `~/.opencompany/workflow.db` with its `workflow.db-wal` and `workflow.db-shm` files (or set `examples_loaded=false` in DB)
 5. Restart server - examples auto-load on first workflow list fetch
 
 ### Database Migration
@@ -2515,7 +2518,7 @@ Updated `client_left` and presence handlers use `has_real_android_devices()` ins
 | **Node Execution** | `execute_node`, `execute_workflow`, `cancel_execution`, `get_node_output`, `clear_node_output` |
 | **Triggers/Events** | `cancel_event_wait`, `get_active_waiters` |
 | **Dead Letter Queue** | `get_dlq_entries`, `get_dlq_entry`, `get_dlq_stats`, `replay_dlq_entry`, `remove_dlq_entry`, `purge_dlq` |
-| **Deployment** | `deploy_workflow` (Start's own step; refused without a live generation), `cancel_deployment`, `get_deployment_status`, `get_workflow_lock`, `update_deployment_settings` |
+| **Deployment** | `deploy_workflow` (Start's own step; refused without a live generation; arms the graph the generation recorded, never the request's), `cancel_deployment`, `get_deployment_status`, `get_workflow_lock`, `update_deployment_settings` |
 | **AI Operations** | `execute_ai_node`, `get_ai_models` |
 | **API Keys** | `validate_api_key`, `get_stored_api_key`, `save_api_key`, `delete_api_key` |
 | **CLI agent auth** | `claude_code_login`, `claude_code_logout`, `codex_cli_login`, `codex_cli_logout` |
