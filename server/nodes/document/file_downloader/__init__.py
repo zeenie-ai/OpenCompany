@@ -82,7 +82,12 @@ class FileDownloaderNode(ActionNode):
                 url = item.get("url", "") if isinstance(item, dict) else str(item)
                 if not url:
                     return {"status": "failed", "error": "Empty URL"}
-                filename = unquote(Path(urlparse(url).path).name or "download")
+                # The last path segment, decoded first so an encoded separator
+                # (%2f, %5c) cannot climb out of the folder; ':' would name a
+                # Windows drive or a file stream.
+                path = unquote(urlparse(url).path).replace("\\", "/").rstrip("/")
+                name = path.rsplit("/", 1)[-1].replace(":", "_")
+                filename = name if name not in ("", ".", "..") else "download"
                 file_path = output_dir / filename
                 if skip_existing and file_path.exists():
                     return {"status": "skipped", "path": str(file_path), "url": url}

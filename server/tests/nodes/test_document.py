@@ -271,6 +271,27 @@ class TestFileDownloader:
         assert (tmp_path / "a.pdf").read_bytes() == b"AAA"
         assert on_loop == [False]
 
+    @pytest.mark.parametrize("path, saved_as", [
+        ("..%2f..%2fpwned.txt", "pwned.txt"),
+        ("..%5c..%5cpwned.txt", "pwned.txt"),
+        ("C:pwned.txt", "C_pwned.txt"),  # a drive-relative name on Windows
+        ("dir/..%2f", "download"),
+    ])
+    async def test_a_url_cannot_name_a_file_outside_the_folder(self, harness, tmp_path, path, saved_as):
+        # The file name comes from the URL, which a scraped page can choose.
+        out = tmp_path / "a" / "b"
+        with respx.mock:
+            respx.get(f"https://example.com/{path}").mock(return_value=httpx.Response(200, content=b"x"))
+            result = await harness.execute(
+                "fileDownloader",
+                {"items": [{"url": f"https://example.com/{path}"}], "outputDir": str(out)},
+            )
+
+        harness.assert_envelope(result, success=True)
+        assert result["result"]["downloaded"] == 1
+        assert (out / saved_as).read_bytes() == b"x"
+        assert not (tmp_path / "pwned.txt").exists()
+
 
 # ============================================================================
 # documentParser

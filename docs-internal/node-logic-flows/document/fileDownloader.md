@@ -86,7 +86,7 @@ flowchart TD
 
 - **Empty items**: short-circuits to a zero-count success envelope before any directory work.
 - **Output dir resolution**: `outputDir` param -> `<context.workspace_dir>/downloads` -> literal `downloads` relative to CWD.
-- **Filename**: `unquote(basename(urlparse(url).path))` or literal `"download"` when URL has no path. Collisions silently overwrite unless `skipExisting=true`.
+- **Filename**: the last non-empty segment of the URL's decoded path (trailing slashes ignored), with `/` and `\` (encoded or not) both separators and `:` replaced by `_`, so a link such as `..%2f..%2fname` or `C:name` cannot place the file outside the output folder; literal `"download"` when that segment is empty, `.` or `..`. Collisions silently overwrite unless `skipExisting=true`.
 - **Skip logic**: path-existence check, not size/hash check.
 - **Network policy**: the client runs `check_request` (`services/netpolicy.py`) as an httpx request hook, so every request, each redirect hop included, is checked with `fetch_policy()` on the URL and every address its host resolves to. A hop to OpenCompany's own ports on this machine (the `*_PORT` settings, and the Browser's and Android's live ports), to cloud metadata, or to a host that does not resolve raises `BlockedURL("Cannot request <url>: <reason>.")` before anything is sent to it, and the item fails like any other. The owner's own network and other loopback ports stay reachable.
 - **Per-URL failure**: appended to `failed` list, envelope remains `success=true`.
@@ -109,7 +109,7 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Decoded filename containment**: the URL basename is URL-decoded before joining it to `output_dir`, and no final containment check is performed. Encoded path separators can therefore change the destination outside that directory. Use trusted download sources; this audit records the runtime gap without repairing it.
+- **Windows device names**: a URL whose last segment is a device name (`NUL`, and on Windows 10 and earlier `CON`, `AUX`, `PRN`, `COM1`-`COM9`, `LPT1`-`LPT9`) names that device, not a file: nothing is saved there.
 - **Unbounded response body**: the HTTP client materializes `resp.content` before writing; no download byte limit is enforced by this operation.
 
 
