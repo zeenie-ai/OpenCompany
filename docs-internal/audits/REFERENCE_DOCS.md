@@ -2,6 +2,12 @@
 
 **Baseline:** committed `56d4154e713845d93124875b271144acac8d26cd`.
 
+> **Codex follow-up, 2026-11-04:** Codex rejection/login gaps in this audit
+> describe that baseline. Managed login and JSONL execution (`7e9c2f03`), saved
+> null-list handling (`2c95bcd6`), and Auto model selection/readable provider
+> errors (`958203c1`) now ship. See the [current Codex guide](../codex_agent.md).
+> The original audit evidence and unrelated findings below remain historical.
+
 **Coverage:** 54 active top-level internal reference documents, 43 design/reference Markdown files, and three desktop/client/mobile entrypoint documents (100 original files). The new historical Docker extraction is recorded separately.
 
 This is a contract-focused static source review. Each row records the local boundary reviewed and its evidence; source review is not a runtime proof of the whole feature. Historical/vendor snapshots, prototype anatomy, dated performance measurements and deployment/OS acceptance are classified explicitly. No external provider request, vault access, browser/mobile session, provisioning, build, test run or live service was performed by this worker.

@@ -1,6 +1,6 @@
 # Claude Code Agent Architecture
 
-> **ARCHIVED 2026-09-04 — Superseded.** LangGraph-era design material. Its one current-tense claim was wrong: the claude path is a plain subprocess over stdio pipes, not a PTY (`nodes/agent/claude_code_agent/_pool.py`); PTY is used only by the non-pooled `AICliSession` for codex and gemini.
+> **ARCHIVED 2026-09-04 — Superseded.** LangGraph-era design material. Its one current-tense claim was wrong: the claude path is a plain subprocess over stdio pipes, not a PTY (`nodes/agent/claude_code_agent/_pool.py`); Codex now uses piped `exec --json` in `AICliSession`; its remaining PTY branch is legacy Claude code, and Gemini remains a stub. See the current [Codex guide](../codex_agent.md).
 >
 > For current state see:
 >

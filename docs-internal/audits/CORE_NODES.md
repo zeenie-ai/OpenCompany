@@ -3,6 +3,13 @@
 Status: source-backed audit snapshot, 2026-11-02. Baseline:
 `56d4154e713845d93124875b271144acac8d26cd`, isolated documentation worktree.
 
+> **Codex follow-up, 2026-11-04:** the Codex rows below describe this audit
+> baseline. The current node has managed login, Auto models, saved null-list
+> compatibility and piped JSONL execution. Codex reports usage but no native
+> dollar cost; shared pricing can derive a value when model/pricing data is
+> known, otherwise it remains null. See the [current Codex guide](../codex_agent.md)
+> and [node contract](../node-logic-flows/specialized_agents/codex_agent.md).
+
 Covers **88 supported node types**, **99 node-operation entries** (75 distinct
 source operations) and every fixed selector branch, **31 default skills**, the active Process Manager v1 variant,
 and the skill-authoring guide. The sibling integration audit covers the other

@@ -2,6 +2,25 @@
 
 Documented root causes and fixes for errors encountered in OpenCompany development and production.
 
+## Codex CLI: sign-in, parameter validation and model rejection
+
+These are separate failure stages; a successful login does not establish that a
+selected model is available. See the [Codex guide](codex_agent.md) for the
+managed paths, native log locations and current execution contract.
+
+| Symptom | Root cause and recovery |
+|---|---|
+| Historical “Codex login is not yet wired” response | The old handler always failed. The managed browser/device flow replaces it; restart an older running backend to load the implementation. A personal global CLI login is separate from the app's `CODEX_HOME`. |
+| `tasks` / `allowed_credentials`: “Input should be a valid list” for saved nulls | The panel can persist absent list defaults as null. Codex now matches Claude's `null -> []` validator through both direct and Temporal execution; other malformed non-list values remain errors. |
+| HTTP 400 `model_not_found`, empty response and zero usage | The native service rejected an explicit model before generation. Auto omits `--model`; clear an obsolete saved Model or task override rather than silently selecting another model. ChatGPT and API-key availability can differ. |
+| `input=no` while the task contains a prompt | The collection log describes upstream input, not the saved Prompt field. Check the task prompt and native user event. Successful MCP setup followed by provider rejection is not an input-parser failure. |
+
+Nested provider JSON now becomes a readable task error with safe error-code and
+status metadata. MCP DELETE during failure cleanup is not necessarily the
+cause. New application defaults do not rewrite saved overrides or admitted
+Temporal snapshots. In `company dev`, Python does not hot-reload: stop the
+existing foreground run and use `bun run dev` once after backend/config edits.
+
 ---
 
 ## 1. SQLAlchemy Import Hang (Windows)

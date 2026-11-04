@@ -635,10 +635,20 @@ Two settings flags route agent execution through different Temporal paths (see [
 | Flag | Off | On (default) |
 |---|---|---|
 | `TEMPORAL_PER_TYPE_DISPATCH` | Ordinary nodes use the legacy `execute_node_activity` dispatcher (WS round-trip); enabled agent child-Workflow routing still takes precedence for supported types. | Ordinary nodes use per-type `node.{type}.v{version}` Activities registered by `BaseNode.as_activity()`. Graph dispatch honors plugin retry/queue; Workspace-task patches and version 1 agent-tool dispatch also use plugin timeout/heartbeat. |
-| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | Supported agents run the in-process loop inside a node Activity: per-type when per-type dispatch is on, otherwise the legacy single dispatcher. | Types in `AGENT_WORKFLOW_TYPES` become **child Workflows** (`AgentWorkflow`). LLM steps and ordinary tools are Activities; preparation resolves configuration and explicit refresh binds canvas changes. `rlm_agent` and `claude_code_agent` remain whole-node Activities. |
+| `TEMPORAL_AGENT_WORKFLOW_ENABLED` | Supported agents run the in-process loop inside a node Activity: per-type when per-type dispatch is on, otherwise the legacy single dispatcher. | Types in `AGENT_WORKFLOW_TYPES` become **child Workflows** (`AgentWorkflow`). LLM steps and ordinary tools are Activities; preparation resolves configuration and explicit refresh binds canvas changes. `rlm_agent`, `claude_code_agent`, and `codex_agent` remain whole-node Activities. |
 
 Both flags default to `true` in `.env.template`; the starter freezes their
 values and the worker-pool routing flag into each execution's input.
+
+Claude Code runs each Activity's turn through its backend session pool, whose
+warm CLI process can outlive the Activity; Codex runs one `exec --json` process
+per task and waits for its batch to settle. Both CLI paths
+validate supplied node parameters through the shared executor and plugin Params,
+including saved `tasks=null` and `allowed_credentials=null` values, which become
+empty lists before validation. The node's captured `node_data` fields take
+precedence over saved settings; this does not imply snapshot isolation for every
+connected-node lookup. See the [CLI parameter boundary](TEMPORAL_ARCHITECTURE.md)
+and [Codex node contract](node-logic-flows/specialized_agents/codex_agent.md).
 
 Distributed Browser bindings additionally freeze an owner-specific queue.
 That queue applies to Browser Activities even when worker pools are disabled;

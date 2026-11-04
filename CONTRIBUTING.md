@@ -223,7 +223,8 @@ The [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md) records the comm
 | [rlm_service.md](docs-internal/rlm_service.md) | Recursive Language Model agent via REPL |
 | [claude_code_agent.md](docs-internal/claude_code_agent.md) | Claude Code agent hub (routes to architecture, interactive mode, and the vendored `claude_code_*_reference.md` snapshots) |
 | [claude_code_agent_architecture.md](docs-internal/ARCHIVE/claude_code_agent_architecture.md) | *Archived* LangGraph-era design notes; see claude_code_interactive_mode.md |
-| [cli_agent_framework.md](docs-internal/cli_agent_framework.md) | Multi-provider CLI agent runtime (Claude Code / Codex / Gemini) — worktree isolation, MCP bridge, memory bridge |
+| [cli_agent_framework.md](docs-internal/cli_agent_framework.md) | Multi-provider CLI agent runtime (Claude Code / Codex / Gemini) — worktree isolation, MCP bridge, Claude memory bridge |
+| [codex_agent.md](docs-internal/codex_agent.md) | Codex managed login, Auto model selection, JSONL results, nullable parameters, Temporal Activity execution and troubleshooting |
 | [autonomous_agent_creation.md](docs-internal/ARCHIVE/autonomous_agent_creation.md) | *Archived* external research notes on Code Mode agents; the plugin is `server/nodes/agent/autonomous_agent/` |
 | [event_framework.md](docs-internal/event_framework.md) | Wave 12 event framework — Temporal Signals + Visibility routing, Search Attributes, plugin `_events.py` contract |
 | [stripe_service.md](docs-internal/stripe_service.md) | Reference Wave 12 plugin — signed webhooks + CLI-managed auth, file-by-file |

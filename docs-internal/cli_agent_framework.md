@@ -2,6 +2,9 @@
 
 Multi-instance, multi-provider runtime for AI CLI agents (Claude Code, Codex, Gemini). One workflow node spawns N parallel CLI sessions over a list of tasks, each isolated in its own git worktree, each able to call back into OpenCompany over MCP.
 
+For Codex setup, Auto model selection, log diagnosis and development restarts,
+start with the [Codex guide](codex_agent.md) and [node contract](node-logic-flows/specialized_agents/codex_agent.md).
+
 | Provider | Status | Login flow |
 |---|---|---|
 | Claude Code (`@anthropic-ai/claude-code`) | shipping | Shared-tree install + spawn (`nodes/agent/claude_code_agent/_oauth.py:run_claude_login`) |
@@ -33,7 +36,7 @@ AICliService.run_batch(provider, tasks, *, node_id, workflow_id, workspace_dir)
                  _do_start():    binary check, then _pre_spawn() (git worktree add; lockfile
                                  only if the provider declares `ide_lockfile`, Codex does not),
                                  then consumes Codex JSONL on stdout through process exit
-                 cleanup(): terminate_then_kill(5s) + worktree remove
+                 cleanup(): kill_tree for a live child + reap/drain + worktree remove
         │
         │  ◄────  CLI calls back via MCP/HTTP at /mcp/ide/mcp
         │           Authorization: Bearer <batch-token>  (per-batch isolation)
@@ -103,7 +106,7 @@ class AICliProvider(Protocol):
     def is_final_event(self, event: dict) -> bool: ...
     def event_to_session_result(self, events, stderr, exit_code) -> dict: ...
         # Returns: {...shared, "provider_data": {<vendor-specific>}}
-        # provider_data carries Anthropic reasoning_details, Codex call_id,
+        # provider_data carries Anthropic reasoning_details, Codex thread_id/error metadata,
         # Gemini extra_content — pattern from Hermes agent/transports/types.py.
     def canonical_usage(self, events) -> CanonicalUsage: ...
         # Normalises vendor token-counting; feeds services/pricing.py.
@@ -252,10 +255,10 @@ CLI auth is delegated to the CLI's own login flow + a synthetic marker token in 
 
 **Per-provider WS handler names** (Twitter / Google / Stripe convention — frontend dispatches `{}` payload, handler name encodes provider):
 
-| Catalogue id | Login handler | Logout handler |
-|---|---|---|
-| `claude_code` | `claude_code_login` | `claude_code_logout` |
-| `codex_cli`   | `codex_cli_login` | `codex_cli_logout` |
+| Catalogue id | Browser login | Device login | Status | Logout |
+|---|---|---|---|---|
+| `claude_code` | `claude_code_login` | — | Login rechecks native status | `claude_code_logout` |
+| `codex_cli` | `codex_cli_login` | `codex_cli_device_login` | `codex_cli_status` | `codex_cli_logout` |
 
 **Claude flow** (`handle_claude_code_login` and `handle_claude_code_logout` in `server/nodes/agent/claude_code_agent/_handlers.py`) uses the documented CLI subcommands from [code.claude.com/docs/en/cli-reference](https://code.claude.com/docs/en/cli-reference):
 
@@ -279,9 +282,23 @@ Steps:
 
 Native browser login returns the CLI's authorization URL to the credentials panel. Device authentication uses `codex login --device-auth` for a remote backend or container whose localhost callback cannot be reached from the user's browser. The account or workspace must allow device authentication. See the official [authentication guide](https://learn.chatgpt.com/docs/auth#login-on-headless-devices), [login command](https://learn.chatgpt.com/docs/developer-commands#codex-login), and [CODEX_HOME configuration](https://learn.chatgpt.com/docs/config-file/environment-variables#core-locations).
 
-**Codex execution**: `codex exec --json -c 'approval_policy="never"' --model <model> --sandbox <mode> -- <prompt>` runs with pipes and no PTY; the task's approval policy overrides the example's `never`. `thread.started`, `item.completed`, and `turn.completed` provide the thread id, answer, tools, and token usage; `turn.failed`, nonzero exit, and premature stream end fail the task. Completion waits for process exit and both output streams. Timeout and cancellation terminate the process tree before worktree cleanup. The batch's required MCP server is passed using `-c mcp_servers.opencompany.url=...`; its credential uses `bearer_token_env_var` and stays out of argv and persistent configuration. See [JSONL events](https://learn.chatgpt.com/docs/non-interactive-mode#make-output-machine-readable) and [HTTP MCP configuration](https://learn.chatgpt.com/docs/extend/mcp#streamable-http-servers).
+**Codex execution**: `codex exec --json -c 'approval_policy="never"' --sandbox <mode> -- <prompt>` runs with pipes and no PTY; the task's approval policy overrides the example's `never`. `thread.started`, `item.completed`, and `turn.completed` provide the thread id, answer, tools, and token usage; `turn.failed`, nonzero exit, and premature stream end fail the task. Completion waits for process exit and both output streams. Timeout and cancellation terminate the process tree before worktree cleanup. The batch's required MCP server is passed using `-c mcp_servers.opencompany.url=...`; its credential uses `bearer_token_env_var` and stays out of argv and persistent configuration. See [JSONL events](https://learn.chatgpt.com/docs/non-interactive-mode#make-output-machine-readable) and [HTTP MCP configuration](https://learn.chatgpt.com/docs/extend/mcp#streamable-http-servers).
 
 **Codex model selection**: the node and provider default to Auto. With no task or node override, OpenCompany omits `--model` so Codex uses its configured or account-recommended model. Explicit choices are preserved; an unsupported model fails with a readable message and the provider error code/status, without retrying another model. Clear an obsolete saved Model value to return that node to Auto. ChatGPT and API-key model availability can differ, so the OpenAI API model catalogue is not used to pick a Codex subscription model. See the official [local model defaults](https://learn.chatgpt.com/docs/models#configure-your-default-local-model) and [`codex exec` model override](https://learn.chatgpt.com/docs/developer-commands#codex-exec).
+
+The login task owns cold installation and the initial status check, so they do
+not hold the request open indefinitely. Browser/device instructions are returned
+within five seconds when available, otherwise through pending-status polling.
+Explicit Refresh rechecks native status after a terminal error; logout and the
+registered shutdown hook cancel pending authentication. The [Codex guide](codex_agent.md#cli-installation-and-authentication)
+describes the native command bounds and managed credential paths.
+
+**Saved list defaults**: both Codex and Claude normalize `tasks=null` and
+`allowed_credentials=null` to `[]` before validation. Pydantic list factories
+apply to omitted fields, while the parameter panel can save untouched fields as
+null. The compatibility validator applies to direct execution and captured
+Temporal `node_data`; other malformed non-list values remain errors. Changing
+defaults does not rewrite previously admitted snapshots or explicit model pins.
 
 **Frontend**: the generic `OAuthConnect.tsx` handles the fieldless-CLI case (`config.fields = []`, `kind: "oauth"`, `stored` flag drives Connected state). Providers can supply a status handler to poll a pending CLI login.
 
@@ -342,7 +359,7 @@ Shared by every CLI provider plugin. Imports nothing from `nodes/`.
 | `service.py` | `AICliService.run_batch()` — dispatcher; every claude task goes to the pool via `factory.get_session_pool(provider_name)` (warm keyed session when bound, ephemeral per-task session otherwise). |
 | `_cli_auth.py` | CLI-agnostic `mark_logged_in` / `mark_logged_out` / `broadcast_credential_event` + `"cli-managed"` marker token. Shared by claude + codex handlers. |
 | `_codex_auth.py` | Managed pinned Codex install, isolated environment, native login/status/logout and login subprocess cleanup. |
-| `_handlers.py` | Codex WS handlers (`codex_cli_login` / `codex_cli_logout`). Claude's moved to the plugin folder. |
+| `_handlers.py` | Codex browser/device login, status, logout and shutdown cleanup (`codex_cli_login`, `codex_cli_device_login`, `codex_cli_status`, `codex_cli_logout`). Claude's moved to the plugin folder. |
 | `providers/openai_codex.py` | Codex provider — sandbox-first, no session continuity. Will move when codex_agent adopts the per-folder layout. |
 | `providers/google_gemini.py` | v2 stub. |
 | `jsonl_watcher.py` | Used only by `AICliSession`; no claude caller. |
@@ -377,7 +394,13 @@ the reference implementation). Four self-registration calls in
 
 ## Output contract
 
-```json
+`run_batch()` returns a `BatchResult` dataclass with flat aggregate fields.
+The shared `BatchResultModel` serialization shown below groups totals under
+`summary`; individual node outputs follow their own declared contract. The
+[Codex node output](node-logic-flows/specialized_agents/codex_agent.md#output-payload)
+publishes its totals at the top level.
+
+```jsonc
 {
   "tasks": [{
     "task_id": "t_<8hex>",
@@ -398,7 +421,9 @@ the reference implementation). Four self-registration calls in
     },
     "provider_data": {
       "reasoning_details": "...",   // Claude only
-      "call_id": "...",             // Codex only
+      "thread_id": "...",           // Codex only
+      "error_code": "model_not_found", // Codex provider failure, when supplied
+      "status_code": 400,            // Codex provider failure, when supplied
       "extra_content": [...]        // Gemini only (v2)
     },
     "success": true, "error": null
@@ -414,6 +439,18 @@ the reference implementation). Four self-registration calls in
 ```
 
 `cost_usd` is the provider's reported value when available (Claude). For Codex (no native USD), `service.py:_derive_cost` falls back to `services.pricing.PricingService.calculate_cost()` from `canonical_usage` — single source of truth for LLM cost across OpenCompany. `summary.total_cost_usd` is `null` if any task didn't surface cost.
+
+Codex usage comes from `turn.completed`, with cached input separated from
+uncached input. Cost derivation can still be unknown when no priced requested
+model is available, including Auto. A thread id identifies the native run; this
+node does not expose native resume. Context-bound node output clears
+`session_id` so it is not mistaken for a continuation handle.
+
+Failed turns remain failures. Nested JSON API errors are decoded into readable
+task errors and safe `provider_data.error_code` / `status_code` metadata.
+`model_not_found` suggests Auto or an available account model; it does not
+trigger model substitution or a retry. A provider rejection before generation
+can legitimately have an empty response and zero token usage.
 
 ## Memory bridge — `simpleMemory` → `claude_code_agent`
 
@@ -623,6 +660,15 @@ Unit tests (in `server/tests/services/cli_agent/`):
 - `test_providers.py` — Claude + Codex argv shapes, parse_event fidelity (vendored NDJSON), event_to_session_result reconstruction, auth-error detection, `supports()` flags. Factory raises `NotImplementedError` for `gemini`.
 - `test_mcp_server.py` — bearer-token registry register/lookup/unregister, 401 on missing/malformed/unknown/expired tokens, lockfile shape matches VSCode convention, stale-PID sweep.
 - `test_service.py` — `not_git_repo` abort path, resolver contract (explicit `repo_root` doesn't fall back to cwd), cancel-when-idle, singleton.
+- `test_codex_login.py` — managed installation/status, browser/device instructions, single-flight login, explicit Refresh, cancellation and shutdown.
+- `test_codex_session.py` — chunked JSONL and final lines, drained pipes, failure/timeout/cancel cleanup, Context capture and isolated environment.
+
+`tests/nodes/test_codex_parameters.py` compares Codex and Claude nullable-list
+handling through saved parameters, frozen snapshots and real Temporal Activity
+wrappers. `tests/temporal/test_dispatch.py` keeps both on whole-node Activities.
+Provider tests also cover Auto versus explicit models, readable nested errors,
+thread ids and completed-turn token usage. The [Codex guide](codex_agent.md#regression-coverage)
+records the scoped live Auto smoke result and its limits.
 
 Plugin contract: `tests/test_plugin_contract.py` + `tests/test_node_spec.py` — clean per-provider Params schemas, no `$defs`/`$ref` in the fast-path.
 

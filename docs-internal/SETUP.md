@@ -141,6 +141,17 @@ bun run dev          # or: OPENCOMPANY_DESKTOP_APP_ROOT=.. OPENCOMPANY_DESKTOP_V
 Full reference: [desktop_app.md](./desktop_app.md); the backend's side of
 the arrangement is [desktop_host_contract.md](./desktop_host_contract.md).
 
+## Codex CLI agent
+
+Connect **Codex CLI** in Credentials using browser sign-in, or **Use device
+code** for a remote/container backend. The app installs the pinned CLI into
+`<DATA_DIR>/packages/` and keeps its separate login under
+`CODEX_HOME=<DATA_DIR>/codex`; a personal terminal login does not connect it.
+Leave the node's Model field blank for Auto. Saved explicit model pins remain
+explicit and can be unavailable to a ChatGPT login even when an API model with
+that name exists. See the [Codex guide](codex_agent.md) for task parameters,
+Temporal execution and stage-by-stage troubleshooting.
+
 ## Services Overview
 
 ### Frontend (React — always at the app port; Vite dev server proxying the backend, or the production build served by uvicorn)
@@ -270,7 +281,7 @@ built from source; see [docker.md](./docker.md).
 | `bun run start` | Start the app (backend-owned daemons start on demand) |
 | `bun run stop` | Stop all services |
 | `bun run build` | Full production build (`company build`: bun install, client, JS sidecar, Pi runtime, `uv sync --extra docs`, bytecode, Temporal binary) |
-| `bun run dev` | Start development server |
+| `bun run dev` | Vite HMR plus a Python backend; restart the foreground run after Python/plugin/config changes |
 
 ## Troubleshooting
 
@@ -303,7 +314,7 @@ copy of `workflow.db` put in that folder.
 ## Development Workflow
 
 1. **Make changes** in client/ or server/
-2. **Hot reload** automatically updates running services
+2. **Frontend HMR** updates client changes; Python/plugin/provider-config changes require restarting the existing foreground run (Ctrl+C, then `bun run dev` once)
 3. **WebSocket** provides real-time status updates
 4. **Database** persists data between restarts
 

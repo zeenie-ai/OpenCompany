@@ -68,11 +68,12 @@ server/nodes/agent/claude_code_agent/
 server/services/cli_agent/  (generic framework — shared by all CLI plugins)
 ├── factory.py     # register_provider / register_session_pool / register_skill_materialiser registries
 ├── service.py     # AICliService.run_batch — dispatcher; every claude task goes to the pool (registry lookup)
-├── session.py     # AICliSession — generic PTY + JSONL path; NOT used for claude (GitHub #133 / #134)
+├── session.py     # AICliSession — Codex stdout JSONL pipes + legacy Claude PTY; Claude runs through its pool
 ├── mcp_server.py  # BatchContext + FastMCP bridge (shared by every CLI provider)
 ├── context_bridge.py  # SpecializedAgentContextBridge — Context pool_key, transcript-in-prompt, record_turn
 ├── workflow_tools.py / worktree.py / lockfile.py / jsonl_watcher.py / config.py / protocol.py / types.py / _cli_auth.py
-└── _handlers.py   # codex WS handlers only (will move once codex_agent migrates)
+├── _codex_auth.py # pinned managed Codex install + CODEX_HOME-isolated native authentication
+└── _handlers.py   # Codex login / device login / status / logout WS handlers
 ```
 
 ## argv shape

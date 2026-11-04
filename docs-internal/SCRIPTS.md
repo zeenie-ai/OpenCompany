@@ -41,6 +41,13 @@ deprecation warning; kept for upgrade compatibility).
 | `company version sync [tag]` | Write a git tag's version (default: the latest) into every version file: root / client / desktop `package.json`, `pyproject.toml`, `cli/__init__.py`. Never `server/pyproject.toml`, which `server/uv.lock` records. The release procedure is in [ci_cd.md -> Cutting a release](./ci_cd.md#cutting-a-release) |
 | `company docs nodes [--check]` | Regenerate (or verify) the `docs-internal/node-logic-flows/` index |
 
+`company dev` hot-reloads the frontend through Vite, but the backend uvicorn
+command has no `--reload`. After Python, node-schema or provider-config edits,
+stop the existing foreground dev run with Ctrl+C and start `bun run dev` once.
+Do not use `company daemon restart` for that launch mode or rely on stopping
+only uvicorn to restart its supervisor. See [Codex development restarts](codex_agent.md#temporal-and-development-restarts)
+for the stale-schema/model-default symptoms this can cause.
+
 Help comes from two places. `company` with no arguments, `company help`,
 `company --help` and `company -h` are answered by the launcher itself
 (`printHelp()` in `bin/cli.js`, its `COMMANDS` table), without starting

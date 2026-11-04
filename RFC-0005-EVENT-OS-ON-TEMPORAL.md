@@ -1198,7 +1198,7 @@ Phase 1 ended on 2026-10-24. Commit 49177427 came from another session.
 - **RFC-0007 (approvals)** was written as b3b7cdf3, then checked against the code and revised as 554cf308, both on 2026-10-25.
   - Its steps AP.1-AP.6 run in batch A, after 1b.2. AP.7 starts writing its flag one release later.
   - It shrinks 1b.5 to drafts and Retry, and 1b.14 does not count time spent waiting on an approval (RFC-0007 §6).
-  - The Codex launch fix left it: Codex never starts, so making it run is its own item.
+  - At that baseline, the Codex launch fix left it because Codex never started; making it run was a separate item. Launch, isolated login, JSONL execution, null-list compatibility and Auto model selection later shipped in `7e9c2f03`, `2c95bcd6` and `958203c1` (2026-11-04). See the [current Codex guide](docs-internal/codex_agent.md); interactive approval integration remains separate.
 
 | Item | Commit | Notes |
 |---|---|---|
