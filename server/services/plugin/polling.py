@@ -32,8 +32,9 @@ to the next interval. In this in-process loop, permanent errors (auth
 revoked, account deleted) keep retrying every cycle with the same log
 line. The Temporal poll activity (``as_poll_activity``) instead turns a
 credential ``PermissionError`` that names its provider into a
-non-retryable ``NodeUserError``, and caps one cycle's results by bytes
-and by time (1b.17, 1b.18).
+non-retryable ``NodeUserError``, caps one cycle's results by bytes
+and by time (1b.17, 1b.18), and leaves an id whose ``fetch_detail``
+failed new, so the next cycle fetches it again (RFC-0005 M3).
 
 Out of scope (commit-stage)
 ---------------------------
@@ -221,10 +222,14 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                 "events": List[Dict],     # new event payloads, oldest first, at most
                                           # POLL_RESULT_MAX_BYTES of JSON (the first
                                           # always included) and fetched within two
-                                          # thirds of the attempt's deadline
+                                          # thirds of the attempt's deadline (failed
+                                          # fetches count against it too)
                 "seen_ids": List[str],    # the provider's current ids minus the new
-                                          # ids this cycle did not reach (they stay
-                                          # new for the next cycle)
+                                          # ids this cycle did not emit: an id whose
+                                          # fetch_detail failed, that did not fit,
+                                          # or that the cycle did not reach stays
+                                          # new and is fetched again next cycle
+                                          # while the provider still lists it
             }
 
         Determinism: every operation runs inside the activity (network
@@ -280,25 +285,29 @@ class PollingTriggerNode(TriggerNode, abstract=True):
 
             new_ids = current - prior_seen
             events: list[Dict[str, Any]] = []
-            attempted: Set[str] = set()
+            emitted: Set[str] = set()
             size = 0
             budget = _detail_budget_s()
             # Oldest first, so a cycle that stops early leaves the newest
             # ids for the next one, and a retried cycle picks the same ids.
-            for msg_id in sorted(new_ids, key=_oldest_first):
-                if budget is not None and attempted and time.monotonic() - started > budget:
+            # The first id is always fetched; each later one only within
+            # the time budget, which a failed fetch uses up too.
+            for index, msg_id in enumerate(sorted(new_ids, key=_oldest_first)):
+                if budget is not None and index and time.monotonic() - started > budget:
                     break  # out of time: the rest stays new for the next cycle
                 try:
                     detail = await instance.fetch_detail(service, msg_id, params)
                 except Exception as exc:  # noqa: BLE001
+                    # A transient error, or a token that expired after
+                    # fetch_ids: the id is not emitted, so it stays new and
+                    # the next cycle fetches it again.
                     logger.warning(
-                        "Polling activity fetch_detail failed; skipping id",
+                        "Polling activity fetch_detail failed; the id stays new",
                         node_id=node_id,
                         node_type=cls.type,
                         msg_id=msg_id,
                         error=str(exc),
                     )
-                    attempted.add(msg_id)  # a failed detail stays seen, as before
                     continue
                 # The workflow needs a stable event.id for cross-cycle
                 # dedup. Fall back to the provider id when fetch_detail
@@ -306,10 +315,12 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                 if "id" not in detail:
                     detail["id"] = msg_id
                 # The Temporal payload encoding; the first event always fits.
-                item_bytes = len(json.dumps(detail, separators=(",", ":")))
+                # default=str measures a value plain JSON cannot encode (a
+                # datetime) instead of failing every cycle on it.
+                item_bytes = len(json.dumps(detail, separators=(",", ":"), default=str))
                 if events and size + item_bytes > POLL_RESULT_MAX_BYTES:
                     break  # this id and the ones after it stay new for the next cycle
-                attempted.add(msg_id)
+                emitted.add(msg_id)
                 events.append(detail)
                 size += item_bytes
                 # post_emit side effect (e.g. mark-as-read), only for an
@@ -329,8 +340,9 @@ class PollingTriggerNode(TriggerNode, abstract=True):
             # set hit ~36K entries in a year — ~1.4MB just for IDs,
             # serialised through Temporal payload on every cycle. Now
             # bounded by the provider's natural window size, minus the
-            # ids this cycle deferred, which stay new for the next one.
-            deferred = new_ids - attempted
+            # new ids this cycle did not emit (failed, did not fit or not
+            # reached), which stay new for the next one.
+            deferred = new_ids - emitted
             if deferred:
                 logger.info(
                     "Polling activity deferred ids to the next cycle",

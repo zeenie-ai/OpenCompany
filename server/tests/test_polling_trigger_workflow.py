@@ -306,7 +306,8 @@ class TestAsPollActivity:
 
 class TestPollResultByteCap:
     """1b.18: one cycle's events stay under the payload limit; what does not
-    fit (in bytes, or in the attempt's time) stays new for the next cycle."""
+    fit (in bytes, or in the attempt's time) stays new for the next cycle, and
+    so does an id whose detail fetch failed (RFC-0005 M3)."""
 
     @staticmethod
     def _cycle(cls, seen):
@@ -356,21 +357,31 @@ class TestPollResultByteCap:
         assert [event["id"] for event in result["events"]] == ["2", "9", "10", "abc"]
 
     @pytest.mark.asyncio
-    async def test_a_failed_detail_stays_attempted(self):
+    async def test_a_failed_detail_stays_new_and_the_next_cycle_fetches_it(self):
+        # RFC-0005 M3: a transient error, or a token that expired after the
+        # listing, must not mark the message seen and lose it for good.
+        failing = {"2"}
+
         def payload(msg_id):
-            if msg_id == "2":
+            if msg_id in failing:
+                failing.discard(msg_id)  # fails once, then the provider answers
                 raise RuntimeError("detail failed")
             return {"id": msg_id}
 
         cls = _make_fake_polling_class("test.failed", current_ids={"1", "2", "3"}, detail_payload_fn=payload)
-        result = await self._cycle(cls, [])
-        assert [event["id"] for event in result["events"]] == ["1", "3"]
-        assert set(result["seen_ids"]) == {"1", "2", "3"}  # not retried, as before
+        first = await self._cycle(cls, [])
+        assert [event["id"] for event in first["events"]] == ["1", "3"]
+        assert set(first["seen_ids"]) == {"1", "3"}
+        second = await self._cycle(cls, first["seen_ids"])
+        assert cls.services[1].detail_calls == ["2"]
+        assert [event["id"] for event in second["events"]] == ["2"]
+        assert set(second["seen_ids"]) == {"1", "2", "3"}
 
     @pytest.mark.asyncio
-    async def test_a_cycle_out_of_time_defers_the_rest(self, monkeypatch):
+    @pytest.mark.parametrize("fails", [False, True])
+    async def test_a_cycle_out_of_time_defers_the_rest(self, monkeypatch, fails):
         # Two thirds of a 3 s deadline: 2 s. A burst of slow detail calls
-        # (IMAP) must not time every attempt out.
+        # (IMAP) must not time every attempt out, whether they answer or fail.
         from dataclasses import replace
         from datetime import timedelta
         from types import SimpleNamespace
@@ -379,14 +390,39 @@ class TestPollResultByteCap:
 
         from services.plugin import polling
 
+        def payload(msg_id):
+            if fails:
+                raise RuntimeError("detail failed")
+            return {"id": msg_id}
+
         clock = iter([0.0, 0.5, 3.0])
         monkeypatch.setattr(polling, "time", SimpleNamespace(monotonic=lambda: next(clock)))
-        cls = _make_fake_polling_class("test.budget", current_ids={"1", "2", "3"})
+        cls = _make_fake_polling_class("test.budget", current_ids={"1", "2", "3"}, detail_payload_fn=payload)
         env = ActivityEnvironment()
         env.info = replace(env.info, start_to_close_timeout=timedelta(seconds=3))
         result = await env.run(cls.as_poll_activity(), {"node_id": "n1", "params": {}, "seen_ids": [], "baseline_only": False})
-        assert [event["id"] for event in result["events"]] == ["1", "2"]
-        assert set(result["seen_ids"]) == {"1", "2"}
+        assert cls.services[0].detail_calls == ["1", "2"]
+        emitted = [] if fails else ["1", "2"]
+        assert [event["id"] for event in result["events"]] == emitted
+        assert set(result["seen_ids"]) == set(emitted)
+
+    @pytest.mark.asyncio
+    async def test_a_detail_with_a_datetime_does_not_fail_the_cycle(self):
+        # Plain JSON cannot encode a datetime; measuring the event must not
+        # fail every cycle over it. Temporal's default converter encodes it.
+        from datetime import datetime, timezone
+
+        from temporalio.converter import DataConverter
+
+        received = datetime(2026, 11, 3, 9, 30, tzinfo=timezone.utc)
+
+        def payload(msg_id):
+            return {"id": msg_id, "received": received}
+
+        cls = _make_fake_polling_class("test.datetime", current_ids={"1"}, detail_payload_fn=payload)
+        result = await self._cycle(cls, [])
+        assert result == {"events": [{"id": "1", "received": received}], "seen_ids": ["1"]}
+        DataConverter.default.payload_converter.to_payloads([result])
 
 
 # ---------------------------------------------------------------------------

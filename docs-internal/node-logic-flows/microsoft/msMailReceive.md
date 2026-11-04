@@ -77,7 +77,7 @@ flowchart TD
     D1 --> D3[new_ids = current - prior_seen]
     D3 --> D4[per id, oldest first, within the byte and time budget: fetch_detail GET base/messages/id $select -> _summarize + id]
     D4 --> D5[post_emit for emitted events: mark read if mark_as_read, failures logged]
-    D5 --> D6[return events, seen_ids = current - deferred]
+    D5 --> D6[return events, seen_ids = current - new ids not emitted]
   end
   subgraph canvas Run: execute override
     C0[broadcast waiting status] --> C1[baseline fetch_ids, failure treated as empty]
@@ -108,12 +108,14 @@ flowchart TD
 - **Temporal activity** (`as_poll_activity`): a `setup_service` or
   `fetch_ids` failure re-raises (Temporal retry policy owns it), except the
   "not connected" `PermissionError` annotated with `provider` (see Auth),
-  which is raised as `NodeUserError` and not retried; a `fetch_detail` failure skips
-  that id with a warning; `post_emit` failures are swallowed; the result is
+  which is raised as `NodeUserError` and not retried; a `fetch_detail` failure logs
+  a warning and leaves that id new, so the next cycle fetches it again;
+  `post_emit` failures are swallowed; the result is
   `{"events": [...], "seen_ids": [...]}`: the events of at most 512,000 bytes
   (the first always included, fetched within two thirds of the attempt's
-  deadline), and the current ids minus the new ones the cycle deferred, which
-  the next cycle takes.
+  deadline, which failed fetches use up too), and the current ids minus the new
+  ones the cycle did not emit (failed, did not fit or not reached), which the
+  next cycle takes.
 - **Legacy coroutine** (`_build_poll_coroutine`): setup failure ends the
   poller; baseline failure logs a warning and treats everything as new on the
   next cycle; per-cycle exceptions are logged and retried next interval.
