@@ -254,15 +254,25 @@ async def resolve_addresses(host: str, port: int) -> List[IPAddress]:
 
 
 async def resolved_url_block_reason(url: str, policy: NetPolicy) -> Optional[str]:
-    """Why a node may not download ``url``, or ``None``.
+    """Why a node may not download ``url`` with httpx, or ``None``.
 
     :func:`url_block_reason`, plus a check of every address the host resolves
-    to, because the node connects itself and nothing else checks it.
+    to, because the node connects itself and nothing else checks it. The URL
+    is first written as httpx sends it, so the name looked up is the one httpx
+    connects to: a non-ASCII host in its IDNA 2008 form ("straße" is
+    "xn--strae-oqa", where getaddrinfo's own codec makes it "strasse"), and
+    the characters httpx percent-encodes in a host.
     """
+    import httpx
+
+    try:
+        url = str(httpx.URL(url.strip()))
+    except httpx.InvalidURL:
+        return "not a valid URL"
     reason = url_block_reason(url, policy)
     if reason:
         return reason
-    parts = urlsplit(url.strip())
+    parts = urlsplit(url)
     host = parts.hostname or ""
     if not host:
         return "no host"

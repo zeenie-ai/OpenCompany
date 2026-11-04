@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
+import socket
 
 import httpx
 import pytest
@@ -60,6 +62,26 @@ async def test_the_owners_network_is_allowed(monkeypatch):
 async def test_a_name_that_does_not_resolve_is_refused(monkeypatch):
     _resolving_to(monkeypatch)
     assert "could not be found" in await resolved_url_block_reason("https://nowhere.invalid/", POLICY)
+
+
+@pytest.mark.parametrize("url, as_written, as_httpx_sends_it", [
+    # getaddrinfo encodes a non-ASCII name with IDNA 2003, httpx with IDNA 2008.
+    ("http://straße.attacker.example/latest/meta-data/", "strasse.attacker.example", "xn--strae-oqa.attacker.example"),
+    # httpx percent-encodes a few ASCII characters in a host.
+    ("http://a^b.attacker.example/latest/meta-data/", "a^b.attacker.example", "a%5eb.attacker.example"),
+])
+async def test_a_host_is_checked_as_httpx_connects_to_it(monkeypatch, url, as_written, as_httpx_sends_it):
+    # The domain's owner can point the two names at different addresses, so
+    # the check must look up the one httpx connects to.
+    assert httpx.URL(url).raw_host.decode("ascii").lower() == as_httpx_sends_it
+    records = {as_written: "93.184.216.34", as_httpx_sends_it: "169.254.169.254"}
+
+    async def getaddrinfo(host, port, **_kwargs):
+        name = host if host.isascii() else host.encode("idna").decode("ascii")  # as the real lookup does
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (records[name.lower()], port))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", getaddrinfo)
+    assert "metadata" in (await resolved_url_block_reason(url, POLICY) or "")
 
 
 def test_the_fetch_policy_refuses_the_configured_ports(monkeypatch):
