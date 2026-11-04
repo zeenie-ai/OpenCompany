@@ -223,8 +223,7 @@ is resolved through `OPENCOMPANY_UV_BIN` / `shutil.which`. So the bundled
 runtime dirs prepended to PATH (plus the two overrides) satisfy the JS
 executor sidecar (`nodes/code/_runtime.py`, `[bun, dist/index.js]`), the
 plugin installers that `bun add` into the shared `<DATA_DIR>/packages/` tree
-(claude-code, edgymeow, cf, vercel — `core.js_runtime.add_package`),
-the codex provider (`bun x @openai/codex` when no system `codex` exists), and
+(claude-code, codex, edgymeow, cf, vercel — `core.js_runtime.add_package`), and
 the Browser runtime's pinned `uv tool install browser-use==<pin>` installation.
 The Browser installer respects `UV_TOOL_DIR` / `UV_TOOL_BIN_DIR`; otherwise it
 uses `<DATA_DIR>/packages/browser-use/{tools,bin}`. OpenCompany supervises installed Chrome/Edge/Chromium in a dedicated profile,

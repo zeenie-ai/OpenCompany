@@ -31,6 +31,7 @@ const OAuthPanel: React.FC<CredentialPanelProps> = ({
         config={config} form={panel.form} connected={connected}
         stored={panel.stored} loading={panel.loading} error={panel.error}
         verificationCode={panel.verificationCode}
+        pending={panel.oauthPending} loginUrl={panel.loginUrl} loginMessage={panel.loginMessage}
         icon={<NodeIcon icon={config.iconRef} size={theme.iconSize.md} />}
         onSaveCredentials={() => {
           const missing = config.fields?.find(f => f.required && !panel.form.getFieldValue(f.key)?.trim());
@@ -56,6 +57,7 @@ const OAuthPanel: React.FC<CredentialPanelProps> = ({
         onValidateApiKey={() => panel.actions.validate(config.id, (panel.form.getFieldValue('apiKey') ?? '').trim())}
         onDeleteApiKey={() => panel.actions.remove(config.id)}
         onLogin={() => panel.actions.oauthLogin()}
+        onDeviceLogin={config.ws?.device_login ? () => panel.actions.oauthLogin(true) : undefined}
         onLogout={() => panel.actions.oauthLogout()}
         onRefresh={() => panel.actions.oauthRefresh()}
         extraSection={

@@ -102,7 +102,7 @@ export interface ProviderConfig {
   /** Credential input fields. */
   fields?: FieldDef[];
   /** WebSocket commands for OAuth flows. */
-  ws?: { login: string; logout: string; status: string };
+  ws?: { login: string; logout: string; status: string; device_login?: string };
   /** Which status hook to read. */
   statusHook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram' | 'microsoft';
   /** Config-driven status rows (replaces per-provider conditionals). */

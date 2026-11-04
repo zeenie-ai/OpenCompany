@@ -23,16 +23,18 @@
   },
   "codex": {
     "package_name": "@openai/codex",
+    "package_version": "0.144.2",
     "binary_name": "codex",
     "login_argv": ["codex", "login"],
-    "auth_status_argv": ["codex", "--version"],
+    "auth_status_argv": ["codex", "login", "status"],
     "ide_lock_env_var": null,
     "ide_lockfile_dir": null,
     "default_model": "gpt-5.2-codex",
     "default_sandbox": "workspace-write",
     "default_ask_for_approval": "never",
     "supports": [
-      "sandbox"
+      "sandbox",
+      "mcp_runtime"
     ]
   },
   "gemini": {

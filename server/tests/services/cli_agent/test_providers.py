@@ -18,6 +18,7 @@ Covers:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -447,7 +448,11 @@ class TestClaudeSupports:
 
 
 @pytest.fixture
-def codex_provider():
+def codex_provider(monkeypatch):
+    # Unit tests must never install or invoke the real CLI.
+    from services.cli_agent.providers.openai_codex import OpenAICodexProvider
+
+    monkeypatch.setattr(OpenAICodexProvider, "binary_path", lambda self: Path("codex"))
     return create_cli_provider("codex")
 
 
@@ -470,8 +475,25 @@ class TestCodexArgv:
     def test_ask_for_approval_flag(self, codex_provider):
         task = CodexTaskSpec(prompt="x", ask_for_approval="on-request")
         argv = codex_provider.interactive_argv(task, defaults={})
-        assert "--ask-for-approval" in argv
-        assert "on-request" in argv
+        assert "--ask-for-approval" not in argv
+        assert 'approval_policy="on-request"' in argv
+
+    def test_framework_keywords_and_mcp_token_not_in_argv(self, codex_provider):
+        argv = codex_provider.interactive_argv(
+            CodexTaskSpec(prompt="--help"),
+            defaults={},
+            connected_skill_names=["skill"],
+            connected_tool_names=["tool"],
+            mcp_endpoint_url="http://127.0.0.1:5678/mcp/ide/mcp",
+            mcp_bearer_token="secret-batch-token",
+        )
+        assert argv[-2:] == ["--", "--help"]
+        assert "secret-batch-token" not in " ".join(argv)
+        assert any("bearer_token_env_var" in arg for arg in argv)
+        assert "mcp_servers.opencompany.required=true" in argv
+
+    def test_status_checks_authentication(self, codex_provider):
+        assert codex_provider.auth_status_argv()[-2:] == ["login", "status"]
 
     def test_default_sandbox_workspace_write(self, codex_provider):
         task = CodexTaskSpec(prompt="x")
@@ -497,28 +519,60 @@ class TestCodexArgv:
 class TestCodexEventReconstruction:
     @pytest.fixture
     def fixture_events(self):
-        # Codex has no public stream-json schema; this is a plausible
-        # synthetic stream that exercises our best-effort matchers.
+        # Documented `codex exec --json` stream, not synthetic legacy events.
         return [
-            {"type": "message", "text": "Working on it..."},
-            {"type": "assistant", "text": "Final answer is X."},
-            {"type": "complete", "duration_ms": 5000, "stats": {"turns": 3}},
+            {"type": "thread.started", "thread_id": "thread-123"},
+            {"type": "turn.started"},
+            {"type": "item.started", "item": {"id": "cmd-1", "type": "command_execution"}},
+            {"type": "item.completed", "item": {"id": "cmd-1", "type": "command_execution"}},
+            {"type": "item.completed", "item": {"id": "msg-1", "type": "agent_message", "text": "Final answer is X."}},
+            {
+                "type": "turn.completed",
+                "usage": {"input_tokens": 100, "cached_input_tokens": 80, "output_tokens": 12, "reasoning_output_tokens": 2},
+            },
         ]
 
     def test_extracts_response_from_final_event(self, codex_provider, fixture_events):
         result = codex_provider.event_to_session_result(fixture_events, "", 0)
-        # Response comes from final event's `text`/`response`/`result`/`content`
-        # if present; otherwise the last assistant message.
         assert "Final answer is X." in result["response"]
+        assert result["session_id"] == "thread-123"
+        assert result["success"] is True
+        assert result["tool_calls"] == 1
 
     def test_cost_always_none_for_codex(self, codex_provider, fixture_events):
         result = codex_provider.event_to_session_result(fixture_events, "", 0)
         assert result["cost_usd"] is None
 
-    def test_canonical_usage_zeros(self, codex_provider, fixture_events):
+    def test_canonical_usage(self, codex_provider, fixture_events):
         cu = codex_provider.canonical_usage(fixture_events)
-        assert cu.input_tokens == 0
-        assert cu.output_tokens == 0
+        assert cu.input_tokens == 20
+        assert cu.cache_read == 80
+        assert cu.output_tokens == 12
+        assert cu.reasoning_tokens == 2
+        assert cu.request_count == 1
+
+    def test_failed_turn_with_zero_exit_is_failure(self, codex_provider):
+        result = codex_provider.event_to_session_result(
+            [{"type": "turn.failed", "error": {"message": "Authentication required"}}],
+            "",
+            0,
+        )
+        assert result["success"] is False
+        assert result["error"] == "Authentication required"
+
+    def test_incomplete_stream_is_failure(self, codex_provider):
+        result = codex_provider.event_to_session_result([{"type": "turn.started"}], "", 0)
+        assert result["success"] is False
+        assert "without turn.completed" in result["error"]
+
+    @pytest.mark.parametrize("line", ["[]", "null", "1", "not-json", ""])
+    def test_non_object_events_are_ignored(self, codex_provider, line):
+        assert codex_provider.parse_event(line) is None
+
+    def test_documented_terminal_events(self, codex_provider):
+        assert codex_provider.is_final_event({"type": "turn.completed"})
+        assert codex_provider.is_final_event({"type": "turn.failed"})
+        assert not codex_provider.is_final_event({"type": "item.completed"})
 
 
 class TestCodexAuthDetection:

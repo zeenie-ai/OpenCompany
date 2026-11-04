@@ -109,10 +109,8 @@ class AICliProvider(Protocol):
 
     def binary_path(self) -> Path:
         ...
-        # Resolve the CLI binary. Resolution chain (Composio pattern):
-        #   1) shutil.which(<binary_name>)
-        #   2) `bun x <package_name>` (bun from core.js_runtime.bun_binary)
-        # Raises FileNotFoundError if neither is available.
+        # Resolve the provider's managed CLI binary. May install a pinned
+        # package on first use; callers keep that work off the event loop.
 
     def interactive_argv(self, task: Any, *, defaults: Dict[str, Any]) -> List[str]:
         ...
@@ -128,8 +126,8 @@ class AICliProvider(Protocol):
     def login_argv(self) -> List[str]:
         ...
         # CLI's own login command, e.g. ["claude", "login"]. Spawned
-        # interactively from the Credentials Modal. CLI stores its own
-        # credentials in `~/.claude/`, `~/.codex/`, `~/.gemini/`.
+        # from the Credentials Modal. CLI owns credentials under the
+        # provider's configured OpenCompany data directory.
 
     def auth_status_argv(self) -> Optional[List[str]]:
         ...
@@ -154,8 +152,8 @@ class AICliProvider(Protocol):
     def is_final_event(self, event: Dict[str, Any]) -> bool:
         ...
         # True if this event marks end-of-task. For Claude: `type=="result"`.
-        # For Gemini: `type=="result"`. For Codex: `type=="complete"` or
-        # heuristic fallback.
+        # For Gemini: `type=="result"`. For Codex: `turn.completed` or
+        # `turn.failed`; its process exit still determines task completion.
 
     def event_to_session_result(
         self,

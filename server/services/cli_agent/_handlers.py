@@ -15,6 +15,8 @@ claude and codex handlers consume it.
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 from typing import Any, Awaitable, Callable, Dict
 
 from fastapi import WebSocket
@@ -23,46 +25,168 @@ from core.logging import get_logger
 
 from services.cli_agent._cli_auth import (
     broadcast_credential_event,
+    mark_logged_in,
     mark_logged_out,
 )
+from services.cli_agent._codex_auth import codex_auth_logout, codex_auth_status_info, run_codex_login
 
 logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Codex — login flow not yet wired; logout works for marker cleanup
+# Codex — the CLI owns credentials; only a verified marker is stored here.
 # ---------------------------------------------------------------------------
 
 
-async def handle_codex_cli_login(
-    data: Dict[str, Any],  # noqa: ARG001
-    websocket: WebSocket,  # noqa: ARG001
-) -> Dict[str, Any]:
-    return {
-        "success": False,
-        "error": (
-            "Codex login is not yet wired in OpenCompany. "
-            "Install with `bun add -g @openai/codex` and run "
-            "`codex login` in your terminal — then click Login again "
-            "to mark connected."
-        ),
-    }
+_login_task: asyncio.Task[None] | None = None
+_login_lock = asyncio.Lock()
+_login_state: Dict[str, Any] = {}
+_login_native_started = False
+LOGIN_RESPONSE_WAIT_SECONDS = 5.0
+
+
+def _login_in_progress() -> bool:
+    return _login_task is not None and not _login_task.done()
+
+
+def _response() -> Dict[str, Any]:
+    return {"success": not bool(_login_state.get("error")), "connected": False, "pending": _login_in_progress(), **_login_state}
+
+
+async def _connected() -> None:
+    await mark_logged_in("codex_cli")
+    _login_state.clear()
+    _login_state.update(connected=True, pending=False)
+    await broadcast_credential_event("credential.oauth.connected", provider="codex_cli")
+
+
+async def _finalize_codex_login(ready: asyncio.Event, *, device_auth: bool) -> None:
+    global _login_native_started
+    owner = asyncio.current_task()
+
+    def prompt_received(prompt: Dict[str, str]) -> None:
+        if _login_task is not owner:
+            return
+        _login_state.update(prompt)
+        if _login_state.get("url") and (not device_auth or _login_state.get("verification_code")):
+            ready.set()
+
+    try:
+        # Installation and the native status probe can be slow on first use.
+        # Keep both in the owned task so Login, Cancel and polling stay usable.
+        info = await codex_auth_status_info()
+        if info.get("logged_in") or info.get("error"):
+            async with _login_lock:
+                if owner is not _login_task:
+                    return
+                if info.get("logged_in"):
+                    await _connected()
+                    _login_state["already_logged_in"] = True
+                else:
+                    _login_state.clear()
+                    _login_state.update(pending=False, error=info["error"])
+            return
+        _login_native_started = True
+        result = await run_codex_login(on_prompt=prompt_received, device_auth=device_auth)
+        info = await codex_auth_status_info() if result.get("success") else {}
+        async with _login_lock:
+            if asyncio.current_task() is not _login_task:
+                return
+            if result.get("success") and info.get("logged_in"):
+                await _connected()
+            else:
+                _login_state.clear()
+                _login_state.update(
+                    pending=False, error=result.get("error") or "Codex sign-in completed without authenticated credentials. Try again."
+                )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        # Exceptions may carry OAuth URLs; never log or return raw auth output.
+        if owner is _login_task:
+            _login_state.clear()
+            _login_state.update(pending=False, error="Codex sign-in could not be completed. Try again.")
+        logger.warning("[codex_cli_login] authentication failed")
+    finally:
+        ready.set()
+
+
+async def handle_codex_cli_login(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:  # noqa: ARG001
+    global _login_task, _login_native_started
+    async with _login_lock:
+        if _login_in_progress():
+            return _response()
+        _login_state.clear()
+        _login_native_started = False
+        _login_state.update(
+            pending=True, message="Complete Codex sign-in in your browser. Use a device code when OpenCompany runs on a remote server."
+        )
+        ready = asyncio.Event()
+        _login_task = asyncio.create_task(_finalize_codex_login(ready, device_auth=data.get("device_auth") is True), name="codex_cli_login")
+    # Return the URL/code before the CLI finishes. Slow cold installs continue
+    # in the background, and the status endpoint supplies instructions later.
+    with suppress(TimeoutError):
+        await asyncio.wait_for(ready.wait(), timeout=LOGIN_RESPONSE_WAIT_SECONDS)
+    return _response()
+
+
+async def handle_codex_cli_device_login(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    return await handle_codex_cli_login({**data, "device_auth": True}, websocket)
+
+
+async def handle_codex_cli_status(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:  # noqa: ARG001
+    async with _login_lock:
+        if _login_in_progress() or (_login_state.get("error") and not data.get("refresh")):
+            return _response()
+        info = await codex_auth_status_info()
+        if info.get("error"):
+            return {"success": False, "error": info["error"]}
+        if info.get("logged_in"):
+            await _connected()
+        else:
+            was_connected = _login_state.get("connected")
+            await mark_logged_out("codex_cli")
+            _login_state.clear()
+            if was_connected:
+                await broadcast_credential_event("credential.oauth.disconnected", provider="codex_cli")
+        return _response()
+
+
+async def shutdown_codex_login() -> None:
+    """Reap a pending native login during backend lifespan shutdown."""
+    global _login_task
+    async with _login_lock:
+        task, _login_task = _login_task, None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        _login_state.clear()
 
 
 async def handle_codex_cli_logout(
     data: Dict[str, Any],  # noqa: ARG001
     websocket: WebSocket,  # noqa: ARG001
 ) -> Dict[str, Any]:
-    try:
-        await mark_logged_out("codex_cli")
-        await broadcast_credential_event(
-            "credential.oauth.disconnected",
-            provider="codex_cli",
-        )
-    except Exception as exc:
-        logger.warning("[codex_cli_logout] failed: %s", exc)
-        return {"success": False, "error": str(exc)}
-    return {"success": True}
+    global _login_task
+    async with _login_lock:
+        # Cancel during a cold install/status check without starting another
+        # installer just to run logout: no native login was launched yet.
+        cancel_check = _login_in_progress() and not _login_native_started
+        if _login_in_progress():
+            _login_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await _login_task
+        _login_task = None
+        _login_state.clear()
+        try:
+            if not cancel_check and not await codex_auth_logout():
+                return {"success": False, "error": "Codex could not sign out. Try again."}
+            await mark_logged_out("codex_cli")
+            await broadcast_credential_event("credential.oauth.disconnected", provider="codex_cli")
+        except Exception:
+            logger.warning("[codex_cli_logout] sign-out failed")
+            return {"success": False, "error": "Codex could not sign out. Try again."}
+        return {"success": True, "connected": False, "pending": False}
 
 
 # ---------------------------------------------------------------------------
@@ -74,5 +198,11 @@ WSHandler = Callable[[Dict[str, Any], WebSocket], Awaitable[Dict[str, Any]]]
 
 WS_HANDLERS: Dict[str, WSHandler] = {
     "codex_cli_login": handle_codex_cli_login,
+    "codex_cli_device_login": handle_codex_cli_device_login,
+    "codex_cli_status": handle_codex_cli_status,
     "codex_cli_logout": handle_codex_cli_logout,
 }
+
+from services.plugin.shutdown_hooks import register_shutdown_hook
+
+register_shutdown_hook("codex_cli_login", shutdown_codex_login)

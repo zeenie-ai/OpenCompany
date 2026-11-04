@@ -29,6 +29,9 @@ interface Props {
   /** Device-flow one-time code from the login response (RFC 8628) —
    * shown while the user completes auth in the opened browser tab. */
   verificationCode?: string | null;
+  pending?: boolean;
+  loginUrl?: string | null;
+  loginMessage?: string | null;
   icon: React.ReactNode;
   onSaveCredentials: () => void;
   /** Validate-and-store for the canonical `apiKey` field (dual-path
@@ -41,6 +44,7 @@ interface Props {
   onValidateApiKey?: () => void;
   onDeleteApiKey?: () => void;
   onLogin: () => void;
+  onDeviceLogin?: () => void;
   onLogout: () => void;
   onRefresh: () => void;
   /** Optional slot rendered below the info box, above the ActionBar. */
@@ -48,8 +52,8 @@ interface Props {
 }
 
 const OAuthConnect: React.FC<Props> = ({
-  config, form, connected, stored, loading, error, verificationCode, icon,
-  onSaveCredentials, onValidateApiKey, onDeleteApiKey, onLogin, onLogout, onRefresh, extraSection,
+  config, form, connected, stored, loading, error, verificationCode, pending, loginUrl, loginMessage, icon,
+  onSaveCredentials, onValidateApiKey, onDeleteApiKey, onLogin, onDeviceLogin, onLogout, onRefresh, extraSection,
 }) => {
   // Some providers (e.g. Stripe) delegate auth entirely to an external
   // CLI tool — they have no OpenCompany-side credentials to paste, so
@@ -67,8 +71,9 @@ const OAuthConnect: React.FC<Props> = ({
   ];
 
   const actions: ActionDef[] = [
-    { key: 'login', label: `Login with ${config.name}`, intent: 'save', onClick: onLogin, disabled: hasRequiredFields && !stored, hidden: connected },
-    { key: 'logout', label: 'Disconnect', intent: 'stop', onClick: onLogout, hidden: !connected },
+    { key: 'login', label: `Login with ${config.name}`, intent: 'save', onClick: onLogin, disabled: pending || (hasRequiredFields && !stored), hidden: connected },
+    ...(onDeviceLogin ? [{ key: 'device', label: 'Use device code', intent: 'save' as const, onClick: onDeviceLogin, disabled: !!pending, hidden: connected }] : []),
+    { key: 'logout', label: pending ? 'Cancel sign-in' : 'Disconnect', intent: 'stop', onClick: onLogout, hidden: !connected && !pending },
     { key: 'refresh', label: 'Refresh', intent: 'save', onClick: onRefresh, icon: <RotateCcw className="h-4 w-4" /> },
   ];
 
@@ -154,9 +159,14 @@ const OAuthConnect: React.FC<Props> = ({
                   <span className="text-xs">Click the code to select it, then approve the request to finish connecting.</span>
                 </div>
               )
-              : (stored || !hasRequiredFields)
+              : pending
+                ? loginMessage || 'Complete sign-in in your browser.'
+                : (stored || !hasRequiredFields)
                 ? 'Click Login to authorize.'
                 : 'Enter your credentials above to get started.'}
+          {!connected && loginUrl && (
+            <a className="mt-2 block text-accent underline" href={loginUrl} target="_blank" rel="noopener noreferrer">Open sign-in page</a>
+          )}
         </div>
       </div>
 

@@ -66,7 +66,7 @@ Everything the app keeps is in the `opencompany-selfhost_data` volume, mounted a
 | `packages/` | The Temporal CLI and the tools plugins install on first use |
 | `workspaces/` | Per-workflow files |
 | `claude/`, `whatsapp/` | Claude Code login, WhatsApp session |
-| `home/` | `$HOME`: gh, stripe, cf and codex logins, bun and uv caches |
+| `home/` | `$HOME`: gh, stripe and cf logins, bun and uv caches (Codex uses `/data/codex`) |
 
 `opencompany.env` holds `API_KEY_ENCRYPTION_KEY`, the key that decrypts `credentials.db`. Back the two up together and keep the file private. If the key changes, stored credentials can no longer be decrypted.
 
@@ -130,7 +130,7 @@ With plain `docker run`, pass `--init` and `--stop-timeout 120` to get the same 
 ## Limitations
 
 - **Temporal Web UI.** The dev server binds loopback inside the container, so its UI is not reachable from outside.
-- **Claude Code login.** The login button in the credentials panel waits for a browser callback on the container's own localhost, so it cannot finish. Log in from an interactive shell in the container (`docker compose exec opencompany sh`) with `CLAUDE_CONFIG_DIR=/data/claude` set, or supply `ANTHROPIC_API_KEY` through `environment:`. Codex has no login button at all; run its login from the same shell.
+- **CLI login.** Claude Code's browser callback targets the container's localhost. Log in from an interactive shell in the container (`docker compose exec opencompany sh`) with `CLAUDE_CONFIG_DIR=/data/claude` set, or supply `ANTHROPIC_API_KEY` through `environment:`. For Codex, use device authentication in the credentials panel. A manual login must use the app-managed CLI with `CODEX_HOME=/data/codex`, for example `CODEX_HOME=/data/codex /data/packages/node_modules/.bin/codex login --device-auth` after the app has installed it. Native browser login requires the browser to reach the backend's localhost callback. See [Codex headless authentication](https://learn.chatgpt.com/docs/auth#login-on-headless-devices).
 - **Owner-checked panels under login.** New workflows created through the REST save route receive placeholder owner `owner` rather than the logged-in account. REST updates preserve an existing workflow's owner. The Canvas, Memory, Context and dataSource panels check that owner, so they can refuse the logged-in user for a newly placeholder-owned workflow. This identity-propagation limitation is separate from legacy rows with empty ownership. `company deploy` VMs, which also require a login, behave the same.
 - **Browser image integration.** The image selects system Chromium with `BROWSER_FAMILY=chromium` and enables `BROWSER_HEADLESS=true` for displayless operation. The default system mode fails clearly when no installed browser exists. Testing mode is a separate opt-in download. Both modes install the pinned browser-use CLI with uv. Validate selected-browser version/profile compatibility and Linux libraries in the built image; adding the extra alone is not an end-to-end browser check.
 - **Agent nodes need the `git` extra and a git repository.** Claude Code and Codex agents work in git worktrees, and the image contains no `.git`. Run `git init` in a workflow's workspace and make a first commit before pointing an agent at it. Set a commit identity once from a shell in the container (`git config --global user.name ...` and `user.email ...`); it is stored in `/data/home` and survives upgrades.

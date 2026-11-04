@@ -92,6 +92,7 @@ async def run_cli_command(
     if api_key:
         full_argv.extend([api_key_arg, api_key])
 
+    proc = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *full_argv,
@@ -102,6 +103,16 @@ async def run_cli_command(
             cwd=cwd,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(input=input), timeout=timeout)
+    except asyncio.CancelledError:
+        # Cancelling a pending login/status caller must also reap its native
+        # CLI and any wrapper descendants, rather than orphaning the process.
+        if proc is not None:
+            kill_tree(proc.pid)
+            try:
+                await proc.wait()
+            except Exception:  # pragma: no cover - reaping is best-effort
+                pass
+        raise
     except asyncio.TimeoutError:
         # wait_for cancels the communicate() task but does NOT touch the
         # child, so without this the process keeps running, orphaned, still

@@ -1,12 +1,12 @@
-"""One CLI session per task — interactive PTY + on-disk JSONL events.
+"""One CLI session per task — Codex JSONL pipes or legacy Claude PTY.
 
 **Not used for Claude.** ``AICliService.run_batch`` routes every Claude
 task through ``ClaudeSessionPool`` (plain pipes + stream-json): a PTY
 stdin makes the CLI reject ``--input-format stream-json``, and this
 class never wrote the prompt to the child (GitHub #133 / #134). It is
 still what ``run_batch`` uses for a provider with no registered session
-pool (Codex), but ``_do_start`` raises for every provider except
-``claude``, so those runs fail (reported as ``worktree_setup_failed``).
+pool (Codex). Codex runs ``exec --json`` with piped stdout and stderr;
+completion waits for process exit and fully drained event streams.
 
 Each session is bound to:
   - one provider (Claude or Codex)
@@ -14,7 +14,7 @@ Each session is bound to:
   - one git worktree (created in `_pre_spawn`, removed in `cleanup`)
   - one IDE lockfile (written in `_pre_spawn` when the provider supports it)
 
-**Transport / protocol split** (see
+**Legacy Claude transport / protocol split** (see
 ``docs-internal/claude_code_interactive_mode.md``):
 
   - Transport: a PTY (``ptyprocess`` on POSIX / ``pywinpty>=3.0.3`` on
@@ -29,14 +29,14 @@ Inherits from :class:`BaseProcessSupervisor` for its idempotent locked
 start/stop machinery but overrides ``_do_start`` / ``_do_stop`` /
 ``is_running`` to drive a :class:`PtyHandle` + :class:`JsonlWatcher`
 pair instead of a plain ``anyio.open_process``. ``self._proc`` stays
-``None`` for the whole session lifetime; the PTY handle is the
-authoritative process owner.
+``None`` for the whole session lifetime. Codex uses ``_codex_proc``;
+the legacy Claude path uses its PTY handle as process owner.
 
 Sessions are NOT registered in the global supervisor registry — they're
 owned by ``AICliService.run_batch()`` for the lifetime of one batch.
 
-Liveness: ``wait_for_completion(timeout_seconds)`` waits for the JSONL
-``result`` event (signalled by ``_on_event`` setting an ``asyncio.Event``).
+Liveness: Codex waits for process exit and fully drained pipes. Legacy
+Claude waits for the on-disk JSONL ``result`` event.
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ import asyncio
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import uuid
@@ -55,6 +56,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from core.logging import get_logger
 from core.paths import safe_path_component
 from services._supervisor.process import BaseProcessSupervisor
+from services._supervisor.util import kill_tree
 from services.cli_agent.jsonl_watcher import JsonlWatcher, snapshot_jsonl_sizes
 from services.cli_agent.lockfile import remove_ide_lockfile, write_ide_lockfile
 from services.cli_agent.protocol import AICliProvider, CanonicalUsage, SessionResult
@@ -104,9 +106,7 @@ class AICliSession(BaseProcessSupervisor):
         connected_tool_names: Optional[List[str]] = None,
         connected_skill_names: Optional[List[str]] = None,
         memory_bound: bool = False,
-        context_event_sink: Optional[
-            Callable[[Dict[str, Any]], Awaitable[None]]
-        ] = None,
+        context_event_sink: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -163,6 +163,9 @@ class AICliSession(BaseProcessSupervisor):
         # Signalled by `_on_event` when claude writes a `result` event;
         # `wait_for_completion` awaits this.
         self._result_event: asyncio.Event = asyncio.Event()
+        self._codex_proc: Optional[asyncio.subprocess.Process] = None
+        self._codex_completion: Optional[asyncio.Task[int]] = None
+        self._codex_stderr = ""
 
     # ------------------------------------------------------------------
     # Identity
@@ -220,8 +223,7 @@ class AICliSession(BaseProcessSupervisor):
     def env(self) -> Dict[str, str]:
         # Inherit parent env, then redirect provider config to OpenCompany's
         # project-local isolation dir for providers that support it (Claude
-        # via CLAUDE_CONFIG_DIR; Codex/Gemini still use their native auth
-        # paths until isolation is wired). Without this, the agent's
+        # via CLAUDE_CONFIG_DIR and Codex via CODEX_HOME). Without this, the agent's
         # spawned CLI reads the user's personal `~/.claude/` credentials
         # instead of the ones the credentials modal's Login button wrote.
         e: Dict[str, str] = {**os.environ, "PYTHONUNBUFFERED": "1"}
@@ -229,6 +231,12 @@ class AICliSession(BaseProcessSupervisor):
             from nodes.agent.claude_code_agent._oauth import OPENCOMPANY_CLAUDE_DIR
 
             e["CLAUDE_CONFIG_DIR"] = str(OPENCOMPANY_CLAUDE_DIR)
+        elif self._provider.name == "codex":
+            from services.cli_agent._codex_auth import _codex_env
+            from services.cli_agent.providers.openai_codex import MCP_TOKEN_ENV
+
+            e.update(_codex_env())
+            e[MCP_TOKEN_ENV] = self._batch_token
         if self._lockfile_path and self._provider.ide_lock_env_var:
             e[self._provider.ide_lock_env_var] = str(self._lockfile_path)
         # Composio-style parent-run-ID for MCP correlation
@@ -305,27 +313,28 @@ class AICliSession(BaseProcessSupervisor):
     # ------------------------------------------------------------------
 
     async def _do_start(self) -> None:
+        if self._provider.name == "codex":
+            try:
+                await self._start_codex()
+            except BaseException:
+                await self._do_stop()
+                raise
+            return
+
         binary = self.binary_path()
         if not binary.exists():
             raise FileNotFoundError(f"{self.label} binary not found at {binary}")
 
         await self._pre_spawn()
 
-        # The new path is claude-specific. Codex / Gemini's automation
-        # surface is `codex exec --json` / `gemini --output-format
-        # stream-json` — both write events to stdout, not disk — and
-        # need the legacy spawn path. For now claude is the only
-        # provider actually wired to a node plugin; once codex_agent
-        # ships, that branch grows here. We raise loudly if a non-
-        # claude provider tries to use this session class so the gap
-        # isn't silent.
+        # Codex was dispatched above. Keep the legacy PTY branch specific
+        # to Claude; future providers must select their own event transport.
         if self._provider.name != "claude":
             raise RuntimeError(
                 f"AICliSession (interactive PTY+JSONL) currently only "
                 f"supports the 'claude' provider; got "
-                f"{self._provider.name!r}. Codex / Gemini still use the "
-                f"stream-json-on-stdout path and need a separate session "
-                f"class — track via codex_agent plugin work."
+                f"{self._provider.name!r}. This provider needs its own "
+                f"event transport."
             )
 
         # Where claude will write its session JSONL. The project_key is
@@ -411,6 +420,99 @@ class AICliSession(BaseProcessSupervisor):
         )
         await self._jsonl_watcher.start()
 
+    async def _start_codex(self) -> None:
+        # Resolving the managed CLI can install its pinned package. Keep that
+        # blocking work off the backend event loop.
+        binary = await asyncio.to_thread(self.binary_path)
+        if not binary.exists():
+            raise FileNotFoundError(f"{self.label} binary not found at {binary}")
+        await self._pre_spawn()
+        argv = await asyncio.to_thread(self.argv)
+        kwargs: Dict[str, Any] = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+        else:
+            kwargs["start_new_session"] = True
+        self._codex_proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(self.cwd() or self._repo_root),
+            env=without_onepassword_environment(self.env()),
+            **kwargs,
+        )
+        self._codex_completion = asyncio.create_task(
+            self._collect_codex(self._codex_proc),
+            name=f"{self.label}_collect",
+        )
+        self._logger.info("[%s] spawned pid=%s", self.label, self._codex_proc.pid)
+
+    async def _collect_codex(self, proc: asyncio.subprocess.Process) -> int:
+        drains = [
+            asyncio.create_task(self._read_codex_stdout(proc)),
+            asyncio.create_task(self._read_codex_stderr(proc)),
+        ]
+        try:
+            await asyncio.gather(proc.wait(), *drains)
+            return proc.returncode if proc.returncode is not None else -1
+        except BaseException:
+            if proc.returncode is None:
+                kill_tree(proc.pid)
+            await proc.wait()
+            for task in drains:
+                task.cancel()
+            await asyncio.gather(*drains, return_exceptions=True)
+            raise
+
+    async def _read_codex_stdout(self, proc: asyncio.subprocess.Process) -> None:
+        assert proc.stdout is not None
+        buffer = b""
+        while chunk := await proc.stdout.read(65536):
+            buffer += chunk
+            while b"\n" in buffer:
+                line, buffer = buffer.split(b"\n", 1)
+                await self._consume_codex_line(line)
+            if len(buffer) > 8 * 1024 * 1024:
+                raise RuntimeError("Codex JSONL event exceeded 8 MiB")
+        if buffer:
+            await self._consume_codex_line(buffer)
+
+    async def _consume_codex_line(self, line: bytes) -> None:
+        event = self._provider.parse_event(line.decode("utf-8", errors="replace"))
+        if event is None:
+            return
+        await self._on_jsonl_event(event)
+        if self._context_capture_error:
+            raise RuntimeError(self._context_capture_error)
+
+    async def _read_codex_stderr(self, proc: asyncio.subprocess.Process) -> None:
+        assert proc.stderr is not None
+        while chunk := await proc.stderr.read(65536):
+            # Keep diagnostics bounded even if a failing CLI floods stderr.
+            self._codex_stderr = (self._codex_stderr + chunk.decode("utf-8", errors="replace"))[-16384:]
+
+    async def _wait_for_codex(self, timeout_seconds: int) -> SessionResult:
+        if self._codex_completion is None:
+            return self._build_result(success=False, error="session never started")
+        try:
+            self._exit_code = await asyncio.wait_for(
+                asyncio.shield(self._codex_completion),
+                timeout_seconds,
+            )
+            return self._build_result(success=self._exit_code == 0)
+        except asyncio.TimeoutError:
+            await self.stop()
+            self._exit_code = -1
+            return self._build_result(success=False, error=f"timeout after {timeout_seconds}s")
+        except asyncio.CancelledError:
+            await self.stop()
+            raise
+        except Exception as exc:
+            await self._do_stop()
+            self._exit_code = -1
+            return self._build_result(success=False, error=str(exc))
+
     # ------------------------------------------------------------------
     # JSONL location helpers
     # ------------------------------------------------------------------
@@ -476,9 +578,7 @@ class AICliSession(BaseProcessSupervisor):
             try:
                 await self._context_event_sink(dict(event))
             except Exception as exc:  # noqa: BLE001 - journal failure visible
-                self._context_capture_error = (
-                    f"context_event_persistence_failed: {exc}"
-                )
+                self._context_capture_error = f"context_event_persistence_failed: {exc}"
                 self._logger.error(
                     "[%s] Context raw-event append failed: %s",
                     self.label,
@@ -491,11 +591,7 @@ class AICliSession(BaseProcessSupervisor):
         await self._on_event(event)
         if self._provider.is_final_event(event):
             self._result_event.set()
-        if (
-            self._context_event_sink is None
-            and event.get("type") == "system"
-            and event.get("subtype") == "compact_boundary"
-        ):
+        if self._context_event_sink is None and event.get("type") == "system" and event.get("subtype") == "compact_boundary":
             await self._record_native_compaction(event)
 
     async def _record_native_compaction(self, event: Dict[str, Any]) -> None:
@@ -572,11 +668,7 @@ class AICliSession(BaseProcessSupervisor):
             await self._safe_node_status("executing", payload)
         else:
             if self._context_event_sink is not None:
-                text = (
-                    "provider event "
-                    f"type={event.get('type', 'unknown')} "
-                    f"subtype={event.get('subtype', '')}"
-                )
+                text = f"provider event type={event.get('type', 'unknown')} subtype={event.get('subtype', '')}"
             else:
                 msg = event.get("message") or event.get("text") or event.get("delta") or json.dumps(event)
                 text = msg if isinstance(msg, str) else json.dumps(msg)
@@ -591,7 +683,7 @@ class AICliSession(BaseProcessSupervisor):
                 tools = event.get("tools") or []
                 mcp_servers = event.get("mcp_servers") or []
                 self._logger.info(
-                    "[CC-Agent stream] system.init tools=%d (sample=%s) " "mcp_servers=%s",
+                    "[CC-Agent stream] system.init tools=%d (sample=%s) mcp_servers=%s",
                     len(tools),
                     tools[:8],
                     [s.get("name") for s in mcp_servers if isinstance(s, dict)],
@@ -604,7 +696,7 @@ class AICliSession(BaseProcessSupervisor):
                 if tool_uses:
                     for tu in tool_uses:
                         self._logger.info(
-                            "[CC-Agent stream] assistant->tool_use name=%s " "input_keys=%s",
+                            "[CC-Agent stream] assistant->tool_use name=%s input_keys=%s",
                             tu.get("name"),
                             list((tu.get("input") or {}).keys()),
                         )
@@ -641,14 +733,10 @@ class AICliSession(BaseProcessSupervisor):
                 )
             elif etype == "result":
                 self._logger.info(
-                    "[CC-Agent stream] result is_error=%s subtype=%s " "session_id=%s duration_ms=%s num_turns=%s cost=%s",
+                    "[CC-Agent stream] result is_error=%s subtype=%s session_id=%s duration_ms=%s num_turns=%s cost=%s",
                     event.get("is_error", False),
                     event.get("subtype"),
-                    (
-                        None
-                        if self._context_event_sink is not None
-                        else event.get("session_id")
-                    ),
+                    (None if self._context_event_sink is not None else event.get("session_id")),
                     event.get("duration_ms"),
                     event.get("num_turns"),
                     event.get("total_cost_usd"),
@@ -690,12 +778,31 @@ class AICliSession(BaseProcessSupervisor):
     def is_running(self) -> bool:
         """Override BaseProcessSupervisor: we own the process via the
         PTY handle, not ``self._proc``."""
+        if self._provider.name == "codex":
+            return self._codex_proc is not None and (
+                self._codex_proc.returncode is None or (self._codex_completion is not None and not self._codex_completion.done())
+            )
         return self._pty_handle is not None and self._pty_handle.is_alive()
 
     async def _do_stop(self) -> None:
         """Override BaseProcessSupervisor: stop the JSONL watcher and
         kill the PTY child. Idempotent — clearing both refs prevents a
         double-stop from racing the kill-cascade."""
+        if self._provider.name == "codex":
+            proc, self._codex_proc = self._codex_proc, None
+            completion, self._codex_completion = self._codex_completion, None
+            if proc is not None:
+                if proc.returncode is None:
+                    # Kill the wrapper and descendants together: terminating only
+                    # the npm launcher can leave its native Codex child running.
+                    kill_tree(proc.pid)
+                await proc.wait()
+            if completion is not None:
+                if not completion.done():
+                    completion.cancel()
+                await asyncio.gather(completion, return_exceptions=True)
+            return
+
         watcher = self._jsonl_watcher
         self._jsonl_watcher = None
         if watcher is not None:
@@ -735,6 +842,8 @@ class AICliSession(BaseProcessSupervisor):
         result event doesn't arrive within ``timeout_seconds``, we
         force-stop the PTY and surface a timeout error.
         """
+        if self._provider.name == "codex":
+            return await self._wait_for_codex(timeout_seconds)
         if self._pty_handle is None:
             return self._build_result(
                 success=False,
@@ -770,7 +879,13 @@ class AICliSession(BaseProcessSupervisor):
         """Stop the watcher + kill the PTY child and remove the
         worktree + lockfile."""
         try:
-            await self.stop()
+            if self._provider.name == "codex":
+                # BaseSupervisor.stop skips already-exited processes. Still reap
+                # completed reader tasks and clear their process references.
+                async with self._lock:
+                    await self._do_stop()
+            else:
+                await self.stop()
         except Exception as exc:
             self._logger.debug("[%s] stop during cleanup: %s", self.label, exc)
 
@@ -804,7 +919,7 @@ class AICliSession(BaseProcessSupervisor):
         # error context from JSONL `result.subtype == "error"` events.
         provider_result = self._provider.event_to_session_result(
             self._events,
-            "",
+            self._codex_stderr if self._provider.name == "codex" else "",
             self._exit_code if self._exit_code is not None else -1,
         )
 

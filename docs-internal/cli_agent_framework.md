@@ -5,7 +5,7 @@ Multi-instance, multi-provider runtime for AI CLI agents (Claude Code, Codex, Ge
 | Provider | Status | Login flow |
 |---|---|---|
 | Claude Code (`@anthropic-ai/claude-code`) | shipping | Shared-tree install + spawn (`nodes/agent/claude_code_agent/_oauth.py:run_claude_login`) |
-| OpenAI Codex (`@openai/codex`) | **fails on every run** (see Risks); no login flow yet | User runs `codex login` manually; UI returns a graceful "not yet wired" error |
+| OpenAI Codex (`@openai/codex`) | managed login + `exec --json` subprocess | Pinned shared-tree CLI, isolated `CODEX_HOME`, native browser or device authentication |
 | Google Gemini (`@google/gemini-cli`) | v2 stub | factory raises `NotImplementedError` |
 
 Browser automation has its own runtime (the installed Chrome/Edge/Chromium by default, plus a uv-installed browser-use CLI); it is not installed into this bun package tree. See [browser.md](./browser.md) and [browser_workspace.md](./browser_workspace.md) for its lifecycle and live control surface.
@@ -32,7 +32,7 @@ AICliService.run_batch(provider, tasks, *, node_id, workflow_id, workspace_dir)
         └──► codex (no session pool) → AICliSession (BaseProcessSupervisor + CodexProvider)
                  _do_start():    binary check, then _pre_spawn() (git worktree add; lockfile
                                  only if the provider declares `ide_lockfile`, Codex does not),
-                                 then raises for every provider except claude, so the run fails
+                                 then consumes Codex JSONL on stdout through process exit
                  cleanup(): terminate_then_kill(5s) + worktree remove
         │
         │  ◄────  CLI calls back via MCP/HTTP at /mcp/ide/mcp
@@ -255,7 +255,7 @@ CLI auth is delegated to the CLI's own login flow + a synthetic marker token in 
 | Catalogue id | Login handler | Logout handler |
 |---|---|---|
 | `claude_code` | `claude_code_login` | `claude_code_logout` |
-| `codex_cli`   | `codex_cli_login` (returns "not yet wired") | `codex_cli_logout` |
+| `codex_cli`   | `codex_cli_login` | `codex_cli_logout` |
 
 **Claude flow** (`handle_claude_code_login` and `handle_claude_code_logout` in `server/nodes/agent/claude_code_agent/_handlers.py`) uses the documented CLI subcommands from [code.claude.com/docs/en/cli-reference](https://code.claude.com/docs/en/cli-reference):
 
@@ -275,9 +275,13 @@ Steps:
 
 **Logout**: runs `claude auth logout`, drops the marker via `auth_service.remove_oauth_tokens()`, and broadcasts.
 
-**Codex login**: not yet wired. The handler returns a graceful error pointing the user at `bun add -g @openai/codex` + `codex login` manual flow (the provider itself falls back to `bun x @openai/codex` when no system `codex` is on PATH). Follow-up: mirror `nodes/agent/claude_code_agent/_oauth.py` for codex with a `HOME=<DATA_DIR>/codex/` env redirect (Codex has no `CONFIG_DIR` equivalent).
+**Codex login**: `_codex_auth.py` installs the pinned `@openai/codex` package into the shared packages tree. Login, `codex login status`, logout, and task execution all use that binary with `CODEX_HOME=<DATA_DIR>/codex`. This keeps the app's login separate from a personal terminal session without changing `HOME`. The CLI owns credential storage; OpenCompany never parses `auth.json`. A successful status exit stores the catalogue marker. An in-flight login is single-flight, and logout cancels it before clearing native credentials and the marker. The frontend polls `codex_cli_status` while authentication is pending and shows failures instead of remaining indefinitely in Connecting.
 
-**Frontend**: no changes. The existing `client/src/components/credentials/primitives/OAuthConnect.tsx` already documents and supports the Stripe-style fieldless-CLI case (`config.fields = []`, `kind: "oauth"`, `stored` flag drives Connected state).
+Native browser login returns the CLI's authorization URL to the credentials panel. Device authentication uses `codex login --device-auth` for a remote backend or container whose localhost callback cannot be reached from the user's browser. The account or workspace must allow device authentication. See the official [authentication guide](https://learn.chatgpt.com/docs/auth#login-on-headless-devices), [login command](https://learn.chatgpt.com/docs/developer-commands#codex-login), and [CODEX_HOME configuration](https://learn.chatgpt.com/docs/config-file/environment-variables#core-locations).
+
+**Codex execution**: `codex exec --json -c 'approval_policy="never"' --model <model> --sandbox <mode> -- <prompt>` runs with pipes and no PTY; the task's approval policy overrides the example's `never`. `thread.started`, `item.completed`, and `turn.completed` provide the thread id, answer, tools, and token usage; `turn.failed`, nonzero exit, and premature stream end fail the task. Completion waits for process exit and both output streams. Timeout and cancellation terminate the process tree before worktree cleanup. The batch's required MCP server is passed using `-c mcp_servers.opencompany.url=...`; its credential uses `bearer_token_env_var` and stays out of argv and persistent configuration. See [JSONL events](https://learn.chatgpt.com/docs/non-interactive-mode#make-output-machine-readable) and [HTTP MCP configuration](https://learn.chatgpt.com/docs/extend/mcp#streamable-http-servers).
+
+**Frontend**: the generic `OAuthConnect.tsx` handles the fieldless-CLI case (`config.fields = []`, `kind: "oauth"`, `stored` flag drives Connected state). Providers can supply a status handler to poll a pending CLI login.
 
 ## VSCode-style IDE MCP server
 
@@ -332,9 +336,10 @@ Shared by every CLI provider plugin. Imports nothing from `nodes/`.
 | `mcp_server.py` | FastMCP sub-app mounted at `/mcp/ide` (JSON-RPC endpoint `/mcp/ide/mcp`) with bearer-token middleware + the infrastructure tools (`getWorkspaceFiles`, `listSkills`, `getSkill`, `readSkillResource`, `searchSkillResource`, `getCredential`, `broadcastLog`) + `rebind_batch` for warm-reuse context updates. |
 | `context_bridge.py` | `SpecializedAgentContextBridge` — RFC-0002 Context continuity for specialized providers (`resolve` / `augment_prompt` / `record_turn`); shared with RLM. |
 | `workflow_tools.py` | Per-batch MCP tool exposure (`mcp__opencompany__<node_type>`) + handler scope check + `tools/list_changed` notify. |
-| `session.py` | `AICliSession(BaseProcessSupervisor)` — PTY + JSONL path. Not used for claude; `run_batch` uses it for a provider with no session pool (Codex), but `_do_start` raises for every provider except claude, so those runs fail. |
+| `session.py` | `AICliSession(BaseProcessSupervisor)` — Codex stdout JSONL subprocess lifecycle; retains the legacy Claude PTY path. Claude uses its registered pool. |
 | `service.py` | `AICliService.run_batch()` — dispatcher; every claude task goes to the pool via `factory.get_session_pool(provider_name)` (warm keyed session when bound, ephemeral per-task session otherwise). |
 | `_cli_auth.py` | CLI-agnostic `mark_logged_in` / `mark_logged_out` / `broadcast_credential_event` + `"cli-managed"` marker token. Shared by claude + codex handlers. |
+| `_codex_auth.py` | Managed pinned Codex install, isolated environment, native login/status/logout and login subprocess cleanup. |
 | `_handlers.py` | Codex WS handlers (`codex_cli_login` / `codex_cli_logout`). Claude's moved to the plugin folder. |
 | `providers/openai_codex.py` | Codex provider — sandbox-first, no session continuity. Will move when codex_agent adopts the per-folder layout. |
 | `providers/google_gemini.py` | v2 stub. |
@@ -630,9 +635,9 @@ Live verification (needs a real Claude install + auth):
 
 ## Risks / open considerations
 
-- **Codex login not yet wired.** v1 returns a graceful error directing the user to `bun add -g @openai/codex` + `codex login`. Follow-up: a codex `_oauth.py` mirroring `nodes/agent/claude_code_agent/_oauth.py` with a `HOME=<DATA_DIR>/codex/` env redirect (Codex has no `CONFIG_DIR` env; `HOME` redirect is risky on Windows, so Windows may need a different strategy or accept user-global Codex auth).
+- **Codex authentication status is local.** `codex login status` confirms locally stored credentials; a later server-side revocation can still fail a task. Personal terminal logins use a different `CODEX_HOME` and do not connect the app automatically.
 - **Gemini deferred.** `factory.create_cli_provider("gemini")` raises `NotImplementedError` (the one name-specific branch left in the factory, kept so the dropdown can grey it out). v2 work: implement the provider, register it from a `nodes/agent/gemini_cli_agent/` plugin folder, and drop that branch. ~430 LoC. No abstraction changes needed.
-- **Codex fails on every run.** No session pool is registered for Codex, so `run_batch` runs it through `AICliSession`, and `AICliSession._do_start` raises for every provider except `claude`. The task comes back failed with `worktree_setup_failed: AICliSession (interactive PTY+JSONL) currently only supports the 'claude' provider ...` (or `cli_not_installed` when the Codex binary is missing). A Codex session class or pool is needed before the node can work.
+- **Codex remains one process per task.** Native resume, warm pooling, budget caps, and turn limits are not exposed by the node. Context continuity uses the existing stored-conversation bridge.
 - **Claude pool gaps.** Context-bound runs lose Claude's own session after a reap or eviction, the stored transcript is re-sent on every warm turn, the spawn inherits the backend's environment while passing `--ide`, `getCredential` / `broadcastLog` are model-visible, and warm reuse keeps the spawn-time flags and skill descriptors. Details in [claude_code_interactive_mode.md → Known gaps](./claude_code_interactive_mode.md#known-gaps).
 - **Native-binary stdin sensitivity.** claude-code >= 2.1.162 ships a native binary that reads stdin during `auth login`. We spawn it with `stdin=asyncio.subprocess.PIPE` (never written) so the read blocks and the OAuth callback server stays alive; an inherited/closed stdin EOFs the binary into an early exit that drops the browser callback. If a future CLI version changes its stdin contract this is the spot to revisit.
 - **Marker token written without verifying CLI is actually functional** — we trust `claude auth status`'s exit code. If Anthropic invalidates the token server-side and the CLI hasn't re-checked, the modal still shows Connected until the next session attempt's `detect_auth_error` catches it.

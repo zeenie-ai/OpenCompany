@@ -47,6 +47,16 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
   // GitHub et al. require the user to TYPE it on the verification
   // page, so the panel must display it).
   const [verificationCode, setVerificationCode] = useState<string | null>(null);
+  const [oauthPending, setOauthPending] = useState(false);
+  const [loginUrl, setLoginUrl] = useState<string | null>(null);
+  const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const activeProvider = useRef(config.id);
+  const actionSequence = useRef(0);
+  if (activeProvider.current !== config.id) {
+    activeProvider.current = config.id;
+    actionSequence.current += 1;
+  }
+  useEffect(() => () => { actionSequence.current += 1; }, []);
 
   // Reset transient UI state when the user switches providers so a
   // "Bot Token required" error from Telegram doesn't bleed into the
@@ -57,6 +67,9 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
     setLoading(null);
     setStored(false);
     setVerificationCode(null);
+    setOauthPending(false);
+    setLoginUrl(null);
+    setLoginMessage(null);
   }, [config.id]);
 
   const {
@@ -166,19 +179,22 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
 
   // Generic action executor — replaces 19 duplicate handler functions.
   const execute = useCallback(async (key: string, fn: () => Promise<any>) => {
+    const provider = activeProvider.current;
+    const sequence = ++actionSequence.current;
+    const current = () => activeProvider.current === provider && actionSequence.current === sequence;
     setLoading(key);
     setError(null);
     try {
       const result = await fn();
-      if (result && !result.success && result.error) {
+      if (current() && result && !result.success && result.error) {
         setError(result.error);
       }
       return result;
     } catch (err: any) {
-      setError(err.message || `Failed: ${key}`);
+      if (current()) setError(err.message || `Failed: ${key}`);
       return undefined;
     } finally {
-      setLoading(null);
+      if (current()) setLoading(null);
     }
   }, []);
 
@@ -191,6 +207,41 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
       queryKey: queryKeys.credentialValues.byProvider(providerKey).queryKey,
     });
   }, [qc, providerKey]);
+
+  const applyOAuthStatus = useCallback((res: any, sequence: number) => {
+    if (activeProvider.current !== providerKey || actionSequence.current !== sequence) return false;
+    setOauthPending(Boolean(res.success && res.pending));
+    setVerificationCode(res.success && !res.connected && res.pending !== false ? (res.verification_code ?? null) : null);
+    setLoginUrl(res.success && !res.connected && res.pending !== false ? (res.url ?? null) : null);
+    setLoginMessage(res.success && res.pending ? (res.message ?? 'Complete sign-in in your browser.') : null);
+    setError(res.error ?? null);
+    if (res.connected !== undefined) {
+      void qc.invalidateQueries({ queryKey: ['credentialCatalogue'] });
+    }
+    return true;
+  }, [qc, providerKey]);
+
+  useEffect(() => {
+    if (!visible || !oauthPending || !config.ws?.status) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const sequence = actionSequence.current;
+      try {
+        const res = await sendRequest(config.ws!.status, {});
+        if (stopped) return;
+        applyOAuthStatus(res, sequence);
+        if (res.success && res.pending) timer = setTimeout(poll, 1500);
+      } catch {
+        if (!stopped && actionSequence.current === sequence) {
+          setOauthPending(false);
+          setError('Could not check sign-in. Refresh to check its status.');
+        }
+      }
+    };
+    timer = setTimeout(poll, 1500);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [visible, oauthPending, config.ws, sendRequest, applyOAuthStatus]);
 
   // Pre-built actions that panels call directly.
   const actions = {
@@ -217,17 +268,29 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
       await invalidateValues();
       setStored(false);
     }),
-    oauthLogin: () => execute('login', async () => {
-      const res = await sendRequest(config.ws!.login, {});
-      setVerificationCode(res.success ? (res.verification_code ?? null) : null);
-      if (res.success && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+    oauthLogin: (deviceAuth = false) => execute(deviceAuth ? 'device' : 'login', async () => {
+      const sequence = actionSequence.current;
+      const res = await sendRequest(deviceAuth ? config.ws!.device_login! : config.ws!.login, {});
+      if (applyOAuthStatus(res, sequence) && res.success && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
       return res;
     }),
     oauthLogout: () => execute('logout', async () => {
+      setOauthPending(false);
       setVerificationCode(null);
+      setLoginUrl(null);
+      setLoginMessage(null);
       return sendRequest(config.ws!.logout, {});
     }),
-    oauthRefresh: () => execute('refresh', () => sendRequest(config.ws!.status, {})),
+    oauthRefresh: () => execute('refresh', async () => {
+      const sequence = actionSequence.current;
+      if (!config.ws?.status) {
+        await qc.invalidateQueries({ queryKey: ['credentialCatalogue'] });
+        return { success: true };
+      }
+      const res = await sendRequest(config.ws.status, { refresh: true });
+      applyOAuthStatus(res, sequence);
+      return res;
+    }),
     sendWs: (type: string, data?: Record<string, any>, timeoutMs?: number) =>
       execute(type, () => sendRequest(type, data ?? {}, timeoutMs)),
   };
@@ -249,6 +312,7 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
     statusSummary,
     sources: credentialValuesQuery.data?.sources ?? {},
     verificationCode,
+    oauthPending, loginUrl, loginMessage,
     execute, actions, isConnected,
     getProviderDefaults, saveProviderDefaults,
     getProviderUsageSummary, getAPIUsageSummary,
