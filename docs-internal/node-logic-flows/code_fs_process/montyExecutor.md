@@ -88,9 +88,10 @@ flowchart TD
   telling the caller Monty is unavailable and to use `python_code` instead.
 - **Capability resolution** (`_build_capabilities`): unknown capability ->
   `NodeUserError`. `http_get` wires an SSRF-guarded `http_get(url)` host
-  function. `workspace_read` / `workspace_write` require `ctx.workspace_dir`
-  (else `NodeUserError`) and mount it at `/workspace` (`read-only` /
-  `read-write`).
+  function: its public-host check runs as an httpx request hook, so every
+  redirect hop is checked, not only the URL the code passed.
+  `workspace_read` / `workspace_write` require `ctx.workspace_dir` (else
+  `NodeUserError`) and mount it at `/workspace` (`read-only` / `read-write`).
 - **Enforced limits**: `timeout` -> `max_duration_secs`, `max_memory_mb * 1024
   * 1024` -> `max_memory`. Both are enforced by the Rust interpreter.
 - **Error classification**: all Monty failures subclass `MontyError`; the op
@@ -107,8 +108,9 @@ flowchart TD
 
 - **Database writes**: none.
 - **Broadcasts**: none from this op.
-- **External API calls**: only when `http_get` is granted — an outbound
-  `httpx.get(url)` (follow-redirects, 15 s timeout) to a publicly-routable host.
+- **External API calls**: only when `http_get` is granted — an outbound GET
+  through a synchronous `httpx.Client` (follow-redirects, 15 s timeout) to a
+  publicly-routable host; each redirect hop must be publicly routable too.
 - **File I/O**: only when `workspace_read` / `workspace_write` is granted — the
   sandbox sees `/workspace` mapped to `ctx.workspace_dir` (read-only or
   read-write).
@@ -132,9 +134,14 @@ flowchart TD
   caller to `python_code`.
 - **Enforced limits** (unlike `pythonExecutor`): time + memory breaches are
   caught and surfaced as `NodeUserError`.
-- **SSRF guard is best-effort**: `_is_public_url` re-resolves DNS and rejects
+- **SSRF guard is best-effort**: `_is_public_url` (`services/net.py`) runs
+  before every request, redirect hops included, resolves the host and rejects
   loopback / private / link-local / reserved / multicast / unspecified
   addresses, but httpx re-resolves at request time so it is not TOCTOU-proof.
+  It differs from the `fetch_policy` the downloading nodes use: it refuses
+  the owner's own network and all of loopback, which `fetch_policy` allows,
+  but not `100.100.100.200` (Alibaba's metadata service) or OpenCompany's
+  ports on this host's public address, which `fetch_policy` refuses.
 - **Workspace capability requires a workspace**: requesting `workspace_read` /
   `workspace_write` without a `ctx.workspace_dir` raises `NodeUserError`.
 - **Missing wheel degrades gracefully**: a platform without a `pydantic-monty`

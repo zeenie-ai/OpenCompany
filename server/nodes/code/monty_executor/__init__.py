@@ -73,13 +73,17 @@ def _make_http_get(timeout: float = 15.0) -> Callable[[str], str]:
     """
     import httpx
 
-    def http_get(url: str) -> str:
-        ok, reason = _is_public_url(url)
+    def check(request: httpx.Request) -> None:
+        # A request hook: httpx calls it before every request, each redirect hop included.
+        ok, reason = _is_public_url(str(request.url))
         if not ok:
             raise ValueError(f"http_get blocked: {reason}")
-        resp = httpx.get(url, timeout=timeout, follow_redirects=True)
-        resp.raise_for_status()
-        return resp.text
+
+    def http_get(url: str) -> str:
+        with httpx.Client(timeout=timeout, follow_redirects=True, event_hooks={"request": [check]}) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return resp.text
 
     return http_get
 

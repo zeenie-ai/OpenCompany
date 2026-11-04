@@ -16,11 +16,14 @@ the unsupported-feature error path.
 from __future__ import annotations
 
 import importlib.util
+import socket
 import sys
 import types
 from unittest.mock import patch
 
+import httpx
 import pytest
+import respx
 
 
 pytestmark = pytest.mark.node_contract
@@ -253,6 +256,29 @@ class TestMontyExecutor:
         )
         harness.assert_envelope(result, success=False)
         assert "workspace" in result["error"].lower()
+
+
+class TestHttpGet:
+    """The http_get capability's public-host check, on every redirect hop."""
+
+    def test_a_redirect_to_cloud_metadata_is_refused(self, monkeypatch):
+        from nodes.code.monty_executor import _make_http_get
+
+        def getaddrinfo(host, port, *args, **kwargs):
+            # public.example is a public host; an address stands for itself.
+            address = {"public.example": "93.184.216.34"}.get(host, host)
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 0))]
+
+        monkeypatch.setattr("services.net.socket.getaddrinfo", getaddrinfo)
+        location = "http://169.254.169.254/latest/meta-data/"
+        with respx.mock:
+            respx.get("https://public.example/data").mock(return_value=httpx.Response(302, headers={"location": location}))
+            metadata = respx.get(location).mock(return_value=httpx.Response(200, text="secret"))
+
+            with pytest.raises(ValueError, match="http_get blocked: blocked non-public address 169.254.169.254"):
+                _make_http_get()("https://public.example/data")
+
+        assert not metadata.called
 
 
 # ============================================================================

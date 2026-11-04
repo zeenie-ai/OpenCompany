@@ -85,7 +85,7 @@ flowchart TD
   D3 --> E
   E --> F{useProxy?}
   F -- yes --> F1[Lookup proxy URL via proxy_service<br/>swallow errors, continue without proxy]
-  F -- no --> G[httpx.AsyncClient timeout=30 follow_redirects=True]
+  F -- no --> G[httpx.AsyncClient timeout=30 follow_redirects=True<br/>netpolicy.check_request on every hop]
   F1 --> G
   G --> H[For each URL: GET + BeautifulSoup parse]
   H -- HTTPStatusError / Exception --> I[Append to errors, keep going]
@@ -100,13 +100,14 @@ flowchart TD
 - **Date mode**: missing `start_date` or `end_date` raises `NodeUserError` -> `success=false`.
 - **Iteration mode**: `iteration_mode` is a `Literal`, so unknown values are rejected by Pydantic; `single` is the only non-date/page branch.
 - **Per-URL errors**: collected into `errors` list; the op still returns `success=true` even if every URL failed (only top-level setup errors fail the envelope).
+- **Network policy**: the client runs `check_request` (`services/netpolicy.py`) as an httpx request hook, so every request, each redirect hop included, is checked with `fetch_policy()` on the URL and every address its host resolves to on this machine, proxied or not. A hop to OpenCompany's own ports on this machine, to cloud metadata, or to a host that does not resolve is never sent; it lands in `errors` as `"<url>: Cannot request <hop url>: <reason>."`. The owner's own network and other loopback ports stay reachable.
 - **Proxy failure**: logged at warning, request proceeds without proxy.
 
 ## Side Effects
 
 - **Database writes**: none.
 - **Broadcasts**: none.
-- **External API calls**: `GET <fetch_url>` for each expanded URL, timeout 30s, `follow_redirects=True`.
+- **External API calls**: `GET <fetch_url>` for each expanded URL, timeout 30s, `follow_redirects=True`; each hop passes the network policy above.
 - **File I/O**: none.
 - **Subprocess**: none.
 

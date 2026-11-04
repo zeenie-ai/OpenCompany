@@ -75,9 +75,9 @@ flowchart TD
   F --> G{Per-item}
   G -- empty url --> Gx[status=failed]
   G -- skip_existing + exists --> Gs[status=skipped]
-  G -- fetch --> Gf[GET with timeout, follow_redirects=True]
-  Gf -- HTTPStatusError/Exception --> Ge[status=failed]
-  Gf -- ok --> Gw[write_bytes, status=downloaded]
+  G -- fetch --> Gf[GET with timeout, follow_redirects=True<br/>netpolicy.check_request on every hop]
+  Gf -- BlockedURL/HTTPStatusError/Exception --> Ge[status=failed]
+  Gf -- ok --> Gw[write_bytes in a worker thread, status=downloaded]
   G --> H[Collect Exception results into failed]
   H --> I[Return success=true with totals + downloaded files list]
 ```
@@ -88,6 +88,7 @@ flowchart TD
 - **Output dir resolution**: `outputDir` param -> `<context.workspace_dir>/downloads` -> literal `downloads` relative to CWD.
 - **Filename**: `unquote(basename(urlparse(url).path))` or literal `"download"` when URL has no path. Collisions silently overwrite unless `skipExisting=true`.
 - **Skip logic**: path-existence check, not size/hash check.
+- **Network policy**: the client runs `check_request` (`services/netpolicy.py`) as an httpx request hook, so every request, each redirect hop included, is checked with `fetch_policy()` on the URL and every address its host resolves to. A hop to OpenCompany's own ports on this machine (the `*_PORT` settings, and the Browser's and Android's live ports), to cloud metadata, or to a host that does not resolve raises `BlockedURL("Cannot request <url>: <reason>.")` before anything is sent to it, and the item fails like any other. The owner's own network and other loopback ports stay reachable.
 - **Per-URL failure**: appended to `failed` list, envelope remains `success=true`.
 - **Gather exceptions**: wrapped tasks may raise - `return_exceptions=True` collects them and they are normalized into `failed` entries with only an `error` field.
 
@@ -95,8 +96,8 @@ flowchart TD
 
 - **Database writes**: none.
 - **Broadcasts**: none.
-- **External API calls**: `GET <url>` per item with user-supplied timeout, follow redirects.
-- **File I/O**: creates `output_dir` (recursive), writes each download via `Path.write_bytes`.
+- **External API calls**: `GET <url>` per item with user-supplied timeout, follow redirects; each hop passes the network policy above.
+- **File I/O**: creates `output_dir` (recursive), writes each download via `Path.write_bytes` in a worker thread (`asyncio.to_thread`), off the event loop.
 - **Subprocess**: none.
 
 ## External Dependencies

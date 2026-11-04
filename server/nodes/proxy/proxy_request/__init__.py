@@ -73,6 +73,7 @@ class ProxyRequestNode(ActionNode):
         from core.logging import get_logger
         import httpx
 
+        from services.netpolicy import fetch_policy, resolved_url_block_reason
         from services.proxy.models import ProxyResult
         from services.proxy.service import get_proxy_service
         from .._usage import track_proxy_usage
@@ -83,6 +84,14 @@ class ProxyRequestNode(ActionNode):
             raise NodeUserError(
                 "Proxy service not initialized. Use proxy_config tool to add a " "provider first.",
             )
+
+        if not params.url:
+            raise NodeUserError("URL is required")
+        # Before the proxy choice: every attempt sends this URL, with no
+        # redirects, and a retry that gets no proxy URL goes direct.
+        reason = await resolved_url_block_reason(params.url, fetch_policy())
+        if reason:
+            raise NodeUserError(f"Cannot request {params.url}: {reason}.")
 
         raw = params.model_dump()
         proxy_url = await svc.get_proxy_url(params.url, raw)

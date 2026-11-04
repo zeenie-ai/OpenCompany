@@ -64,7 +64,7 @@ Params uses `extra="allow"`, so the retry loop also reads an undeclared `proxy_f
 
 ### Output payload (failure)
 
-All retries exhausted -> `raise RuntimeError("All N attempts failed. Last error: <str>")`. Short-circuit raises are `NodeUserError` ("Proxy service not initialized..." when the service is disabled; "No proxy provider available" when `get_proxy_url` returns `None`). A status `>= 400` on an attempt raises `NodeUserError(f"HTTP {status}: ...")`. `BaseNode.execute()` maps `NodeUserError` to a single WARN line + structured envelope, and the bare `RuntimeError` to a structured error envelope with a traceback in operator logs.
+All retries exhausted -> `raise RuntimeError("All N attempts failed. Last error: <str>")`. Short-circuit raises are `NodeUserError` ("Proxy service not initialized..." when the service is disabled; "URL is required" for an empty `url`; "Cannot request <url>: <reason>." when the network policy refuses it; "No proxy provider available" when `get_proxy_url` returns `None`). A status `>= 400` on an attempt raises `NodeUserError(f"HTTP {status}: ...")`. `BaseNode.execute()` maps `NodeUserError` to a single WARN line + structured envelope, and the bare `RuntimeError` to a structured error envelope with a traceback in operator logs.
 
 ## Logic Flow
 
@@ -72,7 +72,9 @@ All retries exhausted -> `raise RuntimeError("All N attempts failed. Last error:
 flowchart TD
   A[ProxyRequestNode.request] --> B{proxy_svc enabled?}
   B -- no --> Edis[raise NodeUserError<br/>Proxy service not initialized]
-  B -- yes --> F[await proxy_svc.get_proxy_url url raw]
+  B -- yes --> P{url empty, or refused by<br/>resolved_url_block_reason?}
+  P -- yes --> Epol[raise NodeUserError<br/>URL is required / Cannot request url: reason]
+  P -- no --> F[await proxy_svc.get_proxy_url url raw]
   F -- None --> Enop[raise NodeUserError<br/>No proxy provider available]
   F -- url --> G[attempt = 0]
   G --> H[httpx.AsyncClient proxy=proxy_url timeout=timeout]
@@ -100,8 +102,9 @@ flowchart TD
 
 - **Validation**:
   - Service disabled / not enabled -> `raise NodeUserError("Proxy service not initialized...")`.
+  - Empty `url` -> `raise NodeUserError("URL is required")` (the Pydantic field is required but accepts an empty string).
   - `get_proxy_url` returns `None` -> `raise NodeUserError("No proxy provider available")`.
-  - (`url` is a required Pydantic field; an empty value is rejected at param validation, not in the op body.)
+- **Network policy**: before the proxy choice, `resolved_url_block_reason(url, fetch_policy())` (`services/netpolicy.py`) checks the URL and every address its host resolves to on this machine. OpenCompany's own ports on this machine (the `*_PORT` settings, and the Browser's and Android's live ports), cloud metadata and non-http(s) schemes raise `NodeUserError("Cannot request <url>: <reason>.")` before any attempt. Every attempt sends the same URL and the client follows no redirects, so this one check covers the proxied attempts and a retry that goes direct because `get_proxy_url` returned `None` (the service was disabled meanwhile). A proxy on this machine resolves the target here too; through a remote proxy, a name is judged by this machine's DNS. The owner's own network and other loopback ports stay reachable.
 - **Branches**:
   - Retry loop runs up to `max_retries + 1` times; `proxy_failover=false` breaks after the first failure.
   - Body str-JSON-parseable -> `kwargs.json`, str-non-JSON -> `kwargs.content`, non-str -> `kwargs.json`.

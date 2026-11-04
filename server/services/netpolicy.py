@@ -5,9 +5,11 @@ Callers:
   proxy on the addresses it resolved itself;
 - the custom MCP connectors (``nodes/mcp``): the server the owner added, on
   every address its host resolves to;
-- nodes that fetch a URL they were given: the HTTP request node, a WhatsApp
-  media URL, a Google Drive upload's source (:func:`resolved_url_block_reason`
-  with :func:`fetch_policy`).
+- nodes that fetch a URL they were given: the HTTP request and Proxy Request
+  nodes, a WhatsApp media URL, a Google Drive upload's source
+  (:func:`resolved_url_block_reason` with :func:`fetch_policy`), and the File
+  Downloader and HTTP Scraper, which follow redirects, on every hop
+  (:func:`check_request`).
 
 What they reach is untrusted, and an agent follows untrusted instructions
 (prompt injection), so these stay out of reach:
@@ -38,8 +40,11 @@ import ipaddress
 import os
 import socket
 from dataclasses import dataclass, field
-from typing import Callable, FrozenSet, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, FrozenSet, Iterable, List, Optional, Tuple, Union
 from urllib.parse import urlsplit
+
+if TYPE_CHECKING:
+    import httpx
 
 IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
 
@@ -277,10 +282,35 @@ async def resolved_url_block_reason(url: str, policy: NetPolicy) -> Optional[str
     return None
 
 
+class BlockedURL(Exception):
+    """A URL :func:`fetch_policy` refuses. The message names the URL and why."""
+
+    def __init__(self, url: str, reason: str) -> None:
+        super().__init__(f"Cannot request {url}: {reason}.")
+        self.url = url
+        self.reason = reason
+
+
+async def check_request(request: httpx.Request) -> None:
+    """Raise :class:`BlockedURL` for a request :func:`fetch_policy` refuses.
+
+    An httpx request hook (``event_hooks={"request": [check_request]}``).
+    httpx runs request hooks before every request it sends, each redirect
+    hop included, so a URL that redirects to cloud metadata or to one of
+    OpenCompany's own ports is refused at that hop.
+    """
+    url = str(request.url)
+    reason = await resolved_url_block_reason(url, fetch_policy())
+    if reason:
+        raise BlockedURL(url, reason)
+
+
 __all__ = [
+    "BlockedURL",
     "NAVIGABLE_SCHEMES",
     "NetPolicy",
     "address_block_reason",
+    "check_request",
     "domain_allowed",
     "fetch_policy",
     "host_block_reason",

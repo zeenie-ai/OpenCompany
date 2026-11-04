@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
+from services.netpolicy import check_request
 from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
 
 logger = get_logger(__name__)
@@ -176,7 +177,9 @@ class HttpScraperNode(ActionNode):
                 logger.warning("[httpScraper] Proxy lookup failed", error=str(e))
 
         items, errors = [], []
-        client_kwargs: dict = {"timeout": 30, "follow_redirects": True}
+        # Each request, every redirect hop included, passes the fetch policy
+        # (services/netpolicy.py); a refused one lands in errors.
+        client_kwargs: dict = {"timeout": 30, "follow_redirects": True, "event_hooks": {"request": [check_request]}}
         if proxy_url:
             client_kwargs["proxy"] = proxy_url
 

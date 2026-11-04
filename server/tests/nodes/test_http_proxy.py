@@ -176,6 +176,27 @@ class TestHttpRequest:
 class TestProxyRequest:
     URL = "https://api.example.com/scrape"
 
+    @pytest.fixture(autouse=True)
+    def public_dns(self, monkeypatch):
+        # The node checks where a URL resolves (services/netpolicy.py); no real lookup.
+        monkeypatch.setattr("services.netpolicy.resolve_addresses",
+                            AsyncMock(return_value=[ipaddress.ip_address("93.184.216.34")]))
+
+    @pytest.mark.parametrize("url", ["http://127.0.0.1:5684/api/v1/namespaces", "http://169.254.169.254/latest/meta-data/"])
+    async def test_refuses_opencompanys_own_ports_and_cloud_metadata(self, harness, monkeypatch, url):
+        # Before the proxy choice, so neither a proxied attempt nor a retry
+        # that goes direct sends it.
+        monkeypatch.setenv("TEMPORAL_HTTP_PORT", "5684")
+        proxy_svc = _make_proxy_service_mock()
+
+        with respx.mock, patch("services.proxy.service.get_proxy_service", return_value=proxy_svc), patched_container():
+            result = await harness.execute("proxyRequest", {"method": "GET", "url": url})
+
+        harness.assert_envelope(result, success=False)
+        assert "never reachable" in result["error"]
+        proxy_svc.get_proxy_url.assert_not_awaited()
+        proxy_svc.report_result.assert_not_called()
+
     @respx.mock
     async def test_happy_path_reports_success_and_tracks_cost(self, harness):
         respx.get(self.URL).mock(return_value=httpx.Response(200, json={"ok": True}))

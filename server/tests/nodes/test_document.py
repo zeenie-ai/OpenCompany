@@ -7,7 +7,8 @@ these indicates the docs (and the user-visible contract) need to be updated
 too.
 
 External side-effects are mocked:
-  - httpScraper / fileDownloader: httpx calls stubbed via respx.
+  - httpScraper / fileDownloader: httpx calls stubbed via respx, and the
+    network policy's DNS lookup stubbed to a public address.
   - documentParser: each parser library is patched at the module level
     (`services.handlers.document.<lib>`), or real HTML is fed through
     BeautifulSoup for the happy path.
@@ -18,7 +19,10 @@ External side-effects are mocked:
 
 from __future__ import annotations
 
+import asyncio
+import ipaddress
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,12 +33,23 @@ import respx
 
 pytestmark = pytest.mark.node_contract
 
+METADATA_URL = "http://169.254.169.254/latest/meta-data/"
+OWN_PORT_URL = "http://127.0.0.1:5684/api/v1/namespaces"
+
+
+@pytest.fixture
+def public_dns(monkeypatch):
+    # The nodes check where each URL resolves (services/netpolicy.py); no real lookup.
+    monkeypatch.setattr("services.netpolicy.resolve_addresses",
+                        AsyncMock(return_value=[ipaddress.ip_address("93.184.216.34")]))
+
 
 # ============================================================================
 # httpScraper
 # ============================================================================
 
 
+@pytest.mark.usefixtures("public_dns")
 class TestHttpScraper:
     @respx.mock
     async def test_happy_path_single_mode_extracts_links(self, harness):
@@ -112,12 +127,28 @@ class TestHttpScraper:
         # Three calls: 01, 02, 03
         assert len(respx.calls) == 3
 
+    @respx.mock
+    async def test_a_page_that_redirects_to_cloud_metadata_is_refused(self, harness):
+        respx.get("https://example.com/list").mock(return_value=httpx.Response(302, headers={"location": METADATA_URL}))
+        metadata = respx.get(METADATA_URL).mock(return_value=httpx.Response(200, text='<a href="/keys.pdf">keys</a>'))
+
+        result = await harness.execute("httpScraper", {"url": "https://example.com/list"})
+
+        harness.assert_envelope(result, success=True)
+        assert not metadata.called
+        assert result["result"]["item_count"] == 0
+        assert result["result"]["errors"] == [
+            f"https://example.com/list: Cannot request {METADATA_URL}: "
+            "cloud metadata and link-local addresses are never reachable."
+        ]
+
 
 # ============================================================================
 # fileDownloader
 # ============================================================================
 
 
+@pytest.mark.usefixtures("public_dns")
 class TestFileDownloader:
     @respx.mock
     async def test_happy_path_downloads_files(self, harness, tmp_path):
@@ -195,6 +226,50 @@ class TestFileDownloader:
         harness.assert_envelope(result, success=True)
         assert result["result"]["failed"] == 1
         assert result["result"]["downloaded"] == 0
+
+    @pytest.mark.parametrize("location", [METADATA_URL, OWN_PORT_URL])
+    async def test_a_redirect_to_cloud_metadata_or_an_own_port_is_refused(self, harness, tmp_path, monkeypatch, location):
+        monkeypatch.setenv("TEMPORAL_HTTP_PORT", "5684")  # OWN_PORT_URL's port
+        with respx.mock:
+            respx.get("https://example.com/a.pdf").mock(return_value=httpx.Response(302, headers={"location": location}))
+            target = respx.get(location).mock(return_value=httpx.Response(200, content=b"SECRET"))
+
+            result = await harness.execute(
+                "fileDownloader",
+                {"items": [{"url": "https://example.com/a.pdf"}], "outputDir": str(tmp_path)},
+            )
+
+        harness.assert_envelope(result, success=True)
+        assert not target.called
+        assert result["result"]["failed"] == 1
+        assert result["result"]["downloaded"] == 0
+        assert not (tmp_path / "a.pdf").exists()
+
+    @respx.mock
+    async def test_writes_the_file_off_the_event_loop(self, harness, tmp_path, monkeypatch):
+        respx.get("https://example.com/a.pdf").mock(return_value=httpx.Response(200, content=b"AAA"))
+        on_loop = []
+        write_bytes = Path.write_bytes
+
+        def recording_write_bytes(path, data):
+            if path.name == "a.pdf":
+                try:
+                    asyncio.get_running_loop()
+                    on_loop.append(True)
+                except RuntimeError:
+                    on_loop.append(False)
+            return write_bytes(path, data)
+
+        monkeypatch.setattr(Path, "write_bytes", recording_write_bytes)
+
+        result = await harness.execute(
+            "fileDownloader",
+            {"items": [{"url": "https://example.com/a.pdf"}], "outputDir": str(tmp_path)},
+        )
+
+        harness.assert_envelope(result, success=True)
+        assert (tmp_path / "a.pdf").read_bytes() == b"AAA"
+        assert on_loop == [False]
 
 
 # ============================================================================

@@ -11,6 +11,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.logging import get_logger
+from services.netpolicy import check_request
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
 logger = get_logger(__name__)
@@ -86,10 +87,13 @@ class FileDownloaderNode(ActionNode):
                 if skip_existing and file_path.exists():
                     return {"status": "skipped", "path": str(file_path), "url": url}
                 try:
-                    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                    # Each redirect hop passes the fetch policy too (services/netpolicy.py).
+                    async with httpx.AsyncClient(
+                        timeout=timeout, follow_redirects=True, event_hooks={"request": [check_request]}
+                    ) as client:
                         resp = await client.get(url)
                         resp.raise_for_status()
-                        file_path.write_bytes(resp.content)
+                        await asyncio.to_thread(file_path.write_bytes, resp.content)
                         return {
                             "status": "downloaded",
                             "path": str(file_path),
