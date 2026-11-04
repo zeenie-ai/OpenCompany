@@ -27,7 +27,7 @@ Unified access to 200+ models from multiple providers (OpenAI, Anthropic, Google
 | `system_prompt` | string | `""` | no | - | System prompt |
 | `model` | string | `""` (injected) | no | - | `provider/model-id` format, e.g. `anthropic/claude-opus-4.6`, `openai/gpt-4o`. `[FREE] ` prefix stripped before the API call but preserved for dropdown grouping |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
-| `max_tokens` | number\|null | `null` (varies per model) | no | - | 1-200000 |
+| `max_tokens` | number\|null | `null` | no | - | 1-200000. Unset sends no `max_tokens`, so OpenRouter applies each serving endpoint's own limit (`omit_default_max_tokens` in `llm_defaults.json`); a set value is clamped to the model's ceiling and sent |
 | `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `frequency_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `presence_penalty` | number\|null | `0.0` | no | - | Declared schema field; not forwarded by the standalone chat path |

@@ -245,6 +245,7 @@
       "_popular_note": "Registry ids verbatim (OpenRouter registry, 2026-10-19), one or two current models per vendor; Claude Sonnet 5.5 replaced Sonnet 5 as the default on 2026-09-29, at the same price, and Gemini 4 Argon replaced Gemini 3.5 Flash on 2026-10-23; tests/llm/test_global_model_catalogue.py checks each is in model_registry.json.",
       "detection_patterns": ["openrouter"],
       "open_world_models": true,
+      "omit_default_max_tokens": true,
       "base_url": "https://openrouter.ai/api/v1",
       "models_endpoint": "https://openrouter.ai/api/v1/models",
       "api_key_param": "api_key",

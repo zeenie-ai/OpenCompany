@@ -189,7 +189,7 @@ class OpenAIProvider:
         *,
         model: str,
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = 4096,
         thinking: Optional[ThinkingConfig] = None,
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
@@ -226,10 +226,12 @@ class OpenAIProvider:
 
         # OpenAI reasoning models use max_completion_tokens.  Compatible
         # endpoints continue to receive their documented max_tokens field.
-        if policy["max_completion_tokens"]:
-            params["max_completion_tokens"] = max_tokens
-        else:
-            params["max_tokens"] = max_tokens
+        # None sends neither: the provider applies its own limit.
+        if max_tokens is not None:
+            if policy["max_completion_tokens"]:
+                params["max_completion_tokens"] = max_tokens
+            else:
+                params["max_tokens"] = max_tokens
         if policy["temperature_allowed"]:
             params["temperature"] = temperature
 

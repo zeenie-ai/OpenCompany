@@ -10,7 +10,8 @@ execute_agent, execute_chat_agent, and the Temporal F4.B
 - no user value -> the model's max output tokens (registry ->
   llm_defaults fallback), never an artificial provider-wide floor
   (the old behaviour capped agents at the 8192 ``_default`` from
-  llm_defaults.json regardless of model capability).
+  llm_defaults.json regardless of model capability), or none at all for
+  a provider that declares ``omit_default_max_tokens`` (OpenRouter).
 """
 
 from __future__ import annotations
@@ -50,6 +51,25 @@ class TestNativeResolver:
 
         with patch("services.model_registry.get_model_registry", return_value=_registry_mock()):
             assert resolve_max_tokens({"max_tokens": 2048}, "m", "p") == 2048
+
+
+class TestOpenRouterLeavesTheLimitToItsEndpoints:
+    """OpenRouter routes a sent max_tokens only to endpoints that support it
+    and holds its price before the request runs, so an unset value sends
+    none. Reads the real llm_defaults.json, so the flag itself is pinned."""
+
+    def test_unset_sends_none(self):
+        from services.llm.config import resolve_max_tokens
+
+        with patch("services.model_registry.get_model_registry", return_value=_registry_mock()):
+            assert resolve_max_tokens({}, "moonshotai/kimi-k3", "openrouter") is None
+
+    def test_set_value_is_still_clamped_and_sent(self):
+        from services.llm.config import resolve_max_tokens
+
+        with patch("services.model_registry.get_model_registry", return_value=_registry_mock()):
+            assert resolve_max_tokens({"max_tokens": 100_000}, "moonshotai/kimi-k3", "openrouter") == MODEL_MAX
+            assert resolve_max_tokens({"max_tokens": 2048}, "moonshotai/kimi-k3", "openrouter") == 2048
 
 
 class TestAgentResolverDelegates:

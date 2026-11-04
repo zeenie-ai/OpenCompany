@@ -500,6 +500,27 @@ class TestOpenRouterProvider:
         call_kwargs = provider._client.chat.completions.create.call_args[1]
         assert call_kwargs["model"] == "meta-llama/llama-3-8b"
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("max_tokens", [None, 2048])
+    async def test_max_tokens_reaches_the_request_only_when_set(self, provider, max_tokens):
+        mock_resp = MagicMock()
+        mock_resp.choices = [MagicMock(message=MagicMock(content="ok", reasoning_content=None, tool_calls=None), finish_reason="stop")]
+        mock_resp.usage = MagicMock(prompt_tokens=5, completion_tokens=2, total_tokens=7, completion_tokens_details=None)
+        provider._client.chat.completions.create = AsyncMock(return_value=mock_resp)
+
+        await provider.chat(
+            [Message(role="user", content="test")],
+            model="moonshotai/kimi-k3",
+            max_tokens=max_tokens,
+        )
+
+        call_kwargs = provider._client.chat.completions.create.call_args[1]
+        assert "max_completion_tokens" not in call_kwargs
+        if max_tokens is None:
+            assert "max_tokens" not in call_kwargs
+        else:
+            assert call_kwargs["max_tokens"] == max_tokens
+
 
 class TestEmptyAssistantTurnFiltering:
     """An empty assistant turn must be dropped; a compaction checkpoint

@@ -302,8 +302,10 @@ def attempt_timeout_seconds(provider: str) -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 
-def resolve_max_tokens(params: dict, model: str, provider: str) -> int:
-    """Resolve max_tokens: user param -> model registry -> llm_defaults -> 4096."""
+def resolve_max_tokens(params: dict, model: str, provider: str) -> Optional[int]:
+    """Resolve max_tokens: the user's value clamped to the model's max output
+    (registry -> llm_defaults -> 4096), else that max, or ``None`` (send no
+    limit) for a provider that declares ``omit_default_max_tokens``."""
     from services.model_registry import get_model_registry
 
     registry = get_model_registry()
@@ -316,6 +318,11 @@ def resolve_max_tokens(params: dict, model: str, provider: str) -> int:
             logger.info(f"[AI] Clamping max_tokens {user_int} -> {model_max} for {provider}/{model}")
             return model_max
         return user_int
+    # OpenRouter routes a sent max_tokens only to endpoints that can return
+    # that many tokens and holds their price before the request runs; sent
+    # none, each serving endpoint applies its own limit.
+    if _provider_block(provider).get("omit_default_max_tokens"):
+        return None
     return model_max
 
 

@@ -995,7 +995,7 @@ class LLMProvider(Protocol):
         *,
         model: str,
         temperature: float = 0.7,
-        max_tokens: int = 4096,
+        max_tokens: Optional[int] = 4096,
         thinking: Optional[ThinkingConfig] = None,
         tools: Optional[List[ToolDef]] = None,
         context_management: Optional[Dict[str, Any]] = None,
@@ -1008,7 +1008,9 @@ class LLMProvider(Protocol):
         llm_defaults.json) hands each delta to ``on_event`` as it arrives and
         still returns the same response; the others never receive one.
         ``effort`` (``low`` / ``high``) is the owner's chat choice, sent only
-        for a model its provider lists in ``effort_models``.
+        for a model its provider lists in ``effort_models``. ``max_tokens`` is
+        ``None`` only for a provider that declares ``omit_default_max_tokens``,
+        and the request then carries no limit.
 
         ``extra_headers`` and ``extra_body`` ride on this request only: the
         LLM gateway's attribution headers and replay-cache body. ChatUnifier

@@ -190,7 +190,7 @@ def _require_saved_endpoint(provider: str) -> None:
         raise NodeUserError(message)
 
 
-def _resolve_max_tokens(flattened: dict, model: str, provider: str) -> int:
+def _resolve_max_tokens(flattened: dict, model: str, provider: str) -> Optional[int]:
     """Resolve max_tokens: user param (clamped to model max) -> model max.
 
     Delegates to ``services/llm/config.py::resolve_max_tokens`` so the
@@ -198,7 +198,8 @@ def _resolve_max_tokens(flattened: dict, model: str, provider: str) -> int:
     prepare_agent_payload) and the native chat path agree: when the user
     doesn't set max_tokens, the model's full supported output budget is
     used (registry -> llm_defaults fallback), never an artificial
-    provider-wide floor.
+    provider-wide floor. A provider that declares
+    ``omit_default_max_tokens`` gets ``None`` and applies its own limit.
     """
     return native_resolve_max_tokens(flattened, model, provider)
 
