@@ -92,19 +92,32 @@ describe('employee live work', () => {
     actions.sendRequest.mockRejectedValue(new Error('internal execution error'));
     await act(async () => { await cache.invalidateQueries({ queryKey: employeeDetailKey('w1'), exact: true }); });
     expect(await screen.findByText(/Couldn’t refresh progress/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Refresh progress' })).toBeInTheDocument();
+    // A neutral outline: a refresh borrows no action colour.
+    const refresh = screen.getByRole('button', { name: 'Refresh progress' });
+    expect(refresh).toHaveClass('border-border-default', 'text-fg-default');
+    expect(refresh.className).not.toMatch(/action-/);
     expect(screen.queryByText('internal execution error')).not.toBeInTheDocument();
     expect(screen.getByText('Gather information')).toBeInTheDocument();
   });
 
-  it('shows legacy chat tool steps immediately and changes them as the live run progresses', () => {
+  it('says progress is unavailable when there is none to show and it cannot be read', async () => {
+    show({ work_progress: null });
+    await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledTimes(1));
+    actions.sendRequest.mockRejectedValue(new Error('internal execution error'));
+    await act(async () => { await cache.invalidateQueries({ queryKey: employeeDetailKey('w1'), exact: true }); });
+    expect(await screen.findByText('Work progress is unavailable.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh progress' }).className).not.toMatch(/action-/);
+  });
+
+  it('leaves a reply under way to the chat, and shows their own work again once it ends', () => {
     const run = { ...emptyRun('r1', 'w1'), state: 'running' as const, startedAt: now,
       steps: [{ stepId: 'search', name: 'Searching the web', state: 'running' as const }] };
     useChatRunStore.getState().upsertRun(run);
-    show({ work_progress: null });
-    expect(screen.getByText('Searching the web')).toBeInTheDocument();
-    act(() => useChatRunStore.getState().upsertRun({ ...run, seq: 2, steps: [{ ...run.steps[0], state: 'done' }] }));
-    expect(screen.getByText('1 of 1 steps finished')).toBeInTheDocument();
+    show();
+    expect(screen.queryByRole('region', { name: 'Employee work progress' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Searching the web')).not.toBeInTheDocument();
+    act(() => useChatRunStore.getState().upsertRun({ ...run, seq: 2, state: 'finished' }));
+    expect(screen.getByRole('region', { name: 'Employee work progress' })).toHaveTextContent('Research is gathering information');
   });
 
   it('keeps employee progress isolated when switching conversations', async () => {
@@ -123,18 +136,19 @@ describe('employee live work', () => {
     expect(screen.queryByText('Gather information')).not.toBeInTheDocument();
   });
 
-  it('shows a new live reply immediately instead of the previous completed job', () => {
+  it('shows no earlier finished job while a new reply is under way', () => {
     useChatRunStore.getState().upsertRun({ ...emptyRun('new-reply', 'w1'), state: 'running', startedAt: now,
       steps: [{ stepId: 'new-search', name: 'Searching for today’s news', state: 'running' }] });
     show({ work_progress: { ...progress, state: 'done', message: 'The work is finished.' } });
-    expect(screen.getByText('Preparing your reply.')).toBeInTheDocument();
-    expect(screen.getByText('Searching for today’s news')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Employee work progress' })).not.toBeInTheDocument();
     expect(screen.queryByText('The work is finished.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Preparing your reply.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Searching for today’s news')).not.toBeInTheDocument();
   });
 
   it('offers refresh for an unavailable snapshot without leaking backend errors', () => {
     show({ work_progress: { state: 'unavailable', message: 'Work progress could not be loaded. Try refreshing.' } });
-    expect(screen.getByRole('button', { name: 'Refresh progress' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh progress' })).toHaveClass('border-border-default', 'text-fg-default');
     expect(screen.queryByText(/This is taking longer/)).not.toBeInTheDocument();
   });
 });

@@ -8,8 +8,9 @@
  * The turns follow the session's runs (docs-internal/chat_protocol.md): the
  * employee's steps and answer stream in while the run a message started is
  * going, whatever else arrives meanwhile, and the next message waits until
- * it ends. Meanwhile Send is Stop, and Esc anywhere in the pane stops the
- * answer too. A message that does not go comes back into the box.
+ * it ends. Meanwhile the live work pill above the box says what they are
+ * doing (composer/LiveWork.tsx), Send is Stop, and Esc anywhere in the pane
+ * stops the answer too. A message that does not go comes back into the box.
  *
  * What the employee wants to send waits for the owner on a card: on the
  * reply that made it, or after the conversation for the employee's own work
@@ -58,6 +59,7 @@ import { AskModeMenu } from './composer/AskModeMenu';
 import { addAttachments } from './composer/attachments';
 import { DropOverlay } from './composer/DropOverlay';
 import { Greetings } from './composer/Greetings';
+import { LiveWork } from './composer/LiveWork';
 import { ModelPicker, ModelPickerButton } from './composer/ModelPicker';
 import { Suggestions } from './composer/Suggestions';
 import { WebChip } from './composer/WebChip';
@@ -187,6 +189,9 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
 
   const busy = send.isPending || lane !== null || changing;
   const stopping = lane?.state === 'stopping' || stop.isPending || (controlled && control.state === 'pausing');
+  // What the employee is doing, above the box, while the run works (not
+  // while it waits to start or for Resume).
+  const working = lane && lane.state !== 'queued' && !suspended && !resuming ? lane : null;
   // The lane's run waits for the owner's OK on a call: a message goes as
   // the owner's answer instead, declining the call with its text as the
   // note (RFC-0007 D3; the server decides). Nothing else goes meanwhile.
@@ -546,6 +551,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       <div className={cn('relative flex-none', compact ? 'border-t border-border-default px-3 py-2' : 'px-6 pb-3')}>
         <div className={cn('mx-auto flex w-full flex-col', compact ? 'gap-2' : 'max-w-(--w-chat-column) gap-2.5')}>
           {host.notices}
+          <LiveWork run={working} name={persona.name} stopping={stopping} compact={compact} />
           {composer !== 'closed' && (
             <Composer
               sessionId={sessionId}

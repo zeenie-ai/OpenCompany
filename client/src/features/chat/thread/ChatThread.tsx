@@ -5,10 +5,14 @@
  *
  * - **Sticks to the bottom.** While the newest turn is in view, anything
  *   that grows the thread (a new turn, text arriving, a markdown chunk
- *   loading) keeps it in view. Scrolled up, it stays put and a "Jump to
- *   latest" button counts what arrived meanwhile; sending a message always
- *   scrolls down to it. Opening the thread starts at the newest turn.
+ *   loading) or takes room from it (the dock under it growing) keeps it in
+ *   view. Scrolled up, it stays put and a "Jump to latest" button counts
+ *   what arrived meanwhile; sending a message always scrolls down to it.
+ *   Opening the thread starts at the newest turn.
  * - New turns rise in (`chat-rise`), never the ones already there on open.
+ * - A divider names the day over the first message of each ("Today",
+ *   "Yesterday", the weekday, the date), and another marks where the
+ *   employee restarted.
  * - The turns are a log, so a screen reader hears new ones.
  */
 
@@ -25,6 +29,7 @@ import type { ChatPersona } from '../host';
 import { AssistantTurn } from '../turns/AssistantTurn';
 import { UserTurn } from '../turns/UserTurn';
 import type { ChatTurn } from './model';
+import { dayKey, dayLabel } from './timeLabel';
 import type { ArtifactRef } from '../data/parts';
 
 /** Closer to the bottom than this counts as at the bottom. */
@@ -37,6 +42,16 @@ function RestartDivider({ name }: { name: string }) {
     <div className="flex items-center gap-3 text-xs text-fg-muted">
       <span aria-hidden className="h-px flex-1 bg-border-default" />
       <span className="text-center">{name} restarted — they start fresh from here</span>
+      <span aria-hidden className="h-px flex-1 bg-border-default" />
+    </div>
+  );
+}
+
+function DayDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 font-mono text-2xs font-medium tracking-label text-fg-faint uppercase">
+      <span aria-hidden className="h-px flex-1 bg-border-default" />
+      <span>{label}</span>
       <span aria-hidden className="h-px flex-1 bg-border-default" />
     </div>
   );
@@ -123,7 +138,8 @@ export function ChatThread({
     }
   };
 
-  // Whatever grows the thread keeps the newest turn in view while it is.
+  // Whatever grows the thread, or takes room from it, keeps the newest turn
+  // in view while it is.
   useLayoutEffect(() => {
     const content = contentRef.current;
     const scroller = scrollRef.current;
@@ -132,6 +148,7 @@ export function ChatThread({
       if (atBottom.current) scroller.scrollTop = scroller.scrollHeight;
     });
     observer.observe(content);
+    observer.observe(scroller);
     return () => observer.disconnect();
   }, []);
 
@@ -165,6 +182,18 @@ export function ChatThread({
 
   const now = new Date();
   const lastTurn = turns.at(-1)?.key;
+  // The turns that start a day, with the day's name. A reply still on its
+  // way has no day yet.
+  const dayStarts = new Map<string, string>();
+  let shownDay: string | null = null;
+  for (const turn of turns) {
+    const timestamp = turn.kind === 'divider' ? null : (turn.message?.timestamp ?? null);
+    const day = dayKey(timestamp);
+    if (day && day !== shownDay) {
+      dayStarts.set(turn.key, dayLabel(timestamp, now));
+      shownDay = day;
+    }
+  }
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -198,10 +227,11 @@ export function ChatThread({
             aria-label={`Conversation with ${persona.name}`}
             className={cn('flex flex-col', compact ? 'gap-4' : 'gap-7', turns.length === 0 && 'hidden')}
           >
-            {turns.map((turn) => {
-              if (turn.kind === 'divider') return <RestartDivider key={turn.key} name={persona.name} />;
+            {turns.flatMap((turn) => {
+              if (turn.kind === 'divider') return [<RestartDivider key={turn.key} name={persona.name} />];
               const latest = turn.key === lastTurn;
-              return (
+              const dayName = dayStarts.get(turn.key);
+              const row = (
                 <div key={turn.key} data-turn-key={turn.key}>
                   {turn.kind === 'user' ? (
                     <UserTurn message={turn.message} now={now} latest={latest} compact={compact} />
@@ -226,6 +256,7 @@ export function ChatThread({
                   )}
                 </div>
               );
+              return dayName ? [<DayDivider key={`day:${turn.key}`} label={dayName} />, row] : [row];
             })}
           </div>
           {afterThread}

@@ -6,7 +6,7 @@
 
 import type { RunError } from '@/lib/agui/events';
 import type { RunSnapshot, RunStep } from '@/lib/agui/reduceRun';
-import type { ChatApproval } from '../data/approvals';
+import type { ChatApproval, ChatApprovals } from '../data/approvals';
 
 /** The text a run that has not posted its answer shows. */
 export interface LiveText {
@@ -84,6 +84,22 @@ export function approvalStep(step: RunStep, approval: ChatApproval): RunStep {
   }
 }
 
+/** A run's steps with each call it waits on following its card
+ *  (`approvalStep`), of the drafts `ids` names; the same array when none
+ *  waits. The turn and the live work pill above the box read these. */
+export function withApprovalSteps(steps: RunStep[], ids: readonly string[], approvals: ChatApprovals): RunStep[] {
+  const byCall = new Map<string, ChatApproval>();
+  for (const id of ids) {
+    const approval = approvals.byId.get(id);
+    if (approval?.waits && approval.toolCallId) byCall.set(approval.toolCallId, approval);
+  }
+  if (byCall.size === 0) return steps;
+  return steps.map((step) => {
+    const approval = byCall.get(step.stepId);
+    return approval ? approvalStep(step, approval) : step;
+  });
+}
+
 /** "· 42 tok/s": how fast the answer is coming, a token counted as four
  *  characters; null before a second has passed. */
 export function writingRate(characters: number, elapsedMs: number): string | null {
@@ -105,6 +121,33 @@ export function workLabel(steps: readonly RunStep[], live: boolean, durationMs: 
   if (live) return 'Working…';
   const count = steps.filter((step) => step.state !== 'skipped').length;
   return `Worked for ${duration(durationMs)} · ${count} ${count === 1 ? 'step' : 'steps'}`;
+}
+
+/** What the live work pill above the box says the run is doing (design
+ *  handoff chat V2 §3, "Live work"): the step under way, else "Writing the
+ *  reply" while the answer comes, "Thinking" between steps and "Getting
+ *  started" before any. */
+export function liveWorkLabel(
+  steps: readonly RunStep[],
+  { writing, waiting, stopping }: { writing: boolean; waiting: boolean; stopping: boolean },
+): string {
+  if (stopping) return 'Stopping…';
+  if (waiting) return 'Waiting for your OK';
+  const current = steps.filter((step) => step.state === 'running' && step.name).at(-1);
+  if (current) return current.name;
+  if (writing) return 'Writing the reply';
+  return steps.length > 0 ? 'Thinking' : 'Getting started';
+}
+
+/** The pill's count and clock, "2/3 · 4s": the steps finished (done, failed
+ *  or skipped) of those begun, since a step is known only once it starts,
+ *  and how long the run has worked, rounded as "Worked for" is; what is not
+ *  known yet is left out. */
+export function liveWorkMeta(steps: readonly RunStep[], elapsedMs: number | null): string {
+  const parts: string[] = [];
+  if (steps.length > 0) parts.push(`${steps.filter((step) => step.state !== 'running').length}/${steps.length}`);
+  if (elapsedMs !== null) parts.push(duration(elapsedMs));
+  return parts.join(' · ');
 }
 
 /** What a step says under its name. */

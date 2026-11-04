@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Check, Circle, LoaderCircle, X } from 'lucide-react';
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { useLaneRun } from '@/features/chat';
-import type { RunSnapshot } from '@/lib/agui/reduceRun';
 import { useEmployeeDetailQuery } from '../data/employees';
 import type { EmployeeSummary, WorkProgress } from '../data/schemas';
 import { JobProgress } from './JobProgress';
@@ -13,6 +12,9 @@ const LABELS: Record<string, string> = {
   queued: 'Queued', waiting: 'Waiting', running: 'In progress', reviewing: 'Checking the result',
   done: 'Finished', failed: 'Needs attention', cancelled: 'Stopped', stopping: 'Stopping',
 };
+/** Refresh progress is a neutral outline: colour marks a state or a role,
+ *  not a refresh. */
+const REFRESH_BUTTON = 'border-border-default text-fg-default';
 
 function age(timestamp: string | null, now: number): number | null {
   if (!timestamp) return null;
@@ -24,24 +26,6 @@ function duration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-}
-
-function chatProgress(lane: RunSnapshot | null): WorkProgress | null {
-  if (!lane) return null;
-  const state = lane.state === 'queued' ? 'queued' : lane.state === 'stopping' ? 'stopping' : 'running';
-  return {
-    state,
-    message: state === 'queued' ? 'Your message is saved and waiting to start.'
-      : state === 'stopping' ? 'Stopping this reply.' : 'Preparing your reply.',
-    started_at: lane.startedAt ?? lane.createdAt,
-    updated_at: null,
-    truncated: false,
-    steps: lane.steps.map((step) => ({
-      id: step.stepId, node_id: null, label: step.name, member: null,
-      status: step.state === 'skipped' ? 'cancelled' : step.state,
-      started_at: null, updated_at: null,
-    })),
-  };
 }
 
 function WorkPanel({ progress, connected, failed, refresh }: {
@@ -83,7 +67,7 @@ function WorkPanel({ progress, connected, failed, refresh }: {
       {!connected && <p className="m-0 text-xs text-fg-muted">Connection lost. Updates will resume when you reconnect.</p>}
       {connected && failed && <div className="flex flex-wrap items-center gap-2">
         <p className="m-0 text-xs text-fg-muted">Couldn’t refresh progress. Showing the last update.</p>
-        <ActionButton intent="config" onClick={refresh}>Refresh progress</ActionButton>
+        <Button variant="quiet" size="sm" onClick={refresh} className={REFRESH_BUTTON}>Refresh progress</Button>
       </div>}
       {connected && !failed && updated !== null && <p className="m-0 text-xs text-fg-muted">Last activity {updated < 5 ? 'just now' : `${duration(updated)} ago`}</p>}
       {connected && !failed && active && !['waiting', 'queued', 'stopping'].includes(progress.state) && updated !== null && updated >= 60 &&
@@ -101,23 +85,25 @@ function WorkPanel({ progress, connected, failed, refresh }: {
   );
 }
 
-/** Detailed work stays separate from list-owned controls and composer state. */
+/** Detailed work stays separate from list-owned controls and composer state:
+ *  the employee's own work (team tasks, scheduled work, what waits for the
+ *  owner), while no reply is under way. */
 export function EmployeeWork({ employee }: { employee: EmployeeSummary }) {
   const { isReady } = useWebSocketActions();
   const detail = useEmployeeDetailQuery(employee.workflow_id, { live: true });
   const lane = useLaneRun(employee.workflow_id);
   const saved = detail.data?.work_progress;
-  // A new message starts immediately; a previous completed job must not
-  // mask its live steps while the next detail snapshot is on its way.
-  const progress = saved && !(lane && ['done', 'failed', 'cancelled'].includes(saved.state)) ? saved : chatProgress(lane);
+  // A reply under way shows in the chat, above the box (features/chat
+  // LiveWork); the employee's own snapshot describes it too.
+  const progress = lane ? null : saved ?? null;
   const job = detail.data ? detail.data.job_progress : employee.job_progress;
   const delivery = job && ['delivery_needs_review', 'waiting_for_approval', 'failed', 'cancelled'].includes(job.state);
   return <>
     {progress && <WorkPanel progress={progress} connected={isReady} failed={detail.isError || progress.state === 'unavailable'} refresh={() => void detail.refetch()} />}
-    {!progress && detail.isError && <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+    {!saved && !lane && detail.isError && <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
       <span>Work progress is unavailable.</span>
-      <ActionButton intent="config" onClick={() => void detail.refetch()}>Refresh progress</ActionButton>
+      <Button variant="quiet" size="sm" onClick={() => void detail.refetch()} className={REFRESH_BUTTON}>Refresh progress</Button>
     </div>}
-    {(delivery || (!progress && job)) && <JobProgress key={`${job.request_id}:${job.state}`} employee={{ ...employee, job_progress: job }} />}
+    {(delivery || (!saved && !lane && job)) && <JobProgress key={`${job.request_id}:${job.state}`} employee={{ ...employee, job_progress: job }} />}
   </>;
 }

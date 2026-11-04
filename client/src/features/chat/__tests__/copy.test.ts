@@ -1,13 +1,25 @@
 /**
- * What a turn says: when a message was written, why a run did not answer,
- * what a working run is doing and showing, and its steps.
+ * What a turn says: when a message was written and the day a divider names,
+ * why a run did not answer, what a working run is doing and showing, its
+ * steps, and what the live work pill above the box says meanwhile.
  */
 
 import { describe, expect, it } from 'vitest';
 import { emptyRun, type RunSnapshot, type RunStep } from '@/lib/agui/reduceRun';
-import { timeLabel } from '../thread/timeLabel';
-import { parseApproval } from '../data/approvals';
-import { approvalStep, failureLines, liveLabel, liveText, stepDetail, workLabel, writingRate } from '../turns/runCopy';
+import { dayKey, dayLabel, timeLabel } from '../thread/timeLabel';
+import { NO_APPROVALS, parseApproval, type ChatApproval, type ChatApprovals } from '../data/approvals';
+import {
+  approvalStep,
+  failureLines,
+  liveLabel,
+  liveText,
+  liveWorkLabel,
+  liveWorkMeta,
+  stepDetail,
+  withApprovalSteps,
+  workLabel,
+  writingRate,
+} from '../turns/runCopy';
 
 describe('timeLabel', () => {
   const now = new Date(2026, 8, 28, 15, 30);
@@ -34,6 +46,35 @@ describe('timeLabel', () => {
   it('says nothing for a time it cannot read', () => {
     expect(timeLabel(null, now)).toBe('');
     expect(timeLabel('yesterday-ish', now)).toBe('');
+  });
+});
+
+describe('day dividers', () => {
+  const now = new Date(2026, 8, 28, 15, 30);
+
+  it('name today, yesterday, the weekday within a week, else the date', () => {
+    expect(dayLabel(new Date(2026, 8, 28, 9, 5).toISOString(), now)).toBe('Today');
+    expect(dayLabel(new Date(2026, 8, 27, 22, 40).toISOString(), now)).toBe('Yesterday');
+    const monday = new Date(2026, 8, 22, 10, 0);
+    expect(dayLabel(monday.toISOString(), now)).toBe(monday.toLocaleDateString(undefined, { weekday: 'long' }));
+    const earlier = new Date(2026, 7, 3, 10, 0);
+    expect(dayLabel(earlier.toISOString(), now)).toBe(earlier.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    const lastYear = new Date(2025, 11, 31, 10, 0);
+    expect(dayLabel(lastYear.toISOString(), now)).toBe(
+      lastYear.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
+    );
+  });
+
+  it('say nothing for a time they cannot read', () => {
+    expect(dayLabel(null, now)).toBe('');
+    expect(dayLabel('yesterday-ish', now)).toBe('');
+  });
+
+  it('go over the first message of each day', () => {
+    expect(dayKey(new Date(2026, 8, 28, 0, 5).toISOString())).toBe(dayKey(new Date(2026, 8, 28, 23, 55).toISOString()));
+    expect(dayKey(new Date(2026, 8, 28, 0, 5).toISOString())).not.toBe(dayKey(new Date(2026, 8, 27, 23, 55).toISOString()));
+    expect(dayKey(null)).toBeNull();
+    expect(dayKey('yesterday-ish')).toBeNull();
   });
 });
 
@@ -123,5 +164,46 @@ describe('working steps', () => {
     });
     expect(approvalStep(held, card({ status: 'discarded' }))).toMatchObject({ state: 'skipped', detail: 'You declined' });
     expect(approvalStep(held, card({ status: 'expired' }))).toMatchObject({ state: 'skipped', detail: 'No answer in time' });
+  });
+});
+
+describe('the live work pill', () => {
+  const step = (stepId: string, state: RunStep['state'], name = stepId): RunStep => ({ stepId, name, state });
+  const quiet = { writing: false, waiting: false, stopping: false };
+
+  it('says what the run is doing', () => {
+    expect(liveWorkLabel([], quiet)).toBe('Getting started');
+    expect(liveWorkLabel([step('c1', 'running', 'Checked Google Calendar')], quiet)).toBe('Checked Google Calendar');
+    expect(liveWorkLabel([step('a', 'running', 'Searched the web'), step('b', 'running', 'Read the inbox')], quiet)).toBe('Read the inbox');
+    expect(liveWorkLabel([step('a', 'done'), step('b', 'failed')], quiet)).toBe('Thinking');
+    expect(liveWorkLabel([step('a', 'done')], { ...quiet, writing: true })).toBe('Writing the reply');
+    // The step under way wins over text written beside it.
+    expect(liveWorkLabel([step('a', 'running', 'Searched the web')], { ...quiet, writing: true })).toBe('Searched the web');
+    expect(liveWorkLabel([step('a', 'running')], { ...quiet, waiting: true })).toBe('Waiting for your OK');
+    expect(liveWorkLabel([step('a', 'running')], { ...quiet, waiting: true, stopping: true })).toBe('Stopping…');
+    // A step with no name says nothing about it.
+    expect(liveWorkLabel([step('a', 'running', '')], quiet)).toBe('Thinking');
+  });
+
+  it('counts the steps finished of those begun, then how long it has worked', () => {
+    expect(liveWorkMeta([], 4_000)).toBe('4s');
+    expect(liveWorkMeta([step('a', 'done'), step('b', 'failed'), step('c', 'running')], 4_000)).toBe('2/3 · 4s');
+    expect(liveWorkMeta([step('a', 'done'), step('b', 'skipped')], 125_000)).toBe('2/2 · 2m 5s');
+    expect(liveWorkMeta([step('a', 'running')], null)).toBe('0/1');
+    expect(liveWorkMeta([], null)).toBe('');
+  });
+
+  it('reads the steps the turn reads: a call the run waits on follows its card', () => {
+    const card = (patch: Record<string, unknown> = {}) =>
+      parseApproval({ approval_id: 'ap1', status: 'pending', waits: true, run_id: 'r1', tool_call_id: 'call_1', ...patch })!;
+    const known = (approval: ChatApproval): ChatApprovals => ({ byId: new Map([[approval.id, approval]]), order: [approval.id], offsetMs: 0, receivedAt: 0 });
+    const steps = [step('call_1', 'done', 'Send a WhatsApp message'), step('c2', 'done')];
+    expect(withApprovalSteps(steps, [], NO_APPROVALS)).toBe(steps);
+    const waiting = withApprovalSteps(steps, ['ap1'], known(card()));
+    expect(waiting[0]).toMatchObject({ stepId: 'call_1', state: 'running', detail: 'Waiting for your OK' });
+    expect(waiting[1]).toBe(steps[1]);
+    expect(withApprovalSteps(steps, ['ap1'], known(card({ waits: false })))).toBe(steps);
+    // Only the drafts named count.
+    expect(withApprovalSteps(steps, [], known(card()))).toBe(steps);
   });
 });

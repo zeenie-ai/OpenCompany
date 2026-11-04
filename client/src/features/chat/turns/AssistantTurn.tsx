@@ -26,7 +26,7 @@ import type { UiStateChange } from '../data/uiState';
 import { cn } from '@/lib/utils';
 import { ApprovalCard } from '../approval/ApprovalCard';
 import { ApprovalsContext } from '../approval/context';
-import { NO_APPROVALS, turnApprovalIds, waitsOnOwner, type ChatApproval } from '../data/approvals';
+import { NO_APPROVALS, turnApprovalIds, waitsOnOwner } from '../data/approvals';
 import {
   liveArtifacts,
   mergeArtifacts,
@@ -52,7 +52,7 @@ import { ArtifactCard } from './ArtifactCard';
 import { GeneratedUiBlock } from './GeneratedUiBlock';
 import { FollowUps } from './FollowUps';
 import { ReplyActions } from './ReplyActions';
-import { approvalStep, failureLines, liveLabel, liveText } from './runCopy';
+import { failureLines, liveLabel, liveText, withApprovalSteps } from './runCopy';
 import { SourceChips } from './SourceChips';
 import { StatusLine } from './StatusLine';
 import { StepsDisclosure } from './StepsDisclosure';
@@ -178,19 +178,8 @@ export function AssistantTurn({
   // A call its turn waits on: its step follows its card.
   const steps = useMemo(() => {
     if (!work) return null;
-    const byCall = new Map<string, ChatApproval>();
-    for (const id of approvals) {
-      const approval = known.byId.get(id);
-      if (approval?.waits && approval.toolCallId) byCall.set(approval.toolCallId, approval);
-    }
-    if (byCall.size === 0) return work;
-    return {
-      ...work,
-      steps: work.steps.map((step) => {
-        const approval = byCall.get(step.stepId);
-        return approval ? approvalStep(step, approval) : step;
-      }),
-    };
+    const adjusted = withApprovalSteps(work.steps, approvals, known);
+    return adjusted === work.steps ? work : { ...work, steps: adjusted };
   }, [work, approvals, known]);
   // Only under the latest answer, once it is done, not stopped, and while
   // the owner is not writing something else.

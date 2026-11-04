@@ -1,14 +1,16 @@
 /**
  * The shared chat against a fake server: it follows the session's runs
  * (subscribing while mounted), shows a message at once and the employee
- * working until the run ends, streams the answer and its steps, holds the
- * next message until then (Send is Stop, and Esc stops too), says why a run
- * failed, waits for Resume, and puts a message that did not go back in the
- * box, where it survives leaving the conversation.
+ * working until the run ends, streams the answer and its steps, says above
+ * the box what the employee is doing meanwhile, holds the next message
+ * until then (Send is Stop, and Esc stops too), says why a run failed, waits
+ * for Resume, names the day over each day's first message, and puts a
+ * message that did not go back in the box, where it survives leaving the
+ * conversation.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const sendRequest = vi.fn();
@@ -88,6 +90,15 @@ function renderPane(chat: ChatHost = host()) {
 
 function box() {
   return screen.getByRole('textbox', { name: 'Message Maya' });
+}
+
+function conversation() {
+  return screen.getByRole('log', { name: 'Conversation with Maya' });
+}
+
+/** The live work pill above the box. */
+function progress() {
+  return screen.queryByRole('region', { name: 'Maya’s progress' });
 }
 
 function type(text: string) {
@@ -251,7 +262,7 @@ describe('ChatPane', () => {
     await screen.findByText('Thinking');
     runEvents(frame(2, 'step.started', { step_id: 'c1', step_name: 'Checked Google Calendar' }));
     expect(screen.getByRole('button', { name: /Working…/ })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('Checked Google Calendar')).toBeInTheDocument();
+    expect(within(conversation()).getByText('Checked Google Calendar')).toBeInTheDocument();
     runEvents(frame(3, 'step.finished', { step_id: 'c1', state: 'done', detail: '3 events on Saturday', duration_ms: 900 }));
     expect(screen.getByText('3 events on Saturday')).toBeInTheDocument();
 
@@ -270,6 +281,59 @@ describe('ChatPane', () => {
     expect(done).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(done);
     expect(done).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('says above the box what the employee is doing while the run works', async () => {
+    server.messages = [row('m1', 'user', 'Check my calendar', { run_id: 'r1' })];
+    server.activeRuns = [
+      { run_id: 'r1', session_id: 'w1', state: 'running', seq: 1, hub_epoch: 'e1', started_at: new Date(Date.now() - 4_000).toISOString() },
+    ];
+    renderPane();
+    const pill = await screen.findByRole('region', { name: 'Maya’s progress' });
+    expect(within(pill).getByRole('status')).toHaveTextContent('Getting started');
+    expect(within(pill).getByRole('button')).toBeDisabled();
+
+    runEvents(frame(2, 'step.started', { step_id: 'c1', step_name: 'Checked Google Calendar' }));
+    expect(within(pill).getByRole('status')).toHaveTextContent('Checked Google Calendar');
+    expect(pill).toHaveTextContent(/0\/1 · \d+s/);
+    fireEvent.click(within(pill).getByRole('button'));
+    expect(within(pill).getByRole('list', { name: 'Steps' })).toHaveTextContent('Checked Google Calendar');
+
+    runEvents(frame(3, 'step.finished', { step_id: 'c1', state: 'done', detail: '3 events on Saturday', duration_ms: 900 }));
+    expect(within(pill).getByRole('status')).toHaveTextContent('Thinking');
+    expect(pill).toHaveTextContent(/1\/1 · \d+s/);
+
+    runEvents(frame(4, 'text.started', { message_id: 'r1.0.1' }), frame(5, 'text.content', { message_id: 'r1.0.1', delta: 'You have three.' }));
+    expect(within(pill).getByRole('status')).toHaveTextContent('Writing the reply');
+
+    // The turn's "Worked for" takes over once the run ends.
+    runEvents(frame(6, 'finished', { outcome: { type: 'success' }, result: { reply_message_id: 'a_r1' } }));
+    expect(progress()).not.toBeInTheDocument();
+  });
+
+  it('says what the employee is doing in the editor’s compact chat too', async () => {
+    server.messages = [row('m1', 'user', 'Hi', { run_id: 'r1' })];
+    server.activeRuns = [{ run_id: 'r1', session_id: 'w1', state: 'running', seq: 1, hub_epoch: 'e1' }];
+    renderPane(host({ kind: 'dev', compact: true }));
+    const pill = await screen.findByRole('region', { name: 'Maya’s progress' });
+    expect(within(pill).getByRole('status')).toHaveTextContent('Getting started');
+    expect(within(pill).getByRole('button')).toHaveClass('h-7');
+  });
+
+  it('names the day over the first message of each day', async () => {
+    const now = new Date();
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12).toISOString();
+    server.messages = [
+      row('m0', 'user', 'Any bookings?', { timestamp: yesterday }),
+      row('m1', 'user', 'And today?', { timestamp: now.toISOString() }),
+      row('a1', 'assistant', 'Two, at 10 and at 3.', { timestamp: now.toISOString() }),
+    ];
+    renderPane();
+    await within(conversation()).findByText('Two, at 10 and at 3.');
+    const days = within(conversation()).getAllByText(/^(Today|Yesterday)$/);
+    expect(days.map((day) => day.textContent)).toEqual(['Yesterday', 'Today']);
+    // Each over its day's first message.
+    expect(days[1].compareDocumentPosition(within(conversation()).getByText('And today?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('keeps the steps of an answer read back closed until opened', async () => {
@@ -301,7 +365,8 @@ describe('ChatPane', () => {
 
     fireEvent.keyDown(box(), { key: 'Escape' });
     await waitFor(() => expect(stopped).toEqual([{ run_id: 'r1' }]));
-    expect(await screen.findByText('Stopping…')).toBeInTheDocument();
+    expect(await within(conversation()).findByText('Stopping…')).toBeInTheDocument();
+    expect(within(progress()!).getByRole('status')).toHaveTextContent('Stopping…');
     expect(screen.getByRole('button', { name: 'Stopping' })).toBeDisabled();
     // Pressing it again changes nothing while it stops.
     fireEvent.keyDown(box(), { key: 'Escape' });
@@ -310,6 +375,7 @@ describe('ChatPane', () => {
     runEvents(frame(2, 'custom', { name: 'opencompany.stopping', value: {} }), frame(3, 'finished', { outcome: { type: 'stopped' }, result: { no_reply: true } }));
     expect(await screen.findByText('You stopped this reply.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+    expect(progress()).not.toBeInTheDocument();
   });
 
   it('says so when Stop did not reach the server', async () => {
@@ -371,6 +437,7 @@ describe('ChatPane', () => {
     expect(await screen.findByRole('button', { name: 'Resume' })).toBeEnabled();
     expect(screen.getByText('Saved partial output')).toBeInTheDocument();
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    expect(progress()).not.toBeInTheDocument();
     fireEvent.keyDown(box(), { key: 'Escape' });
     expect(sendRequest.mock.calls.filter(([kind]) => kind === 'stop_chat_run')).toHaveLength(0);
   });
@@ -424,9 +491,11 @@ describe('ChatPane', () => {
     fireEvent.keyDown(box(), { key: 'Enter' });
     expect(await screen.findByText('Waiting for you to resume Maya.')).toBeInTheDocument();
     expect(screen.queryByText('Thinking')).not.toBeInTheDocument();
+    expect(progress()).not.toBeInTheDocument();
 
     runEvents(frame(1, 'started', { kind: 'message' }));
     expect(await screen.findByText('Thinking')).toBeInTheDocument();
+    expect(progress()).toBeInTheDocument();
   });
 
   it('puts a message that did not go back in the box, and lets the host say why', async () => {
