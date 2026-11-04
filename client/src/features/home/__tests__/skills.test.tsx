@@ -126,6 +126,9 @@ describe('SkillsTab', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Create' }));
     const add = screen.getByRole('button', { name: 'Add' });
     expect(add).toBeDisabled();
+    // The form's one primary action is the invert button, not run green.
+    expect(add).toHaveAttribute('data-variant', 'invert');
+    expect(add).toHaveClass('h-7.5', 'rounded-lg', 'px-3.5', 'text-meta', 'font-semibold');
     fireEvent.change(screen.getByRole('textbox', { name: 'Skill name' }), { target: { value: 'Front desk' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'How it’s done' }), {
       target: { value: 'Greet everyone by name. Keep it short.' },

@@ -29,6 +29,16 @@ describe('reviewed delivery progress', () => {
     expect(sendRequest).not.toHaveBeenCalled();
   });
 
+  it('offers both outcomes as neutral outlines', () => {
+    show();
+    for (const name of ['It arrived', 'It did not arrive; retry']) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('data-variant', 'quiet');
+      expect(button).toHaveClass('border-border-default', 'text-fg-default');
+      expect(button.className).not.toMatch(/action-/);
+    }
+  });
+
   it('confirms arrival using only the saved job identity', async () => {
     sendRequest.mockResolvedValue({ success: true, message: 'Delivery confirmed.' });
     show();

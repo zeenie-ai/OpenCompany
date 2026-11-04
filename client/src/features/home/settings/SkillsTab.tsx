@@ -7,7 +7,6 @@
  */
 
 import { useMemo, useState } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -68,9 +67,9 @@ function CreateSkillForm({ close, onCreate }: { close: () => void; onCreate: (ti
         <Button variant="quiet" size="sm" onClick={close}>
           Cancel
         </Button>
-        <ActionButton intent="run" disabled={!ready} onClick={() => void submit()} className="h-7.5 rounded-lg px-3.5 text-meta">
+        <Button variant="invert" disabled={!ready} onClick={() => void submit()} className="h-7.5 rounded-lg px-3.5 text-meta font-semibold">
           {saving ? 'Adding…' : 'Add'}
-        </ActionButton>
+        </Button>
       </div>
     </>
   );

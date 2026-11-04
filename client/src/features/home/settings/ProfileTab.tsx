@@ -8,7 +8,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
@@ -195,7 +194,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
             name="memory_across_chats"
             render={({ field }) => (
               <SettingRow title="Memory across chats" detail="Agents remember what you share and reuse it later.">
-                <Switch size="md" tone="run" aria-label="Memory across chats" checked={field.value} onCheckedChange={field.onChange} />
+                <Switch size="md" tone="ink" aria-label="Memory across chats" checked={field.value} onCheckedChange={field.onChange} />
               </SettingRow>
             )}
           />
@@ -206,7 +205,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
               <SettingRow title="Keep everything on this computer" detail="Use AI that runs on this computer whenever possible." last>
                 <Switch
                   size="md"
-                  tone="run"
+                  tone="ink"
                   aria-label="Keep everything on this computer"
                   checked={field.value}
                   onCheckedChange={field.onChange}
@@ -220,9 +219,9 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
           <Button type="button" variant="quiet" className="h-8.5 border-border-default px-3.5 font-semibold text-fg-default" onClick={onDone}>
             Cancel
           </Button>
-          <ActionButton ref={saveRef} type="submit" intent="run" disabled={isPending} className="h-8.5 px-4">
+          <Button ref={saveRef} type="submit" variant="invert" disabled={isPending} className="h-8.5 px-4 font-semibold">
             {isPending ? 'Saving…' : saved ? 'Saved' : 'Save changes'}
-          </ActionButton>
+          </Button>
         </div>
       </form>
     </Form>

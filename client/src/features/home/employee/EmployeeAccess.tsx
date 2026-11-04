@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import { pillToast } from '../ui/pillToast';
 
 interface Access { id: string; app: string; action?: string; approved: boolean; revoked: boolean; parent_grant_id?: string | null; scope_apps?: string[]; account_id?: string }
+
+/** The access choices are neutral outlines: colour marks a state or a role,
+ *  not a decision. */
+const DECIDE_BUTTON = 'rounded-md border-border-default px-3.5 font-semibold text-fg-default';
 
 export function EmployeeAccess({ workflowId, name, pendingOnly = false }: { workflowId: string; name: string; pendingOnly?: boolean }) {
   const { sendRequest } = useWebSocketActions();
@@ -30,8 +34,8 @@ export function EmployeeAccess({ workflowId, name, pendingOnly = false }: { work
         {row.scope_apps?.length ? <p className="mb-0 mt-1 text-sm text-fg-muted">Includes {row.scope_apps.join(', ')} for {row.action || 'their assigned work'}.</p> : null}
         {row.account_id && <p className="mb-0 mt-1 text-sm text-fg-muted">Account: {row.account_id}</p>}
       </div>
-      {(!row.approved || row.revoked) && <ActionButton intent="config" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: true })}>{row.revoked ? 'Allow again' : 'Allow'}</ActionButton>}
-      {!row.revoked && <ActionButton intent="config" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: false })}>{row.approved ? 'Remove access' : 'Not now'}</ActionButton>}
+      {(!row.approved || row.revoked) && <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: true })} className={DECIDE_BUTTON}>{row.revoked ? 'Allow again' : 'Allow'}</Button>}
+      {!row.revoked && <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: false })} className={DECIDE_BUTTON}>{row.approved ? 'Remove access' : 'Not now'}</Button>}
     </div>)}
   </div>;
 }

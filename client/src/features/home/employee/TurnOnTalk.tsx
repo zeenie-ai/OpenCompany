@@ -2,11 +2,13 @@
  * An employee with no talk line yet that can be given one (talk `off`:
  * hired before Talk, or built in Dev mode). "Turn on Talk" adds the line
  * after current work finishes. Existing conversations and approvals remain.
+ * It is the card's one primary action (the message box is closed while Talk
+ * is off), so it is the invert button.
  */
 
 import { MessageSquare } from 'lucide-react';
 import { useState } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,9 +60,9 @@ export function TurnOnTalk({ employee }: { employee: EmployeeSummary }) {
       <MessageSquare aria-hidden className="size-5 text-fg-faint" strokeWidth={1.75} />
       <p className="m-0 text-md font-medium text-fg-default">Talk with {name}</p>
       <p className="m-0 max-w-100 text-sm text-fg-muted">Turn on Talk to send {name} messages and get answers right here.</p>
-      <ActionButton intent="config" disabled={enable.isPending} onClick={() => setConfirming(true)} className="h-9 rounded-row px-4">
+      <Button variant="invert" disabled={enable.isPending} onClick={() => setConfirming(true)} className="h-9 rounded-row px-4 font-semibold">
         {enable.isPending ? 'Turning on…' : 'Turn on Talk'}
-      </ActionButton>
+      </Button>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>

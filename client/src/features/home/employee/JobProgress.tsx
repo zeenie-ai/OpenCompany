@@ -1,9 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import { refreshEmployee } from '../data/employees';
 import type { EmployeeSummary } from '../data/schemas';
+
+/** The delivery choices are neutral outlines: colour marks a state or a
+ *  role, not a decision. */
+const DECIDE_BUTTON = 'rounded-md border-border-default px-3.5 font-semibold text-fg-default';
 
 export function JobProgress({ employee }: { employee: EmployeeSummary }) {
   const { sendRequest } = useWebSocketActions();
@@ -27,8 +31,8 @@ export function JobProgress({ employee }: { employee: EmployeeSummary }) {
   return <div className="flex flex-col gap-3 rounded-card border border-border-default bg-bg-panel p-4">
     <p role="status" className="m-0 text-sm text-fg-muted">{resolve.isSuccess ? resolve.data?.message || 'Your delivery decision is saved.' : progress.message}</p>
     {needsReview && !resolve.isSuccess && <div className="flex flex-wrap gap-2">
-      <ActionButton intent="config" disabled={resolve.isPending} onClick={() => resolve.mutate('arrived')}>It arrived</ActionButton>
-      <ActionButton intent="config" disabled={resolve.isPending} onClick={() => resolve.mutate('retry')}>It did not arrive; retry</ActionButton>
+      <Button variant="quiet" disabled={resolve.isPending} onClick={() => resolve.mutate('arrived')} className={DECIDE_BUTTON}>It arrived</Button>
+      <Button variant="quiet" disabled={resolve.isPending} onClick={() => resolve.mutate('retry')} className={DECIDE_BUTTON}>It did not arrive; retry</Button>
     </div>}
     {resolve.isError && <p role="alert" className="m-0 text-sm">{resolve.error.message}</p>}
   </div>;

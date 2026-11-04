@@ -57,6 +57,22 @@ describe('employee app access', () => {
     expect(screen.queryByRole('button', { name: 'Not now' })).not.toBeInTheDocument();
   });
 
+  it('offers every choice as a neutral outline', async () => {
+    sendRequest.mockResolvedValue({ success: true, access: [
+      { id: 'asked', app: 'Calendar', approved: false, revoked: false },
+      { id: 'allowed', app: 'Email', approved: true, revoked: false },
+      { id: 'removed', app: 'Drive', approved: false, revoked: true },
+    ] });
+    show();
+    await screen.findByText('Maya’s team no longer has access to Drive.');
+    for (const name of ['Allow', 'Not now', 'Remove access', 'Allow again']) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('data-variant', 'quiet');
+      expect(button).toHaveClass('border-border-default', 'text-fg-default');
+      expect(button.className).not.toMatch(/action-/);
+    }
+  });
+
   it('shows a specialist permission once with its scoped apps', async () => {
     sendRequest.mockResolvedValue({ success: true, access: [
       { id: 'team', app: 'Research help', action: 'research evidence', approved: false, revoked: false, scope_apps: ['Web search', 'Calendar'] },

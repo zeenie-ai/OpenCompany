@@ -5,11 +5,15 @@
  * conversation; Apply makes them available to later work.
  */
 
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import type { EmployeeSummary } from '../data/schemas';
 import { useApplyChanges, useStopAndApply } from '../data/talk';
 import { SPIKE, spikeOrb } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
+
+/** Both buttons are neutral outlines, as Pause is: colour marks a state or a
+ *  role, and green `run` means Start. */
+const APPLY_BUTTON = 'h-9 rounded-row border-border-strong px-4 font-semibold text-fg-default';
 
 function applyErrorMessage(code: string, name: string): string {
   switch (code) {
@@ -44,14 +48,14 @@ export function PendingChangesNotice({ employee }: { employee: EmployeeSummary }
       <p className="m-0 min-w-60 flex-1 text-sm text-fg-default">
         {name} has new abilities saved. Apply them after current work finishes. Their conversations and pending approvals stay in place.
       </p>
-      <ActionButton intent="config" disabled={apply.isPending} onClick={onApply} className="h-9 rounded-row px-4">
+      <Button variant="quiet" disabled={apply.isPending} onClick={onApply} className={APPLY_BUTTON}>
         {apply.isPending ? 'Applying…' : 'Apply'}
-      </ActionButton>
-      {(employee.pending_approvals > 0 || employee.job_progress) && <ActionButton intent="config" disabled={apply.isPending || interrupt.isPending}
+      </Button>
+      {(employee.pending_approvals > 0 || employee.job_progress) && <Button variant="quiet" disabled={apply.isPending || interrupt.isPending}
         onClick={() => interrupt.mutate(employee.workflow_id, { onSuccess: () => { pillToast('Stopping current work and applying the saved abilities.'); spikeOrb(SPIKE.apply); },
-          onError: () => pillToast('The change could not finish. Your saved abilities are still here.', { tone: 'error' }) })} className="h-9 rounded-row px-4">
+          onError: () => pillToast('The change could not finish. Your saved abilities are still here.', { tone: 'error' }) })} className={APPLY_BUTTON}>
         {interrupt.isPending ? 'Stopping…' : 'Stop work and apply'}
-      </ActionButton>}
+      </Button>}
     </div>
   );
 }

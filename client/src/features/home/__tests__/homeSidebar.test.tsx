@@ -80,6 +80,15 @@ describe('HomeSidebar employee deletion', () => {
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'b' });
   });
 
+  it('shows the delete button in neutral colours, revealed on hover or focus', () => {
+    mountSidebar();
+    const button = screen.getByRole('button', { name: 'Delete Maya' });
+    // Not the stop tint: the dialog's Delete is the destructive step.
+    expect(button).toHaveClass('text-fg-faint', 'hover:bg-bg-hover', 'hover:text-fg-default');
+    expect(button.className).not.toMatch(/action-/);
+    expect(button).toHaveClass('[@media(hover:hover)]:opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
+  });
+
   it('deletes the selected employee through the store and returns to hiring without creating a replacement', async () => {
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'a' }, workspaceFor: 'a' });
     mountSidebar();

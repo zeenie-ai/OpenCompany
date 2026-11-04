@@ -130,6 +130,8 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
           </span>
         )}
       </button>
+      {/* Neutral, not the stop tint: the dialog's Delete is the
+          destructive step. */}
       <Button
         variant="quiet"
         size="icon-sm"
@@ -137,7 +139,7 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
         title={`Delete ${employee.name}`}
         disabled={deleting}
         onClick={() => setConfirming(true)}
-        className="mr-1 size-7.5 shrink-0 text-action-stop-ink opacity-100 transition-opacity hover:bg-action-stop-soft group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0"
+        className="mr-1 size-7.5 shrink-0 text-fg-faint opacity-100 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0"
       >
         <X aria-hidden className="size-3.75" />
       </Button>
