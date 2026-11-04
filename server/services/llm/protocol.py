@@ -864,15 +864,24 @@ def _thinking_signature_diagnostic(provider: str, status: Optional[int], body: M
 _OPENROUTER_LIMIT_TEXT = {
     "openrouter_credits": (
         "Your OpenRouter credits cannot cover this request.",
-        "Add OpenRouter credits, or set a lower Max Tokens so OpenRouter reserves less for the request, then resume.",
+        "Add OpenRouter credits, or make the request smaller with a lower Max Tokens or less context, then resume.",
     ),
     "openrouter_request_over_budget": (
         "This request alone is larger than what OpenRouter lets your account spend at once.",
-        "Set a lower Max Tokens, or add OpenRouter credits, then resume. Repeating the request will not fix it.",
+        "Make the request smaller with a lower Max Tokens or less context, or add OpenRouter credits, then resume. "
+        "Repeating the request will not fix it.",
     ),
     "openrouter_key_limit": (
         "This OpenRouter API key has reached its credit limit.",
         "Raise the key's credit limit on OpenRouter, or connect another key in Settings > Connectors, then resume.",
+    ),
+    "openrouter_guardrail_budget": (
+        "An OpenRouter guardrail budget for this key is used up.",
+        "Wait for the budget to reset, or ask your OpenRouter organization admin to raise it, then resume.",
+    ),
+    "openrouter_workspace_budget": (
+        "Your OpenRouter workspace budget is used up.",
+        "Wait for the budget to reset, or ask your OpenRouter organization admin to raise it, then resume.",
     ),
 }
 
@@ -888,9 +897,11 @@ def _openrouter_limit(body: Mapping[str, Any]) -> Optional[str]:
     if not isinstance(metadata, Mapping):
         return None
     source = metadata.get("limit_source")
+    if not isinstance(source, str):
+        return None
     if source == "openrouter_credits" and metadata.get("reason") == "weight_exceeds_budget":
         return "openrouter_request_over_budget"
-    if source in ("openrouter_credits", "openrouter_key_limit", "openrouter_in_flight_budget"):
+    if source == "openrouter_in_flight_budget" or source in _OPENROUTER_LIMIT_TEXT:
         return source
     return None
 

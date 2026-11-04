@@ -246,6 +246,7 @@
       "detection_patterns": ["openrouter"],
       "open_world_models": true,
       "omit_default_max_tokens": true,
+      "_omit_default_max_tokens_note": "A sent max_tokens routes only to endpoints that support that length and is held as credit before the request runs (openrouter.ai/docs/api-reference/limits), so an empty Max Tokens sends none.",
       "base_url": "https://openrouter.ai/api/v1",
       "models_endpoint": "https://openrouter.ai/api/v1/models",
       "api_key_param": "api_key",

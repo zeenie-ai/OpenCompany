@@ -78,6 +78,8 @@ def test_openrouter_in_flight_budget_waits_and_retries():
      "openrouter_request_over_budget", "larger than", "lower Max Tokens"),
     (402, {"limit_source": "openrouter_key_limit"}, "openrouter_key_limit", "credit limit", "Raise the key's credit limit"),
     (403, {"limit_source": "openrouter_key_limit"}, "openrouter_key_limit", "credit limit", "Raise the key's credit limit"),
+    (403, {"limit_source": "openrouter_guardrail_budget"}, "openrouter_guardrail_budget", "guardrail budget", "organization admin"),
+    (403, {"limit_source": "openrouter_workspace_budget"}, "openrouter_workspace_budget", "workspace budget", "organization admin"),
 ])
 def test_openrouter_spending_refusal_names_its_limit(status, metadata, code, cause, remedy):
     error = openrouter_refusal(status, metadata)

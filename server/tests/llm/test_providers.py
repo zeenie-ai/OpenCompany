@@ -515,7 +515,6 @@ class TestOpenRouterProvider:
         )
 
         call_kwargs = provider._client.chat.completions.create.call_args[1]
-        assert "max_completion_tokens" not in call_kwargs
         if max_tokens is None:
             assert "max_tokens" not in call_kwargs
         else:

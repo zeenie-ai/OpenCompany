@@ -210,6 +210,50 @@ class TestWorkflowLoopContract:
         assert policy.maximum_interval == timedelta(minutes=5)
 
     @pytest.mark.asyncio
+    async def test_no_max_tokens_reaches_the_llm_step_as_none(
+        self,
+        monkeypatch,
+        patched_workflow,
+    ):
+        # What resolve_max_tokens prepares for OpenRouter with Max Tokens
+        # empty; a 4096 fallback here would cap every such agent at 4096.
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        llm_payloads: list[dict] = []
+
+        async def fake_execute_activity(name, *, args, **kwargs):
+            if name == "agent.prepare_payload":
+                return {**_payload(), "max_tokens": None}
+            if name == "agent.broadcast_progress":
+                return {"emitted": True}
+            if name == "agent.execute_llm_step":
+                llm_payloads.append(args[0])
+                return {
+                    "kind": "final",
+                    "content": "done",
+                    "thinking": None,
+                    "usage": {"input_tokens": 3, "output_tokens": 1},
+                }
+            if name == "agent.store_output":
+                return {"stored": True}
+            if name == "agent.skill.clear":
+                return {"cleared": True}
+            raise AssertionError(f"Unexpected activity {name}")
+
+        monkeypatch.setattr(
+            patched_workflow,
+            "execute_activity",
+            fake_execute_activity,
+        )
+
+        result = await AgentWorkflow().run(
+            {"node_id": "agent-1", "execution_id": "root-run-1"}
+        )
+
+        assert result["success"] is True
+        assert llm_payloads[0]["max_tokens"] is None
+
+    @pytest.mark.asyncio
     async def test_compaction_failure_is_terminal_for_the_run(
         self,
         monkeypatch,
@@ -624,6 +668,33 @@ class TestLlmStepActivity:
         assert kwargs["sdk_max_retries"] == 0
         assert kwargs["translate_errors"] is False
         assert kwargs["tools"][0].name == "write_todos"
+
+    @pytest.mark.asyncio
+    async def test_step_passes_no_max_tokens_through_as_none(self, monkeypatch):
+        import core.container as container_module
+        import services.agent_runtime as runtime_module
+        from services.llm.protocol import LLMResponse, Message, Usage, message_to_wire
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
+        run_step = AsyncMock(
+            return_value=LLMResponse(content="done", usage=Usage(input_tokens=1, output_tokens=1))
+        )
+        monkeypatch.setattr(runtime_module, "run_native_llm_step", run_step)
+
+        await _execute_native_llm_step(
+            {
+                "provider": "openrouter",
+                "model": "moonshotai/kimi-k3",
+                "api_key": "secret",
+                "messages": [message_to_wire(Message(role="user", content="go"))],
+                "tools": [],
+                "temperature": 0,
+                "max_tokens": None,
+            }
+        )
+
+        assert run_step.await_args.kwargs["max_tokens"] is None
 
 
 # 1b.25: an attempt gets the timeout agent.prepare_payload recorded for its
