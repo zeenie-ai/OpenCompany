@@ -4,6 +4,7 @@ from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 from temporalio.testing import ActivityEnvironment
 from temporalio.worker import ExecuteActivityInput
 
@@ -89,3 +90,25 @@ async def test_the_retry_log_is_quiet_between_its_warnings(store):
     await _attempt("node.httpRequest.v1", 3)
     await _attempt("agent.acquire_subagent_permit", 2)
     _interceptors.logger.warning.assert_not_called()
+
+
+async def test_a_benign_failure_ends_at_debug_and_keeps_the_retry_alert(store):
+    # RFC-0006 §9.2 rec 4: a planned retry (a retryable LLM error, 1b.28) is no failure.
+    benign = ApplicationError("rate limited", category=ApplicationErrorCategory.BENIGN)
+    with pytest.raises(ApplicationError):
+        await _attempt("agent.execute_llm_step", 10, benign)
+    extra = {"activity_name": "agent.execute_llm_step", "activity_id": "act-1", "workflow_id": "wf", "attempt": 10}
+    _interceptors.logger.debug.assert_called_once_with("activity_end", outcome="failure", error="ApplicationError", **extra)
+    _interceptors.logger.warning.assert_called_once_with("activity_retry", limit=8, **extra)
+    store.touch.assert_awaited_once_with("stuck_retry", "wf:act-1")
+    store.resolve.assert_not_awaited()
+
+
+@pytest.mark.parametrize("failure", [ApplicationError("bad request", non_retryable=True), RuntimeError("boom")])
+async def test_any_other_failure_still_warns(store, failure):
+    with pytest.raises(type(failure)):
+        await _attempt("agent.execute_llm_step", 1, failure)
+    _interceptors.logger.warning.assert_called_once_with(
+        "activity_end", outcome="failure", error=type(failure).__name__,
+        activity_name="agent.execute_llm_step", activity_id="act-1", workflow_id="wf", attempt=1,
+    )

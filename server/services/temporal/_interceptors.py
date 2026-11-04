@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Any, Optional, Type
 
 from temporalio import activity, workflow
+from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 from temporalio.worker import (
     ActivityInboundInterceptor,
     ExecuteActivityInput,
@@ -103,7 +104,11 @@ class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
             async with log_context(**bound):
                 result = await self.next.execute_activity(input)
         except Exception as exc:
-            logger.warning(
+            # A BENIGN error is a planned retry, such as a retryable LLM error:
+            # DEBUG, as the SDK logs it. The retry alert above still counts it.
+            benign = isinstance(exc, ApplicationError) and exc.category == ApplicationErrorCategory.BENIGN
+            log = logger.debug if benign else logger.warning
+            log(
                 "activity_end",
                 outcome="failure",
                 error=type(exc).__name__,
