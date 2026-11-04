@@ -138,6 +138,7 @@ describe('adding files', () => {
     expect(boxState()).toEqual([{ name: 'prices.txt', size: 3, mime: 'text/plain', state: 'ready', ref: ref('prices.txt'), error: null }]);
     expect(upload).toHaveBeenCalledWith(expect.any(File), 'w1');
     expect(screen.getByRole('button', { name: 'Remove prices.txt' })).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Attached files' })).getByText('TXT')).toHaveClass('border-border-default', 'bg-bg-active', 'text-fg-muted');
   });
 
   it('sends files alone, as paths, once they have uploaded', async () => {
@@ -166,7 +167,18 @@ describe('adding files', () => {
     const files = await screen.findByRole('list', { name: 'Attached files' });
     expect(within(files).getByRole('img', { name: 'shelf.png' })).toHaveAttribute('src', expect.stringContaining('/api/workspace/w1/files/uploads/shelf.png'));
     expect(within(files).getByText('prices.txt')).toBeInTheDocument();
+    expect(within(files).getByText('TXT')).toHaveClass('border-border-default', 'bg-bg-active', 'text-fg-muted');
     expect(document.querySelector('.chat-msg-user')).toBeNull();
+  });
+
+  it('frames a drop in the focus colour', async () => {
+    renderPane();
+    await screen.findByRole('button', { name: 'Attach files' });
+    fireEvent.dragEnter(screen.getByRole('region', { name: 'Chat with Maya' }), { dataTransfer: { files: [], types: ['Files'] } });
+    const frame = screen.getByText('Drop files for Maya').closest('.border-dashed');
+    expect(frame).toHaveClass('border-border-focus');
+    expect(frame?.className).not.toMatch(/action-tools/);
+    expect(frame?.querySelector('svg')).toHaveClass('text-border-focus');
   });
 });
 
@@ -176,6 +188,8 @@ describe('commands, Web and suggestions', () => {
     await screen.findByPlaceholderText(/Type \/ for commands/);
     fireEvent.change(box(), { target: { value: '/' } });
     const list = await screen.findByRole('listbox', { name: 'Commands' });
+    // Headed like the model picker's panel (cmdk's own label names the list).
+    expect(list.closest('[cmdk-root]')).toContainElement(screen.getByText('Commands', { selector: '[aria-hidden="true"]' }));
     expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual([
       '/scheduleCheck a day in the calendar',
       '/summarizeSummarize this conversation',
@@ -184,6 +198,10 @@ describe('commands, Web and suggestions', () => {
     // The box controls the list and names the highlighted command.
     expect(box()).toHaveAttribute('aria-controls', list.id);
     expect(box()).toHaveAttribute('aria-activedescendant', within(list).getAllByRole('option')[1].id);
+    // Enter's mark shows on the highlighted command only, by cmdk's data-selected.
+    const highlighted = within(list).getByRole('option', { selected: true });
+    expect(highlighted).toBe(within(list).getAllByRole('option')[1]);
+    expect(highlighted.querySelector('svg')).toHaveClass('hidden', 'group-data-[selected=true]/cmd:block');
     fireEvent.keyDown(box(), { key: 'Enter' });
     expect(box()).toHaveValue('Summarize what we’ve agreed so far.');
     expect(box()).not.toHaveAttribute('aria-activedescendant');
@@ -287,6 +305,7 @@ describe('dictation', () => {
     renderPane();
     fireEvent.click(await screen.findByRole('button', { name: 'Dictate' }));
     expect(await screen.findByLabelText('Recording time')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use dictation' })).toHaveAttribute('data-variant', 'invert');
     fireEvent.click(screen.getByRole('button', { name: 'Use dictation' }));
     await waitFor(() => expect(box()).toHaveValue('Please Send reminders for tomorrow'));
     expect(stop).toHaveBeenCalled();

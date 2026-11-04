@@ -40,7 +40,7 @@ export function AttachmentChips({ items, onRemove }: { items: readonly BoxAttach
                 item.state === 'failed' ? 'border-action-stop-border' : 'border-border-default',
               )}
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-md bg-action-config-soft font-mono text-2xs font-semibold text-action-config-ink">
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border-default bg-bg-active font-mono text-2xs font-semibold text-fg-muted">
                 {extensionLabel(item.name)}
               </span>
               <span className="flex min-w-0 flex-col">

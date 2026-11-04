@@ -1,16 +1,19 @@
 /**
  * Slash commands (design handoff chat, "Composer": `/`). A draft that is a
  * single word starting with `/` opens a list of the commands it begins,
- * above the message box; ArrowUp and ArrowDown move, Enter or Tab puts the
- * command's text in the box, Esc closes it (until the draft changes). Focus
- * stays in the box: the list is the popup it controls (`aria-controls`), and
- * the highlighted option is its `aria-activedescendant`. cmdk names its list
- * and options itself, so both ids are read from the list once it has drawn.
- * The list is placed against the box through a ref (`anchorRef`): it has no
- * button of its own that could claim the anchor, and the box itself may be
- * the model picker's anchor (composer/ModelPicker.tsx).
+ * above the message box and as wide as it: each command on one row with what
+ * it does, and Enter's mark on the highlighted one. ArrowUp and ArrowDown
+ * move, Enter or Tab puts the command's text in the box, Esc closes it
+ * (until the draft changes). Focus stays in the box: the list is the popup
+ * it controls (`aria-controls`), and the highlighted option is its
+ * `aria-activedescendant`. cmdk names its list and options itself, so both
+ * ids are read from the list once it has drawn. The list is placed against
+ * the box through a ref (`anchorRef`): it has no button of its own that
+ * could claim the anchor, and the box itself may be the model picker's
+ * anchor (composer/ModelPicker.tsx).
  */
 
+import { CornerDownLeft } from 'lucide-react';
 import { useLayoutEffect, type RefObject } from 'react';
 import { Command, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
@@ -65,9 +68,12 @@ export function SlashMenu({
         sideOffset={8}
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
-        className="w-(--radix-popover-trigger-width) max-w-105 p-1"
+        className="w-(--radix-popover-trigger-width) rounded-card border border-border-default bg-bg-elevated p-1.5 shadow-card-hover ring-0"
       >
-        <Command id={listId} shouldFilter={false} value={selected} label="Commands">
+        <Command id={listId} shouldFilter={false} value={selected} label="Commands" className="bg-transparent">
+          <div aria-hidden className="px-2.5 pt-1.5 pb-1 font-mono text-2xs font-medium tracking-label text-fg-faint uppercase">
+            Commands
+          </div>
           <CommandList label="Commands">
             {items.map((item, index) => (
               <CommandItem
@@ -75,10 +81,11 @@ export function SlashMenu({
                 value={item.command}
                 onSelect={() => onPick(item)}
                 onMouseEnter={() => onActive(index)}
-                className="flex-col items-start gap-0.5"
+                className="group/cmd h-10 gap-3 px-2.5"
               >
-                <span className="font-mono text-sm font-medium text-fg-default">{item.command}</span>
-                {item.description && <span className="text-xs text-fg-muted">{item.description}</span>}
+                <span className="min-w-23 shrink-0 font-mono text-sm font-semibold text-fg-default">{item.command}</span>
+                {item.description && <span className="min-w-0 truncate text-sm text-fg-muted">{item.description}</span>}
+                <CornerDownLeft aria-hidden className="ml-auto hidden size-3 text-fg-faint group-data-[selected=true]/cmd:block" />
               </CommandItem>
             ))}
           </CommandList>

@@ -12,10 +12,10 @@ export function DropOverlay({ name }: { name: string }) {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-2.5 z-20 grid place-items-center rounded-xl border-2 border-dashed border-action-tools-border bg-bg-scrim-soft backdrop-blur-(--blur-scrim)"
+      className="pointer-events-none absolute inset-2.5 z-20 grid place-items-center rounded-xl border-2 border-dashed border-border-focus bg-bg-scrim-soft backdrop-blur-(--blur-scrim)"
     >
       <div className="flex flex-col items-center gap-2 text-center">
-        <Upload aria-hidden className="size-7 text-action-tools-ink" strokeWidth={1.75} />
+        <Upload aria-hidden className="size-7 text-border-focus" strokeWidth={1.75} />
         <span className="text-md font-semibold text-fg-default">Drop files for {name}</span>
         <span className="text-sm text-fg-muted">Documents, photos and spreadsheets, up to {MAX_ATTACHMENTS} at a time</span>
       </div>

@@ -89,6 +89,13 @@ describe('the document card', () => {
     expect(screen.getByRole('button', { name: 'Open Weekly report' })).toBeDisabled();
     expect(screen.getByText('Code')).toBeInTheDocument();
   });
+
+  it('draws its tile neutral, in no action’s colour', () => {
+    render(<ArtifactCard artifact={ref(1)} onOpen={vi.fn()} />);
+    const tile = screen.getByRole('button', { name: 'Open Weekly report' }).querySelector('[aria-hidden]');
+    expect(tile).toHaveClass('border-border-default', 'bg-bg-active', 'text-fg-muted');
+    expect(tile?.className).not.toMatch(/action-tools|node-agent/);
+  });
 });
 
 describe('a document in a streaming reply', () => {

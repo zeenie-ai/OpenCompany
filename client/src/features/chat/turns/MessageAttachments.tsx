@@ -29,7 +29,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly unkn
                 download={ref.filename}
                 className="flex h-12 max-w-55 items-center gap-2.5 rounded-xl border border-border-default bg-bg-panel py-0 pr-3.5 pl-2 text-fg-default no-underline hover:bg-bg-hover"
               >
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-action-config-soft font-mono text-2xs font-semibold text-action-config-ink">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-border-default bg-bg-active font-mono text-2xs font-semibold text-fg-muted">
                   {extensionLabel(ref.filename)}
                 </span>
                 <span className="flex min-w-0 flex-col">

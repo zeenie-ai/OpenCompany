@@ -175,13 +175,13 @@ export function VoiceRecorder({
         <X aria-hidden className="size-3.75" strokeWidth={2.2} />
       </Button>
       <Button
-        variant="quiet"
+        variant="invert"
         size="icon"
         disabled={busy}
         onClick={() => finish.current(true)}
         aria-label="Use dictation"
         title="Use dictation"
-        className="shrink-0 rounded-full bg-action-run-soft text-action-run-ink hover:bg-action-run-hover"
+        className="shrink-0 rounded-full"
       >
         <Check aria-hidden className="size-3.75" strokeWidth={2.4} />
       </Button>

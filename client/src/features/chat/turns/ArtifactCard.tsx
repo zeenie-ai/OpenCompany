@@ -24,7 +24,7 @@ export function ArtifactCard({ artifact, onOpen }: { artifact: ArtifactRef; onOp
         onOpen && 'hover:-translate-y-px hover:border-border-strong hover:shadow-card-hover motion-reduce:hover:translate-y-0',
       )}
     >
-      <span aria-hidden className="grid size-9.5 flex-none place-items-center rounded-lg border border-node-agent-border bg-action-tools-soft text-action-tools-ink">
+      <span aria-hidden className="grid size-9.5 flex-none place-items-center rounded-lg border border-border-default bg-bg-active text-fg-muted">
         <FileText className="size-4.25" strokeWidth={1.8} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-px">
