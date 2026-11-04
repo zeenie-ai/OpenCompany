@@ -14,14 +14,16 @@ from services.llm.protocol import LLMResponse, Usage
 
 
 @pytest.fixture
-def ai_service():
+def ai_service(monkeypatch):
     """Create an AIService with a mock chat_unifier injected.
 
     Stubs the cross-cutting modules that ``services.ai`` imports at the
     top level so test collection doesn't need a real DI container.
+    The stubs go in through ``monkeypatch``, which puts ``sys.modules``
+    and ``core.config.Settings`` back after each test, so later tests in
+    the same process import the real modules.
     """
     import sys
-    from unittest.mock import MagicMock as MM
 
     _stubs = [
         "core.config",
@@ -35,9 +37,9 @@ def ai_service():
     ]
     for mod in _stubs:
         if mod not in sys.modules:
-            sys.modules[mod] = MM()
+            monkeypatch.setitem(sys.modules, mod, MagicMock())
 
-    sys.modules["core.config"].Settings = MagicMock
+    monkeypatch.setattr(sys.modules["core.config"], "Settings", MagicMock)
 
     from services.ai import AIService
 
