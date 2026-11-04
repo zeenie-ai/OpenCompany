@@ -1,7 +1,8 @@
 /**
  * The primitive extensions Normal mode builds on: Modal (single close,
- * header-less, spring entrance), Switch (md size, run tone), Textarea (bare),
- * Button (invert, chip, pill), ToggleGroup.
+ * header-less, spring entrance), Switch (md size, run and ink tones),
+ * Textarea (bare), Button (invert, chip, pill), ToggleGroup (segmented, and
+ * chips with a neutral picked state).
  */
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -87,6 +88,22 @@ describe('Switch', () => {
     expect(thumb.className).not.toContain('dark:data-checked:bg-primary-foreground');
   });
 
+  it('ink tone: the foreground colour as the track and the app background as the knob', () => {
+    render(<Switch size="md" tone="ink" aria-label="Remind" defaultChecked />);
+    const root = screen.getByRole('switch', { name: 'Remind' });
+    expect(root.className).toContain('data-checked:bg-fg-default');
+    expect(root.className).toContain('data-checked:border-fg-default');
+    // Off reads as the run tone's off.
+    expect(root.className).toContain('data-unchecked:border-border-strong');
+    expect(root.className).toContain('data-unchecked:bg-border-default');
+    expect(root.className).not.toContain('action-run');
+    expect(root.className).not.toContain('bg-primary');
+    const thumb = root.querySelector('[data-slot="switch-thumb"]')!;
+    expect(thumb.className).toContain('data-checked:bg-bg-app');
+    expect(thumb.className).toContain('data-unchecked:bg-fg-muted');
+    expect(thumb.className).not.toContain('action-run');
+  });
+
   it('toggles', () => {
     const onCheckedChange = vi.fn();
     render(<Switch aria-label="Local" onCheckedChange={onCheckedChange} />);
@@ -170,5 +187,25 @@ describe('ToggleGroup', () => {
     for (const item of screen.getAllByRole('radio')) {
       expect(item).toHaveAttribute('data-variant', 'segmented');
     }
+  });
+
+  it('chips: a picked item is neutral, and a status tint in className replaces it', () => {
+    render(
+      <ToggleGroup type="single" variant="chips" aria-label="Show" defaultValue="all">
+        <ToggleGroupItem value="all">All</ToggleGroupItem>
+        <ToggleGroupItem value="web" className="data-[state=on]:bg-action-save-soft">
+          Web
+        </ToggleGroupItem>
+      </ToggleGroup>,
+    );
+    const picked = screen.getByRole('radio', { name: 'All' });
+    expect(picked).toHaveAttribute('data-state', 'on');
+    expect(picked.className).toContain('data-[state=on]:border-border-strong');
+    expect(picked.className).toContain('data-[state=on]:bg-bg-active');
+    expect(picked.className).toContain('data-[state=on]:text-fg-default');
+    expect(picked.className).not.toContain('node-agent');
+    const tinted = screen.getByRole('radio', { name: 'Web' });
+    expect(tinted.className).toContain('data-[state=on]:bg-action-save-soft');
+    expect(tinted.className).not.toContain('data-[state=on]:bg-bg-active');
   });
 });

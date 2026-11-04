@@ -13,8 +13,10 @@ import { Sounds } from "@/lib/sound"
  * - `default`: quiet text button; pressed reads as a raised surface.
  * - `segmented`: an item inside a ToggleGroup track (the gen-UI Choice and
  *   the Normal/Dev switch). The track itself is drawn by ToggleGroup.
- * - `chips`: a bordered pill (category filters); pressed takes the agent
- *   role's soft tint. Callers may pass a different role tint in className.
+ * - `chips`: a bordered pill (category filters, the gen-UI Select); pressed
+ *   reads as a picked surface with a stronger border, since colour marks
+ *   only state or role (chat V2 colour pass, 4 Nov). Callers may pass a
+ *   status tint in className, as the composer's Web and Ask first chips do.
  */
 const toggleVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-1.5 border border-transparent font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3",
@@ -26,7 +28,7 @@ const toggleVariants = cva(
         segmented:
           "rounded-[calc(var(--radius-row)-3px)] bg-transparent text-fg-muted hover:text-fg-default data-[state=on]:bg-bg-elevated data-[state=on]:text-fg-default data-[state=on]:shadow-sm",
         chips:
-          "rounded-pill border-border-default bg-transparent text-fg-muted hover:bg-bg-hover hover:text-fg-default data-[state=on]:border-node-agent-edge data-[state=on]:bg-node-agent-fill data-[state=on]:text-node-agent-ink",
+          "rounded-pill border-border-default bg-transparent text-fg-muted hover:bg-bg-hover hover:text-fg-default data-[state=on]:border-border-strong data-[state=on]:bg-bg-active data-[state=on]:text-fg-default",
       },
       size: {
         sm: "h-6.5 px-2.5 text-xs font-semibold",

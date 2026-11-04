@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { ACCENT_AVATAR_CLASS } from '@/components/catalog/presentation';
 import { AvatarFace } from '@/components/catalog/primitives';
 import { cn } from '@/lib/utils';
 import {
@@ -32,6 +33,7 @@ export function Avatar({
   size = 'md',
   status,
   pulse = false,
+  accent = false,
   className,
 }: {
   name: string;
@@ -42,6 +44,9 @@ export function Avatar({
   /** Draws the status pip bottom-right (sidebar rows). */
   status?: StatusTone;
   pulse?: boolean;
+  /** The solid accent face in place of the role tint: the employee on
+   *  their own page's header, as beside their turns in the chat. */
+  accent?: boolean;
   className?: string;
 }) {
   return (
@@ -49,7 +54,7 @@ export function Avatar({
       aria-hidden
       className={cn(
         'relative grid shrink-0 place-items-center rounded-full border font-semibold',
-        AVATAR_CLASS[colorRole],
+        accent ? ACCENT_AVATAR_CLASS : AVATAR_CLASS[colorRole],
         AVATAR_SIZE[size],
         className,
       )}

@@ -1,9 +1,9 @@
 /**
- * Where the editor's dot grid, the light colour scheme and the scrollbars
- * get their values. The grid is drawn by the two base themes only: light.css
- * also styles Atomic through `:root`, so `--grid-dot` (and the light
- * `color-scheme`) must live in blocks that match only `[data-theme="light"]`
- * / `[data-theme="dark"]`.
+ * Where the editor's dot grid, the light colour scheme, the scrollbars and
+ * the employee's accent face get their values. The grid is drawn by the two
+ * base themes only: light.css also styles Atomic through `:root`, so
+ * `--grid-dot` (and the light `color-scheme`) must live in blocks that match
+ * only `[data-theme="light"]` / `[data-theme="dark"]`.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -52,5 +52,16 @@ describe('theme tokens', () => {
     expect(bodiesFor(index, '::-webkit-scrollbar-track').join('\n')).toMatch(/var\(--scrollbar-track\)/);
     expect(bodiesFor(index, '::-webkit-scrollbar-thumb').join('\n')).toMatch(/var\(--scrollbar-thumb\)/);
     expect(bodiesFor(index, 'html').join('\n')).toMatch(/scrollbar-color:\s*var\(--scrollbar-thumb\) var\(--scrollbar-track\)/);
+  });
+
+  it('gives the employee’s accent face its rim and highlight on every theme', () => {
+    // Defined once on :root from each theme's own --accent and --fg-default.
+    const root = bodiesFor(read('..', 'base.css'), ':root').join('\n');
+    expect(root).toMatch(/--tint-accent-edge:\s*70%/);
+    expect(root).toMatch(/--accent-edge:\s*color-mix\(in srgb, var\(--accent\) var\(--tint-accent-edge\), var\(--fg-default\)\)/);
+    expect(root).toMatch(/--shadow-avatar:\s*inset 0 1px 0 rgb\(255 255 255 \/ 0\.22\)/);
+    const index = read('..', '..', 'index.css');
+    expect(index).toMatch(/--color-accent-edge:\s*var\(--accent-edge\)/);
+    expect(index).toMatch(/--shadow-avatar:\s*var\(--shadow-avatar\)/);
   });
 });

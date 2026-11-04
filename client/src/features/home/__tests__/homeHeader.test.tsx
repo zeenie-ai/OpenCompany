@@ -1,13 +1,13 @@
 /**
- * The Home header: on an employee's page it says who they are (name, role
- * and apps, status) and offers New conversation, which asks first; the
- * owner renames them and changes their photo there; the Normal/Dev switch
- * opens that employee's workflow there, and elsewhere what the editor last
- * had.
+ * The Home header: on an employee's page it says who they are (their face
+ * on the accent disc, name, role and apps, status) and offers New
+ * conversation, which asks first; the owner renames them and changes their
+ * photo there; the Normal/Dev switch opens that employee's workflow there,
+ * and elsewhere what the editor last had.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -162,6 +162,7 @@ describe('HomeHeader', () => {
     const { container } = wrap(<HomeHeader title="Maya" employee={{ ...maya, derived: false, photo_url: photoUrl }} scrolled={false} />);
     const image = container.querySelector('img');
     expect(image).toHaveAttribute('src', photoUrl);
+    expect(image!.closest('.bg-accent')).not.toBeNull();
     await user.click(screen.getByRole('button', { name: 'Change Maya’s photo' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Remove photo' }));
     await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('set_employee_photo', { workflow_id: 'w1', path: null }));
@@ -174,6 +175,17 @@ describe('HomeHeader', () => {
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
     wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     expect(screen.queryByRole('button', { name: 'Change Maya’s photo' })).not.toBeInTheDocument();
+    expect(screen.getByText('M')).toHaveClass('bg-accent', 'border-accent-edge');
+  });
+
+  it('draws their face on the accent disc, which dims under the pointer', () => {
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={{ ...maya, color_role: 'tool', derived: false }} scrolled={false} />);
+    const trigger = screen.getByRole('button', { name: 'Change Maya’s photo' });
+    const face = within(trigger).getByText('M');
+    expect(face).toHaveClass('bg-accent', 'text-accent-foreground', 'border-accent-edge', 'shadow-avatar');
+    expect(face.className).not.toMatch(/node-tool/);
+    expect(trigger).toHaveClass('hover:opacity-88');
   });
 
   it('opens the Welcome guide at its first step', () => {

@@ -42,7 +42,7 @@ function subtitleOf(employee: EmployeeSummary): string {
 function PhotoButton({ employee }: { employee: EmployeeSummary }) {
   const setPhoto = useSetEmployeePhoto();
   const input = useRef<HTMLInputElement>(null);
-  const avatar = <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} size="sm" />;
+  const avatar = <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} size="sm" accent />;
   if (employee.derived) return avatar;
   const change = (file: File | null) =>
     setPhoto.mutate(
@@ -58,7 +58,8 @@ function PhotoButton({ employee }: { employee: EmployeeSummary }) {
             size="icon"
             aria-label={`Change ${employee.name}’s photo`}
             title="Change photo"
-            className="size-auto rounded-full p-0"
+            // The solid disc hides the quiet hover fill, so the disc dims instead.
+            className="size-auto rounded-full p-0 hover:opacity-88"
           >
             {avatar}
           </Button>

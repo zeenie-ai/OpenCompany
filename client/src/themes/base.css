@@ -91,6 +91,7 @@
   --tint-node-edge:       60%;   /* node-color border ring */
   --tint-gear-hover:      20%;   /* gear button hover border */
   --tint-edge:            62%;   /* resting canvas-edge stroke (fg mix) */
+  --tint-accent-edge:     70%;   /* employee avatar rim (accent mixed toward fg) */
   /* Shadows / glows */
   --tint-shadow:          18%;   /* resting node accent shadow */
   --tint-shadow-hover:    28%;   /* hover node accent shadow */
@@ -180,7 +181,7 @@
   --w-composer: 740px;
   --h-composer-max: 200px;   /* the job box grows with its text up to this */
   --w-employee-card: 620px;
-  --size-orb-hire: min(230px, 26vh);
+  --size-orb-hire: min(200px, 24vh);
   --size-orb-employee: min(96px, 14vh);  /* small: the conversation has the page */
   --size-orb-connecting: min(300px, 36vh); /* waiting for the server */
   --size-orb-login: min(150px, 20vh);      /* above the sign-in card */
@@ -189,6 +190,8 @@
   --w-settings-nav: 224px;
   --w-guide: 940px;          /* the Welcome guide dialog */
   --h-guide: 620px;
+  --w-ai-models: 780px;      /* Home's AI models dialog */
+  --h-ai-models: 600px;
 
   /* ── Chat (Home Talk and Dev's console Chat pane share it) — design
    * handoff design_handoff_opencompany_home/chat (2026-10-03). Loop
@@ -208,6 +211,11 @@
   --w-chat-model-menu: 320px;      /* the model picker, and the Ask first menu */
   --h-chat-model-menu: 460px;      /* ...at most; less on a short window */
   --shadow-knob: 0 1px 4px rgb(0 0 0 / 0.25);  /* a level slider's knob */
+  /* The employee's face beside their turns and on their page's header (chat
+   * V2 colour pass, 4 Nov): a solid accent disc, its rim mixed toward the
+   * text colour, with a soft highlight along its top edge. */
+  --accent-edge: color-mix(in srgb, var(--accent) var(--tint-accent-edge), var(--fg-default));
+  --shadow-avatar: inset 0 1px 0 rgb(255 255 255 / 0.22);
   /* The Mobile tab's phone (design handoff "Workspace panel"): a dark bezel
    * around the live screen, shaped by the screen's own width and height. */
   --phone-bezel: #0b0c0e;

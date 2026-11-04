@@ -15,7 +15,7 @@ const twMerge = extendTailwindMerge({
     theme: {
       text: ["micro", "meta", "row", "lead", "title", "headline", "hero"],
       radius: ["pill", "row", "card", "panel", "draft", "composer"],
-      shadow: ["float", "popover", "dialog", "dock", "pip", "glow-connect", "card", "card-hover", "modal", "knob"],
+      shadow: ["float", "popover", "dialog", "dock", "pip", "glow-connect", "card", "card-hover", "modal", "knob", "avatar"],
       ease: ["spring", "overshoot", "reveal", "default", "emphasis"],
       tracking: ["label", "hero", "wordmark"],
       leading: ["hero"],

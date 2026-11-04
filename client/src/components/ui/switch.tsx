@@ -12,15 +12,21 @@ import { cn } from "@/lib/utils"
  * `run`: the Normal-mode settings switch (design handoff) — soft run-green
  * track with the readable run ink as the knob when on; a neutral track and
  * a muted knob when off.
+ *
+ * `ink`: a switch with no status to show (chat V2 colour pass, 4 Nov) — the
+ * foreground colour as the track and the app background as the knob when
+ * on; off as `run`.
  */
 const ROOT_TONE = {
   default: "data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80",
   run: "data-checked:border-action-run-border data-checked:bg-action-run-hover data-unchecked:border-border-strong data-unchecked:bg-border-default",
+  ink: "data-checked:border-fg-default data-checked:bg-fg-default data-unchecked:border-border-strong data-unchecked:bg-border-default",
 } as const
 
 const THUMB_TONE = {
   default: "bg-background dark:data-checked:bg-primary-foreground dark:data-unchecked:bg-foreground",
   run: "data-checked:bg-action-run-ink data-unchecked:bg-fg-muted",
+  ink: "data-checked:bg-bg-app data-unchecked:bg-fg-muted",
 } as const
 
 function Switch({

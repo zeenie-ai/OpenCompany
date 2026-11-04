@@ -77,6 +77,8 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  /* The rim of the employee's accent face (themes/base.css). */
+  --color-accent-edge: var(--accent-edge);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
@@ -267,6 +269,8 @@
   --shadow-card-hover: var(--shadow-card-hover);
   --shadow-knob:       var(--shadow-knob);
   --shadow-modal:      var(--shadow-modal);
+  /* The highlight on the employee's accent face (themes/base.css). */
+  --shadow-avatar:     var(--shadow-avatar);
 
   --blur-scrim: var(--blur-scrim);
 
