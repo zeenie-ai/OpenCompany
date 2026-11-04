@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from core.logging import get_logger
 from services.plugin import (
@@ -66,6 +66,14 @@ class CodexAgentParams(AgentRuntimeParams):
     working_directory: Optional[str] = None
     max_parallel: int = Field(default=5, ge=1, le=20)
     allowed_credentials: List[str] = Field(default_factory=list)
+
+    # The parameter panel can persist untouched list defaults as null.
+    # Match Claude Code's saved-workflow compatibility at both the direct
+    # and Temporal Params boundaries; leave other invalid inputs to Pydantic.
+    @field_validator("tasks", "allowed_credentials", mode="before")
+    @classmethod
+    def _none_is_empty_list(cls, value: Any) -> Any:
+        return [] if value is None else value
 
     model_config = ConfigDict(extra="ignore")
 

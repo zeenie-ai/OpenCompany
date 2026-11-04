@@ -144,7 +144,7 @@ class TestResolveActivityPoolRouting:
 class TestAgentWorkflowDispatch:
     """F4.B: when the agent-workflow flag is on AND the node type is in
     AGENT_WORKFLOW_TYPES, dispatch must route through the child workflow
-    instead of an activity. Excluded types (rlm_agent / claude_code_agent)
+    instead of an activity. Excluded types (rlm_agent / claude_code_agent / codex_agent)
     keep using the activity path."""
 
     def _set_flags(self, *, per_type: bool, agent_wf: bool):
@@ -178,10 +178,10 @@ class TestAgentWorkflowDispatch:
             assert dispatch["kind"] == "child_workflow", f"{t} should route to AgentWorkflow when F4.B is on"
 
     def test_excluded_agents_stay_on_activity_path(self, workflow_instance):
-        """rlm_agent / claude_code_agent are NOT migrated (externalised
+        """rlm_agent / claude_code_agent / codex_agent are NOT migrated (externalised
         session state). They must use the per-type activity path even
         when F4.B is on."""
-        for t in ("rlm_agent", "claude_code_agent"):
+        for t in ("rlm_agent", "claude_code_agent", "codex_agent"):
             with self._set_flags(per_type=True, agent_wf=True):
                 dispatch = workflow_instance._resolve_dispatch(t)
             assert dispatch["kind"] == "activity", f"{t} must NOT migrate to AgentWorkflow (externalised session)"
