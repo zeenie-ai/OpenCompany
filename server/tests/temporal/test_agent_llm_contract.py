@@ -428,6 +428,32 @@ class TestLlmStepActivity:
         assert secret not in str(temporal_error.details)
         assert message not in str(temporal_error.details)
 
+    def test_openrouter_in_flight_402_retries_after_its_header(self):
+        import httpx
+        import openai
+
+        from services.llm.protocol import LLMError
+        from services.temporal.agent_activities import _as_temporal_llm_error
+
+        secret = "Retry after your in-flight requests settle sk-secret"
+        response = httpx.Response(402, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+                                  headers={"retry-after": "3"})
+        sdk_error = openai.APIStatusError(secret, response=response, body={
+            "code": 402,
+            "message": secret,
+            "metadata": {"reason": "in_flight_budget_exhausted", "limit_source": "openrouter_in_flight_budget",
+                         "remedy_hint": secret},
+        })
+
+        temporal_error = _as_temporal_llm_error(LLMError.from_exception("openrouter", sdk_error))
+
+        assert temporal_error.type == "LLMError.rate_limit"
+        assert temporal_error.non_retryable is False
+        assert temporal_error.next_retry_delay == timedelta(seconds=3)
+        assert temporal_error.details[0]["diagnostic_code"] == "openrouter_in_flight_budget"
+        assert secret not in str(temporal_error)
+        assert secret not in str(temporal_error.details)
+
     def test_structured_llm_error_becomes_safe_temporal_failure(self):
         from services.llm.protocol import LLMError, LLMErrorCategory
         from services.temporal.agent_activities import (

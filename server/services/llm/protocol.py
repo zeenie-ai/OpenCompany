@@ -546,6 +546,8 @@ class LLMError(Exception):
             if delay is not None and (retry_after is None or delay > retry_after):
                 retry_after, retry_after_value = delay, raw_delay
         category = _classify_error(exc, status)
+        limit = _openrouter_limit(body)
+        limit_message, limit_hint = _OPENROUTER_LIMIT_TEXT.get(limit, (None, None))
         return cls(
             message=str(exc),
             provider=provider,
@@ -566,7 +568,9 @@ class LLMError(Exception):
                 if retry_after_value is not None
                 else None
             ),
-            diagnostic_code=_thinking_signature_diagnostic(provider, status, body),
+            public_message=limit_message,
+            public_hint=limit_hint,
+            diagnostic_code=_thinking_signature_diagnostic(provider, status, body) or limit,
         )
 
 
@@ -855,6 +859,42 @@ def _thinking_signature_diagnostic(provider: str, status: Optional[int], body: M
     return "thinking_signature_invalid"
 
 
+#: What the owner is told for an OpenRouter limit only they can lift, by the
+#: code ``_openrouter_limit`` returns: (message, hint).
+_OPENROUTER_LIMIT_TEXT = {
+    "openrouter_credits": (
+        "Your OpenRouter credits cannot cover this request.",
+        "Add OpenRouter credits, or set a lower Max Tokens so OpenRouter reserves less for the request, then resume.",
+    ),
+    "openrouter_request_over_budget": (
+        "This request alone is larger than what OpenRouter lets your account spend at once.",
+        "Set a lower Max Tokens, or add OpenRouter credits, then resume. Repeating the request will not fix it.",
+    ),
+    "openrouter_key_limit": (
+        "This OpenRouter API key has reached its credit limit.",
+        "Raise the key's credit limit on OpenRouter, or connect another key in Settings > Connectors, then resume.",
+    ),
+}
+
+
+def _openrouter_limit(body: Mapping[str, Any]) -> Optional[str]:
+    """A fixed code for the OpenRouter limit that refused a request, or None.
+
+    OpenRouter names it in ``metadata.limit_source``, with ``reason`` for a
+    single request larger than the in-flight budget; its ``remedy_hint`` is
+    prose and is never read (OpenRouter API reference, Limits).
+    """
+    metadata = body.get("metadata")
+    if not isinstance(metadata, Mapping):
+        return None
+    source = metadata.get("limit_source")
+    if source == "openrouter_credits" and metadata.get("reason") == "weight_exceeds_budget":
+        return "openrouter_request_over_budget"
+    if source in ("openrouter_credits", "openrouter_key_limit", "openrouter_in_flight_budget"):
+        return source
+    return None
+
+
 def _error_body(exc: BaseException) -> Mapping[str, Any]:
     for attribute in ("body", "details"):
         body = getattr(exc, attribute, None)
@@ -924,6 +964,10 @@ def _classify_error(
     # the user can fix it.
     if "budget_exceeded" in codes:
         return LLMErrorCategory.BILLING
+    # OpenRouter's in-flight budget frees up as running requests settle: its
+    # 402 comes with Retry-After and is a wait, not an empty account.
+    if _openrouter_limit(body) == "openrouter_in_flight_budget":
+        return LLMErrorCategory.RATE_LIMIT
     # A quota/credit exhaustion can arrive as 429, but backoff cannot fix it.
     # Match narrow billing signatures before the generic HTTP classifiers.
     if status in {None, 400, 402, 403, 429} and (

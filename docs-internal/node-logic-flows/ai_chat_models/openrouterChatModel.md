@@ -109,6 +109,7 @@ flowchart TD
 - **`[FREE] ` models are OpenRouter-free but may still cost latency**: routing can queue against capacity.
 - **`owner/model` prefix is load-bearing**: removing it breaks OpenRouter routing. Other compatible providers, notably Groq, may also require owner-qualified identifiers.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
+- **Spending refusals (402)**: before a request runs, OpenRouter holds its estimated cost: the prompt plus the output `max_tokens` allows, up to a fixed per-request cap that it also uses when none is sent. It routes a sent `max_tokens` only to endpoints that support that length. A request can therefore be refused while the account still has credits. The refusal names its limit in `error.metadata.limit_source` (`services/llm/protocol.py::_openrouter_limit`). The in-flight budget, which comes with `Retry-After`, is retried after the wait. Credits, the key's credit limit, and a request larger than the budget stop the step with a message and hint naming that limit. OpenRouter's own wording is never shown or logged; the WARN line carries the fixed `diagnostic_code`.
 
 ## Related
 

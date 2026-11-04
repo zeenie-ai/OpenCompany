@@ -49,6 +49,59 @@ def test_structured_billing_signature_wins_over_generic_message(provider, status
     assert error.requires_user_action
 
 
+OPENROUTER_PROSE = "sk-secret prose"
+
+
+def openrouter_refusal(status, metadata, headers=None):
+    """OpenRouter's refusal as the openai SDK raises it: its error object in
+    ``body``, the limit in ``metadata``, and prose that must never be shown."""
+    body = {"code": status, "message": OPENROUTER_PROSE, "metadata": {**metadata, "remedy_hint": OPENROUTER_PROSE}}
+    return LLMError.from_exception("openrouter", sdk_error("openai", status, OPENROUTER_PROSE, body=body, headers=headers))
+
+
+def test_openrouter_in_flight_budget_waits_and_retries():
+    error = openrouter_refusal(
+        402,
+        {"limit_source": "openrouter_in_flight_budget", "reason": "in_flight_budget_exhausted"},
+        headers={"retry-after": "3"},
+    )
+    assert error.category == LLMErrorCategory.RATE_LIMIT
+    assert error.retryable
+    assert error.retry_after == 3
+    assert not error.requires_user_action
+    assert error.diagnostic_code == "openrouter_in_flight_budget"
+
+
+@pytest.mark.parametrize(("status", "metadata", "code", "cause", "remedy"), [
+    (402, {"limit_source": "openrouter_credits"}, "openrouter_credits", "credits cannot cover", "Add OpenRouter credits"),
+    (402, {"limit_source": "openrouter_credits", "reason": "weight_exceeds_budget"},
+     "openrouter_request_over_budget", "larger than", "lower Max Tokens"),
+    (402, {"limit_source": "openrouter_key_limit"}, "openrouter_key_limit", "credit limit", "Raise the key's credit limit"),
+    (403, {"limit_source": "openrouter_key_limit"}, "openrouter_key_limit", "credit limit", "Raise the key's credit limit"),
+])
+def test_openrouter_spending_refusal_names_its_limit(status, metadata, code, cause, remedy):
+    error = openrouter_refusal(status, metadata)
+    assert not error.retryable
+    assert error.requires_user_action
+    assert error.diagnostic_code == code
+    assert cause in error.user_message
+    assert remedy in error.hint
+    assert "sk-secret" not in error.user_message + error.hint
+
+
+@pytest.mark.parametrize("metadata", [
+    {"limit_source": "openrouter_new_limit"},
+    {"limit_source": ["openrouter_credits"]},
+    "openrouter_credits",
+])
+def test_unknown_openrouter_limit_keeps_the_billing_wording(metadata):
+    body = {"code": 402, "message": OPENROUTER_PROSE, "metadata": metadata}
+    error = LLMError.from_exception("openrouter", sdk_error("openai", 402, OPENROUTER_PROSE, body=body))
+    assert error.category == LLMErrorCategory.BILLING
+    assert error.diagnostic_code is None
+    assert error.public_message is None
+
+
 @pytest.mark.parametrize(("headers", "expected"), [
     ({"retry-after": "2.5", "retry-after-ms": "9000"}, 9),
     ({"retry-after": "20", "retry-after-ms": "1500"}, 20),
