@@ -686,6 +686,47 @@ html.oc-theme-fade *::after {
   color: var(--fg-muted);
   font-weight: 600;
 }
+/* A reply's code block and table in their frames (design handoff chat,
+ * "code" and "table"; ReplyMarkdown draws the wrappers). Scoped to the
+ * wrappers, so a console row's plain `pre` and table keep the rules above.
+ * Unlayered rules here outrank Tailwind's utility classes, so the frame's
+ * `pre` gets its margin and padding from this file, not from a class. */
+.chat-markdown .chat-code {
+  margin: 2px 0 14px;
+  border: 1px solid var(--code-border, var(--border-default));
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--code-bg);
+  color: var(--code-text);
+  /* The handoff's 13px beside Home's 16px reply text; relative, so it follows
+   * the console's font size in Dev's chat pane. */
+  font-size: 0.8125em;
+}
+.chat-markdown .chat-code pre {
+  margin: 0;
+  padding: 0 16px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  overflow: visible;
+}
+.chat-markdown .chat-code code { font-size: inherit; }
+.chat-markdown .chat-table {
+  margin: 2px 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  overflow-x: auto;
+}
+.chat-markdown .chat-table table {
+  margin: 0;
+  font-size: 0.8125em; /* as the code frame: 13px on Home, scaling in Dev */
+}
+.chat-markdown .chat-table th,
+.chat-markdown .chat-table td {
+  border: 0;
+  padding: 9px 12px;
+}
+.chat-markdown .chat-table td { border-top: 1px solid var(--border-default); }
 .chat-markdown blockquote {
   border-left: 3px solid var(--border-strong);
   margin: 8px 0;
@@ -724,6 +765,8 @@ html.oc-theme-fade *::after {
   animation: opencompany-caret-pulse var(--dur-caret, 1000ms) ease-in-out infinite;
 }
 .chat-markdown[data-streaming] > :is(ul, ol):last-child::after { content: none; }
+/* Not under a framed code block or table either, as the handoff draws them. */
+.chat-markdown[data-streaming] > :is(.chat-code, .chat-table):last-child::after { content: none; }
 @media (prefers-reduced-motion: reduce) {
   .chat-markdown[data-streaming] > :last-child::after,
   .chat-markdown[data-streaming] > :is(ul, ol):last-child > li:last-child::after { animation: none; }
