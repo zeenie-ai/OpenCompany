@@ -12,12 +12,17 @@
  *
  * The draft itself lives on the server (data/approvals.ts); the card holds
  * only the edit in progress. `chat-approval` is the theme hook.
+ *
+ * Colour marks only where it stands (chat V2 colour pass): the waiting frame
+ * and header, the status pill and its dot, a failure's bar. The buttons are
+ * neutral; each step's one primary (Send / Allow, a confirming Decline or
+ * Send again) is the invert.
  */
 
-import { Check, Link2, Loader2, MessageCircle, Pause, Pencil, RotateCcw, Send, Undo2, X } from 'lucide-react';
+import { Check, CheckCheck, Link2, MessageCircle, Pause, Pencil, RotateCcw, Send, Undo2, X } from 'lucide-react';
 import { useContext, useEffect, useId, useLayoutEffect, useState, type KeyboardEvent } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
+import { RingSpinner } from '@/components/ui/ring-spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { ChatApproval } from '../data/approvals';
@@ -28,7 +33,7 @@ const PILL_TONE: Record<CardTone, string> = {
   waiting: 'border-action-config-border bg-action-config-soft text-action-config-ink',
   sending: 'border-action-run-border bg-action-run-soft text-action-run-ink',
   sent: 'border-action-run-border bg-action-run-soft text-action-run-ink',
-  muted: 'border-border-default bg-bg-hover text-fg-muted',
+  muted: 'border-border-default bg-bg-active text-fg-muted',
   failed: 'border-action-stop-border bg-action-stop-soft text-action-stop-ink',
 };
 
@@ -42,19 +47,30 @@ const DOT_TONE: Record<CardTone, string> = {
 
 const FRAME: Record<CardTone, string> = {
   waiting: 'border-action-config-border ring-[3px] ring-action-config-soft',
-  sending: 'border-action-run-border',
-  sent: 'border-action-run-border',
+  sending: 'border-border-default',
+  sent: 'border-border-default',
   muted: 'border-border-default',
   failed: 'border-action-stop-border',
 };
 
 const HEAD: Record<CardTone, string> = {
   waiting: 'bg-action-config-soft',
-  sending: 'bg-action-run-soft',
-  sent: 'bg-action-run-soft',
+  sending: '',
+  sent: '',
   muted: '',
   failed: 'bg-action-stop-soft',
 };
+
+/** The decide row's buttons, and a confirmation's: 32px, 13px labels; `sm`
+ *  keeps the theme's radius. */
+const DECIDE_BUTTON = 'h-8 gap-1.5 px-3.5 text-sm font-semibold';
+
+/** A status footer's neutral outline button (Undo, Restore, Dismiss, Try
+ *  again): 28px, on the panel colour, so it reads on a failure's bar too. */
+const FOOTER_BUTTON = 'gap-1.5 border-border-default bg-bg-panel text-xs font-semibold text-fg-default';
+
+/** The footer spinner in the neutral ink, not the chat's working tint. */
+const SPINNER = 'size-3.5 border-border-default border-t-fg-default';
 
 function isMac(): boolean {
   return typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
@@ -153,7 +169,10 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
       <div className={cn('flex items-center gap-2.5 border-b border-border-default px-3.5 py-2.75 transition-colors duration-(--dur-slow)', HEAD[view.tone])}>
         <span
           aria-hidden
-          className="grid size-7.5 flex-none place-items-center rounded-lg border border-node-tool-border bg-action-run-soft text-action-run-ink"
+          className={cn(
+            'grid size-7.5 flex-none place-items-center rounded-lg border transition-colors duration-(--dur-default)',
+            view.tone === 'waiting' ? 'border-action-config-border bg-bg-panel text-action-config-ink' : 'border-border-default bg-bg-active text-fg-default',
+          )}
         >
           <MessageCircle className="size-3.75" strokeWidth={1.9} />
         </span>
@@ -197,9 +216,10 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                       value={subject}
                       onChange={(event) => setSubject(event.target.value)}
                       aria-label="Subject"
-                      className="h-8 rounded-lg border border-action-tools-border bg-bg-input px-3 text-sm text-fg-default outline-none"
+                      className="h-8 rounded-lg border border-border-focus bg-bg-input px-3 text-sm text-fg-default outline-none dark:bg-bg-input"
                     />
                   )}
+                  {/* The design's halo stays on focus (the box opens focused). */}
                   <Textarea
                     id={boxId}
                     value={text}
@@ -208,7 +228,7 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                     rows={3}
                     aria-label="Edit the draft"
                     autoFocus
-                    className="min-h-21 resize-y border-action-tools-border bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft"
+                    className="min-h-21 resize-y border-border-focus bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft focus-visible:ring-node-agent-soft dark:bg-bg-input"
                   />
                   <span className={cn('self-end font-mono text-2xs font-medium', tooLong ? 'text-action-stop-ink' : 'text-fg-faint')}>
                     {text.length} / {approval.maxLength}
@@ -218,8 +238,7 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                 <div className="flex justify-end">
                   <div
                     className={cn(
-                      'flex max-w-[92%] flex-col gap-1 rounded-[14px_4px_14px_14px] border px-3 pt-2.25 pb-1.5 transition-[background-color,border-color,opacity] duration-(--dur-slow)',
-                      view.bubble === 'sent' ? 'border-action-run-border bg-action-run-soft' : 'border-border-default bg-bg-elevated',
+                      'flex max-w-[92%] flex-col gap-1 rounded-[14px_4px_14px_14px] border border-border-default bg-bg-elevated px-3 pt-2.25 pb-1.5 transition-[background-color,border-color,opacity] duration-(--dur-slow)',
                       view.bubble === 'struck' && 'opacity-55',
                     )}
                   >
@@ -229,7 +248,7 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                     </span>
                     <span className="flex items-center gap-1 self-end text-2xs text-fg-faint">
                       {view.when}
-                      {view.bubble === 'sent' && <Check aria-hidden className="size-3 text-action-save-ink" strokeWidth={2.4} />}
+                      {view.bubble === 'sent' && <CheckCheck aria-hidden className="size-3.5 text-primary" strokeWidth={2.4} />}
                     </span>
                   </div>
                 </div>
@@ -284,9 +303,9 @@ function Footer({
   if (footer.kind === 'undo') {
     return (
       <div className={cn(bar, 'bg-bg-app text-xs text-fg-muted')} aria-live="off">
-        <Loader2 aria-hidden className="opencompany-spinner size-3.5 text-action-run-ink" />
+        <RingSpinner className={SPINNER} />
         <span className="flex-1">Sends in {footer.seconds}s</span>
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'undo' })} className="gap-1.5 font-semibold tabular-nums">
+        <Button variant="quiet" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'undo' })} className={cn(FOOTER_BUTTON, 'tabular-nums')}>
           <Undo2 aria-hidden className="size-3.25" />
           Undo · {footer.seconds}s
         </Button>
@@ -296,7 +315,7 @@ function Footer({
   if (footer.kind === 'sending') {
     return (
       <div className={cn(bar, 'bg-bg-app text-xs text-fg-muted')} role="status">
-        <Loader2 aria-hidden className="opencompany-spinner size-3.5 text-action-run-ink" />
+        <RingSpinner className={SPINNER} />
         {view.preview === 'message' ? `Sending on ${approval.channel}…` : 'Running…'}
       </div>
     );
@@ -307,7 +326,7 @@ function Footer({
         <Pause aria-hidden className="size-3.5" />
         <span className="flex-1">{footer.text}</span>
         {footer.undo && (
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'undo' })} className="gap-1.5 font-semibold">
+          <Button variant="quiet" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'undo' })} className={FOOTER_BUTTON}>
             <Undo2 aria-hidden className="size-3.25" />
             Undo
           </Button>
@@ -317,9 +336,9 @@ function Footer({
   }
   if (footer.kind === 'sent') {
     return (
-      <div className={cn(bar, 'bg-action-run-soft')} role="status">
-        <span aria-hidden className="grid size-5 flex-none place-items-center rounded-full border border-action-run-border bg-action-run-soft">
-          <Check className="opencompany-draw size-2.75 text-action-run-ink" strokeWidth={3} />
+      <div className={cn(bar, 'bg-bg-app')} role="status">
+        <span aria-hidden className="grid size-5 flex-none place-items-center rounded-full border border-fg-default bg-fg-default">
+          <Check className="opencompany-draw size-2.75 text-bg-app" strokeWidth={3} />
         </span>
         <span className="min-w-0 flex-1 text-xs text-fg-default">{footer.text}</span>
       </div>
@@ -335,11 +354,11 @@ function Footer({
         {footer.canRestore && (
           // Its countdown ticks every second: never announced.
           <Button
-            variant="outline"
+            variant="quiet"
             size="sm"
             disabled={busy}
             onClick={() => decide({ approval, decision: 'restore' })}
-            className="gap-1.5 font-semibold tabular-nums"
+            className={cn(FOOTER_BUTTON, 'tabular-nums')}
             aria-live="off"
           >
             <RotateCcw aria-hidden className="size-3.25" />
@@ -367,7 +386,7 @@ function Footer({
         <span className="min-w-0 flex-1 text-xs text-fg-default" role="status">
           {footer.text}
         </span>
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'dismiss' })} className="gap-1.5 font-semibold">
+        <Button variant="quiet" size="sm" disabled={busy} onClick={() => decide({ approval, decision: 'dismiss' })} className={FOOTER_BUTTON}>
           <X aria-hidden className="size-3.25" />
           Dismiss
         </Button>
@@ -427,15 +446,15 @@ function DecideFooter({
           autoFocus
           aria-label={`Tell ${name} what to do instead`}
           placeholder={`Tell ${name} what to do instead (optional)`}
-          className="min-h-16 resize-y bg-bg-input text-sm"
+          className="min-h-16 resize-y bg-bg-input text-sm dark:bg-bg-input"
         />
         <div className="flex items-center justify-end gap-2">
-          <Button variant="quiet" size="sm" onClick={() => setDeclining(false)} className="font-semibold">
+          <Button variant="quiet" size="sm" onClick={() => setDeclining(false)} className={cn(DECIDE_BUTTON, 'border-border-default text-fg-default')}>
             Back
           </Button>
-          <ActionButton intent="stop" disabled={busy} onClick={decline}>
+          <Button variant="invert" size="sm" disabled={busy} onClick={decline} className={DECIDE_BUTTON}>
             Decline
-          </ActionButton>
+          </Button>
         </div>
       </div>
     );
@@ -443,23 +462,18 @@ function DecideFooter({
   const always = approval.always;
   return (
     <div className={cn(className, 'bg-bg-app')}>
-      <Button
-        variant="quiet"
-        size="sm"
-        disabled={busy}
-        onClick={() => setDeclining(true)}
-        className="font-semibold hover:bg-action-stop-soft hover:text-action-stop-ink"
-      >
+      <Button variant="quiet" size="sm" disabled={busy} onClick={() => setDeclining(true)} className={cn(DECIDE_BUTTON, 'border-border-default')}>
+        <X aria-hidden className="size-3.25" strokeWidth={2.2} />
         Decline
       </Button>
       {approval.editable && (
         <Button
-          variant="outline"
+          variant="quiet"
           size="sm"
           disabled={busy}
           aria-pressed={editing}
           onClick={onToggleEdit}
-          className={cn('gap-1.5 font-semibold', editing && 'border-action-tools-border bg-action-tools-soft text-action-tools-ink')}
+          className={cn(DECIDE_BUTTON, 'border-border-default text-fg-default', editing && 'border-border-strong bg-bg-active')}
         >
           <Pencil aria-hidden className="size-3.25" />
           {editing ? 'Done' : 'Edit'}
@@ -467,12 +481,12 @@ function DecideFooter({
       )}
       {always && (
         <Button
-          variant="outline"
+          variant="quiet"
           size="sm"
           disabled={!canSend}
           title={`Always allow ${always.label}`}
           onClick={() => onSend(true)}
-          className="max-w-64 min-w-0 font-semibold"
+          className={cn(DECIDE_BUTTON, 'max-w-64 min-w-0 border-border-default text-fg-default')}
         >
           <span className="truncate">Always allow {always.label}</span>
         </Button>
@@ -480,10 +494,10 @@ function DecideFooter({
       <span aria-hidden className="ml-auto flex items-center font-mono text-2xs font-medium text-fg-faint">
         <kbd className="rounded-sm border border-border-default bg-bg-panel px-1.25 py-px font-[inherit]">{isMac() ? '⌘ ↵' : 'Ctrl ↵'}</kbd>
       </span>
-      <ActionButton intent="run" disabled={!canSend} onClick={() => onSend()} className="gap-1.75">
+      <Button variant="invert" size="sm" disabled={!canSend} onClick={() => onSend()} className={cn(DECIDE_BUTTON, 'gap-1.75')}>
         {view.preview === 'message' ? <Send aria-hidden className="size-3.25" /> : <Check aria-hidden className="size-3.25" />}
         {view.preview === 'message' ? 'Send' : 'Allow'}
-      </ActionButton>
+      </Button>
       {approval.approvalClass === 'money' && byMode && (
         <span className="w-full text-xs text-fg-muted">Money and deletes always ask unless you allow them under Allowed without asking.</span>
       )}
@@ -517,19 +531,21 @@ function FailedFooter({
         <span className="min-w-0 flex-1 text-xs text-fg-default" role="status">
           {message ? 'It may already have gone out. Send it again anyway?' : 'It may already have happened. Run it again anyway?'}
         </span>
-        <Button variant="quiet" size="sm" onClick={() => setConfirming(false)} className="font-semibold">
+        <Button variant="quiet" size="sm" onClick={() => setConfirming(false)} className={cn(DECIDE_BUTTON, 'border-border-default text-fg-default')}>
           Keep it
         </Button>
-        <ActionButton
-          intent="stop"
+        <Button
+          variant="invert"
+          size="sm"
           disabled={busy}
           onClick={() => {
             setConfirming(false);
             onRetry(true);
           }}
+          className={DECIDE_BUTTON}
         >
           {again}
-        </ActionButton>
+        </Button>
       </div>
     );
   }
@@ -539,11 +555,11 @@ function FailedFooter({
         {text}
       </span>
       <Button
-        variant="outline"
+        variant="quiet"
         size="sm"
         disabled={busy}
         onClick={() => (unknown ? setConfirming(true) : onRetry(false))}
-        className="gap-1.5 font-semibold"
+        className={FOOTER_BUTTON}
       >
         <RotateCcw aria-hidden className="size-3.25" />
         {unknown ? again : 'Try again'}

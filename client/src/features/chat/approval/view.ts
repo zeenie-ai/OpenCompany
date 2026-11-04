@@ -7,6 +7,8 @@
  *   message to show);
  * - approved, inside the Undo window: Sending, "Sends in Ns" with Undo (none
  *   for a call its turn waits on);
+ * - approved while its employee is stopped: Waiting, muted as paused, "Sends
+ *   when you resume {name}.";
  * - sending: Sending, a spinner;
  * - sent (and a gate's draft once it went through): Sent, with when and to
  *   whom, and whether it went without asking;
@@ -105,10 +107,12 @@ export function approvalView(approval: ChatApproval, { name, nowMs, offsetMs, ed
           seconds > 0 ? { kind: 'undo', seconds }
           : paused ? { kind: 'waiting', text: `${message ? 'Sends' : 'Runs'} when you resume ${name}.`, undo: approval.kind === 'tool_call' && !approval.waits }
           : { kind: 'sending' };
+        // Held for Resume, it reads as paused: the muted pill, still.
+        const held = paused && seconds === 0;
         return {
           title: `${name} is ${message ? 'sending' : 'doing'} it`,
           sub,
-          pill: { label: paused && seconds === 0 ? 'Waiting' : message ? 'Sending' : 'Running', tone: 'sending', pulse: !(paused && seconds === 0) },
+          pill: held ? { label: 'Waiting', tone: 'muted', pulse: false } : { label: message ? 'Sending' : 'Running', tone: 'sending', pulse: true },
           tone: 'sending',
           preview,
           bubble: 'draft',

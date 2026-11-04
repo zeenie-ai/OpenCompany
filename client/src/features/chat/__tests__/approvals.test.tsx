@@ -80,6 +80,8 @@ describe('the card says what happened', () => {
   it('a gate’s draft for a paused employee goes on Resume', () => {
     const paused = view({ kind: 'gate', status: 'approved', undo_until: '2026-10-04T08:59:59Z', deployment_state: 'paused' });
     expect(paused.footer).toEqual({ kind: 'waiting', text: 'Sends when you resume Maya.', undo: false });
+    // It reads as paused, not as on its way.
+    expect(paused.pill).toEqual({ label: 'Waiting', tone: 'muted', pulse: false });
   });
 
   it('a held draft waits for Resume too, and can still be undone', () => {
@@ -614,7 +616,11 @@ describe('Ask first by mode', () => {
     expect(await within(list).findByText('Shell')).toBeInTheDocument();
     expect(within(list).getByText(/added/)).toBeInTheDocument();
     expect(within(list).queryByRole('button', { name: 'Remove Stripe' })).not.toBeInTheDocument();
-    expect(within(list).getByRole('switch', { name: 'Allow Stripe without asking' })).toBeChecked();
+    const stripe = within(list).getByRole('switch', { name: 'Allow Stripe without asking' });
+    expect(stripe).toBeChecked();
+    // A control, not a status: the ink tone, never the run green.
+    expect(stripe).toHaveClass('data-checked:bg-fg-default');
+    expect(stripe.className).not.toMatch(/action-run/);
     expect(within(list).getByRole('switch', { name: 'Allow Google Calendar: delete without asking' })).not.toBeChecked();
 
     await user.click(within(list).getByRole('button', { name: 'Remove Shell' }));

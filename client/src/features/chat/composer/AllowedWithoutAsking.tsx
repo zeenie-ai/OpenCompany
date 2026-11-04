@@ -100,7 +100,7 @@ function AllowList({ workflowId, name, onError }: { workflowId: string; name: st
             <div key={`${option.nodeType}:${option.operation}`} className="flex items-center gap-3 py-1">
               <span className="min-w-0 flex-1 text-sm text-fg-default">{option.label}</span>
               <Switch
-                tone="run"
+                tone="ink"
                 aria-label={`Allow ${option.label} without asking`}
                 checked={option.allowId !== null}
                 disabled={busy}
