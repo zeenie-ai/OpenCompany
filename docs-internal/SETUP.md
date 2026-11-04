@@ -295,7 +295,10 @@ The export is never committed (`.gitignore` lists it): a tracked copy drifts fro
 ### Database issues
 SQLite databases are created automatically under `DATA_DIR`
 (`~/.opencompany/` by default; `<repo>/.opencompany/` in dev mode).
-Delete `workflow.db` there to reset all data.
+Delete `workflow.db` there to reset all data. Stop the app first, and
+delete `workflow.db-wal` and `workflow.db-shm` with it: the database runs in
+SQLite's WAL mode, and SQLite applies a `-wal` file left behind to the next
+copy of `workflow.db` put in that folder.
 
 ## Development Workflow
 

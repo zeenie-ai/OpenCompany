@@ -134,8 +134,9 @@ def clean_command() -> None:
 
     # Step 4: selectively clean both state roots. Preserve ``workflows/``
     # (shipped example seeds, see ``_OPENCOMPANY_KEEP``);
-    # wipe everything else (claude/, workspaces/, *.db, ...) so the
-    # repo-local DATA_DIR opt-out gets the same fresh-state treatment.
+    # wipe everything else (claude/, workspaces/, each *.db with its
+    # -wal, -shm and -journal files, ...) so the repo-local DATA_DIR
+    # opt-out gets the same fresh-state treatment.
     for state_dir_name in _STATE_DIRS:
         state_dir = root / state_dir_name
         if not state_dir.is_dir():

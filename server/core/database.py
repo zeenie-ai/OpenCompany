@@ -162,6 +162,22 @@ class Database:
                 future=True,
                 json_serializer=lambda obj: json.dumps(to_jsonable_python(obj, fallback=str)),
             )
+            if self.engine.dialect.name == "sqlite":
+                # WAL lets a commit go through while other connections read
+                # (RFC-0005 N9). synchronous=NORMAL cannot corrupt a WAL file,
+                # though a power cut or OS crash can undo its last commits. A
+                # writer waits up to 5 s for another's write lock, as in
+                # Temporal's SQLite store. WAL is stored in the file; an
+                # in-memory database answers "memory" and stays as it is.
+                from sqlalchemy import event
+
+                @event.listens_for(self.engine.sync_engine, "connect")
+                def _sqlite_pragmas(dbapi_connection, _connection_record):
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute("PRAGMA busy_timeout=5000")
+                    cursor.execute("PRAGMA journal_mode=WAL")
+                    cursor.execute("PRAGMA synchronous=NORMAL")
+                    cursor.close()
 
             # Create session factory
             self.async_session = async_sessionmaker(bind=self.engine, class_=AsyncSession, expire_on_commit=False)

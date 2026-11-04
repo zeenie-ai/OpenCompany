@@ -34,6 +34,26 @@ def test_opencompany_keep_preserves_workflows_deploy_and_packages():
     assert clean._STATE_DIRS == (".opencompany", ".machina")
 
 
+def test_clean_removes_each_database_with_its_wal_shm_and_journal_files(tmp_path: Path):
+    """``workflow.db`` and ``temporal.db`` run in SQLite's WAL mode, and a
+    ``-wal`` file left behind is applied to the next copy of the database put
+    in its place. ``clean`` removes every file in the state folders, so each
+    database goes with its ``-wal``, ``-shm`` and ``-journal`` files."""
+    state = tmp_path / ".opencompany"
+    for kept in ("workflows", "deploy", "packages"):
+        (state / kept).mkdir(parents=True)
+    for name in ("workflow.db", "workflow.db-wal", "workflow.db-shm", "credentials.db", "credentials.db-journal"):
+        (state / name).write_bytes(b"x")
+
+    with (
+        patch.object(clean, "preflight", return_value=(None, tmp_path)),
+        patch.object(clean, "_kill_running_processes", return_value=False),
+    ):
+        clean.clean_command()
+
+    assert sorted(child.name for child in state.iterdir()) == ["deploy", "packages", "workflows"]
+
+
 def test_rmtree_with_retry_handles_oserror(tmp_path: Path):
     """If rmtree fails 3 times, the helper returns False without raising."""
     target = tmp_path / "doesnotmatter"

@@ -72,7 +72,7 @@ Everything the app keeps is in the `opencompany-selfhost_data` volume, mounted a
 
 An image that pins a new Temporal server minor (`server/config/temporal_cli.json`) deletes `temporal.db` and the old CLI on its first start. Every deployment then shows Failed, and its owner resets and starts it (see [TEMPORAL_ARCHITECTURE.md](./TEMPORAL_ARCHITECTURE.md#server-management)).
 
-Back up `/data` while the container is stopped. `temporal.db` runs in SQLite's WAL mode, so recent commits live in a `-wal` file next to it until SQLite folds them back in: a copy taken while the app runs needs the `-wal` and `-shm` files too, and a `-wal` file must never be deleted. SQLite needs working file locks, so keep `/data` on the named volume or a local disk, never NFS or SMB.
+Back up `/data` while the container is stopped. `workflow.db` and `temporal.db` run in SQLite's WAL mode, so recent commits live in a `-wal` file next to each until SQLite folds them back in: a copy taken while the app runs needs the `-wal` and `-shm` files too, and a `-wal` file must never be deleted. SQLite needs working file locks, so keep `/data` on the named volume or a local disk, never NFS or SMB.
 
 ## Configuration
 
