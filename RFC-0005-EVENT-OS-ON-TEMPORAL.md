@@ -3,7 +3,7 @@
 
 > **Current-state reading rule:** defect lists, measurements and code sketches below are anchored to their cited baseline commits. Some fixes have since landed. Use the [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md), current runtime references and recorded generation flags for shipped behavior; proposed paths and later rollout phases remain designs until implemented. This audit does not change the accepted owner decisions.
 
-- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) was done on 2026-11-02 apart from AP.7, which writes its flag one release after the release that ships AP.1-AP.6. Eleven fixes followed on 2026-11-04, N9's WAL among them (§24.4). RFC-0006 amended this RFC on 2026-10-24, and RFC-0007 on 2026-10-25 (§30).
+- **Status:** Accepted, 2026-10-23 (owner decisions in §3). Implementation is phased (§24). Phase 0 landed on 2026-10-23 and Phase 1 on 2026-10-24 (§24.4); Phase 1b (RFC-0006 §22.2) was done on 2026-11-02 apart from AP.7, which writes its flag one release after the release that ships AP.1-AP.6. Eleven fixes followed on 2026-11-04, N9's WAL among them, and two more on 2026-11-05 (§24.4). RFC-0006 amended this RFC on 2026-10-24, and RFC-0007 on 2026-10-25 (§30).
 - **Created:** 2026-10-23
 - **Scope:** the path from every event source to every effect:
   - `server/services/events/` and `server/routers/webhook.py`;
@@ -1130,7 +1130,7 @@ RFC-0006 §22.3 lists what each phase gains in full, with the owning sections, P
   - a size guard on child input (C1);
   - poll loops re-raise cancellation (H8);
   - a slim continue-as-new carry (H10);
-  - from RFC-0006 §22.4: poison events dead-lettered after 5 spawn attempts, with spawn backoff; stable execution-control Update ids and slim Update results; `register_trigger` hardening and triggers in the start input; seen keys carried as digests; the trigger filter and status broadcasts as local activities behind a patch; the rollover request to every live controller at the first boot of each release, once the slim carry and the cancellation fix have shipped. Graph approval gates that stop holding Stop moved into Phase 1b with RFC-0007.
+  - from RFC-0006 §22.4: poison events dead-lettered after 5 spawn attempts, with spawn backoff (built in 64fe733b, dormant for one release); stable execution-control Update ids and slim Update results; `register_trigger` hardening and triggers in the start input; seen keys carried as digests; the trigger filter and status broadcasts as local activities behind a patch; the rollover request to every live controller at the first boot of each release, once the slim carry and the cancellation fix have shipped. Graph approval gates that stop holding Stop moved into Phase 1b with RFC-0007.
 - Cancellation, after Phase 1b and before Phase 4 (RFC-0006 §22.4):
   - 1b.12: agent children request cancellation (`REQUEST_CANCEL`, `WAIT_CANCELLATION_COMPLETED`), with the re-raise that stops a plain agent on the cancel (`agent-delegation-drain-v1`);
   - MachinaWorkflow and AgentWorkflow cancel and drain their running work, with a 2-minute bound, behind a patch;
@@ -1276,6 +1276,13 @@ Phase 1b's items were done on 2026-11-02, apart from AP.7. Test-only fixes (a34f
 | The fetch check's host name | 0d1297b5 | `resolved_url_block_reason` writes the URL as httpx sends it before looking it up, so a name whose IDNA 2003 form ("strasse") or unencoded ASCII form differs from what httpx connects to no longer passes the check while httpx connects elsewhere. |
 | Media downloads' redirect hops | 7e10f2d0 | `fetch_to_workspace` checks every redirect hop; `is_public_url` refuses 100.64.0.0/10 (Alibaba Cloud's metadata at 100.100.100.200) and turns a malformed URL into a refusal. |
 | fileDownloader file names | 78890283 | The name is the last segment of the decoded path, with `/` and `\` both separators and `:` replaced, so a link cannot place the file outside the output folder. |
+
+**Batch 2** (2026-11-05). The owner chose both on 2026-11-04, and they were built and reviewed the same way. The first changes a workflow command, behind a patch marker that ships dormant.
+
+| Item | Commit | Notes |
+|---|---|---|
+| Poison events back off and are dead-lettered | 64fe733b | RFC-0006 §11.6 rec 2 with §7.4 A1, under `controller-spawn-backoff-v1`: a failed spawn waits behind the queue for 5 s, 30 s, 2 min and 10 min while later events start, and its fifth failure writes it to `<controller id>:dead` rows, which the queue never reads back; Reset deletes them. The marker ships dormant (`DORMANT_PATCHES` in `services/temporal/patches.py`, RFC-0006 §18.9 rec 2), so this release's runs keep the head-of-line retry; the next release removes it from the set. |
+| Home's Retry reset | c5d35ddd | A Reset whose Workspace cleanup passes 240 s (1b.15) stays `resetting`, and Home offered no way to send it again. Retry reset is now the employee's main action while the control is `resetting`; it reads the control status first and sends the Reset only while the generation the summary shows is still resetting. |
 
 ## 25. Defaults chosen and open items
 
