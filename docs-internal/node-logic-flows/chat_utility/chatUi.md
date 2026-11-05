@@ -126,7 +126,7 @@ flowchart TD
   imports `server/config/chat_genui_catalog.json` itself, and a client test
   (`client/src/features/chat/__tests__/genuiCatalog.test.ts`) holds its prop schemas to
   the manifest.
-- Allowed for Hire by `node_allowlist.json` `enabled_nodes`; the employee builder adds it to Talk when the node is allowed (`_talk_tools`), so generated interfaces are available to the answering Talk agent.
+- Allowed for Hire by `node_allowlist.json` `enabled_nodes`; the employee builder adds it to Talk when the node is allowed (`talk_tools` in `services/employees/builder.py`), so generated interfaces are available to the answering Talk agent while the owner has Generated UI on.
 
 ## Related
 

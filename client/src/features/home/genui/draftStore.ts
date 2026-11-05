@@ -13,8 +13,9 @@
  * server cancels an older call on its own when a newer token from the same
  * owner arrives. Cancel hands the owner's words back to the composer.
  *
- * The server builds the model's messages (the catalogue prompt, the owner's
- * context, the "The job:" / "Change the setup:" prefixes); the client sends
+ * The server builds the model's messages (the catalogue prompt, or the fixed
+ * form while the owner has Generated UI off; the owner's context; the
+ * "The job:" / "Change the setup:" prefixes); the client sends
  * the owner's words and the earlier replies, then reads the reply it gets
  * back (parse) and makes it safe to render (normalize) before showing it.
  * The screen's trigger is then checked against the apps the server

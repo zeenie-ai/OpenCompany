@@ -11,8 +11,9 @@ connected agent's ``response`` (``connected_outputs``, which NodeExecutor
 gives this node), so an agent wired in the editor needs no template. An
 answer that is empty, or exactly NO_REPLY (the agent had nothing to say),
 posts nothing. A ``<followups>`` block the answer ends with is never
-shown as text: in a chat run it becomes the reply's follow-up buttons
-(``services/chat/guide.py``), elsewhere it is dropped.
+shown as text: in a chat run, while the owner has Generated UI on, it
+becomes the reply's follow-up buttons (``services/chat/guide.py``);
+otherwise it is dropped.
 
 In a run the owner's chat message started, the reply is that chat run's
 answer (``run_scope``, set by MachinaWorkflow): it is saved under the run's
@@ -115,8 +116,9 @@ class ChatReplyNode(ActionNode):
         from services.plugin.deps import get_database
 
         text = params.message.strip() or _connected_answer(ctx.raw).strip()
-        # The <followups> block an answer may end with shows as buttons, never
-        # as text: a message that is only the block says nothing.
+        # The <followups> block an answer may end with never shows as text
+        # (as buttons only while Generated UI is on): a message that is only
+        # the block says nothing.
         visible = split_followups(text)[0].strip()
         if not visible or visible == NO_REPLY:
             return ChatReplyOutput(posted=False)

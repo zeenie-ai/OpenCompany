@@ -307,7 +307,9 @@ newer version wins in place.
 
 - **Switch.** One owner-wide setting, `UserSettings.generated_ui`, decides whether employees get generated UI at all.
   It is off by default and sits in Home's Settings > Profile and in Dev's Settings panel. `services/genui/switch.py`
-  reads it when a run starts, and a settings row that is missing or cannot be read means off. While it is off:
+  reads it when a run starts (the agent's tools and guide), again when Reply in Chat saves the reply (its
+  follow-ups), and on each setup request; a settings row that is missing or cannot be read means off. While it is
+  off:
   - `collect_agent_connections` leaves the Show UI tool out of every agent's tools, so its description rides no
     request (an agent the Agent Builder gives Show UI during a run keeps it until that run ends);
   - the guide asks for no follow-ups, and Reply in Chat keeps none;
@@ -350,8 +352,8 @@ newer version wins in place.
   - keep only an element's `type`, `props`, `children`, `visible` and `on`, and only an action binding's `action`
     and `params`: `watch`, `repeat`, `slots`, `confirm`, `onSuccess`, `onError` and `preventDefault` go;
   - take an action binding's `statePath` and `clearStatePath` only as a usable path written out: the client drops a
-    binding whose path is an expression or unusable, and the server refuses a `setState` whose `statePath` is an
-    expression;
+    binding whose path is an expression or unusable; the server refuses a `setState` whose `statePath` is an
+    expression, and `pushState`, the one action that reads `clearStatePath`, outright;
   - drop `$computed`, and `$item`, `$index` and `$bindItem`, which mean nothing without `repeat`;
   - validate every element's props (the client degrades one bad prop at a time with forgiving zod schemas);
   - drop unknown component types before rendering.

@@ -2,16 +2,17 @@
 ``cancel_employee_setup``.
 
 ``generate_employee_setup {job, refine?, history?, draft_token}`` asks the
-owner's AI model for the setup screen (config/genui_catalog.json describes
-what it may contain) and returns the raw reply; the client reads it and
-makes it safe to render. The server builds every message: the catalogue
-prompt, the owner's context, and the "The job:" / "Change the setup:"
-prefixes. Of the earlier replies it keeps the latest plus at most two
-before it, within 40K characters.
+owner's AI model for the setup screen and returns the reply; the client
+reads it and makes it safe to render. While the owner has Generated UI on,
+config/genui_catalog.json describes what the screen may contain, and the
+server builds every message: the catalogue prompt, the owner's context, and
+the "The job:" / "Change the setup:" prefixes. Of the earlier replies it
+keeps the latest plus at most two before it, within 40K characters.
 
-While the owner has Generated UI off, the model fills a fixed form instead
-and the server draws the setup card from it (``setup_form.py``); the reply
-the client gets has the same shape either way.
+While the switch is off, the model fills a fixed form instead and the server
+draws the setup card from it (``setup_form.py``). A change sends only the
+latest setup back, as the form it describes. The reply the client gets has
+the same shape either way.
 
 Time: 90 s for a cloud model, 240 s for a local one, for the whole
 request including its one retry. The client waits up to 300 s.

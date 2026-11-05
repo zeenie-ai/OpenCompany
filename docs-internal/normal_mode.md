@@ -344,7 +344,8 @@ Help in browser), else the first on the team.
 `generate_employee_setup {job, refine?, history?, draft_token}`
 ([services/employees/setup.py](../server/services/employees/setup.py)):
 
-- **The server builds every message** ([setup_prompt.py](../server/services/employees/setup_prompt.py)):
+- **The server builds every message** ([setup_prompt.py](../server/services/employees/setup_prompt.py)),
+  while Generated UI is on (with it off, see **Generated UI off** below):
   a preamble, the component catalogue (`config/genui_prompt.txt`, written
   from `config/genui_catalog.json` by json-render's `catalog.prompt()` with
   our template: `client/src/lib/jsonRender/prompts.ts`, `bun run

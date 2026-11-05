@@ -9,9 +9,10 @@ the agent's system prompt stays stable for prompt caching. It is appended by
 (``services/genui/switch.py``) the agent reads ``CHAT_GUIDE_BASE``, the
 same guide without the line asking for follow-up questions.
 
-``split_followups`` takes the ``<followups>`` block off a reply: the chat
-shows its questions as buttons (``parts.followups``) and the block itself
-never shows (the stream holds it back too, ``services/chat/stream.py``).
+``split_followups`` takes the ``<followups>`` block off a reply: while the
+owner has Generated UI on, the chat shows its questions as buttons
+(``parts.followups``), and the block itself never shows (the stream holds it
+back too, ``services/chat/stream.py``).
 """
 
 from __future__ import annotations

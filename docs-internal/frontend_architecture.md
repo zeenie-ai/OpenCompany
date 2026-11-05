@@ -250,8 +250,9 @@ client/src/
 │   │                               # sanitize (no prototype paths; no watch/repeat/slots/$computed/confirm),
 │   │                               # guard (props through the catalogue schema, live-only entrance),
 │   │                               # reveal (spec -> patch stream, paced), paths (state-path rule),
-│   │                               # catalog (forgiving prop schemas), prompts (writes server/config/*_prompt.txt;
-│   │                               # never loaded by the app)
+│   │                               # catalog (forgiving prop schemas), prompts (the text of
+│   │                               # server/config/*_prompt.txt, which client/scripts/genui-prompts.ts
+│   │                               # writes; never loaded by the app)
 │   └── utils.ts                    # cn() = clsx + tailwind-merge (shadcn convention)
 ├── schemas/workflowSchema.ts       # Structural pre-flight for workflow export (backend is the schema authority)
 ├── stores/
