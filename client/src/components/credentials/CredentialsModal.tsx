@@ -1,6 +1,7 @@
 /** One app-level host for browsing, connecting and managing credentials.
- *  The Welcome guide's Connect step shows the same provider page inline
- *  (ProviderPage); every other entry point opens this dialog. */
+ *  Home's AI models dialog and the Welcome guide's Connect step show the AI
+ *  models and their pages inline; every other entry point opens this
+ *  dialog. */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
@@ -49,14 +50,13 @@ function CredentialsSession({ visible, onClose, options }: Props & { options: Cr
   }, [visible, provider, selection, connected, options.intent, onClose, closeProvider]);
 
   const allProviders = () => { setBrowsing(true); setSelection(null); };
-  const aiSetup = options.categoryId === 'ai' && options.intent === 'connect';
 
   return (
     <>
       <Modal
         isOpen={visible && browsing}
         onClose={onClose}
-        title={aiSetup ? 'Connect an AI model' : 'Connectors'}
+        title="Connectors"
         titleIcon={<ShieldCheck className="size-4" />}
         motion="spring"
         maxWidth="min(1040px, calc(100vw - 2rem))"
@@ -100,7 +100,7 @@ function CredentialsSession({ visible, onClose, options }: Props & { options: Cr
           <ProviderPage
             view={view}
             selection={selection}
-            backLabel={options.categoryId === 'ai' ? 'All AI models' : 'All connectors'}
+            backLabel="All connectors"
             onBack={allProviders}
             visible={visible}
             onOpen={(id) => setSelection({ id, intent: 'manage' })}

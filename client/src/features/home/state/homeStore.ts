@@ -1,6 +1,6 @@
 /**
  * Normal mode's UI state: which view is showing, the sidebar, the Settings
- * dialog, the Workspace dock, the Welcome guide, and
+ * dialog, the Workspace dock, the Welcome guide, the AI models dialog, and
  * the one-shot signals the hire choreography fires (a sidebar row's glow,
  * the logo pulse, what a hire could not set up as asked, a new hire's first
  * day). Server data lives in TanStack Query (features/home/data), never here.
@@ -9,7 +9,7 @@
 import { z } from 'zod';
 import { create } from 'zustand';
 import type { CanvasFocus } from '@/lib/canvasBoard';
-import { useShellDialogsStore, type CredentialsIntent } from '@/stores/shellDialogsStore';
+import type { CredentialsIntent } from '@/stores/shellDialogsStore';
 import { SPIKE, spikeOrb } from '../orb/orb';
 
 export type HomeView = { kind: 'hire' } | { kind: 'employee'; workflowId: string };
@@ -32,6 +32,16 @@ export interface GuideState {
   /** The last step's job waits for an AI model: connecting one finishes
    *  the guide and sends it. */
   pendingDraft: boolean;
+}
+
+/** Home's AI models dialog (onboarding/AiModelsDialog). */
+export interface ConnectAIState {
+  open: boolean;
+  /** The model's page it shows in place of the list. */
+  provider: { id: string; intent: CredentialsIntent } | null;
+  /** Connecting a model closes it, so the task that wanted one goes on.
+   *  The Get started checklist opens it to stay on the list instead. */
+  closeOnConnect: boolean;
 }
 
 /** An employee's screen the owner took (Take over). */
@@ -89,8 +99,8 @@ export interface WorkspaceFocus extends CanvasFocus {
   canvasNodeId: string;
 }
 
-/** A hire made in this session, from the hire until their first
- *  conversation begins (employee/FirstDay). A reload ends it. */
+/** A hire made in this session, from the hire until a reload, New
+ *  conversation or deleting them (employee/FirstDay). */
 export interface FirstDay {
   /** The hire started them itself (nothing was missing). */
   started: boolean;
@@ -147,6 +157,8 @@ interface HomeState {
   takeovers: Record<string, Takeover>;
   /** The Welcome guide (onboarding/WelcomeGuide). */
   guide: GuideState;
+  /** The AI models dialog. */
+  connectAI: ConnectAIState;
   /** New hires on their first day, by workflow id. */
   firstDays: Record<string, FirstDay>;
 
@@ -158,7 +170,11 @@ interface HomeState {
   setSettingsTab: (tab: SettingsTab) => void;
   glowRow: (workflowId: string) => void;
   pulseLogo: () => void;
-  openConnectAI: () => void;
+  /** Open the AI models dialog on its list (closeOnConnect defaults to true). */
+  openConnectAI: (options?: { closeOnConnect?: boolean }) => void;
+  closeConnectAI: () => void;
+  /** Show a model's page in the AI models dialog (null: back to the list). */
+  setConnectAIProvider: (provider: ConnectAIState['provider']) => void;
   setHireNotice: (notice: HireNotice | null) => void;
   /** The composer took the focus it was asked for; a remount must not
    *  take it again. */
@@ -186,7 +202,7 @@ interface HomeState {
    *  at the step they left. A completed owner never sees it unasked. */
   checkGuide: (settings: { onboarding_completed?: unknown; onboarding_step?: unknown }) => void;
   beginFirstDay: (workflowId: string, firstDay: FirstDay) => void;
-  /** Their first conversation began, or they are gone. */
+  /** New conversation, or they are gone. */
   endFirstDay: (workflowId: string) => void;
 }
 
@@ -212,6 +228,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   workspaceFocus: null,
   takeovers: {},
   guide: { open: false, step: 'welcome', furthest: 0, checked: false, provider: null, pendingDraft: false },
+  connectAI: { open: false, provider: null, closeOnConnect: true },
   firstDays: {},
 
   showHire: (options) =>
@@ -245,10 +262,13 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   glowRow: (workflowId) =>
     set((state) => ({ glow: { workflowId, nonce: (state.glow?.nonce ?? 0) + 1 } })),
   pulseLogo: () => set((state) => ({ logoPulse: state.logoPulse + 1 })),
-  openConnectAI: () => {
+  openConnectAI: ({ closeOnConnect = true } = {}) => {
     spikeOrb(SPIKE.connect);
-    useShellDialogsStore.getState().openCredentials({ categoryId: 'ai', intent: 'connect' });
+    set({ connectAI: { open: true, provider: null, closeOnConnect } });
   },
+  // The page stays, so the dialog does not change page while it closes.
+  closeConnectAI: () => set((state) => ({ connectAI: { ...state.connectAI, open: false } })),
+  setConnectAIProvider: (provider) => set((state) => ({ connectAI: { ...state.connectAI, provider } })),
   setHireNotice: (notice) => set({ hireNotice: notice }),
   consumeComposerFocus: () => set((state) => (state.composerFocus === 0 ? state : { composerFocus: 0 })),
   openWorkspace: (workflowId) => {

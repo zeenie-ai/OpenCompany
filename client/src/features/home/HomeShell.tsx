@@ -8,10 +8,11 @@
  * team current, the line for work that keeps retrying (header/AttentionLine),
  * the orb behind the content, the Workspace dock on the
  * right, the Settings dialog, the Welcome guide (onboarding/, which
- * opens over the hire view on first launch) and, once the guide is
- * finished, the Get started checklist. Connection actions open the app shell's
- * shared credentials dialog. Switching views scrolls to the top and plays
- * the view swap.
+ * opens over the hire view on first launch), the AI models dialog and, once
+ * the guide is finished, the Get started checklist. Connecting an app opens
+ * the app shell's shared credentials dialog; connecting an AI model opens
+ * the AI models dialog. Switching views scrolls to the top and plays the
+ * view swap.
  *
  * Hiring scrolls as one page. An employee's page is the chat, which scrolls
  * its conversation itself above its message box, so it gets a column that
@@ -29,6 +30,7 @@ import { EmployeeView } from './employee/EmployeeView';
 import { AttentionLine } from './header/AttentionLine';
 import { HomeHeader } from './header/HomeHeader';
 import { HireView } from './hire/HireView';
+import { AiModelsDialog } from './onboarding/AiModelsDialog';
 import { GetStartedChecklist } from './onboarding/GetStartedChecklist';
 import { WelcomeGuide } from './onboarding/WelcomeGuide';
 import { SPIKE, spikeOrb } from './orb/orb';
@@ -115,6 +117,7 @@ export default function HomeShell() {
       <WorkspaceDock onConnect={openConnect} />
       <HomeSettings onConnect={openConnect} />
       <WelcomeGuide />
+      <AiModelsDialog />
       <GetStartedChecklist />
     </div>
   );

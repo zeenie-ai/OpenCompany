@@ -1,8 +1,8 @@
 /**
  * The composer's binding: a chip's job goes in the box to be read, changed
- * and sent, never sent for the owner; "no AI model" opens the guided
- * connect dialog; and once a model is connected the draft that waited for
- * one is sent again, once.
+ * and sent, never sent for the owner; "no AI model" opens the AI models
+ * dialog; and once a model is connected the draft that waited for one is
+ * sent again, once.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,7 +22,6 @@ vi.mock('../../data/connectors', () => ({
 
 import corpus from '../__fixtures__/replies.json';
 import { useHomeStore } from '../../state/homeStore';
-import { useShellDialogsStore } from '@/stores/shellDialogsStore';
 import { resetDraftForTests, useDraftStore } from '../draftStore';
 import { useHireComposer, useJobComposer, useSendJob } from '../useHireComposer';
 
@@ -33,8 +32,7 @@ beforeEach(() => {
   resetDraftForTests();
   connectors.hasAi = false;
   connectors.isLoading = false;
-  useHomeStore.setState({ composerFocus: 0, view: { kind: 'hire' } });
-  useShellDialogsStore.setState({ credentialsOpen: false });
+  useHomeStore.setState({ composerFocus: 0, view: { kind: 'hire' }, connectAI: { open: false, provider: null, closeOnConnect: true } });
 });
 
 async function submit(result: { current: ReturnType<typeof useHireComposer> }, job: string) {
@@ -51,15 +49,13 @@ describe('useHireComposer', () => {
     expect(sendRequest).not.toHaveBeenCalled();
   });
 
-  it('opens the guided dialog when there is no AI model, and sends the draft once one is connected', async () => {
+  it('opens the AI models dialog when there is no AI model, and sends the draft once one is connected', async () => {
     sendRequest.mockResolvedValue({ success: false, error: 'no_ai_provider' });
     const { result, rerender } = renderHook(() => useHireComposer());
     await submit(result, 'Answer my WhatsApp');
     await waitFor(() => expect(useDraftStore.getState().failure?.code).toBe('no_ai_provider'));
-    expect(useShellDialogsStore.getState()).toMatchObject({
-      credentialsOpen: true,
-      credentialsOptions: { categoryId: 'ai', intent: 'connect' },
-    });
+    // Connecting one closes it, so the draft goes on.
+    expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
 
     sendRequest.mockResolvedValue({ success: true, reply: GOOD_REPLY });
     connectors.hasAi = true;
@@ -108,7 +104,7 @@ describe('useJobComposer (the Welcome guide’s box)', () => {
     await act(async () => {
       await result.current.submit();
     });
-    expect(useShellDialogsStore.getState().credentialsOpen).toBe(false);
+    expect(useHomeStore.getState().connectAI.open).toBe(false);
   });
 });
 

@@ -151,11 +151,9 @@ describe('shared credentials host', () => {
     expect(ws.sendRequest.mock.calls.some(([type]) => type === 'get_stored_api_key')).toBe(false);
   });
 
-  it('opens on Connect an AI model with key links, and a refused save preserves the input and shows its reason', async () => {
-    mount({ categoryId: 'ai', intent: 'connect' }); await open();
-    expect(await screen.findByRole('dialog', { name: 'Connect an AI model' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Manage Telegram' })).not.toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: 'Connect OpenAI' }));
+  it('links to where a key comes from, and a refused save preserves the input and shows its reason', async () => {
+    mount({ providerId: 'openai', intent: 'connect' }); await open();
+    expect(await screen.findByRole('dialog', { name: 'Connect OpenAI' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Get a key from OpenAI' })).toHaveAttribute('href', 'https://platform.openai.com/api-keys');
     await userEvent.type(await keyInput(), 'rejected-key');
     await userEvent.click(screen.getByRole('button', { name: 'Validate' }));

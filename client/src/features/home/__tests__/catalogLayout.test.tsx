@@ -2,8 +2,9 @@
  * The shared catalog page: Discover shows eight until "Show all"; the
  * category filter reveals its chips and clears when closed; Yours shows the
  * page's own list with a switch only when the page can toggle and remove
- * only when it can remove; an empty Yours points to Discover; a card that
- * turns added while on screen calls back once.
+ * only when it can remove; the card's controls borrow no action colour (the
+ * added mark stays green, a state); an empty Yours points to Discover; a
+ * card that turns added while on screen calls back once.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -108,6 +109,30 @@ describe('CatalogLayout', () => {
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Item 1' }));
     expect(onRemove).toHaveBeenCalledWith(added);
+  });
+
+  it('draws the card’s controls neutral, keeping the added mark green', () => {
+    const added = item('1', { state: 'added', enabled: true });
+    const lists = {
+      yours: { items: [added], sectionTitle: 'Your things', empty: EMPTY },
+      discover: { items: [added, item('2')], sectionTitle: 'Top things' },
+    };
+    const onRemove = vi.fn();
+    const { rerenderWith } = renderLayout({ ...lists, onRemove });
+    expect(screen.getByRole('button', { name: 'Add Item 2' }).className).not.toMatch(/action-/);
+    const mark = screen.getByRole('button', { name: 'Remove Item 1' });
+    expect(mark).toHaveClass('bg-action-run-soft');
+    expect(mark.className).not.toMatch(/hover:\S*action-/);
+
+    rerenderWith({ ...lists, onRemove, onManage: vi.fn() });
+    expect(screen.getByRole('button', { name: 'Manage Item 1' })).toHaveClass('border-border-default', 'text-fg-default');
+    expect(screen.getByRole('button', { name: 'Remove Item 1' }).className).not.toMatch(/action-/);
+
+    rerenderWith({ ...lists, onRemove, onToggle: vi.fn() });
+    showYours();
+    expect(screen.getByRole('switch', { name: 'Item 1' })).toHaveClass('data-checked:bg-fg-default');
+    expect(screen.getByRole('switch', { name: 'Item 1' }).className).not.toMatch(/action-/);
+    expect(screen.getByRole('button', { name: 'Remove Item 1' }).className).not.toMatch(/action-/);
   });
 
   it('points an empty Yours to Discover', () => {

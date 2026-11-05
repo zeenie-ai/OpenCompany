@@ -1,23 +1,24 @@
 /**
- * Guide step 2, Connect an AI model (onboarding handoff A2): the shared
- * credentials browser, cut to AI models. Every AI provider shows (no
- * "Show all" cap, so models that run on this computer are not hidden),
- * Yours counts AI models only, and there is no category filter.
+ * Connect an AI model (onboarding handoff A2): the Welcome guide's step 2,
+ * and the list in Home's AI models dialog. The shared credentials browser,
+ * cut to AI models: every AI provider shows (no "Show all" cap, so models
+ * that run on this computer are not hidden), Yours counts AI models only,
+ * and there is no category filter. The host keeps which page is open.
  *
  * Connect and Manage open the provider's page in place of the list
- * (ProviderPage, the same page the credentials dialog shows). The list stays
- * mounted underneath, hidden, so a card that turns connected still glows
- * and reports it: then a pill says so, and the step returns to the list
- * after a connect (Manage stays open). When the last step's job is waiting
- * for a model, connecting one finishes the guide and sends it. Back returns
- * focus to the card it came from.
+ * (ProviderPage, the same page the credentials dialog shows, unless the
+ * host renders its own). The list stays mounted underneath, hidden, so a
+ * card that turns connected still glows and reports it: then a pill says
+ * so, and the step returns to the list after a connect (Manage stays open).
+ * When the host's task waits for a model (the guide's job, the dialog
+ * opened for one), connecting one finishes it instead. Back returns focus
+ * to the card it came from.
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { CredentialsBrowser, type CredentialsBrowserCopy } from '@/components/credentials/CredentialsBrowser';
-import { ProviderPage } from '@/components/credentials/ProviderPage';
-import { isConnected, useCredentialsCatalogue } from '../../data/connectors';
-import { useHomeStore } from '../../state/homeStore';
+import { ProviderPage, type ProviderSelection } from '@/components/credentials/ProviderPage';
+import { isConnected, useCredentialsCatalogue, type CredentialsCatalogue } from '../../data/connectors';
 import { pillToast } from '../../ui/pillToast';
 
 const AI_COPY = (connected: boolean): CredentialsBrowserCopy => ({
@@ -28,13 +29,39 @@ const AI_COPY = (connected: boolean): CredentialsBrowserCopy => ({
   yoursEmpty: { title: 'No AI models connected yet', detail: 'Connect one so your employees can think.' },
 });
 
-export function ConnectStep({ onFinish }: { onFinish: () => void }) {
+/** What a provider's page is given: the AI models and which one to show. */
+export interface ConnectPage {
+  view: CredentialsCatalogue;
+  selection: ProviderSelection;
+  onBack: () => void;
+}
+
+/** A provider's full page in place of the list (ProviderPage). */
+export function FullProviderPage({ view, selection, onBack }: ConnectPage) {
+  return (
+    <div className="px-3 pb-8">
+      <ProviderPage view={view} selection={selection} backLabel="All AI models" onBack={onBack} visible showHeading autoFocusBack />
+    </div>
+  );
+}
+
+export interface ConnectStepProps {
+  /** The provider page shown in place of the list (null: the list). */
+  selection: ProviderSelection | null;
+  onSelect: (selection: ProviderSelection | null) => void;
+  /** Connecting a model finishes the host's task rather than returning to
+   *  the list. */
+  finishOnConnect: boolean;
+  onFinish: () => void;
+  /** A provider's page. Default: the full page (FullProviderPage). */
+  renderPage?: (page: ConnectPage) => ReactNode;
+}
+
+export function ConnectStep({ selection, onSelect, finishOnConnect, onFinish, renderPage }: ConnectStepProps) {
   const catalogue = useCredentialsCatalogue();
   const providers = useMemo(() => catalogue.providers.filter((provider) => provider.consumer_category === 'ai'), [catalogue.providers]);
   const view = { ...catalogue, providers, categories: [] };
   const connected = providers.some(isConnected);
-  const selection = useHomeStore((s) => s.guide.provider);
-  const setProvider = useHomeStore((s) => s.setGuideProvider);
 
   // Back on the list: focus the card the page was opened from.
   const shown = useRef<string | null>(null);
@@ -51,20 +78,21 @@ export function ConnectStep({ onFinish }: { onFinish: () => void }) {
   const onItemAdded = (id: string) => {
     const name = providers.find((provider) => provider.id === id)?.name ?? 'Your AI model';
     pillToast(`${name} is connected`);
-    const { guide } = useHomeStore.getState();
-    if (guide.pendingDraft) {
+    if (finishOnConnect) {
       onFinish();
       return;
     }
-    if (guide.provider?.id === id && guide.provider.intent === 'connect') setProvider(null);
+    if (selection?.id === id && selection.intent === 'connect') onSelect(null);
   };
+
+  const page = selection && { view, selection, onBack: () => onSelect(null) };
 
   return (
     <>
       <div hidden={selection !== null}>
         <CredentialsBrowser
           catalogue={view}
-          onConnect={(id, intent = 'connect') => setProvider({ id, intent })}
+          onConnect={(id, intent = 'connect') => onSelect({ id, intent })}
           copy={AI_COPY(connected)}
           variant="embedded"
           discoverLimit={null}
@@ -72,19 +100,7 @@ export function ConnectStep({ onFinish }: { onFinish: () => void }) {
           customConnectors={false}
         />
       </div>
-      {selection && (
-        <div className="px-3 pb-8">
-          <ProviderPage
-            view={view}
-            selection={selection}
-            backLabel="All AI models"
-            onBack={() => setProvider(null)}
-            visible
-            showHeading
-            autoFocusBack
-          />
-        </div>
-      )}
+      {page && (renderPage ? renderPage(page) : <FullProviderPage {...page} />)}
     </>
   );
 }

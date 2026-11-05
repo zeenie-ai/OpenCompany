@@ -1,8 +1,9 @@
 /**
  * The Get started checklist on Home (onboarding/GetStartedChecklist): it
  * shows once the Welcome guide is finished and stays out of the way while
- * the guide is open; Connect an AI model and Hire your first employee
- * follow the team as it is now, and their rows take the owner there; Say
+ * the guide or the AI models dialog is open; Connect an AI model and Hire
+ * your first employee follow the team as it is now, and their rows take the
+ * owner there (the AI models dialog, kept open after a connect); Say
  * hello and Approve a first draft are latched in the owner's settings,
  * each written once; it folds to a pill; hiding it says where it comes back.
  */
@@ -80,7 +81,11 @@ beforeEach(() => {
   listeners.clear();
   ai = [];
   vi.mocked(pillToast).mockClear();
-  useHomeStore.setState((state) => ({ view: { kind: 'hire' }, guide: { ...state.guide, open: false } }));
+  useHomeStore.setState((state) => ({
+    view: { kind: 'hire' },
+    guide: { ...state.guide, open: false },
+    connectAI: { open: false, provider: null, closeOnConnect: true },
+  }));
   server = { settings: { onboarding_completed: true }, employees: [], messages: [] };
   sendRequest.mockReset().mockImplementation(async (type: string, data: Wire) => {
     if (type === 'get_user_settings') return { settings: server.settings };
@@ -109,14 +114,23 @@ describe('Get started on Home', () => {
     expect(screen.queryByRole('region', { name: 'Get started' })).not.toBeInTheDocument();
   });
 
+  it('stays hidden while the AI models dialog is open', async () => {
+    useHomeStore.setState((state) => ({ connectAI: { ...state.connectAI, open: true } }));
+    renderChecklist();
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('list_employees', {}));
+    expect(screen.queryByRole('region', { name: 'Get started' })).not.toBeInTheDocument();
+  });
+
   it('offers the first steps, each taking the owner there', async () => {
     renderChecklist();
     const card = await screen.findByRole('region', { name: 'Get started' });
     expect(within(card).getByText('0 of 4 done')).toBeInTheDocument();
     expect(within(card).getByText('OpenAI, Anthropic, Gemini or a local model')).toBeInTheDocument();
     fireEvent.click(step(/Connect an AI model/));
-    expect(useHomeStore.getState().guide).toMatchObject({ open: true, step: 'connect' });
-    act(() => useHomeStore.setState((state) => ({ guide: { ...state.guide, open: false }, view: { kind: 'employee', workflowId: 'x' } })));
+    // The AI models dialog, which stays on its list after a connect.
+    expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: false });
+    expect(useHomeStore.getState().guide.open).toBe(false);
+    act(() => useHomeStore.setState((state) => ({ connectAI: { ...state.connectAI, open: false }, view: { kind: 'employee', workflowId: 'x' } })));
     fireEvent.click(await screen.findByRole('button', { name: /Hire your first employee/ }));
     expect(useHomeStore.getState().view).toEqual({ kind: 'hire' });
   });

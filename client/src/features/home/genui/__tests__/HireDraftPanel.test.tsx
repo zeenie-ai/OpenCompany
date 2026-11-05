@@ -5,7 +5,7 @@
  * the model's rules, then the footer strip) with neutral controls and Hire
  * the one strong one, a double-clicked Hire sends one request, a finished
  * hire clears the draft and opens the new employee's page (with what the
- * hire said, and the AI connect dialog when there is no model), "Change
+ * hire said, and the AI models dialog when there is no model), "Change
  * something" hands the composer the draft, controls write back into the
  * draft, changing when they work reaches the hire, a reply in json-render's
  * own shape works the same, a failed setup says so on a neutral notice with
@@ -17,7 +17,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { setReducedMotion } from '@/test/waapi';
-import { useShellDialogsStore } from '@/stores/shellDialogsStore';
 import { useAppStore } from '@/store/useAppStore';
 
 const sendRequest = vi.fn();
@@ -111,8 +110,12 @@ beforeEach(() => {
   vi.mocked(pillToast).mockClear();
   resetDraftForTests();
   seedReadyDraft();
-  useHomeStore.setState({ view: { kind: 'hire' }, hireNotice: null, firstDays: {} });
-  useShellDialogsStore.setState({ credentialsOpen: false });
+  useHomeStore.setState({
+    view: { kind: 'hire' },
+    hireNotice: null,
+    firstDays: {},
+    connectAI: { open: false, provider: null, closeOnConnect: true },
+  });
   useAppStore.setState({ shellMode: 'normal' });
 });
 
@@ -270,10 +273,7 @@ describe('HireDraftPanel', () => {
     const home = useHomeStore.getState();
     expect(home.view).toEqual({ kind: 'employee', workflowId: 'w1' });
     expect(home.hireNotice).toEqual({ workflowId: 'w1', name: 'Maya', warnings });
-    expect(useShellDialogsStore.getState()).toMatchObject({
-      credentialsOpen: true,
-      credentialsOptions: { categoryId: 'ai', intent: 'connect' },
-    });
+    expect(home.connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
   });
 
   it.each(['team_temporal_required', 'team_agent_workflow_required', 'team_runtime_not_ready'])('shows a saved hire waiting for %s in plain words', async (issue) => {
@@ -372,7 +372,7 @@ describe('HireDraftPanel', () => {
     expect(payload).toMatchObject({ name: 'Maya', rules: { ask_first: false }, sends_via: 'WhatsApp' });
   });
 
-  it('opens the guided AI connect dialog from a setup that found no AI model', () => {
+  it('opens the AI models dialog from a setup that found no AI model', () => {
     useDraftStore.setState({ status: 'failed', failure: { code: 'no_ai_provider', text: 'Answer WhatsApp', refine: false } });
     renderPanel();
     // A neutral notice: the attention dot is its one colour.
@@ -382,10 +382,8 @@ describe('HireDraftPanel', () => {
     expect(alert.querySelector('.bg-status-attention-dot')).not.toBeNull();
     expect(connect.className).not.toMatch(/node-|action-/);
     fireEvent.click(connect);
-    expect(useShellDialogsStore.getState()).toMatchObject({
-      credentialsOpen: true,
-      credentialsOptions: { categoryId: 'ai', intent: 'connect' },
-    });
+    // Connecting one closes it, and the setup is sent again.
+    expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
   });
 
   it('offers Try again after any failure, in neutral colours', async () => {

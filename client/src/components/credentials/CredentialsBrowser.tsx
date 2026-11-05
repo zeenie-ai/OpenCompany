@@ -4,31 +4,23 @@
  *
  * Connect and Manage open the shared host with the corresponding intent.
  * Disconnect removes what the panel would remove for API-key, signed-in and
- * custom (MCP) providers, after a confirmation; for the rest (a paired
- * phone, an email account) it opens the panel, which owns those steps. A
- * card glows when it turns connected. Connection-success feedback belongs
- * to the host. Add opens the custom connector form (AddConnectorForm), as
- * does the MCP server card's page (panels/McpAddPanel); a saved connector
- * opens on its own page once the catalogue holds it.
+ * custom (MCP) providers, after a confirmation (ConfirmDisconnect); for the
+ * rest (a paired phone, an email account) it opens the panel, which owns
+ * those steps. A card glows when it turns connected. Connection-success
+ * feedback belongs to the host. Add opens the custom connector form
+ * (AddConnectorForm), as does the MCP server card's page
+ * (panels/McpAddPanel); a saved connector opens on its own page once the
+ * catalogue holds it.
  */
 
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { AddConnectorForm } from './AddConnectorForm';
 import { isConnected, useCredentialsCatalogue, type ConsumerProvider, type CredentialsCatalogue } from './catalogue';
+import { ConfirmDisconnect } from './ConfirmDisconnect';
 import type { CatalogItem } from '@/components/catalog/catalog';
 import { CatalogLayout } from '@/components/catalog/CatalogLayout';
 
@@ -81,8 +73,9 @@ function toItem(provider: ConsumerProvider): CatalogItem {
   };
 }
 
-/** What the browser says. Settings > Connectors uses the defaults; the
- *  Welcome guide's Connect step speaks of AI models. */
+/** What the browser says. Settings > Connectors uses the defaults; the AI
+ *  model list (the Welcome guide's Connect step, Home's AI models dialog)
+ *  speaks of AI models. */
 export interface CredentialsBrowserCopy {
   title: string;
   searchPlaceholder: string;
@@ -106,13 +99,13 @@ export interface CredentialsBrowserProps {
   /** The host can share its query/visibility result without another hook. */
   catalogue?: CredentialsCatalogue;
   copy?: CredentialsBrowserCopy;
-  /** Passed to CatalogLayout (the Welcome guide embeds the browser). */
+  /** Passed to CatalogLayout (the AI model list embeds the browser). */
   variant?: 'page' | 'embedded';
   discoverLimit?: number | null;
   /** A provider on screen turned connected (after its card's glow starts). */
   onItemAdded?: (providerId: string) => void;
-  /** Offer Add for a custom connector (default). The Welcome guide's AI
-   *  model step turns it off. */
+  /** Offer Add for a custom connector (default). The AI model list turns
+   *  it off. */
   customConnectors?: boolean;
 }
 
@@ -209,20 +202,12 @@ function CredentialsBrowserContent({
         }
       />
 
-      <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect {confirming?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Employees that use {confirming?.name} stop using it until you connect it again.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void confirmDisconnect()}>Disconnect</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDisconnect
+        name={confirming?.name ?? ''}
+        open={confirming !== null}
+        onOpenChange={(open) => !open && setConfirming(null)}
+        onConfirm={() => void confirmDisconnect()}
+      />
     </>
   );
 }

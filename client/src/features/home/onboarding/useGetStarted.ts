@@ -2,7 +2,8 @@
  * The Get started checklist's state (onboarding handoff D), from what Home
  * already knows:
  *
- * - Connect an AI model: one is connected now.
+ * - Connect an AI model: one is connected now. Its row opens the AI models
+ *   dialog, which stays on its list after a connect.
  * - Hire your first employee: someone on the team was hired.
  * - Say hello: the owner has written to their first hire. Latched in the
  *   owner's settings (`getting_started_said_hello`), since New conversation
@@ -84,7 +85,7 @@ export function useGetStarted() {
     'connect-ai': {
       done: hasAi,
       sub: ai ? `${ai.name} is connected` : 'OpenAI, Anthropic, Gemini or a local model',
-      act: () => home().openGuide('connect'),
+      act: () => home().openConnectAI({ closeOnConnect: false }),
     },
     hire: {
       done: first !== null,

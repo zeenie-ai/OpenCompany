@@ -37,7 +37,6 @@ import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { EmployeeView } from '../employee/EmployeeView';
 import { useHomeStore } from '../state/homeStore';
-import { useShellDialogsStore } from '@/stores/shellDialogsStore';
 import { SPIKE, orbState } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
 
@@ -160,16 +159,13 @@ describe('EmployeeView', () => {
     expect(orbState.spike).toBe(SPIKE.start);
   });
 
-  it('says to connect an AI model, and opens that dialog, when Start is refused for want of one', async () => {
-    useShellDialogsStore.setState({ credentialsOpen: false });
+  it('says to connect an AI model, and opens the AI models dialog, when Start is refused for want of one', async () => {
+    useHomeStore.setState({ connectAI: { open: false, provider: null, closeOnConnect: true } });
     actions.startEmployee.mockRejectedValue(new Error('needs_ai'));
     renderPage(summary({ status: 'ready', talk: TALK_ON }, { state: 'never_started' }));
     fireEvent.click(screen.getByRole('button', { name: 'Start' }));
     await waitFor(() => expect(pillToast).toHaveBeenCalledWith('Connect an AI model first.', { tone: 'error' }));
-    expect(useShellDialogsStore.getState()).toMatchObject({
-      credentialsOpen: true,
-      credentialsOptions: { categoryId: 'ai', intent: 'connect' },
-    });
+    expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
   });
 
   it.each([
@@ -184,14 +180,11 @@ describe('EmployeeView', () => {
     await waitFor(() => expect(pillToast).toHaveBeenCalledWith(message, { tone: 'error' }));
   });
 
-  it('opens the "Connect an AI model" dialog from the conversation', () => {
-    useShellDialogsStore.setState({ credentialsOpen: false });
+  it('opens the AI models dialog from the conversation’s Connect an AI model', () => {
+    useHomeStore.setState({ connectAI: { open: false, provider: null, closeOnConnect: true } });
     renderPage(summary({ status: 'ready', talk: TALK_ON, needs_ai: true }, { state: 'never_started' }));
     fireEvent.click(screen.getByRole('button', { name: 'Connect an AI model' }));
-    expect(useShellDialogsStore.getState()).toMatchObject({
-      credentialsOpen: true,
-      credentialsOptions: { categoryId: 'ai', intent: 'connect' },
-    });
+    expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
   });
 
   it('offers Start again above the message box after a failure', () => {

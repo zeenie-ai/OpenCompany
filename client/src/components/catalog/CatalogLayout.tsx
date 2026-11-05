@@ -11,8 +11,9 @@
  *   when the page is opened on one;
  * - Discover shows DISCOVER_LIMIT cards until "Show all" (`discoverLimit`
  *   changes the cap; null shows everything);
- * - `variant="embedded"` fits a narrower host (the Welcome guide's step):
- *   a smaller title and a shorter search box;
+ * - `variant="embedded"` fits a narrower host (the AI model list in the
+ *   Welcome guide and Home's AI models dialog): a smaller title and a
+ *   shorter search box;
  * - a card offers remove only with `onRemove`, and a switch only with
  *   `onToggle`;
  * - a card glows when its item turns 'added' while it is on screen, then
@@ -365,7 +366,13 @@ function CardAction({
   if (item.state === 'added' && onManage) {
     return (
       <>
-        <Button variant="quiet" size="sm" aria-label={`Manage ${item.name}`} onClick={() => onManage(item)}>
+        <Button
+          variant="quiet"
+          size="sm"
+          aria-label={`Manage ${item.name}`}
+          onClick={() => onManage(item)}
+          className="h-7.5 border-border-default text-sm text-fg-default"
+        >
           Manage
         </Button>
         {onRemove && (
@@ -374,7 +381,7 @@ function CardAction({
             size="xs"
             aria-label={`${removeVerb} ${item.name}`}
             onClick={() => onRemove(item)}
-            className="text-fg-faint hover:bg-action-stop-soft hover:text-action-stop-ink"
+            className="text-fg-faint"
           >
             {removeVerb}
           </Button>
@@ -391,12 +398,14 @@ function CardAction({
           aria-label={`${verbs.add} ${item.name}`}
           title={`${verbs.add} ${item.name}`}
           onClick={() => onAdd(item)}
-          className="size-8.5 border-border-strong bg-bg-app text-fg-default hover:border-action-run-border hover:bg-action-run-soft hover:text-action-run-ink active:scale-92"
+          className="size-8.5 border-border-strong bg-bg-app text-fg-default hover:border-fg-default active:scale-92"
         >
           <Plus />
         </Button>
       );
     }
+    // Green says it is added; pressing it removes, with the neutral hover
+    // every other control has.
     return onRemove ? (
       <Button
         variant="quiet"
@@ -404,7 +413,7 @@ function CardAction({
         aria-label={`${removeVerb} ${item.name}`}
         title={`${removeVerb} ${item.name}`}
         onClick={() => onRemove(item)}
-        className={cn(DONE, 'hover:border-action-stop-border hover:bg-action-stop-soft hover:text-action-stop-ink')}
+        className={cn(DONE, 'hover:border-border-strong')}
       >
         <Check strokeWidth={2.2} />
       </Button>
@@ -417,7 +426,7 @@ function CardAction({
   return (
     <>
       {onToggle && (
-        <Switch size="md" tone="run" checked={item.enabled ?? false} onCheckedChange={(on) => onToggle(item, on)} aria-label={item.name} />
+        <Switch size="md" tone="ink" checked={item.enabled ?? false} onCheckedChange={(on) => onToggle(item, on)} aria-label={item.name} />
       )}
       {onRemove && (
         <Button
@@ -425,7 +434,7 @@ function CardAction({
           size="xs"
           aria-label={`${removeVerb} ${item.name}`}
           onClick={() => onRemove(item)}
-          className="mt-auto h-6.5 px-2 text-xs text-fg-faint hover:bg-action-stop-soft hover:text-action-stop-ink"
+          className="mt-auto h-6.5 px-2 text-xs text-fg-faint"
         >
           {removeVerb}
         </Button>

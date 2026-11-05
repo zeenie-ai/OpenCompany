@@ -105,7 +105,7 @@ export function WelcomeGuide() {
               <WelcomeStep />
             </TabsPrimitive.Content>
             <TabsPrimitive.Content value="connect" className="outline-none">
-              <ConnectStep onFinish={guide.finish} />
+              <ConnectStep selection={provider} onSelect={setProvider} finishOnConnect={guide.pendingDraft} onFinish={guide.finish} />
             </TabsPrimitive.Content>
             <TabsPrimitive.Content value="first-hire" className="outline-none">
               <FirstHireStep onFinish={guide.finish} onNeedsModel={() => guide.goTo('connect')} />
