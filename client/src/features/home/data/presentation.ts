@@ -27,6 +27,9 @@
  * | paused       | Resume                                               |
  * | attention    | Resume when possible; after a failure Start again (the server resets first); else Open in Dev mode |
  *
+ * Whatever the status, a control still `resetting` (a Reset the server has
+ * not finished, whose status reads `ready`) offers Retry reset first.
+ *
  * The message box follows the control state the way the server's
  * `send_chat_message` does (its `delivery`): a message goes now while the
  * employee runs, starts or resumes, waits while it is paused or pausing,
@@ -48,6 +51,8 @@ export type PrimaryAction =
   | { kind: 'resume' }
   /** `again`: the last run failed; `start_employee` resets it first. */
   | { kind: 'start'; again?: boolean }
+  /** Retry reset: send a Reset the server has not finished again. */
+  | { kind: 'reset' }
   | { kind: 'connect_app'; app: AppRef }
   | { kind: 'connect_ai' }
   | { kind: 'open_workflow' };
@@ -100,6 +105,9 @@ function startBlocker(employee: EmployeeSummary): PrimaryAction | null {
 
 function primaryAction(employee: EmployeeSummary): PrimaryAction {
   const { control } = employee;
+  // A Reset the server has not finished stays resetting until it finishes
+  // or is sent again; nothing can start them meanwhile.
+  if (control.state === 'resetting' && control.can_reset) return { kind: 'reset' };
   switch (employee.status) {
     case 'working':
       return control.can_pause ? { kind: 'pause' } : { kind: 'open_workflow' };
@@ -150,6 +158,8 @@ export function primaryActionLabel(action: PrimaryAction): string {
       return 'Resume';
     case 'start':
       return action.again ? 'Start again' : 'Start';
+    case 'reset':
+      return 'Retry reset';
     case 'connect_app':
       return `Connect ${action.app.name}`;
     case 'connect_ai':

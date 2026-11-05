@@ -40,6 +40,8 @@ describe('presentEmployee', () => {
     ['attention', { state: 'failed', can_resume: false }, false, 'Needs attention', 'attention', 'start'],
     ['attention', { state: 'pausing', can_resume: false }, false, 'Needs attention', 'attention', 'open_workflow'],
     ['ready', { state: 'never_started' }, false, 'Not started', 'paused', 'start'],
+    // A Reset the server has not finished.
+    ['ready', { state: 'resetting' }, false, 'Not started', 'paused', 'reset'],
   ])('%s (%o, answering: %s) shows %s and offers %s', (status, control, answering, label, tone, action) => {
     const view = presentEmployee(employee({ status }, control), undefined, answering);
     expect(view.pill).toEqual({ label, tone });
@@ -73,6 +75,12 @@ describe('presentEmployee', () => {
   it('asks for what a failed employee is missing before starting it again', () => {
     const view = presentEmployee(employee({ status: 'attention', missing_apps: [whatsapp] }, { state: 'failed', can_resume: false }));
     expect(view.primary.kind).toBe('connect_app');
+  });
+
+  it('offers Retry reset while a Reset waits, before an app to connect', () => {
+    const view = presentEmployee(employee({ status: 'ready', missing_apps: [whatsapp] }, { state: 'resetting' }));
+    expect(view.primary).toEqual({ kind: 'reset' });
+    expect(primaryActionLabel(view.primary)).toBe('Retry reset');
   });
 
   it('asks to connect the first missing app before anything else', () => {

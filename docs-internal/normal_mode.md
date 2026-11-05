@@ -85,7 +85,7 @@ Approval waiting is implemented; activation for ordinary new generations remains
 | `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist in the corner (connect a model, hire, say hello, approve a first draft) until it is hidden ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
-| `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
+| `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, Retry reset while a Reset waits, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
 | `workspace/` | The Workspace dock (below), its header pill, its Canvas tab (which loads in its own chunk), and its footer: the timeline of steps (`steps.ts`, `WorkspaceTimeline.tsx`) and Take over (`takeover.ts`) |
 | `settings/` | Settings pages (App access, Profile, Billing, Help, Skills, Connectors, Plugins). Catalog primitives live in `components/catalog`; Connectors embeds the shared `components/credentials/CredentialsBrowser`. Provider dialogs belong to AppShell. |
 | `approvals/` | The drafts query, the decide mutation (optimistic), the approval broadcast listener |
@@ -128,12 +128,13 @@ and never starts loops then. Toasts are a second sonner toaster
 (`ui/pillToast.tsx`): one bottom-centre pill at a time, springing up from
 16px below at .96 scale over `--dur-toast-in` and dropping 10px as it fades
 over `--dur-toast-out` (`.pill-toaster` in index.css replaces sonner's slide).
-Start, Resume and Stop say they went through ("{Name} started" / "resumed" /
-"stopped"), and so does turning Ask first on or off in the chat ("{Name} will
-ask before sending" / "will send without asking"). Where the chat shows the
-mode menu instead (see [Asking before sending](#asking-before-sending)),
-choosing a mode says "{Name} will ask before anything outside" / "before
-everything" / "only before money and deletes".
+Start, Resume, Stop and Retry reset say they went through ("{Name} started" /
+"resumed" / "stopped" / "was reset"), and so does turning Ask first on or off
+in the chat ("{Name} will ask before sending" / "will send without asking").
+Where the chat shows the mode menu instead
+(see [Asking before sending](#asking-before-sending)), choosing a mode says
+"{Name} will ask before anything outside" / "before everything" / "only
+before money and deletes".
 
 ### Deleting an employee
 
@@ -245,7 +246,14 @@ Help in browser), else the first on the team.
   Stopped, Needs attention, Needs you). Then their main action (Stop, Resume, Start, or
   connect what is missing), and Expand and Close. Stop shows Stopping while
   admitted work drains; the header follows authoritative generation control
-  instead of treating a completed browser request as a completed Stop.
+  instead of treating a completed browser request as a completed Stop. A
+  Reset the server has not finished, such as one whose Workspace cleanup
+  took over 240 s, leaves the control `resetting`; the main action, here and
+  above the message box, is then Retry reset (the editor's Retry Reset). It
+  reads the control status first and sends the Reset again, with the
+  summary's revision, only while the generation the summary shows is still
+  resetting, so it never resets one started since; otherwise it says that
+  changed and refetches the team.
 - **Canvas**: the board named by the summary's `canvas_node_id`, drawn by
   the editor's Canvas renderer (`CanvasContent`, see [Canvas Node](./canvas_node.md)).
   It loads in its own chunk, which keeps the board's markdown, code and
@@ -764,7 +772,8 @@ sending and drafts belong to the chat (wire and client rules in
     while its run drains. Legacy queued runs can still be withdrawn with Stop.
   - *start* (never started, ready, resetting, failed): no box; a line says
     they can't read messages, beside their main action (Start, Start again,
-    or what they are missing), which the Workspace header offers too.
+    Retry reset while a Reset waits, or what they are missing), which the
+    Workspace header offers too.
   - *wait* (a new hire still starting, on their first day): the box shows,
     disabled, saying "{Name} is starting…".
   - While the agent waits for the owner in the browser, the server's line

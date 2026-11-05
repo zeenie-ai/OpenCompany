@@ -1,13 +1,17 @@
 /**
- * An employee's main action (Pause, Resume, Start, connect what they are
- * missing, or open them in Dev mode): the Workspace header offers it, and
- * their page's message box while they cannot read messages.
+ * An employee's main action (Pause, Resume, Start, Retry reset, connect what
+ * they are missing, or open them in Dev mode): the Workspace header offers
+ * it, and their page's message box while they cannot read messages.
  *
- * Start / Pause / Resume send the summary's control revision. After one
- * returns, the label stays "Pausing…" until the summary has caught up with
- * the new state (or a few seconds pass and the list is refetched), so the
- * button never flashes the old label in between. A change that went through
- * says so in a toast, and a start or resume spikes the orb.
+ * Start / Pause / Resume / Retry reset send the summary's control revision.
+ * Retry reset first reads the control status and sends the Reset only while
+ * the generation the summary shows is still resetting; otherwise it says
+ * that changed. After one returns, the label stays "Pausing…" until the
+ * summary has caught up with the new state (or a few seconds pass and the
+ * list is refetched), so the button never flashes the old label in between.
+ * A change that went through says so in a toast, and a start or resume
+ * spikes the orb. A Retry reset the server still has not finished answers
+ * pending: no toast, and Retry reset is offered again.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -26,7 +30,7 @@ import { SPIKE, spikeOrb } from '../orb/orb';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 
-/** How long a finished Start / Pause / Resume waits for the summary to catch up. */
+/** How long a finished Start / Pause / Resume / Retry reset waits for the summary to catch up. */
 const SYNC_WAIT_MS = 4000;
 
 const CONTROL_ERRORS: Record<string, string> = {
@@ -44,11 +48,11 @@ export function controlErrorMessage(error: unknown): string {
   return CONTROL_ERRORS[message] ?? 'That did not work. Try again.';
 }
 
-type ControlKind = Extract<PrimaryAction['kind'], 'pause' | 'resume' | 'start'>;
+type ControlKind = Extract<PrimaryAction['kind'], 'pause' | 'resume' | 'start' | 'reset'>;
 
 /** What the toast says once a change went through (the button says Stop
- *  for `pause`). */
-const CONTROL_DONE: Record<ControlKind, string> = { start: 'started', resume: 'resumed', pause: 'stopped' };
+ *  for `pause`, Retry reset for `reset`). */
+const CONTROL_DONE: Record<ControlKind, string> = { start: 'started', resume: 'resumed', pause: 'stopped', reset: 'was reset' };
 
 export interface EmployeeControl {
   /** The pill and the primary action, from the summary. */
@@ -80,6 +84,19 @@ export function useEmployeeControl(employee: EmployeeSummary, onConnect: (provid
     return () => window.clearTimeout(timer);
   }, [waiting, queryClient]);
 
+  // The context scopes a Reset to the generation in its status map. On Home
+  // that map has only the broadcasts since load, so it can be empty or newer
+  // than the summary. Reading the status first fills it: the Reset, and the
+  // retry the context makes after a conflict, then stay with the generation
+  // the owner saw resetting and never reset one started since.
+  const retryReset = async (id: string, current: WorkflowControlStatus) => {
+    const latest = await actions.getWorkflowControlStatus(id);
+    if (latest.state !== 'resetting' || latest.root_execution_id !== current.root_execution_id) {
+      throw new Error('control_revision_conflict');
+    }
+    return actions.resetWorkflow(id, current.revision);
+  };
+
   const control = async (kind: ControlKind) => {
     const { workflow_id: id, control: current } = employee;
     setRunning(kind);
@@ -89,15 +106,20 @@ export function useEmployeeControl(employee: EmployeeSummary, onConnect: (provid
           ? actions.pauseWorkflow(id, current.revision)
           : kind === 'resume'
             ? actions.resumeWorkflow(id, current.revision)
-            : actions.startEmployee(id, current.revision);
+            : kind === 'reset'
+              ? retryReset(id, current)
+              : actions.startEmployee(id, current.revision);
       const target = await run;
       setAwaiting({ kind, target });
       // A Stop or Resume whose drain is still running answers early: the
       // label keeps saying so, and no toast claims it is done.
       if (target.state !== 'pausing' && target.state !== 'resuming') pillToast(`${employee.name} ${CONTROL_DONE[kind]}`);
-      if (kind !== 'pause') spikeOrb(SPIKE.start);
+      if (kind === 'start' || kind === 'resume') spikeOrb(SPIKE.start);
     } catch (error) {
       if (error instanceof Error && error.message === 'workflow_control_superseded') return;
+      // The Workspace still has not answered the Reset: it stays resetting,
+      // so Retry reset is offered again. Pending, not failed.
+      if (kind === 'reset' && error instanceof Error && error.message === 'workflow_control_transition_pending') return;
       pillToast(controlErrorMessage(error), { tone: 'error' });
       if (error instanceof Error && error.message === 'control_revision_conflict') invalidateEmployees(queryClient);
       if (error instanceof Error && error.message === 'needs_ai') openConnectAI();

@@ -132,8 +132,9 @@ runs, the answer is `success: true` with `transition_pending: true` and the
 `workflow_control_status` broadcast carries the outcome. Reset waits up to
 240 s for the Workspace task controller's cleanup; past that it answers
 `workflow_control_transition_pending` and the row stays `resetting` until the
-same Reset runs again: Dev's Retry Reset, or the next boot, which runs it once
-more (Home has no Retry). Safe Apply waits 30 s for each controller Update and
+same Reset runs again: Dev's Retry Reset, Home's Retry reset (the employee's
+main action while the control is `resetting`), or the next boot, which runs it
+once more. Safe Apply waits 30 s for each controller Update and
 otherwise answers `waiting`; `recover_applies` finishes it once its claim's
 lease lapses. If the first pause Update of "Stop work and apply" is the one
 still pending, the apply answers `waiting` before it stops any work, and
@@ -552,7 +553,8 @@ state. Every successful **Start** atomically creates a
 **Reset** reaches `ready` only after durable executions and schedules are gone,
 the generation data scope is archived, and node/runtime state has been reset.
 If any cleanup step fails, the control remains `resetting`; retrying Reset
-(the owner's Retry Reset in Dev, or the boot, which runs it once more) resumes
+(the owner's Retry Reset in Dev or Retry reset on Home, or the boot, which runs
+it once more) resumes
 cleanup instead of falsely completing or skipping it. Reset does not
 delete outputs, tasks, traces, or the graph snapshot; open team tasks and
 requests are cancelled, not deleted. The toolbar returns to

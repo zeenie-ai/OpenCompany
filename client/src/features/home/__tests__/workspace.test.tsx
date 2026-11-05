@@ -27,6 +27,8 @@ const actions = {
   },
   pauseWorkflow: vi.fn(),
   resumeWorkflow: vi.fn(),
+  resetWorkflow: vi.fn(),
+  getWorkflowControlStatus: vi.fn(),
   startEmployee: vi.fn(),
 };
 
@@ -216,6 +218,20 @@ describe('WorkspaceDock', () => {
     await act(async () => {});
     expect(pillToast).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
+  });
+
+  it('offers Retry reset in the header while a Reset waits in resetting', async () => {
+    const resetting = normalizeWorkflowControlStatus({ generation: 1, state: 'resetting', revision: 7, root_execution_id: 'r1' }, 'w1');
+    actions.getWorkflowControlStatus.mockReset().mockResolvedValue(resetting);
+    actions.resetWorkflow.mockReset().mockReturnValue(new Promise(() => {}));
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
+    renderWith([employee({ status: 'ready', control: resetting })]);
+    // The quiet button Stop uses: no intent colour on Home.
+    expect(screen.getByRole('button', { name: 'Retry reset' })).toHaveAttribute('data-variant', 'quiet');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry reset' }));
+    await waitFor(() => expect(actions.resetWorkflow).toHaveBeenCalledWith('w1', 7));
+    expect(actions.getWorkflowControlStatus).toHaveBeenCalledWith('w1');
+    expect(screen.getByRole('button', { name: 'Resetting…' })).toBeDisabled();
   });
 
   it('follows the employee last opened, else the first', () => {

@@ -4,9 +4,10 @@
  * cannot read messages
  * (Connect goes to the provider's connect dialog, Resume sends the
  * summary's revision and says "Resuming…" until the summary shows them
- * running, never flashing "Resume" again in between), never the reason
- * they stopped; Help in browser while they wait for the owner there; and
- * the drafts after the messages.
+ * running, never flashing "Resume" again in between; Retry reset while a
+ * Reset waits in resetting, only for the generation the summary shows),
+ * never the reason they stopped; Help in browser while they wait for the
+ * owner there; and the drafts after the messages.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +20,8 @@ const actions = {
   addEventListener: () => () => {},
   pauseWorkflow: vi.fn(),
   resumeWorkflow: vi.fn(),
+  resetWorkflow: vi.fn(),
+  getWorkflowControlStatus: vi.fn(),
   startEmployee: vi.fn(),
 };
 
@@ -79,6 +82,8 @@ beforeEach(() => {
   actions.sendRequest.mockReset();
   actions.pauseWorkflow.mockReset();
   actions.resumeWorkflow.mockReset();
+  actions.resetWorkflow.mockReset();
+  actions.getWorkflowControlStatus.mockReset();
   actions.startEmployee.mockReset();
   vi.mocked(enterDev).mockClear();
   vi.mocked(pillToast).mockClear();
@@ -196,6 +201,62 @@ describe('EmployeeView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
     expect(actions.startEmployee).toHaveBeenCalledWith('w1', 7);
     expect(enterDev).not.toHaveBeenCalled();
+  });
+
+  it('offers Retry reset while a Reset waits in resetting, with the summary’s revision, until the state moves on', async () => {
+    orbState.spike = 0;
+    const resetting = { state: 'resetting', revision: 7, root_execution_id: 'r1' };
+    actions.getWorkflowControlStatus.mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, ...resetting }, 'w1'));
+    let done!: (status: unknown) => void;
+    actions.resetWorkflow.mockReturnValue(new Promise((resolve) => (done = resolve)));
+    const { client } = renderPage(summary({ status: 'ready', talk: TALK_ON }, resetting));
+    expect(screen.getByText('Maya isn’t running, so they can’t read messages right now.')).toBeInTheDocument();
+    // The quiet button Stop uses: no intent colour on Home.
+    expect(screen.getByRole('button', { name: 'Retry reset' })).toHaveAttribute('data-variant', 'quiet');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry reset' }));
+    // Disabled while its request runs, the status read included.
+    expect(screen.getByRole('button', { name: 'Resetting…' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Retry reset' })).not.toBeInTheDocument();
+    await waitFor(() => expect(actions.resetWorkflow).toHaveBeenCalledWith('w1', 7));
+    expect(actions.getWorkflowControlStatus).toHaveBeenCalledWith('w1');
+    expect(screen.getByRole('button', { name: 'Resetting…' })).toBeDisabled();
+
+    await act(async () => done(normalizeWorkflowControlStatus({ state: 'ready', revision: 8, generation: 1, can_start: true }, 'w1')));
+    expect(pillToast).toHaveBeenCalledWith('Maya was reset');
+    // Only a start or resume spikes the orb.
+    expect(orbState.spike).toBe(0);
+    // The summary still says resetting: keep the in-flight label.
+    expect(screen.getByRole('button', { name: 'Resetting…' })).toBeDisabled();
+
+    await act(async () => {
+      client.setQueryData(EMPLOYEES_QUERY_KEY, [summary({ status: 'ready', talk: TALK_ON }, { state: 'ready', revision: 8, can_start: true })]);
+    });
+    expect(await screen.findByRole('button', { name: 'Start' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /^(Retry reset|Resetting…)$/ })).not.toBeInTheDocument();
+  });
+
+  it('offers Retry reset again, with no error, while the Reset is still pending', async () => {
+    const resetting = { state: 'resetting', revision: 7, root_execution_id: 'r1' };
+    actions.getWorkflowControlStatus.mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, ...resetting }, 'w1'));
+    actions.resetWorkflow.mockRejectedValue(new Error('workflow_control_transition_pending'));
+    renderPage(summary({ status: 'ready', talk: TALK_ON }, resetting));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry reset' }));
+    await waitFor(() => expect(actions.resetWorkflow).toHaveBeenCalledWith('w1', 7));
+    expect(await screen.findByRole('button', { name: 'Retry reset' })).toBeEnabled();
+    expect(pillToast).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a later generation started', { generation: 2, state: 'running', revision: 10, root_execution_id: 'r2' }],
+    ['the Reset finished elsewhere', { generation: 1, state: 'ready', revision: 8, root_execution_id: 'r1' }],
+  ])('sends no Reset, and says that changed, when %s since the summary', async (_why, latest) => {
+    actions.getWorkflowControlStatus.mockResolvedValue(normalizeWorkflowControlStatus(latest, 'w1'));
+    renderPage(summary({ status: 'ready', talk: TALK_ON }, { state: 'resetting', revision: 7, root_execution_id: 'r1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry reset' }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith('That changed a moment ago. Try again.', { tone: 'error' }));
+    expect(actions.getWorkflowControlStatus).toHaveBeenCalledWith('w1');
+    expect(actions.resetWorkflow).not.toHaveBeenCalled();
   });
 
   it('offers Start above the message box while the employee is not running', async () => {

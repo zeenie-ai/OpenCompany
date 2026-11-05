@@ -1,7 +1,8 @@
 /**
  * The button for an employee's main action (see useEmployeeControl): the
  * green run button only for starting them (Start, Start again, Resume), a
- * neutral one for everything else (connecting what they are missing, Stop).
+ * neutral one for everything else (connecting what they are missing, Stop,
+ * Retry reset).
  * Normal mode omits the developer-workflow fallback. `className` sizes it
  * for a smaller host (the Workspace header, a new hire's first-day strip).
  */
