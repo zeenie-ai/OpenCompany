@@ -1,14 +1,15 @@
 /**
  * A reply's interface made ready to draw (genui/prepare.ts) and what its
  * buttons do (genui/actions.ts): unknown components are left out, each
- * button's press is tagged with its element and label, `ask` sends only what
- * the button says, and any other action goes back to the employee.
+ * button's press is tagged with its element and label, the state the owner
+ * last set is read as plain data, `ask` sends only what the button says, and
+ * any other action goes back to the employee.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import booking from '../__fixtures__/saturday-booking.spec.json';
 import { asksWhatItSays, chatActionHandlers, type ChatUiActions } from '../genui/actions';
-import { PRESS_ELEMENT, PRESS_LABEL, prepareChatSpec, untagged } from '../genui/prepare';
+import { PRESS_ELEMENT, PRESS_LABEL, prepareChatSpec, prepareChatState, untagged } from '../genui/prepare';
 
 describe('prepareChatSpec', () => {
   it('keeps the handoff example and tags each press with its element and label', () => {
@@ -48,6 +49,20 @@ describe('prepareChatSpec', () => {
       label: 'Hold',
       params: { slot: 's2' },
     });
+  });
+});
+
+describe('prepareChatState', () => {
+  it('reads what the owner last set as plain data, without prototype keys', () => {
+    const saved = JSON.parse('{"service":"Highlights","__proto__":{"admin":true},"form":{"constructor":{"x":1},"name":"Ana"}}');
+    const state = prepareChatState(saved);
+    expect(state).toEqual({ service: 'Highlights', form: { name: 'Ana' } });
+    expect(Object.prototype.hasOwnProperty.call(state, '__proto__')).toBe(false);
+  });
+
+  it('reads anything but an object as no state', () => {
+    expect(prepareChatState(null)).toEqual({});
+    expect(prepareChatState(['Highlights'])).toEqual({});
   });
 });
 

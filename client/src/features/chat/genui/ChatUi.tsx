@@ -11,9 +11,9 @@
  *   that land in several bursts never restart it. A UI read back later shows
  *   at once, without motion.
  * - **State.** json-render keeps it (JSONUIProvider's own store), seeded
- *   from what the owner last set (`state`) or the spec's own, and reports
- *   every change to `onStateChange`. Every path it can write at was made
- *   safe first (prepare.ts, lib/jsonRender/sanitize.ts).
+ *   from what the owner last set (`state`) or the spec's own, both made safe
+ *   the same way, and reports every change to `onStateChange`. Every path it
+ *   can write at was made safe first (prepare.ts, lib/jsonRender/sanitize.ts).
  * - **Buttons** run the chat's actions (genui/actions.ts); `setState` is
  *   json-render's own.
  */
@@ -24,7 +24,7 @@ import { JSONUIProvider, Renderer } from '@json-render/react';
 import { LiveUiContext, useSpecReveal } from '@/lib/jsonRender';
 import type { UiStateChange } from '../data/uiState';
 import { chatActionHandlers, type ChatUiActions } from './actions';
-import { prepareChatSpec } from './prepare';
+import { prepareChatSpec, prepareChatState } from './prepare';
 import { chatRegistry } from './registry';
 
 export interface ChatUiProps {
@@ -51,7 +51,7 @@ function ChatUiBody({ partId, spec, state, live, actions, onStateChange }: Omit<
     latest.current = actions;
   });
   // Seeds json-render's store once: a new object later would be applied again.
-  const [initialState] = useState(() => state ?? spec.state ?? {});
+  const [initialState] = useState(() => (state ? prepareChatState(state) : spec.state ?? {}));
   const [handlers] = useState(() => chatActionHandlers(partId, () => latest.current));
 
   return (

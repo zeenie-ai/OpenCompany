@@ -12,7 +12,7 @@
  */
 
 import type { ActionBinding, Spec, UIElement } from '@json-render/core';
-import { DEFAULT_SANITIZE_LIMITS, sanitizeSpec, type SanitizeLimits } from '@/lib/jsonRender/sanitize';
+import { DEFAULT_SANITIZE_LIMITS, sanitizeSpec, sanitizeState, type SanitizeLimits } from '@/lib/jsonRender/sanitize';
 import { limits } from '../../../../../server/config/chat_genui_catalog.json';
 import { isChatComponentType } from './catalog';
 
@@ -63,6 +63,12 @@ export function prepareChatSpec(raw: unknown): Spec | null {
     elements[id] = withPressIdentity(id, clean);
   }
   return { root: spec.root, state: spec.state, elements };
+}
+
+/** What the owner last set, as the saved reply holds it, made ready the way a
+ *  spec's own state is: plain data, without prototype keys. */
+export function prepareChatState(raw: unknown): Record<string, unknown> {
+  return sanitizeState(raw, CHAT_SANITIZE_LIMITS);
 }
 
 /** A press's params as the employee should see them: without the tags. */
