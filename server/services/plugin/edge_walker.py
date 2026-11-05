@@ -738,15 +738,14 @@ async def collect_teammate_connections(
                     "label": (child.get("data") or {}).get("label", child.get("type")),
                 })
         child_skills = await _teammate_child_skills(source_id, nodes, edges, database)
-        teammates.append({
-            **descriptor,
-            "parameters": params,
-            "child_tools": child_tools,
-            "child_skills": child_skills,
-            "capabilities": describe_teammate_capabilities(child_tools, child_skills),
-        })
+        teammates.append({**descriptor, "parameters": params, "child_tools": child_tools, "child_skills": child_skills})
         logger.debug(f"[Teams] Found teammate: {descriptor['node_type']} ({source_id})")
 
+    # A teammate holds Show UI only while the owner has Generated UI on, so the
+    # roster lists it only then.
+    teammates = await drop_chat_ui_when_off(teammates, database)
+    for teammate in teammates:
+        teammate["capabilities"] = describe_teammate_capabilities(teammate["child_tools"], teammate["child_skills"])
     return teammates
 
 

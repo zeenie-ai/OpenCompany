@@ -75,3 +75,39 @@ async def test_an_agent_holds_show_ui_only_while_the_switch_is_on():
     for row, kept in (({"generated_ui": True}, [CHAT_UI_TYPE, "duckduckgoSearch"]), (None, ["duckduckgoSearch"])):
         _, _, tools, _, _ = await collect_agent_connections("agent", context, Database(row))
         assert [tool["node_type"] for tool in tools] == kept
+
+
+def _child_with_show_ui(lead_type, handle):
+    """A lead with one child agent that holds Show UI and a search tool."""
+    nodes = [
+        {"id": "lead", "type": lead_type, "data": {"label": "Lead"}},
+        {"id": "child", "type": "aiAgent", "data": {"label": "Helper"}},
+        {"id": "ui", "type": CHAT_UI_TYPE, "data": {"label": "Show UI"}},
+        {"id": "search", "type": "duckduckgoSearch", "data": {"label": "Search"}},
+    ]
+    edges = [
+        {"source": "child", "target": "lead", "targetHandle": handle},
+        {"source": "ui", "target": "child", "targetHandle": "input-tools"},
+        {"source": "search", "target": "child", "targetHandle": "input-tools"},
+    ]
+    return {"nodes": nodes, "edges": edges, "workflow_id": "wf"}
+
+
+async def test_an_agent_tools_child_names_show_ui_only_while_the_switch_is_on():
+    from services.plugin.edge_walker import collect_agent_connections
+
+    context = _child_with_show_ui("aiAgent", "input-tools")
+    for row, listed in (({"generated_ui": True}, [CHAT_UI_TYPE, "duckduckgoSearch"]), (None, ["duckduckgoSearch"])):
+        _, _, [child], _, _ = await collect_agent_connections("lead", context, Database(row))
+        assert [tool["node_type"] for tool in child["child_tools"]] == listed
+
+
+async def test_a_team_lead_roster_names_show_ui_only_while_the_switch_is_on():
+    from services.plugin.edge_walker import collect_teammate_connections
+
+    context = _child_with_show_ui("orchestrator_agent", "input-teammates")
+    [on] = await collect_teammate_connections("lead", context, Database({"generated_ui": True}))
+    [off] = await collect_teammate_connections("lead", context, Database(None))
+    assert [tool["node_type"] for tool in on["child_tools"]] == [CHAT_UI_TYPE, "duckduckgoSearch"]
+    assert [tool["node_type"] for tool in off["child_tools"]] == ["duckduckgoSearch"]
+    assert "Show UI" in on["capabilities"] and "Show UI" not in off["capabilities"]
