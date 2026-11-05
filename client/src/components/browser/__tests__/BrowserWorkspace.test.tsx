@@ -1,4 +1,4 @@
-import { createRef } from 'react';
+import { createRef, type ComponentProps } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SurfaceControl } from '../../workspace/surface';
@@ -351,5 +351,119 @@ describe('The agent’s cursor', () => {
     const socket = MockSocket.instances[0];
     act(() => { socket.open(); socket.message({ type: 'agent_action', action: 'click', x: 1, y: 1 }); });
     expect(screen.queryByText('Maya')).toBeNull();
+  });
+});
+
+describe('BrowserWorkspace in Home', () => {
+  /** Home's browser, while the employee is using it. */
+  function home(props: Partial<ComponentProps<typeof BrowserWorkspace>> = {}) {
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} chrome="home" {...props} />);
+    const socket = MockSocket.instances.at(-1)!;
+    act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); });
+    return socket;
+  }
+
+  it('works back, forward and reload only while the owner has control', () => {
+    const socket = home();
+    for (const name of ['Back', 'Forward', 'Reload page']) expect(screen.getByRole('button', { name })).toBeDisabled();
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    for (const [name, action] of [['Back', 'back'], ['Forward', 'forward'], ['Reload page', 'reload']]) {
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect(socket.sent.at(-1)).toEqual({ type: 'navigate', action });
+    }
+  });
+
+  it('shows the page’s domain, locked for https, with the whole address in its title', () => {
+    const socket = home();
+    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
+    const address = screen.getByText('example.com').parentElement!;
+    expect(address).toHaveAttribute('title', 'https://example.com/book');
+    expect(address.querySelector('.lucide-lock')).toBeInTheDocument();
+    // Nothing to type into.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    const link = screen.getByRole('link', { name: 'Open in new tab' });
+    expect(link).toHaveAttribute('href', 'https://example.com/book');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    act(() => socket.message({ type: 'page', url: 'http://example.org/menu' }));
+    expect(screen.getByText('example.org').parentElement!.querySelector('.lucide-lock')).toBeNull();
+    // Any other address shows as it is, and opens nowhere.
+    act(() => socket.message({ type: 'page', url: 'chrome://settings' }));
+    expect(screen.getByText('chrome://settings')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull();
+  });
+
+  it('ends the row of page controls with the dock’s action', () => {
+    home({ action: <button type="button">Take over</button> });
+    const takeOver = screen.getByRole('button', { name: 'Take over' });
+    const row = takeOver.parentElement!;
+    expect(row).toHaveClass('h-13', 'border-b', 'border-border-default');
+    expect(row).toContainElement(screen.getByRole('button', { name: 'Back' }));
+    expect(row.lastElementChild).toBe(takeOver);
+  });
+
+  it('leaves out the editor’s Take control, browser controls, Full view and browser tasks', () => {
+    const { unmount } = render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
+    act(() => { MockSocket.instances[0].open(); MockSocket.instances[0].message({ type: 'state', state: 'agent', controller: null }); });
+    const editorOnly = ['Take control', 'Browser controls', 'Browser full view'];
+    for (const name of editorOnly) expect(screen.getByRole('button', { name })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Browser AI tasks' })).toBeInTheDocument();
+    unmount();
+    home();
+    for (const name of editorOnly) expect(screen.queryByRole('button', { name })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Browser AI tasks' })).toBeNull();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('takes the screen for the dock’s Take over and gives it back', async () => {
+    const control = createRef<SurfaceControl>();
+    const socket = home({ ref: control });
+    let claim!: Promise<(() => void) | null>;
+    act(() => { claim = control.current!.claim(); });
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_request', force: true });
+    act(() => { socket.message({ type: 'control', granted: true }); socket.message({ type: 'state', state: 'user', controller: 'you' }); });
+    const giveBack = await claim;
+    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
+    act(() => giveBack!());
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_release' });
+  });
+
+  it('puts the page-tab picker on a line of its own while the browser has several tabs', () => {
+    const socket = home();
+    act(() => socket.message({ type: 'tabs', tabs: [{ target_id: 't1', title: 'Bookings', active: true }] }));
+    expect(screen.queryByRole('combobox', { name: 'Browser tab' })).toBeNull();
+    act(() => {
+      socket.message({ type: 'tabs', tabs: [{ target_id: 't1', title: 'Bookings', active: true }, { target_id: 't2', title: 'Calendar' }] });
+      socket.message({ type: 'state', state: 'user', controller: 'you' });
+    });
+    const picker = screen.getByRole('combobox', { name: 'Browser tab' });
+    const row = screen.getByRole('button', { name: 'Back' }).parentElement!.parentElement!;
+    expect(row).not.toContainElement(picker);
+    expect(row.nextElementSibling).toContainElement(picker);
+    fireEvent.change(picker, { target: { value: 't2' } });
+    expect(socket.sent.at(-1)).toEqual({ type: 'tab', action: 'activate', target_id: 't2' });
+  });
+
+  it.each([
+    { chrome: 'home', variant: 'quiet', note: 'Take over to respond.' },
+    { chrome: 'dev', variant: 'outline', note: 'Take control to respond.' },
+  ] as const)('draws the page’s buttons $variant in $chrome', ({ chrome, variant, note }) => {
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} chrome={chrome} />);
+    const socket = MockSocket.instances[0];
+    const drawn = (name: string) => {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('data-variant', variant);
+      // Home's are neutral outlines: colour there marks a state or a role.
+      if (chrome === 'home') expect(button).toHaveClass('border-border-default', 'text-fg-default');
+    };
+    act(() => { socket.open(); socket.message({ type: 'attached', running: false }); });
+    drawn('Start browser');
+    act(() => { socket.message({ type: 'state', state: 'agent', controller: null }); socket.message({ type: 'dialog', kind: 'confirm', message: 'Leave this page?' }); });
+    drawn('OK'); drawn('Cancel');
+    expect(screen.getByText(note)).toBeInTheDocument();
+    act(() => socket.message({ type: 'sensitive', enabled: true }));
+    drawn('Close browser for manual login');
+    act(() => { socket.readyState = 3; socket.onclose?.({ code: 4004, reason: 'Session closed' }); });
+    drawn('Reconnect');
   });
 });
