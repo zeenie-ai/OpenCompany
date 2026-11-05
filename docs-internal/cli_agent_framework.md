@@ -280,18 +280,40 @@ Steps:
 
 **Codex login**: `_codex_auth.py` installs the pinned `@openai/codex` package into the shared packages tree. Login, `codex login status`, logout, and task execution all use that binary with `CODEX_HOME=<DATA_DIR>/codex`. This keeps the app's login separate from a personal terminal session without changing `HOME`. The CLI owns credential storage; OpenCompany never parses `auth.json`. A successful status exit stores the catalogue marker. An in-flight login is single-flight, and logout cancels it before clearing native credentials and the marker. The frontend polls `codex_cli_status` while authentication is pending and shows failures instead of remaining indefinitely in Connecting.
 
+[Issue #128](https://github.com/zeenie-ai/OpenCompany/issues/128) is covered by
+the managed-session acceptance contract: a native status exit of zero stores
+the `codex_cli` marker, emits `credential.oauth.connected`, and makes the
+catalogue report Connected without starting another login. Native success text
+on stderr is still success. The app explicitly supplies its managed
+`CODEX_HOME`, rather than adopting a personal terminal authentication store.
+
 Native browser login returns the CLI's authorization URL to the credentials panel. Device authentication uses `codex login --device-auth` for a remote backend or container whose localhost callback cannot be reached from the user's browser. The account or workspace must allow device authentication. See the official [authentication guide](https://learn.chatgpt.com/docs/auth#login-on-headless-devices), [login command](https://learn.chatgpt.com/docs/developer-commands#codex-login), and [CODEX_HOME configuration](https://learn.chatgpt.com/docs/config-file/environment-variables#core-locations).
 
 **Codex execution**: `codex exec --json -c 'approval_policy="never"' --sandbox <mode> -- <prompt>` runs with pipes and no PTY; the task's approval policy overrides the example's `never`. `thread.started`, `item.completed`, and `turn.completed` provide the thread id, answer, tools, and token usage; `turn.failed`, nonzero exit, and premature stream end fail the task. Completion waits for process exit and both output streams. Timeout and cancellation terminate the process tree before worktree cleanup. The batch's required MCP server is passed using `-c mcp_servers.opencompany.url=...`; its credential uses `bearer_token_env_var` and stays out of argv and persistent configuration. See [JSONL events](https://learn.chatgpt.com/docs/non-interactive-mode#make-output-machine-readable) and [HTTP MCP configuration](https://learn.chatgpt.com/docs/extend/mcp#streamable-http-servers).
 
 **Codex model selection**: the node and provider default to Auto. With no task or node override, OpenCompany omits `--model` so Codex uses its configured or account-recommended model. Explicit choices are preserved; an unsupported model fails with a readable message and the provider error code/status, without retrying another model. Clear an obsolete saved Model value to return that node to Auto. ChatGPT and API-key model availability can differ, so the OpenAI API model catalogue is not used to pick a Codex subscription model. See the official [local model defaults](https://learn.chatgpt.com/docs/models#configure-your-default-local-model) and [`codex exec` model override](https://learn.chatgpt.com/docs/developer-commands#codex-exec).
 
-The login task owns cold installation and the initial status check, so they do
-not hold the request open indefinitely. Browser/device instructions are returned
-within five seconds when available, otherwise through pending-status polling.
+The login task owns cold installation/update and the initial status check, so
+they do not hold the request open indefinitely. Status/Refresh and native logout
+only use an existing pinned managed launcher: they never install packages or
+wait for the installer lock. A missing or outdated CLI produces status guidance
+to click Login for preparation. Browser/device instructions are returned within
+five seconds when available, otherwise through pending-status polling.
 Explicit Refresh rechecks native status after a terminal error; logout and the
-registered shutdown hook cancel pending authentication. The [Codex guide](codex_agent.md#cli-installation-and-authentication)
-describes the native command bounds and managed credential paths.
+registered shutdown hook cancel pending authentication.
+When a failed Refresh preserves an earlier connected marker, the OAuth panel
+exposes **Reconnect with Codex CLI** and **Use device code**. These use the normal
+login preparation path; pending instructions, code, sign-in link and Cancel
+sign-in remain visible while the catalogue still carries the old marker.
+
+Status runs its native probe outside the login lock and checks an authentication
+revision before applying the result. Each started probe advances the revision,
+so only the latest-started probe can reconcile state. Login, logout and shutdown
+also invalidate older probes. A confirmed signed-out status drops the persisted
+marker and broadcasts
+`credential.oauth.disconnected`, including after a backend restart with no
+in-memory connected state. See the [Codex guide](codex_agent.md#existing-login-and-issue-128)
+for issue #128 acceptance and the native command bounds.
 
 **Saved list defaults**: both Codex and Claude normalize `tasks=null` and
 `allowed_credentials=null` to `[]` before validation. Pydantic list factories
@@ -661,6 +683,8 @@ Unit tests (in `server/tests/services/cli_agent/`):
 - `test_mcp_server.py` — bearer-token registry register/lookup/unregister, 401 on missing/malformed/unknown/expired tokens, lockfile shape matches VSCode convention, stale-PID sweep.
 - `test_service.py` — `not_git_repo` abort path, resolver contract (explicit `repo_root` doesn't fall back to cwd), cancel-when-idle, singleton.
 - `test_codex_login.py` — managed installation/status, browser/device instructions, single-flight login, explicit Refresh, cancellation and shutdown.
+- `test_codex_login_catalogue.py` — issue #128 status-to-marker/catalogue/broadcast acceptance through the real shared marker helpers.
+- `test_codex_auth_probe.py` — non-installing status/logout probes, missing/outdated pinned launcher guidance, installer-lock independence, managed environment and sanitized failures.
 - `test_codex_session.py` — chunked JSONL and final lines, drained pipes, failure/timeout/cancel cleanup, Context capture and isolated environment.
 
 `tests/nodes/test_codex_parameters.py` compares Codex and Claude nullable-list

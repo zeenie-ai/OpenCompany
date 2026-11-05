@@ -130,6 +130,54 @@ describe.each([false, true])('connection forms with technical sections %s', (sho
     openWindow.mockRestore();
   });
 
+  it('keeps a healthy connected CLI panel focused on disconnect and refresh', async () => {
+    mount({
+      ...BASE, id: 'codex_cli', name: 'Codex CLI', stored: true,
+      ws: { ...BASE.ws!, device_login: 'codex_cli_device_login' },
+    }, showTechnicalSections);
+
+    expect(await screen.findByRole('button', { name: 'Disconnect' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /(?:Login|Reconnect) with Codex CLI/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Use device code' })).not.toBeInTheDocument();
+    expect(mocks.sendRequest).not.toHaveBeenCalled();
+  });
+
+  it('offers reconnect after a failed refresh and shows pending device instructions with a stored marker', async () => {
+    const user = userEvent.setup();
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    const instructions = {
+      success: true, connected: false, pending: true,
+      url: 'https://example.com/device', verification_code: 'CODE-128',
+      message: 'Complete Codex sign-in in your browser.',
+    };
+    const preparationError = 'The managed Codex CLI is missing or needs an update. Click Login to prepare it, then try again.';
+    mocks.sendRequest.mockResolvedValueOnce({ success: false, error: preparationError }).mockResolvedValue(instructions);
+    mount({
+      ...BASE, id: 'codex_cli', name: 'Codex CLI', stored: true,
+      ws: {
+        login: 'codex_cli_login', logout: 'codex_cli_logout',
+        status: 'codex_cli_status', device_login: 'codex_cli_device_login',
+      },
+    }, showTechnicalSections);
+
+    await user.click(await screen.findByRole('button', { name: 'Refresh' }));
+    expect(mocks.sendRequest).toHaveBeenCalledWith('codex_cli_status', { refresh: true });
+    expect(await screen.findByText(preparationError)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reconnect with Codex CLI' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Use device code' }));
+
+    expect(mocks.sendRequest).toHaveBeenCalledWith('codex_cli_device_login', {});
+    expect(await screen.findByText(instructions.verification_code)).toBeInTheDocument();
+    expect(screen.getByText(instructions.message)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open sign-in page' })).toHaveAttribute('href', instructions.url);
+    expect(screen.getByRole('button', { name: 'Cancel sign-in' })).toBeEnabled();
+    expect(screen.getByText('Connected')).toBeInTheDocument();
+    expect(screen.queryByText(preparationError)).not.toBeInTheDocument();
+    expect(openWindow).toHaveBeenCalledWith(instructions.url, '_blank', 'noopener,noreferrer');
+    openWindow.mockRestore();
+  });
+
   it('keeps optional tokens usable alongside OAuth without making them a login prerequisite', async () => {
     const user = userEvent.setup();
     const provider: ProviderConfig = {

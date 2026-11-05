@@ -51,6 +51,8 @@ does not connect this separate app session. OpenCompany does not change
 the app stores only a `cli-managed` catalogue marker. The UI offers native
 ChatGPT browser/device sign-in. OpenCompany does not inject its saved OpenAI
 API key into Codex; ordinary subprocess environment inheritance still applies.
+The app sets its managed `CODEX_HOME` explicitly, including when the parent
+environment contains a different value.
 
 Cold installation and initial status checking run in a single background login
 task. The login request waits at most five seconds for instructions, then
@@ -67,6 +69,38 @@ file existence as the connection check or copy auth files into a report.
 Official references: [authentication](https://learn.chatgpt.com/docs/auth),
 [login commands](https://learn.chatgpt.com/docs/developer-commands#codex-login),
 and [CODEX_HOME](https://learn.chatgpt.com/docs/config-file/environment-variables#core-locations).
+
+### Existing login and issue #128
+
+[Issue #128](https://github.com/zeenie-ai/OpenCompany/issues/128) reported a
+hardcoded Login failure and misleading instructions that promised a connected
+badge after terminal authentication. The current managed integration checks
+real native status: an already authenticated app session is marked connected
+without launching another browser/device login. Exit code zero is the gate,
+including when Codex writes its success text to stderr. The handler stores the
+`codex_cli` marker and broadcasts `credential.oauth.connected`; the catalogue
+then supplies the Connected badge.
+
+Login owns preparation of a missing or outdated managed CLI. Status, Refresh
+and native logout only use an existing launcher at the pinned version; they
+do not install packages or wait for the installer lock. An unprepared status
+returns guidance to click Login to prepare the CLI. A failed probe is not
+treated as authenticated, and a failed native logout does not falsely clear
+the marker. If the last verified marker still shows Connected after a failed
+Refresh, choose **Reconnect with Codex CLI** or **Use device code**. Both start
+the normal preparation path. Pending retries show the sign-in message, code
+and link when available, plus Cancel sign-in, even while the previous catalogue
+marker remains connected.
+
+Status releases the login lock while the native command runs. Its result is
+checked against the authentication revision before it can update state. Each
+new status probe advances that revision, so only the latest-started probe may
+apply its result. Login, Logout and shutdown also advance it, preventing older
+probes from restoring stale connection state. A confirmed signed-out status
+clears the durable marker and
+broadcasts disconnection even after a backend restart, when no connected flag
+exists in memory. For a headless backend, use the device-code flow against this
+same managed session.
 
 ## Auto and explicit model selection
 
@@ -158,6 +192,8 @@ out of shared logs.
 
 - [Provider tests](../server/tests/services/cli_agent/test_providers.py): Auto/explicit model precedence, argv, JSONL responses, nested provider errors and usage.
 - [Login tests](../server/tests/services/cli_agent/test_codex_login.py): status exit semantics, browser/device instructions, single-flight login, refresh, timeout, cancellation and shutdown.
+- [Login-to-catalogue tests](../server/tests/services/cli_agent/test_codex_login_catalogue.py): issue #128 acceptance from native status through the real marker helpers, catalogue connection state and credential broadcasts.
+- [Authentication probe tests](../server/tests/services/cli_agent/test_codex_auth_probe.py): status/logout never install or wait for preparation, missing/outdated CLI guidance, managed environment isolation and sanitized failures.
 - [Session tests](../server/tests/services/cli_agent/test_codex_session.py): chunked/final JSONL, pipe draining, failures, timeout, process-tree cleanup and environment isolation.
 - [Parameter and Activity tests](../server/tests/nodes/test_codex_parameters.py): null lists and unchanged explicit settings through direct, snapshot and real Temporal Activity wrapper paths for Codex and Claude.
 - [Dispatch tests](../server/tests/temporal/test_dispatch.py): Codex stays on the whole-node Activity path.

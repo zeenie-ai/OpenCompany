@@ -15,8 +15,10 @@ def isolated(monkeypatch, tmp_path):
     monkeypatch.setattr(handlers, "_login_task", None)
     monkeypatch.setattr(handlers, "_login_state", {})
     monkeypatch.setattr(handlers, "_login_native_started", False)
+    monkeypatch.setattr(handlers, "_auth_revision", 0)
     monkeypatch.setattr(handlers, "_login_lock", asyncio.Lock())
     monkeypatch.setattr(handlers, "codex_auth_status_info", AsyncMock(return_value={"logged_in": False}))
+    monkeypatch.setattr(handlers, "codex_binary_path", Mock(return_value="managed-codex"))
     monkeypatch.setattr(handlers, "codex_auth_logout", AsyncMock(return_value=True))
     monkeypatch.setattr(handlers, "mark_logged_in", AsyncMock())
     monkeypatch.setattr(handlers, "mark_logged_out", AsyncMock())
@@ -205,6 +207,115 @@ async def test_explicit_refresh_recovers_from_terminal_login_error(monkeypatch):
     refreshed = await handlers.handle_codex_cli_status({"refresh": True}, None)
     assert refreshed["success"] and refreshed["connected"]
     assert "error" not in refreshed
+
+
+async def test_signed_out_status_invalidates_marker_after_backend_restart():
+    assert handlers._login_state == {}
+    result = await handlers.handle_codex_cli_status({"refresh": True}, None)
+    assert result["success"] and not result["connected"]
+    handlers.mark_logged_out.assert_awaited_once_with("codex_cli")
+    handlers.broadcast_credential_event.assert_awaited_once_with("credential.oauth.disconnected", provider="codex_cli")
+
+
+async def test_slow_status_does_not_block_logout_or_restore_stale_connection(monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_status():
+        started.set()
+        await release.wait()
+        return {"logged_in": True}
+
+    monkeypatch.setattr(handlers, "codex_auth_status_info", slow_status)
+    probe = asyncio.create_task(handlers.handle_codex_cli_status({"refresh": True}, None))
+    try:
+        await started.wait()
+        logged_out = await asyncio.wait_for(handlers.handle_codex_cli_logout({}, None), timeout=1)
+        assert logged_out["success"]
+        release.set()
+        result = await probe
+        assert result["success"] and not result["connected"]
+        handlers.mark_logged_in.assert_not_awaited()
+    finally:
+        release.set()
+        await asyncio.gather(probe, return_exceptions=True)
+
+
+async def test_old_signed_out_probe_cannot_clear_new_login(monkeypatch):
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def status():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await release.wait()
+            return {"logged_in": False}
+        return {"logged_in": True}
+
+    monkeypatch.setattr(handlers, "codex_auth_status_info", status)
+    probe = asyncio.create_task(handlers.handle_codex_cli_status({"refresh": True}, None))
+    try:
+        await started.wait()
+        logged_in = await asyncio.wait_for(handlers.handle_codex_cli_login({}, None), timeout=1)
+        assert logged_in["success"] and logged_in["connected"]
+        release.set()
+        result = await probe
+        assert result["connected"]
+        handlers.mark_logged_out.assert_not_awaited()
+    finally:
+        release.set()
+        await asyncio.gather(probe, return_exceptions=True)
+
+
+@pytest.mark.parametrize("old_connected,new_connected", [(False, True), (True, False)])
+async def test_older_status_cannot_overwrite_newer_probe(monkeypatch, old_connected, new_connected):
+    started, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    async def status():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            started.set()
+            await release.wait()
+            return {"logged_in": old_connected}
+        return {"logged_in": new_connected}
+
+    monkeypatch.setattr(handlers, "codex_auth_status_info", status)
+    older = asyncio.create_task(handlers.handle_codex_cli_status({"refresh": True}, None))
+    try:
+        await started.wait()
+        newer = await handlers.handle_codex_cli_status({"refresh": True}, None)
+        assert newer["connected"] is new_connected
+        release.set()
+        assert (await older)["connected"] is new_connected
+        if new_connected:
+            handlers.mark_logged_in.assert_awaited_once_with("codex_cli")
+            handlers.mark_logged_out.assert_not_awaited()
+        else:
+            handlers.mark_logged_out.assert_awaited_once_with("codex_cli")
+            handlers.mark_logged_in.assert_not_awaited()
+    finally:
+        release.set()
+        await asyncio.gather(older, return_exceptions=True)
+
+
+async def test_failed_status_probe_keeps_last_verified_marker(monkeypatch):
+    monkeypatch.setattr(handlers, "codex_auth_status_info", AsyncMock(return_value={"logged_in": False, "error": "CLI unavailable"}))
+    result = await handlers.handle_codex_cli_status({"refresh": True}, None)
+    assert not result["success"]
+    handlers.mark_logged_out.assert_not_awaited()
+    handlers.broadcast_credential_event.assert_not_awaited()
+
+
+async def test_background_install_failure_is_actionable_and_does_not_connect(monkeypatch):
+    monkeypatch.setattr(handlers, "codex_binary_path", Mock(side_effect=RuntimeError("private install output")))
+    result = await handlers.handle_codex_cli_login({}, None)
+    assert not result["success"]
+    assert "managed Codex CLI" in result["error"]
+    assert "private" not in result["error"]
+    handlers.mark_logged_in.assert_not_awaited()
 
 
 async def test_shutdown_cancels_owned_login(monkeypatch):

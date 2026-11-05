@@ -62,6 +62,9 @@ const OAuthConnect: React.FC<Props> = ({
   // alternative auth path, not a prerequisite (e.g. Vercel's access
   // token alongside its CLI device-flow login).
   const hasRequiredFields = !!config.fields?.some((f) => f.required);
+  // A failed refresh can leave the last verified catalogue marker in place.
+  // Keep the normal login path reachable so it can prepare or repair the CLI.
+  const showLogin = !connected || !!error;
 
   const statusRows: StatusRowDef[] = [
     { label: 'Status', ok: () => connected, trueText: 'Connected', falseText: 'Not Connected' },
@@ -71,8 +74,8 @@ const OAuthConnect: React.FC<Props> = ({
   ];
 
   const actions: ActionDef[] = [
-    { key: 'login', label: `Login with ${config.name}`, intent: 'save', onClick: onLogin, disabled: pending || (hasRequiredFields && !stored), hidden: connected },
-    ...(onDeviceLogin ? [{ key: 'device', label: 'Use device code', intent: 'save' as const, onClick: onDeviceLogin, disabled: !!pending, hidden: connected }] : []),
+    { key: 'login', label: `${connected ? 'Reconnect' : 'Login'} with ${config.name}`, intent: 'save', onClick: onLogin, disabled: pending || (hasRequiredFields && !stored), hidden: !showLogin },
+    ...(onDeviceLogin ? [{ key: 'device', label: 'Use device code', intent: 'save' as const, onClick: onDeviceLogin, disabled: !!pending, hidden: !showLogin }] : []),
     { key: 'logout', label: pending ? 'Cancel sign-in' : 'Disconnect', intent: 'stop', onClick: onLogout, hidden: !connected && !pending },
     { key: 'refresh', label: 'Refresh', intent: 'save', onClick: onRefresh, icon: <RotateCcw className="h-4 w-4" /> },
   ];
@@ -145,26 +148,26 @@ const OAuthConnect: React.FC<Props> = ({
 
       <div className="rounded-md border border-accent/30 bg-accent/10 p-3">
         <div className="text-sm leading-relaxed text-muted-foreground">
-          {connected
-            ? config.account_label
-              ? `Connected as ${config.account_label}.`
-              : `Your ${config.name} account is connected.`
-            : verificationCode
-              ? (
-                <div className="flex flex-col items-center gap-2 py-1 text-center">
-                  <span>Enter this one-time code in the browser tab that just opened:</span>
-                  <code className="select-all font-mono text-3xl font-bold tracking-[0.25em] text-accent">
-                    {verificationCode}
-                  </code>
-                  <span className="text-xs">Click the code to select it, then approve the request to finish connecting.</span>
-                </div>
-              )
-              : pending
-                ? loginMessage || 'Complete sign-in in your browser.'
+          {verificationCode
+            ? (
+              <div className="flex flex-col items-center gap-2 py-1 text-center">
+                <span>{loginMessage || 'Enter this one-time code in the browser tab that just opened:'}</span>
+                <code className="select-all font-mono text-3xl font-bold tracking-[0.25em] text-accent">
+                  {verificationCode}
+                </code>
+                <span className="text-xs">Click the code to select it, then approve the request to finish connecting.</span>
+              </div>
+            )
+            : pending
+              ? loginMessage || 'Complete sign-in in your browser.'
+              : connected
+                ? config.account_label
+                  ? `Connected as ${config.account_label}.`
+                  : `Your ${config.name} account is connected.`
                 : (stored || !hasRequiredFields)
-                ? 'Click Login to authorize.'
-                : 'Enter your credentials above to get started.'}
-          {!connected && loginUrl && (
+                  ? 'Click Login to authorize.'
+                  : 'Enter your credentials above to get started.'}
+          {(!connected || pending || verificationCode) && loginUrl && (
             <a className="mt-2 block text-accent underline" href={loginUrl} target="_blank" rel="noopener noreferrer">Open sign-in page</a>
           )}
         </div>

@@ -23,6 +23,25 @@ LOGIN_TIMEOUT_SECONDS = 600.0
 ONESHOT_TIMEOUT_SECONDS = 30.0
 _install_lock = threading.Lock()
 _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_CLI_UNPREPARED_ERROR = "The managed Codex CLI is missing or needs an update. Click Login to prepare it, then try again."
+
+
+def codex_installed_binary_path() -> str | None:
+    """Return an existing pinned managed CLI without installing or waiting.
+
+    Authentication probes must stay independent of the package install lock:
+    preparing a missing or outdated CLI belongs to the owned login task.
+    """
+    from core.js_runtime import installed_version, shared_tree_bin
+    from services.cli_agent.config import get_provider_config
+
+    cfg = get_provider_config("codex")
+    if cfg is None or not cfg.package_version:
+        return None
+    binary = shared_tree_bin(cfg.binary_name)
+    if binary.is_file() and installed_version(cfg.package_name) == cfg.package_version:
+        return str(binary)
+    return None
 
 
 def codex_binary_path() -> str:
@@ -51,7 +70,9 @@ def _codex_env() -> Dict[str, str]:
 
 async def _run_auth(argv: list[str]) -> Dict[str, Any]:
     try:
-        binary = await asyncio.to_thread(codex_binary_path)
+        binary = await asyncio.to_thread(codex_installed_binary_path)
+        if binary is None:
+            return {"success": False, "cli_missing": True, "error": _CLI_UNPREPARED_ERROR}
         OPENCOMPANY_CODEX_DIR.mkdir(parents=True, exist_ok=True)
         return await run_cli_command(binary=binary, argv=argv, env=_codex_env(), timeout=ONESHOT_TIMEOUT_SECONDS)
     except (OSError, RuntimeError):
@@ -60,6 +81,8 @@ async def _run_auth(argv: list[str]) -> Dict[str, Any]:
 
 async def codex_auth_status_info() -> Dict[str, Any]:
     envelope = await _run_auth(["login", "status"])
+    if envelope.get("cli_missing"):
+        return {"logged_in": False, "error": _CLI_UNPREPARED_ERROR}
     if envelope.get("success"):
         return {"logged_in": True}
     # Codex writes both successful status and signed-out status to stderr.
