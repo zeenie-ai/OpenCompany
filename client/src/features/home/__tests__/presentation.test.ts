@@ -15,8 +15,11 @@ import {
   presentEmployee,
   primaryActionLabel,
   restartDraftsWarning,
+  STATUS_DOT_CLASS,
+  STATUS_PILL_CLASS,
   talkMode,
   talkNoticeText,
+  workspaceStatus,
 } from '../data/presentation';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 
@@ -121,6 +124,30 @@ describe('presentEmployee', () => {
     const view = presentEmployee(employee({ status: 'working' }, { state: 'running', can_pause: false }));
     expect(view.primary.kind).toBe('open_workflow');
     expect(primaryActionLabel(view.primary)).toBe('Open in Dev mode');
+  });
+});
+
+describe('workspaceStatus', () => {
+  const request = { node_id: 'w:browser:1', reason: 'login', since: null };
+
+  it.each([
+    ['you have their screen', 'Waiting', 'waiting', { status: 'paused' }, { state: 'paused' }, true],
+    // First match wins: having the screen beats Needs you.
+    ['you have their screen while they wait for you', 'Waiting', 'waiting', { status: 'working', browser_request: request }, { state: 'running' }, true],
+    ['drafts wait', 'Needs you', 'waiting', { status: 'working', pending_approvals: 2 }, { state: 'running' }, false],
+    ['they wait in the browser', 'Needs you', 'waiting', { status: 'working', browser_request: request }, { state: 'running' }, false],
+    ['they work', 'Live', 'live', { status: 'working' }, { state: 'running' }, false],
+    // Otherwise the pill's own label and tone.
+    ['they are stopped', 'Stopped', 'paused', { status: 'paused' }, { state: 'paused' }, false],
+    ['they never started', 'Not started', 'paused', { status: 'ready' }, { state: 'never_started' }, false],
+    ['they need attention', 'Needs attention', 'attention', { status: 'attention' }, { state: 'failed', can_resume: false }, false],
+  ])('when %s it says %s (%s)', (_when, label, tone, patch, control, takenOver) => {
+    expect(workspaceStatus(employee(patch, control), takenOver)).toEqual({ label, tone });
+  });
+
+  it('draws Live red, the dot blinking', () => {
+    expect(STATUS_DOT_CLASS.live).toBe('bg-destructive opencompany-pip-pulse');
+    expect(STATUS_PILL_CLASS.live).toBe('bg-danger-soft border-danger-border text-destructive');
   });
 });
 

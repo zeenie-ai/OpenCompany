@@ -4,8 +4,9 @@
  * A table over server-decided fields: the server owns `status`, the task
  * text, `missing_apps`, `needs_ai` and the control capabilities; this only
  * picks labels, colours and the primary action from them. It derives no new
- * rules. `answering` is the one live input: one of the employee's nodes is
- * executing right now (data/liveTask `useAnswering`).
+ * rules. Two inputs are live: `answering`, one of the employee's nodes is
+ * executing right now (data/liveTask `useAnswering`), and the Workspace's
+ * `takenOver`, the owner has their screen (workspace/takeover).
  *
  * The pill, first match wins:
  *
@@ -43,7 +44,7 @@ import type {
   WorkflowControlStatus,
 } from '@/contexts/WebSocketContext';
 
-/** `live` is the Workspace's "watching now" pill, not an employee state. */
+/** `live` is the Workspace's "watching now" status (workspaceStatus), not an employee state. */
 export type StatusTone = 'working' | 'ready' | 'paused' | 'attention' | 'waiting' | 'live';
 
 export type PrimaryAction =
@@ -169,6 +170,28 @@ export function primaryActionLabel(action: PrimaryAction): string {
   }
 }
 
+// ----- the Workspace -----
+
+/**
+ * The Workspace's status (the dock's dot and floating pill, the header
+ * button's dot): the pill above, except Live while they work and Waiting
+ * while the owner has their screen. First match wins:
+ *
+ * | When                     | Status (status tone)       |
+ * |--------------------------|----------------------------|
+ * | the owner has the screen | Waiting (waiting)          |
+ * | the pill says Needs you  | Needs you (waiting)        |
+ * | working                  | Live (live, blinks red)    |
+ * | otherwise                | the pill's label and tone  |
+ */
+export function workspaceStatus(employee: EmployeeSummary, takenOver: boolean): { label: string; tone: StatusTone } {
+  if (takenOver) return { label: 'Waiting', tone: 'waiting' };
+  const pill = pillOf(employee, undefined, false);
+  if (pill.tone === 'waiting') return pill;
+  if (employee.status === 'working') return { label: 'Live', tone: 'live' };
+  return pill;
+}
+
 // ----- the message box -----
 
 /** `send`: delivered now. `queue`: waits for Resume. `start`: nothing to send to yet. */
@@ -274,19 +297,20 @@ export const STATUS_PILL_CLASS: Record<StatusTone, string> = {
   paused: 'bg-status-paused-fill border-status-paused-border text-status-paused-ink',
   attention: 'bg-status-attention-fill border-status-attention-border text-status-attention-ink',
   waiting: 'bg-status-waiting-fill border-status-waiting-border text-status-waiting-ink',
-  live: 'bg-node-trigger-fill border-node-trigger-edge text-node-trigger-ink',
+  // Live is red: the danger tokens.
+  live: 'bg-danger-soft border-danger-border text-destructive',
 };
 
-/** Status dot (the sidebar pip, the pill's dot). */
+/** Status dot (the sidebar pip, the pill's dot, the Workspace's dot). */
 export const STATUS_DOT_CLASS: Record<StatusTone, string> = {
   working: 'bg-status-working-dot',
   ready: 'bg-status-ready-dot',
   paused: 'bg-status-paused-dot',
   attention: 'bg-status-attention-dot',
   waiting: 'bg-status-waiting-dot',
-  // Blinks rather than rings (design handoff "Live"); animations.css
-  // stops it under reduced motion.
-  live: 'bg-node-trigger opencompany-pip-pulse',
+  // Red, and blinks rather than rings (design handoff "Live");
+  // animations.css stops it under reduced motion.
+  live: 'bg-destructive opencompany-pip-pulse',
 };
 
 export { AVATAR_CLASS, initialOf } from '@/components/catalog/presentation';
