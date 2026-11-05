@@ -71,7 +71,7 @@ export function SlashMenu({
         className="w-(--radix-popover-trigger-width) rounded-card border border-border-default bg-bg-elevated p-1.5 shadow-card-hover ring-0"
       >
         <Command id={listId} shouldFilter={false} value={selected} label="Commands" className="bg-transparent">
-          <div aria-hidden className="px-2.5 pt-1.5 pb-1 font-mono text-2xs font-medium tracking-label text-fg-faint uppercase">
+          <div aria-hidden className="px-2.5 pt-1.5 pb-1 font-mono text-2xs font-medium tracking-label text-fg-muted uppercase">
             Commands
           </div>
           <CommandList label="Commands">

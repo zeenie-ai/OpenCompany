@@ -32,6 +32,7 @@ import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { EmployeeChat } from '../employee/EmployeeChat';
 import type { EmployeeControl } from '../employee/useEmployeeControl';
 import { ENERGY, SPIKE, orbState } from '../orb/orb';
+import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 // Loaded up front so the turns' lazy markdown resolves from the module cache.
 import '@/features/chat/markdown/ReplyMarkdown';
@@ -154,6 +155,13 @@ describe('the thread', () => {
     expect(box).not.toHaveFocus();
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     expect(box).toHaveFocus();
+  });
+
+  it('takes focus on arrival when asked to (a Get started row)', async () => {
+    useHomeStore.setState({ composerFocus: 1 });
+    renderChat(employee());
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message Maya' })).toHaveFocus());
+    expect(useHomeStore.getState().composerFocus).toBe(0);
   });
 });
 

@@ -100,12 +100,12 @@ export function useGetStarted() {
     'say-hello': {
       done: saidHello || wroteToFirst,
       sub: first ? `Send ${first.name} a first message` : 'Once your first hire joins',
-      act: first ? () => home().showEmployee(first.workflow_id) : undefined,
+      act: first ? () => home().showEmployee(first.workflow_id, { focus: true }) : undefined,
     },
     'approve-draft': {
       done: approved,
       sub: 'Nothing goes out until you say so',
-      act: waiting ? () => home().showEmployee(waiting.workflow_id) : undefined,
+      act: waiting ? () => home().showEmployee(waiting.workflow_id, { focus: true }) : undefined,
     },
   };
   const rows: GetStartedRow[] = GET_STARTED_ITEMS.map((item) => ({ ...item, ...state[item.id] }));

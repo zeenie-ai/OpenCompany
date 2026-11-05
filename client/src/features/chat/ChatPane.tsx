@@ -119,6 +119,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   const resume = useResumeChatGeneration(control, () => notify('Couldn’t resume. Try again.', 'error'));
   const boxRef = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => ({ focusComposer: () => boxRef.current?.focus() }), []);
+  const focusBox = useCallback(() => boxRef.current?.focus(), []);
 
   // What the box offers here (files, dictation, commands, Web, the model
   // picker), and what the next message carries: Web off, and the picker's
@@ -545,7 +546,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       <div className={cn('relative flex-none', compact ? 'border-t border-border-default px-3 py-2' : 'px-6 pb-3')}>
         <div className={cn('mx-auto flex w-full flex-col', compact ? 'gap-2' : 'max-w-(--w-chat-column) gap-2.5')}>
           {host.notices}
-          <LiveWork run={working} name={persona.name} stopping={stopping} compact={compact} />
+          <LiveWork run={working} name={persona.name} stopping={stopping} compact={compact} onLeave={focusBox} />
           {composer !== 'closed' && (
             <Composer
               sessionId={sessionId}

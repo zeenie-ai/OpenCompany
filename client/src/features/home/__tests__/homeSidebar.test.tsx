@@ -84,7 +84,7 @@ describe('HomeSidebar employee deletion', () => {
     mountSidebar();
     const button = screen.getByRole('button', { name: 'Delete Maya' });
     // Not the stop tint: the dialog's Delete is the destructive step.
-    expect(button).toHaveClass('text-fg-faint', 'hover:bg-bg-hover', 'hover:text-fg-default');
+    expect(button).toHaveClass('text-fg-muted', 'hover:bg-bg-hover', 'hover:text-fg-default');
     expect(button.className).not.toMatch(/action-/);
     expect(button).toHaveClass('[@media(hover:hover)]:opacity-0', 'group-hover:opacity-100', 'group-focus-within:opacity-100');
   });

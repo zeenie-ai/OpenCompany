@@ -175,6 +175,8 @@ describe('a new hire’s first day', () => {
     expect(firstDayNote(employee({ needs_ai: true }))).toBe('Connect an AI model first.');
     expect(firstDayNote(employee({ activation_state: 'failed' }))).toBe('Maya couldn’t start.');
     expect(firstDayNote(employee({}, { state: 'failed' }))).toBe('Maya couldn’t start.');
+    // She ran, then failed: not "couldn't start".
+    expect(firstDayNote(employee({ activation_state: 'running' }, { state: 'failed' }))).toBe('Maya isn’t running.');
     expect(firstDayNote(employee({}))).toBe('Maya isn’t running.');
   });
 

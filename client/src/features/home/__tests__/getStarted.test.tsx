@@ -92,6 +92,7 @@ beforeEach(() => {
     guide: { ...state.guide, open: false },
     connectAI: { open: false, provider: null, closeOnConnect: true },
     getStartedFolded: false,
+    composerFocus: 0,
   }));
   server = { settings: { onboarding_completed: true }, employees: [], messages: [] };
   sendRequest.mockReset().mockImplementation(async (type: string, data: Wire) => {
@@ -151,6 +152,8 @@ describe('Get started on Home', () => {
     expect(screen.getByText('2 of 4 done')).toBeInTheDocument();
     fireEvent.click(step(/Say hello/));
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
+    // The card goes with the hire view: focus waits in their message box.
+    expect(useHomeStore.getState().composerFocus).toBe(1);
   });
 
   it('takes the owner to whoever has a draft waiting, for Approve a first draft', async () => {
@@ -160,6 +163,7 @@ describe('Get started on Home', () => {
     expect(await screen.findByText('Maya joined your team')).toBeInTheDocument();
     fireEvent.click(step(/Approve a first draft/));
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w2' });
+    expect(useHomeStore.getState().composerFocus).toBe(1);
   });
 
   it('latches Say hello once the owner has written to their first hire', async () => {
@@ -223,11 +227,11 @@ describe('Get started on Home', () => {
 });
 
 describe('The Get started pill on an employee’s page', () => {
-  it('goes back to the hire view with the card open', async () => {
+  it('goes back to the hire view with the card open, focus in the hire box', async () => {
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' }, getStartedFolded: true });
     renderPill();
     fireEvent.click(await screen.findByRole('button', { name: 'Get started · 0/4' }));
-    expect(useHomeStore.getState()).toMatchObject({ view: { kind: 'hire' }, getStartedFolded: false });
+    expect(useHomeStore.getState()).toMatchObject({ view: { kind: 'hire' }, getStartedFolded: false, composerFocus: 1 });
   });
 
   it('shows by the card’s rule', async () => {

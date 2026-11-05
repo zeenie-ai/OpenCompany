@@ -49,7 +49,7 @@ function RestartDivider({ name }: { name: string }) {
 
 function DayDivider({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-3 font-mono text-2xs font-medium tracking-label text-fg-faint uppercase">
+    <div className="flex items-center gap-3 font-mono text-2xs font-medium tracking-label text-fg-muted uppercase">
       <span aria-hidden className="h-px flex-1 bg-border-default" />
       <span>{label}</span>
       <span aria-hidden className="h-px flex-1 bg-border-default" />

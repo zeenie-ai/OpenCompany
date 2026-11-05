@@ -216,10 +216,11 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                       value={subject}
                       onChange={(event) => setSubject(event.target.value)}
                       aria-label="Subject"
-                      className="h-8 rounded-lg border border-border-focus bg-bg-input px-3 text-sm text-fg-default outline-none dark:bg-bg-input"
+                      className="h-8 rounded-lg border border-input bg-bg-input px-3 text-sm text-fg-default outline-none focus-visible:border-border-focus focus-visible:ring-3 focus-visible:ring-node-agent-soft dark:bg-bg-input"
                     />
                   )}
-                  {/* The design's halo stays on focus (the box opens focused). */}
+                  {/* The design's focus border and halo while it has focus (it opens
+                      focused); the plain border otherwise, so focus visibly moves on. */}
                   <Textarea
                     id={boxId}
                     value={text}
@@ -228,7 +229,7 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                     rows={3}
                     aria-label="Edit the draft"
                     autoFocus
-                    className="min-h-21 resize-y border-border-focus bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft focus-visible:ring-node-agent-soft md:text-base dark:bg-bg-input"
+                    className="min-h-21 resize-y bg-bg-input text-base leading-normal focus-visible:border-border-focus focus-visible:ring-node-agent-soft md:text-base dark:bg-bg-input"
                   />
                   <span className={cn('self-end font-mono text-2xs font-medium', tooLong ? 'text-action-stop-ink' : 'text-fg-faint')}>
                     {text.length} / {approval.maxLength}

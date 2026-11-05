@@ -18,10 +18,11 @@
  *   setup cannot answer gets a note instead of the box.
  * - A new hire's page opens with their first-day strip (FirstDay) at the
  *   top of the conversation for the rest of the session: it says how their
- *   start is going, offers their main action when it did not go ahead (so
- *   the line above the box does not say it twice), and lists their routine
- *   until the first message. Before that message, while they start, the box
- *   shows but takes nothing yet.
+ *   start is going and, until the first message, offers their main action
+ *   when it did not go ahead (the line above the box then stays away, so it
+ *   is not said twice) and lists their routine. After that message the strip
+ *   can scroll out of view, so the line above the box is back. Before it,
+ *   while they start, the box shows but takes nothing yet.
  * - A document they wrote opens from its card in the reply on the
  *   Workspace's Canvas tab, at that version.
  * - Cmd/Ctrl+K puts the cursor in the message box.
@@ -89,7 +90,8 @@ function Notices({
   employee: EmployeeSummary;
   control: EmployeeControl;
   queued: boolean;
-  /** Their first-day strip says their state and offers their main action. */
+  /** Their first-day strip says their state and offers their main action
+   *  (until the conversation has a message). */
   firstDay: boolean;
 }) {
   const { name } = employee;
@@ -142,7 +144,8 @@ export function EmployeeChat({
   const mode = talkMode(employee.control);
 
   // Their first day lasts the session (homeStore.firstDays); its routine
-  // line and the waiting box last until the conversation has a message.
+  // line, its main action and the waiting box last until the conversation
+  // has a message.
   const firstDay = useHomeStore((s) => s.firstDays[workflowId]);
   const spoken = (useChatThread(workflowId, 'all').data?.messages.length ?? 0) > 0;
   const phase = firstDay ? firstDayPhase(employee, firstDay.started) : null;
@@ -162,6 +165,15 @@ export function EmployeeChat({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  // Asked to take focus on arrival (a Get started row: the card goes with
+  // the hire view, so focus would land on the page): the message box takes it.
+  const focusNonce = useHomeStore((s) => s.composerFocus);
+  const consumeComposerFocus = useHomeStore((s) => s.consumeComposerFocus);
+  useEffect(() => {
+    if (!focusNonce) return;
+    pane.current?.focusComposer();
+    consumeComposerFocus();
+  }, [focusNonce, consumeComposerFocus]);
 
   // The orb answers the conversation (design handoff "Orb reactivity"): it
   // brightens while the owner writes, and spikes when something goes.
@@ -198,7 +210,7 @@ export function EmployeeChat({
           persona: { name, colorRole: employee.color_role, photo: employee.photo_url },
           composer,
           placeholder: composer === 'wait' ? `${name} is starting…` : undefined,
-          notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} firstDay={Boolean(firstDay)} />,
+          notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} firstDay={Boolean(firstDay) && !spoken} />,
           top: (
             <>
               {firstDay && phase && (

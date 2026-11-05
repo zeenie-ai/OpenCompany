@@ -192,6 +192,18 @@ describe('a new hire’s first day', () => {
     expect(useHomeStore.getState().firstDays.w1).toBeDefined();
   });
 
+  it('leaves their main action to the line above the box once they have talked', async () => {
+    server.messages = [MORNING];
+    // She ran, talked, then failed: the strip scrolls with the thread.
+    renderPage(employee('failed', { status: 'attention', activation_state: 'running' }));
+    expect(await screen.findByText('Morning!')).toBeInTheDocument();
+    const day = await strip();
+    expect(within(day).getByText('Maya isn’t running.')).toBeInTheDocument();
+    expect(within(day).queryByRole('button', { name: 'Start again' })).not.toBeInTheDocument();
+    expect(screen.getByText(/isn’t running, so they can’t read messages/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start again' })).toBeInTheDocument();
+  });
+
   it('lets a message go while they resume after talking', async () => {
     server.messages = [MORNING];
     renderPage(employee('resuming', { status: 'working' }));

@@ -32,7 +32,7 @@ export function HelpTab({ onDone }: { onDone: () => void }) {
             Replay
           </Button>
         </SettingRow>
-        <SettingRow title="Get started checklist" detail="Your first steps, ticked off as you go, in the corner of Home." last>
+        <SettingRow title="Get started checklist" detail="Your first steps, ticked off as you go." last>
           <Button
             variant="quiet"
             onClick={() => {

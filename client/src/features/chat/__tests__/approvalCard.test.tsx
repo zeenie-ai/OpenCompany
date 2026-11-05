@@ -84,18 +84,21 @@ describe('a card waiting for the owner', () => {
     expect(within(card).getByRole('button', { name: 'Allow' })).toHaveAttribute('data-variant', 'invert');
   });
 
-  it('edits in a box framed in the focus colour, with Done pressed', () => {
+  it('edits in a box framed in the focus colour while focused, with Done pressed', () => {
     const card = renderCard({ subject: 'Hello' });
     fireEvent.click(within(card).getByRole('button', { name: 'Edit' }));
     const done = within(card).getByRole('button', { name: 'Done' });
     expect(done).toHaveAttribute('aria-pressed', 'true');
     expect(done).toHaveClass('bg-bg-active', 'border-border-strong', 'text-fg-default');
     const box = within(card).getByRole('textbox', { name: 'Edit the draft' });
-    expect(box).toHaveClass('border-border-focus', 'ring-node-agent-soft', 'focus-visible:ring-node-agent-soft');
+    expect(box).toHaveClass('focus-visible:border-border-focus', 'focus-visible:ring-node-agent-soft');
+    // At rest the plain border, so focus visibly leaves it.
+    expect(box).not.toHaveClass('border-border-focus', 'ring-node-agent-soft');
     // Its own fill in dark mode too, not the field primitive's.
     expect(box).toHaveClass('bg-bg-input', 'dark:bg-bg-input');
     expect(box.className).not.toMatch(/bg-input\/30/);
-    expect(within(card).getByRole('textbox', { name: 'Subject' })).toHaveClass('border-border-focus', 'dark:bg-bg-input');
+    const subject = within(card).getByRole('textbox', { name: 'Subject' });
+    expect(subject).toHaveClass('border-input', 'focus-visible:border-border-focus', 'focus-visible:ring-node-agent-soft', 'dark:bg-bg-input');
     expect(tinted(card)).toHaveLength(0);
   });
 

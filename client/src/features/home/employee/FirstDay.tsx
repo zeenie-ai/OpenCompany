@@ -7,7 +7,9 @@
  *   and the hire glow once they run, then "{Name} · {Role}".
  * - How their start is going, on one line driven by what really happened,
  *   never by timers (firstDayLine). A start that did not go ahead says why,
- *   with their main action (connect what is missing, or Start).
+ *   with their main action (connect what is missing, or Start) until the
+ *   conversation has a message; after that the line above the box offers it,
+ *   since the strip scrolls away with the thread.
  * - Their status as the header says it, a dot and a label; Starting…
  *   while the hire's own start is under way.
  * - What they do: their routine on one line, from the hire's plan, until
@@ -47,7 +49,8 @@ export function FirstDay({
   firstDay: FirstDayEntry;
   phase: FirstDayPhase;
   control: EmployeeControl;
-  /** The conversation has a message: the routine line goes. */
+  /** The conversation has a message: the routine line, the main action and
+   *  the hire glow go. */
   spoken: boolean;
 }) {
   const { name } = employee;
@@ -63,9 +66,10 @@ export function FirstDay({
   useLayoutEffect(() => {
     rise(rootRef.current, { duration: 'chat-rise' });
   }, []);
-  // They are ready: the hire glow, once.
+  // They are ready: the hire glow. Not once they have talked, or it would
+  // play again on every visit and every Resume.
   useLayoutEffect(() => {
-    if (phase !== 'ready') return;
+    if (phase !== 'ready' || spoken) return;
     animate(
       avatarRef.current,
       [
@@ -74,7 +78,7 @@ export function FirstDay({
       ],
       { duration: 'glow', easing: 'spring' },
     );
-  }, [phase]);
+  }, [phase, spoken]);
 
   return (
     <section
@@ -100,7 +104,7 @@ export function FirstDay({
             {firstDayLine(employee, phase, firstDay.nodeCount)}
           </p>
         </div>
-        {phase === 'stopped' && <PrimaryActionButton control={control} className="h-7 px-3 text-meta" />}
+        {phase === 'stopped' && !spoken && <PrimaryActionButton control={control} className="h-7 px-3 text-meta" />}
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-fg-muted">
           <StatusDot tone={status.tone} pulse={pulse} className="size-1.5" />
           {status.label}

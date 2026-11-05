@@ -240,7 +240,10 @@ export function firstDayPhase(employee: EmployeeSummary, started: boolean): Firs
 export function firstDayNote(employee: EmployeeSummary): string | null {
   if (employee.missing_apps.length > 0) return `${employee.missing_apps[0].name} isn’t connected yet.`;
   if (employee.needs_ai) return 'Connect an AI model first.';
-  if (employee.activation_state === 'failed' || employee.control.state === 'failed') return `${employee.name} couldn’t start.`;
+  // Only the hire's own start: one that failed after they ran gets the usual line.
+  if (employee.activation_state === 'failed' || (employee.control.state === 'failed' && employee.activation_state !== 'running')) {
+    return `${employee.name} couldn’t start.`;
+  }
   return stateNoticeText(talkMode(employee.control), employee.name);
 }
 

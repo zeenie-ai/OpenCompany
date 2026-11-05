@@ -11,7 +11,6 @@
 
 import { useId, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -165,9 +164,10 @@ export function AddConnectorForm({ close, onAdded }: AddConnectorFormProps) {
         <Button type="button" variant="quiet" size="sm" onClick={close}>
           Cancel
         </Button>
-        <ActionButton intent="run" type="submit" disabled={!ready} className="h-7.5 rounded-lg px-3.5 text-meta">
+        {/* The form's one primary action: invert, as the Skills form's Add. */}
+        <Button variant="invert" type="submit" disabled={!ready} className="h-7.5 rounded-lg px-3.5 text-meta font-semibold">
           {saving ? (signIn === 'oauth' ? 'Opening its sign-in…' : 'Reading its tools…') : 'Add'}
-        </ActionButton>
+        </Button>
       </div>
     </form>
   );

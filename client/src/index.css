@@ -699,8 +699,9 @@ html.oc-theme-fade *::after {
   background: var(--code-bg);
   color: var(--code-text);
   /* The handoff's 13px beside Home's 16px reply text; relative, so it follows
-   * the console's font size in Dev's chat pane. */
-  font-size: 0.8125em;
+   * the console's font size in Dev's chat pane, but never below the pane's
+   * smallest text. */
+  font-size: max(0.8125em, var(--text-2xs));
 }
 .chat-markdown .chat-code pre {
   margin: 0;
@@ -716,16 +717,21 @@ html.oc-theme-fade *::after {
   border: 1px solid var(--border-default);
   border-radius: var(--radius-card);
   overflow-x: auto;
+  /* The reply's wrap-anywhere would shrink every column to one letter, so a
+   * wide table could never scroll; cells break between words instead. */
+  overflow-wrap: break-word;
 }
 .chat-markdown .chat-table table {
   margin: 0;
-  font-size: 0.8125em; /* as the code frame: 13px on Home, scaling in Dev */
+  font-size: max(0.8125em, var(--text-2xs)); /* as the code frame */
 }
 .chat-markdown .chat-table th,
 .chat-markdown .chat-table td {
   border: 0;
   padding: 9px 12px;
 }
+/* Header cells at the handoff's 12px beside 13px cells. */
+.chat-markdown .chat-table th { font-size: max(calc(12em / 13), var(--text-2xs)); }
 .chat-markdown .chat-table td { border-top: 1px solid var(--border-default); }
 .chat-markdown blockquote {
   border-left: 3px solid var(--border-strong);

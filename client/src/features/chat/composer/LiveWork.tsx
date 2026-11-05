@@ -8,11 +8,12 @@
  * turn keeps the full record; the pill goes when the run ends.
  *
  * It stays mounted without a run, so whether the owner opened it carries
- * over to the next one.
+ * over to the next one. When it goes while its trigger has focus, focus
+ * moves to the message box (onLeave), not to the page.
  */
 
 import { Check, ChevronDown, Minus, X } from 'lucide-react';
-import { useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { RingSpinner } from '@/components/ui/ring-spinner';
 import type { RunSnapshot, RunStep } from '@/lib/agui/reduceRun';
@@ -23,6 +24,14 @@ import { liveText, liveWorkLabel, liveWorkMeta, withApprovalSteps } from '../tur
 
 /** The spinner in the pill's neutral ink, not the chat's working tint. */
 const SPINNER = 'size-3 border-border-default border-t-fg-default';
+
+/** What a screen reader hears for a step's mark. */
+const STEP_STATE: Record<RunStep['state'], string> = {
+  running: 'in progress',
+  done: 'done',
+  failed: 'failed',
+  skipped: 'skipped',
+};
 
 function StepMark({ state }: { state: RunStep['state'] }) {
   if (state === 'running') return <RingSpinner className={SPINNER} />;
@@ -35,14 +44,29 @@ export function LiveWork({
   name,
   stopping,
   compact,
+  onLeave,
 }: {
   /** The run working now; null while none is. */
   run: RunSnapshot | null;
   name: string;
   stopping: boolean;
   compact: boolean;
+  /** The pill went while its trigger had focus. Keep it stable: a new
+   *  function re-attaches the trigger's ref. */
+  onLeave?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // React runs a ref's cleanup before the node leaves the page, while it can
+  // still hold focus.
+  const triggerRef = useCallback(
+    (node: HTMLButtonElement | null) => {
+      if (!node) return;
+      return () => {
+        if (document.activeElement === node) onLeave?.();
+      };
+    },
+    [onLeave],
+  );
   const live = run !== null;
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -72,6 +96,7 @@ export function LiveWork({
         className="flex max-w-full flex-col self-center overflow-hidden rounded-card border border-border-default bg-bg-panel"
       >
         <CollapsibleTrigger
+          ref={triggerRef}
           className={cn(
             'flex h-8.5 max-w-full items-center gap-2 pr-2.5 pl-3 text-xs font-medium text-fg-default focus-visible:-outline-offset-2 enabled:hover:bg-bg-hover',
             compact && 'h-7 text-2xs',
@@ -87,7 +112,12 @@ export function LiveWork({
           <span role="status" className="min-w-0 truncate">
             {liveWorkLabel(steps, { writing: liveText(run).streaming, waiting, stopping })}
           </span>
-          {meta && <span className="shrink-0 text-fg-muted tabular-nums">{meta}</span>}
+          {/* Out of the button's name, which would otherwise change every second. */}
+          {meta && (
+            <span aria-hidden className="shrink-0 text-fg-muted tabular-nums">
+              {meta}
+            </span>
+          )}
           {expandable && (
             <ChevronDown
               aria-hidden
@@ -111,6 +141,7 @@ export function LiveWork({
               >
                 <StepMark state={step.state} />
                 <span className="min-w-0 truncate">{step.name}</span>
+                <span className="sr-only">, {STEP_STATE[step.state]}</span>
               </li>
             ))}
           </ol>

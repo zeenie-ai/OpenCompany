@@ -138,7 +138,8 @@ interface HomeState {
   glow: { workflowId: string; nonce: number } | null;
   /** Bumped to replay the logo pulse. 0 = never played. */
   logoPulse: number;
-  /** Bumped to ask the composer to take focus. */
+  /** Bumped to ask the composer to take focus: the hire box, or the
+   *  message box on an employee's page. */
   composerFocus: number;
   /** What the last hire said, for its employee's page (hire/HireNotice). */
   hireNotice: HireNotice | null;
@@ -168,7 +169,7 @@ interface HomeState {
   firstDays: Record<string, FirstDay>;
 
   showHire: (options?: { focus?: boolean }) => void;
-  showEmployee: (workflowId: string) => void;
+  showEmployee: (workflowId: string, options?: { focus?: boolean }) => void;
   toggleSidebar: () => void;
   openSettings: (tab?: SettingsTab, category?: string) => void;
   closeSettings: () => void;
@@ -208,7 +209,7 @@ interface HomeState {
   checkGuide: (settings: { onboarding_completed?: unknown; onboarding_step?: unknown }) => void;
   setGetStartedFolded: (folded: boolean) => void;
   /** The header's Get started pill: back to the hire view, with the
-   *  checklist open. */
+   *  checklist open and focus in the hire box (the pill goes with the page). */
   openGetStarted: () => void;
   beginFirstDay: (workflowId: string, firstDay: FirstDay) => void;
   /** New conversation, or they are gone. */
@@ -247,10 +248,11 @@ export const useHomeStore = create<HomeState>((set, get) => ({
       composerFocus: options?.focus ? state.composerFocus + 1 : state.composerFocus,
       hireNotice: null,
     })),
-  showEmployee: (workflowId) =>
+  showEmployee: (workflowId, options) =>
     set((state) => ({
       view: { kind: 'employee', workflowId },
       workspaceFor: workflowId,
+      composerFocus: options?.focus ? state.composerFocus + 1 : state.composerFocus,
       hireNotice: state.hireNotice?.workflowId === workflowId ? state.hireNotice : null,
     })),
   toggleSidebar: () =>
@@ -351,7 +353,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   },
   setGetStartedFolded: (getStartedFolded) => set({ getStartedFolded }),
   openGetStarted: () => {
-    get().showHire();
+    get().showHire({ focus: true });
     set({ getStartedFolded: false });
   },
   beginFirstDay: (workflowId, firstDay) => set((state) => ({ firstDays: { ...state.firstDays, [workflowId]: firstDay } })),

@@ -139,7 +139,7 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
         title={`Delete ${employee.name}`}
         disabled={deleting}
         onClick={() => setConfirming(true)}
-        className="mr-1 size-7.5 shrink-0 text-fg-faint opacity-100 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0"
+        className="mr-1 size-7.5 shrink-0 opacity-100 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:hover)]:opacity-0"
       >
         <X aria-hidden className="size-3.75" />
       </Button>
