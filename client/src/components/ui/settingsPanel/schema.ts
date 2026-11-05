@@ -67,9 +67,9 @@ export function fromServerRow(row: Record<string, any> | null | undefined): Work
 }
 
 /**
- * The server keys a change touches: a change saves only these, so a value
- * another window saved meanwhile (Home's Profile shows Generated UI too) is
- * never written back from a stale copy.
+ * The server keys that differ between two copies: a change, and Save, send
+ * only these, so a value another window saved meanwhile (Home's Profile shows
+ * Generated UI too) is never written back from a stale copy.
  */
 export function changedRow(previous: WorkflowSettings, next: WorkflowSettings): Record<string, any> {
   const before = toServerRow(previous);

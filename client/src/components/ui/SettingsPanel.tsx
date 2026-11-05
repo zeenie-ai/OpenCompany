@@ -139,11 +139,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       toast.error(message);
       return;
     }
-    // A change saves only what it changed; Save and Reset save the whole row.
+    // A change and Save send only what differs from `previous`, so a window
+    // whose copy is stale never writes back what another window saved (Home's
+    // Profile shows Generated UI too). Reset sends the whole row.
     const row = previous ? changedRow(previous, parsed.data) : toServerRow(parsed.data);
-    if (Object.keys(row).length === 0) return;
     try {
-      await saveMutation.mutateAsync(row);
+      if (Object.keys(row).length > 0) await saveMutation.mutateAsync(row);
       if (withToast) toast.success('Settings saved successfully');
     } catch (error) {
       console.error('[SettingsPanel] Failed to save settings:', error);
@@ -162,8 +163,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     await persist(defaultSettings, true);
   };
 
+  // Every change saves itself, so Save sends only what the loaded settings
+  // don't hold yet, and waits until they have loaded.
   const handleSave = async () => {
-    await persist(settings, true);
+    if (!settingsQuery.data) return;
+    await persist(settings, true, fromServerRow(settingsQuery.data));
   };
 
   const headerActions = (
@@ -185,7 +189,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <ActionButton
           intent="run"
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !settingsQuery.data}
           title="Save settings"
         >
           <Save className="h-3 w-3" />
