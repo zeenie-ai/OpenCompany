@@ -5,8 +5,8 @@
  * the screen's state at the press and calls the handler with them. The
  * actions map onto Home: start editing the draft, open Connectors, connect
  * one app, or hire. `setState` is not here: json-render runs it itself,
- * writing the screen's state store (lib/jsonRender/uiState.ts), and the
- * store tells the draft.
+ * writing the screen's state, which is the draft's own (HireScreen.tsx gives
+ * json-render the draft through createStoreAdapter).
  *
  * `connect_app` names an app in the owner's words ("Gmail", "Google
  * calendar"). The server resolves the names a reply uses against the app

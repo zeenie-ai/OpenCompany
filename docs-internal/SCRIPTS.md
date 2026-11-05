@@ -131,6 +131,12 @@ The Temporal dev server is backend-owned: the FastAPI lifespan starts it via `Te
 | `test:frontend` | `bun --cwd=client run test` (vitest) |
 | `test:nodes` | node-plugin tests with handler coverage |
 
+### Generated files
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `genui:prompts` | `bun client/scripts/genui-prompts.ts` | Writes the generated-UI prompt files the server reads (`server/config/*_prompt.txt`) from the catalogue manifests through json-render's `catalog.prompt()`. Run it after changing `server/config/*genui_catalog.json` or `client/src/lib/jsonRender/prompts.ts`, and commit the files: a client test fails while one is stale |
+
 ### Lifecycle hooks
 
 | Script | File | Purpose |

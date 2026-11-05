@@ -15,7 +15,9 @@ make, a short form, numbers, a chart, buttons. The agent calls `show_ui`
 with a json-render spec; the owner sees it under the reply, uses it, and its
 buttons either ask something in the owner's name or come back to the agent
 as the owner's next turn. Wire it to the `input-tools` handle of the agent
-that answers through Reply in Chat. See
+that answers through Reply in Chat. The agent holds it only while the owner
+has Generated UI on (Home's Settings > Profile or Dev's Settings panel; off
+by default). See
 [Chat Protocol → Generated UI](../../chat_protocol.md#generated-ui).
 
 ## Inputs (handles)
@@ -82,7 +84,11 @@ flowchart TD
   JSON Schema refuses; `$bindState` on a prop other than the input's bound
   one; a state path through `__proto__`, `constructor` or `prototype`; an
   action name that is not one (`push`, `pop`, `pushState`, `removeState` and
-  `validateForm` are kept by the chat); params starting `__`.
+  `validateForm` are kept by the chat); params starting `__`; a `setState`
+  whose `statePath` is an expression rather than a path written out.
+- **Generated UI switch**: while the owner has it off, `collect_agent_connections`
+  leaves the tool out of the agent's tools (`services/genui/switch.py`), so its
+  description rides no request. The node stays on the graph.
 - **Left out and reported**: elements of an unknown type (and children
   naming them), elements the root does not reach, element fields other than
   `type`, `props`, `children`, `visible` and `on`, props a component does not
@@ -116,8 +122,10 @@ flowchart TD
 ## Edge cases & known limits
 
 - The client checks the spec again before drawing it
-  (`client/src/features/chat/genui/prepare.ts` with `lib/jsonRender`), and a
-  test on each side holds the two catalogues to each other.
+  (`client/src/features/chat/genui/prepare.ts` with `lib/jsonRender`). It
+  imports `server/config/chat_genui_catalog.json` itself, and a client test
+  (`client/src/features/chat/__tests__/genuiCatalog.test.ts`) holds its prop schemas to
+  the manifest.
 - Allowed for Hire by `node_allowlist.json` `enabled_nodes`; the employee builder adds it to Talk when the node is allowed (`_talk_tools`), so generated interfaces are available to the answering Talk agent.
 
 ## Related

@@ -305,6 +305,15 @@ newer version wins in place.
 
 ## Generated UI
 
+- **Switch.** One owner-wide setting, `UserSettings.generated_ui`, decides whether employees get generated UI at all.
+  It is off by default and sits in Home's Settings > Profile and in Dev's Settings panel. `services/genui/switch.py`
+  reads it when a run starts, and a settings row that is missing or cannot be read means off. While it is off:
+  - `collect_agent_connections` leaves the Show UI tool out of every agent's tools, so its description rides no
+    request (an agent the Agent Builder gives Show UI during a run keeps it until that run ends);
+  - the guide asks for no follow-ups, and Reply in Chat keeps none;
+  - Home's hire screen is a fixed card the server draws (normal_mode.md, Hiring).
+
+  Interfaces already in a chat keep working: a press still reaches the employee.
 - **Source.** The employee calls the `show_ui` tool (`chatUi` plugin, `nodes/chat/chat_ui`) with a json-render flat
   spec `{root, state, elements}`. `services/genui/spec.py` checks it against `server/config/chat_genui_catalog.json`
   (JSON Schema per component, which prop each input binds, what each layout may hold, the limits): a spec that
@@ -325,10 +334,12 @@ newer version wins in place.
   (json-render hands a handler the params only). `ask` sends its text as the owner's message only when it is what
   the button says (case and spacing aside); otherwise the text goes into the composer for review. Any other action
   becomes `send_chat_message{ui_event: {part_id, element_id, action, params}}`: the server checks it against the
-  saved spec (a Button whose press runs that action, params it declares), saves the owner's message as the button's
-  label (`kind: "action"`, the press in `meta.ui_event`), starts a run of kind `action`, and sends the employee the
-  line `[ui-event]{"ui_id", "element", "label", "action", "params"}[/ui-event]`. A press while the employee is still
-  answering is held back with a notice. `ui_event_rejected` says why one does not fit.
+  saved spec (a Button whose press runs that action, params it declares). A param the binding writes out is the
+  saved value, whatever the press sends or leaves out; only a param read from the state (`$state` and the other
+  expressions) is the press's (`services/genui/spec.py` `has_expression`). The server then saves the owner's
+  message as the button's label (`kind: "action"`, the press in `meta.ui_event`), starts a run of kind `action`, and
+  sends the employee the line `[ui-event]{"ui_id", "element", "label", "action", "params"}[/ui-event]`. A press while
+  the employee is still answering is held back with a notice. `ui_event_rejected` says why one does not fit.
 - **Sanitising.** json-render 0.21.4 does not guard every state path (its state store writes through any segment,
   and nothing refuses `constructor` or `prototype`), does not validate props against the catalog, and supports `watch` (actions fired by state changes), `repeat`, `$computed`
   and an action binding's `confirm`, `onSuccess` and `onError` (the last two set state or run further actions).
@@ -338,6 +349,9 @@ newer version wins in place.
     condition that reads one is false;
   - keep only an element's `type`, `props`, `children`, `visible` and `on`, and only an action binding's `action`
     and `params`: `watch`, `repeat`, `slots`, `confirm`, `onSuccess`, `onError` and `preventDefault` go;
+  - take an action binding's `statePath` and `clearStatePath` only as a usable path written out: the client drops a
+    binding whose path is an expression or unusable, and the server refuses a `setState` whose `statePath` is an
+    expression;
   - drop `$computed`, and `$item`, `$index` and `$bindItem`, which mean nothing without `repeat`;
   - validate every element's props (the client degrades one bad prop at a time with forgiving zod schemas);
   - drop unknown component types before rendering.
@@ -793,16 +807,18 @@ told. `agent.prepare_payload` claims the session's untold notes for the agent an
 something), so a run that failed or stopped before writing offers them again, and a note changed after its claim stays
 untold. Clearing the chat forgets them.
 
-The answering agent's system prompt ends with a fixed guide (`services/chat/guide.py` `CHAT_REPLY_GUIDE`, byte for
-byte the same on every turn): bracketed lines come from OpenCompany, not from the owner; a search result numbered
-n is cited as `[n]`; and how to suggest follow-ups.
+The answering agent's system prompt ends with a fixed guide (`services/chat/guide.py`): bracketed lines come from
+OpenCompany, not from the owner; a search result numbered n is cited as `[n]`; and, while the owner has Generated UI
+on, how to suggest follow-ups (`CHAT_REPLY_GUIDE`). With it off the agent reads `CHAT_GUIDE_BASE`, the same guide
+without that line. Each is byte for byte the same on every turn.
 
 ## Follow-ups
 
 The answering agent may end its reply with `<followups>["…", "…"]</followups>` (a list of lines works too). The
 stream holds the block back; Reply in Chat takes it off the reply (`guide.split_followups`: the last block, at most
-3 suggestions, 160 characters each, repeats dropped) and saves the suggestions as `parts.followups`. Outside a chat
-run the block is dropped, and a message that is only the block posts nothing. The chat shows them as buttons under
+3 suggestions, 160 characters each, repeats dropped) and saves the suggestions as `parts.followups`, only while the
+owner has Generated UI on: the guide asks for them only then, and with it off the block is still taken off but
+nothing is kept. Outside a chat run the block is dropped, and a message that is only the block posts nothing. The chat shows them as buttons under
 the latest answer only, once it is done; one sends its text as the owner's message, or waits in the box while an
 answer is still coming.
 

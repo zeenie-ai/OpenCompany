@@ -249,7 +249,9 @@ client/src/
 │   ├── jsonRender/                 # Generated-UI glue around json-render (hire setup screen, chat replies):
 │   │                               # sanitize (no prototype paths; no watch/repeat/slots/$computed/confirm),
 │   │                               # guard (props through the catalogue schema, live-only entrance),
-│   │                               # reveal (spec -> patch stream, paced), uiState (guarded store)
+│   │                               # reveal (spec -> patch stream, paced), paths (state-path rule),
+│   │                               # catalog (forgiving prop schemas), prompts (writes server/config/*_prompt.txt;
+│   │                               # never loaded by the app)
 │   └── utils.ts                    # cn() = clsx + tailwind-merge (shadcn convention)
 ├── schemas/workflowSchema.ts       # Structural pre-flight for workflow export (backend is the schema authority)
 ├── stores/

@@ -375,6 +375,19 @@ Help in browser), else the first on the team.
   below; the owner's words stay in the draft, which is sent again by itself
   once a model is connected), `timeout`, `provider_error`, `unparseable`,
   `cancelled`, `busy`, `invalid_request`.
+- **Generated UI off** (the owner's switch in Settings > Profile, off by
+  default; [services/genui/switch.py](../server/services/genui/switch.py)):
+  the model gets no catalogue. It fills a fixed form instead
+  (`config/genui_fields_prompt.txt`, from the same `prompts.ts`): name, role,
+  description, apps, the routine's steps, one to three ground rules, the
+  trigger and the app they answer through.
+  [setup_form.py](../server/services/employees/setup_form.py) reads the form
+  as Hire reads a hire, and draws the core of a setup screen from it: who they
+  are, the routine, the ground rules with "Ask me before sending anything",
+  and Change and Hire. A form without a name, a role or a step draws nothing
+  and costs the one retry. The reply has the same `{"text", "spec"}` shape, so
+  everything below applies to it unchanged. A change request sends the
+  latest setup back as the form it describes.
 
 A template chip under the composer fills the box with its starter's job for
 the owner to read, change and send; it never sends by itself. While the box
@@ -509,7 +522,8 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    attached, and while the owner asks first a call that sends is held for
    them, Stripe is refused and the browser reads only, per call. The talk
    agent alone also gets its talk tools: generated UI in the chat (`chatUi`,
-   "Show in chat") and a way to send through each of the hire's apps (the
+   "Show in chat", bound only while the owner has Generated UI on) and a way
+   to send through each of the hire's apps (the
    registry's `talk_send`: WhatsApp, WhatsApp Business, Telegram, Discord,
    Gmail, Outlook, email), so the owner can ask it to send something; never on
    a worker strangers write to. The instructions read the same with the rule
@@ -1033,9 +1047,15 @@ changing page clears it.
 
 - **Profile**: `profile_full_name`, `profile_call_name`, `profile_role`,
   `profile_preferences`, `profile_timezone` (written from `Intl` on save),
-  `memory_across_chats` and `prefer_local_ai` on `UserSettings`, normalised on
-  save by [services/settings/profile.py](../server/services/settings/profile.py).
-  Every hire reads them into its instructions.
+  `memory_across_chats`, `prefer_local_ai` and `generated_ui` on
+  `UserSettings`, normalised on save by
+  [services/settings/profile.py](../server/services/settings/profile.py).
+  Every hire reads the profile into its instructions. **Generated UI** (off by
+  default; also in Dev's Settings panel) lets employees show interfaces and
+  suggested questions in their replies and gives each hire a setup screen
+  made for the job; with it off, a hire gets the fixed form (see
+  [Hiring](#1-the-setup-screen)) and nothing in a run asks for generated UI
+  ([Chat Protocol](./chat_protocol.md#generated-ui)).
 - **Billing**: usage only. It shows the tasks done this month
   (`get_employee_usage`), "Since {Mon D}, across your whole team", and the
   number of employees, "In your sidebar now". A count that can't be read
