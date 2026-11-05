@@ -110,7 +110,7 @@ Standard shadcn keys (`background`, `foreground`, `card`, `popover`, `primary`, 
 
 ### 3. Action role tokens
 
-Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block.
+Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home and in the shared chat they mark a state, and colour a control only where it means the intent: `run` starts an employee ([Colour marks state or role](#colour-marks-state-or-role)).
 
 ### 4. Node-type role tokens
 
@@ -124,7 +124,7 @@ Six tokens for canvas identity: `agent / model / skill / tool / trigger / workfl
 
 `--code-*` — the per-theme syntax palette for the code editor, console/output JSON viewers, and chat code blocks. Each theme defines its own `--code-*` block in its own CSS file (`client/src/themes/<theme>.css`): editor chrome (`--code-bg`, `--code-gutter-bg`, `--code-gutter-fg`, `--code-caret`, `--code-border`, `--code-line-active`, `--code-selection`) + syntax roles (`--code-text`, `--code-comment`, `--code-keyword`, `--code-string`, `--code-number`, `--code-boolean`, `--code-function`, `--code-property`, `--code-operator`, `--code-punctuation`, `--code-tag`). The per-theme `--code-*` blocks in `client/src/themes/*.css` are the only home of this tier (the vendored bundle ships no `tokens/code.css` — the tier postdates it); Atomic derives syntax from its own role hues — **keyword→trigger, string→success, number→agent, function→model, tag→tool, comment→faint, punctuation→muted** — on an adaptive dark/light code surface (`color-mix(#000 45%, --bg-panel)` dark, `color-mix(#000 5%, --surface-card)` light).
 
-Consumed as `var(--code-*)` in [index.css](../client/src/index.css) (`.code-editor-container`, `.console-json-output`, and in chat replies `.chat-markdown pre`, whose surface, text and border are `--code-bg` / `--code-text` / `--code-border` on every theme, plus the `.chat-markdown .token.*` colours shared with the editor) and exposed as Tailwind utilities (`text-code-tag`, `bg-code-bg`, …) via the `@theme inline` bridge; the `OutputPanel` `@uiw/react-json-view` viewer reads the same vars. This **replaced the old global dracula-hardcoded `--prism-*` block and the dead `getPrismTokenCSS()` helper** — code/JSON now paints in each theme's palette instead of one dracula scheme everywhere. (`prismjs` is still the tokenizer; only the colours moved to `--code-*`.)
+Consumed as `var(--code-*)` in [index.css](../client/src/index.css) (`.code-editor-container`, `.console-json-output`, and in chat markdown `.chat-markdown pre`, whose surface, text and border are `--code-bg` / `--code-text` / `--code-border` on every theme; a reply's code block is framed in `.chat-markdown .chat-code` instead, with the same three on the frame, the fence's language and Copy on `--bg-panel` above and the line numbers in `--fg-faint`, at `max(0.8125em, var(--text-2xs))` (0.8125em of the reply text, never below `--text-2xs`) like the table frame `.chat-table`; plus the `.chat-markdown .token.*` colours shared with the editor) and exposed as Tailwind utilities (`text-code-tag`, `bg-code-bg`, …) via the `@theme inline` bridge; the `OutputPanel` `@uiw/react-json-view` viewer reads the same vars. This **replaced the old global dracula-hardcoded `--prism-*` block and the dead `getPrismTokenCSS()` helper** — code/JSON now paints in each theme's palette instead of one dracula scheme everywhere. (`prismjs` is still the tokenizer; only the colours moved to `--code-*`.)
 
 ### Home (Normal mode) tokens
 
@@ -155,15 +155,28 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   `--tracking-hero`, `--leading-hero`; `headline` is 28px, the onboarding
   headings), and the Home layout constants (`--w-home-sidebar`,
   `--h-home-header`, `--w-composer`, the orb slot sizes `--size-orb-hire |
-  employee | connecting | login`, the Settings and Welcome guide dialog sizes
-  `--w-settings`/`--h-settings` and `--w-guide`/`--h-guide`). The guide's demo
+  employee | connecting | login`, the Settings, Welcome guide and AI models
+  dialog sizes `--w-settings`/`--h-settings`, `--w-guide`/`--h-guide` and
+  `--w-ai-models`/`--h-ai-models`, the last 780 by 600). The guide's demo
   stage is the `.home-welcome-stage` class in `index.css` (two washes of
   `--node-agent-fill` and `--node-model-soft` over `--bg-app`).
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
-  for the employee pills and dots. The dot is the raw role colour; light.css
+  for the employee pills and dots, and for the Get started checklist's done
+  steps. The dot is the raw role colour; light.css
   keeps the paused dot at the design's mid grey. `--shadow-pip`
   (`shadow-pip`) is a dot's glow in its own colour: give the dot a
   `text-status-*-dot` colour and `bg-current`.
+- **The employee's face**: `--accent-edge`, the rim (`--accent` mixed toward
+  `--fg-default` at `--tint-accent-edge`, 70%), and `--shadow-avatar`, a soft
+  highlight along the top edge, bridged in `index.css` as `border-accent-edge`
+  and `shadow-avatar` (`lib/utils.ts` tells tailwind-merge that
+  `shadow-avatar` is a shadow). `ACCENT_AVATAR_CLASS`
+  ([components/catalog/presentation.ts](../client/src/components/catalog/presentation.ts))
+  puts them on a solid `--accent` disc with the `--accent-foreground` initial:
+  the employee beside their turns (`ChatAvatar`, on Home and in Dev), on their
+  page's header and on a new hire's first-day strip (`Avatar` with `accent`).
+  The team's lists, the Workspace header, the setup card and the owner's own
+  avatar keep the role tints (`AVATAR_CLASS`).
 - **Errors**: `--danger-soft` (15%) and `--danger-border` (45%) tint
   `--destructive` for an error on a Home surface (`bg-danger-soft`,
   `border-danger-border`).
@@ -185,6 +198,45 @@ family's values under it unless atomic.css overrides them.
 `setTheme(next, { reveal: true, origin })`
 grows the new theme as a circle from `origin` (View Transitions), falls back
 to a short colour fade, and is instant under reduced motion.
+
+### Colour marks state or role
+
+On Home and in the shared chat (`features/chat`, so Dev's console chat pane
+too), colour marks a state (a status dot or pill, a trend) or a role (an
+avatar or node-role tint), and a control never borrows an action intent's
+colour for an action it does not mean. This is the owner's rule, from the chat
+colour pass of 4 Nov (`design_handoff_opencompany_home/chat/V2.md`, section 3)
+and the onboarding v3 handoff:
+
+- **Green `run` only starts an employee**: Start, Start again and Resume
+  (`features/home/employee/PrimaryActionButton.tsx`), and the Workspace's
+  Hand back, which resumes them when Take over stopped them. Their other main
+  actions (Stop, Retry reset, connecting what is missing) are neutral.
+- **One primary action per screen or card** may be `Button variant="invert"`
+  (the foreground as the fill): Create on the hire view, Hire on the setup
+  card, Send in the message box (Stop or Resume while a run holds it) and Use
+  dictation, Send or Allow on an approval card, a generated interface's
+  primary button, Connect on the AI models dialog's plain page, Turn on Talk,
+  Save changes in Settings > Profile, and Add in the skill form and in the
+  custom connector form.
+- **Every other button is neutral**: `variant="quiet"`, with
+  `border-border-default` (or `border-border-strong`) and `text-fg-default`
+  where it is drawn as an outline, written per call site, as a module constant
+  where a file repeats it. Not `variant="outline"`: its `dark:` rules beat the
+  caller's classes in dark mode.
+- **Switches use `tone="ink"`** (`components/ui/switch.tsx`), and a picked chip
+  is neutral: the Toggle `chips` variant's picked state is `bg-bg-active` with
+  `border-border-strong`, and a picked starter chip is a raised surface with a
+  foreground border.
+- **Status colours stay**: the Ask first chip and an approval card's waiting
+  frame, header and pill (config); the Web chip and the source and citation
+  numbers (save); an approval card's Sending and Sent pill and its dot (run)
+  and a failure's frame, header and footer (stop); live dots and the streaming
+  caret; a done step's tick and the copied tick; the hire view's pip, green
+  only while someone is working; a stat's delta and a chart's bars.
+- **The Welcome guide keeps its own colours** (`WelcomeGuide`, `WelcomeStep`,
+  `WelcomeDemo`, `FirstHireStep`). The shared pieces it shows (the starter
+  chips, the catalog cards, the AI model list) follow the rule there too.
 
 ## Migration recipe
 
@@ -209,7 +261,7 @@ Concrete swaps when migrating an existing component:
 | Hover row | `hover:bg-bg-hover` | Lists, menu items |
 | Selected row | `bg-bg-active` | Selected workflow cards, active tabs |
 | Modal scrim | `bg-bg-overlay` | Dialog overlays |
-| `<ActionButton intent="...">` | unchanged | All toolbar / panel action buttons |
+| `<ActionButton intent="...">` | unchanged | All toolbar / panel action buttons in the editor (Home: [Colour marks state or role](#colour-marks-state-or-role)) |
 
 ### Display-typography helper
 
@@ -281,7 +333,7 @@ Result by theme (display font / tracking / case):
 tiles themselves are deliberately left to Google's own styling; `useAppTheme` here covers only
 the surrounding chrome. Every other surface uses Tailwind + tokens. New themes contribute to `useAppTheme` via a `THEME_OVERRIDES` entry, never by importing `lightColors` / `darkColors` directly.
 6. **Hand-rolled modal backdrops.** Use `<Modal>` from `client/src/components/ui/Modal.tsx`.
-7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">`.
+7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor. On Home and in the shared chat, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary, neutral `quiet` buttons (with a border where they are drawn as an outline), and `run` only to start an employee.
 8. **Static fallback theme palettes in TS.** Themes live in CSS (`client/src/themes/<name>.css`), not TS exports. `client/src/styles/theme.ts` ships only the two `lightColors` / `darkColors` base packs that `useAppTheme` overlays on top of — it is not a place to add a third / fourth / Nth palette.
 
 ## What's done vs deferred
@@ -336,6 +388,7 @@ Wave 15 added structural classNames across the React tree so the handoff CSS sel
 | Component palette | `.palette` | ComponentPalette |
 | Console / chat panel | `.chat` | ConsolePanel (root) |
 | Chat turns (Home and Dev) | `.chat-msg .chat-msg-user` on the owner's bubble; `.chat-msg .chat-msg-bot` on a reply's text only; `.chat-turn-user`, `.chat-turn-bot` on each turn; `.chat-composer` on the message box; `.chat-approval` on a draft's card; `.chat-genui` on a generated interface | features/chat (`UserTurn`, `AssistantTurn`, `Composer`, `approval/ApprovalCard`, `turns/GeneratedUiBlock`) |
+| Reply code block and table | `.chat-code` and `.chat-table`, the frames inside `.chat-markdown` (styled in `index.css`) | features/chat (`markdown/ReplyMarkdown`) |
 | Status bar | `.statusbar`, `.pip` (connection dot) | StatusBar |
 | Modal | `.modal`, `.modal-head` | Modal |
 | Collapsible section | `.cat`, `.cat-head`, `.cat-body` | CollapsibleSection |

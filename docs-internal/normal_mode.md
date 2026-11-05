@@ -80,9 +80,9 @@ Approval waiting is implemented; activation for ordinary new generations remains
 
 | Folder | Contents |
 |---|---|
-| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the Get started checklist, the connect dialog, the orb's stage, and under an employee's page a line saying whether they ask first |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, the Guide pill (opens the Welcome guide), the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
-| `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist in the corner (connect a model, hire, say hello, approve a first draft) until it is hidden ([onboarding.md](./onboarding.md)) |
+| `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the AI models dialog, the Get started checklist (on the hire view only) and the orb's stage |
+| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, on an employee's page the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist (connect a model, hire, say hello, approve a first draft) until it is hidden, as a card in the hire view's corner and a header pill on an employee's page; and the AI models dialog, which opens whenever Home needs an AI model ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
 | `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, Retry reset while a Reset waits, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
@@ -92,7 +92,7 @@ Approval waiting is implemented; activation for ordinary new generations remains
 | `data/` | zod-parsed queries for employees, connectors and the profile; `employeeCache.ts`, the team's query keys and `removeEmployee` (shared with the app store's delete); `talk.ts`, Turn on Talk, Apply and the retry note (the thread itself is the shared chat's); `presentation.ts` maps server state to pills, actions and the message box's mode without deriving new rules |
 | `orb/` | The 3D orb (below) |
 | `ui/` | Small shared pieces (avatar, status dot and pill, app mark), the pill toast, and `useAutoGrow` (the composer's and the message box's growing text area) |
-| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Welcome guide (`guide`), new hires' first days (`firstDays`), the last hire's notice, the Workspace dock, one-shot glow and pulse signals; `openConnectAI` opens the app's credentials dialog on the AI category |
+| `state/homeStore.ts` | UI state only: the view, the sidebar, Settings, the Welcome guide (`guide`), the AI models dialog (`connectAI`), whether the Get started checklist is folded (`getStartedFolded`), new hires' first days (`firstDays`), the last hire's notice, the Workspace dock, one-shot glow and pulse signals; `openConnectAI` opens the AI models dialog |
 
 Status comes from the server: an employee summary is `working` (control
 `starting`, `running` or `resuming`), `ready` (never started, or reset),
@@ -136,9 +136,26 @@ Where the chat shows the mode menu instead
 "{Name} will ask before anything outside" / "before everything" / "only
 before money and deletes".
 
+Colour on Home marks a state or a role, never an action it does not mean
+([Theme System](./theme_system.md#colour-marks-state-or-role)). An employee's
+main action is the green `run` button only when it starts them (Start, Start
+again, Resume; `PrimaryActionButton`); Stop, Retry reset and connecting what
+they are missing are neutral outlines, in the Workspace header, above the
+message box and on a new hire's first-day strip. A screen's or card's one
+primary action is the invert button (Create, the setup card's Hire, Turn on
+Talk, Save changes in Settings > Profile, Add in the skill form and in the
+custom connector form, Connect on the AI models dialog's plain page), and the
+other buttons are neutral: outlines (Hire now, Apply and Stop work and apply,
+the app-access and delivery choices, the draft panel's Connect an AI model and
+Try again, Help in browser, Refresh progress) or plain quiet buttons, such as
+the sidebar's delete X. Every switch uses the ink tone, and a picked chip is
+neutral. The hire view's "N working now" pip is green only while someone is
+working.
+
 ### Deleting an employee
 
-Each row in the team sidebar has a delete button, an X at its end: on a
+Each row in the team sidebar has a delete button, a neutral X at its end (the
+dialog's Delete is the destructive step): on a
 device with hover it shows when the row is hovered or focused, on touch it is
 always there. [HomeSidebar.tsx](../client/src/features/home/sidebar/HomeSidebar.tsx)
 asks for confirmation; confirming closes the dialog and folds the row away
@@ -372,7 +389,7 @@ Help in browser), else the first on the team.
   the prompt one that works when the owner messages them is as good as any.
   The Hire button's `trigger` carries a schedule's time as one of the
   catalogue's `trigger.times`.
-- **Errors**: `no_ai_provider` (the guided Connect an AI model dialog opens,
+- **Errors**: `no_ai_provider` (the AI models dialog opens,
   below; the owner's words stay in the draft, which is sent again by itself
   once a model is connected), `timeout`, `provider_error`, `unparseable`,
   `cancelled`, `busy`, `invalid_request`.
@@ -393,10 +410,16 @@ Help in browser), else the first on the team.
 A template chip under the composer fills the box with its starter's job for
 the owner to read, change and send; it never sends by itself. While the box
 still holds that job as written, the chip shows as picked with the starter's
-summary and **Hire now** (see [One-click starters](#one-click-starters)).
+summary and **Hire now** (see [One-click starters](#one-click-starters)). The
+chips are neutral (onboarding v3): muted at rest, the foreground on hover, a
+raised surface with a foreground border when picked. Hire now is a neutral
+outline, since Create is the view's one invert button.
 While the model writes, the draft panel shows one honest line, "Writing their
 setup…", with the time so far and Cancel, and after `SLOW_AFTER_SECONDS` a
-note that some models take a few minutes. Development builds also show the
+note that some models take a few minutes. A setup that fails says so on a
+neutral card with the attention dot ("Couldn’t finish setting this up", or
+"Couldn’t make that change" for a change, and why), with Try again, and
+Connect an AI model for `no_ai_provider`. Development builds also show the
 screen's spec and its patch stream (`spec.json` / `patches.jsonl`).
 
 The reply is a flat JSON UI spec in json-render's shape (catalogue
@@ -444,12 +467,15 @@ draws each place with its own `Renderer` over the same spec under one
 element by element: the identity row with Discard beside it, the body, the
 suggested team (the panel's children), then the footer strip, which bleeds to
 the card's edges on `bg-bg-app` and gives its controls their own look
-(`HireSpecContext.inFooter`): "Ask before sending" beside a compact switch,
+(`HireSpecContext.inFooter`): "Ask before sending" beside its switch,
 "Change something" as a quiet pill and "Hire {name} →" as the inverted pill.
 The model's other rules, choices and inputs stay in view in compact cards, so
-nothing is hired unseen. The panel's header (NEW EMPLOYEE, the job, Discard)
-shows only while the setup is written or after it failed, or for a screen with
-no agent card, and the model's one-line introduction is not shown.
+nothing is hired unseen. A button the model places in the body is neutral even
+when it is primary ("Connect {App}", "Open apps"), so Hire stays the card's one
+strong control; every switch on the card is the ink tone at the `md` size.
+The panel's header (NEW EMPLOYEE, the job, Discard) shows only while the
+setup is written or after it failed, or for a screen with no agent card, and
+the model's one-line introduction is not shown.
 
 **When they work.** The routine says it in its When row. With a `Plan`, the
 normaliser binds the plan's `trigger` to `/trigger` (`state_paths.trigger`)
@@ -465,7 +491,8 @@ or day of the month. The routine is a timeline
 the left, each step's dot on it, its role in mono as WHEN / THEY / USING /
 THEN), and a routine with no "When" step still starts with one. The When row
 ends in **Change**, which opens the editor under it: the owner messaging them,
-a schedule, or a new message in any app whose `can_trigger` is true. A change
+a schedule, or a new message in any app whose `can_trigger` is true, each a
+chip that reads as picked by a neutral fill and border. A change
 rewrites the When row as one sentence ("Every weekday at 08:00"), and the hire
 payload reads `/trigger` before the button's params.
 
@@ -561,8 +588,8 @@ every successful hire lands on the new employee's page, on their first day
 (below), with a glow in the sidebar and a toast; the team list is then read
 back from the server rather than taking the summary the hire answered with. The response's `warnings` show there once as the hire
 notice ("A few notes on {Name}'s setup", `hire/HireNotice.tsx`), until the
-owner dismisses it or opens another view; `needs_ai` opens Connect an AI
-model; every error code has plain words (`busy`: they are still being set
+owner dismisses it or opens another view; `needs_ai` opens the AI models
+dialog; every error code has plain words (`busy`: they are still being set
 up).
 
 ### 3. Start, Stop, Resume
@@ -619,14 +646,23 @@ that way and fails when one loses an app it names or the way it starts.
 
 ### Connecting an AI model
 
-`homeStore.openConnectAI()` delegates to the shared app-level credentials
-host with `{ categoryId: 'ai', intent: 'connect' }`. The connector browser
-starts on AI; selecting a provider opens the same connection form used in
-Dev (`components/credentials/ProviderPage.tsx`). Featured providers keep the
-key-page links and hints from `components/credentials/aiProviderLinks.ts`.
-Successful guided connection closes the flow; Manage stays open after
-saving. These actions serve setup's `no_ai_provider`, hire/start's
-`needs_ai`, and the employee's Connect an AI model action.
+`homeStore.openConnectAI()` opens Home's AI models dialog
+([onboarding/AiModelsDialog.tsx](../client/src/features/home/onboarding/AiModelsDialog.tsx),
+780 by 600; the app shell's credentials dialog still connects apps and opens
+from Settings > Connectors). It lists
+every AI model (the Welcome guide's step 2 list, `ConnectStep`) and shows a
+model's page in place of the list: a plain page for a model the catalogue
+describes as one field and a button (an API key, or a local server's address:
+the field, "Get a key from {name}" for the featured providers in
+`components/credentials/aiProviderLinks.ts`, a help line, an invert Connect,
+and a Disconnect that asks first), and the full connection form used in Dev
+(`components/credentials/ProviderPage.tsx`) for the Gateway, named endpoints,
+an install that requires 1Password and a key saved in 1Password. A connect
+closes it (`closeOnConnect`), so what asked for a model goes on: setup's
+`no_ai_provider` (the draft is sent again for review), hire's and Start's
+`needs_ai`, and the employee's Connect an AI model action. The Get started
+checklist opens it to stay on the list instead. Details in
+[onboarding.md](./onboarding.md#the-ai-models-dialog).
 
 The Welcome guide's step 2 is the other way in ([onboarding.md](./onboarding.md)):
 the same browser cut to AI models, with the provider page shown in place of
@@ -676,26 +712,38 @@ sending and drafts belong to the chat (wire and client rules in
 [chat_protocol.md](./chat_protocol.md#client)).
 
 - **A new hire's first day** ([employee/FirstDay.tsx](../client/src/features/home/employee/FirstDay.tsx),
-  onboarding handoff C): a hire made in this session (`homeStore.firstDays`,
-  set by `welcomeHire` from the response's `started` and `node_count`) shows
-  this in place of the empty conversation until the first message, and then
-  never again (a Reset that empties the thread later does not bring it back;
-  New conversation, a reload or deleting them ends it too). Their avatar turns a ring while
-  they start, then glows once with a ready pip; "{Name} joined your team".
-  The start-up card's rows follow what happened, never timers: Setup saved
-  and "Workflow built · N blocks" (the hire did both), then "{Name} is
-  running" once the control state is `running`, and "Ready to talk" once
-  they run with Talk on (`firstDayPhase` in `presentation.ts`: starting while
-  the control state is starting, or never started by a hire that started
-  them and whose `activation_state` is neither `blocked` nor `failed`). A
-  start that did not go ahead ends the card with why (`firstDayNote`:
-  "WhatsApp isn't connected yet.", "Connect an AI model first.", "{Name}
-  couldn't start.") and their main action, so the line above the box does
-  not say it again. "What {Name} does" lists their routine from the hire's
-  `plan` (`get_employee`), on the timeline the setup card uses. While they
-  start, the box shows but takes nothing ("{Name} is starting…", the host's
-  `wait`); once they can read messages, two greetings under the card put
-  their words in it. The small orb stays above.
+  onboarding v3): a hire made in this session (`homeStore.firstDays`, set by
+  `welcomeHire` from the response's `started` and `node_count`) shows one
+  slim strip at the top of the conversation, its first item, for the rest of
+  the session: from the hire until a reload, New conversation or deleting
+  them. The first message does not end it. The strip has the header's accent
+  avatar (a ring turning while they start, and the hire glow once they run,
+  while the conversation has no message), "{Name} · {Role}", one status line
+  that follows what happened, never timers (`firstDayLine` in
+  `presentation.ts`: "Starting {Name}…", "Ready to talk · N blocks" ("{Name}
+  is running" without Talk), or why the start did not go ahead
+  (`firstDayNote`): "WhatsApp isn't connected yet.", "Connect an AI model
+  first.", "{Name} couldn't start." when the hire's own start failed
+  (`activation_state` `failed`, or control `failed` while `activation_state`
+  is not `running`), else the usual state line (`stateNoticeText`), so a
+  generation that fails after they ran reads "{Name} isn't running."), and
+  the header's status as a dot and a label (Starting… while the hire's own
+  start is under way). Until the conversation has a message, and again after
+  a Reset empties the thread, the strip also offers their main action when
+  the start did not go ahead (green for Start, Start again or Resume, neutral
+  for the rest), so the line above the box stays away rather than say it
+  twice, and under its first row lists their routine on one line from the
+  hire's `plan` (`get_employee`), each step's label and title with no role
+  colours (`RoutineLine` in `ui/routine.tsx`). Once there is a message, the
+  line above the box and its action are back, since the strip scrolls away
+  with the thread. `firstDayPhase` says where the start is: starting while
+  the control state is starting or resuming, or never started (or ready) by
+  a hire that started them and whose `activation_state` is not `blocked`,
+  `failed` or `running`, so a later Reset does not read as a start under way.
+  While they start and before the first message, the box shows but takes
+  nothing ("{Name} is starting…", the host's `wait`). Once they can read
+  messages, an empty first-day chat offers the suggestion cards any
+  employee's page does. The small orb stays above.
 - **The model picker** ([chat/composer/ModelPicker.tsx](../client/src/features/chat/composer/ModelPicker.tsx),
   design handoff chat v2) sits in the message box before Dictate, when the
   employee's talk agent runs as an AgentWorkflow (`get_chat_context`
@@ -713,16 +761,21 @@ sending and drafts belong to the chat (wire and client rules in
   newest 200 messages): the conversation since the employee last started,
   since a Reset clears it (see [Turn on Talk and Apply](#turn-on-talk-and-apply)).
   The orb (`min(96px, 14vh)`) stays above it, outside its scroll area, so a
-  long conversation never takes it out of view; a new hire's notes are the
-  thread's first item.
+  long conversation never takes it out of view; a new hire's first-day strip
+  and notes are the thread's first items.
   Where a message's `run_key` (its generation) differs from the one before (a
   message left from before a Start, such as a test run in Dev mode), a divider
-  reads "{Name} restarted — they start fresh from here". The owner's messages
+  reads "{Name} restarted — they start fresh from here", and over the first
+  message of each day another names it ("Today", "Yesterday", the weekday
+  within a week, else the date). The owner's messages
   are bubbles on the right; answers have no bubble, beside the employee's
-  avatar on the left, as markdown (`ReplyMarkdown`, in its own chunk, with the
-  theme's code colours). The turns are an `aria-live` log; the thread starts
-  at the newest turn and stays there while new ones arrive, and scrolled up a
-  "Jump to latest" button counts them. It refetches on `chat.updated`, after a
+  accent avatar on the left, as markdown (`ReplyMarkdown`, in its own chunk):
+  a code block sits in a frame with its language, Copy and line numbers in the
+  theme's code colours, and a table in a frame with one rule between rows,
+  both 13px beside the 16px text. The turns are an `aria-live` log; the
+  thread starts at the newest turn and stays there while new ones arrive or
+  the dock under it grows, and scrolled up a "Jump to latest" button counts
+  them. It refetches on `chat.updated`, after a
   runtime reset, and when the socket reopens. The drafts waiting for the
   owner's OK follow the conversation (the host's `afterThread`).
 - **Working** follows the run the message started and its owning generation's
@@ -732,7 +785,14 @@ sending and drafts belong to the chat (wire and client rules in
   ends or is intentionally suspended, whatever else lands meanwhile (a routine report does not end it). The
   talk agent's answer streams in as it is written ("Writing · N tok/s", a
   caret after the text), and the apps it uses show above it as steps
-  ("Working…", then "Worked for 12s · 3 steps"). A run that failed says so
+  ("Working…", then "Worked for 12s · 3 steps"). Meanwhile the Live work pill
+  above the message box says what they are doing: the step under way and
+  "2/3 · 4s" (the steps finished of those begun, and the time so far),
+  opening to the steps' names, or "Waiting for your OK" while a call waits on
+  the owner ([chat_protocol.md](./chat_protocol.md#client)). The work panel
+  above the box (`employee/EmployeeWork.tsx`) leaves a reply under way to the
+  pill and shows the employee's own work: team tasks, scheduled work and
+  waits; its Refresh progress buttons are neutral. A run that failed says so
   where the answer would be ("{Name} didn't pick up this message.", "…took too
   long to answer.", or "{Name} couldn't answer." with the error and its hint),
   also after a reload; a late answer replaces a failure that only said none
@@ -758,7 +818,8 @@ sending and drafts belong to the chat (wire and client rules in
   workspace, and a model that can view images sees the pictures. Dictate
   shows when a speech provider has a key, and puts what was said in the box.
   Typing `/` lists commands (generic ones and those the employee's apps add,
-  `employee_apps.json` `commands`), and an empty conversation suggests a few.
+  `employee_apps.json` `commands`) above the box, each on one row with what it
+  does, and an empty conversation suggests a few.
   Web (when the employee has a search tool) keeps them off the web for the
   next messages. Cmd/Ctrl+K puts the cursor in the box. See
   [chat_protocol.md → Attachments](./chat_protocol.md#attachments).
@@ -789,8 +850,8 @@ sending and drafts belong to the chat (wire and client rules in
     they can't read messages, beside their main action (Start, Start again,
     Retry reset while a Reset waits, or what they are missing), which the
     Workspace header offers too.
-  - *wait* (a new hire still starting, on their first day): the box shows,
-    disabled, saying "{Name} is starting…".
+  - *wait* (a new hire still starting, before the conversation's first
+    message): the box shows, disabled, saying "{Name} is starting…".
   - While the agent waits for the owner in the browser, the server's line
     for it ("Needs you to sign in to a site in the browser") sits above the
     box beside Help in browser; after a run of failures paused them, why.
@@ -802,7 +863,8 @@ sending and drafts belong to the chat (wire and client rules in
 - **New conversation** (the header) asks first, then clears the thread and
   what the employee remembers of it (`clear_chat_messages`).
 - **Turn on Talk**: an employee whose `talk.state` is `off` (hired before
-  Talk, or built in Dev mode) shows Turn on Talk where the box would be. An
+  Talk, or built in Dev mode) shows Turn on Talk where the box would be, the
+  invert button, as the one thing to do there. An
   `AlertDialog` confirms that Talk can wait for current work to finish;
   existing conversations and drafts waiting for approval stay in place.
   `unsupported` gets a note that
@@ -812,9 +874,9 @@ sending and drafts belong to the chat (wire and client rules in
 - **Pending changes**: while `pending_changes` is true, a notice above the box
   reads "{Name} has new abilities saved. Apply them after current work
   finishes. Their conversations and pending approvals stay in place."
-  Its Apply (`ActionButton intent="config"`) calls
-  `apply_employee_changes`. The separate **Stop work and apply** action
-  explicitly interrupts active work; it is not the default Apply behavior.
+  Its Apply, a neutral outline, calls `apply_employee_changes`. The separate
+  **Stop work and apply** action, neutral too, explicitly interrupts active
+  work; it is not the default Apply behavior.
 - **Asking first**: under the box, a line says whether the employee asks
   before sending anything on the owner's behalf (the summary's `asks_first`).
 
@@ -1115,7 +1177,8 @@ changing page clears it.
 **The catalog page** ([settings/CatalogLayout.tsx](../client/src/features/home/settings/CatalogLayout.tsx)).
 The implementation is shared in `components/catalog/`; Home paths are compatibility exports.
 Connectors uses `components/credentials/CredentialsBrowser` in both modes.
-Connected cards offer Manage and Disconnect; connection dialogs are owned by
+Connected cards offer a bordered Manage and Disconnect, which asks first
+(`components/credentials/ConfirmDisconnect.tsx`); connection dialogs are owned by
 AppShell. Normal mode omits provider defaults, detailed usage and rate limits,
 while preserving all setup fields. Disabled credential categories are filtered
 from both browsing and directly requested providers.
@@ -1129,8 +1192,9 @@ The page supplies both lists, so the layout never needs to know which page it
 is on:
 - Discover shows eight cards until Show all.
 - A card's "+" turns into a check, which removes on hover only when the page
-  can remove.
-- Yours shows a switch only when the page can toggle.
+  can remove. The check stays green, since it marks a state; the "+" and the
+  remove hovers are neutral.
+- Yours shows a switch, in the ink tone, only when the page can toggle.
 - A card glows when its item turns added while it is on screen.
 
 ## Wire contract
@@ -1202,9 +1266,12 @@ growing a saved employee: `tests/services/employees/`
 `tests/services/test_workflow_context_archive_outbox.py` (a late save or read
 cannot re-create a deleted workflow). Client:
 `features/home/**/__tests__` (including `employeeChat.test.tsx`,
-`homeHeader.test.tsx`, `connectAI.test.ts`, `welcomeGuide.test.tsx`,
-`employee/__tests__/FirstDay.test.tsx`), `features/chat/__tests__` (the
-shared chat: turns, drafts, the pane against a fake server),
+`homeHeader.test.tsx`, `connectAI.test.ts`, `aiModelsDialog.test.tsx`,
+`getStarted.test.tsx`, `welcomeGuide.test.tsx`,
+`employee/__tests__/FirstDay.test.tsx`, `employee/__tests__/EmployeeWork.test.tsx`),
+`features/chat/__tests__` (the shared chat: turns, drafts, the pane against a
+fake server, the Live work pill in `liveWork.test.tsx`, the approval card in
+`approvalCard.test.tsx`, framed code blocks and tables in `markdown.test.tsx`),
 `stores/__tests__/chatRunStore.test.ts`, `lib/agui/__tests__`, `app/__tests__`,
 `contexts/__tests__/themePrePaint.test.ts`,
 `contexts/__tests__/webSocketActions.test.tsx` (`chat.updated`, the editor

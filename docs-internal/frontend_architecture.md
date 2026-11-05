@@ -91,12 +91,15 @@ client/src/
 │   ├── genui/               # Generated UI in replies: catalog (parity with server/config/chat_genui_catalog.json),
 │   │                        # views, registry, ChatUi (lazy, with json-render), prepare, actions
 │   └── turns/ composer/ markdown/  # UserTurn / AssistantTurn / StepsDisclosure / GeneratedUiBlock / StatusLine,
-│                                   # the message box, ReplyMarkdown
+│                                   # the message box and the Live work pill above it (LiveWork),
+│                                   # ReplyMarkdown (framed code blocks and tables)
 │
 ├── features/home/           # Normal mode (see docs-internal/normal_mode.md)
 │   ├── HomeShell.tsx        # Sidebar + header + current view + Workspace dock + Settings + orb stage,
-│   │                        # plus the Welcome guide and the Get started checklist
-│   ├── onboarding/          # Welcome guide (3 steps) + Get started checklist (docs-internal/onboarding.md)
+│   │                        # plus the Welcome guide, the AI models dialog and, on the hire view only,
+│   │                        # the Get started checklist
+│   ├── onboarding/          # Welcome guide (3 steps), AI models dialog, Get started checklist and its
+│   │                        # header pill (docs-internal/onboarding.md)
 │   ├── sidebar/ header/ hire/ employee/ settings/ approvals/ data/ state/ ui/
 │   ├── workspace/           # Home Workspace dock; shared live Browser tab, lazy Canvas tab
 │   ├── genui/               # Setup-screen pipeline; only its index.ts is importable (ESLint)
@@ -129,9 +132,12 @@ client/src/
 │   │
 │   ├── credentials/         # EXEMPLAR SUBSYSTEM — see "Credentials" section below
 │   │   ├── CredentialsModal.tsx    # Shared app-level browser + provider dialogs
-│   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings and the Welcome guide
+│   │   ├── CredentialsBrowser.tsx  # Connector cards; also embedded in Home Settings, the Welcome guide
+│   │   │                           # and Home's AI models dialog
+│   │   ├── ConfirmDisconnect.tsx   # Asks before a disconnect (the browser's cards, Home's plain AI model page)
 │   │   ├── AddConnectorForm.tsx    # The page's Add form: a custom MCP connector's URL, name and sign-in
-│   │   ├── ProviderPage.tsx        # One provider's page: back, key link, PanelRenderer (dialog + guide)
+│   │   ├── ProviderPage.tsx        # One provider's page: back, key link, PanelRenderer (dialog, guide,
+│   │   │                           # AI models dialog)
 │   │   ├── aiProviderLinks.ts      # Where to get each AI provider's key
 │   │   ├── catalogue.ts           # Shared catalogue ordering + category visibility
 │   │   ├── PanelRenderer.tsx       # Lazy-loads panel by kind
@@ -354,14 +360,14 @@ All under [components/ui/](../client/src/components/ui/). Editable — add varia
 
 | Concern | Primitive | Notes |
 |---|---|---|
-| Button | `Button` (CVA) | Variants: `default | secondary | ghost | outline | destructive | link` + Normal-mode `invert | quiet | chip` (ours). Sizes: `default | xs | sm | lg | icon | icon-xs | icon-sm | icon-lg` + `pill | chip` (ours). `buttonVariants` in `components/ui/button.tsx` is authoritative |
+| Button | `Button` (CVA) | Variants: `default | secondary | ghost | outline | destructive | link` + Normal-mode `invert | quiet | chip` (ours). Sizes: `default | xs | sm | lg | icon | icon-xs | icon-sm | icon-lg` + `pill | chip` (ours). `buttonVariants` in `components/ui/button.tsx` is authoritative. On Normal-mode surfaces a screen's or card's one primary action is `invert`; other buttons are neutral: `quiet`, with `border-border-default` (or `border-border-strong`) and `text-fg-default` where it is drawn as an outline, never `outline`, whose `dark:` rules beat a caller's classes in dark mode ([Theme System](./theme_system.md#colour-marks-state-or-role)) |
 | Badge | `Badge` | + `success | warning | info` (ours) |
 | Alert | `Alert + AlertTitle + AlertDescription` | + `success | warning | info` (ours) |
 | Overlay | `Dialog`, `AlertDialog`, `Tooltip`, `DropdownMenu`, `Popover` | Radix |
 | Lists | `Command` (the chat's slash menu; driven from another field it controls `value` and filters itself) | cmdk |
-| Toggle | `Toggle`, `ToggleGroup + ToggleGroupItem` | Radix. Variants `default | segmented | chips` (ours); the CVA in `components/ui/toggle.tsx` is authoritative |
+| Toggle | `Toggle`, `ToggleGroup + ToggleGroupItem` | Radix. Variants `default | segmented | chips` (ours); the CVA in `components/ui/toggle.tsx` is authoritative. A picked `chips` item is neutral (`bg-bg-active`, `border-border-strong`, `text-fg-default`), so it reads as picked, not as a role; a caller that marks a status passes its tint in `className` (the chat's Web and Ask first chips) |
 | Disclosure | `Accordion`, `Collapsible`, `Tabs` | Radix |
-| Inputs | `Input`, `Textarea`, `Select`, `Switch`, `Checkbox`, `Slider`, `Label` | Radix (Select/Switch/Checkbox/Slider) |
+| Inputs | `Input`, `Textarea`, `Select`, `Switch`, `Checkbox`, `Slider`, `Label` | Radix (Select/Switch/Checkbox/Slider). `Switch` takes `size` (`sm | default | md`) and `tone` (`default | ink`, `components/ui/switch.tsx`): every switch on Home's own screens and in the shared chat is `ink` (the shared credentials dialog's panels keep the default), the foreground as the track and the app background as the knob when on, and a strong-border outline round a default-border track with a muted knob when off. A tone owns all of the switch's colours, so tones are never layered |
 | Cards | `Card + CardHeader/Title/Description/Content/Footer` | Layout primitive |
 | Progress | `Progress` | Radix progress |
 | Form | `Form + FormField + FormItem + FormLabel + FormControl + FormDescription + FormMessage` | react-hook-form wrappers |
@@ -430,8 +436,9 @@ components/credentials/catalogueAdapter.ts  (hydrate JSON -> ProviderConfig)
             │
             ▼
 components/credentials/CredentialsModal.tsx (one AppShell host)
-   ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings and the Welcome guide)
-   └─ ProviderPage.tsx         (one provider; the Welcome guide shows it inline)
+   ├─ CredentialsBrowser.tsx   (shared cards, also embedded in Home Settings, the Welcome guide
+   │                            and Home's AI models dialog)
+   └─ ProviderPage.tsx         (one provider; the Welcome guide and the AI models dialog show it inline)
       └─ PanelRenderer.tsx     (lazy: ApiKey/OAuth/QrPairing/Email/BrowserProfiles/McpConnector)
 ```
 
@@ -452,7 +459,7 @@ components/credentials/CredentialsModal.tsx (one AppShell host)
 **Anchor cache contracts at the prefix root via `setQueryDefaults`, not per-call options.** `PersistQueryClientProvider` hydrates entries from localStorage with the QueryClient's *default* options, so per-call `staleTime: FOREVER` does not stop `gcTime: 5min` eviction on hydration. Every persisted prefix must have a matching `queryClient.setQueryDefaults(['<prefix>'], { staleTime: FOREVER, gcTime: FOREVER })` declaration in [client/src/lib/queryClient.ts](../client/src/lib/queryClient.ts). The persisted set is `['nodeSpec']`, `['nodeGroups']`; both carry `setQueryDefaults`. `['skillContent']` and `['credentialValues']` carry `setQueryDefaults` for in-memory longevity only and are intentionally absent from the persistor whitelist. The persistor whitelist in [client/src/lib/queryPersist.ts](../client/src/lib/queryPersist.ts) must mirror it; a string in the whitelist that doesn't match a real query key (the prior `'pluginCatalogue'` typo) is silently dead. `credentialCatalogue` is intentionally NOT in either list — it has its own `idb-keyval` warm-start. `credentialValues` keeps `gcTime: FOREVER` for the in-memory cache so the credentials form survives idle, but it is intentionally NOT persisted (OWASP — see "Persistence layers" above).
 
 **Component rules:**
-- Normal and Dev use the same connector cards and provider dialogs. `openCredentials({ providerId?, categoryId?, intent? })` defaults to management; guided connection intent closes on a selected provider's disconnected-to-connected transition. Connected cards expose Manage and Disconnect. Every entry point uses the app-level host, including Home's AI setup action, except the Welcome guide's Connect step: it renders the same provider page ([components/credentials/ProviderPage.tsx](../client/src/components/credentials/ProviderPage.tsx), which the host shows as its second layer) in place of its list, with its own heading, and returns to the list when the model connects.
+- Normal and Dev use the same connector cards and provider dialogs. `openCredentials({ providerId?, categoryId?, intent? })` defaults to management; guided connection intent closes on a selected provider's disconnected-to-connected transition. Connected cards expose Manage and Disconnect, and Disconnect asks first ([components/credentials/ConfirmDisconnect.tsx](../client/src/components/credentials/ConfirmDisconnect.tsx), which gives focus back to the button that opened it when it closes). The cards' controls are neutral in both modes (the "+" and remove hovers, a bordered Manage); the green done mark stays, since it marks a state. Every entry point uses the app-level host except two on Home, which show the AI models in place through one list (`features/home/onboarding/steps/ConnectStep.tsx`). The Welcome guide's Connect step renders the same provider page ([components/credentials/ProviderPage.tsx](../client/src/components/credentials/ProviderPage.tsx), which the host shows as its second layer) in place of its list, with its own heading, and returns to the list when the model connects. Home's AI models dialog, which `homeStore.openConnectAI` opens for whatever needs a model, shows a plain page for a model the catalogue describes as one field and a button, and that provider page for the rest (`features/home/onboarding/steps/AiModelPage.tsx`; see [Onboarding](./onboarding.md#the-ai-models-dialog)).
 - The host derives `showTechnicalSections` from effective `useShellMode()` (including the Home-disabled fallback). Provider defaults, usage and rate limits mount only in Dev. Required authentication fields, callback URLs and setup help remain available in both modes; normal-mode saves never clear advanced values.
 - The shared catalogue waits for credential-category visibility before mounting a provider form, including direct targets. Missing or disabled targets show an unavailable state. The credential panel is keyed by provider ID, never mode: switching mode preserves connection drafts, while switching providers resets transient errors and secret reveal state.
 - `PanelRenderer` lazy-loads each panel type so the initial JS payload doesn't grow linearly with provider count.
@@ -724,7 +731,7 @@ The DIY widget registry (RHF + zod + a tester+rank dispatch) is modeled on n8n's
 
 | File | When to use |
 |---|---|
-| [client/src/components/ui/action-button.tsx](../client/src/components/ui/action-button.tsx) | Colored "soft" toolbar button (Run / Save / Cancel / Reset / Stop). One semantic `intent` prop (`run | stop | save | config | secret | tools`) drives bg / border / text / hover against the matching `--action-X` quartet (`-soft`, `-hover`, `-border`, base) via static Tailwind classes — no opacity arithmetic. Disabled state is the shadcn-idiomatic `disabled:opacity-50` on the base class (one rule, all intents). Replaces the `actionButtonStyle(color, isDisabled)` style helper that was copy-pasted across 4 files. The credential-modal panels (`OAuthConnect`, `EmailPanel`, `QrPairingPanel`, `ActionBar`) and the skill / tool-schema editors all consume `<ActionButton>` directly; their `ActionDef` records carry an `intent` key, never a free-form colour. |
+| [client/src/components/ui/action-button.tsx](../client/src/components/ui/action-button.tsx) | Colored "soft" toolbar button (Run / Save / Cancel / Reset / Stop). One semantic `intent` prop (`run | stop | save | config | secret | tools`) drives bg / border / text / hover against the matching `--action-X` quartet (`-soft`, `-hover`, `-border`, base) via static Tailwind classes — no opacity arithmetic. Disabled state is the shadcn-idiomatic `disabled:opacity-50` on the base class (one rule, all intents). Replaces the `actionButtonStyle(color, isDisabled)` style helper that was copy-pasted across 4 files. The credential-modal panels (`OAuthConnect`, `EmailPanel`, `QrPairingPanel`, `ActionBar`) and the skill / tool-schema editors all consume `<ActionButton>` directly; their `ActionDef` records carry an `intent` key, never a free-form colour. On Home and in the shared chat a control never borrows an intent's colour for an action it does not mean: `run` is only for starting an employee (Start, Start again and Resume in `features/home/employee/PrimaryActionButton.tsx`, and the Workspace's Hand back, which resumes them when Take over stopped them), and the rest are `invert` or neutral `Button`s ([Theme System](./theme_system.md#colour-marks-state-or-role)). The Welcome guide keeps its own colours. |
 | [client/src/styles/canvasAnimations.ts](../client/src/styles/canvasAnimations.ts) | Canvas-wide CSS injected once into Dashboard's `<style>` tag — adding a new keyframe or status class is a single-file change. Fully static since the design-handoff edge migration: `buildCanvasStyles()` takes no arguments; every colour/width/dash is a theme token (`--edge-stroke`, `--edge-stroke-width{,-active,-done}`, `--edge-dash{,-active}` from `themes/base.css`, plus semantic tokens for the status classes `selected/executing/completed/error/pending/memory-active/tool-active/skill-active`). Resting edges are pale-neutral dashed orthogonal step edges; the in-progress `.react-flow__connection-path` shares the resting rule. The old `CanvasStatusColors` per-theme hex interface was deleted — add a token, never a colour parameter. |
 | [client/src/components/ui/alert-dialog.tsx](../client/src/components/ui/alert-dialog.tsx) | Confirmation / destructive-action modals. **Never hand-roll a `position: fixed; background: rgba(0,0,0,0.5)` backdrop** — use `<AlertDialog open onOpenChange>` with `AlertDialogHeader` / `AlertDialogDescription` / `AlertDialogFooter`. Focus trap, escape-to-close, and `role="alertdialog"` come from Radix. MiddleSection Clear Memory + Reset Skill dialogs are the canonical consumers (Wave 3 commit `61bf23c`). |
 | [client/src/components/ui/sonner.tsx](../client/src/components/ui/sonner.tsx) | The `<Toaster />` mount — call `import { toast } from 'sonner'` directly at use sites; do not wrap. |

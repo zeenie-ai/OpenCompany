@@ -489,9 +489,9 @@ continuation: Resume does not explicitly rerun completed tools to reconstruct th
 `client/src/features/chat/` is the shared chat; only its `index.ts` is public (an ESLint rule keeps the rest
 private, tests excepted). Hosts give it a `ChatHost` (`host.ts`): the session and scope, who answers, whether the
 message box sends now, waits for Resume, shows but takes nothing yet (`wait`, with the host's `placeholder`: a new
-hire still starting) or is closed, and what sits around the conversation (notices, a top slot, a slot after the
-thread, an empty state, greetings that fill the box in place of the suggested commands, a footnote, how to tell the
-owner something), and two optional reports: `onSent` (a message went, or a draft the owner approved was sent) and
+hire still starting) or is closed, and what sits around the conversation (notices, a top slot, which on Home holds a
+new hire's first-day strip and notes, a slot after the thread, an empty state, a footnote, how to tell the owner
+something), and two optional reports: `onSent` (a message went, or a draft the owner approved was sent) and
 `onComposerChange` (the box gained or lost the cursor or its text), which Home turns into the orb's spikes and
 energy. Home's employee page (`EmployeeChat`) and the editor's console pane (`ConsoleChat`, compact, scope `live`)
 are the two hosts.
@@ -512,7 +512,10 @@ are the two hosts.
   `active_runs` stand in; after it the store alone says which runs are live, and a message whose `run` still reads
   live is read with `get_chat_run` (`useThreadRunReconcile`), as is a run this tab admitted itself (a resent message
   is answered with the run it started before) once the thread says that run has ended.
-- **Turns** (`thread/model.ts`): one per message with a divider where `run_key` changes. A run that is going,
+- **Turns** (`thread/model.ts`): one per message with a divider where `run_key` changes. The thread
+  (`thread/ChatThread.tsx`) also names the day over the first message of each ("Today", "Yesterday", the weekday
+  within a week, else the date; `dayLabel` in `thread/timeLabel.ts`), and keeps the newest turn in view while the
+  dock under it grows, as it does while the thread grows. A run that is going,
   failed or was stopped (or finished, while its answer is on the way) shows on its last answer, or on a turn of its
   own right after its last message before it has answered (a live run whose messages are out of view goes last). Failures whose code only says no answer came
   (`not_delivered`, `timed_out`, `interrupted`) disappear once an answer lands; `reset` and `cleared` never show. A
@@ -530,7 +533,26 @@ are the two hosts.
   `markdown/blocks.ts`); a status line saying "Thinking", "Writing · N tok/s" or "Stopping…", with an Esc hint. The
   steps disclosure (`turns/StepsDisclosure.tsx`) sits on the run's first turn: "Working…" and open while the run
   works, "Worked for 12s · 3 steps" after; a run read back later starts it closed. A finished run keeps its turn
-  until its saved reply lands in the thread, so the streamed answer and the reply stay one element.
+  until its saved reply lands in the thread, so the streamed answer and the reply stay one element. Above the box,
+  the Live work pill (`composer/LiveWork.tsx`, compact in Dev) shows while the lane's run works, not while it is
+  queued or held for Resume: a neutral spinner, the step under way ("Getting started" before any, the step's name,
+  "Thinking" between steps, "Writing the reply", "Stopping…") and "2/3 · 4s", the steps finished of those begun and
+  how long the run has worked (`liveWorkLabel`, `liveWorkMeta` in `turns/runCopy.ts`). The count and clock are hidden
+  from screen readers, so the button's name does not change every second. Once there are steps it opens to their
+  names, each with its state in words for a screen reader (done, failed, skipped, in progress). While the run waits
+  for the owner's OK on a call it says "Waiting for your OK" beside the waiting dot. It reads the same steps as the
+  turn, each call it waits on following its card (`withApprovalSteps`), stays mounted so the owner's open or closed
+  choice carries to the next run, and gives way to the turn's "Worked for …" when the run ends; if its button had
+  focus then, focus moves to the message box (`onLeave`, from `ChatPane`).
+- **Reply markdown** (`markdown/ReplyMarkdown.tsx`, in its own chunk): a code block sits in a frame
+  (`.chat-code` in `index.css`), with its fence's language ("text" without one) and Copy above it, a line number
+  beside each line and the theme's `--code-*` colours, a long line scrolling sideways; a table sits in a frame
+  (`.chat-table`) with one rule between rows. Both are `max(0.8125em, var(--text-2xs))`: 13px beside Home's 16px
+  text, and in Dev's chat pane they follow the console's font size but never go below 11px. A table's header cells
+  are `max(calc(12em / 13), var(--text-2xs))`, 12px on Home, and its frame breaks a cell only between words
+  (`overflow-wrap: break-word`), so a wide table scrolls sideways instead of breaking every cell. The streaming caret
+  never follows a frame. The frame rules are scoped to these wrappers, so console rows keep their plain code and
+  tables.
 - **Stop/Resume** (`data/stop.ts`, `data/control.ts`): Stop or Esc sends `stop_chat_run` for the lane's run.
   Controlled requests use `WebSocketContext.controlMutation`, with a fresh idempotency key per bounded request
   attempt and the current control revision. Success and failure responses merge authoritative control snapshots
@@ -544,8 +566,10 @@ are the two hosts.
   `addAttachments` (`composer/attachments.ts`), which uploads each file at once into the box
   (`state/attachmentStore.ts`, chips with progress and Remove); Send waits while one uploads and sends the finished
   ones' paths. The microphone (`VoiceRecorder`, MediaRecorder with live levels) shows when `dictation_status` says a
-  provider can transcribe. A draft that is one word starting with `/` opens `SlashMenu` (Popover over cmdk; focus
-  stays in the box, which carries `aria-controls` and `aria-activedescendant`). The Web chip keeps the employee off
+  provider can transcribe. A draft that is one word starting with `/` opens `SlashMenu` above the box and as wide as
+  it, on the model picker's surface: a "Commands" heading, each command it begins on one row with what it does, and
+  the Enter mark on the highlighted one (Popover over cmdk; focus stays in the box, which carries `aria-controls` and
+  `aria-activedescendant`). The Web chip keeps the employee off
   web search for the next messages (`composerStore.web`). On Home, where `capabilities.model_choice` says the
   employee takes it, the model picker sits before the microphone (`composer/ModelPicker.tsx`; the host's
   `modelPicker`): a Popover anchored to the whole box (`PopoverAnchor virtualRef`), a cmdk list of Auto and the
@@ -570,7 +594,11 @@ are the two hosts.
   renderer (`genui/ChatUi.tsx`, with json-render, in its own chunk) sanitizes again (`genui/prepare.ts`), draws the
   twelve components (`genui/views.tsx`, through `lib/jsonRender/guard.tsx`), reveals a live one element by element
   (forward only, so patches arriving in bursts never restart it), and routes any button action (`genui/actions.ts`,
-  a Proxy over action names). The slot picker sits in a panel, and a toggle's whole row is its switch's label.
+  a Proxy over action names). The slot picker sits in a panel, and a toggle's whole row is its switch's label. The
+  views follow the colour rule ([Theme System](./theme_system.md#colour-marks-state-or-role)): a primary button is
+  the invert button, a picked slot or Select chip is neutral (`bg-bg-active` with a stronger border), a toggle uses
+  the ink switch, and a callout is a neutral panel with only its icon in the tone's colour; a stat's delta and a
+  chart's bars keep theirs.
   Development builds show, on one row under the interface, its element count, the number of patches that build it
   (`specToPatches`, what the Inspect chip's patches tab lists) and the Inspect chip.
 
@@ -642,12 +670,18 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   `activity.snapshot` with `activity_type: "approval"`); its card sits on that reply. A draft made in a run a button
   press started (its owner message carries `meta.ui_event`) records that interface (`ui_part_id`,
   `ledger.ui_part_of_run`), and the card says "Linked to the form above". Drafts no reply in view made (a
-  gate's, from the employee's own work) show after the conversation. The card (`features/chat/approval/`): Discard /
-  Edit / Send while it waits, "Sends in Ns" with Undo, Sending, Sent (and when, and whether Ask first was off),
-  Restore while it can, Try again (asking first when it may have gone), and "Sends when you resume" for an
+  gate's, from the employee's own work) show after the conversation. The card (`features/chat/approval/`): Decline
+  (with an optional note for the employee) / Edit / Send while it waits (Allow for a call with no message to show,
+  and Always allow when the server offers a rule), "Sends in Ns" with Undo, Sending, Sent (and when, and whether Ask
+  first was off), Restore while it can, Try again (asking first when it may have gone), and "Sends when you resume" for an
   approved draft whose employee is stopped (with Undo on a held call's). An `effect` card has no recipient and no message: "{name} tried to …", May have
   happened, and Dismiss only (Dismissed afterwards). Countdowns use the server's clock (`server_time`).
-  Ctrl/Cmd+Enter sends the newest waiting draft; in the edit box it sends that one.
+  Ctrl/Cmd+Enter sends the newest waiting draft; in the edit box it sends that one. Apart from the recipient's
+  initial, which keeps its role tint, the card's colour marks only where it stands: the waiting frame and header
+  (config), the status pill and its dot (green only while Sending or Running and once Sent or Done; muted for a draft
+  held for Resume) and a failure's frame, header and footer (stop). Its buttons are neutral, and each step's one
+  primary action (Send or Allow, and the confirmation after a decline note or a may-have-gone warning) is the invert
+  button.
 - **Ends.** Clearing or resetting the chat cancels the drafts its runs made that still wait, and their failed sends,
   whose Try again would send from a conversation that is gone; a Reset cancels the waiting gates too
   (`approvalGate.reset_execution_state`); deleting the workflow deletes its drafts and its rule. Leaving a branch
