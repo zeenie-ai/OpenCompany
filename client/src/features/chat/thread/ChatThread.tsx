@@ -1,7 +1,7 @@
 /**
  * The conversation's scroll area (design handoff chat, "Thread"): the
- * host's top slot (Home: a new hire's notes), the turns in a centred
- * column, and what the host shows after them.
+ * host's top slot (Home: a new hire's first-day strip and notes), the turns
+ * in a centred column, and what the host shows after them.
  *
  * - **Sticks to the bottom.** While the newest turn is in view, anything
  *   that grows the thread (a new turn, text arriving, a markdown chunk

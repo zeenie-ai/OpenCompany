@@ -1,6 +1,6 @@
 /**
  * The primitive extensions Normal mode builds on: Modal (single close,
- * header-less, spring entrance), Switch (md size, run and ink tones),
+ * header-less, spring entrance), Switch (md size, the ink tone),
  * Textarea (bare), Button (invert, chip, pill), ToggleGroup (segmented, and
  * chips with a neutral picked state).
  */
@@ -77,23 +77,13 @@ describe('Modal', () => {
 });
 
 describe('Switch', () => {
-  it('md size + run tone carry only the run colours', () => {
-    render(<Switch size="md" tone="run" aria-label="Memory" defaultChecked />);
-    const root = screen.getByRole('switch', { name: 'Memory' });
-    expect(root).toHaveAttribute('data-size', 'md');
-    expect(root.className).toContain('data-checked:bg-action-run-hover');
-    expect(root.className).not.toContain('bg-primary');
-    const thumb = root.querySelector('[data-slot="switch-thumb"]')!;
-    expect(thumb.className).toContain('data-checked:bg-action-run-ink');
-    expect(thumb.className).not.toContain('dark:data-checked:bg-primary-foreground');
-  });
-
-  it('ink tone: the foreground colour as the track and the app background as the knob', () => {
+  it('md size + ink tone: the foreground colour as the track and the app background as the knob', () => {
     render(<Switch size="md" tone="ink" aria-label="Remind" defaultChecked />);
     const root = screen.getByRole('switch', { name: 'Remind' });
+    expect(root).toHaveAttribute('data-size', 'md');
     expect(root.className).toContain('data-checked:bg-fg-default');
     expect(root.className).toContain('data-checked:border-fg-default');
-    // Off reads as the run tone's off.
+    // Off: a neutral track.
     expect(root.className).toContain('data-unchecked:border-border-strong');
     expect(root.className).toContain('data-unchecked:bg-border-default');
     expect(root.className).not.toContain('action-run');
@@ -102,6 +92,7 @@ describe('Switch', () => {
     expect(thumb.className).toContain('data-checked:bg-bg-app');
     expect(thumb.className).toContain('data-unchecked:bg-fg-muted');
     expect(thumb.className).not.toContain('action-run');
+    expect(thumb.className).not.toContain('dark:data-checked:bg-primary-foreground');
   });
 
   it('toggles', () => {

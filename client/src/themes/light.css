@@ -175,7 +175,7 @@
   --action-tools-ink:     #7c3aed;
 
   /* ── Node role variants for identity surfaces (Home: employee avatars,
-   * status pills, template chips, tinted cards). Same alphas as the action
+   * status pills, tinted cards). Same alphas as the action
    * triplet (--tint-action-*), so a role colour reads like a soft-tinted
    * button: -fill 15%, -hover 25%, -edge 60%. -ink is the readable text
    * colour: a darkened accent in light (identical to the matching action

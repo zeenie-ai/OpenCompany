@@ -228,7 +228,7 @@ function Card({ approval, className }: { approval: ChatApproval; className?: str
                     rows={3}
                     aria-label="Edit the draft"
                     autoFocus
-                    className="min-h-21 resize-y border-border-focus bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft focus-visible:ring-node-agent-soft dark:bg-bg-input"
+                    className="min-h-21 resize-y border-border-focus bg-bg-input text-base leading-normal ring-[3px] ring-node-agent-soft focus-visible:ring-node-agent-soft md:text-base dark:bg-bg-input"
                   />
                   <span className={cn('self-end font-mono text-2xs font-medium', tooLong ? 'text-action-stop-ink' : 'text-fg-faint')}>
                     {text.length} / {approval.maxLength}
