@@ -5,7 +5,9 @@ prompt, and reading its follow-up suggestions back out of its answer
 ``CHAT_REPLY_GUIDE`` is fixed text, the same byte for byte on every turn, so
 the agent's system prompt stays stable for prompt caching. It is appended by
 ``agent.prepare_payload`` only for the agent whose answer is the chat's reply
-(the one with a ``chat_stream``).
+(the one with a ``chat_stream``). While the owner has Generated UI off
+(``services/genui/switch.py``) the agent reads ``CHAT_GUIDE_BASE``, the
+same guide without the line asking for follow-up questions.
 
 ``split_followups`` takes the ``<followups>`` block off a reply: the chat
 shows its questions as buttons (``parts.followups``) and the block itself
@@ -28,7 +30,7 @@ FOLLOWUPS_CLOSE = "</followups>"
 MAX_FOLLOWUPS = 3
 MAX_FOLLOWUP_CHARS = 160
 
-CHAT_REPLY_GUIDE = (
+CHAT_GUIDE_BASE = (
     "You are answering the owner in a chat.\n"
     "- A line in square brackets at the start of the owner's message comes from OpenCompany, not from the owner: "
     "[ui-event]{...}[/ui-event] is a button they pressed in an interface you showed (with what they picked), and "
@@ -37,30 +39,37 @@ CHAT_REPLY_GUIDE = (
     "went back from), and [feedback]{...}[/feedback] is how the owner rated one of your answers; learn from it. "
     "[attachments]{...}[/attachments] after their words lists the files they attached, with their paths in your "
     "workspace.\n"
-    "- A search result numbered n is a source: cite the ones you rely on as [n] right after what they support.\n"
+    "- A search result numbered n is a source: cite the ones you rely on as [n] right after what they support."
+)
+FOLLOWUPS_GUIDE = (
     "- When a few short next questions would help the owner, end your reply with "
     '<followups>["...", "..."]</followups>: at most 3, each a short question in the owner\'s own words. The chat '
     "shows them as buttons; the block itself is never shown."
 )
+CHAT_REPLY_GUIDE = f"{CHAT_GUIDE_BASE}\n{FOLLOWUPS_GUIDE}"
 
 _LIST_MARK = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
 
 
-def with_chat_guide(system_message: str) -> str:
-    """The system prompt with the guide after it (once)."""
+def with_chat_guide(system_message: str, *, followups: bool = True) -> str:
+    """The system prompt with the guide after it (once); without the
+    follow-ups line when ``followups`` is false."""
+    guide = CHAT_REPLY_GUIDE if followups else CHAT_GUIDE_BASE
     text = system_message or ""
-    if CHAT_REPLY_GUIDE in text:
+    if guide in text:
         return text
-    return f"{text.rstrip()}\n\n{CHAT_REPLY_GUIDE}" if text.strip() else CHAT_REPLY_GUIDE
+    return f"{text.rstrip()}\n\n{guide}" if text.strip() else guide
 
 
 async def chat_turn(database: Any, chat_stream: Mapping[str, Any], *, system_message: str, prompt: str) -> Tuple[str, str]:
-    """The answering agent's turn: its system prompt with the guide, and the
-    owner's message with the session's untold notes ahead of it (claimed for
-    this run). Notes that cannot be read are left for the next turn."""
+    """The answering agent's turn: its system prompt with the guide (asking
+    for follow-ups only while Generated UI is on), and the owner's message
+    with the session's untold notes ahead of it (claimed for this run).
+    Notes that cannot be read are left for the next turn."""
     from services.chat.notes import claim_notes, notes_prompt
+    from services.genui.switch import generated_ui_enabled
 
-    system = with_chat_guide(system_message)
+    system = with_chat_guide(system_message, followups=await generated_ui_enabled(database))
     try:
         claimed = await claim_notes(database, session_id=str(chat_stream["session_id"]), run_id=str(chat_stream["run_id"]))
     except Exception:  # noqa: BLE001 - the turn goes on without them
@@ -121,8 +130,10 @@ def split_followups(text: str) -> Tuple[str, List[str]]:
 
 
 __all__ = [
+    "CHAT_GUIDE_BASE",
     "CHAT_REPLY_GUIDE",
     "FOLLOWUPS_CLOSE",
+    "FOLLOWUPS_GUIDE",
     "MAX_FOLLOWUPS",
     "chat_turn",
     "run_attachments",

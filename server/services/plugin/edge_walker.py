@@ -25,9 +25,11 @@ via :func:`register_master_skill_expander` from its ``__init__.py``;
 edge_walker calls the registered callback instead of importing
 ``skill_loader`` directly.
 
-These functions have **no service dependencies** beyond the
-``Database`` instance and the registered expander callback. They
-mutate nothing. Wave 11.D.6 inlines the old ``handlers/ai.py:_collect_*``
+Besides the ``Database`` instance and the registered expander callback,
+:func:`collect_agent_connections` calls the services that own its built-in
+tools: the employee job source, and the Generated UI switch
+(``services/genui/switch.py``), which leaves the Show UI tool out while the
+owner has it off. Wave 11.D.6 inlines the old ``handlers/ai.py:_collect_*``
 shims to call here directly.
 """
 
@@ -38,6 +40,7 @@ import re
 from collections import Counter
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from services.genui.switch import drop_chat_ui_when_off
 from services.workspace_capabilities import is_registered_agent
 from core.logging import get_logger
 
@@ -331,6 +334,7 @@ async def collect_agent_connections(
         logger.info("%s Auto-bound durable Task Manager for team lead %s", log_prefix, node_id)
 
     await bind_employee_job_source(node_id, context, database, tool_data)
+    tool_data = await drop_chat_ui_when_off(tool_data, database)
 
     logger.info(
         f"{log_prefix} Collected: {len(skill_data)} skills, {len(tool_data)} tools, "

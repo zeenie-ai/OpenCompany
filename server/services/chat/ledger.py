@@ -353,11 +353,15 @@ async def post_reply(
     retry from the same node returns the row it saved. Serialized by the
     write reservation, so two reply nodes at once cannot take the same id.
     A ``<followups>`` block the agent ended with is taken off the text and
-    saved as the reply's ``parts.followups`` (``services/chat/guide.py``).
+    saved as the reply's ``parts.followups`` (``services/chat/guide.py``),
+    only while the owner has Generated UI on (``services/genui/switch.py``).
     """
     from services.chat.guide import split_followups
+    from services.genui.switch import generated_ui_enabled
 
     text, followups = split_followups(text)
+    if followups and not await generated_ui_enabled(database):
+        followups = []
     async with database.reserved_session() as session:
         result = await session.execute(
             select(ChatMessage)
