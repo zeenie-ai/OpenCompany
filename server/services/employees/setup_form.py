@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from pydantic import ValidationError
 
 from services.employees.context import SetupContext, render_context_block
-from services.employees.genui_catalog import load_genui_catalog
+from services.employees.genui_catalog import limit, load_genui_catalog
 from services.employees.hire_request import HireEmployeeRequest
 from services.employees.setup_prompt import CHANGE_PREFIX, JOB_PREFIX, PREAMBLE, HistoryTurn
 from services.employees.setup_reply import json_object, parse_reply, usable_elements
@@ -44,7 +44,6 @@ MAX_RULES = 3
 #: What a trigger may say; the client snaps its values to a schedule the
 #: server runs (genui/hirePayload.ts snapTrigger), as it does a written screen's.
 _TRIGGER_KEYS = ("kind", "app", "every", "at", "day")
-_TEXT_MAX = 400
 
 
 @lru_cache(maxsize=1)
@@ -205,7 +204,7 @@ def fill_form(raw: Any, job: str) -> str:
         },
     }
     state = {rules_key: {paths["askFirst"].rsplit("/", 1)[1]: True, **{key: item.value for key, item in toggles.items()}}}
-    text = " ".join(fields["text"].split())[:_TEXT_MAX] if isinstance(fields.get("text"), str) else ""
+    text = " ".join(fields["text"].split())[: limit("maxText")] if isinstance(fields.get("text"), str) else ""
     return _compact({"text": text or f"Meet {hire.name}.", "spec": {"root": "root", "state": state, "elements": elements}})
 
 
