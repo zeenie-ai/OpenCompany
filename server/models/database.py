@@ -356,6 +356,7 @@ class UserSettings(SQLModel, table=True):
     profile_timezone: Optional[str] = Field(default=None, max_length=64)  # IANA name, sent from the browser's Intl on save
     memory_across_chats: bool = Field(default=True)  # New hires get the Context + Memory nodes
     prefer_local_ai: bool = Field(default=True)  # Employee setup prefers a configured local model
+    generated_ui: bool = Field(default=False)  # Generated UI: show_ui in chat, follow-up chips, the hire setup screen
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )

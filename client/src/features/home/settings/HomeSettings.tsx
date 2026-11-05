@@ -55,7 +55,7 @@ const PAGES: Page[] = [
     group: 'settings',
     label: 'Profile',
     icon: CircleUserRound,
-    keywords: 'account name',
+    keywords: 'account name generated ui',
     render: ({ close }) => <ProfileTab onDone={close} />,
   },
   {

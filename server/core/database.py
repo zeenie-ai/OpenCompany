@@ -371,7 +371,7 @@ class Database:
                         logger.info(f"Added {col} column to user_settings")
 
                 # Owner profile (Normal mode). Text columns start empty; the
-                # two switches take the model default for existing rows.
+                # switches take the model default for existing rows.
                 for col, length in [
                     ("profile_full_name", 100),
                     ("profile_call_name", 60),
@@ -382,7 +382,7 @@ class Database:
                     if col not in columns:
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} VARCHAR({length})"))
                         logger.info(f"Added {col} column to user_settings")
-                for col in ["memory_across_chats", "prefer_local_ai"]:
+                for col in ["memory_across_chats", "prefer_local_ai", "generated_ui"]:
                     if col not in columns:
                         default_on = 1 if UserSettings.model_fields[col].default else 0
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT {default_on}"))
@@ -2547,6 +2547,7 @@ class Database:
                     "profile_timezone": settings.profile_timezone,
                     "memory_across_chats": settings.memory_across_chats,
                     "prefer_local_ai": settings.prefer_local_ai,
+                    "generated_ui": settings.generated_ui,
                     "created_at": settings.created_at.isoformat() if settings.created_at else None,
                     "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
                 }

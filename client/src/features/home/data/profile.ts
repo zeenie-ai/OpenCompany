@@ -1,6 +1,6 @@
 /**
  * The owner's profile (Settings > Profile): the `profile_*` fields of the
- * user settings row, plus the two switches. Same cache as the editor's
+ * user settings row, plus the switches. Same cache as the editor's
  * Settings panel; the server trims and bounds every field on save
  * (services/settings/profile.py), and the browser's timezone rides along.
  */
@@ -21,6 +21,7 @@ export const profileSchema = z.object({
   profile_preferences: z.string().max(2000, 'Keep preferences under 2,000 characters'),
   memory_across_chats: z.boolean(),
   prefer_local_ai: z.boolean(),
+  generated_ui: z.boolean(),
 });
 
 export type ProfileForm = z.infer<typeof profileSchema>;
@@ -34,6 +35,8 @@ export function profileFromSettings(settings: UserSettings | undefined): Profile
     profile_preferences: String(s.profile_preferences ?? ''),
     memory_across_chats: s.memory_across_chats !== false,
     prefer_local_ai: s.prefer_local_ai !== false,
+    // Off unless the owner turned it on: generated UI costs tokens.
+    generated_ui: s.generated_ui === true,
   };
 }
 

@@ -1,6 +1,6 @@
 /**
  * Settings > Profile (design handoff): how employees address the owner and
- * what they should know, plus appearance and the two behaviour switches.
+ * what they should know, plus appearance and the behaviour switches.
  * Every hired employee reads these into its instructions, so the server
  * trims and bounds them again on save.
  */
@@ -202,7 +202,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
             control={form.control}
             name="prefer_local_ai"
             render={({ field }) => (
-              <SettingRow title="Keep everything on this computer" detail="Use AI that runs on this computer whenever possible." last>
+              <SettingRow title="Keep everything on this computer" detail="Use AI that runs on this computer whenever possible.">
                 <Switch
                   size="md"
                   tone="ink"
@@ -210,6 +210,19 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
                   checked={field.value}
                   onCheckedChange={field.onChange}
                 />
+              </SettingRow>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="generated_ui"
+            render={({ field }) => (
+              <SettingRow
+                title="Generated UI"
+                detail="Employees can add forms, buttons and suggested questions to their replies, and hiring shows a setup screen made for each job. Uses more AI."
+                last
+              >
+                <Switch size="md" tone="ink" aria-label="Generated UI" checked={field.value} onCheckedChange={field.onChange} />
               </SettingRow>
             )}
           />

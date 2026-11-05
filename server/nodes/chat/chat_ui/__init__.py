@@ -67,7 +67,7 @@ class ChatUiNode(ToolNode):
     group = ("chat", "tool")
     description = (
         "Lets an employee show a small interface inside its chat reply: choices, a short form, numbers, "
-        "a chart, buttons."
+        "a chart, buttons. Needs Generated UI on in Settings."
     )
     component_kind = "tool"
     tool_name = "show_ui"

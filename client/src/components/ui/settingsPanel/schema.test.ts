@@ -24,6 +24,13 @@ describe('workflow settings schema', () => {
     expect(fromServerRow({ tool_result_max_chars: 150_000 }).toolResultMaxChars).toBe(150_000);
   });
 
+  it('maps Generated UI both ways and keeps it off for a row saved before it existed', () => {
+    expect(toServerRow({ ...defaultSettings, generatedUi: true }).generated_ui).toBe(true);
+    expect(fromServerRow({ generated_ui: true }).generatedUi).toBe(true);
+    expect(fromServerRow({ compaction_ratio: 0.5 }).generatedUi).toBe(false);
+    expect(defaultSettings.generatedUi).toBe(false);
+  });
+
   it('defaults the tool result limit for a row saved before it existed', () => {
     expect(fromServerRow({ compaction_ratio: 0.5 }).toolResultMaxChars).toBe(defaultSettings.toolResultMaxChars);
   });

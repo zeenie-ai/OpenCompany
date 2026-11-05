@@ -23,6 +23,8 @@ PROFILE_TEXT = {
     "profile_timezone": 64,
 }
 PROFILE_SWITCHES = ("memory_across_chats", "prefer_local_ai")
+# Generated UI costs tokens on every step, so it starts off.
+OFF_SWITCHES = ("generated_ui",)
 
 
 @pytest.fixture(scope="module")
@@ -49,11 +51,15 @@ class TestModel:
         for field in PROFILE_SWITCHES:
             assert UserSettings.model_fields[field].default is True
 
+    def test_generated_ui_defaults_off(self):
+        for field in OFF_SWITCHES:
+            assert UserSettings.model_fields[field].default is False
+
 
 class TestMigration:
     def test_every_profile_column_has_a_branch(self, real_database_module):
         source = inspect.getsource(real_database_module.Database._migrate_user_settings)
-        for field in (*PROFILE_TEXT, *PROFILE_SWITCHES):
+        for field in (*PROFILE_TEXT, *PROFILE_SWITCHES, *OFF_SWITCHES):
             assert f'"{field}"' in source, f"_migrate_user_settings has no branch for {field}"
 
     def test_text_column_widths_match_the_model(self, real_database_module):
@@ -93,13 +99,14 @@ class TestNormalizeProfilePatch:
     def test_drops_unknown_timezones_so_the_stored_one_stands(self, zone):
         assert "profile_timezone" not in normalize_profile_patch({"profile_timezone": zone})
 
+    @pytest.mark.parametrize("field", [*PROFILE_SWITCHES, *OFF_SWITCHES])
     @pytest.mark.parametrize("value", ["false", 0, 1, None, "yes"])
-    def test_drops_non_boolean_switches(self, value):
-        assert "memory_across_chats" not in normalize_profile_patch({"memory_across_chats": value})
+    def test_drops_non_boolean_switches(self, field, value):
+        assert field not in normalize_profile_patch({field: value})
 
     def test_keeps_real_booleans_and_explicit_nulls(self):
-        patch = normalize_profile_patch({"prefer_local_ai": False, "profile_role": None, "profile_timezone": None})
-        assert patch == {"prefer_local_ai": False, "profile_role": None, "profile_timezone": None}
+        patch = normalize_profile_patch({"prefer_local_ai": False, "generated_ui": True, "profile_role": None, "profile_timezone": None})
+        assert patch == {"prefer_local_ai": False, "generated_ui": True, "profile_role": None, "profile_timezone": None}
 
     def test_drops_non_text_values(self):
         assert normalize_profile_patch({"profile_full_name": ["Ada"]}) == {}

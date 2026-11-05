@@ -11,8 +11,8 @@ the way in rather than trusted:
   ``profile_preferences`` keeps its line breaks;
 - ``profile_timezone`` must name a real IANA zone (``zoneinfo``), otherwise
   the key is dropped and the stored value stands;
-- the two switches must be real booleans; anything else is dropped rather
-  than coerced (``"false"`` is truthy).
+- the switches must be real booleans; anything else is dropped rather than
+  coerced (``"false"`` is truthy).
 
 Keys this module does not own pass through untouched.
 """
@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 
 SINGLE_LINE_FIELDS = ("profile_full_name", "profile_call_name", "profile_role")
 MULTI_LINE_FIELDS = ("profile_preferences",)
-BOOLEAN_FIELDS = ("memory_across_chats", "prefer_local_ai")
+BOOLEAN_FIELDS = ("memory_across_chats", "prefer_local_ai", "generated_ui")
 TIMEZONE_FIELD = "profile_timezone"
 
 _WHITESPACE = re.compile(r"\s+")

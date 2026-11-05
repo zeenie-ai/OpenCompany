@@ -260,6 +260,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 disabled={isSaving}
               />
             </Row>
+            <Row
+              label="Generated UI"
+              description="Lets agents show forms, buttons and follow-up questions in chat (the Show UI node), and Home draw a setup screen for each hire. Uses more tokens. Same switch as Home > Settings > Profile."
+            >
+              <Switch
+                checked={settings.generatedUi}
+                onCheckedChange={(checked) => handleChange('generatedUi', checked)}
+                disabled={isSaving}
+              />
+            </Row>
           </Section>
 
           {/* Auto-save */}

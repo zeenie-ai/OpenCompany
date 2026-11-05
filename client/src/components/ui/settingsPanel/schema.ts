@@ -35,6 +35,8 @@ export const workflowSettingsSchema = z.object({
   maxProcesses: z.number().int().min(1).max(50).default(10),
   autoAddSkillForTools: z.boolean().default(true),
   autoRebindToolsAfterCanvasChange: z.boolean().default(true),
+  // The owner-wide Generated UI switch, the same one as Home > Settings > Profile.
+  generatedUi: z.boolean().default(false),
 });
 
 export type WorkflowSettings = z.infer<typeof workflowSettingsSchema>;
@@ -60,6 +62,7 @@ export function fromServerRow(row: Record<string, any> | null | undefined): Work
     autoRebindToolsAfterCanvasChange: row.auto_rebind_tools_after_canvas_change,
     agentRecursionLimit: row.agent_recursion_limit,
     toolResultMaxChars: row.tool_result_max_chars,
+    generatedUi: row.generated_ui,
   });
 }
 
@@ -81,5 +84,6 @@ export function toServerRow(s: WorkflowSettings): Record<string, any> {
     auto_rebind_tools_after_canvas_change: s.autoRebindToolsAfterCanvasChange,
     agent_recursion_limit: s.agentRecursionLimit,
     tool_result_max_chars: s.toolResultMaxChars,
+    generated_ui: s.generatedUi,
   };
 }
