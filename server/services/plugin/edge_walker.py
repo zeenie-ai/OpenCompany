@@ -29,7 +29,8 @@ Besides the ``Database`` instance and the registered expander callback,
 :func:`collect_agent_connections` calls the services that own its built-in
 tools: the employee job source, and the Generated UI switch
 (``services/genui/switch.py``), which leaves the Show UI tool out while the
-owner has it off. Wave 11.D.6 inlines the old ``handlers/ai.py:_collect_*``
+owner has it off (:func:`collect_teammate_connections` calls it for each
+teammate too). Wave 11.D.6 inlines the old ``handlers/ai.py:_collect_*``
 shims to call here directly.
 """
 

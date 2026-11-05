@@ -83,12 +83,13 @@ flowchart TD
   24 elements, 6 levels, 12 children or 16384 bytes; a prop its component's
   JSON Schema refuses; `$bindState` on a prop other than the input's bound
   one; a state path through `__proto__`, `constructor` or `prototype`; an
-  action name that is not one (`push`, `pop`, `pushState`, `removeState` and
-  `validateForm` are kept by the chat); params starting `__`; a `setState`
+  action name that is not one, or one a reply may not use (`push`, `pop`,
+  `pushState`, `removeState` and `validateForm`); params starting `__`; a `setState`
   whose `statePath` is an expression rather than a path written out.
 - **Generated UI switch**: while the owner has it off, `collect_agent_connections`
-  leaves the tool out of the agent's tools (`services/genui/switch.py`), so its
-  description rides no request. The node stays on the graph.
+  leaves the tool out of the agent's tools, and `collect_teammate_connections`
+  out of a teammate's (`services/genui/switch.py`), so its description rides
+  no request. The node stays on the graph.
 - **Left out and reported**: elements of an unknown type (and children
   naming them), elements the root does not reach, element fields other than
   `type`, `props`, `children`, `visible` and `on`, props a component does not

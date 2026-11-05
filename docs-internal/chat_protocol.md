@@ -310,8 +310,9 @@ newer version wins in place.
   reads it when a run starts (the agent's tools and guide), again when Reply in Chat saves the reply (its
   follow-ups), and on each setup request; a settings row that is missing or cannot be read means off. While it is
   off:
-  - `collect_agent_connections` leaves the Show UI tool out of every agent's tools, so its description rides no
-    request (an agent the Agent Builder gives Show UI during a run keeps it until that run ends);
+  - `collect_agent_connections` leaves the Show UI tool out of every agent's tools, and
+    `collect_teammate_connections` out of every teammate's, so its description rides no request (an agent the Agent
+    Builder gives Show UI during a run keeps it until that run ends);
   - the guide asks for no follow-ups, and Reply in Chat keeps none;
   - Home's hire screen is a fixed card the server draws (normal_mode.md, Hiring).
 

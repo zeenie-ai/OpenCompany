@@ -361,16 +361,17 @@ Help in browser), else the first on the team.
 `generate_employee_setup {job, refine?, history?, draft_token}`
 ([services/employees/setup.py](../server/services/employees/setup.py)):
 
-- **The server builds every message** ([setup_prompt.py](../server/services/employees/setup_prompt.py)),
-  while Generated UI is on (with it off, see **Generated UI off** below):
+- **The server builds every message** ([setup_prompt.py](../server/services/employees/setup_prompt.py)):
   a preamble, the component catalogue (`config/genui_prompt.txt`, written
   from `config/genui_catalog.json` by json-render's `catalog.prompt()` with
   our template: `client/src/lib/jsonRender/prompts.ts`, `bun run
   genui:prompts`), and a context block
   ([context.py](../server/services/employees/context.py)) with the connected
-  and connectable apps, the team's names, the owner profile, the local time and
-  whether an AI model is set up. A change request carries the latest reply
-  plus at most two earlier turns, within a character budget.
+  and connectable apps, the team's names, the owner profile and the local
+  time. A change request carries the latest reply plus at most two earlier
+  turns, within a character budget. That is while Generated UI is on; with it
+  off, the form takes the catalogue's place and a change works on the form
+  (see **Generated UI off** below).
 - **Model choice** ([llm.py](../server/services/employees/llm.py)): a local
   provider when the owner prefers local AI, else the global default provider
   when it has a key, else the first usable provider, else the first saved
@@ -446,13 +447,15 @@ per-element guard that reads props through the catalogue's forgiving schema,
 the paced reveal). The screen's state is the draft's own, which json-render
 reads and writes through `createStoreAdapter`. The vocabulary
 itself is [config/genui_catalog.json](../server/config/genui_catalog.json),
-which the server writes the prompt from and the client imports (`catalog.ts`,
-`hirePayload.ts`); `genui/__tests__/catalog.test.ts` holds the prop schemas to
+which `bun run genui:prompts` writes the setup prompt from
+(`config/genui_prompt.txt`, which the server reads) and the client imports
+(`catalog.ts`, `hirePayload.ts`); `genui/__tests__/catalog.test.ts` holds the prop schemas to
 its components and props, and a shared
 corpus of model replies in both shapes (`genui/__fixtures__/replies.json`) is
 parsed the same way on both sides. Only what `genui/index.ts` exports
-(`HireDraftPanel`, `useHireComposer`, `useStarterHire`, `DraftMessagePreview`)
-leaves the folder: ESLint refuses imports of its internal modules.
+(`HireDraftPanel`, `DraftMessagePreview`, `useHireComposer`, `useJobComposer`,
+`useSendJob`, `useStarterHire` and `HIRE_LIMITS`) leaves the folder: ESLint
+refuses imports of its internal modules.
 
 **The card** (onboarding handoff R2). Whatever the model wrote, the
 normaliser lays the screen out one way and names the places in

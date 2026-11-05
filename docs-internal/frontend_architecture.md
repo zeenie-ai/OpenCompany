@@ -88,8 +88,9 @@ client/src/
 │   │                        # UI state sync, conversation
 │   ├── state/               # composerStore: what the owner is writing, per session
 │   ├── thread/              # model.ts (turns from messages + runs, pure), ChatThread (stick to bottom)
-│   ├── genui/               # Generated UI in replies: catalog (parity with server/config/chat_genui_catalog.json),
-│   │                        # views, registry, ChatUi (lazy, with json-render), prepare, actions
+│   ├── genui/               # Generated UI in replies, from server/config/chat_genui_catalog.json (registry and
+│   │                        # prepare import it; catalog's prop schemas are held to it): catalog, views, registry,
+│   │                        # ChatUi (lazy, with json-render), prepare, actions
 │   └── turns/ composer/ markdown/  # UserTurn / AssistantTurn / StepsDisclosure / GeneratedUiBlock / StatusLine,
 │                                   # the message box and the Live work pill above it (LiveWork),
 │                                   # ReplyMarkdown (framed code blocks and tables)

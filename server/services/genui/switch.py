@@ -3,12 +3,14 @@ default (docs-internal/chat_protocol.md, "Generated UI").
 
 Generated UI costs tokens on every step: the ``show_ui`` tool's description
 rides each request of an agent that holds it, and the chat guide asks for
-follow-up questions. One owner-wide switch, read when a run starts, turns
-these off together:
+follow-up questions. One owner-wide switch turns these off together. It is
+read when a run starts (the agent's tools and guide), when Reply in Chat
+saves the reply (its follow-ups), and on each setup request:
 
-- ``show_ui``: :func:`drop_chat_ui_when_off`, called once at the end of
-  ``collect_agent_connections``, so every runtime that collects an agent's
-  tools binds it only while the switch is on;
+- ``show_ui``: :func:`drop_chat_ui_when_off`, called at the end of
+  ``collect_agent_connections`` and in ``collect_teammate_connections``, so
+  every runtime that collects an agent's or a teammate's tools binds it only
+  while the switch is on;
 - the guide's follow-ups line and the follow-up buttons
   (``services/chat/guide.py``, ``services/chat/ledger.py``);
 - the setup screen made for each hire (``services/employees/setup.py``).
