@@ -2,7 +2,8 @@
  * An interface the employee shows in its reply, against a fake server: it
  * streams in with the run, its buttons ask (sending only what they say) or
  * go back to the employee once the answer is done, what the owner sets goes
- * to the server after a pause, and the saved reply keeps it.
+ * to the server after a pause or before a press that sends, and the saved
+ * reply keeps it.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,11 +59,11 @@ function runEvents(...frames: unknown[]) {
 }
 
 /** The booking interface as the server streams it: a snapshot, then a patch per step. */
-function uiFrames(firstSeq: number) {
+function uiFrames(firstSeq: number, spec: typeof booking = booking) {
   const patches: Wire[] = [
-    { op: 'add', path: '/root', value: booking.root },
-    { op: 'add', path: '/state', value: booking.state },
-    ...Object.entries(booking.elements).map(([id, element]) => ({ op: 'add', path: `/elements/${id}`, value: element })),
+    { op: 'add', path: '/root', value: spec.root },
+    { op: 'add', path: '/state', value: spec.state },
+    ...Object.entries(spec.elements).map(([id, element]) => ({ op: 'add', path: `/elements/${id}`, value: element })),
   ];
   return [
     frame(firstSeq, 'activity.snapshot', { message_id: 'ui_1', activity_type: 'json_render', content: { root: '', state: {}, elements: {} }, replace: true }),
@@ -103,13 +104,13 @@ beforeEach(() => {
   });
 });
 
-async function finishRun() {
+async function finishRun(spec: typeof booking = booking) {
   server.activeRuns = [];
   server.messages = [
     ...server.messages,
     row('a_r1', 'assistant', 'Saturday has a clean gap with Ana.', {
       run_id: 'r1',
-      parts: { ui: [{ part_id: 'ui_1', spec: booking, state: booking.state, state_revision: 0, elements: 11 }] },
+      parts: { ui: [{ part_id: 'ui_1', spec, state: spec.state, state_revision: 0, elements: 11 }] },
     }),
   ];
   runEvents(frame(16, 'finished', { outcome: { type: 'success' }, result: { reply_message_id: 'a_r1' } }));
@@ -157,6 +158,25 @@ describe('an interface in a reply', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Show Sunday instead' }));
     expect(screen.getByRole('textbox', { name: 'Message Maya' })).toHaveValue('What does Sunday look like?');
     expect(sendRequest).not.toHaveBeenCalledWith('send_chat_message', expect.anything());
+  });
+
+  it('sends what the owner set before an ask that goes as written', async () => {
+    // This Sunday button asks exactly what it says, so a press sends it at once.
+    const asking = structuredClone(booking);
+    asking.elements.sun.on.press.params.text = asking.elements.sun.props.label;
+    renderPane();
+    await screen.findByText('Thinking');
+    runEvents(...uiFrames(2, asking));
+    await finishRun(asking);
+    fireEvent.click(screen.getByRole('radio', { name: 'Highlights' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show Sunday instead' }));
+    await waitFor(() =>
+      expect(sendRequest).toHaveBeenCalledWith('send_chat_message', expect.objectContaining({ message: 'Show Sunday instead' })),
+    );
+    // The change did not wait for the pause: it went before the message.
+    const kinds = sendRequest.mock.calls.map(([kind]) => kind);
+    expect(kinds).toContain('chat_ui_state');
+    expect(kinds.indexOf('chat_ui_state')).toBeLessThan(kinds.indexOf('send_chat_message'));
   });
 
   it('sends a press back to the employee once the answer is done', async () => {

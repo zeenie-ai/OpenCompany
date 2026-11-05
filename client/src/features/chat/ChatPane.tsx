@@ -268,6 +268,8 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
       ask: (text, label) => {
         const pane = live.current;
         if (asksWhatItSays(text, label) && !pane.busy && pane.ready) {
+          // What the owner set goes first, as it does before a press.
+          pane.uiState.flush();
           pane.send({ text, clientMessageId: newClientMessageId(), options: optionsRef.current });
           return;
         }
