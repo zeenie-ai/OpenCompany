@@ -5,7 +5,10 @@
  * - chat_genui_prompt.txt: the show_ui tool's description
  *   (server/config/chat_genui_catalog.json);
  * - genui_prompt.txt: the setup screen's catalogue
- *   (server/config/genui_catalog.json).
+ *   (server/config/genui_catalog.json);
+ * - genui_fields_prompt.txt: the fixed form a hire fills while the owner
+ *   has Generated UI off; the server draws the setup card from it
+ *   (services/employees/setup_form.py).
  *
  * The server reads the files in server/config. `bun run genui:prompts`
  * (client/scripts/genui-prompts.ts) writes them, and __tests__/prompts.test.ts
@@ -154,10 +157,32 @@ function hireText(m: HireManifest): string {
   ].join('\n');
 }
 
+// ----- the fixed form, while Generated UI is off -----
+
+function fieldsText(m: HireManifest): string {
+  return [
+    'Reply ONLY with a JSON object, no code fences, that describes the new employee:',
+    '{"text": string, "name": string, "role": string, "description": string, "apps": [string], ' +
+      `"steps": [{"title": string, "detail": string, "role": ${quoted(m.step_roles)}, "app"?: string}], ` +
+      '"rules": [{"label": string, "value": boolean}], "trigger": {...}, "sends_via"?: string}.',
+    '"text": one short, warm sentence introducing the new employee by name.',
+    '"name": a friendly first name. "role": a plain job title. "description": one sentence on what they do. ' +
+      '"apps": the apps they use.',
+    '"steps": their routine, 3-5 steps; the first has role "trigger" (e.g. "When a message arrives", "Every ' +
+      'weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app names it in "app".',
+    '"rules": 1-3 ground rules the owner can turn on or off, each a short label and whether it starts on. ' +
+      `Leave out "${m.ask_first_label}": it is always there.`,
+    `${triggerRule(m)} "sends_via" is the app they answer or report through.`,
+    'Keep it compact: single-line minified JSON, every string under 70 characters, step details under 8 words.',
+    'When asked to change the setup, return the full updated JSON in the same format.',
+  ].join('\n');
+}
+
 /** Each prompt file the server reads (server/config/<name>), with its text. */
 export function genuiPrompts(): Record<string, string> {
   return {
     'chat_genui_prompt.txt': promptOf(chat, chatText),
     'genui_prompt.txt': promptOf(hire, hireText),
+    'genui_fields_prompt.txt': promptOf(hire, fieldsText),
   };
 }

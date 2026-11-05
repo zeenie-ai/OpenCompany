@@ -3,7 +3,8 @@ answer comes back with the apps it names resolved (and whether each can
 start the work); a cut-off or unreadable
 answer gets exactly one retry; failures come back as codes; every call is
 booked; a newer draft cancels the older; and the owner's words are never
-logged."""
+logged. With Generated UI off the model fills a fixed form and the reply is
+the card the server draws from it (services/employees/setup_form.py)."""
 
 from __future__ import annotations
 
@@ -20,22 +21,28 @@ from services.authz.ws_surface import INTERNAL_SOCKET_HANDLERS
 from services.employees import setup
 from services.employees.apps import get_apps
 from services.employees.llm import LLMChoice
+from services.employees.setup_form import FORM_RETRY_NUDGE, fields_prompt
 from services.employees.setup_prompt import RETRY_NUDGE
+from services.employees.team_recipe import preview_from_reply
 from services.llm.protocol import LLMResponse, Usage
 from services.plugin.base import NodeUserError
 from services.ws_handler_registry import get_ws_handlers
 
 CORPUS = Path(__file__).resolve().parents[4] / "client" / "src" / "features" / "home" / "genui" / "__fixtures__" / "replies.json"
-GOOD = next(case["reply"] for case in json.loads(CORPUS.read_text(encoding="utf-8")) if case["name"] == "clean minified reply")
+CASES = json.loads(CORPUS.read_text(encoding="utf-8"))
+GOOD = next(case["reply"] for case in CASES if case["name"] == "clean minified reply")
+#: The form a model filled in while Generated UI was off, and the card drawn from it.
+FORM = next(case for case in CASES if "fields" in case)
 JOB = "Answer customer messages on WhatsApp and book appointments"
 
 
 class FakeDatabase:
     def __init__(self):
         self.metrics = []
+        self.settings = {"profile_call_name": "Alex", "profile_timezone": "Europe/London", "generated_ui": True}
 
     async def get_user_settings(self, user_id):
-        return {"profile_call_name": "Alex", "profile_timezone": "Europe/London"}
+        return self.settings
 
     async def get_all_workflows(self):
         return [SimpleNamespace(name="Leo")]
@@ -242,6 +249,38 @@ async def test_a_change_request_sends_the_history(harness):
     roles = [m.role for m in harness.unifier.calls[0]["messages"]]
     assert roles == ["system", "user", "assistant", "user"]
     assert harness.unifier.calls[0]["messages"][-1].content == "Change the setup: Only weekdays"
+
+
+async def test_with_generated_ui_off_the_server_draws_the_card_from_a_form(harness):
+    harness.database.settings["generated_ui"] = False
+    harness.unifier = FakeUnifier(FORM["fields"])
+    result = await generate()
+    assert result["success"] is True and result["retried"] is False
+    assert result["reply"] == FORM["reply"]
+    assert result["apps"]["whatsapp"]["connected"] is True
+    assert result["team"] == preview_from_reply(JOB, FORM["reply"])
+    system = harness.unifier.calls[0]["messages"][0].content
+    assert fields_prompt() in system and "Components (use ONLY these)" not in system
+
+
+async def test_with_generated_ui_off_a_form_that_names_no_one_gets_one_retry(harness):
+    harness.database.settings["generated_ui"] = False
+    harness.unifier = FakeUnifier('{"text":"Hello"}', FORM["fields"])
+    result = await generate()
+    assert result["success"] is True and result["retried"] is True
+    assert result["reply"] == FORM["reply"]
+    assert harness.unifier.calls[1]["messages"][-1].content.endswith(FORM_RETRY_NUDGE)
+
+
+async def test_with_generated_ui_off_a_change_sends_the_latest_setup_as_the_form(harness):
+    harness.database.settings["generated_ui"] = False
+    harness.unifier = FakeUnifier(FORM["fields"])
+    result = await generate(refine="Only weekdays", history=[{"change": None, "reply": FORM["reply"]}])
+    assert result["success"] is True
+    messages = harness.unifier.calls[0]["messages"]
+    assert [m.role for m in messages] == ["system", "user", "assistant", "user"]
+    assert json.loads(messages[2].content)["name"] == "Maya"
+    assert messages[-1].content == "Change the setup: Only weekdays"
 
 
 async def test_the_owner_words_are_never_logged(harness, monkeypatch):

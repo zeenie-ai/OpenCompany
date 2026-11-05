@@ -9,7 +9,10 @@
  * `value`, a Button's `action` / `actionParams` props) and json-render's
  * (`checked`, `on.press`). The server's salvage check runs the same corpus
  * (server/tests/services/employees/test_setup_salvage_parity.py), so the
- * two sides agree on which replies are worth retrying.
+ * two sides agree on which replies are worth retrying. One case is the card
+ * the server draws while Generated UI is off, from the `fields` a model
+ * filled in (services/employees/setup_form.py); the server checks it still
+ * draws exactly that reply (test_setup_form.py).
  */
 
 import { describe, expect, it } from 'vitest';

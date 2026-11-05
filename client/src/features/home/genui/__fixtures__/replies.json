@@ -261,5 +261,25 @@
       "strippedExtras": true,
       "metricValue": ""
     }
+  },
+  {
+    "name": "fixed form the server draws while Generated UI is off",
+    "fields": "{\"text\":\"Meet Maya, your new receptionist.\",\"name\":\"Maya\",\"role\":\"Receptionist\",\"description\":\"Answers WhatsApp and books visits.\",\"apps\":[\"WhatsApp\",\"Google Calendar\"],\"steps\":[{\"title\":\"When a message arrives\",\"detail\":\"On WhatsApp\",\"role\":\"trigger\",\"app\":\"WhatsApp\"},{\"title\":\"Answer the question\",\"detail\":\"Using your notes\",\"role\":\"agent\"},{\"title\":\"Book the visit\",\"detail\":\"In your calendar\",\"role\":\"tool\",\"app\":\"Google Calendar\"}],\"rules\":[{\"label\":\"Ask me before sending anything\",\"value\":true},{\"label\":\"Only reply 9 to 6\",\"value\":false}],\"trigger\":{\"kind\":\"app_event\",\"app\":\"WhatsApp\"},\"sends_via\":\"WhatsApp\"}",
+    "reply": "{\"text\":\"Meet Maya, your new receptionist.\",\"spec\":{\"root\":\"root\",\"state\":{\"rules\":{\"askFirst\":true,\"rule1\":false}},\"elements\":{\"root\":{\"type\":\"Stack\",\"props\":{\"direction\":\"vertical\",\"gap\":\"md\"},\"children\":[\"agent\",\"plan\",\"rules\",\"change\",\"hire\"]},\"agent\":{\"type\":\"AgentCard\",\"props\":{\"name\":\"Maya\",\"role\":\"Receptionist\",\"description\":\"Answers WhatsApp and books visits.\",\"apps\":[\"WhatsApp\",\"Google Calendar\"],\"status\":\"ready\"},\"children\":[]},\"plan\":{\"type\":\"Plan\",\"props\":{\"title\":\"Their routine\",\"steps\":[{\"title\":\"When a message arrives\",\"detail\":\"On WhatsApp\",\"role\":\"trigger\",\"app\":\"WhatsApp\"},{\"title\":\"Answer the question\",\"detail\":\"Using your notes\",\"role\":\"agent\"},{\"title\":\"Book the visit\",\"detail\":\"In your calendar\",\"role\":\"tool\",\"app\":\"Google Calendar\"}]},\"children\":[]},\"rules\":{\"type\":\"Card\",\"props\":{\"title\":\"Ground rules\"},\"children\":[\"askFirst\",\"rule1\"]},\"askFirst\":{\"type\":\"Toggle\",\"props\":{\"label\":\"Ask me before sending anything\",\"checked\":{\"$bindState\":\"/rules/askFirst\"}},\"children\":[]},\"rule1\":{\"type\":\"Toggle\",\"props\":{\"label\":\"Only reply 9 to 6\",\"checked\":{\"$bindState\":\"/rules/rule1\"}},\"children\":[]},\"change\":{\"type\":\"Button\",\"props\":{\"label\":\"Change something\",\"variant\":\"secondary\"},\"on\":{\"press\":{\"action\":\"refine\"}},\"children\":[]},\"hire\":{\"type\":\"Button\",\"props\":{\"label\":\"Hire Maya\",\"variant\":\"primary\"},\"on\":{\"press\":{\"action\":\"hire_employee\",\"params\":{\"name\":\"Maya\",\"role\":\"Receptionist\",\"apps\":[\"WhatsApp\",\"Google Calendar\"],\"trigger\":{\"kind\":\"app_event\",\"app\":\"WhatsApp\"},\"sendsVia\":\"WhatsApp\"}}},\"children\":[]}}}}",
+    "salvageable": true,
+    "expect": {
+      "text": "Meet Maya, your new receptionist.",
+      "hasAgent": "Maya",
+      "hireButtons": 1,
+      "refineButtons": 1,
+      "askFirstToggles": 1,
+      "askFirstValue": true,
+      "togglesInRulesCard": 1,
+      "hireLabel": "Hire Maya",
+      "trigger": {
+        "kind": "app_event",
+        "app": "WhatsApp"
+      }
+    }
   }
 ]

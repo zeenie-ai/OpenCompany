@@ -165,6 +165,27 @@ def parse_reply(raw: Any) -> ParsedReply:
     return ParsedReply(text="", spec=None, failed=True)
 
 
+def json_object(raw: Any) -> Optional[Dict[str, Any]]:
+    """The JSON object a reply holds, read the way ``parse_reply`` reads one
+    (fences and chatter around it ignored, a cut-off one repaired), or None
+    when it holds none."""
+    reply = _FENCE.sub("", str(raw if raw is not None else "")[: limit("maxReplyChars")])
+    start = reply.find("{")
+    if start < 0:
+        return None
+    body = reply[start:]
+    end = body.rfind("}")
+    value: Any = None
+    if end > 0:
+        try:
+            value = _loads(body[: end + 1])
+        except (ValueError, RecursionError):
+            value = None
+    if not isinstance(value, dict):
+        value = repair_json(body)
+    return value if isinstance(value, dict) else None
+
+
 def _text(value: Any) -> str:
     if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         return ""
@@ -291,4 +312,13 @@ def app_names(raw: Any) -> List[str]:
     return list(seen.values())
 
 
-__all__ = ["ParsedReply", "app_names", "button_press", "is_salvageable", "parse_reply", "repair_json", "usable_elements"]
+__all__ = [
+    "ParsedReply",
+    "app_names",
+    "button_press",
+    "is_salvageable",
+    "json_object",
+    "parse_reply",
+    "repair_json",
+    "usable_elements",
+]

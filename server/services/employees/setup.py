@@ -9,6 +9,10 @@ prompt, the owner's context, and the "The job:" / "Change the setup:"
 prefixes. Of the earlier replies it keeps the latest plus at most two
 before it, within 40K characters.
 
+While the owner has Generated UI off, the model fills a fixed form instead
+and the server draws the setup card from it (``setup_form.py``); the reply
+the client gets has the same shape either way.
+
 Time: 90 s for a cloud model, 240 s for a local one, for the whole
 request including its one retry. The client waits up to 300 s.
 
@@ -47,6 +51,7 @@ from services.employees.apps import resolve_app
 from services.employees.connections import Connections
 from services.employees.context import build_setup_prompt_context
 from services.employees.llm import LLMChoice, employees_chat, record_llm_usage, resolve_llm_choice
+from services.employees.setup_form import FORM_RETRY_NUDGE, fill_form, form_messages
 from services.employees.setup_prompt import RETRY_NUDGE, HistoryTurn, build_messages
 from services.employees.setup_reply import app_names, is_salvageable
 from services.employees.team_recipe import preview_from_reply
@@ -155,11 +160,11 @@ async def _resolve_apps(connections: Connections, reply: str) -> Dict[str, Dict[
     return refs
 
 
-def _with_nudge(messages: List[Message]) -> List[Message]:
+def _with_nudge(messages: List[Message], nudge: str) -> List[Message]:
     """The same conversation, with the retry instruction added to the last
     (user) message so the roles still alternate."""
     last = messages[-1]
-    return [*messages[:-1], Message(role=last.role, content=f"{last.content}\n\n{RETRY_NUDGE}")]
+    return [*messages[:-1], Message(role=last.role, content=f"{last.content}\n\n{nudge}")]
 
 
 async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
@@ -173,10 +178,16 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
         return _failure("no_ai_provider", request.token)
 
     context = await build_setup_prompt_context(database, connections)
-    messages = build_messages(context, request.job, change=request.change, history=request.history)
+    if context.generated_ui:
+        messages = build_messages(context, request.job, change=request.change, history=request.history)
+        nudge = RETRY_NUDGE
+    else:
+        messages = form_messages(context, request.job, change=request.change, history=request.history)
+        nudge = FORM_RETRY_NUDGE
     deadline = time.monotonic() + choice.budget_seconds
     usage = Usage()
     kept: Optional[LLMResponse] = None
+    reply = ""
     retried = False
     for attempt in range(2):
         remaining = deadline - time.monotonic()
@@ -197,21 +208,23 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
         await record_llm_usage(database, choice, response, session_id=owner)
         usage = usage + (response.billing_usage or response.usage)
         truncated = str(response.finish_reason or "").lower() in TRUNCATED_FINISH_REASONS
-        usable = is_salvageable(response.content)
+        drawn = response.content if context.generated_ui else fill_form(response.content, request.job)
+        usable = is_salvageable(drawn)
         if usable:
-            kept = response
+            kept, reply = response, drawn
         if usable and not truncated:
             break
         if attempt == 0:
             retried = True
-            messages = _with_nudge(messages)
+            messages = _with_nudge(messages, nudge)
 
     logger.info(
         "Setup written" if kept is not None else "Setup unreadable",
         provider=choice.provider,
         model=choice.model,
+        form=not context.generated_ui,
         retried=retried,
-        reply_chars=len(kept.content) if kept is not None else 0,
+        reply_chars=len(reply),
         finish_reason=kept.finish_reason if kept is not None else None,
     )
     if kept is None:
@@ -219,14 +232,14 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
     return {
         "success": True,
         "draft_token": request.token,
-        "reply": kept.content,
+        "reply": reply,
         "provider": choice.provider,
         "model": choice.model,
         "usage": {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens, "total_tokens": usage.total_tokens},
         "retried": retried,
         "finish_reason": kept.finish_reason,
-        "apps": await _resolve_apps(connections, kept.content),
-        "team": preview_from_reply(request.job, kept.content),
+        "apps": await _resolve_apps(connections, reply),
+        "team": preview_from_reply(request.job, reply),
     }
 
 

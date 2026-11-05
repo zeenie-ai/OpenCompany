@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.logging import get_logger
 from services.employees.connections import Connections
+from services.genui.switch import generated_ui_on
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,9 @@ class SetupContext:
     local_time: str = ""
     has_ai: bool = False
     prefer_local_ai: bool = True
+    #: The owner's Generated UI switch: a setup screen made for the job while
+    #: it is on, else the fixed form (setup_form.py). Never told to the model.
+    generated_ui: bool = False
 
 
 def _zone(name: Optional[str]) -> ZoneInfo:
@@ -87,6 +91,7 @@ async def build_setup_prompt_context(
         local_time=local_time_text(now or datetime.now(timezone.utc), zone),
         has_ai=await connections.has_ai(),
         prefer_local_ai=settings.get("prefer_local_ai") is not False,
+        generated_ui=generated_ui_on(settings),
     )
 
 
