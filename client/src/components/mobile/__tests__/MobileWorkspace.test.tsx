@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import type { SurfaceControl } from '../../workspace/surface';
@@ -379,6 +379,98 @@ describe('Mobile Workspace', () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/release') && JSON.parse(options.body).resume === false)).toBe(true));
     giveBack!();
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/resume'))).toBe(true));
+  });
+});
+
+describe('Mobile Workspace in Home', () => {
+  it('keeps the phone, its buttons and Help & diagnostics, and drops the editor’s toolbar, controls, AI activity and Ask AI', async () => {
+    const now = Date.now() / 1000;
+    snapshot = { ...snapshot, running: true, setup: 'ready', setup_progress: { message: 'Phone is ready', started_at: now - 120, finished_at: now - 30, events: [] },
+      active: { run_id: 'run', phase: 'Using phone', current_goal: 'Open Settings', steps: 2, max_steps: 40 } };
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" />);
+    expect(await screen.findByRole('toolbar', { name: 'Phone buttons' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Phone screen, view only')).toBeInTheDocument();
+    expect(await screen.findByText('Help & diagnostics')).toBeVisible();
+    expect(screen.getByText('WHPX is installed and usable.')).toBeInTheDocument();
+    for (const name of ['Use phone', 'Stop phone', 'Refresh mobile status', 'Phone controls', 'Phone full view']) {
+      expect(screen.queryByRole('button', { name, hidden: true })).toBeNull();
+    }
+    for (const name of ['Android activity', 'Phone AI task', 'Completed mobile setup']) {
+      expect(screen.queryByRole('group', { name, hidden: true })).toBeNull();
+    }
+    expect(screen.queryByText(/Engine step/)).toBeNull();
+    expect(screen.queryByText('Open Settings')).toBeNull();
+  });
+
+  it('offers Start phone on the screen where the phone is ready to turn on, and starts it', async () => {
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" />);
+    const start = await screen.findByRole('button', { name: 'Start phone' });
+    expect(screen.getByText(/Your phone is ready to turn on/).parentElement).toContainElement(start);
+    // Neutral in Home, as every outline-style button there.
+    expect(start).toHaveAttribute('data-variant', 'quiet');
+    expect(start).toHaveClass('border-border-default', 'text-fg-default');
+    await waitFor(() => expect(start).toBeEnabled());
+    await userEvent.click(start);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url, options]) => url.endsWith('/start') && options.method === 'POST')).toBe(true));
+  });
+
+  it('says the phone is starting while it boots', async () => {
+    snapshot.starting = true;
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" />);
+    expect(await screen.findByText('Starting phone…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start phone' })).toBeDisabled();
+    expect(screen.queryByText(/ready to turn on/)).toBeNull();
+  });
+
+  it('keeps setup, with Set up phone as its card’s one primary action', async () => {
+    fetchMock.mockImplementation(async (url: string) => json(url.endsWith('/doctor') ? { supported: true } : snapshot));
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" />);
+    expect(await screen.findByRole('region', { name: 'Mobile setup' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set up phone' })).toHaveAttribute('data-variant', 'invert');
+    expect(screen.queryByRole('button', { name: 'Start phone' })).toBeNull();
+  });
+
+  it('puts the dock’s action at the end of the phone’s buttons, as tall as they are; the editor shows none', async () => {
+    snapshot.running = true;
+    const action = <button type="button">Take over</button>;
+    const view = render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" action={action} />);
+    const bar = await screen.findByRole('toolbar', { name: 'Phone buttons' });
+    const takeOver = within(bar).getByRole('button', { name: 'Take over' });
+    expect(bar.lastElementChild).toContainElement(takeOver);
+    expect(bar.lastElementChild).toHaveClass('*:h-7.5');
+    view.unmount();
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} action={action} />);
+    await screen.findByRole('toolbar', { name: 'Phone buttons' });
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+  });
+
+  it('types on the phone once the Workspace’s Take over has it', async () => {
+    snapshot.running = true;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/takeover')) {
+        snapshot = { ...snapshot, controller: 'viewer:server-hash', control_state: 'human', epoch: 7 };
+        return json({ owner: 'viewer:server-hash', epoch: 7 });
+      }
+      if (url.endsWith('/input')) return json({ success: true, result: true });
+      return json(url.endsWith('/doctor') ? ready : snapshot);
+    });
+    const control = createRef<SurfaceControl>();
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" ref={control} />);
+    await screen.findByRole('toolbar', { name: 'Phone buttons' });
+    await act(async () => { await control.current!.claim(); });
+    // The next status read shows this view holding the phone.
+    const field = await screen.findByRole('textbox', { name: 'Text to type on phone' }, { timeout: 3000 });
+    expect(screen.getByRole('button', { name: 'Home' })).toBeEnabled();
+    // Hand back is the dock's; the editor's lease buttons and APK install stay out.
+    for (const name of ['Let AI continue', 'Finish using phone']) expect(screen.queryByRole('button', { name, hidden: true })).toBeNull();
+    expect(screen.queryByLabelText('Install APK')).toBeNull();
+    await userEvent.type(field, 'hello');
+    const type = screen.getByRole('button', { name: 'Type' });
+    expect(type).toHaveAttribute('data-variant', 'quiet');
+    await userEvent.click(type);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/input'))).toBe(true));
+    const request = fetchMock.mock.calls.find(([url]) => url.endsWith('/input'))!;
+    expect(JSON.parse(request[1].body)).toMatchObject({ epoch: 7, operation: 'text', parameters: { text: 'hello' } });
   });
 });
 
