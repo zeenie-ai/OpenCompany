@@ -2698,6 +2698,9 @@ async def _reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[st
     # Start runs the graph saved by then, and recovery would apply the older
     # snapshot over it.
     await cancel_applies(service.database, workflow_id)
+    # The events its controller gave up starting (the dead rows) go too.
+    from services.temporal.controller_queue import clear_dead_letters
+    await clear_dead_letters(service.database, current.controller_workflow_id)
     workspace = await _reset_workspace_tasks(workflow_id, service.database, current, data)
 
     archived = await service.database.update_workflow_run_data_scope(

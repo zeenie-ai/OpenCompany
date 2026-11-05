@@ -942,7 +942,7 @@
   "patch_entries": [
     {
       "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
-      "after": "e9024c218326db6bda56d7cfbce68ec5459116ad404b78219931ceb238bf6fbc",
+      "after": "5c27949be70b71eaf931a5520a928b2699eb4403ee66f3d04d7d743fd87d433f",
       "new_types": [
         "ApprovalWorkflow"
       ],
@@ -950,6 +950,12 @@
         "approval_wait_version"
       ],
       "reason": "RFC-0007 AP.4a/AP.4b: ApprovalWorkflow is a new type, so no recorded history runs it; AgentWorkflow starts it, and claims, runs and records an allowed call, only in generations admitted with approval_wait_version 1; ApprovedToolCallWorkflow's commands moved into run_approved_call with no ids, so they replay as recorded (the approved_tool_call fixture)."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "5c27949be70b71eaf931a5520a928b2699eb4403ee66f3d04d7d743fd87d433f",
+      "patch": "controller-spawn-backoff-v1",
+      "reason": "RFC-0006 §11.6 rec 2 and §7.4 A1: on the durable-queue path, WorkflowControlWorkflow's spawn-failure arm records controller-spawn-backoff-v1 before it retries a failed spawn behind the rest of the queue (5 s, 30 s, 2 min, 10 min) and then writes it to the dead rows through controller.queue.spill; a history without the marker keeps the head-of-line retry every 5 s. The marker ships dormant (services/temporal/patches.py DORMANT_PATCHES), so this release's runs record none; the only other change is the spill helper moving out of _continue_as_new with the same payloads."
     }
   ],
   "handlers": {

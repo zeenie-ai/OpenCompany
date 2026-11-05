@@ -861,6 +861,20 @@ keep that release's command identities:
   New handlers and node types are fine.
   `record_fixtures --golden-only --source-commit <commit>` refreshes the file
   at each release; it starts no server, so it needs no `TEMPORAL_TEST_CLI`.
+- **Dormant patches** (RFC-0006 §18.9 recommendation 2). A new
+  `workflow.patched` id ships dormant for one release: it is listed in
+  `DORMANT_PATCHES` in `server/services/temporal/patches.py`, and every worker
+  that runs workflows (the manager's, the standalone worker and
+  `create_worker`) passes `patch_activation_callback=activate_patch`. The SDK
+  asks the callback about a patch id once per run, at the id's first
+  `patched()` call outside replay when history holds no marker for it, so that
+  release's runs take the old branch and record no marker, while replay still
+  follows the markers in history. The next release removes the id from the set
+  and runs start taking the new branch; a rollback to the release before then
+  still replays, because that release has the branch. A fix for sends, money or
+  approvals may activate at once instead. `test_workflow_identity_golden.py`
+  fails when a dormant id names no `workflow.patched` marker in the code.
+  `controller-spawn-backoff-v1` is the first dormant id.
 - **Release check.** `test_the_current_version_has_its_replay_histories` in
   `cli/tests/test_release_pipeline_config.py` fails a version that has no
   `fixtures/<version>/`. It also fails a set recorded on another CLI than the
@@ -1113,6 +1127,8 @@ guarantee applies to version 1 generations with their controller chain intact.
 - **Boot-time reconcile** (`reconcile_active_controls_on_boot`, called from the lifecycle module after workers start): first runs once more, inline, a Reset a crash left `resetting` (a failure leaves the row `resetting`; a slow one delays the rows after it and the dev-server watchdog), runs the lazy `_reconcile_control` over every other active control row, converges `starting` rows a crash left behind (controller alive with triggers registered → `running`; alive-but-empty for a graph that declares triggers → `failed` + controller closed; vanished → `failed`), and re-arms the process-local half of running/paused generations from the persisted graph snapshot — DeploymentManager state, in-process collectors for non-canary trigger types, cron pause posture. Idempotent by construction (controller `register_trigger` keyed by listener id, legacy starts use `USE_EXISTING`, cron creation preserves server-owned pause state).
 
 **Controller event accumulation.** `controller-durable-queue-v2` preserves FIFO across carried events and the existing durable spillway. New execution-control version 1 histories also record `controller-event-accumulator-v1`: pending IDs remain protected beyond the recent-ID window, rollover includes Signals received during spill Activities, and a duplicate deterministic child start cannot block subsequent events. Legacy and pre-marker histories retain their recorded paths. Trigger processing stays immediate; no inactivity batching is added. The queue-paging activities (`controller.queue.read`, `controller.queue.spill`) retry without limit (`QUEUE_PAGING_RETRY`): both are idempotent, so a database outage cannot fail a controller that a version 1 generation could not rebuild, and paging that keeps failing shows as an attention item. See [event accumulation during Stop and rollover](./temporal-workflow-control.md#event-accumulation-during-stop-and-rollover) for scope and delivery limits.
+
+**Controller spawn backoff.** On the durable-queue path, a spawn that fails (anything but a duplicate start with the accumulator) evaluates `controller-spawn-backoff-v1` (RFC-0006 §11.6 rec 2, §7.4 A1). With the marker, the failure is counted on the event itself (`_spawn_attempts`, with the retry time in `_spawn_retry_at`, so both ride continue-as-new and spills), and the event waits behind the rest of the queue for 5 s, 30 s, 2 min and then 10 min while later events start; the main loop's wait gets a timer, at the earliest retry time, only when nothing else can run and such an event waits, so a run with no failed spawn issues the same commands as before. When every event read back from the overflow store waits (a continue-as-new carried or spilled them), the loop reads the next page at once rather than at the retry time, checking history pressure between those reads, so a rollover the history asks for comes first. The fifth failure writes the event, with the exception's type in `_dead_reason`, to the dead rows: `controller.queue.spill` under `<controller id>:dead` (`controller_queue.dead_letter_id`), which `controller.queue.read` never reads back. The queue moves on, and with the accumulator the event is finished like a started one. The child run never sees the two fields. Without the marker, the event goes back to the head and is tried every 5 s, blocking every event behind it, which is what every history before the marker recorded. Reset deletes the generation's dead rows, with the chunk rows of a large one whose spill stopped part way (`controller_queue.clear_dead_letters`), and deleting the workflow deletes them with its other controller rows (`employees.store.delete_for_workflow`). This release ships the marker dormant (see [dormant patches](#the-replay-safety-net-rfc-0005-phase-1)), so no run takes the backoff yet; the next release activates it.
 
 **Controller Update traffic.** Fresh version 1 histories record `controller-messaging-v1` so successful Updates can request history-pressure rollover even without event Signals or pollers. The same gate prevents producer-only Safe Apply compatibility messages from reopening a stopped generation. Pure Update validators reject malformed control requests before acceptance; the main loop waits for handlers before rollover. See [workflow messaging review](./temporal-workflow-control.md#workflow-messaging-review).
 

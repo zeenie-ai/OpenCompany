@@ -188,6 +188,9 @@ async def test_duplicate_child_start_does_not_block_next_event(wf, monkeypatch):
 
 
 async def test_transient_failure_keeps_same_event_pending_until_success(wf, monkeypatch):
+    # The head-of-line retry of histories without controller-spawn-backoff-v1;
+    # test_controller_queue.py covers the backoff.
+    monkeypatch.setattr(wf, "patched", lambda name: name != "controller-spawn-backoff-v1")
     controller = WorkflowControlWorkflow()
     calls = []
 

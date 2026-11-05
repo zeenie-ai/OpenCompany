@@ -81,6 +81,23 @@ async def test_update_and_delete(real_database):
     assert await store.delete_for_workflow(real_database, "30") == 0
 
 
+async def test_delete_removes_the_controller_rows_dead_letters_included(real_database):
+    # A controller writes the events it gave up starting under "<controller id>:dead".
+    from sqlmodel import select
+
+    from models.employees import WorkflowQueuedEvent
+
+    async with real_database.get_session() as session:
+        for key, controller_id in (("queued", "workflow-control-30-g1"), ("dead", "workflow-control-30-g1:dead"),
+                                   ("other", "workflow-control-31-g1:dead")):
+            session.add(WorkflowQueuedEvent(id=key, controller_id=controller_id, sequence=1, item={}))
+        await session.commit()
+    await store.delete_for_workflow(real_database, "30")
+    async with real_database.get_session() as session:
+        left = (await session.execute(select(WorkflowQueuedEvent.controller_id))).scalars().all()
+    assert left == ["workflow-control-31-g1:dead"]
+
+
 async def test_rejects_fields_it_does_not_own(real_database):
     with pytest.raises(ValueError):
         await store.reserve(real_database, owner_id="owner", idempotency_key="k5", payload_hash="h", fields={"hire_state": "ready"})

@@ -13,6 +13,7 @@ def control(status="reset", revision=4):
     return SimpleNamespace(
         id="control-wf-2", workflow_id="wf", generation=2, execution_id="execution-2",
         root_execution_id="execution-2", data_scope_id="scope-2", status=status, revision=revision,
+        controller_workflow_id="workflow-control-wf-g2",
     )
 
 
@@ -124,6 +125,7 @@ async def test_a_pending_workspace_cleanup_keeps_a_generation_resetting(monkeypa
     monkeypatch.setattr("services.approvals.waiting.cancel_waits", AsyncMock(return_value=0))
     monkeypatch.setattr("services.employees.safe_apply.close_open_work", AsyncMock(return_value=None))
     monkeypatch.setattr("services.employees.safe_apply.cancel_applies", AsyncMock(return_value=None))
+    monkeypatch.setattr("services.temporal.controller_queue.clear_dead_letters", AsyncMock(return_value=0))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(side_effect=UpdatePending("no answer in 240 s")))
     monkeypatch.setattr(handlers, "_control_payload", AsyncMock(side_effect=lambda row, **_: {"state": row.status}))
     monkeypatch.setattr(runtime_state, "archive_and_reset_node_state", archive)
@@ -214,6 +216,7 @@ async def test_generation_reset_waits_for_workspace_before_archive_and_final_res
 
     monkeypatch.setattr("services.employees.safe_apply.close_open_work", close_open_work)
     monkeypatch.setattr("services.employees.safe_apply.cancel_applies", cancel_applies)
+    monkeypatch.setattr("services.temporal.controller_queue.clear_dead_letters", AsyncMock(return_value=0))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", workspace)
     monkeypatch.setattr(runtime_state, "archive_and_reset_node_state", archive)
     notices = broadcaster(monkeypatch, order)

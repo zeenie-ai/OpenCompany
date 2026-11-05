@@ -2,8 +2,26 @@
 import hashlib
 import json
 from temporalio import activity
-from sqlmodel import select
+from sqlmodel import delete, select
 from models.employees import WorkflowQueuedEvent
+
+
+def dead_letter_id(controller_id: str) -> str:
+    """Where a controller writes the events it gave up starting.
+    controller.queue.read reads by exact controller id, so these rows are
+    never read back."""
+    return f"{controller_id}:dead"
+
+
+async def clear_dead_letters(database, controller_id: str) -> int:
+    """Delete a controller's dead-letter rows (Reset), with the chunk rows
+    (``<id>:dead:chunks:<key>``) of a large one whose spill stopped part way.
+    Returns rows removed."""
+    async with database.get_session() as session:
+        result = await session.execute(delete(WorkflowQueuedEvent).where(
+            WorkflowQueuedEvent.controller_id.startswith(dead_letter_id(controller_id), autoescape=True)))
+        await session.commit()
+        return int(result.rowcount or 0)
 
 
 @activity.defn(name="controller.queue.spill")

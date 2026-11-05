@@ -28,6 +28,7 @@ from temporalio.worker import PollerBehaviorAutoscaling, Worker
 
 from core.logging import get_logger
 from ._interceptors import ObservabilityWorkerInterceptor
+from .patches import activate_patch
 from .workflow import MachinaWorkflow
 from .trigger_listener_workflow import TriggerListenerWorkflow
 from .polling_trigger_workflow import PollingTriggerWorkflow
@@ -266,6 +267,8 @@ class TemporalWorkerManager:
             # executor slot counts per the worker-performance docs.
             activity_task_poller_behavior=PollerBehaviorAutoscaling(initial=2, minimum=1, maximum=10),
             workflow_task_poller_behavior=PollerBehaviorAutoscaling(initial=2, minimum=1, maximum=20),
+            # New runs take the old branch of a dormant patch (patches.py).
+            patch_activation_callback=activate_patch,
         )
         logger.info(
             "Registered Temporal activities",
@@ -878,6 +881,7 @@ async def run_standalone_worker(
             # repeating it here double-instruments each Signal / Query /
             # Update / Activity and doubles the emitted spans.
             interceptors=[ObservabilityWorkerInterceptor()],
+            patch_activation_callback=activate_patch,
         )
 
         logger.info("Worker running. Press Ctrl+C to stop.")
@@ -932,6 +936,7 @@ async def create_worker(
         # repeating it here double-instruments each Signal / Query /
         # Update / Activity and doubles the emitted spans.
         interceptors=[ObservabilityWorkerInterceptor()],
+        patch_activation_callback=activate_patch,
     )
 
 

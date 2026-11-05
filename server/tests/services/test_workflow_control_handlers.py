@@ -1078,6 +1078,9 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     # So are its waiting Apply requests: the next Start must not apply them.
     cancel_applies = AsyncMock(return_value=None)
     monkeypatch.setattr("services.employees.safe_apply.cancel_applies", cancel_applies)
+    # So are the events its controller dead-lettered (RFC-0006 §7.4 A1).
+    clear_dead_letters = AsyncMock(return_value=1)
+    monkeypatch.setattr("services.temporal.controller_queue.clear_dead_letters", clear_dead_letters)
     monkeypatch.setattr(
         handlers,
         "_delete_cron_schedules",
@@ -1114,6 +1117,7 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     assert close_open_work.await_args.kwargs["reason"] == "The workflow was reset"
     assert "queued" in close_open_work.await_args.kwargs["job_states"]
     cancel_applies.assert_awaited_once_with(database, "wf")
+    clear_dead_letters.assert_awaited_once_with(database, "workflow-control-wf-g1")
     assert result["terminated_executions"] == 2
     assert result["deleted_schedules"] == 3
     assert result["local_cleanup_completed"] is False

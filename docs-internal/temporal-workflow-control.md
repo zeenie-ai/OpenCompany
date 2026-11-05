@@ -420,6 +420,22 @@ rollover from resurrecting it. An already-started deterministic child is treated
 as a duplicate admission; transient start failures retain the event for retry
 instead of blocking all later events permanently on a successful duplicate.
 
+A start that fails for any other reason (an exhausted trigger filter call, a
+failed child start) depends on `controller-spawn-backoff-v1`. Without the
+marker, the event goes back to the head of the queue and is tried every 5
+seconds, so every event behind it waits. With it, the event waits behind the
+rest of the queue and is tried again after 5 seconds, 30 seconds, 2 minutes and
+10 minutes while later events start, including events still in the overflow
+store behind waiting ones: the controller reads those pages at once, unless the
+history asks for a rollover first. The attempt count and retry time ride on
+the event, through continue-as-new and the overflow store, and the run that
+finally starts does not see them. The fifth failure writes the event, with the
+error's type, to dead-letter rows (`<controller id>:dead`), which the queue
+never reads back, and the queue moves on. Reset deletes the generation's
+dead-letter rows; deleting the workflow deletes them with its other queue rows.
+This release ships the marker dormant: no run takes the backoff until the next
+release activates it ([dormant patches](./TEMPORAL_ARCHITECTURE.md#the-replay-safety-net-rfc-0005-phase-1)).
+
 Message producers use their existing stable provider identities: Telegram's
 chat/message pair, Discord message or interaction ID, WhatsApp chat/message
 and direction, and chat run ID or saved message ID. Payloads without a complete
@@ -451,6 +467,7 @@ workflow. There is no migration of an old run's continuation into a new root.
 | Persisted generation `execution_control_version=1` | Root enrollment, cooperative gates, acknowledged execution-tree drain, held Resume, frozen agent continuation and controlled chat Stop |
 | `controller-event-accumulator-v1` | Pending-key protection, duplicate-start handling and final Signal fences during controller rollover |
 | `controller-messaging-v1` | Successful Updates request main-loop rollover and Safe Apply producer controls cannot override generation suspension |
+| `controller-spawn-backoff-v1` (dormant this release) | A failed start waits behind the queue with backoff and is dead-lettered after its fifth failure, instead of retrying at the head every 5 seconds |
 | Existing controller durable-queue markers | Preserve the recorded overflow/spill command paths |
 
 New markers are recorded at the relevant runtime command paths, not in
@@ -478,6 +495,7 @@ event durability, messaging and chat/UI contracts:
 | [Generation SDK integration](../server/tests/temporal/test_generation_execution_control_integration.py) | Attached graph/agent children, cron roots and jobs, late enrollment, detached lifetime and controller rollover |
 | [Accumulator unit tests](../server/tests/temporal/test_controller_accumulator.py) and [SDK integration](../server/tests/temporal/test_controller_accumulator_integration.py) | Signals during spill and handler fences, pending-key eviction, restored FIFO, duplicate child start, transient retry, Reset, restart and pre-marker replay |
 | [Messaging unit tests](../server/tests/temporal/test_controller_messaging.py) and [SDK integration](../server/tests/temporal/test_controller_messaging_integration.py) | Malformed Updates rejected before acceptance without Workflow Task failure, valid subsequent messages, Update-only rollover, Safe Apply guards and replay |
+| [Queue unit tests](../server/tests/temporal/test_controller_queue.py) and [spawn backoff SDK integration](../server/tests/temporal/test_controller_spawn_backoff_integration.py) | Head-of-line retry without the backoff marker (dormant, no marker recorded), backoff behind the queue, dead-letter rows never read back, spilled pages behind a waiting start, Reset's cleanup and replay |
 | [Versioned handler tests](../server/tests/services/test_versioned_workflow_control.py) | Timeout keeps intent closed, Resume ordering/deadline metadata, missing controller fail-closed and owning-generation guard |
 | [Chat Stop](../server/tests/services/chat/test_stop.py) and [watchdog](../server/tests/services/chat/test_watchdog.py) | Controlled run identity/lane retention, legacy terminal Stop, long-pause protection and fresh resumed age window |
 
@@ -485,7 +503,7 @@ Run from `server/` after the normal dependency setup:
 
 ```bash
 uv run pytest -q -p no:cacheprovider tests/temporal/test_execution_control.py tests/temporal/test_controller_accumulator.py tests/temporal/test_controller_messaging.py tests/services/test_versioned_workflow_control.py
-uv run pytest -q -p no:cacheprovider tests/temporal/test_agent_execution_control_integration.py tests/temporal/test_execution_control_replay.py tests/temporal/test_generation_execution_control_integration.py tests/temporal/test_controller_accumulator_integration.py tests/temporal/test_controller_messaging_integration.py
+uv run pytest -q -p no:cacheprovider tests/temporal/test_agent_execution_control_integration.py tests/temporal/test_execution_control_replay.py tests/temporal/test_generation_execution_control_integration.py tests/temporal/test_controller_accumulator_integration.py tests/temporal/test_controller_messaging_integration.py tests/temporal/test_controller_spawn_backoff_integration.py
 uv run pytest -q tests/temporal/test_agent_workflow.py tests/temporal/test_controller_queue.py tests/services/chat
 ```
 

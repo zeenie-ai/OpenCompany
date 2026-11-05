@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import nodes  # noqa: F401 -- populate the node registry
+from services.temporal.patches import activate_patch
 
 
 def _settings(
@@ -214,6 +215,32 @@ async def test_create_worker_registers_plugin_and_pause_activities(
     # The same registration as the manager's (1b.36): the cron workflow
     # arrives through the plugins.
     assert captured["plugins"] == worker_module.temporal_plugins()
+    # New runs keep this release's dormant patches off (RFC-0006 §18.9).
+    assert captured["patch_activation_callback"] is activate_patch
+
+
+@pytest.mark.asyncio
+async def test_the_manager_worker_keeps_dormant_patches_off(monkeypatch):
+    import temporalio.worker._worker as sdk_worker
+    from services.temporal import worker as worker_module
+
+    captured = {}
+
+    def fake_worker(_client, **kwargs):
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(worker_module, "Worker", fake_worker)
+    monkeypatch.setattr(worker_module, "_main_queue_activities", lambda _client, _execute: [])
+    monkeypatch.setattr(worker_module, "_graceful_shutdown_timeout", lambda: timedelta(seconds=1))
+    monkeypatch.setattr(worker_module, "_worker_identity", lambda queue: queue)
+    monkeypatch.setattr(worker_module, "_sticky_cache_size", lambda: 1)
+    monkeypatch.setattr(sdk_worker, "load_default_build_id", lambda: "build")
+    manager = worker_module.TemporalWorkerManager(MagicMock())
+    manager._activities = SimpleNamespace(execute_node_activity=object())
+    await manager._build_worker()
+    assert captured["workflows"]
+    assert captured["patch_activation_callback"] is activate_patch
 
 
 @pytest.mark.asyncio
@@ -297,6 +324,7 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     assert plugin_activity in captured["activities"]
     assert pause_workflow_on_failure_activity in captured["activities"]
     assert captured["plugins"] == worker_module.temporal_plugins()
+    assert captured["patch_activation_callback"] is activate_patch
     assert connect.await_args.kwargs["namespace"] == "tenant-ns"
     assert captured["task_queue"] == "tenant-queue"
     session.close.assert_awaited_once()

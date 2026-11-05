@@ -1,7 +1,9 @@
 """Long-lived deployment controller and trigger hub for one generation."""
 
 import asyncio
-from datetime import timedelta
+import hashlib
+import json
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from temporalio import workflow
@@ -37,6 +39,18 @@ _MAX_CARRIED_SEEN_IDS = 4_096
 # applies but workflow payloads historically did not.
 _MIN_POLL_INTERVAL_S = 30
 _CAN_INPUT_MAX_BYTES = 1_900_000
+# Under controller-spawn-backoff-v1 a spawn that fails (a duplicate start
+# with the accumulator is not a failure) is tried again after these delays,
+# behind the rest of the queue; the failure after the last delay
+# dead-letters the event (RFC-0006 §11.6 rec 2, §7.4 A1). The attempt count
+# and the retry time ride on the event, so continue-as-new and spills keep
+# them; the child run never sees them.
+_SPAWN_RETRY_DELAYS = (timedelta(seconds=5), timedelta(seconds=30), timedelta(minutes=2), timedelta(minutes=10))
+# Only the backoff writes these keys: a push event's content sits under
+# "data", and a poll item is the record its trigger's fetch_detail builds. So
+# a history recorded without the marker holds neither, and replays on the old
+# paths.
+_SPAWN_FIELDS = ("_spawn_attempts", "_spawn_retry_at")
 
 
 class _AdmissionDeferred(Exception):
@@ -366,12 +380,38 @@ class WorkflowControlWorkflow:
         self._maybe_request_rollover()
 
     def _next_event(self) -> Optional[int]:
+        # Without a failed spawn waiting this is the head when running, and
+        # the first review event while draining.
         if self._state == "running" and self._events:
-            return 0
+            return next((index for index, (_, event) in enumerate(self._events) if self._spawn_due(event)), None)
         if self._state == "paused" and self._drain_tasks:
-            return next((index for index, (listener_id, _) in enumerate(self._events)
-                if (self._triggers.get(listener_id, {}).get("listener_args") or {}).get("node_type") == "taskTrigger"), None)
+            return next((index for index, (listener_id, event) in enumerate(self._events)
+                if (self._triggers.get(listener_id, {}).get("listener_args") or {}).get("node_type") == "taskTrigger"
+                and self._spawn_due(event)), None)
         return None
+
+    @staticmethod
+    def _spawn_due(event: Dict[str, Any]) -> bool:
+        """False while a failed spawn waits for its retry time."""
+        retry_at = event.get("_spawn_retry_at")
+        return retry_at is None or datetime.fromisoformat(retry_at) <= workflow.now()
+
+    def _next_retry_at(self) -> Optional[datetime]:
+        """The earliest retry time still ahead, or None when no failed spawn
+        waits; the main loop then waits exactly as before."""
+        retry_times = [datetime.fromisoformat(event["_spawn_retry_at"])
+            for _, event in self._events if "_spawn_retry_at" in event]
+        if not retry_times:
+            return None
+        now = workflow.now()
+        return min((retry_at for retry_at in retry_times if retry_at > now), default=None)
+
+    def _prefix_waits(self) -> bool:
+        # True when every event in the durable prefix is a failed spawn
+        # waiting for its retry time: the main loop then reads the spilled
+        # pages behind them. Never true without a failed spawn waiting.
+        prefix = self._events[:self._durable_prefix]
+        return bool(prefix) and not any(self._spawn_due(event) for _, event in prefix)
 
     @workflow.query
     def status(self) -> Dict[str, Any]:
@@ -402,9 +442,13 @@ class WorkflowControlWorkflow:
         self._seed_carried_state(control_data)
         queue_v2 = workflow.patched("controller-durable-queue-v2")
         accumulator_v1 = self._accumulator_enabled()
+
+        def ready() -> bool:
+            return self._closed or self._can_requested or self._next_event() is not None
+
         while not self._closed:
             read_reviews = queue_v2 and self._state == "paused" and self._drain_tasks and self._next_event() is None and not self._review_overflow_checked
-            if self._overflow and ((queue_v2 and self._state == "running" and self._durable_prefix == 0) or read_reviews or (not queue_v2 and not self._events)):
+            if self._overflow and ((queue_v2 and self._state == "running" and (self._durable_prefix == 0 or self._prefix_waits())) or read_reviews or (not queue_v2 and not self._events)):
                 self._queue_reads += 1
                 page = await workflow.execute_activity("controller.queue.read", {
                     "controller_id": workflow.info().workflow_id,
@@ -438,13 +482,25 @@ class WorkflowControlWorkflow:
                 else:
                     self._events.extend(incoming)
                 self._overflow = page["more"]
-            await workflow.wait_condition(
-                lambda: (
-                    self._closed
-                    or self._can_requested
-                    or self._next_event() is not None
-                )
-            )
+            if queue_v2 and self._overflow and self._state == "running" and self._prefix_waits():
+                # Every event read so far waits for a retry time: read the
+                # next page now rather than at that time. No event starts
+                # between these reads, so check the history here; a rollover
+                # it asks for comes first.
+                self._maybe_request_rollover()
+                if not self._can_requested:
+                    continue
+            retry_at = self._next_retry_at()
+            if retry_at is None or ready():
+                await workflow.wait_condition(ready)
+            else:
+                # Nothing can run now and a failed spawn waits: wake for a
+                # new event or control change, or when the first failed spawn
+                # may be tried again. Timers are not accurate below a second.
+                try:
+                    await workflow.wait_condition(ready, timeout=max(retry_at - workflow.now(), timedelta(seconds=1)))
+                except asyncio.TimeoutError:
+                    continue
             if self._closed:
                 break
             if self._can_requested:
@@ -489,9 +545,14 @@ class WorkflowControlWorkflow:
                         f"Controller push spawn failed for event.id={event.get('id')}: {exc}"
                     )
                 if queue_v2 and not accepted:
-                    self._events.insert(0, (listener_id, event))
-                    self._durable_prefix += 1
-                    await workflow.sleep(timedelta(seconds=5))
+                    if workflow.patched("controller-spawn-backoff-v1"):
+                        accepted = await self._retry_later_or_dead_letter(listener_id, event, exc)
+                    else:
+                        # Histories without the marker: the event goes back
+                        # to the head and is tried every 5 s.
+                        self._events.insert(0, (listener_id, event))
+                        self._durable_prefix += 1
+                        await workflow.sleep(timedelta(seconds=5))
             if accumulator_v1 and accepted:
                 self._finish_pending_event(listener_id, event)
             self._maybe_request_rollover()
@@ -635,26 +696,9 @@ class WorkflowControlWorkflow:
             prefix_count = self._durable_prefix if self._overflow else len(self._events)
             prefix = self._events[:prefix_count]
             chunks = list(event_batches(prefix, max_events=_MAX_CARRIED_EVENTS))
-            import json
-            import hashlib
-            async def spill(batch, prepend=False):
-                base = {"controller_id": workflow.info().workflow_id, "prepend": prepend}
-                async def invoke(payload):
-                    await workflow.execute_activity("controller.queue.spill", payload, start_to_close_timeout=timedelta(seconds=60), retry_policy=QUEUE_PAGING_RETRY)
-                if len(batch) == 1:
-                    encoded = json.dumps(batch[0], separators=(",", ":"), ensure_ascii=True)
-                    if len(encoded.encode()) > 512_000:
-                        listener_id, event = batch[0]
-                        key = hashlib.sha256(f'{base["controller_id"]}:{listener_id}:{event["id"]}'.encode()).hexdigest()
-                        pieces = [encoded[index:index + 200_000] for index in range(0, len(encoded), 200_000)]
-                        for index, piece in enumerate(pieces):
-                            await invoke({**base, "chunk_id": key, "index": index, "chunk": piece})
-                        await invoke({**base, "chunk_id": key, "count": len(pieces)})
-                        return
-                await invoke({**base, "events": batch})
             carry = chunks[0] if chunks and len(json.dumps(chunks[0]).encode()) <= 512_000 else []
             for batch in reversed(chunks[1:] if carry else chunks):
-                await spill(batch, prepend=True)
+                await self._spill(batch, prepend=True)
                 self._overflow = True
                 if accumulator_v1 and self._closed:
                     return
@@ -667,7 +711,7 @@ class WorkflowControlWorkflow:
                     while cursor < len(self._events):
                         tail_end = len(self._events)
                         for batch in event_batches(self._events[cursor:tail_end]):
-                            await spill(batch)
+                            await self._spill(batch)
                             self._overflow = True
                             if self._closed:
                                 return
@@ -679,7 +723,7 @@ class WorkflowControlWorkflow:
                         break
             else:
                 for batch in event_batches(self._events[prefix_count:]):
-                    await spill(batch)
+                    await self._spill(batch)
                     self._overflow = True
         else:
             durable_queue = workflow.patched("controller-durable-overflow-v1")
@@ -729,6 +773,27 @@ class WorkflowControlWorkflow:
         )
         workflow.continue_as_new(args=[carried])
 
+    async def _spill(self, batch: list, *, prepend: bool = False, controller_id: Optional[str] = None) -> None:
+        """Write a batch to ``controller.queue.spill`` rows: this controller's
+        queue, or ``controller_id``'s. One event over 512 KB goes in 200 KB
+        chunks, so no payload passes 512 KB."""
+        base = {"controller_id": controller_id or workflow.info().workflow_id, "prepend": prepend}
+
+        async def invoke(payload):
+            await workflow.execute_activity("controller.queue.spill", payload, start_to_close_timeout=timedelta(seconds=60), retry_policy=QUEUE_PAGING_RETRY)
+
+        if len(batch) == 1:
+            encoded = json.dumps(batch[0], separators=(",", ":"), ensure_ascii=True)
+            if len(encoded.encode()) > 512_000:
+                listener_id, event = batch[0]
+                key = hashlib.sha256(f'{base["controller_id"]}:{listener_id}:{event["id"]}'.encode()).hexdigest()
+                pieces = [encoded[index:index + 200_000] for index in range(0, len(encoded), 200_000)]
+                for index, piece in enumerate(pieces):
+                    await invoke({**base, "chunk_id": key, "index": index, "chunk": piece})
+                await invoke({**base, "chunk_id": key, "count": len(pieces)})
+                return
+        await invoke({**base, "events": batch})
+
     def _upsert_event_types_attribute(self) -> None:
         """Advertise push event types via the ControlEventTypes attribute.
 
@@ -766,12 +831,33 @@ class WorkflowControlWorkflow:
 
     # ---- spawning -------------------------------------------------------
 
+    async def _retry_later_or_dead_letter(self, listener_id: str, event: Dict[str, Any], exc: Exception) -> bool:
+        """Count a failed spawn on the event and queue it behind every other
+        event until its retry time. After the last delay, write it to the
+        dead rows instead and return True: the queue moves on."""
+        attempts = int(event.get("_spawn_attempts", 0)) + 1
+        if attempts <= len(_SPAWN_RETRY_DELAYS):
+            retry_at = workflow.now() + _SPAWN_RETRY_DELAYS[attempts - 1]
+            self._events.append((listener_id, {**event, "_spawn_attempts": attempts, "_spawn_retry_at": retry_at.isoformat()}))
+            return False
+        from services.temporal.controller_queue import dead_letter_id
+
+        dead = {key: value for key, value in event.items() if key != "_spawn_retry_at"}
+        await self._spill([[listener_id, {**dead, "_spawn_attempts": attempts, "_dead_reason": type(exc).__name__}]],
+                          controller_id=dead_letter_id(workflow.info().workflow_id))
+        workflow.logger.error(
+            f"Controller dead-lettered event.id={event.get('id')} after {attempts} failed spawns: {type(exc).__name__}"
+        )
+        return True
+
     async def _spawn_push_run(self, event: Dict[str, Any], spec: Dict[str, Any]) -> None:
         from services.temporal.trigger_listener_workflow import (
             TriggerListenerWorkflow,
             event_workflow_search_attributes,
         )
 
+        # The run sees the event as it arrived, without the retry bookkeeping.
+        event = {key: value for key, value in event.items() if key not in _SPAWN_FIELDS}
         listener = TriggerListenerWorkflow()
         listener_args = spec["listener_args"]
         if self._execution_control.enabled:

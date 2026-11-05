@@ -68,6 +68,19 @@ def test_patch_markers_move_to_deprecated_before_they_vanish():
     assert not vanished, f"Patch markers removed without a release of deprecate_patch: {sorted(vanished)}"
 
 
+def test_dormant_patches_name_patch_markers_in_the_code():
+    """RFC-0006 §18.9: a new patch ships dormant for one release
+    (``services/temporal/patches.py``). A dormant id that names no
+    ``workflow.patched`` marker keeps nothing off, and the marker it meant
+    would start on new runs at once."""
+    from temporalio.worker import PatchActivationInput
+
+    from services.temporal.patches import DORMANT_PATCHES, activate_patch
+
+    assert DORMANT_PATCHES <= _markers(identity_snapshot(), "patched")
+    assert not any(activate_patch(PatchActivationInput(workflow_info=None, patch_id=patch_id)) for patch_id in DORMANT_PATCHES)
+
+
 def test_the_marker_rule_allows_deprecation_and_catches_removal():
     def snapshot(*commands):
         return {"m.py": {"commands": [{"command": command, "type": f'"{marker}"'} for command, marker in commands]}}
