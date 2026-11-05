@@ -192,8 +192,10 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
     retried = False
     for attempt in range(2):
         remaining = deadline - time.monotonic()
-        if attempt == 1 and remaining < MIN_RETRY_SECONDS:
-            break
+        if attempt == 1:
+            if remaining < MIN_RETRY_SECONDS:
+                break
+            retried = True
         try:
             response = await employees_chat(container.chat_unifier(), auth_service, choice, messages, timeout=remaining, principal=owner)
         except asyncio.TimeoutError:
@@ -216,7 +218,6 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
         if usable and not truncated:
             break
         if attempt == 0:
-            retried = True
             messages = _with_nudge(messages, nudge)
 
     logger.info(

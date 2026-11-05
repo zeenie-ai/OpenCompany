@@ -181,6 +181,16 @@ async def test_two_unreadable_replies_fail_as_unparseable(harness):
     assert len(harness.unifier.calls) == 2
 
 
+async def test_no_retry_when_too_little_time_is_left_and_none_is_reported(harness, monkeypatch):
+    # The whole budget is shorter than a retry needs (MIN_RETRY_SECONDS).
+    monkeypatch.setattr("services.employees.llm.CLOUD_BUDGET_SECONDS", setup.MIN_RETRY_SECONDS - 5)
+    harness.choice = LLMChoice(provider="openai", model="gpt-x", local=False)
+    harness.unifier = FakeUnifier("Sorry, no.", "Still no.")
+    result = await generate()
+    assert result == {"success": False, "error": "unparseable", "draft_token": "t1", "retried": False}
+    assert len(harness.unifier.calls) == 1
+
+
 async def test_a_readable_but_cut_off_reply_survives_a_failed_retry(harness):
     cut = GOOD[: GOOD.index('"e":{"type":"Stack"')]
     harness.unifier = FakeUnifier((cut, "max_tokens"), NodeUserError("rate limited"))
