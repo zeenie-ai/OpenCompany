@@ -56,13 +56,31 @@ def test_a_form_that_names_no_one_draws_nothing():
 
 
 def test_ask_first_is_there_once_and_on_and_the_other_rules_are_capped():
-    rules = [{"label": "Ask first before you send", "value": False}] + [{"label": f"Rule {n}", "value": n % 2 == 0} for n in range(5)]
+    rules = [{"label": "  ask me before SENDING anything ", "value": False}] + [{"label": f"Rule {n}", "value": n % 2 == 0} for n in range(5)]
     reply = fill_form(form(rules=rules), JOB)
     drawn = elements(reply)
     toggles = [element["props"]["label"] for element in drawn.values() if element["type"] == "Toggle"]
     assert toggles == ["Ask me before sending anything", "Rule 0", "Rule 1", "Rule 2"]
     assert len(toggles) == MAX_RULES + 1
     assert parse_reply(reply).spec["state"] == {"rules": {"askFirst": True, "rule1": True, "rule2": False, "rule3": True}}
+
+
+def test_a_rule_that_only_mentions_asking_is_kept():
+    rules = [{"label": "Ask for a deposit before booking", "value": True}, {"label": "Ask clarifying questions first", "value": False}]
+    reply = fill_form(form(rules=rules), JOB)
+    toggles = [element["props"]["label"] for element in elements(reply).values() if element["type"] == "Toggle"]
+    assert toggles == ["Ask me before sending anything", "Ask for a deposit before booking", "Ask clarifying questions first"]
+    assert fields_from_reply(reply)["rules"] == rules
+
+
+def test_the_trigger_goes_to_the_hire_button_as_the_model_wrote_it():
+    # The client snaps it to a schedule the server runs, as for a written
+    # screen: "8:00" becomes 08:00 there, never 09:00 here.
+    schedule = {"kind": "schedule", "every": "weekday", "at": "8:00", "note": {"x": 1}}
+    hire = elements(fill_form(form(trigger=schedule), JOB))["hire"]["on"]["press"]["params"]
+    assert hire["trigger"] == {"kind": "schedule", "every": "weekday", "at": "8:00"}
+    # A trigger of no known kind is left out: the client picks one.
+    assert "trigger" not in elements(fill_form(form(trigger={"kind": "sometimes"}), JOB))["hire"]["on"]["press"]["params"]
 
 
 def test_a_cut_off_form_is_read_up_to_where_it_stops():

@@ -171,7 +171,7 @@ function fieldsText(m: HireManifest): string {
     '"steps": their routine, 3-5 steps; the first has role "trigger" (e.g. "When a message arrives", "Every ' +
       'weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app names it in "app".',
     '"rules": 1-3 ground rules the owner can turn on or off, each a short label and whether it starts on. ' +
-      `Leave out "${m.ask_first_label}": it is always there.`,
+      `Leave out "${m.ask_first_label}": it is always there, and the owner turns it on or off on the card.`,
     `${triggerRule(m)} "sends_via" is the app they answer or report through.`,
     'Keep it compact: single-line minified JSON, every string under 70 characters, step details under 8 words.',
     'When asked to change the setup, return the full updated JSON in the same format.',

@@ -19,7 +19,6 @@ nothing, and costs the one retry ``setup.py`` allows.
 from __future__ import annotations
 
 import json
-import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -42,9 +41,9 @@ FORM_RETRY_NUDGE = (
 
 #: The most ground rules the card shows besides "Ask me before sending anything".
 MAX_RULES = 3
-#: A rule worded like "Ask me before sending anything", which the card always
-#: has (the client's normalize.ts reads the same wording).
-_ASK_FIRST_WORDING = re.compile(r"\bask\b.*\b(before|first)\b", re.IGNORECASE)
+#: What a trigger may say; the client snaps its values to a schedule the
+#: server runs (genui/hirePayload.ts snapTrigger), as it does a written screen's.
+_TRIGGER_KEYS = ("kind", "app", "every", "at", "day")
 _TEXT_MAX = 400
 
 
@@ -85,6 +84,13 @@ def _paths() -> Dict[str, str]:
     return load_genui_catalog()["state_paths"]
 
 
+def _is_ask_first(label: Any) -> bool:
+    """The "Ask me before sending anything" rule itself, which the card always
+    has. Only that wording: "Ask for a deposit before booking" is a rule."""
+    wording = load_genui_catalog()["ask_first_label"]
+    return isinstance(label, str) and " ".join(label.split()).casefold() == wording.casefold()
+
+
 def _bound_value(bound: Any, state: Any) -> bool:
     """A Toggle's value: written out, or read from the state at its path."""
     if isinstance(bound, bool):
@@ -114,7 +120,7 @@ def fields_from_reply(raw: str) -> Dict[str, Any]:
             bound = props.get("checked", props.get("value"))
             label = props.get("label")
             path = bound.get("$bindState") if isinstance(bound, dict) else None
-            if isinstance(label, str) and path != ask_first and not _ASK_FIRST_WORDING.search(label):
+            if isinstance(label, str) and path != ask_first and not _is_ask_first(label):
                 rules.append({"label": label, "value": _bound_value(bound, state)})
         elif kind == "Button" and element["press"][0] == "hire_employee":
             params = element["press"][1]
@@ -155,11 +161,16 @@ def fill_form(raw: Any, job: str) -> str:
 
     paths = _paths()
     rules_key = paths["rules"].strip("/")
-    kept = [item for item in hire.rules.items if item.label and not _ASK_FIRST_WORDING.search(item.label)][:MAX_RULES]
+    kept = [item for item in hire.rules.items if item.label and not _is_ask_first(item.label)][:MAX_RULES]
     toggles = {f"rule{n}": item for n, item in enumerate(kept, 1)}
     params: Dict[str, Any] = {"name": hire.name, "role": hire.role, "apps": hire.apps}
     if hire.trigger is not None:
-        params["trigger"] = hire.trigger.model_dump(exclude_none=True)
+        trigger = fields["trigger"]
+        params["trigger"] = {
+            key: str(trigger[key])[:40]
+            for key in _TRIGGER_KEYS
+            if isinstance(trigger.get(key), (str, int)) and not isinstance(trigger.get(key), bool)
+        }
     if hire.sends_via:
         params["sendsVia"] = hire.sends_via
 

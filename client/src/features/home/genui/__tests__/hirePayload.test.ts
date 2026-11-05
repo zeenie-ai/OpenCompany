@@ -65,6 +65,27 @@ describe('buildHirePayload', () => {
     expect(fitsHireLimit(payload)).toBe(true);
   });
 
+  it('hires the card the server draws while Generated UI is off', () => {
+    const drawn = specOf('fixed form the server draws while Generated UI is off');
+    const payload = buildHirePayload({ spec: drawn, state: drawn.state, params: hireParams(drawn), job: 'Answer WhatsApp', idempotencyKey: 'k2', core });
+    expect(payload).toMatchObject({
+      name: 'Maya',
+      role: 'Receptionist',
+      description: 'Answers WhatsApp and books visits.',
+      apps: ['WhatsApp', 'Google Calendar'],
+      rules: { ask_first: true, items: [{ key: 'rule1', label: 'Only reply 9 to 6', value: false }] },
+      choices: [],
+      inputs: [],
+      trigger: { kind: 'app_event', app: 'WhatsApp' },
+      sends_via: 'WhatsApp',
+    });
+    expect(payload.steps).toEqual([
+      { title: 'When a message arrives', detail: 'On WhatsApp', role: 'trigger', app: 'WhatsApp' },
+      { title: 'Answer the question', detail: 'Using your notes', role: 'agent' },
+      { title: 'Book the visit', detail: 'In your calendar', role: 'tool', app: 'Google Calendar' },
+    ]);
+  });
+
   it('follows the owner’s toggles and choices', () => {
     let state = writePath(spec.state, STATE_PATHS.askFirst, false);
     state = writePath(state, '/rules/hours', true);
