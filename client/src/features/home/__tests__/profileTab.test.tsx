@@ -1,8 +1,8 @@
 /**
- * Settings > Profile: the two behaviour switches are ink (they show a
- * setting, not a status), and Save changes is the page's one primary
- * action, the invert button: disabled while the save is under way, then
- * the same button pulses.
+ * Settings > Profile: the behaviour switches are ink (they show a setting,
+ * not a status), and Save changes is the page's one primary action, the
+ * invert button: disabled while the save is under way, then the same button
+ * pulses. A save sends only what was changed on the page.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,12 +45,25 @@ beforeEach(() => {
 describe('ProfileTab', () => {
   it('shows the behaviour switches in ink', async () => {
     await renderTab();
-    for (const name of ['Memory across chats', 'Keep everything on this computer']) {
+    for (const name of ['Memory across chats', 'Keep everything on this computer', 'Generated UI']) {
       const toggle = screen.getByRole('switch', { name });
       expect(toggle).toHaveClass('data-checked:bg-fg-default');
       expect(toggle.className).not.toMatch(/action-run/);
       expect(toggle.querySelector('[data-slot="switch-thumb"]')).toHaveClass('data-checked:bg-bg-app');
     }
+  });
+
+  it('sends only what was changed on the page', async () => {
+    await renderTab();
+    const toggle = screen.getByRole('switch', { name: 'Generated UI' });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('save_user_settings', expect.anything()));
+    const [, payload] = sendRequest.mock.calls.find(([type]) => type === 'save_user_settings')!;
+    // The browser's timezone always rides along; nothing else was touched.
+    const { profile_timezone: _zone, ...sent } = payload.settings;
+    expect(sent).toEqual({ generated_ui: true });
   });
 
   it('saves with the invert button, disabled while saving, then pulses it', async () => {

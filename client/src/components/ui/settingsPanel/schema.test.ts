@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   TOOL_RESULT_MAX_CHARS_RANGE,
+  changedRow,
   defaultSettings,
   fromServerRow,
   toServerRow,
@@ -29,6 +30,13 @@ describe('workflow settings schema', () => {
     expect(fromServerRow({ generated_ui: true }).generatedUi).toBe(true);
     expect(fromServerRow({ compaction_ratio: 0.5 }).generatedUi).toBe(false);
     expect(defaultSettings.generatedUi).toBe(false);
+  });
+
+  it('saves only the keys a change touches', () => {
+    // A stale copy of Generated UI (Home may have changed it) is not sent back.
+    expect(changedRow(defaultSettings, { ...defaultSettings, autoSaveInterval: 45 })).toEqual({ auto_save_interval: 45 });
+    expect(changedRow(defaultSettings, { ...defaultSettings, generatedUi: true })).toEqual({ generated_ui: true });
+    expect(changedRow(defaultSettings, defaultSettings)).toEqual({});
   });
 
   it('defaults the tool result limit for a row saved before it existed', () => {

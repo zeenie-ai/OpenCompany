@@ -70,7 +70,9 @@ export function useSaveProfile() {
   const mutation = useSaveUserSettingsMutationCore(sendRequest);
   return {
     ...mutation,
-    saveProfile: (form: ProfileForm) => {
+    /** Saves only the fields given (what the owner changed), so a setting
+     *  saved meanwhile in another window stays as it is. */
+    saveProfile: (form: Partial<ProfileForm>) => {
       const zone = browserTimezone();
       return mutation.mutateAsync({ ...form, ...(zone ? { profile_timezone: zone } : {}) });
     },

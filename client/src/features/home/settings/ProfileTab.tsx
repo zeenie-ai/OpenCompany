@@ -55,10 +55,15 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
 
   const fullName = useWatch({ control: form.control, name: 'profile_full_name' });
   const calledAs = (useWatch({ control: form.control, name: 'profile_call_name' }) || fullName || '').trim();
+  // Read while rendering, so the form keeps track of it.
+  const { dirtyFields } = form.formState;
 
   const onSubmit = async (values: ProfileForm) => {
+    // Only what was changed here: Dev's Settings panel shows Generated UI
+    // too, and a value saved there meanwhile must not be written back.
+    const changed = Object.fromEntries(Object.entries(values).filter(([name]) => dirtyFields[name as keyof ProfileForm]));
     try {
-      await saveProfile(values);
+      await saveProfile(changed);
       form.reset(values);
       setSaved(true);
       animate(saveRef.current, [{ transform: 'scale(1)' }, { transform: 'scale(1.06)', offset: 0.4 }, { transform: 'scale(1)' }], {

@@ -24,6 +24,7 @@ import {
 } from '../../hooks/useUserSettingsQuery';
 import {
   workflowSettingsSchema,
+  changedRow,
   defaultSettings,
   fromServerRow,
   toServerRow,
@@ -129,7 +130,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, settingsQuery.data]);
 
-  const persist = async (next: WorkflowSettings, withToast: boolean) => {
+  const persist = async (next: WorkflowSettings, withToast: boolean, previous?: WorkflowSettings) => {
     // Validate before persisting so an out-of-range field never reaches
     // the server. Surface zod errors as a toast and refuse the save.
     const parsed = workflowSettingsSchema.safeParse(next);
@@ -138,8 +139,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
       toast.error(message);
       return;
     }
+    // A change saves only what it changed; Save and Reset save the whole row.
+    const row = previous ? changedRow(previous, parsed.data) : toServerRow(parsed.data);
+    if (Object.keys(row).length === 0) return;
     try {
-      await saveMutation.mutateAsync(toServerRow(parsed.data));
+      await saveMutation.mutateAsync(row);
       if (withToast) toast.success('Settings saved successfully');
     } catch (error) {
       console.error('[SettingsPanel] Failed to save settings:', error);
@@ -150,7 +154,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const handleChange = (key: keyof WorkflowSettings, value: number | boolean) => {
     const next = { ...settings, [key]: value } as WorkflowSettings;
     onSettingsChange(next);
-    void persist(next, false);
+    void persist(next, false, settings);
   };
 
   const handleReset = async () => {
@@ -262,7 +266,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </Row>
             <Row
               label="Generated UI"
-              description="Lets agents show forms, buttons and follow-up questions in chat (the Show UI node), and Home draw a setup screen for each hire. Uses more tokens. Same switch as Home > Settings > Profile."
+              description="Lets agents show forms and buttons in chat (the Show UI node) and suggest follow-up questions, and lets Home draw a setup screen for each hire. Uses more tokens. Same switch as Home > Settings > Profile."
             >
               <Switch
                 checked={settings.generatedUi}
