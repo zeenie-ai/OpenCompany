@@ -157,6 +157,8 @@ describe('CredentialsBrowser', () => {
     state.isError = true;
     render(<ThemeProvider><CredentialsBrowser catalogue={state} onConnect={vi.fn()} /></ThemeProvider>);
     expect(screen.getByText("Couldn't load connectors")).toBeInTheDocument();
+    // Neutral: quiet with a border, not outline (whose dark: rules beat a caller's classes).
+    expect(screen.getByRole('button', { name: 'Try again' })).toHaveClass('border-border-default', 'text-fg-default');
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(state.refetch).toHaveBeenCalledTimes(1);
   });

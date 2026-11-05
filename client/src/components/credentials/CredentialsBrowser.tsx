@@ -161,7 +161,9 @@ function CredentialsBrowserContent({
       <Alert variant="destructive" className="m-8 w-auto">
         <AlertTitle>Couldn't load connectors</AlertTitle>
         <AlertDescription>Check your connection and try again.</AlertDescription>
-        <Button variant="outline" onClick={() => void refetch()}>Try again</Button>
+        <Button variant="quiet" onClick={() => void refetch()} className="border-border-default text-fg-default">
+          Try again
+        </Button>
       </Alert>
     );
   }
