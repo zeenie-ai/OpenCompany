@@ -3,10 +3,12 @@
 # desktop failure never blocks the package release and the strings that
 # cli/tests/test_release_pipeline_config.py locks stay untouched.
 #
-# Unsigned first release: no certificates are read here. Signing is wired
-# later purely through secrets (CSC_LINK / CSC_KEY_PASSWORD for Windows,
-# APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID + a Developer ID
-# cert for macOS) plus flipping the mac flags in desktop/electron-builder.yml.
+# No certificates are read here: macOS is signed ad-hoc and Windows is
+# unsigned (desktop/electron-builder.yml says why). The macOS leg checks the
+# signature of the app inside the DMG and the zip, because an app without a
+# sealed signature is "damaged" to macOS once downloaded (issue #154), and
+# finalize publishes nothing until every leg passes. What Developer ID
+# signing needs is in docs-internal/desktop_app.md ("Signing and updates").
 #
 # Flow: prepare drafts the GitHub Release from the annotated tag's message
 # (first line = title, rest = notes) -> each matrix leg builds the client +
@@ -170,11 +172,36 @@ jobs:
         working-directory: desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Unsigned: never let electron-builder go looking for a cert.
+          # No certificate is used (macOS signs ad-hoc): never let
+          # electron-builder pick one from the keychain on its own.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           PUBLISH: ${{ (github.event_name == 'push' || inputs.publish) && 'always' || 'never' }}
         run: bun run dist -- ${{ matrix.builder_args }} --publish $PUBLISH
         shell: bash
+
+      # The check that would have caught issue #154. macOS calls a downloaded
+      # app "damaged" unless its signature seals the whole bundle, which is
+      # what `codesign --verify --deep --strict` checks. It runs on the app
+      # inside the DMG and the zip users download, not only the build folder;
+      # a failure keeps finalize from publishing the draft.
+      - name: Verify the macOS app signature
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify() {
+            codesign --verify --deep --strict --verbose=2 "$1"
+            codesign --display --verbose=1 "$1"
+          }
+          verify release/mac-arm64/OpenCompany.app
+          dmg_mount="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$dmg_mount" release/OpenCompany-macos-arm64.dmg
+          verify "$dmg_mount/OpenCompany.app"
+          hdiutil detach "$dmg_mount"
+          zip_dir="$(mktemp -d)"
+          ditto -x -k release/OpenCompany-macos-arm64.zip "$zip_dir"
+          verify "$zip_dir/OpenCompany.app"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -9,11 +9,13 @@
 # macro selects the per-target runtime dir so one config serves every
 # platform.
 #
-# Unsigned first release: mac identity null (skips signing; Electron's own
-# ad-hoc signature keeps the arm64 binary launchable), hardened runtime and
-# notarization off, no Windows certificate. Signing is added later purely
-# through CI secrets (CSC_LINK / CSC_KEY_PASSWORD, APPLE_ID / APPLE_APP_
-# SPECIFIC_PASSWORD / APPLE_TEAM_ID) plus flipping the three mac flags.
+# macOS is signed ad-hoc (mac.identity "-"), which needs no certificate.
+# Skipping signing (identity null, up to v0.3.1) shipped Electron's binaries
+# with only their linker signatures and no sealed bundle, and macOS called
+# the downloaded app damaged, with no way to open it (issue #154). An ad-hoc
+# seal turns that into the usual first-launch approval. Hardened runtime and
+# notarization stay off and Windows has no certificate; what a Developer ID
+# build needs is in docs-internal/desktop_app.md ("Signing and updates").
 
 appId: ai.zeenie.opencompany
 productName: OpenCompany
@@ -80,9 +82,15 @@ mac:
       arch: [arm64]
   icon: build/icon.png
   artifactName: ${productName}-macos-${arch}.${ext}
-  identity: null
+  identity: "-" # ad-hoc; see the header
+  # The bundled runtimes keep the signatures they ship with: uv and bun are
+  # signed and notarized by their makers, CPython by its linker. The app's
+  # seal still covers every file under Resources by content hash (macOS
+  # seals Contents/Resources as data), so re-signing them would only swap
+  # uv's and bun's notarized signatures for ad-hoc ones.
+  signIgnore:
+    - "/Contents/Resources/(app-root|runtime)/"
   hardenedRuntime: false
-  gatekeeperAssess: false
   notarize: false
   darkModeSupport: true
 dmg:

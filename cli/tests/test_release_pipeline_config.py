@@ -871,6 +871,34 @@ def test_desktop_release_refuses_a_version_that_does_not_match_the_tag(
     assert "exit 1" in guard["run"]
 
 
+def test_desktop_release_checks_the_mac_signature_users_download(
+    root: Path, desktop_release_yml: dict
+):
+    """An app whose signature does not seal the bundle is "damaged" to macOS
+    once downloaded, with no way to open it (issue #154: v0.3.1 shipped with
+    ``mac.identity: null``). electron-builder.yml must sign, and after the
+    build the macOS leg must run ``codesign --verify --deep --strict`` on the
+    app inside the DMG and the zip, which is what users install."""
+    builder_yml = root / "desktop" / "electron-builder.yml"
+    builder = yaml.safe_load(builder_yml.read_text(encoding="utf-8"))
+    assert builder["mac"]["identity"] == "-", (
+        "macOS signs ad-hoc until a Developer ID certificate exists; "
+        "identity null skips signing and ships a 'damaged' app"
+    )
+
+    steps = desktop_release_yml["jobs"]["build"]["steps"]
+    dist_index = next(i for i, step in enumerate(steps) if "bun run dist" in step.get("run", ""))
+    verify_index = next(
+        i for i, step in enumerate(steps) if "codesign --verify" in step.get("run", "")
+    )
+    assert dist_index < verify_index
+
+    verify = steps[verify_index]
+    assert verify["if"] == "runner.os == 'macOS'"
+    for needle in ("--deep", "--strict", "OpenCompany-macos-arm64.dmg", "OpenCompany-macos-arm64.zip"):
+        assert needle in verify["run"]
+
+
 # ---------------------------------------------------------------------------
 # Docker image — toolchain pins shared with CI and the desktop bundle
 # ---------------------------------------------------------------------------

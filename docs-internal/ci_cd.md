@@ -59,7 +59,7 @@ The repo currently ships **six workflows** plus one composite action. Code scann
 | `NPM_TOKEN` | release.yml | npmjs publish access to the public `@zeenie-ai` scope (`publish-npm`) |
 | `GITHUB_TOKEN` | release.yml, desktop-release.yml | GitHub Packages publish; desktop installer upload to the draft release and the `finalize` undraft (auto-provided; the desktop workflow needs `contents: write`) |
 
-Desktop code signing is deliberately absent for the first releases: `CSC_IDENTITY_AUTO_DISCOVERY=false` is set so electron-builder never looks for a certificate. Adding it later is secrets-only (`CSC_LINK` + `CSC_KEY_PASSWORD` for Windows; a Developer ID cert plus `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` for macOS) plus the three mac flags in `desktop/electron-builder.yml` — see [desktop_app.md](./desktop_app.md#signing-and-updates).
+Desktop builds use no certificates: macOS is signed ad-hoc (`mac.identity: "-"` in `desktop/electron-builder.yml`), Windows is unsigned, and `CSC_IDENTITY_AUTO_DISCOVERY=false` keeps electron-builder from picking a certificate up on its own. After the build, the macOS leg runs `codesign --verify --deep --strict` on the app inside the DMG and the zip, because an app without a sealed signature is "damaged" to macOS once downloaded (issue #154). Moving macOS to Developer ID signing takes more than secrets (entitlements, dropping that workflow flag, a notarization check, and no writes inside the app bundle) — see [desktop_app.md](./desktop_app.md#signing-and-updates).
 
 ---
 

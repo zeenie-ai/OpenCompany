@@ -22,8 +22,8 @@ produced this feature. Short form:
   to the ~430 MB first-run download both would need.
 - **Bundle uv + Python, `uv sync` at first run** (over a pre-built venv in
   the installer). The venv is built at its final path, so nothing has to be
-  made relocatable; the macOS signing scope (later) is a fixed set of
-  ~60 CPython Mach-O files plus uv and bun; updates re-sync only when
+  made relocatable; the bundled runtimes hold a fixed set of Mach-O files
+  (11 in CPython, plus uv and bun); updates re-sync only when
   `uv.lock` / `pyproject.toml` / the bundled Python changes. OpenCompany
   already provisions at first run (`install.js` runs `uv sync`, Temporal and
   the plugin CLIs (`bun add` into `~/.opencompany/packages/`) download on
@@ -155,31 +155,61 @@ names are produced, so the rename was safe between releases.
 
 ## Signing and updates
 
-Unsigned first release: `mac.identity: null`, `hardenedRuntime: false`,
-`notarize: false`, no Windows certificate, `CSC_IDENTITY_AUTO_DISCOVERY=false`
-in CI. Electron's own ad-hoc signature keeps the arm64 binary launchable.
-What users see:
+macOS is signed ad-hoc (`mac.identity: "-"`) with `hardenedRuntime: false`
+and `notarize: false`; Windows has no certificate; CI sets
+`CSC_IDENTITY_AUTO_DISCOVERY=false`. An ad-hoc signature needs no
+certificate, but it seals every bundle in the app, and macOS needs that
+seal. Up to v0.3.1 signing was skipped (`identity: null`): Electron's
+binaries kept only the signatures their linker wrote, which seal nothing,
+so macOS called the downloaded app damaged and offered no way to open it
+(issue #154). `signIgnore` leaves everything under `Resources/app-root` and
+`Resources/runtime` as its makers signed it (uv and bun are signed and
+notarized, CPython is linker-signed): macOS seals `Contents/Resources` as
+data, so the app's seal covers those files by content hash. After the
+build, the macOS release leg runs `codesign --verify --deep --strict` on
+the app inside the DMG and the zip.
+
+What users see on first launch:
 
 | OS | First launch |
 |---|---|
+| macOS 14 | Control-click the app > Open, or System Settings > Privacy & Security > Open Anyway |
 | macOS 15 | "Apple could not verify..." then System Settings > Privacy & Security > Open Anyway (right-click Open no longer bypasses on Sequoia) |
+| macOS 26 | Unconfirmed: one independent test on 26.6.1 offered a quarantined ad-hoc app only Move to Trash. The fallback is `xattr -dr com.apple.quarantine /Applications/OpenCompany.app` in Terminal |
 | Windows | SmartScreen "Windows protected your PC" > More info > Run anyway |
 | Linux | nothing |
 
 Updates: electron-updater against the GitHub Release feed
 (`latest.yml`, `latest-mac.yml`, `latest-linux.yml`). Windows NSIS and Linux
 AppImage download and apply; deb has no auto-update. **macOS is notify-only
-until the app is signed** because Squirrel.Mac refuses to apply an update to
-an unsigned app; the shell shows the new version and opens the releases
-page.
+until the app has a Developer ID signature**: Squirrel.Mac applies an update
+only when it satisfies the installed app's designated requirement, and an
+ad-hoc signature's requirement names that one build. The shell shows the new
+version and opens the releases page.
 
-Adding signing later: Windows needs `CSC_LINK` + `CSC_KEY_PASSWORD` (or
-Azure Trusted Signing); macOS needs a Developer ID certificate in
-`CSC_LINK`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and
-`hardenedRuntime: true`, `notarize: true`, `identity` unset, plus an
-entitlements file allowing JIT and unsigned executable memory for the
-bundled Python. Then remove the macOS notify-only branch in
-`desktop/src/main/updater.ts`.
+Moving macOS to Developer ID (needs the paid Apple Developer Program):
+- a Developer ID Application certificate in `CSC_LINK` / `CSC_KEY_PASSWORD`,
+  with `identity` removed or set to the certificate's name, and
+  `CSC_IDENTITY_AUTO_DISCOVERY=false` dropped from the workflow (with no
+  identity named and discovery off, the build ships unsigned without an
+  error);
+- `hardenedRuntime: true` and `notarize: true`, with `APPLE_API_KEY` /
+  `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` (or `APPLE_ID` /
+  `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`). electron-builder only
+  warns and skips notarization when they are missing, so CI must check the
+  ticket (`xcrun stapler validate`);
+- entitlements allowing JIT, plus `com.apple.security.cs.disable-library-validation`
+  for nested code: the bundled Python loads ad-hoc-signed extension modules
+  from the venv;
+- CPython out of `signIgnore`, so its Mach-O files get the Developer ID
+  signature;
+- no writes inside the bundle: the model registry refresh, pricing saves
+  and built-in skill edits currently write under `app-root`, and macOS
+  checks a notarized app's signature at every launch.
+
+Then remove the macOS notify-only branch in `desktop/src/main/updater.ts`;
+installs from ad-hoc builds update by hand once. Windows signing needs
+`CSC_LINK` + `CSC_KEY_PASSWORD` (or Azure Trusted Signing).
 
 ## CI
 
@@ -190,7 +220,8 @@ bundled Python. Then remove the macOS notify-only branch in
   with the repo toolchain, syncs the version and refuses to continue when it
   differs from the tag (the build ships the committed desktop version, not
   the tag's), stages, runs typecheck + unit + invariant tests, then
-  `electron-builder --publish always` into that draft; a `finalize` job
+  `electron-builder --publish always` into that draft; the macOS leg then
+  verifies the signature of the app inside the DMG and the zip; a `finalize` job
   undrafts it once all legs and the `predeploy` checks (the reusable
   workflow `release.yml` also runs) pass, because Windows and Linux installs
   update themselves as soon as the release is public. A manual dispatch has no tag, so there is

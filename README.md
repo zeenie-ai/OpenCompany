@@ -52,7 +52,7 @@ The app downloads its supporting software on first launch, then opens Home.
 
 You can hire and manage employees from Home without writing code. **Dev mode** opens the visual editor for people who want to customize how a team is put together.
 
-The builds are not code-signed yet. If your computer blocks the installer, macOS provides **System Settings > Privacy & Security**, and Windows SmartScreen provides **More info > Run anyway**.
+The builds are not signed with an Apple or Microsoft developer certificate yet, so your computer asks before the first launch. On a Mac, try to open the app, then choose **Open Anyway** in **System Settings > Privacy & Security**. On Windows, choose **More info > Run anyway**. If a Mac says the app is damaged (version 0.3.1 and earlier) or offers only **Move to Trash**, drag OpenCompany to Applications and run `xattr -dr com.apple.quarantine /Applications/OpenCompany.app` in Terminal. That skips the Mac's download check for that copy, so only do it with an installer from the releases page.
 
 ### How an employee works
 
