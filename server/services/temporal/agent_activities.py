@@ -1421,39 +1421,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         )
     owns_execution_team = False
     if node_type in {"orchestrator_agent", "ai_employee"}:
+        # Each teammate comes with its own tools (``child_tools``), already
+        # past the owner's Generated UI switch, as on the inline path.
         teammates = await collect_teammate_connections(
             node_id, walk_context, connection_database
         )
-        all_nodes = walk_context["nodes"]
-        all_edges = walk_context["edges"]
-        for teammate in teammates:
-            teammate_id = teammate["node_id"]
-            child_tools: List[Dict[str, Any]] = []
-            for edge in all_edges:
-                if (
-                    edge.get("target") != teammate_id
-                    or edge.get("targetHandle") != "input-tools"
-                ):
-                    continue
-                child_id = edge.get("source")
-                child = next(
-                    (candidate for candidate in all_nodes if candidate.get("id") == child_id),
-                    None,
-                )
-                if child:
-                    child_tools.append(
-                        {
-                            "node_id": child_id,
-                            "node_type": child.get("type", ""),
-                            "label": child.get("data", {}).get("label")
-                            or child.get("type", ""),
-                        }
-                    )
-            entry = {
-                **teammate,
-                "child_tools": child_tools,
-            }
-            tool_data = [*(tool_data or []), entry]
+        if teammates:
+            tool_data = [*(tool_data or []), *(dict(teammate) for teammate in teammates)]
         # A taskTrigger completion is a separate downstream automation run.
         # It must not mint a second empty "active" team for the same lead;
         # doing so makes the owning execution's submitted/accepted tasks seem

@@ -735,7 +735,7 @@ async def collect_teammate_connections(
                 child_tools.append({
                     "node_id": child.get("id"),
                     "node_type": child.get("type"),
-                    "label": (child.get("data") or {}).get("label", child.get("type")),
+                    "label": (child.get("data") or {}).get("label") or child.get("type"),
                 })
         child_skills = await _teammate_child_skills(source_id, nodes, edges, database)
         teammates.append({**descriptor, "parameters": params, "child_tools": child_tools, "child_skills": child_skills})

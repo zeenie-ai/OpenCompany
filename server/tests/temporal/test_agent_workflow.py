@@ -91,8 +91,9 @@ class TestDurableTeamDelegationContract:
         from services.temporal.agent_activities import prepare_agent_payload
 
         source = inspect.getsource(prepare_agent_payload)
+        # Each teammate's own tools come with it from the collector
+        # (test_prepare_payload_team_tools.py runs it).
         assert "collect_teammate_connections" in source
-        assert '"input-tools"' in source
         assert "get_or_create_execution_team" in source
         assert '"team_id": execution_team_id' in source
         assert '"outputs": context.get("outputs") or context.get("inputs")' in source
