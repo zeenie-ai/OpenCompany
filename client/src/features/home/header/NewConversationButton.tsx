@@ -2,7 +2,7 @@
  * New conversation, in the header of an employee's page (design handoff
  * chat, "Header"). It clears the conversation and what the employee
  * remembers of it (`clear_chat_messages`), so it asks first. A new hire's
- * first day ends with it, as it does with their first message.
+ * first day ends with it.
  */
 
 import { SquarePen } from 'lucide-react';

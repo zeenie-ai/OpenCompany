@@ -1,8 +1,8 @@
 /**
  * One employee's page (design handoff chat): the conversation with them
  * (EmployeeChat) fills the page under the header, which names them; the
- * orb stays above the conversation, and a new hire's notes (HireNotice)
- * open the thread.
+ * orb stays above the conversation, and a new hire's first-day strip
+ * (FirstDay) and notes (HireNotice) open the thread.
  *
  * What to act on lives above the message box, and only while there is
  * something to do: their main action while they cannot read messages

@@ -1,8 +1,9 @@
 /**
  * The button for an employee's main action (see useEmployeeControl): the
- * green run button for Start, Resume and connecting, a quiet one for Pause.
+ * green run button only for starting them (Start, Start again, Resume), a
+ * neutral one for everything else (connecting what they are missing, Stop).
  * Normal mode omits the developer-workflow fallback. `className` sizes it
- * for a smaller host (the Workspace header).
+ * for a smaller host (the Workspace header, a new hire's first-day strip).
  */
 
 import { ActionButton } from '@/components/ui/action-button';
@@ -15,22 +16,22 @@ export function PrimaryActionButton({ control, className }: { control: EmployeeC
   // Keep an in-flight lifecycle label until it settles, but never offer
   // the developer-workflow fallback from normal-mode employee controls.
   if (primary.kind === 'open_workflow' && !control.busy) return null;
-  if (primary.kind === 'pause' || primary.kind === 'open_workflow') {
+  if (primary.kind === 'start' || primary.kind === 'resume') {
     return (
-      <Button
-        variant="quiet"
-        disabled={control.busy}
-        onClick={control.act}
-        className={cn('h-9 gap-2 rounded-row border-border-strong px-4 font-semibold text-fg-default', className)}
-      >
+      <ActionButton intent="run" disabled={control.busy} onClick={control.act} className={cn('h-9 rounded-row px-4', className)}>
         {control.label}
-      </Button>
+      </ActionButton>
     );
   }
   return (
-    <ActionButton intent="run" disabled={control.busy} onClick={control.act} className={cn('h-9 rounded-row px-4', className)}>
+    <Button
+      variant="quiet"
+      disabled={control.busy}
+      onClick={control.act}
+      className={cn('h-9 gap-2 rounded-row border-border-strong px-4 font-semibold text-fg-default', className)}
+    >
       {control.label}
-    </ActionButton>
+    </Button>
   );
 }
 

@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import {
   busyLabelFor,
+  firstDayLine,
   firstDayNote,
   firstDayPhase,
   initialOf,
@@ -155,6 +156,8 @@ describe('a new hire’s first day', () => {
     // The hire did not start them (something was missing).
     [{ state: 'never_started' }, { activation_state: 'saved' }, false, 'stopped'],
     [{ state: 'failed' }, {}, true, 'stopped'],
+    // A Reset after the hire's start went through: nothing is under way.
+    [{ state: 'ready' }, { activation_state: 'running' }, true, 'stopped'],
   ])('control %o with %o (started: %s) is %s', (control, patch, started, phase) => {
     expect(firstDayPhase(employee(patch, control), started)).toBe(phase);
   });
@@ -165,6 +168,17 @@ describe('a new hire’s first day', () => {
     expect(firstDayNote(employee({ activation_state: 'failed' }))).toBe('Maya couldn’t start.');
     expect(firstDayNote(employee({}, { state: 'failed' }))).toBe('Maya couldn’t start.');
     expect(firstDayNote(employee({}))).toBe('Maya isn’t running.');
+  });
+
+  it('says how their start is going on one line', () => {
+    const talking = { talk: { state: 'on', agent_node_id: 'w:talk' } };
+    expect(firstDayLine(employee({}), 'starting', 6)).toBe('Starting Maya…');
+    expect(firstDayLine(employee(talking, { state: 'running' }), 'ready', 6)).toBe('Ready to talk · 6 blocks');
+    expect(firstDayLine(employee(talking, { state: 'running' }), 'ready', null)).toBe('Ready to talk');
+    // Without Talk they cannot be talked to, only run.
+    expect(firstDayLine(employee({}, { state: 'running' }), 'ready', 6)).toBe('Maya is running · 6 blocks');
+    expect(firstDayLine(employee({ missing_apps: [whatsapp] }), 'stopped', 6)).toBe('WhatsApp isn’t connected yet.');
+    expect(firstDayLine(employee({}, { state: 'paused' }), 'stopped', 6)).toBe('Maya is paused.');
   });
 });
 

@@ -43,16 +43,14 @@ export interface ChatHost {
   /** Above the box, while there is something to act on (Start, Apply, Help
    *  in browser). */
   notices?: ReactNode;
-  /** The first item of the thread's scroll area (Home: a new hire's notes). */
+  /** The first item of the thread's scroll area (Home: a new hire's
+   *  first-day strip and notes). */
   top?: ReactNode;
   /** After the conversation, inside the scroll area (Home: the drafts
    *  waiting for the owner). */
   afterThread?: ReactNode;
   /** In place of the conversation while it has no message. */
   emptyState?: ReactNode;
-  /** Under the empty state while a message can go: things to say first,
-   *  each putting its words in the box. In place of the suggested commands. */
-  greetings?: readonly string[];
   /** The box's placeholder, in place of "Message {name}…". */
   placeholder?: string;
   /** One line under the box. */

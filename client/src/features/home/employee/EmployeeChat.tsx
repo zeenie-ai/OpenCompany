@@ -3,11 +3,11 @@
  * over the session whose id is their workflow id, with Home around it.
  *
  * - The orb stays above the conversation: the thread scrolls under it, so a
- *   long conversation never takes it out of view. A new hire's notes are
- *   the thread's first item. What they want to send waits for the owner on
- *   cards in the chat (features/chat), with the Ask first chip beside the
- *   box; the line under the box says whether they ask before sending
- *   anything.
+ *   long conversation never takes it out of view. A new hire's first-day
+ *   strip and notes are the thread's first items. What they want to send
+ *   waits for the owner on cards in the chat (features/chat), with the Ask
+ *   first chip beside the box; the line under the box says whether they ask
+ *   before sending anything.
  * - The message box follows their control state the way the server does: a
  *   message goes at once while they run, waits for Resume while they are
  *   paused, and cannot be sent otherwise. Above it, what to act on: Resume or
@@ -16,10 +16,12 @@
  *   why a run of failures paused them.
  * - Without a talk line, Turn on Talk offers to add one; an employee whose
  *   setup cannot answer gets a note instead of the box.
- * - A new hire's page opens on their first day (FirstDay) until their first
- *   conversation begins: the box waits while they start, then offers
- *   something to say, and the card says why when the start did not go ahead
- *   (so the line above the box does not say it twice).
+ * - A new hire's page opens with their first-day strip (FirstDay) at the
+ *   top of the conversation for the rest of the session: it says how their
+ *   start is going, offers their main action when it did not go ahead (so
+ *   the line above the box does not say it twice), and lists their routine
+ *   until the first message. Before that message, while they start, the box
+ *   shows but takes nothing yet.
  * - A document they wrote opens from its card in the reply on the
  *   Workspace's Canvas tab, at that version.
  * - Cmd/Ctrl+K puts the cursor in the message box.
@@ -28,8 +30,8 @@
 import { Monitor } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ActionButton } from '@/components/ui/action-button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { ChatPane, useChatThread, useLaneRun, type ChatPaneHandle, type ComposerMode } from '@/features/chat';
 import { invalidateEmployees } from '../data/employees';
 import { firstDayPhase, stateNoticeText, talkMode, talkNoticeText } from '../data/presentation';
@@ -50,9 +52,6 @@ import { FirstDay } from './FirstDay';
 import { LlmWaitNote } from '@/components/ui/LlmWaitNote';
 import type { EmployeeControl } from './useEmployeeControl';
 
-/** What to say first, on a new hire's first day. */
-const GREETINGS = ['Hi! What can you do?', 'Walk me through your routine'] as const;
-
 /** The agent is waiting for the owner in the browser (it called `request_user`). */
 function BrowserNotice({ employee }: { employee: EmployeeSummary }) {
   const openWorkspace = useHomeStore((s) => s.openWorkspace);
@@ -60,17 +59,17 @@ function BrowserNotice({ employee }: { employee: EmployeeSummary }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <p className="m-0 min-w-50 flex-1 text-sm text-fg-muted">{employee.task?.text || `${employee.name} needs you in the browser.`}</p>
-      <ActionButton
-        intent="tools"
+      <Button
+        variant="quiet"
         onClick={() => {
           openWorkspace(employee.workflow_id);
           setWorkspaceTab('browser');
         }}
-        className="h-9 gap-2 rounded-row px-3.5"
+        className="h-9 gap-2 rounded-row border-border-default px-3.5 font-semibold text-fg-default"
       >
         <Monitor aria-hidden className="size-3.5" />
         Help in browser
-      </ActionButton>
+      </Button>
     </div>
   );
 }
@@ -90,7 +89,7 @@ function Notices({
   employee: EmployeeSummary;
   control: EmployeeControl;
   queued: boolean;
-  /** Their first day's card says their state and offers their main action. */
+  /** Their first-day strip says their state and offers their main action. */
   firstDay: boolean;
 }) {
   const { name } = employee;
@@ -142,18 +141,14 @@ export function EmployeeChat({
   const liveNote = useRetryNote(workflowId, employee.talk.agent_node_id, lane !== null && lane.state !== 'queued');
   const mode = talkMode(employee.control);
 
-  // Their first day lasts until their first conversation begins: a Reset
-  // that empties the thread later does not bring it back.
+  // Their first day lasts the session (homeStore.firstDays); its routine
+  // line and the waiting box last until the conversation has a message.
   const firstDay = useHomeStore((s) => s.firstDays[workflowId]);
-  const endFirstDay = useHomeStore((s) => s.endFirstDay);
   const spoken = (useChatThread(workflowId, 'all').data?.messages.length ?? 0) > 0;
-  useEffect(() => {
-    if (firstDay && spoken) endFirstDay(workflowId);
-  }, [endFirstDay, firstDay, spoken, workflowId]);
   const phase = firstDay ? firstDayPhase(employee, firstDay.started) : null;
 
   const composer: ComposerMode =
-    employee.talk.state !== 'on' ? 'closed' : phase === 'starting' ? 'wait' : mode === 'start' ? 'closed' : mode;
+    employee.talk.state !== 'on' ? 'closed' : phase === 'starting' && !spoken ? 'wait' : mode === 'start' ? 'closed' : mode;
 
   // Cmd/Ctrl+K puts the cursor in the message box (on Home only: in the
   // editor it opens the command palette, which has Focus Chat).
@@ -204,9 +199,14 @@ export function EmployeeChat({
           composer,
           placeholder: composer === 'wait' ? `${name} is starting…` : undefined,
           notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} firstDay={Boolean(firstDay)} />,
-          top: <HireNotice workflowId={workflowId} />,
-          emptyState: firstDay && phase ? <FirstDay employee={employee} firstDay={firstDay} phase={phase} control={control} /> : undefined,
-          greetings: firstDay ? GREETINGS : undefined,
+          top: (
+            <>
+              {firstDay && phase && (
+                <FirstDay employee={employee} firstDay={firstDay} phase={phase} control={control} spoken={spoken} />
+              )}
+              <HireNotice workflowId={workflowId} />
+            </>
+          ),
           footnote: employee.asks_first
             ? `${name} asks before sending anything on your behalf.`
             : `${name} doesn’t ask before sending anything on your behalf.`,

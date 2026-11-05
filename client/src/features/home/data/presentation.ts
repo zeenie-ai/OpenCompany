@@ -211,17 +211,19 @@ export function stateNoticeText(mode: TalkMode, name: string): string | null {
 // ----- a new hire's first day -----
 
 /** Where a new hire's start is (employee/FirstDay): `ready` once they run,
- *  `starting` while the start is under way (the hire started them, and it
- *  has neither been held for something to connect nor failed), `stopped`
- *  when it did not go ahead. */
+ *  `starting` while the start is under way (the hire started them, and
+ *  their activation has not settled: held for something to connect,
+ *  failed, or gone through), `stopped` when it did not go ahead. */
 export type FirstDayPhase = 'starting' | 'ready' | 'stopped';
 
 export function firstDayPhase(employee: EmployeeSummary, started: boolean): FirstDayPhase {
   const { state } = employee.control;
   if (state === 'running') return 'ready';
   if (state === 'starting' || state === 'resuming') return 'starting';
-  const held = employee.activation_state === 'blocked' || employee.activation_state === 'failed';
-  return started && !held && (state === 'never_started' || state === 'ready') ? 'starting' : 'stopped';
+  // Gone through: a later Reset left them ready, with nothing under way.
+  const activation = employee.activation_state;
+  const settled = activation === 'blocked' || activation === 'failed' || activation === 'running';
+  return started && !settled && (state === 'never_started' || state === 'ready') ? 'starting' : 'stopped';
 }
 
 /** Why a new hire is not running, beside their main action. */
@@ -230,6 +232,17 @@ export function firstDayNote(employee: EmployeeSummary): string | null {
   if (employee.needs_ai) return 'Connect an AI model first.';
   if (employee.activation_state === 'failed' || employee.control.state === 'failed') return `${employee.name} couldn’t start.`;
   return stateNoticeText(talkMode(employee.control), employee.name);
+}
+
+/** The one line under a new hire's name on their first-day strip
+ *  (employee/FirstDay): their start under way, how it went, or why it did
+ *  not go ahead (firstDayNote). */
+export function firstDayLine(employee: EmployeeSummary, phase: FirstDayPhase, nodeCount: number | null): string {
+  const { name } = employee;
+  if (phase === 'starting') return `Starting ${name}…`;
+  if (phase === 'stopped') return firstDayNote(employee) ?? '';
+  const ready = employee.talk.state === 'on' ? 'Ready to talk' : `${name} is running`;
+  return nodeCount === null ? ready : `${ready} · ${nodeCount} blocks`;
 }
 
 /** Said before anything that restarts an employee (Turn on Talk, Apply): a

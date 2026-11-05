@@ -23,13 +23,12 @@
  * Files go with a message where the chat allows them: Attach, a paste, or
  * a drop anywhere on the chat (DropOverlay), all through one
  * `addAttachments` (composer/attachments.ts). The box also dictates, offers
- * slash commands and, in an empty chat, the host's greetings or else
- * suggestions (data/chatContext.ts), and the Web chip keeps the employee off
- * web search for the next messages. On Home, where the employee takes it,
- * the model picker chooses the model and how hard it thinks
- * (composer/ModelPicker.tsx); a message waits until that choice is known.
- * Every message, edit and retry carries these choices (`sendOptions`). In
- * the host's `wait` the box shows but takes nothing yet.
+ * slash commands and, in an empty chat, suggestions (data/chatContext.ts),
+ * and the Web chip keeps the employee off web search for the next messages.
+ * On Home, where the employee takes it, the model picker chooses the model
+ * and how hard it thinks (composer/ModelPicker.tsx); a message waits until
+ * that choice is known. Every message, edit and retry carries these choices
+ * (`sendOptions`). In the host's `wait` the box shows but takes nothing yet.
  *
  * The owner can change the conversation (data/branches.ts, TurnActions):
  * edit one of their messages in place (ArrowUp in an empty box edits the
@@ -58,7 +57,6 @@ import { AskFirstChip } from './composer/AskFirstChip';
 import { AskModeMenu } from './composer/AskModeMenu';
 import { addAttachments } from './composer/attachments';
 import { DropOverlay } from './composer/DropOverlay';
-import { Greetings } from './composer/Greetings';
 import { LiveWork } from './composer/LiveWork';
 import { ModelPicker, ModelPickerButton } from './composer/ModelPicker';
 import { Suggestions } from './composer/Suggestions';
@@ -412,11 +410,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     [chatContext, host.kind],
   );
   // What to say first, under the empty state, once a message can go.
-  const starters =
-    composer !== 'send' ? null
-    : host.greetings?.length ? <Greetings items={host.greetings} onPick={fill} />
-    : suggestions.length > 0 ? <Suggestions items={suggestions} onPick={fillBox} />
-    : null;
+  const starters = composer !== 'send' ? null : suggestions.length > 0 ? <Suggestions items={suggestions} onPick={fillBox} /> : null;
 
   // A drop anywhere on the chat adds the files, as Attach does.
   const [dragging, setDragging] = useState(false);
