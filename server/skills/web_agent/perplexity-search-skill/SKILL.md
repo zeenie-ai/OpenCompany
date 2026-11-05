@@ -135,7 +135,7 @@ The `answer` field contains rich markdown:
 - **API**: POST `https://api.perplexity.ai/chat/completions`
 - **Auth**: `Authorization: Bearer` header
 - **Models**: `sonar` (fast, default), `sonar-pro` (deeper research)
-- **Timeout**: 60 seconds (AI generation takes longer than traditional search)
+- **Timeout**: 30 seconds per request
 - **Pricing**: ~$0.005 per request
 
 ## Setup Requirements
