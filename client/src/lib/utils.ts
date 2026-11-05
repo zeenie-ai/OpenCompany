@@ -18,7 +18,7 @@ const twMerge = extendTailwindMerge({
       shadow: ["float", "popover", "dialog", "dock", "pip", "glow-connect", "card", "card-hover", "modal", "knob", "avatar"],
       ease: ["spring", "overshoot", "reveal", "default", "emphasis"],
       tracking: ["label", "hero", "wordmark"],
-      leading: ["hero"],
+      leading: ["hero", "message"],
       blur: ["scrim"],
     },
   },

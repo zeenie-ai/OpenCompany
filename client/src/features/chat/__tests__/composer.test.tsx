@@ -4,9 +4,12 @@
  * alternative reaching the same state), files alone are a message and wait
  * for their uploads, slash commands fill the box, Web off goes with the next
  * message, suggestions fill an empty chat's box, and dictation puts its text
- * in the box.
+ * in the box. The box itself takes the design's size on Home (chat V2 §5,
+ * 5 Nov) and keeps its compact one in the editor's chat.
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -305,5 +308,29 @@ describe('dictation', () => {
     expect(track.stop).toHaveBeenCalled();
     expect(requests('transcribe_audio')[0]).toMatchObject({ session_id: 'w1', path: expect.stringMatching(/^uploads\/dictation-\d+\.webm$/) });
     vi.unstubAllGlobals();
+  });
+});
+
+describe('the box’s size', () => {
+  it('is at least 64px tall on Home, padded 10px 2px, at the message line height', async () => {
+    renderPane();
+    await screen.findByRole('button', { name: 'Attach files' });
+    expect(box()).toHaveClass('min-h-16', 'px-0.5', 'py-2.5', 'text-md', 'leading-message', 'max-h-(--h-chat-composer-max)');
+    expect(box().className).not.toMatch(/leading-normal/);
+  });
+
+  it('keeps the compact box in the editor’s chat', async () => {
+    renderPane(host({ kind: 'dev', compact: true }));
+    await screen.findByRole('button', { name: 'Attach files' });
+    expect(box()).toHaveClass('py-1', 'text-sm', 'leading-normal', 'max-h-(--h-chat-composer-max)');
+    expect(box().className).not.toMatch(/min-h-16|px-0\.5|py-2\.5|leading-message/);
+  });
+
+  it('grows to 240px, and a message is written at 1.55', () => {
+    const css = (...path: string[]) => readFileSync(join(__dirname, '..', '..', '..', ...path), 'utf-8');
+    expect(css('themes', 'base.css')).toMatch(/--h-chat-composer-max:\s*240px;/);
+    expect(css('themes', 'base.css')).toMatch(/--leading-message:\s*1\.55;/);
+    // Bridged, so `leading-message` is a utility.
+    expect(css('index.css')).toMatch(/--leading-message:\s*var\(--leading-message\);/);
   });
 });

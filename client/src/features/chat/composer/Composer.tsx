@@ -297,7 +297,7 @@ export function Composer({
       }
       className={cn(
         'max-h-(--h-chat-composer-max) overflow-hidden text-fg-default field-sizing-fixed',
-        compact ? 'py-1 text-sm leading-normal' : 'py-1.5 text-md leading-normal',
+        compact ? 'py-1 text-sm leading-normal' : 'min-h-16 px-0.5 py-2.5 text-md leading-message',
       )}
     />
   );

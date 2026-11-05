@@ -67,7 +67,7 @@ export function UserEditBox({
         aria-label="Edit your message"
         className={cn(
           'max-h-(--h-chat-composer-max) overflow-hidden text-fg-default field-sizing-fixed',
-          compact ? 'text-sm leading-normal' : 'text-md leading-normal',
+          compact ? 'text-sm leading-normal' : 'text-md leading-message',
         )}
       />
       <div className="flex flex-wrap items-center gap-2">

@@ -160,6 +160,12 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   `--w-ai-models`/`--h-ai-models`, the last 780 by 600). The guide's demo
   stage is the `.home-welcome-stage` class in `index.css` (two washes of
   `--node-agent-fill` and `--node-model-soft` over `--bg-app`).
+- **The message box**: `--h-chat-composer-max` (240px) is how tall the chat's
+  message box (on Home and in Dev's console chat pane) and the box that edits
+  one of the owner's messages grow before they scroll. `--leading-message`
+  (1.55), bridged in `index.css` as `leading-message`, is the line height of
+  Home's message box, which is at least 64px tall, of the owner's bubble and
+  of its edit box; Dev's compact chat keeps `leading-normal`.
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
   for the employee pills and dots, and for the Get started checklist's done
   steps. The dot is the raw role colour; light.css

@@ -198,7 +198,8 @@
    * durations feed the opencompany-* helpers in animations.css; the rest
    * are read by lib/motion.ts. ──────────────────────────────────────── */
   --w-chat-column: 760px;          /* thread column; the text measure is this minus its padding */
-  --h-chat-composer-max: 220px;    /* the message box grows with its text up to this */
+  --h-chat-composer-max: 240px;    /* the message box grows with its text up to this */
+  --leading-message: 1.55;         /* Home's message box, the owner's bubble and its edit box */
   --dur-chat-rise: 560ms;          /* thread and empty-state entrance */
   --dur-genui-enter: 420ms;        /* one generated-UI element arriving */
   --dur-follow-in: 460ms;          /* approval card and follow-up chips */

@@ -60,7 +60,7 @@ export function UserTurn({ message, now, latest, compact }: { message: ChatMessa
         <p
           className={cn(
             'chat-msg chat-msg-user m-0 max-w-[85%] rounded-draft rounded-br-sm border border-border-default bg-bg-elevated whitespace-pre-wrap text-fg-default wrap-anywhere',
-            compact ? 'px-3 py-2 leading-normal' : 'px-4 py-2.5 text-md leading-normal',
+            compact ? 'px-3 py-2 leading-normal' : 'px-4 py-2.5 text-md leading-message',
           )}
         >
           {message.text}

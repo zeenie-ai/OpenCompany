@@ -3,7 +3,9 @@
  * owner's messages in place (and ArrowUp to edit the last one), moving
  * between versions, trying the latest answer again (also from the note of a
  * run that gave none), rating an answer, copying, saying why a change was
- * refused, and hiding the suggested questions while the owner writes.
+ * refused, and hiding the suggested questions while the owner writes. On
+ * Home the owner's bubble and its edit box are written at the message line
+ * height, as the message box is.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,6 +164,26 @@ describe('editing a message', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send edit' }));
     await waitFor(() => expect(chat.notify).toHaveBeenCalledWith(branchRefusalText('cannot_rewind', 'Maya'), 'error'));
     expect(screen.getByRole('textbox', { name: 'Edit your message' })).toHaveValue('Book Sunday');
+  });
+});
+
+describe('the owner’s message', () => {
+  it('writes the bubble and its edit box at the message line height on Home', async () => {
+    renderPane();
+    expect(await screen.findByText('Book Saturday')).toHaveClass('chat-msg-user', 'text-md', 'leading-message');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+    expect(screen.getByRole('textbox', { name: 'Edit your message' })).toHaveClass('text-md', 'leading-message');
+  });
+
+  it('keeps the normal line height in the editor’s compact chat', async () => {
+    renderPane(host({ kind: 'dev', compact: true }));
+    const bubble = await screen.findByText('Book Saturday');
+    expect(bubble).toHaveClass('chat-msg-user', 'leading-normal');
+    expect(bubble.className).not.toMatch(/leading-message/);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
+    const editor = screen.getByRole('textbox', { name: 'Edit your message' });
+    expect(editor).toHaveClass('text-sm', 'leading-normal');
+    expect(editor.className).not.toMatch(/leading-message/);
   });
 });
 

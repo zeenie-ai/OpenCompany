@@ -309,6 +309,7 @@
   --tracking-label:    var(--tracking-label);
   --tracking-hero:     var(--tracking-hero);
   --leading-hero:      var(--leading-hero);
+  --leading-message:   var(--leading-message);
 
   /* Code & syntax tokens -> Tailwind utilities (text-code-tag, bg-code-bg, …).
    * Defined per-theme in client/src/themes/<theme>.css. */
