@@ -23,13 +23,19 @@
  * falls back to a short colour fade where View Transitions are missing, and
  * is instant under prefers-reduced-motion.
  *
+ * A theme chosen in another window or tab (the `storage` event on the theme
+ * key) shows here too, at once and without being saved again, so two
+ * windows never echo each other. `applyThemeToDom` also keeps a
+ * `<meta name="theme-color">` at the theme's `--background`, the colour the
+ * desktop shell paints its window with.
+ *
  * Adding a new theme: drop a new CSS file under client/src/themes/
  * scoped to `:root[data-theme="<name>"]`, import it in main.tsx, and
  * add the name to `AVAILABLE_THEMES` and `THEME_LABEL` below and to the
  * pre-paint script in index.html.
  */
 
-import React, { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { BRAND_STORAGE_KEYS, readAndMigrateStorageValue } from '../lib/brandStorage';
 import { animate, dur, invalidateMotionTokens } from '../lib/motion';
@@ -102,12 +108,23 @@ function loadInitialTheme(): ThemeName {
   return 'dark';
 }
 
-/** Write `theme` to `<html>`. Idempotent. */
+/** Write `theme` to `<html>`, and its background colour to the page's
+ *  `theme-color` meta. Idempotent. */
 export function applyThemeToDom(theme: ThemeName): void {
   const html = document.documentElement;
   if (html.dataset.theme !== theme) html.dataset.theme = theme;
   html.classList.toggle('dark', DARK_FAMILY.has(theme));
   invalidateMotionTokens();
+
+  let meta = document.head.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.append(meta);
+  }
+  // Empty only where no theme CSS is loaded (tests).
+  const background = getComputedStyle(html).getPropertyValue('--background').trim();
+  if (background) meta.content = background;
 }
 
 function saveTheme(theme: ThemeName): void {
@@ -147,13 +164,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // only inside the View Transition callback, so a second click before then
   // must step on from the pending theme, not the rendered one.
   const requestedRef = useRef<ThemeName>(theme);
+  // The theme storage holds as far as this window knows: the last one it
+  // saved, or one another window saved. Only a theme that differs is saved,
+  // so a theme from another window is never written back.
+  const storedRef = useRef<ThemeName | null>(null);
 
   // Safety net for the first render (no pre-paint script, e.g. tests), and
-  // the save of every choice. Layout effects run before every passive
-  // effect, so consumers still see the DOM already switched.
+  // the save of every choice made in this window. Layout effects run before
+  // every passive effect, so consumers still see the DOM already switched.
   useLayoutEffect(() => {
     applyThemeToDom(theme);
-    saveTheme(theme);
+    if (storedRef.current !== theme) saveTheme(theme);
+    storedRef.current = theme;
   }, [theme]);
 
   const setTheme = useCallback((next: ThemeName, options?: SetThemeOptions) => {
@@ -226,6 +248,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     },
     [setTheme],
   );
+
+  // Another window or tab saved a theme: show it here at once. Going through
+  // setTheme moves the requested theme too, so a later cycleTheme steps on
+  // from it and a pending revealed switch cannot override it.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      const next = event.newValue;
+      if (event.key !== THEME_STORAGE_KEYS.canonical || !isThemeName(next) || next === requestedRef.current) return;
+      storedRef.current = next;
+      setTheme(next);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [setTheme]);
 
   const value = useMemo<ThemeContextType>(
     () => ({

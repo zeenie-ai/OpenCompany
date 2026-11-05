@@ -56,7 +56,7 @@ OpenCompany.app / OpenCompany/ / AppImage
                                   cache and global state, kept out of a dev install's ~/.bun
     pycache/                      PYTHONPYCACHEPREFIX (bundle is read-only)
     logs/main.log, backend.log, backend.stdout.log
-    desktop-state.json            persisted port
+    desktop-state.json            persisted port, the main window's last background colour
     desktop.env                   operator overrides -> OPENCOMPANY_ENV_FILE
 
 ~/.opencompany/                   DATA_DIR, unchanged, shared with CLI installs
@@ -92,7 +92,11 @@ shell reads it directly (`stage/runtime/<os>-<arch>/`), in a packaged app
    first run.
 7. Main window loads `http://127.0.0.1:<port>/`. `setWindowOpenHandler` and
    `will-navigate` send every off-origin URL to the OS browser, which is what
-   OAuth / device-flow logins and `target="_blank"` links need.
+   OAuth / device-flow logins and `target="_blank"` links need. The SPA keeps
+   a `<meta name="theme-color">` at its theme's `--background`; on
+   `did-change-theme-color` the shell paints the window in that colour and
+   keeps it in `desktop-state.json`, and the next launch opens in it
+   (`#12141f` until a page has set one), so Light and Atomic do not open dark.
 8. `checkForUpdatesAndNotify`.
 
 Quit: `POST /api/desktop/shutdown` with the per-launch token, close stdin,

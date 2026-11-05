@@ -146,7 +146,8 @@ function createMainWindow(port: number): BrowserWindow {
     minHeight: 600,
     show: false,
     title: "OpenCompany",
-    backgroundColor: "#12141f",
+    // The theme's background from last time, so Light and Atomic do not open dark.
+    backgroundColor: loadState(layout.stateFile).windowBackground ?? "#12141f",
     autoHideMenuBar: process.platform !== "darwin",
     webPreferences: {
       contextIsolation: true,
@@ -166,6 +167,13 @@ function createMainWindow(port: number): BrowserWindow {
       event.preventDefault();
       openExternalIfSafe(url);
     }
+  });
+  // The SPA keeps its theme-color meta at the theme's background: paint the
+  // window behind the page in it, and keep it for the next launch.
+  win.webContents.on("did-change-theme-color", (_event, color) => {
+    if (!color) return;
+    win.setBackgroundColor(color);
+    saveState(layout.stateFile, { ...loadState(layout.stateFile), windowBackground: color });
   });
   win.once("ready-to-show", () => {
     win.show();

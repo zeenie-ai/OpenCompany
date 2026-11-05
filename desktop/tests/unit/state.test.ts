@@ -16,4 +16,15 @@ describe("desktop state", () => {
     writeFileSync(file, "{not json");
     expect(loadState(file)).toEqual({});
   });
+
+  it("keeps the window background and drops a bad one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "oc-desktop-state-"));
+    const file = join(dir, "desktop-state.json");
+    saveState(file, { port: 5690, windowBackground: "#f5f7fa" });
+    expect(loadState(file)).toEqual({ port: 5690, windowBackground: "#f5f7fa" });
+    for (const bad of ["not a colour", 42, null]) {
+      writeFileSync(file, JSON.stringify({ port: 5690, windowBackground: bad }));
+      expect(loadState(file)).toEqual({ port: 5690 });
+    }
+  });
 });

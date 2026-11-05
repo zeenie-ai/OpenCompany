@@ -10,6 +10,15 @@ function resetDom(): void {
   localStorage.clear();
   html.removeAttribute('data-theme');
   html.className = '';
+  document.head.querySelector('meta[name="theme-color"]')?.remove();
+}
+
+/** What the browser fires in this window when another window or tab writes
+ *  localStorage (`key` null: the other window cleared it). */
+function otherWindowWrites(key: string | null, newValue: string | null): void {
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key, newValue }));
+  });
 }
 
 interface FakeTransition {
@@ -149,6 +158,65 @@ describe('setTheme', () => {
   });
 });
 
+describe('a theme chosen in another window', () => {
+  it('shows here at once without being saved again', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      otherWindowWrites('opencompany-theme', 'atomic');
+      expect(result.current.theme).toBe('atomic');
+      expect(html.dataset.theme).toBe('atomic');
+      expect(html.classList.contains('dark')).toBe(false);
+      // Writing it back could echo an older theme to the other window.
+      expect(setItem).not.toHaveBeenCalled();
+
+      // The next press steps on from the synced theme, and is saved.
+      act(() => result.current.cycleTheme());
+      expect(result.current.theme).toBe('light');
+      expect(setItem).toHaveBeenCalledWith('opencompany-theme', 'light');
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it('ignores other keys, a cleared key and unknown names', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
+    otherWindowWrites('machinaos-theme', 'atomic');
+    otherWindowWrites('opencompany-theme', null);
+    otherWindowWrites(null, null);
+    otherWindowWrites('opencompany-theme', 'neon');
+    expect(result.current.theme).toBe('dark');
+    expect(html.dataset.theme).toBe('dark');
+  });
+});
+
+describe('theme-color meta', () => {
+  it('keeps one theme-color meta at the theme background', () => {
+    const style = document.createElement('style');
+    style.textContent =
+      ':root[data-theme="dark"] { --background: #0d0f13; } :root[data-theme="light"] { --background: #f5f7fa; }';
+    document.head.append(style);
+    try {
+      const metas = () => document.head.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+      const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
+      expect(metas()).toHaveLength(1);
+      expect(metas()[0].content).toBe('#0d0f13');
+      act(() => result.current.setTheme('light'));
+      expect(metas()).toHaveLength(1);
+      expect(metas()[0].content).toBe('#f5f7fa');
+    } finally {
+      style.remove();
+    }
+  });
+
+  it('writes no colour where no theme CSS is loaded', () => {
+    renderHook(() => useTheme(), { wrapper: ThemeProvider });
+    const meta = document.head.querySelector('meta[name="theme-color"]');
+    expect(meta).not.toBeNull();
+    expect(meta?.hasAttribute('content')).toBe(false);
+  });
+});
+
 describe('revealed switch', () => {
   let waapi: ReturnType<typeof installWaapiStub>;
   let restoreMotion: () => void;
@@ -221,6 +289,23 @@ describe('revealed switch', () => {
       const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
       act(() => result.current.setTheme('light', { reveal: true }));
       act(() => result.current.setTheme('atomic'));
+      expect(result.current.theme).toBe('atomic');
+      await act(async () => {
+        vt.transitions[0].runUpdate();
+      });
+      expect(result.current.theme).toBe('atomic');
+      expect(html.dataset.theme).toBe('atomic');
+    } finally {
+      vt.restore();
+    }
+  });
+
+  it('never lets a pending switch override a theme from another window', async () => {
+    const vt = installViewTransitionStub({ defer: true });
+    try {
+      const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
+      act(() => result.current.setTheme('light', { reveal: true }));
+      otherWindowWrites('opencompany-theme', 'atomic');
       expect(result.current.theme).toBe('atomic');
       await act(async () => {
         vt.transitions[0].runUpdate();

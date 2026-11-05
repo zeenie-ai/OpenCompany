@@ -47,7 +47,7 @@ createRoot(document.getElementById('root')!).render(
         </AuthProvider>
       </ThemeProvider>
       {import.meta.env.DEV && (
-        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-right" />
+        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
       )}
     </PersistQueryClientProvider>
   </StrictMode>,
