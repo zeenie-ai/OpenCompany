@@ -2,8 +2,9 @@
  * The Home header: on an employee's page it says who they are (their face
  * on the accent disc, name, role and apps, status) and offers New
  * conversation, which asks first; the owner renames them and changes their
- * photo there; the Normal/Dev switch opens that employee's workflow there,
- * and elsewhere what the editor last had.
+ * photo there; the Get started pill stands in for the checklist card there
+ * only; the Normal/Dev switch opens that employee's workflow there, and
+ * elsewhere what the editor last had.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,6 +23,7 @@ vi.mock('../../../app/useShellActions', () => ({ enterDev: vi.fn(), enterNormal:
 vi.mock('../../../app/ShellModeSwitch', () => ({ useShellMode: () => 'normal' }));
 vi.mock('../workspace/WorkspaceButton', () => ({ WorkspaceButton: () => null }));
 vi.mock('@/components/ui/ThemeButton', () => ({ ThemeButton: () => null }));
+vi.mock('../onboarding/GetStartedPill', () => ({ GetStartedPill: () => <span>Get started pill</span> }));
 vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 vi.mock('@/lib/workspaceUpload', () => ({ uploadToWorkspace: vi.fn() }));
 
@@ -186,6 +188,17 @@ describe('HomeHeader', () => {
     expect(face).toHaveClass('bg-accent', 'text-accent-foreground', 'border-accent-edge', 'shadow-avatar');
     expect(face.className).not.toMatch(/node-tool/);
     expect(trigger).toHaveClass('hover:opacity-88');
+  });
+
+  it('offers the Get started pill on an employee’s page only, where the card would cover Send', () => {
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    const { unmount } = wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    expect(screen.getByText('Get started pill')).toBeInTheDocument();
+    unmount();
+    // The hire view has the card itself.
+    useHomeStore.setState({ view: { kind: 'hire' } });
+    wrap(<HomeHeader title="New employee" employee={null} scrolled={false} />);
+    expect(screen.queryByText('Get started pill')).not.toBeInTheDocument();
   });
 
   it('opens the Welcome guide at its first step', () => {

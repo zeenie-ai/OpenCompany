@@ -12,9 +12,12 @@
  *   (`approval_lifecycle` decided as approved, heard while Home is open).
  *   Latched (`getting_started_approved_draft`).
  *
- * Each latch is written once: the saved flag guards it. The card shows once
- * the Welcome guide is finished, until the owner hides it (Settings > Help
- * shows it again).
+ * Each latch is written once: the saved flag guards it, and exactly one of
+ * the card (on the hire view) and the header pill (on an employee's page)
+ * calls this hook at a time; both at once would write each latch twice.
+ * They show by one rule: once the Welcome guide is finished, until the
+ * owner hides them (Settings > Help shows them again), and never while the
+ * guide or the AI models dialog is open.
  */
 
 import { useEffect } from 'react';
@@ -55,6 +58,8 @@ function firstHire(team: readonly EmployeeSummary[]): EmployeeSummary | null {
 
 export function useGetStarted() {
   const { data: settings, isSuccess } = useOwnerSettings();
+  const guideOpen = useHomeStore((s) => s.guide.open);
+  const connectOpen = useHomeStore((s) => s.connectAI.open);
   const { sendRequest, addEventListener } = useWebSocketActions();
   const { mutate: save } = useSaveUserSettingsMutationCore(sendRequest);
   const { providers, hasAi } = useConnectors();
@@ -84,29 +89,29 @@ export function useGetStarted() {
   const state: Record<GetStartedItemId, Omit<GetStartedRow, 'id' | 'label' | 'icon'>> = {
     'connect-ai': {
       done: hasAi,
-      sub: ai ? `${ai.name} is connected` : 'OpenAI, Anthropic, Gemini or a local model',
+      sub: ai ? `${ai.name} is connected` : 'So your team can think',
       act: () => home().openConnectAI({ closeOnConnect: false }),
     },
     hire: {
       done: first !== null,
-      sub: first ? `${first.name}, ${first.role}` : 'Describe a job or pick a starter',
+      sub: first ? `${first.name} joined your team` : 'Describe a job in plain words',
       act: () => home().showHire({ focus: true }),
     },
     'say-hello': {
       done: saidHello || wroteToFirst,
-      sub: first ? `Send ${first.name} a message` : 'Send your first hire a message',
+      sub: first ? `Send ${first.name} a first message` : 'Once your first hire joins',
       act: first ? () => home().showEmployee(first.workflow_id) : undefined,
     },
     'approve-draft': {
       done: approved,
-      sub: 'They ask before sending anything',
+      sub: 'Nothing goes out until you say so',
       act: waiting ? () => home().showEmployee(waiting.workflow_id) : undefined,
     },
   };
   const rows: GetStartedRow[] = GET_STARTED_ITEMS.map((item) => ({ ...item, ...state[item.id] }));
 
   return {
-    visible: isSuccess && Boolean(settings?.onboarding_completed) && !settings?.getting_started_dismissed,
+    visible: isSuccess && Boolean(settings?.onboarding_completed) && !settings?.getting_started_dismissed && !guideOpen && !connectOpen,
     rows,
     doneCount: rows.filter((row) => row.done).length,
     dismiss: () => save({ getting_started_dismissed: true }),

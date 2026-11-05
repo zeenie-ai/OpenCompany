@@ -312,7 +312,8 @@ describe('after signing in', () => {
     rerender(<LoginPage />);
 
     expect(screen.queryByLabelText(/^email$/i)).not.toBeInTheDocument();
-    expect(screen.getByText('Signed in')).toBeInTheDocument();
+    // A neutral eyebrow: colour marks only state and role.
+    expect(screen.getByText('Signed in')).toHaveClass('text-fg-muted');
     expect(screen.getByRole('heading', { name: 'Welcome back, Jordan' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Opening your team…');
     expect(orbState.spike).toBe(SPIKE.signedIn);

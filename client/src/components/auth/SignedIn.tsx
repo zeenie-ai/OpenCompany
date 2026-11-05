@@ -38,7 +38,7 @@ export function SignedIn({ created, name }: { created: boolean; name: string }) 
   const greeting = created ? 'Welcome' : 'Welcome back';
   return (
     <div ref={ref} className="flex flex-col items-center gap-2.5 text-center">
-      <p className="m-0 font-mono text-2xs font-medium tracking-label text-node-agent-ink uppercase">
+      <p className="m-0 font-mono text-2xs font-medium tracking-label text-fg-muted uppercase">
         {created ? 'Account created' : 'Signed in'}
       </p>
       <h1 className="m-0 text-headline leading-hero font-semibold tracking-hero text-balance text-fg-default">

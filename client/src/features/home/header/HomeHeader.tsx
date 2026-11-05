@@ -5,10 +5,11 @@
  * role and apps, their status) and New conversation. The owner renames them
  * with the pencil beside their name, and gives them a photo (or takes it
  * away) from their avatar's menu; an employee built in the editor keeps its
- * initial. At the end the Workspace pill, the Normal/Dev switch (on an
- * employee's page, Dev opens their workflow) and the theme button. The
- * bottom border appears only once the content has scrolled, so the hero
- * reads as one surface.
+ * initial. At the end the Guide and Workspace pills, the Normal/Dev switch
+ * (on an employee's page, Dev opens their workflow) and the theme button;
+ * on an employee's page the Get started pill comes first, standing in for
+ * the checklist card (onboarding/GetStartedPill). The bottom border appears
+ * only once the content has scrolled, so the hero reads as one surface.
  */
 
 import { useRef, useState } from 'react';
@@ -26,6 +27,7 @@ import { useAnswering } from '../data/liveTask';
 import { presentEmployee } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
 import { HIRE_LIMITS } from '../genui';
+import { GetStartedPill } from '../onboarding/GetStartedPill';
 import { useHomeStore } from '../state/homeStore';
 import { Avatar, StatusPill } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
@@ -189,6 +191,7 @@ export function HomeHeader({ title, employee, scrolled }: { title: string; emplo
       {employee ? <Identity employee={employee} /> : <h2 className="truncate px-1.5 text-lead font-semibold text-fg-default">{title}</h2>}
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {employee && employee.talk.state === 'on' && <NewConversationButton employee={employee} />}
+        {employeeId && <GetStartedPill />}
         <GuideButton />
         <WorkspaceButton />
         <ModeToggle workflowId={employeeId} />

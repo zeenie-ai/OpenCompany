@@ -5,12 +5,16 @@
  * your first employee follow the team as it is now, and their rows take the
  * owner there (the AI models dialog, kept open after a connect); Say
  * hello and Approve a first draft are latched in the owner's settings,
- * each written once; it folds to a pill; hiding it says where it comes back.
+ * each written once; it folds to a pill, the fold kept in homeStore; Done
+ * and hiding it say where it comes back. On an employee's page the header's
+ * pill (onboarding/GetStartedPill) stands in for it under the same rule,
+ * writes the same latches, and opens the card on the hire view.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 
 const sendRequest = vi.fn();
 const listeners = new Map<string, Set<(data: unknown) => void>>();
@@ -38,7 +42,9 @@ vi.mock('../data/connectors', () => ({
 
 vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 
+import { USER_SETTINGS_QUERY_KEY } from '@/hooks/useUserSettingsQuery';
 import { GetStartedChecklist } from '../onboarding/GetStartedChecklist';
+import { GetStartedPill } from '../onboarding/GetStartedPill';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 
@@ -60,14 +66,14 @@ function saves(): Wire[] {
   return sendRequest.mock.calls.filter(([type]) => type === 'save_user_settings').map(([, data]) => (data as Wire).settings as Wire);
 }
 
-function renderChecklist() {
+function renderWith(ui: ReactElement): QueryClient {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <GetStartedChecklist />
-    </QueryClientProvider>,
-  );
+  render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return client;
 }
+
+const renderChecklist = () => renderWith(<GetStartedChecklist />);
+const renderPill = () => renderWith(<GetStartedPill />);
 
 function emit(type: string, data: unknown) {
   act(() => {
@@ -85,6 +91,7 @@ beforeEach(() => {
     view: { kind: 'hire' },
     guide: { ...state.guide, open: false },
     connectAI: { open: false, provider: null, closeOnConnect: true },
+    getStartedFolded: false,
   }));
   server = { settings: { onboarding_completed: true }, employees: [], messages: [] };
   sendRequest.mockReset().mockImplementation(async (type: string, data: Wire) => {
@@ -108,16 +115,16 @@ describe('Get started on Home', () => {
   });
 
   it('stays hidden while the guide is open', async () => {
-    useHomeStore.setState((state) => ({ guide: { ...state.guide, open: true } }));
     renderChecklist();
-    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('list_employees', {}));
+    await screen.findByRole('region', { name: 'Get started' });
+    act(() => useHomeStore.setState((state) => ({ guide: { ...state.guide, open: true } })));
     expect(screen.queryByRole('region', { name: 'Get started' })).not.toBeInTheDocument();
   });
 
   it('stays hidden while the AI models dialog is open', async () => {
-    useHomeStore.setState((state) => ({ connectAI: { ...state.connectAI, open: true } }));
     renderChecklist();
-    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('list_employees', {}));
+    await screen.findByRole('region', { name: 'Get started' });
+    act(() => useHomeStore.setState((state) => ({ connectAI: { ...state.connectAI, open: true } })));
     expect(screen.queryByRole('region', { name: 'Get started' })).not.toBeInTheDocument();
   });
 
@@ -125,7 +132,7 @@ describe('Get started on Home', () => {
     renderChecklist();
     const card = await screen.findByRole('region', { name: 'Get started' });
     expect(within(card).getByText('0 of 4 done')).toBeInTheDocument();
-    expect(within(card).getByText('OpenAI, Anthropic, Gemini or a local model')).toBeInTheDocument();
+    expect(within(card).getByText('So your team can think')).toBeInTheDocument();
     fireEvent.click(step(/Connect an AI model/));
     // The AI models dialog, which stays on its list after a connect.
     expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: false });
@@ -139,7 +146,7 @@ describe('Get started on Home', () => {
     ai = [{ id: 'openai', name: 'OpenAI', consumer_category: 'ai', connected: true }];
     server.employees = [MAYA];
     renderChecklist();
-    expect(await screen.findByText('Maya, Receptionist')).toBeInTheDocument();
+    expect(await screen.findByText('Maya joined your team')).toBeInTheDocument();
     expect(screen.getByText('OpenAI is connected')).toBeInTheDocument();
     expect(screen.getByText('2 of 4 done')).toBeInTheDocument();
     fireEvent.click(step(/Say hello/));
@@ -150,7 +157,7 @@ describe('Get started on Home', () => {
     const sam = { ...MAYA, workflow_id: 'w2', name: 'Sam', hired_at: '2026-10-08T10:00:00+00:00', pending_approvals: 1 };
     server.employees = [MAYA, sam];
     renderChecklist();
-    expect(await screen.findByText('Maya, Receptionist')).toBeInTheDocument();
+    expect(await screen.findByText('Maya joined your team')).toBeInTheDocument();
     fireEvent.click(step(/Approve a first draft/));
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w2' });
   });
@@ -180,7 +187,10 @@ describe('Get started on Home', () => {
     renderChecklist();
     await screen.findByRole('region', { name: 'Get started' });
     fireEvent.click(screen.getByRole('button', { name: 'Fold the checklist' }));
+    // In the store, so the fold outlives the card (it remounts on each return to the hire view).
+    expect(useHomeStore.getState().getStartedFolded).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /Get started · 0\/4/ }));
+    expect(useHomeStore.getState().getStartedFolded).toBe(false);
     expect(screen.getByRole('region', { name: 'Get started' })).toBeInTheDocument();
   });
 
@@ -191,5 +201,68 @@ describe('Get started on Home', () => {
     await waitFor(() => expect(saves()).toEqual([{ getting_started_dismissed: true }]));
     expect(pillToast).toHaveBeenCalledWith('Get started hidden. Reopen it from Settings → Help.');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Get started' })).not.toBeInTheDocument());
+  });
+
+  it('ends with Done, which hides it the same way', async () => {
+    ai = [{ id: 'openai', name: 'OpenAI', consumer_category: 'ai', connected: true }];
+    server.employees = [MAYA];
+    server.settings = { onboarding_completed: true, getting_started_said_hello: true, getting_started_approved_draft: true };
+    renderChecklist();
+    const card = await screen.findByRole('region', { name: 'Get started' });
+    expect(await within(card).findByRole('heading', { name: 'You’re all set!' })).toBeInTheDocument();
+    // A done step is a state, so its disc takes the working colour.
+    expect(card.querySelectorAll('.bg-status-working-fill')).toHaveLength(4);
+    // Done is neutral, never an action's colour.
+    const done = within(card).getByRole('button', { name: 'Done' });
+    expect(done).toHaveClass('border-border-default');
+    expect(done).not.toHaveClass('bg-action-run-soft');
+    fireEvent.click(done);
+    await waitFor(() => expect(saves()).toEqual([{ getting_started_dismissed: true }]));
+    expect(pillToast).toHaveBeenCalledWith('Get started hidden. Reopen it from Settings → Help.');
+  });
+});
+
+describe('The Get started pill on an employee’s page', () => {
+  it('goes back to the hire view with the card open', async () => {
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' }, getStartedFolded: true });
+    renderPill();
+    fireEvent.click(await screen.findByRole('button', { name: 'Get started · 0/4' }));
+    expect(useHomeStore.getState()).toMatchObject({ view: { kind: 'hire' }, getStartedFolded: false });
+  });
+
+  it('shows by the card’s rule', async () => {
+    const client = renderPill();
+    const pill = () => screen.queryByRole('button', { name: /Get started/ });
+    expect(await screen.findByRole('button', { name: /Get started/ })).toBeInTheDocument();
+    // Only once the guide is finished.
+    act(() => {
+      client.setQueryData(USER_SETTINGS_QUERY_KEY, { onboarding_completed: false });
+    });
+    await waitFor(() => expect(pill()).not.toBeInTheDocument());
+    act(() => {
+      client.setQueryData(USER_SETTINGS_QUERY_KEY, { onboarding_completed: true });
+    });
+    await waitFor(() => expect(pill()).toBeInTheDocument());
+    // Never while the guide or the AI models dialog is open.
+    act(() => useHomeStore.setState((state) => ({ guide: { ...state.guide, open: true } })));
+    expect(pill()).not.toBeInTheDocument();
+    act(() => useHomeStore.setState((state) => ({ guide: { ...state.guide, open: false }, connectAI: { ...state.connectAI, open: true } })));
+    expect(pill()).not.toBeInTheDocument();
+    act(() => useHomeStore.setState((state) => ({ connectAI: { ...state.connectAI, open: false } })));
+    expect(pill()).toBeInTheDocument();
+    // Until the owner hides it.
+    act(() => {
+      client.setQueryData(USER_SETTINGS_QUERY_KEY, { onboarding_completed: true, getting_started_dismissed: true });
+    });
+    await waitFor(() => expect(pill()).not.toBeInTheDocument());
+  });
+
+  it('writes both latches, as the card does on the hire view', async () => {
+    server.employees = [MAYA];
+    server.messages = [{ id: 1, role: 'user', message: 'Hi!', timestamp: '2026-10-08T09:05:00+00:00', run_key: 'g1' }];
+    renderPill();
+    await waitFor(() => expect(saves()).toEqual([{ getting_started_said_hello: true }]));
+    emit('approval_lifecycle', { type: 'com.opencompany.approval.decided', data: { approval_id: 'a2', workflow_id: 'w1', status: 'approved' } });
+    await waitFor(() => expect(saves()).toEqual([{ getting_started_said_hello: true }, { getting_started_approved_draft: true }]));
   });
 });

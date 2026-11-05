@@ -1,17 +1,20 @@
 /**
- * The Get started checklist (onboarding handoff D): a card in Home's
- * bottom-right corner once the Welcome guide is finished, whose four steps
- * tick themselves as the owner gets going (useGetStarted). A step not done
- * yet takes the owner there. The card folds to a "Get started · n/4" pill,
- * and hiding it says where it comes back (Settings > Help). It stays out of
- * the way while the guide or the AI models dialog is open.
+ * The Get started checklist (onboarding handoff D): a card in the hire
+ * view's bottom-right corner once the Welcome guide is finished, whose four
+ * steps tick themselves as the owner gets going (useGetStarted). A step not
+ * done yet takes the owner there. HomeShell mounts it on the hire view only;
+ * on an employee's page, where it would cover Send, the header's Get started
+ * pill stands in for it. The card rises in and folds to a "Get started ·
+ * n/4" pill (the fold is kept in homeStore, so it outlives the card), and
+ * hiding it says where it comes back (Settings > Help). It stays out of the
+ * way while the guide or the AI models dialog is open.
  */
 
 import { Check, ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
-import { useState } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
+import { useLayoutEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { rise } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
@@ -23,7 +26,7 @@ function Step({ row }: { row: GetStartedRow }) {
       <span
         className={cn(
           'grid size-6 shrink-0 place-items-center rounded-full border',
-          row.done ? 'border-action-run-border bg-action-run-soft text-action-run-ink' : 'border-border-default text-fg-muted',
+          row.done ? 'border-status-working-border bg-status-working-fill text-status-working-ink' : 'border-border-default text-fg-muted',
         )}
       >
         {row.done ? <Check aria-hidden className="size-3.5" strokeWidth={2.5} /> : <row.icon aria-hidden className="size-3.5" />}
@@ -49,11 +52,16 @@ function Step({ row }: { row: GetStartedRow }) {
 }
 
 export function GetStartedChecklist() {
-  const guideOpen = useHomeStore((s) => s.guide.open);
-  const connectOpen = useHomeStore((s) => s.connectAI.open);
+  const folded = useHomeStore((s) => s.getStartedFolded);
+  const setFolded = useHomeStore((s) => s.setGetStartedFolded);
   const { visible, rows, doneCount, dismiss } = useGetStarted();
-  const [folded, setFolded] = useState(false);
-  if (!visible || guideOpen || connectOpen) return null;
+  const cardRef = useRef<HTMLElement>(null);
+  const open = visible && !folded;
+  // Rises in whenever it opens: first shown, unfolded, or back on the hire view.
+  useLayoutEffect(() => {
+    if (open) rise(cardRef.current, { duration: 'panel-in' });
+  }, [open]);
+  if (!visible) return null;
 
   const total = rows.length;
   const allDone = doneCount === total;
@@ -78,11 +86,12 @@ export function GetStartedChecklist() {
 
   return (
     <section
+      ref={cardRef}
       aria-label="Get started"
       className="fixed right-4 bottom-4 z-40 flex w-80 flex-col gap-1 rounded-card border border-border-default bg-bg-panel p-2 shadow-popover"
     >
       <div className="flex items-center gap-2 px-2 pt-1">
-        <Sparkles aria-hidden className="size-4 shrink-0 text-node-agent-ink" />
+        <Sparkles aria-hidden className="size-4 shrink-0 text-fg-default" />
         <div className="min-w-0 flex-1">
           <h2 className="m-0 text-sm font-semibold text-fg-default">{allDone ? 'You’re all set!' : 'Get started'}</h2>
           <p className="m-0 text-xs text-fg-muted">
@@ -108,10 +117,15 @@ export function GetStartedChecklist() {
       </ul>
       {allDone && (
         <div className="px-2 pt-1 pb-1 text-center">
-          <ActionButton intent="run" onClick={hide}>
+          {/* Neutral: the hire view's one primary action is Create. */}
+          <Button
+            variant="quiet"
+            onClick={hide}
+            className="h-8 gap-1.5 rounded-row border-border-default px-3.5 font-semibold text-fg-default"
+          >
             <Check aria-hidden className="size-4" />
             Done
-          </ActionButton>
+          </Button>
         </div>
       )}
     </section>

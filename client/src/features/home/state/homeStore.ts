@@ -1,9 +1,10 @@
 /**
  * Normal mode's UI state: which view is showing, the sidebar, the Settings
- * dialog, the Workspace dock, the Welcome guide, the AI models dialog, and
- * the one-shot signals the hire choreography fires (a sidebar row's glow,
- * the logo pulse, what a hire could not set up as asked, a new hire's first
- * day). Server data lives in TanStack Query (features/home/data), never here.
+ * dialog, the Workspace dock, the Welcome guide, the AI models dialog,
+ * whether the Get started checklist is folded, and the one-shot signals the
+ * hire choreography fires (a sidebar row's glow, the logo pulse, what a hire
+ * could not set up as asked, a new hire's first day). Server data lives in
+ * TanStack Query (features/home/data), never here.
  */
 
 import { z } from 'zod';
@@ -159,6 +160,10 @@ interface HomeState {
   guide: GuideState;
   /** The AI models dialog. */
   connectAI: ConnectAIState;
+  /** The Get started checklist is folded to its pill. Kept here for this
+   *  session, since the card mounts on the hire view only and the header's
+   *  pill opens it from an employee's page. */
+  getStartedFolded: boolean;
   /** New hires on their first day, by workflow id. */
   firstDays: Record<string, FirstDay>;
 
@@ -201,6 +206,10 @@ interface HomeState {
   /** Once per session: open the guide for an owner who has not finished it,
    *  at the step they left. A completed owner never sees it unasked. */
   checkGuide: (settings: { onboarding_completed?: unknown; onboarding_step?: unknown }) => void;
+  setGetStartedFolded: (folded: boolean) => void;
+  /** The header's Get started pill: back to the hire view, with the
+   *  checklist open. */
+  openGetStarted: () => void;
   beginFirstDay: (workflowId: string, firstDay: FirstDay) => void;
   /** New conversation, or they are gone. */
   endFirstDay: (workflowId: string) => void;
@@ -229,6 +238,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   takeovers: {},
   guide: { open: false, step: 'welcome', furthest: 0, checked: false, provider: null, pendingDraft: false },
   connectAI: { open: false, provider: null, closeOnConnect: true },
+  getStartedFolded: false,
   firstDays: {},
 
   showHire: (options) =>
@@ -338,6 +348,11 @@ export const useHomeStore = create<HomeState>((set, get) => ({
     set((state) => ({
       guide: { ...state.guide, open: true, step, furthest: Math.max(state.guide.furthest, stepIndex(step)), checked: true },
     }));
+  },
+  setGetStartedFolded: (getStartedFolded) => set({ getStartedFolded }),
+  openGetStarted: () => {
+    get().showHire();
+    set({ getStartedFolded: false });
   },
   beginFirstDay: (workflowId, firstDay) => set((state) => ({ firstDays: { ...state.firstDays, [workflowId]: firstDay } })),
   endFirstDay: (workflowId) =>
