@@ -59,3 +59,15 @@ it('collapses secondary controls without losing their state or remounting the vi
   expect(screen.getByTestId('viewer')).toBe(viewer);
   expect(mount).toHaveBeenCalledTimes(1);
 });
+
+it('draws only the viewer in Home, whose dock has its own Expand', () => {
+  render(<FullView label="Browser" chrome="home" toolbar={<span role="status">Live browser</span>} controls={<input aria-label="Address" />}><canvas data-testid="viewer" /></FullView>);
+  const root = screen.getByTestId('viewer').parentElement;
+  expect(root?.children).toHaveLength(1);
+  // The root the viewers' group-data selectors read is kept.
+  expect(root).toHaveAttribute('data-full-view', 'false');
+  expect(root).toHaveClass('group/fullview');
+  expect(screen.queryByRole('button', { hidden: true })).toBeNull();
+  expect(screen.queryByRole('status', { hidden: true })).toBeNull();
+  expect(screen.queryByRole('textbox', { hidden: true })).toBeNull();
+});

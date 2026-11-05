@@ -1,9 +1,10 @@
 /**
  * Whether a Workspace surface is busy, for the dot on its tab (design
- * handoff "Workspace panel": an inactive tab with activity shows a pink
- * dot). A surface is busy while one of its nodes runs in this workflow, read
- * from the same node statuses the editor canvas shows; the host adds what
- * else counts (Home: the employee waiting for the owner in the browser).
+ * handoff "Workspace panel": an inactive tab with activity shows a dot,
+ * pink in the editor and red in Home). A surface is busy while one of its
+ * nodes runs in this workflow, read from the same node statuses the editor
+ * canvas shows; the host adds what else counts (Home: the employee waiting
+ * for the owner in the browser).
  */
 
 import { useCallback } from 'react';
