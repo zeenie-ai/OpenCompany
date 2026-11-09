@@ -11,6 +11,16 @@ from services.deployment import handlers
 from services.deployment import execution_control
 
 
+# Every wait_for below only catches a hang: the awaited work runs on in-memory
+# mocks and takes milliseconds. A test that relies on a bound cutting work short
+# patches that bound far below this (0.02 s) and asserts the work was retired;
+# the unpatched bounds a regression could fall back to
+# (_TRANSITION_ANSWER_SECONDS 10 s, _BOOT_REARM_TIMEOUT_SECONDS 30 s) are above
+# it. Budgets of 0.2-0.5 s measured the runner instead: GitHub's macOS runners
+# stalled past 0.5 s late in the suite on 2026-11-05 and 2026-11-09.
+HANG_GUARD_SECONDS = 5.0
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def drain_supervised_transitions():
     yield
@@ -191,9 +201,9 @@ async def test_blocked_stop_status_returns_and_reset_supersedes_poll(monkeypatch
     monkeypatch.setattr(execution_control, "transition_generation", temporal)
     stop = asyncio.create_task(handlers.handle_pause_workflow(
         {"workflow_id": "canvas", "expected_revision": 2}, None))
-    await asyncio.wait_for(admitted.wait(), 1)
+    await asyncio.wait_for(admitted.wait(), HANG_GUARD_SECONDS)
     for _ in range(3):
-        snapshot = await asyncio.wait_for(handlers.handle_get_workflow_control_status({"workflow_id": "canvas"}, None), 0.2)
+        snapshot = await asyncio.wait_for(handlers.handle_get_workflow_control_status({"workflow_id": "canvas"}, None), HANG_GUARD_SECONDS)
         assert snapshot["state"] == "pausing"
     assert not stop.done()
     assert temporal.await_count == 1
@@ -201,8 +211,8 @@ async def test_blocked_stop_status_returns_and_reset_supersedes_poll(monkeypatch
 
     reset = await asyncio.wait_for(handlers.handle_reset_workflow(
         {"workflow_id": "canvas", "expected_revision": 3,
-         "expected_root_execution_id": "generation-root"}, None), 1)
-    outcome = await asyncio.wait_for(stop, 1)
+         "expected_root_execution_id": "generation-root"}, None), HANG_GUARD_SECONDS)
+    outcome = await asyncio.wait_for(stop, HANG_GUARD_SECONDS)
     assert reset["success"] and reset["state"] == "ready"
     assert outcome["success"] and outcome["superseded"]
     assert outcome["state"] in {"resetting", "ready"}
@@ -223,7 +233,7 @@ async def test_disconnect_cancels_waiter_and_preserves_durable_stop(monkeypatch)
 
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=stuck))
     waiter = asyncio.create_task(handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None))
-    await asyncio.wait_for(admitted.wait(), 1)
+    await asyncio.wait_for(admitted.wait(), HANG_GUARD_SECONDS)
     transition_task = handlers._control_transition_tasks[(record.row.id, 3)]
     waiter.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -232,7 +242,7 @@ async def test_disconnect_cancels_waiter_and_preserves_durable_stop(monkeypatch)
     assert record.row.status == "pausing"
     record.runtime.resume_deployment.assert_not_awaited()
     release.set()
-    finished, _ = await asyncio.wait_for(asyncio.shield(transition_task), 1)
+    finished, _ = await asyncio.wait_for(asyncio.shield(transition_task), HANG_GUARD_SECONDS)
     assert finished.status == "paused" and record.row.status == "paused"
 
 
@@ -250,13 +260,13 @@ async def test_a_stop_still_draining_answers_pending_and_the_drain_goes_on(monke
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=stuck))
     monkeypatch.setattr(handlers, "_TRANSITION_ANSWER_SECONDS", 0.05)
     outcome = await asyncio.wait_for(
-        handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None), 5)
+        handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None), HANG_GUARD_SECONDS)
     assert outcome["success"] and outcome["transition_pending"] and not outcome["superseded"]
     assert outcome["state"] == "pausing"
     transition_task = handlers._control_transition_tasks[(record.row.id, 3)]
     assert admitted.is_set() and not transition_task.done()
     release.set()
-    finished, _ = await asyncio.wait_for(asyncio.shield(transition_task), 1)
+    finished, _ = await asyncio.wait_for(asyncio.shield(transition_task), HANG_GUARD_SECONDS)
     assert finished.status == "paused" and record.row.status == "paused"
 
 
@@ -284,11 +294,11 @@ async def test_late_transition_after_reset_does_not_broadcast_or_reopen(monkeypa
 
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=late))
     transition_task = asyncio.create_task(handlers._finish_versioned_transition(record.service, copy(record.row)))
-    await asyncio.wait_for(started.wait(), 1)
+    await asyncio.wait_for(started.wait(), HANG_GUARD_SECONDS)
     record.row = copy(record.row)
     record.row.status, record.row.revision = "reset", 5
     release.set()
-    finished, status = await asyncio.wait_for(transition_task, 1)
+    finished, status = await asyncio.wait_for(transition_task, HANG_GUARD_SECONDS)
     assert finished.status == "reset" and status is None
     assert record.broadcasts == []
     record.runtime.resume_deployment.assert_not_awaited()
@@ -464,7 +474,7 @@ async def test_checkpoint_failure_retires_sibling_rpc_pollers():
     root.execute_update.side_effect = root_update
     controller.execute_update.side_effect = controller_update
     with pytest.raises(RuntimeError, match="checkpoint transport failure"):
-        await asyncio.wait_for(execution_control.transition_generation(client, control(), paused=True), 1)
+        await asyncio.wait_for(execution_control.transition_generation(client, control(), paused=True), HANG_GUARD_SECONDS)
     assert retired.is_set()
 
 
@@ -484,14 +494,14 @@ async def test_explicit_retry_joins_existing_transition(monkeypatch, intent, han
     temporal = AsyncMock(side_effect=pending)
     monkeypatch.setattr(execution_control, "transition_generation", temporal)
     background = handlers._schedule_versioned_transition(record.service, copy(record.row))
-    await asyncio.wait_for(started.wait(), 1)
+    await asyncio.wait_for(started.wait(), HANG_GUARD_SECONDS)
     retry = asyncio.create_task(handler({"workflow_id": "canvas", "expected_revision": 3}, None))
-    snapshot = await asyncio.wait_for(handlers.handle_get_workflow_control_status({"workflow_id": "canvas"}, None), 0.2)
+    snapshot = await asyncio.wait_for(handlers.handle_get_workflow_control_status({"workflow_id": "canvas"}, None), HANG_GUARD_SECONDS)
     assert snapshot["state"] == intent
     await asyncio.sleep(0)
     assert not retry.done()
     release.set()
-    result = await asyncio.wait_for(retry, 1)
+    result = await asyncio.wait_for(retry, HANG_GUARD_SECONDS)
     assert result["success"] and not result["transition_pending"]
     assert result["state"] == ("paused" if intent == "pausing" else "running")
     await background
@@ -523,12 +533,12 @@ async def test_unavailable_generation_observation_cannot_hold_reset_lock(monkeyp
     monkeypatch.setattr(execution_control, "count_generation_actions", count)
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=pending))
     stop = asyncio.create_task(handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None))
-    await asyncio.wait_for(observing.wait(), 1)
+    await asyncio.wait_for(observing.wait(), HANG_GUARD_SECONDS)
     reset = await asyncio.wait_for(handlers.handle_reset_workflow(
-        {"workflow_id": "canvas", "expected_revision": 3, "expected_root_execution_id": "generation-root"}, None), 0.5)
+        {"workflow_id": "canvas", "expected_revision": 3, "expected_root_execution_id": "generation-root"}, None), HANG_GUARD_SECONDS)
     assert reset["success"] and reset["state"] == "ready"
     assert retired.is_set()
-    assert (await asyncio.wait_for(stop, 0.5))["superseded"]
+    assert (await asyncio.wait_for(stop, HANG_GUARD_SECONDS))["superseded"]
     # Runtime fallback is explicitly observational. Never report an invented
     # zero generation count or use it as evidence of a checkpoint.
     snapshot = await real_payload(record.row, controller_status={"state": "reset"})
@@ -554,7 +564,7 @@ async def test_workspace_observation_timeout_omits_unavailable_counts(monkeypatc
             retired.set()
 
     monkeypatch.setattr(node_invocations, "controller_status", stalled)
-    snapshot = await asyncio.wait_for(handlers._with_runtime_counts({"state": "pausing"}, "canvas"), 0.5)
+    snapshot = await asyncio.wait_for(handlers._with_runtime_counts({"state": "pausing"}, "canvas"), HANG_GUARD_SECONDS)
     assert retired.is_set()
     assert snapshot["workspace_available"] is False
     assert "workspace_active_count" not in snapshot
@@ -593,12 +603,12 @@ async def test_boot_pending_transition_restores_collectors_without_blocking_othe
 
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=transition))
     monkeypatch.setattr(handlers, "_rearm_generation", AsyncMock(side_effect=rearm))
-    assert await asyncio.wait_for(handlers.reconcile_active_controls_on_boot(), 0.2) == 2
-    await asyncio.wait_for(started.wait(), 0.2)
+    assert await asyncio.wait_for(handlers.reconcile_active_controls_on_boot(), HANG_GUARD_SECONDS) == 2
+    await asyncio.wait_for(started.wait(), HANG_GUARD_SECONDS)
     assert collectors == {"healthy": "running"}
     boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
     release.set()
-    await asyncio.wait_for(asyncio.shield(boot_task), 0.5)
+    await asyncio.wait_for(asyncio.shield(boot_task), HANG_GUARD_SECONDS)
     assert collectors == {"healthy": "running", "canvas": stable}
     assert record.row.status == stable
 
@@ -635,10 +645,10 @@ async def test_boot_interrupted_resume_obeys_unclean_shutdown_policy(monkeypatch
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=transition))
     monkeypatch.setattr(handlers, "_rearm_generation", AsyncMock(side_effect=rearm))
     assert await handlers.reconcile_active_controls_on_boot() == 1
-    await asyncio.wait_for(started.wait(), 0.2)
+    await asyncio.wait_for(started.wait(), HANG_GUARD_SECONDS)
     boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
     release.set()
-    await asyncio.wait_for(asyncio.shield(boot_task), 0.5)
+    await asyncio.wait_for(asyncio.shield(boot_task), HANG_GUARD_SECONDS)
     assert collectors == [stable]
     assert record.row.status == stable
     if policy == "pause":
@@ -661,7 +671,7 @@ async def test_boot_continuation_cannot_rearm_reset_or_a_later_start(monkeypatch
     rearm = AsyncMock()
     monkeypatch.setattr(handlers, "_rearm_generation", rearm)
     await handlers.reconcile_active_controls_on_boot()
-    await asyncio.wait_for(started.wait(), 0.2)
+    await asyncio.wait_for(started.wait(), HANG_GUARD_SECONDS)
     boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
     record.row = copy(record.row)
     record.row.revision = 5
@@ -671,7 +681,7 @@ async def test_boot_continuation_cannot_rearm_reset_or_a_later_start(monkeypatch
     else:
         record.row.status = "reset"
     release.set()
-    await asyncio.wait_for(asyncio.shield(boot_task), 0.5)
+    await asyncio.wait_for(asyncio.shield(boot_task), HANG_GUARD_SECONDS)
     rearm.assert_not_awaited()
     assert record.broadcasts == []
 
@@ -697,10 +707,10 @@ async def test_boot_rearm_failure_keeps_admission_closed_and_retries_collectors(
     monkeypatch.setattr(execution_control, "transition_generation", AsyncMock(side_effect=transition))
     monkeypatch.setattr(handlers, "_rearm_generation", AsyncMock(side_effect=rearm))
     await handlers.reconcile_active_controls_on_boot()
-    await asyncio.wait_for(started.wait(), 0.2)
+    await asyncio.wait_for(started.wait(), HANG_GUARD_SECONDS)
     boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
     release.set()
-    await asyncio.wait_for(asyncio.shield(boot_task), 0.5)
+    await asyncio.wait_for(asyncio.shield(boot_task), HANG_GUARD_SECONDS)
     assert effects == ["rearm", "rearm", "restored"]
     assert record.row.status == "paused"
     record.runtime.resume_deployment.assert_not_awaited()
@@ -725,11 +735,11 @@ async def test_boot_rearm_wait_is_bounded_and_reset_can_take_over(monkeypatch):
                         AsyncMock(return_value={"controller_status": {}, "controlled_executions": 3}))
     monkeypatch.setattr(handlers, "_rearm_generation", rearm)
     await handlers.reconcile_active_controls_on_boot()
-    await asyncio.wait_for(restoring.wait(), 0.2)
+    await asyncio.wait_for(restoring.wait(), HANG_GUARD_SECONDS)
     boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
     reset = await asyncio.wait_for(handlers.handle_reset_workflow({
         "workflow_id": "canvas", "expected_revision": 4,
-    }, None), 0.5)
+    }, None), HANG_GUARD_SECONDS)
     assert reset["success"] and record.row.status == "reset"
     assert retired.is_set()
     await asyncio.gather(boot_task, return_exceptions=True)
@@ -752,11 +762,11 @@ async def test_generation_scoped_reset_preempts_a_blocked_boot_setup_immediately
                         AsyncMock(return_value={"controller_status": {}, "controlled_executions": 3}))
     monkeypatch.setattr(handlers, "_rearm_generation", rearm)
     await handlers.reconcile_active_controls_on_boot()
-    await asyncio.wait_for(restoring.wait(), 0.2)
+    await asyncio.wait_for(restoring.wait(), HANG_GUARD_SECONDS)
     boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
     reset = await asyncio.wait_for(handlers.handle_reset_workflow({
         "workflow_id": "canvas", "expected_root_execution_id": "generation-root",
-    }, None), 0.2)
+    }, None), HANG_GUARD_SECONDS)
     assert reset["success"] and record.row.status == "reset"
     assert retired.is_set()
     await asyncio.gather(boot_task, return_exceptions=True)
@@ -795,13 +805,13 @@ async def test_boot_retry_awaits_existing_setup_receipt_instead_of_claiming_it_r
     try:
         await handlers.reconcile_active_controls_on_boot()
         boot_task = handlers._boot_reconciliation_tasks[(record.row.id, record.row.generation)]
-        await asyncio.wait_for(setup_started.wait(), 0.2)
-        await asyncio.wait_for(gated.wait(), 0.2)
+        await asyncio.wait_for(setup_started.wait(), HANG_GUARD_SECONDS)
+        await asyncio.wait_for(gated.wait(), HANG_GUARD_SECONDS)
         setup_task = handlers._deployment_tasks["canvas"]
         assert not setup_task.done() and not boot_task.done()
         handlers.handle_cancel_deployment.assert_not_awaited()
         release_setup.set()
-        await asyncio.wait_for(asyncio.shield(boot_task), 0.5)
+        await asyncio.wait_for(asyncio.shield(boot_task), HANG_GUARD_SECONDS)
         handlers.handle_deploy_workflow.assert_awaited_once()
         assert setup_task.done() and record.row.status == "paused"
         record.runtime.update_trigger_pause_status.assert_awaited_with("canvas", paused=True)
