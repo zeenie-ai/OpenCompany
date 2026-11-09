@@ -22,6 +22,7 @@ import { useLayoutEffect, useRef } from 'react';
 import { RingSpinner } from '@/components/ui/ring-spinner';
 import { animate, rise } from '@/lib/motion';
 import { useWorkflowControlPending } from '@/stores/workflowControlStore';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { useEmployeeDetailQuery } from '../data/employees';
 import { useAnswering } from '../data/liveTask';
 import { busyLabelFor, firstDayLine, presentEmployee, type FirstDayPhase } from '../data/presentation';
@@ -89,7 +90,7 @@ export function FirstDay({
       <div className="flex items-center gap-2.5">
         <div className="relative shrink-0">
           <span ref={avatarRef} className="block rounded-full">
-            <Avatar name={name} colorRole={employee.color_role} photo={employee.photo_url} size="md" accent />
+            <Avatar name={name} colorRole={employee.color_role} photo={employee.photo_url} fallbackPhoto={getDefaultEmployeeAvatar(employee.workflow_id)} size="md" accent />
           </span>
           {phase === 'starting' && (
             <RingSpinner slow className="absolute -inset-1 border-status-ready-border border-t-status-ready-dot" />

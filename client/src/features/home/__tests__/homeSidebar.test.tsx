@@ -21,6 +21,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { EMPLOYEES_QUERY_KEY } from '../data/employeeCache';
 import { parseEmployee } from '../data/schemas';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { HomeSidebar } from '../sidebar/HomeSidebar';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
@@ -65,6 +66,26 @@ beforeEach(() => {
 afterEach(() => {
   queryClient.clear();
   vi.restoreAllMocks();
+});
+
+describe('HomeSidebar portraits', () => {
+  it('assigns stable cats to hired and editor employees, with uploaded photos taking priority', async () => {
+    const hired = parseEmployee({ workflow_id: 'a', name: 'Maya', role: 'Receptionist', derived: false })!;
+    const derived = parseEmployee({ workflow_id: 'b', name: 'Theo', role: 'Researcher', derived: true })!;
+    queryClient.setQueryData(EMPLOYEES_QUERY_KEY, [hired, derived]);
+    const { container } = mountSidebar();
+    const portrait = (id: string) => container.querySelector(`[data-employee-row="${id}"] img`);
+    expect(portrait('a')).toHaveAttribute('src', getDefaultEmployeeAvatar('a'));
+    expect(portrait('b')).toHaveAttribute('src', getDefaultEmployeeAvatar('b'));
+    act(() => {
+      queryClient.setQueryData(EMPLOYEES_QUERY_KEY, [
+        { ...hired, name: 'Renamed employee', role: 'New role' },
+        { ...derived, photo_url: '/custom.png' },
+      ]);
+    });
+    await waitFor(() => expect(portrait('b')).toHaveAttribute('src', '/custom.png'));
+    expect(portrait('a')).toHaveAttribute('src', getDefaultEmployeeAvatar('a'));
+  });
 });
 
 describe('HomeSidebar employee deletion', () => {

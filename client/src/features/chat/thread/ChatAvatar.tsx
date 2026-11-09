@@ -1,6 +1,6 @@
 /**
- * The answering employee's avatar beside their turns: their photo, else
- * their initial, on the accent disc (chat V2 colour pass, 4 Nov), and a
+ * The answering employee's avatar beside their turns: their photo, assigned
+ * portrait or initial, on the accent disc (chat V2 colour pass, 4 Nov), and a
  * spinning ring while they work (design handoff chat, "Streaming": the live
  * ring).
  */
@@ -21,7 +21,7 @@ export function ChatAvatar({ persona, live = false, compact = false }: { persona
           compact ? 'text-2xs' : 'text-xs',
         )}
       >
-        <AvatarFace name={persona.name} photo={persona.photo} />
+        <AvatarFace name={persona.name} photo={persona.photo} fallbackPhoto={persona.fallbackPhoto} />
       </span>
     </span>
   );

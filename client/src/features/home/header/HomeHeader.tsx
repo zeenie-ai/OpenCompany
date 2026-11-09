@@ -4,8 +4,8 @@
  * hiring, its title; on an employee's page, who they are (avatar, name,
  * role and apps, their status) and New conversation. The owner renames them
  * with the pencil beside their name, and gives them a photo (or takes it
- * away) from their avatar's menu; an employee built in the editor keeps its
- * initial. At the end the Guide pill, the Workspace button (it opens and
+ * away) from their avatar's menu; an employee built in the editor uses its
+ * assigned portrait. At the end the Guide pill, the Workspace button (it opens and
  * closes the dock), the Normal/Dev switch (on an employee's page, Dev opens
  * their workflow) and the theme button;
  * on an employee's page the Get started pill comes first, standing in for
@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { ThemeButton } from '@/components/ui/ThemeButton';
 import { cn } from '@/lib/utils';
 import { useWorkflowControlPending } from '@/stores/workflowControlStore';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { PHOTO_TYPES, useRenameEmployee, useSetEmployeePhoto } from '../data/identity';
 import { useAnswering } from '../data/liveTask';
 import { presentEmployee } from '../data/presentation';
@@ -45,7 +46,7 @@ function subtitleOf(employee: EmployeeSummary): string {
 function PhotoButton({ employee }: { employee: EmployeeSummary }) {
   const setPhoto = useSetEmployeePhoto();
   const input = useRef<HTMLInputElement>(null);
-  const avatar = <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} size="sm" accent />;
+  const avatar = <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} fallbackPhoto={getDefaultEmployeeAvatar(employee.workflow_id)} size="sm" accent />;
   if (employee.derived) return avatar;
   const change = (file: File | null) =>
     setPhoto.mutate(

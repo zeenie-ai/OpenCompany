@@ -35,6 +35,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { ChatPane, useChatThread, useLaneRun, type ChatPaneHandle, type ComposerMode } from '@/features/chat';
 import { invalidateEmployees } from '../data/employees';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { firstDayPhase, stateNoticeText, talkMode, talkNoticeText } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
 import { useRetryNote } from '../data/talk';
@@ -207,7 +208,7 @@ export function EmployeeChat({
           kind: 'home',
           sessionId: workflowId,
           scope: 'all',
-          persona: { name, colorRole: employee.color_role, photo: employee.photo_url },
+          persona: { name, colorRole: employee.color_role, photo: employee.photo_url, fallbackPhoto: getDefaultEmployeeAvatar(workflowId) },
           composer,
           placeholder: composer === 'wait' ? `${name} is starting…` : undefined,
           notices: <Notices employee={employee} control={control} queued={lane?.state === 'queued'} firstDay={Boolean(firstDay) && !spoken} />,

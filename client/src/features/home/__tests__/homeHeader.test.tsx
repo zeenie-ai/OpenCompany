@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -32,6 +32,7 @@ import { uploadToWorkspace } from '@/lib/workspaceUpload';
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { enterDev } from '../../../app/useShellActions';
 import { parseEmployee } from '../data/schemas';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { HomeHeader } from '../header/HomeHeader';
 import { useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
@@ -157,7 +158,7 @@ describe('HomeHeader', () => {
     expect(sendRequest).not.toHaveBeenCalledWith('set_employee_photo', expect.anything());
   });
 
-  it('shows the photo, takes it away, and falls back to the initial when it will not load', async () => {
+  it('shows the uploaded photo, offers removal, and falls back to the assigned cat when it will not load', async () => {
     const user = userEvent.setup();
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
     const photoUrl = '/api/workspace/w1/files/uploads/me.png?v=1';
@@ -169,22 +170,22 @@ describe('HomeHeader', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Remove photo' }));
     await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('set_employee_photo', { workflow_id: 'w1', path: null }));
     fireEvent.error(image!);
-    expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Change Maya’s photo' })).toHaveTextContent('M');
+    expect(container.querySelector('img')).toHaveAttribute('src', getDefaultEmployeeAvatar('w1'));
   });
 
-  it('keeps the initial of an employee built in the editor', () => {
+  it('gives an employee built in the editor an assigned portrait without a photo-upload menu', () => {
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
-    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    const { container } = wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
     expect(screen.queryByRole('button', { name: 'Change Maya’s photo' })).not.toBeInTheDocument();
-    expect(screen.getByText('M')).toHaveClass('bg-accent', 'border-accent-edge');
+    expect(container.querySelector('img')).toHaveAttribute('src', getDefaultEmployeeAvatar('w1'));
+    expect(container.querySelector('img')?.parentElement).toHaveClass('bg-accent', 'border-accent-edge');
   });
 
   it('draws their face on the accent disc, which dims under the pointer', () => {
     useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
     wrap(<HomeHeader title="Maya" employee={{ ...maya, color_role: 'tool', derived: false }} scrolled={false} />);
     const trigger = screen.getByRole('button', { name: 'Change Maya’s photo' });
-    const face = within(trigger).getByText('M');
+    const face = trigger.querySelector('img')!.parentElement!;
     expect(face).toHaveClass('bg-accent', 'text-accent-foreground', 'border-accent-edge', 'shadow-avatar');
     expect(face.className).not.toMatch(/node-tool/);
     expect(trigger).toHaveClass('hover:opacity-88');

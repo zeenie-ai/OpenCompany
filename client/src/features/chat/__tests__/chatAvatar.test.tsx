@@ -5,10 +5,18 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { ChatAvatar } from '../thread/ChatAvatar';
 
 describe('ChatAvatar', () => {
+  it('uses the employee portrait if a custom photo is unavailable, preserving the live ring', () => {
+    const { container } = render(<ChatAvatar persona={{ name: 'Maya', colorRole: 'agent', photo: '/custom.png', fallbackPhoto: '/cat.png' }} live />);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/custom.png');
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/cat.png');
+    expect(container.querySelector('[data-live-ring]')).not.toBeNull();
+  });
+
   it('draws the initial on the accent disc, not the role tint', () => {
     const { container } = render(<ChatAvatar persona={{ name: 'Maya', colorRole: 'tool' }} />);
     const face = container.querySelector('.bg-accent');

@@ -18,6 +18,8 @@ export interface ChatPersona {
   colorRole: ColorRole;
   /** Their photo, when the owner gave them one. */
   photo?: string | null;
+  /** A stable employee portrait when the uploaded photo is absent or unavailable. */
+  fallbackPhoto?: string | null;
 }
 
 /**

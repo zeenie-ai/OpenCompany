@@ -27,6 +27,7 @@ import { useComposerStore } from '@/features/chat/state/composerStore';
 import { resetChatRunStore, useChatRunStore } from '@/stores/chatRunStore';
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { EMPLOYEES_QUERY_KEY, employeeDetailKey, removeEmployee, useEmployeesQuery } from '../data/employees';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { presentEmployee } from '../data/presentation';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { EmployeeChat } from '../employee/EmployeeChat';
@@ -140,6 +141,7 @@ describe('the thread', () => {
     // An answer is markdown, and its links leave the conversation open.
     expect(await screen.findByText('bookings', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'the calendar' })).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('log', { name: 'Conversation with Maya' }).querySelector('img')).toHaveAttribute('src', getDefaultEmployeeAvatar('w1'));
   });
 
   it('starts as just the message box, with whether they ask first under it', async () => {

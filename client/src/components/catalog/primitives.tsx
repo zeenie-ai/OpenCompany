@@ -7,12 +7,13 @@ import { cn } from '@/lib/utils';
 import { theme } from '@/styles/theme';
 import { AVATAR_CLASS, initialOf, type ColorRole } from './presentation';
 
-/** What an avatar disc shows: the photo when one is given and loads, else
- *  the first letter of the name. */
-export function AvatarFace({ name, photo }: { name: string; photo?: string | null }) {
-  const [broken, setBroken] = useState<string | null>(null);
-  if (photo && broken !== photo) {
-    return <img src={photo} alt="" draggable={false} onError={() => setBroken(photo)} className="size-full rounded-full object-cover" />;
+/** Prefer the owner's photo, then an assigned portrait. An initial is the
+ *  last fallback if neither image is available. */
+export function AvatarFace({ name, photo, fallbackPhoto }: { name: string; photo?: string | null; fallbackPhoto?: string | null }) {
+  const [broken, setBroken] = useState<string[]>([]);
+  const source = [photo, fallbackPhoto].find((url) => url && !broken.includes(url));
+  if (source) {
+    return <img src={source} alt="" draggable={false} onError={() => setBroken((urls) => [...urls, source])} className="size-full rounded-full object-cover" />;
   }
   return <>{initialOf(name)}</>;
 }

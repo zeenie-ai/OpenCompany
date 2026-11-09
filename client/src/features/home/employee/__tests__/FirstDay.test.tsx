@@ -27,6 +27,7 @@ import { useComposerStore } from '@/features/chat/state/composerStore';
 import { resetChatRunStore } from '@/stores/chatRunStore';
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { EMPLOYEES_QUERY_KEY } from '../../data/employees';
+import { getDefaultEmployeeAvatar } from '../../data/avatars';
 import { presentEmployee, primaryActionLabel } from '../../data/presentation';
 import { parseEmployee, type EmployeeSummary } from '../../data/schemas';
 import { useHomeStore } from '../../state/homeStore';
@@ -104,7 +105,8 @@ describe('a new hire’s first day', () => {
     expect(within(day).getByText('Starting Maya…')).toBeInTheDocument();
     expect(within(day).getByText('Starting…').querySelector('.bg-status-ready-dot')).not.toBeNull();
     // The header's avatar, its accent face at 32px.
-    expect(within(day).getByText('M')).toHaveClass('bg-accent', 'size-8');
+    expect(day.querySelector('img')).toHaveAttribute('src', getDefaultEmployeeAvatar('w1'));
+    expect(day.querySelector('img')?.parentElement).toHaveClass('bg-accent', 'size-8');
     expect(screen.queryByText('Maya joined your team')).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText('Maya is starting…')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Hi! What can you do?' })).not.toBeInTheDocument();

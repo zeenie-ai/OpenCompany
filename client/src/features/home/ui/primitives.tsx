@@ -28,6 +28,7 @@ export function Avatar({
   name,
   colorRole,
   photo,
+  fallbackPhoto,
   size = 'md',
   status,
   pulse = false,
@@ -36,8 +37,10 @@ export function Avatar({
 }: {
   name: string;
   colorRole: ColorRole;
-  /** Their photo; without one (or while it fails to load), their initial. */
+  /** Their uploaded photo, when present. */
   photo?: string | null;
+  /** The assigned portrait shown when no uploaded photo can be displayed. */
+  fallbackPhoto?: string | null;
   size?: keyof typeof AVATAR_SIZE;
   /** Draws the status pip bottom-right (sidebar rows). */
   status?: StatusTone;
@@ -57,7 +60,7 @@ export function Avatar({
         className,
       )}
     >
-      <AvatarFace name={name} photo={photo} />
+      <AvatarFace name={name} photo={photo} fallbackPhoto={fallbackPhoto} />
       {status && (
         <StatusDot
           tone={status}

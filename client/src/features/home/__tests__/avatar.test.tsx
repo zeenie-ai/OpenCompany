@@ -6,10 +6,31 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { Avatar } from '../ui/primitives';
 
 describe('Avatar', () => {
+  it('keeps the assigned portrait through renames and restores it after removing a custom photo', () => {
+    const { container, rerender } = render(<Avatar name="Maya" colorRole="agent" fallbackPhoto="/cat.png" />);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/cat.png');
+    rerender(<Avatar name="Renamed employee" colorRole="agent" photo="/custom.png" fallbackPhoto="/cat.png" />);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/custom.png');
+    rerender(<Avatar name="Renamed employee" colorRole="agent" photo={null} fallbackPhoto="/cat.png" />);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/cat.png');
+  });
+
+  it('falls back from a broken custom photo to the cat, then to an initial if both fail', () => {
+    const { container, rerender } = render(<Avatar name="Maya" colorRole="agent" photo="/custom.png" fallbackPhoto="/cat.png" />);
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/cat.png');
+    fireEvent.error(container.querySelector('img')!);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.firstElementChild).toHaveTextContent('M');
+    // A later successful upload is still eligible after previous URLs failed.
+    rerender(<Avatar name="Maya" colorRole="agent" photo="/new.png" fallbackPhoto="/cat.png" />);
+    expect(container.querySelector('img')).toHaveAttribute('src', '/new.png');
+  });
+
   it.each([
     ['card', ['size-12', 'border-2', 'text-lg']],
   ] as const)('draws the %s size', (size, classes) => {
