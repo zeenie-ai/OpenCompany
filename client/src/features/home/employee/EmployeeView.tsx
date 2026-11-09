@@ -9,7 +9,7 @@
  * (Resume, Start, or connect what they are missing; useEmployeeControl),
  * Apply, and Help in browser while they wait for the owner there; the
  * drafts to check follow the conversation. Pausing them is the
- * Workspace's, which the header's Workspace pill opens on the employee on
+ * Workspace's, which the header's Workspace button opens on the employee on
  * screen; the header's Dev switch opens their workflow.
  */
 

@@ -5,8 +5,9 @@
  * role and apps, their status) and New conversation. The owner renames them
  * with the pencil beside their name, and gives them a photo (or takes it
  * away) from their avatar's menu; an employee built in the editor keeps its
- * initial. At the end the Guide and Workspace pills, the Normal/Dev switch
- * (on an employee's page, Dev opens their workflow) and the theme button;
+ * initial. At the end the Guide pill, the Workspace button (it opens and
+ * closes the dock), the Normal/Dev switch (on an employee's page, Dev opens
+ * their workflow) and the theme button;
  * on an employee's page the Get started pill comes first, standing in for
  * the checklist card (onboarding/GetStartedPill). The bottom border appears
  * only once the content has scrolled, so the hero reads as one surface.

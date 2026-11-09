@@ -6,7 +6,8 @@
  * owner there (the AI models dialog, kept open after a connect); Say
  * hello and Approve a first draft are latched in the owner's settings,
  * each written once; it folds to a pill, the fold kept in homeStore; Done
- * and hiding it say where it comes back. On an employee's page the header's
+ * and hiding it say where it comes back; the card and its pill sit at the
+ * open Workspace dock's left edge. On an employee's page the header's
  * pill (onboarding/GetStartedPill) stands in for it under the same rule,
  * writes the same latches, and opens the card on the hire view.
  */
@@ -93,6 +94,8 @@ beforeEach(() => {
     connectAI: { open: false, provider: null, closeOnConnect: true },
     getStartedFolded: false,
     composerFocus: 0,
+    workspaceOpen: false,
+    workspaceWide: false,
   }));
   server = { settings: { onboarding_completed: true }, employees: [], messages: [] };
   sendRequest.mockReset().mockImplementation(async (type: string, data: Wire) => {
@@ -205,6 +208,29 @@ describe('Get started on Home', () => {
     await waitFor(() => expect(saves()).toEqual([{ getting_started_dismissed: true }]));
     expect(pillToast).toHaveBeenCalledWith('Get started hidden. Reopen it from Settings → Help.');
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Get started' })).not.toBeInTheDocument());
+  });
+
+  it('sits at the open Workspace dock’s left edge, card and pill, and goes back to the corner', async () => {
+    useHomeStore.setState({ workspaceOpen: true, workspaceWidth: 500, workspaceWide: false });
+    renderChecklist();
+    const BESIDE = 'right-[min(calc(var(--dock-width)_+_1rem),calc(100vw_-_21rem))]';
+    // The dock's width as the dock draws it, and the card one margin left of it.
+    const card = (await screen.findByRole('region', { name: 'Get started' })).parentElement!;
+    expect(card).toHaveClass(BESIDE);
+    expect(card).not.toHaveClass('right-4');
+    expect(card.style.getPropertyValue('--dock-width')).toBe('min(500px, max(340px, 100vw - 40px))');
+    act(() => useHomeStore.setState({ workspaceWide: true }));
+    expect(card.style.getPropertyValue('--dock-width')).toBe('max(420px, min(1100px, 100vw - 420px))');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fold the checklist' }));
+    const pill = screen.getByRole('button', { name: /Get started · 0\/4/ }).parentElement!;
+    expect(pill).toHaveClass(BESIDE);
+    expect(pill.style.getPropertyValue('--dock-width')).toBe('max(420px, min(1100px, 100vw - 420px))');
+
+    act(() => useHomeStore.getState().closeWorkspace());
+    expect(pill).toHaveClass('right-4');
+    expect(pill).not.toHaveClass(BESIDE);
+    expect(pill.style.getPropertyValue('--dock-width')).toBe('');
   });
 
   it('ends with Done, which hides it the same way', async () => {

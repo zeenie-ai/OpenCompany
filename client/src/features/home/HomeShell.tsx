@@ -9,11 +9,12 @@
  * the orb behind the content, the Workspace dock on the
  * right, the Settings dialog, the Welcome guide (onboarding/, which
  * opens over the hire view on first launch), the AI models dialog and, once
- * the guide is finished, the Get started checklist in the hire view's corner
- * (on an employee's page, where it would cover Send, the header's Get
- * started pill stands in for it). Connecting an app opens the app shell's
- * shared credentials dialog; connecting an AI model opens the AI models
- * dialog. Switching views scrolls to the top and plays the view swap.
+ * the guide is finished, the Get started checklist in the hire view's corner,
+ * or at the open dock's left edge (on an employee's page, where it would
+ * cover Send, the header's Get started pill stands in for it). Connecting an
+ * app opens the app shell's shared credentials dialog; connecting an AI
+ * model opens the AI models dialog. Switching views scrolls to the top and
+ * plays the view swap.
  *
  * Hiring scrolls as one page. An employee's page is the chat, which scrolls
  * its conversation itself above its message box, so it gets a column that

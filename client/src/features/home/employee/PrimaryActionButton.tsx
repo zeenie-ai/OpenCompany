@@ -4,7 +4,8 @@
  * neutral one for everything else (connecting what they are missing, Stop,
  * Retry reset).
  * Normal mode omits the developer-workflow fallback. `className` sizes it
- * for a smaller host (the Workspace header, a new hire's first-day strip).
+ * for a smaller host (the Workspace's row of tabs, a new hire's first-day
+ * strip).
  */
 
 import { ActionButton } from '@/components/ui/action-button';

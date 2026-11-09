@@ -260,7 +260,6 @@
   --shadow-float:   var(--shadow-float);
   --shadow-popover: var(--shadow-popover);
   --shadow-dialog:  var(--shadow-dialog);
-  --shadow-dock:    var(--shadow-dock);
   --shadow-pip:     var(--shadow-pip);
   /* The green "Connected" glow (light.css, dark.css), held while it shows. */
   --shadow-glow-connect: var(--glow-connect);

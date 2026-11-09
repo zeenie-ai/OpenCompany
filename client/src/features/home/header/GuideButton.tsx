@@ -1,6 +1,6 @@
 /**
  * The header's Guide pill: opens the Welcome guide again at its first step.
- * Styled as the Workspace pill at rest.
+ * Outlined, unlike the borderless Workspace button beside it.
  */
 
 import { CircleHelp } from 'lucide-react';

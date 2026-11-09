@@ -2,7 +2,8 @@
  * An employee's Workspace steps (server: services/workspace_steps.py): what
  * they did on each surface, oldest first, worded by the server (Browser
  * site actions and screenshots, Canvas displays, phone actions, and the
- * owner taking the phone over and handing it back). Read through
+ * owner taking the phone over and handing it back). The dock's floating
+ * status pill shows the newest while they are live. Read through
  * `workspace_steps_list` and again on each `workspace_step` broadcast for
  * this workflow, which carries only identity.
  */
@@ -51,7 +52,7 @@ export function useWorkspaceSteps(workflowId: string) {
   return useQuery<WorkspaceStep[], Error>({
     queryKey: workspaceStepsKey(workflowId),
     enabled: isReady,
-    // Runs take steps while no timeline shows them: always look again on open.
+    // Runs take steps while the dock is closed: always look again on open.
     refetchOnMount: 'always',
     staleTime: 0,
     queryFn: async () => {

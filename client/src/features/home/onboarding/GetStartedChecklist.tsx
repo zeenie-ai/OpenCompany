@@ -7,18 +7,45 @@
  * pill stands in for it. The card rises in and folds to a "Get started ·
  * n/4" pill (the fold is kept in homeStore, so it outlives the card), and
  * hiding it says where it comes back (Settings > Help). It stays out of the
- * way while the guide or the AI models dialog is open.
+ * way while the guide or the AI models dialog is open. While the Workspace
+ * dock is open, the card and its pill sit at the dock's left edge.
  */
 
 import { Check, ChevronDown, ChevronUp, Sparkles, X } from 'lucide-react';
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { rise } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { useHomeStore } from '../state/homeStore';
+import { dockWidth, useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 import { useGetStarted, type GetStartedRow } from './useGetStarted';
+
+/**
+ * Where the card or its pill sits: the bottom-right corner or, while the
+ * Workspace dock is open, at its left edge, moving with it on the dock's
+ * own timing and never past the screen's left (21rem: the card's 20rem and
+ * the margin). The dock's width, a dynamic value, comes in as
+ * `--dock-width`. It reads the dock itself, so a drag moves only this.
+ */
+function BesideDock({ children }: { children: ReactNode }) {
+  const dockOpen = useHomeStore((s) => s.workspaceOpen);
+  const dockPx = useHomeStore((s) => s.workspaceWidth);
+  const dockWide = useHomeStore((s) => s.workspaceWide);
+  return (
+    <div
+      className={cn(
+        'fixed bottom-4 z-40 transition-[right] motion-reduce:transition-none',
+        dockOpen
+          ? 'right-[min(calc(var(--dock-width)_+_1rem),calc(100vw_-_21rem))] duration-(--dur-dock-in) ease-spring'
+          : 'right-4 duration-(--dur-sidebar-out) ease-(--ease-default)',
+      )}
+      style={dockOpen ? ({ '--dock-width': dockWidth(dockPx, dockWide) } as CSSProperties) : undefined}
+    >
+      {children}
+    </div>
+  );
+}
 
 function Step({ row }: { row: GetStartedRow }) {
   const body = (
@@ -72,63 +99,67 @@ export function GetStartedChecklist() {
 
   if (folded) {
     return (
-      <Button
-        variant="quiet"
-        onClick={() => setFolded(false)}
-        className="fixed right-4 bottom-4 z-40 h-8 gap-1.5 rounded-pill border-border-default bg-bg-panel px-3 text-xs font-medium text-fg-default shadow-popover"
-      >
-        <Sparkles aria-hidden className="size-3.5" />
-        Get started · {doneCount}/{total}
-        <ChevronUp aria-hidden className="size-3.5 text-fg-muted" />
-      </Button>
+      <BesideDock>
+        <Button
+          variant="quiet"
+          onClick={() => setFolded(false)}
+          className="h-8 gap-1.5 rounded-pill border-border-default bg-bg-panel px-3 text-xs font-medium text-fg-default shadow-popover"
+        >
+          <Sparkles aria-hidden className="size-3.5" />
+          Get started · {doneCount}/{total}
+          <ChevronUp aria-hidden className="size-3.5 text-fg-muted" />
+        </Button>
+      </BesideDock>
     );
   }
 
   return (
-    <section
-      ref={cardRef}
-      aria-label="Get started"
-      className="fixed right-4 bottom-4 z-40 flex w-80 flex-col gap-1 rounded-card border border-border-default bg-bg-panel p-2 shadow-popover"
-    >
-      <div className="flex items-center gap-2 px-2 pt-1">
-        <Sparkles aria-hidden className="size-4 shrink-0 text-fg-default" />
-        <div className="min-w-0 flex-1">
-          <h2 className="m-0 text-sm font-semibold text-fg-default">{allDone ? 'You’re all set!' : 'Get started'}</h2>
-          <p className="m-0 text-xs text-fg-muted">
-            {doneCount} of {total} done
-          </p>
-        </div>
-        <Button variant="quiet" size="icon-sm" onClick={() => setFolded(true)} aria-label="Fold the checklist" className="rounded-lg">
-          <ChevronDown className="size-4" />
-        </Button>
-        <Button variant="quiet" size="icon-sm" onClick={hide} aria-label="Hide the checklist" className="rounded-lg">
-          <X className="size-4" />
-        </Button>
-      </div>
-      <div className="px-2 pb-1.5">
-        <Progress value={(doneCount / total) * 100} aria-label="Steps done" className="h-1.5" />
-      </div>
-      <ul className="m-0 flex list-none flex-col p-0">
-        {rows.map((row) => (
-          <li key={row.id}>
-            <Step row={row} />
-          </li>
-        ))}
-      </ul>
-      {allDone && (
-        <div className="px-2 pt-1 pb-1 text-center">
-          {/* Neutral: the hire view's one primary action is Create. */}
-          <Button
-            variant="quiet"
-            onClick={hide}
-            className="h-8 gap-1.5 rounded-row border-border-default px-3.5 font-semibold text-fg-default"
-          >
-            <Check aria-hidden className="size-4" />
-            Done
+    <BesideDock>
+      <section
+        ref={cardRef}
+        aria-label="Get started"
+        className="flex w-80 flex-col gap-1 rounded-card border border-border-default bg-bg-panel p-2 shadow-popover"
+      >
+        <div className="flex items-center gap-2 px-2 pt-1">
+          <Sparkles aria-hidden className="size-4 shrink-0 text-fg-default" />
+          <div className="min-w-0 flex-1">
+            <h2 className="m-0 text-sm font-semibold text-fg-default">{allDone ? 'You’re all set!' : 'Get started'}</h2>
+            <p className="m-0 text-xs text-fg-muted">
+              {doneCount} of {total} done
+            </p>
+          </div>
+          <Button variant="quiet" size="icon-sm" onClick={() => setFolded(true)} aria-label="Fold the checklist" className="rounded-lg">
+            <ChevronDown className="size-4" />
+          </Button>
+          <Button variant="quiet" size="icon-sm" onClick={hide} aria-label="Hide the checklist" className="rounded-lg">
+            <X className="size-4" />
           </Button>
         </div>
-      )}
-    </section>
+        <div className="px-2 pb-1.5">
+          <Progress value={(doneCount / total) * 100} aria-label="Steps done" className="h-1.5" />
+        </div>
+        <ul className="m-0 flex list-none flex-col p-0">
+          {rows.map((row) => (
+            <li key={row.id}>
+              <Step row={row} />
+            </li>
+          ))}
+        </ul>
+        {allDone && (
+          <div className="px-2 pt-1 pb-1 text-center">
+            {/* Neutral: the hire view's one primary action is Create. */}
+            <Button
+              variant="quiet"
+              onClick={hide}
+              className="h-8 gap-1.5 rounded-row border-border-default px-3.5 font-semibold text-fg-default"
+            >
+              <Check aria-hidden className="size-4" />
+              Done
+            </Button>
+          </div>
+        )}
+      </section>
+    </BesideDock>
   );
 }
 

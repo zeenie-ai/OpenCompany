@@ -83,8 +83,6 @@ const PILL_SIZE = {
   md: 'h-7.5 px-3 text-sm',
   /** Beside a name (the employee page's header). */
   compact: 'h-6 px-2.25 text-xs',
-  /** The Workspace header's mono micro pill. */
-  sm: 'h-5.5 px-2 font-mono text-2xs tracking-label uppercase',
 } as const;
 
 export function StatusPill({

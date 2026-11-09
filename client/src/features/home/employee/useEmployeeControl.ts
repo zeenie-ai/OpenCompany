@@ -1,7 +1,8 @@
 /**
  * An employee's main action (Pause, Resume, Start, Retry reset, connect what
- * they are missing, or open them in Dev mode): the Workspace header offers
- * it, and their page's message box while they cannot read messages.
+ * they are missing, or open them in Dev mode): the Workspace offers it at the
+ * end of its row of tabs, and their page's message box while they cannot
+ * read messages.
  *
  * Start / Pause / Resume / Retry reset send the summary's control revision.
  * Retry reset first reads the control status and sends the Reset only while

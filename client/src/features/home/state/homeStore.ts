@@ -65,6 +65,19 @@ export const WORKSPACE_MIN_WIDTH = 360;
 /** Room a drag always leaves for the rest of the screen. */
 const WORKSPACE_KEEP_PX = 420;
 
+/** The Workspace dock's width, as CSS: the dragged width, or Expand's,
+ *  always leaving the window some room. The Get started card sits at its
+ *  left edge while it is open. */
+export function dockWidth(widthPx: number, wide: boolean): string {
+  return wide ? 'max(420px, min(1100px, 100vw - 420px))' : `min(${widthPx}px, max(340px, 100vw - 40px))`;
+}
+
+/** Whose workspace the dock shows: `workspaceFor`, else the first on the
+ *  team. The header's Workspace button reads the same one for its dot. */
+export function dockEmployee<T extends { workflow_id: string }>(team: readonly T[] | undefined, workspaceFor: string | null): T | null {
+  return team?.find((member) => member.workflow_id === workspaceFor) ?? team?.[0] ?? null;
+}
+
 const workspacePrefsSchema = z.object({
   open: z.boolean().catch(false),
   // A bound for stored values only; while dragging, the window sets the limit.
@@ -149,7 +162,8 @@ interface HomeState {
   workspaceWidth: number;
   workspaceTab: WorkspaceTab;
   workspaceWide: boolean;
-  /** Whose workspace it shows: the employee last opened or watched. */
+  /** Whose workspace it shows: the employee last opened or watched
+   *  (dockEmployee falls back to the first on the team). */
   workspaceFor: string | null;
   /** A Canvas item to show (a reply's document card); the nonce lets the
    *  same one be asked for again. */

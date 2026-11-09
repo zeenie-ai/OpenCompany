@@ -1,22 +1,27 @@
 /**
- * The header's Workspace pill (design handoff "Workspace panel"): opens and
- * closes the dock. Tinted purple while the dock is open; while it is
- * closed, a blinking dot says someone on the team is working.
+ * The header's Workspace button (chat/V2.md's prototype, the chat header):
+ * opens and closes the dock. Borderless like New conversation, filled while
+ * the dock is open; while it is closed, a red blinking dot says the employee
+ * the dock would show is live (workspaceStatus), unless the owner has their
+ * screen.
  */
 
-import { Monitor } from 'lucide-react';
+import { PanelRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { useEmployeesQuery } from '../data/employees';
-import { useHomeStore } from '../state/homeStore';
+import { workspaceStatus } from '../data/presentation';
+import { dockEmployee, useHomeStore } from '../state/homeStore';
 import { StatusDot } from '../ui/primitives';
 
 export function WorkspaceButton() {
   const open = useHomeStore((s) => s.workspaceOpen);
   const openWorkspace = useHomeStore((s) => s.openWorkspace);
   const closeWorkspace = useHomeStore((s) => s.closeWorkspace);
+  const workspaceFor = useHomeStore((s) => s.workspaceFor);
   const { data: team } = useEmployeesQuery();
-  const someoneWorking = !open && (team ?? []).some((employee) => employee.status === 'working');
+  const employee = dockEmployee(team, workspaceFor);
+  const takenOver = useHomeStore((s) => employee !== null && employee.workflow_id in s.takeovers);
+  const live = !open && employee !== null && workspaceStatus(employee, takenOver).tone === 'live';
 
   return (
     <Button
@@ -24,17 +29,11 @@ export function WorkspaceButton() {
       aria-pressed={open}
       title="Workspace: see what your employees are working on"
       onClick={() => (open ? closeWorkspace() : openWorkspace())}
-      className={cn(
-        'h-8.5 gap-1.75 rounded-pill px-3 text-sm',
-        // Open keeps its purple on hover, where the quiet variant would grey it.
-        open
-          ? 'border-node-agent-border bg-node-agent-soft text-node-agent-ink hover:bg-node-agent-hover hover:text-node-agent-ink'
-          : 'border-border-default text-fg-default hover:border-border-strong',
-      )}
+      className="h-8 gap-1.75 rounded-lg px-2.5 text-sm aria-pressed:bg-bg-active aria-pressed:text-fg-default"
     >
-      <Monitor aria-hidden className="size-3.75" strokeWidth={1.75} />
+      <PanelRight aria-hidden className="size-4" strokeWidth={1.75} />
       Workspace
-      {someoneWorking && <StatusDot tone="live" />}
+      {live && <StatusDot tone="live" className="size-1.5" />}
     </Button>
   );
 }
