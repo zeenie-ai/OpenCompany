@@ -392,6 +392,8 @@ describe('WorkspaceDock', () => {
     expect(screenControl.claim.mock.invocationCallOrder[0]).toBeLessThan(actions.pauseWorkflow.mock.invocationCallOrder[0]);
     expect(await screen.findByText(BANNER)).toBeInTheDocument();
     expect(useHomeStore.getState().takeovers).toMatchObject({ w1: { screen: 'browser', stop: expect.any(Promise) } });
+    // Take over left the screen the owner now holds: the keyboard is on Hand back.
+    expect(within(banner()).getByRole('button', { name: 'Hand back' })).toHaveFocus();
     // The body under the row is framed, and Take over is gone while the owner has the screen.
     expect(frame()).toHaveClass('border-action-config-border', 'top-(--h-home-header)');
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
@@ -421,6 +423,7 @@ describe('WorkspaceDock', () => {
     expect(screenControl.claim).toHaveBeenCalledTimes(2);
     expect(actions.pauseWorkflow).toHaveBeenCalledOnce();
     expect(screen.getByText(BANNER)).toBeInTheDocument();
+    expect(within(banner()).getByRole('button', { name: 'Hand back' })).toHaveFocus();
 
     await userEvent.click(within(banner()).getByRole('button', { name: 'Hand back' }));
     expect(screenControl.giveBack).toHaveBeenCalledOnce();
@@ -485,6 +488,7 @@ describe('WorkspaceDock', () => {
     screenControl.claim.mockResolvedValue(null);
     await userEvent.click(await screen.findByRole('button', { name: 'Take over' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Take over' })).toHaveFocus();
     expect(actions.pauseWorkflow).not.toHaveBeenCalled();
     expect(screen.queryByText(BANNER)).toBeNull();
   });

@@ -47,7 +47,8 @@ export interface TakeOver {
   screen: WorkspaceTab | null;
   /** Taking the screen or handing it back, not while Take over's Stop drains. */
   busy: boolean;
-  takeOver: () => Promise<void>;
+  /** Takes the screen on show; `onTaken` runs once it is the owner's. */
+  takeOver: (onTaken?: () => void) => Promise<void>;
   handBack: () => Promise<void>;
 }
 
@@ -59,7 +60,7 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
   const setTakeover = useHomeStore((s) => s.setTakeover);
   const [busy, setBusy] = useState(false);
 
-  const takeOver = async () => {
+  const takeOver = async (onTaken?: () => void) => {
     const screen = surface();
     if (!screen || busy) return;
     const id = employee.workflow_id;
@@ -73,11 +74,13 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
     const taken = useHomeStore.getState().takeovers[id];
     if (taken) {
       setTakeover(id, { ...taken, giveBack });
+      onTaken?.();
       return;
     }
     // Only a running employee is stopped, and only then resumed later.
     const stop = presentEmployee(employee).primary.kind === 'pause' ? pauseWorkflow(id, employee.control.revision) : undefined;
     setTakeover(id, { screen: tab, giveBack, stop });
+    onTaken?.();
     pillToast(`You have control — ${employee.name} will wait`);
     if (!stop) return;
     try {

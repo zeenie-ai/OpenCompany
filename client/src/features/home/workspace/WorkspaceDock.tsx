@@ -33,7 +33,7 @@ import { useSurfaceRunning } from '@/components/workspace/activity';
 import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
 import MobileWorkspace from '@/components/mobile/MobileWorkspace';
 import type { SurfaceControl } from '@/components/workspace/surface';
-import { Suspense, lazy, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -190,7 +190,8 @@ function StatusLine({ workflowId, status, takenOver }: { workflowId: string; sta
  * The tabs and their row, the floating status, and Take over: the Browser
  * and phone views hold it next to their controls while the owner does not
  * have the screen; while they do, the body below the row is framed and a
- * banner under it holds Hand back, whichever tab shows.
+ * banner under it holds Hand back, whichever tab shows, and the keyboard
+ * goes there once they take a screen.
  */
 function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary; visible: boolean; onConnect: (providerId: string) => void }) {
   const tab = useHomeStore((s) => s.workspaceTab);
@@ -209,6 +210,16 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
   const browserRunning = useSurfaceRunning(employee.workflow_id, browserIds);
   const mobileRunning = useSurfaceRunning(employee.workflow_id, mobileIds);
 
+  // Take over leaves the screen the owner now holds, so taking one moves the
+  // keyboard to Hand back, after the render that shows it.
+  const handBack = useRef<HTMLButtonElement>(null);
+  const focusHandBack = useRef(false);
+  useEffect(() => {
+    if (!focusHandBack.current) return;
+    focusHandBack.current = false;
+    handBack.current?.focus();
+  });
+
   // Each view shows Take over while the owner does not hold its screen.
   // While they have this employee, only the screen they took offers it: it
   // lets go when the window loses focus or the view hides, and they take it
@@ -218,7 +229,11 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
       <Button
         variant="quiet"
         disabled={takeover.busy}
-        onClick={() => void takeover.takeOver()}
+        onClick={() =>
+          void takeover.takeOver(() => {
+            focusHandBack.current = true;
+          })
+        }
         className="h-8.5 shrink-0 rounded-pill border-border-default bg-bg-elevated px-3.5 text-sm font-medium text-fg-default"
       >
         Take over
@@ -280,6 +295,7 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
             <div className="pointer-events-auto flex h-8 min-w-0 items-center gap-2.5 rounded-pill border border-action-config-border bg-bg-elevated pr-0.75 pl-3.5 text-xs font-medium text-action-config-ink shadow-card-hover">
               <span className="truncate">You’re in control · {employee.name} is waiting</span>
               <Button
+                ref={handBack}
                 variant="invert"
                 size="xs"
                 disabled={takeover.busy}
