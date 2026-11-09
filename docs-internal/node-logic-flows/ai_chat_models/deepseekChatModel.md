@@ -80,7 +80,7 @@ flowchart TD
 
 - **Validation**: missing api_key / empty prompt -> error envelope.
 - **Provider routing**: `detect_ai_provider` matches `'deepseek' in node_type.lower()` **first** (before kimi/mistral/cerebras/groq/openrouter/anthropic/gemini), so routing is unambiguous.
-- **Native path**: uses the OpenAI SDK with DeepSeek's base URL from `llm_defaults.json`. The compatible provider sends `max_tokens` directly in the Chat Completions request; there is no LangChain parameter translation on current chat or agent executions.
+- **Native path**: uses the OpenAI SDK with DeepSeek's base URL from `llm_defaults.json`. The compatible provider sends `max_tokens` directly in the Chat Completions request; the same parameter mapping applies to current chat and agent executions.
 - **Model ID handling**: only the UI-only `[FREE] ` decoration is stripped. The remaining model ID is preserved.
 - **Reasoning trace**: when DeepSeek returns `reasoning_content` the native provider extracts it into `LLMResponse.thinking`, regardless of `thinking_enabled`. This normalization does not establish which models are currently available from the vendor.
 

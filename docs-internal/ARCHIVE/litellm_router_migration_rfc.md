@@ -1,6 +1,6 @@
 # LiteLLM Router Migration RFC
 
-> **ARCHIVED 2026-09-04 — Superseded.** The LiteLLM migration never happened; the native SDK layer replaced LangChain instead. `litellm` appears nowhere in first-party code or dependencies.
+> **ARCHIVED 2026-09-04 — Superseded.** The LiteLLM migration never happened; the native SDK layer replaced the former orchestration adapters instead. `litellm` appears nowhere in first-party code or dependencies.
 >
 > For current state see:
 >
@@ -17,7 +17,7 @@
 ## 1. Abstract
 
 OpenCompany maintains a fully custom multi-provider LLM layer: a `ChatUnifier` facade over
-12 hand-written provider integrations, plus a parallel LangChain path for the agent loop.
+12 hand-written provider integrations, plus a parallel model-wrapper path for the agent loop.
 This RFC proposes replacing the provider *internals* with [LiteLLM](https://github.com/BerriAI/litellm)
 (`litellm.acompletion`, in-process, exact-pinned, lazy-imported) while keeping every
 architectural seam OpenCompany actually relies on: the `ChatUnifier` facade, the
@@ -31,10 +31,10 @@ The migration runs in two flag-gated stages:
   registrations behind `ChatUnifier` for one LiteLLM adapter. Net ~-420 production LOC;
   per-provider quirk knowledge (message reshaping, system-split, role mapping, reasoning
   extraction) is outsourced upstream.
-- **Stage B — agent loop**: replace `create_model` + LangChain message shapes in
+- **Stage B — agent loop**: replace `create_model` + model-wrapper message shapes in
   `_run_agent_loop` / `execute_chat_agent` / Temporal agent activities with the same
   adapter on protocol types. Deletes the 4-format thinking extractor, the ~20.8s-cold
-  `langchain_openai` import class, and 5 dependency pins. Gated on Stage A soak.
+  OpenAI model-wrapper import, and 5 dependency pins. Gated on Stage A soak.
 
 LiteLLM's officially announced Rust rewrite (Router Sep 15 2026, full server Dec 1 2026,
 client-API stability promised) means adopting the SDK surface now inherits the
@@ -49,7 +49,7 @@ performance work later without a second migration.
 | Path | Entry | Mechanism | Providers |
 |---|---|---|---|
 | Chat (single completion) | `execute_chat` ([ai.py:1400](../server/services/ai.py#L1400)) → `ChatUnifier.chat()` | Native SDKs behind `ProviderSpec` registry | 12 |
-| Agent loop (tool-calling) | `execute_agent` / `execute_chat_agent` ([ai.py:2105](../server/services/ai.py#L2105)) → `_run_agent_loop` ([ai.py:733](../server/services/ai.py#L733)) with `create_model` ([ai.py:1206](../server/services/ai.py#L1206)) | LangChain classes (`ChatOpenAI`, `ChatAnthropic`, `ChatGoogleGenerativeAI`, `ChatGroq`, `ChatCerebras`) + `bind_tools` | 11 |
+| Agent loop (tool-calling) | `execute_agent` / `execute_chat_agent` ([ai.py:2105](../server/services/ai.py#L2105)) → `_run_agent_loop` ([ai.py:733](../server/services/ai.py#L733)) with `create_model` ([ai.py:1206](../server/services/ai.py#L1206)) | Provider-wrapper classes (`ChatOpenAI`, `ChatAnthropic`, `ChatGoogleGenerativeAI`, `ChatGroq`, `ChatCerebras`) + `bind_tools` | 11 |
 
 ### 2.2 Size of the custom layer
 
@@ -108,7 +108,7 @@ openrouter/ollama/lmstudio).
    models; empty list signals "server offline" (`llm_defaults.json:267-289`).
 8. `proxy_url` (from the `{provider}_proxy` encrypted credential) always overrides
    `base_url`; placeholder `api_key="ollama"` when a proxy/local relay is active.
-9. Thinking extraction handles 4 response formats (`ai.py:621-730`): LangChain
+9. Thinking extraction handles 4 response formats (`ai.py:621-730`): wrapper
    `content_blocks`, `additional_kwargs.reasoning_content`, `response_metadata` output
    arrays, raw content list.
 10. OpenRouter `[FREE] ` prefix is display-only and stripped before the API call.
@@ -118,7 +118,7 @@ openrouter/ollama/lmstudio).
 12. `fixed_temperature` uses prefix matching so one override covers a model family.
 13. Reasoning models force temperature 1.0 AND omit the parameter from the API call.
 14. Vertex Express keys detected by `"AQ."` prefix (`services/llm/vertex.py:23`) — flips
-    google-genai to `vertexai=True`, ignores proxy_url, and is shared with the LangChain
+    google-genai to `vertexai=True`, ignores proxy_url, and is shared with the model-wrapper
     path (`ai.py:1256`).
 15. Compaction ratio precedence: per-session > per-user > env > `llm_defaults.json`.
 16. `register_local_model` persists ollama/lmstudio context metadata to
@@ -133,11 +133,11 @@ These matter because parity must be defined against reality, not aspiration:
    reads `LLMResponse.thinking` from the unifier.
 2. On the chat path today, groq `reasoning_format` and cerebras `thinking_budget` are
    **silently dropped** — `OpenAIProvider.chat` only applies `reasoning_effort` for
-   o-series/gpt-5. Those knobs work only on the LangChain agent path (`ai.py:1336-1347`).
+   o-series/gpt-5. Those knobs work only on the model-wrapper agent path (`ai.py:1336-1347`).
 3. Kimi's thinking-disable (`extra_body`) exists **only** in `create_model`
    (`ai.py:1287-1291`), not on the unifier path.
 4. `_track_token_usage` ([ai.py:1091](../server/services/ai.py#L1091)) is agent-path
-   only and consumes LangChain `usage_metadata`; the chat path does not track tokens
+   only and consumes wrapper `usage_metadata`; the chat path does not track tokens
    today. `CompactionService.track()` already accepts `cache_read_tokens` /
    `cache_creation_tokens` / `reasoning_tokens` keys (`compaction.py:133-145`).
 
@@ -439,7 +439,7 @@ when the flag is on:
 
 Lazy import is **mandatory**, not optional: the repo's cold-start budget is 2.90s to
 "Application startup complete" ([performance.md](./performance.md)), and the layer
-already fought this war (eager `langchain_openai` cost ~20.8s cold on Windows; fixed via
+already fought this war (an eager OpenAI model-wrapper import cost ~20.8s cold on Windows; fixed via
 `functools.cache` lazy getters — the pattern to copy, `ai.py:55-96`).
 
 ```python
@@ -498,27 +498,26 @@ deferral. It begins only after the Stage B gate (section 10, Phase 4).
 
 ### 7.1 What changes
 
-Replace `create_model` (`ai.py:1206-1353`) and LangChain message shapes in
+Replace `create_model` (`ai.py:1206-1353`) and model-wrapper message shapes in
 `_run_agent_loop` (`ai.py:733-894`), `execute_chat_agent` (`ai.py:2105-2626`), and
 `services/temporal/agent_activities.py:119,208` with adapter calls on protocol types:
 
 | Concern | Mapping |
 |---|---|
 | Messages | `SystemMessage/HumanMessage/AIMessage/ToolMessage` ↔ OpenAI dicts; `AIMessage.tool_calls[{name,args,id}]` → assistant `tool_calls` with JSON-encoded arguments; `ToolMessage.tool_call_id` → role `tool` |
-| Tool binding | `bind_tools(StructuredTool)` → `ToolDef` JSON schemas passed per call (hot-rebind after canvas mutations becomes list mutation — simpler than re-binding a LangChain model) |
-| Memory | `_parse_memory_markdown` (`ai.py` memory glue) returns protocol `Message` objects instead of LangChain messages |
+| Tool binding | `bind_tools(StructuredTool)` → `ToolDef` JSON schemas passed per call (hot-rebind after canvas mutations becomes list mutation — simpler than re-binding a model wrapper) |
+| Memory | `_parse_memory_markdown` (`ai.py` memory glue) returns protocol `Message` objects instead of wrapper messages |
 | Thinking | the 4-format `extract_thinking_from_response` (`ai.py:621-730`) collapses to `reasoning_content` / `thinking_blocks` |
-| Token tracking | `_track_token_usage` (`ai.py:1091`) switches from LangChain `usage_metadata` to our `Usage` — cache/reasoning tokens start flowing into `CompactionService.track()` (which already accepts those keys, `compaction.py:133-145`) — a strict cost-accuracy improvement for Anthropic caching |
+| Token tracking | `_track_token_usage` (`ai.py:1091`) switches from wrapper `usage_metadata` to our `Usage` — cache/reasoning tokens start flowing into `CompactionService.track()` (which already accepts those keys, `compaction.py:133-145`) — a strict cost-accuracy improvement for Anthropic caching |
 | Compaction | native context-management configs (incl. the `compact-2026-01-12` beta header) pass via litellm `extra_headers` |
 | Kimi alignment | the `extra_body` thinking-disable moves into the shared adapter, unifying quirk handling across both paths |
 
 ### 7.2 What explicitly stays
 
-The deepagents-based Deep Agent node remains LangChain — `deepagents==0.6.9` pulls
-`langchain-core` itself, so those pins survive Stage B; *our* loop simply stops using
-them. Removable after Stage B: `langchain-openai`, `langchain-anthropic`,
-`langchain-google-genai`, `langchain-groq`, `langchain-cerebras` pins (and with them the
-~20.8s-cold-import class and the Windows/Py3.13 gemini gRPC hang workaround).
+The archived plan keeps the transitive orchestration dependencies required by
+`deepagents==0.6.9`, while removing the application's provider-wrapper dependencies
+after Stage B. Their ~20.8s cold import and the Windows/Py3.13 Gemini gRPC hang
+workaround would then disappear from the application's loop.
 
 ### 7.3 Stage B gate criteria
 
@@ -560,7 +559,7 @@ them. Removable after Stage B: `langchain-openai`, `langchain-anthropic`,
 | R2 | Behavioral regression across the 16 encoded quirks | High | Golden-request wire-parity suite: capture exact provider-SDK kwargs the current layer produces for a (provider x thinking x model-family) matrix, assert LiteLLM emits equivalent wire params; live smoke stays the gate |
 | R3 | fetch_models gap (LiteLLM lists no per-account models) | Medium | Keep our HTTP listing (~130 LOC, section 6.7); scope LiteLLM to the completion path only |
 | R4 | Usage-shape mismatch breaks Pricing/Compaction persistence (`cache_*`, `reasoning_tokens` are DB columns) | Medium | One adapter mapping function + per-provider fixtures (anthropic/openai/gemini); compaction beta-header pass-through verified before Stage B |
-| R5 | Split-brain window: chat on LiteLLM, agent loop on LangChain until Stage B | Medium | Bounded by the Stage B gate, not indefinite; quirk SSOT stays `llm_defaults.json` so fixes are configured once; both layers already coexist today |
+| R5 | Split-brain window: chat on LiteLLM, agent loop on model wrappers until Stage B | Medium | Bounded by the Stage B gate, not indefinite; quirk SSOT stays `llm_defaults.json` so fixes are configured once; both layers already coexist today |
 | R6 | Weekly upstream churn imports regressions | Medium | Exact pin + monthly/CVE bump policy behind the parity suite |
 | R7 | Adopting immediately before LiteLLM's Rust rewrite | Medium | The `acompletion` SDK surface is the stability-promised, least-changed path; hard pin; re-evaluate topology at Dec 2026 GA |
 | R8 | `fastuuid` transitive dep needs a Rust toolchain where wheels are missing (Windows is the primary platform) | Low-Med | Phase 0 blocker check: `uv add litellm==1.90.0` must resolve binary wheels on win_amd64 / py3.11-3.12 |
@@ -641,7 +640,7 @@ natively by LiteLLM *and* enforced by our adapter regardless.)
   survive); update `test_plugin_shape.py` grep-guards. Surviving unchanged:
   `test_wiring`, `test_unifier_typed_errors`, `test_unifier_incompatible_models_filter`,
   `test_max_tokens_resolution`, `test_messages`.
-- Do NOT remove `anthropic` / `google-genai` / `langchain-*` deps yet — the agent path
+- Do NOT remove `anthropic`, `google-genai` or provider-wrapper dependencies yet — the agent path
   still needs them until Stage B (`services/plugin/credential.py` also touches openai
   exception classes).
 
@@ -655,10 +654,10 @@ message mapping, memory parsing to protocol Messages, tool binding, extractor co
 (gemini `thought_signature` fidelity is the named risk), compaction beta headers, agent
 progress broadcasts, Temporal activity heartbeat behavior.
 
-**Phase 6 — LangChain glue deletion**: the 4-format extractor (~110 LOC), `create_model`
-(~148 LOC), LangChain message glue; remove `langchain-openai` / `langchain-anthropic` /
-`langchain-google-genai` / `langchain-groq` / `langchain-cerebras` pins (deepagents keeps
-`langchain-core` alive); docs updates.
+**Phase 6 — Model-wrapper glue deletion**: the 4-format extractor (~110 LOC),
+`create_model` (~148 LOC), and wrapper message glue; remove the direct
+provider-wrapper dependencies while retaining the transitive dependencies required
+by Deep Agent; update the docs.
 
 ### LOC accounting
 

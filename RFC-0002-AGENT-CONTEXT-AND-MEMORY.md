@@ -69,7 +69,7 @@ shared.
   a new graph/generation and uses new workflow/activity type names.
 - Keep Gemini on `generate_content`; an Interactions migration is out of
   scope.
-- Do not reintroduce LangChain compatibility.
+- Use the existing provider-native message and tool contracts.
 - Do not put runtime state in node parameters, node outputs, workflow JSON,
   status caches, ordinary WebSocket events, CloudEvents, or Temporal Event
   History.

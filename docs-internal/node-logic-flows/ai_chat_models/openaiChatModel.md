@@ -91,7 +91,7 @@ flowchart TD
 
 - **Validation**: missing `api_key` -> ValueError; empty/whitespace `prompt` (via `is_valid_message_content`) -> ValueError. Both produce a `success=false` envelope.
 - **Provider routing**: `detect_ai_provider(node_type)` returns `'openai'` for this node; falls through the else branch in `constants.detect_ai_provider`.
-- **Native path**: `ChatUnifier` resolves the self-registered `openai` spec, so the native `openai` SDK serves both current chat and agent executions. Current executions use the native single-wire provider layer; LangChain is removed.
+- **Native path**: `ChatUnifier` resolves the self-registered `openai` spec, so the native `openai` SDK serves both current chat and agent executions. Chat and agent turns use the same native message and tool contracts.
 - **Model ID handling**: strips only the UI-only `[FREE] ` decoration. Provider model IDs are otherwise opaque and preserved.
 - **Thinking config**: only built when `thinking_enabled` is truthy; passed through to the provider's `chat()` method.
 - **System prompt**: reads the schema-canonical `system_prompt` field and prepends a native `Message(role="system")` when it is non-empty.

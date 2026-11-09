@@ -9,9 +9,9 @@
 > - [claude_code_agent.md](../claude_code_agent.md) — documentation hub
 
 > **Current implementation note:** The production `claude_code_agent` is an
-> interactive Claude Code CLI/PTY integration implemented under
-> `server/nodes/agent/claude_code_agent/`. It does not use LangGraph or
-> LangChain. The LangGraph diagrams and dependency snapshot below are retained
+> interactive Claude Code CLI integration implemented under
+> `server/nodes/agent/claude_code_agent/`. The graph diagrams and dependency
+> snapshot below are retained
 > only as historical design material and must not be used as implementation
 > guidance.
 
@@ -1242,8 +1242,6 @@ are not dependencies of the current server runtime.
 | langgraph | 1.0.7 |
 | langgraph-sdk | 0.3.3 |
 | langgraph-checkpoint | 4.0.0 |
-| langchain-core | 1.2.7 |
-| langchain-anthropic | 1.3.1 |
 
 ---
 

@@ -547,12 +547,11 @@ from the provider implementations and agent execution paths.
 ### Thinking extraction (current native wire)
 
 Native providers normalize provider-exposed reasoning into `LLMResponse.thinking`
-and ordered `Message.blocks`. There is no current
-`extract_thinking_from_response` helper or LangChain replay adapter. Preserve
+and ordered `Message.blocks`. Reasoning is normalized at the provider boundary. Preserve
 recorded Temporal command paths when changing workflows, but do not infer
 that retired Python helper APIs remain available. The single-wire boundary is
-covered by `tests/llm/test_single_wire_standard.py` and
-`tests/llm/test_langchain_removed.py`.
+covered by `tests/llm/test_single_wire_standard.py` and the
+[provider contract tests](../server/tests/llm/).
 
 The agent/chat result envelope carries `thinking` alongside the answer:
 
@@ -734,9 +733,9 @@ standard. The `llm_engine` / `message_wire_version` discriminators and the
 identifiers reappear in production source. Pre-cutover deployments are handled
 by Reset, which starts a fresh generation.
 
-`tests/llm/test_langchain_removed.py` enforces the dependency end state via an
-AST walk over production sources, the `pyproject.toml` declarations, runtime
-importability, and a guarded `core.container` boot.
+The [dependency-boundary tests](../server/tests/llm/) enforce the dependency
+contract through an AST walk over production sources, the `pyproject.toml`
+declarations, runtime import checks, and a guarded `core.container` boot.
 
 
 ## Multimodal image input (first increment)
