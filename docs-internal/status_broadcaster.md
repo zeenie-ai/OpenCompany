@@ -137,7 +137,7 @@ Live total = `len(MESSAGE_HANDLERS) + len(get_ws_handlers())` -- the `MESSAGE_HA
 | Deployment | `deploy_workflow` (Start's own step; refused without a live generation; arms the graph the generation recorded, never the request's), `cancel_deployment`, `get_deployment_status`, `update_deployment_settings` |
 | AI operations | `execute_ai_node`, `get_ai_models` |
 | API keys | `validate_api_key`, `get_stored_api_key`, `save_api_key`, `delete_api_key` |
-| OAuth / CLI login flows | `claude_code_login`, `claude_code_logout` (plugin-registered from `nodes/agent/claude_code_agent/_handlers.py`), `twitter_oauth_login`, `twitter_logout`, `google_oauth_login`, `google_logout` |
+| OAuth / CLI login flows | `claude_code_login`, `claude_code_submit_code`, `claude_code_status`, `claude_code_logout` (plugin-registered from `nodes/agent/claude_code_agent/_handlers.py`), `twitter_oauth_login`, `twitter_logout`, `google_oauth_login`, `google_logout` |
 | Android | `get_android_devices`, `execute_android_action`, `android_relay_connect`, `android_relay_disconnect`, `android_relay_reconnect` |
 | WhatsApp | `whatsapp_status`, `whatsapp_qr`, `whatsapp_send`, `whatsapp_chat_history`, `whatsapp_newsletters`, `whatsapp_diagnostics`, ... |
 | Telegram | `telegram_connect`, `telegram_disconnect`, `telegram_status`, `telegram_send`, `telegram_get_me`, `telegram_get_chat` |

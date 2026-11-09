@@ -63,7 +63,7 @@ server/nodes/agent/claude_code_agent/
 ├── _pool.py       # ClaudeSessionPool — subprocess-based warm-process reuse
 ├── _skills.py     # materialise_skills — per-workflow SKILL.md materialisation + live diff
 ├── _oauth.py      # claude_binary_path, claude_auth_* — project-local install + the documented CLI subcommands
-└── _handlers.py   # claude_code_login / claude_code_logout WS handlers
+└── _handlers.py   # claude_code_login / _submit_code / _status / _logout WS handlers
 
 server/services/cli_agent/  (generic framework — shared by all CLI plugins)
 ├── factory.py     # register_provider / register_session_pool / register_skill_materialiser registries

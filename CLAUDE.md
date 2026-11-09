@@ -2526,7 +2526,7 @@ Updated `client_left` and presence handlers use `has_real_android_devices()` ins
 | **Deployment** | `deploy_workflow` (Start's own step; refused without a live generation; arms the graph the generation recorded, never the request's), `cancel_deployment`, `get_deployment_status`, `get_workflow_lock`, `update_deployment_settings` |
 | **AI Operations** | `execute_ai_node`, `get_ai_models` |
 | **API Keys** | `validate_api_key`, `get_stored_api_key`, `save_api_key`, `delete_api_key` |
-| **CLI agent auth** | `claude_code_login`, `claude_code_logout`, `codex_cli_login`, `codex_cli_device_login`, `codex_cli_status`, `codex_cli_logout` |
+| **CLI agent auth** | `claude_code_login`, `claude_code_submit_code`, `claude_code_status`, `claude_code_logout`, `codex_cli_login`, `codex_cli_device_login`, `codex_cli_status`, `codex_cli_logout` |
 | **Twitter OAuth** | `twitter_oauth_login`, `twitter_oauth_status`, `twitter_logout` |
 | **Google OAuth** | `google_oauth_login`, `google_oauth_status`, `google_logout` |
 | **Discord / Microsoft OAuth** | `discord_oauth_login`, `discord_oauth_status`, `discord_logout`, `microsoft_oauth_login`, `microsoft_oauth_status`, `microsoft_logout` (all minted by `services.events.oauth_lifecycle.make_oauth_lifecycle_handlers`) |

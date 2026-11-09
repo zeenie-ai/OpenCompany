@@ -255,28 +255,32 @@ CLI auth is delegated to the CLI's own login flow + a synthetic marker token in 
 
 **Per-provider WS handler names** (Twitter / Google / Stripe convention — frontend dispatches `{}` payload, handler name encodes provider):
 
-| Catalogue id | Browser login | Device login | Status | Logout |
-|---|---|---|---|---|
-| `claude_code` | `claude_code_login` | — | Login rechecks native status | `claude_code_logout` |
-| `codex_cli` | `codex_cli_login` | `codex_cli_device_login` | `codex_cli_status` | `codex_cli_logout` |
+| Catalogue id | Browser login | Device login | Code from the sign-in page | Status | Logout |
+|---|---|---|---|---|---|
+| `claude_code` | `claude_code_login` | — | `claude_code_submit_code` | `claude_code_status` | `claude_code_logout` |
+| `codex_cli` | `codex_cli_login` | `codex_cli_device_login` | — | `codex_cli_status` | `codex_cli_logout` |
 
-**Claude flow** (`handle_claude_code_login` and `handle_claude_code_logout` in `server/nodes/agent/claude_code_agent/_handlers.py`) uses the documented CLI subcommands from [code.claude.com/docs/en/cli-reference](https://code.claude.com/docs/en/cli-reference):
+**Claude flow** (handlers in `server/nodes/agent/claude_code_agent/_handlers.py`, CLI wrappers in `_oauth.py`) uses the documented CLI subcommands from [code.claude.com/docs/en/cli-reference](https://code.claude.com/docs/en/cli-reference):
 
 | Subcommand | Purpose |
 |---|---|
-| `claude auth login` | Opens the browser, writes credentials |
-| `claude auth status` | Exits 0 when logged in, 1 otherwise |
+| `claude auth login` | Prints the URL of its sign-in page and opens a browser where it can; after the owner signs in, that page shows a code, which the CLI reads from standard input; writes credentials |
+| `claude auth status` | Prints JSON; exits 0 when logged in, 1 otherwise |
 | `claude auth logout` | Clears credentials |
+
+The CLI does the whole sign-in and OpenCompany only relays it, so it also works from a browser on another computer, such as for a headless server ([#129](https://github.com/zeenie-ai/OpenCompany/issues/129)). This is the flow Anthropic's troubleshooting guide gives for WSL2, SSH and containers ("OAuth login fails in WSL2, SSH, or containers").
 
 Steps:
 
-1. Run `claude auth status`. If it exits 0, write the marker + broadcast and return immediately (idempotent re-click).
-2. Otherwise schedule `_finalize_claude_login()` (in `nodes/agent/claude_code_agent/_handlers.py`), which calls `run_claude_login()` from `_oauth.py`:
-   - OpenCompany-managed install of `@anthropic-ai/claude-code` into the shared packages tree at `<DATA_DIR>/packages/` via `core.js_runtime.add_package("<package_name>@<package_version>", trust=True)` — `bun add --cwd <packages_dir> --no-progress --trust <spec>` (same tree as `edgymeow` / `cf` / `vercel`; skipped if already installed; `--trust` because the package's postinstall stages its native launcher, which bun otherwise blocks). The exact version is pinned in `server/config/ai_cli_providers.json` (`package_version`, the vercel / cloudflare idiom) because the stream-json contract and flag surface are verified against that version only. Binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.exe]` and runs on bun — no Node or npm involved (claude-code 2.1.258 verified on bun with no Node on PATH).
-   - `claude auth login` via `run_cli_command(..., env={..., CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/}, stdin=asyncio.subprocess.PIPE)` — same way the VSCode Claude Code extension delegates to the binary. Anthropic doesn't expose `--print-url` or a programmatic OAuth helper (issue [anthropics/claude-code#7100](https://github.com/anthropics/claude-code/issues/7100), closed "not planned"), so we let the CLI open the user's browser via its own OS-level call. `stdin=PIPE` is **load-bearing** for claude-code >= 2.1.162's native binary: it reads stdin while waiting for the browser callback, and an inherited (closed) stdin EOFs it into an early exit that kills the localhost callback server before the redirect arrives — `stdin=PIPE` (never written) makes the read block so the server stays up.
-3. Schedule a background task that polls `claude auth status` every 2s up to 600s. On exit-0, write the synthetic `"cli-managed"` marker via `auth_service.store_oauth_tokens("claude_code", ...)` and broadcast `credential_catalogue_updated`. The catalogue's `stored` flag flips and the existing `OAuthConnect.tsx` primitive renders the modal as Connected.
+1. `claude_code_login` runs `claude auth status`. If it exits 0, it writes the marker, broadcasts and answers `connected` (idempotent re-click). A click while a sign-in runs answers with that sign-in: one `claude auth login` at a time.
+2. Otherwise it starts `_finalize_claude_login()`, which calls `run_claude_login()`:
+   - OpenCompany-managed install of `@anthropic-ai/claude-code` into the shared packages tree at `<DATA_DIR>/packages/` via `core.js_runtime.add_package("<package_name>@<package_version>", trust=True)` — `bun add --cwd <packages_dir> --no-progress --trust <spec>` (same tree as `edgymeow` / `cf` / `vercel`; skipped if already installed; `--trust` because the package's postinstall stages its native launcher, which bun otherwise blocks), run off the event loop. The exact version is pinned in `server/config/ai_cli_providers.json` (`package_version`, the vercel / cloudflare idiom) because the stream-json contract and flag surface are verified against that version only. Binary resolves to `<DATA_DIR>/packages/node_modules/.bin/claude[.exe]` and runs on bun — no Node or npm involved (claude-code 2.1.258 verified on bun with no Node on PATH).
+   - `claude auth login` with `CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/` and piped standard streams. The runner reads the output line by line and passes on only an https URL on `claude.ai`, `claude.com` or `anthropic.com` whose path ends in `/oauth/authorize`. Nothing the CLI prints is logged, because the URL carries the sign-in's state. Standard input stays open until the CLI exits: the native binary gives up when its input closes, which would also stop its localhost callback server.
+   - Login answers within `LOGIN_RESPONSE_WAIT_SECONDS` (5 s) with `{pending, url, message}`; after that the status poll carries the URL. The card opens the URL and shows a "Code from the sign-in page" box (`ws.submit_code`). Where the CLI could open a browser itself, as in the desktop app, its own window finishes without a code.
+3. `claude_code_submit_code` writes the pasted code to the waiting CLI, without any whitespace a copy across wrapped lines adds.
+4. The card polls `claude_code_status` while the sign-in waits. When the CLI exits, `claude auth status` decides. Signed in: the synthetic `"cli-managed"` marker is written via `auth_service.store_oauth_tokens("claude_code", ...)` with the account's email and organisation, and `credential.oauth.connected` is broadcast, so the catalogue's `stored` flag flips and `OAuthConnect.tsx` shows Connected. Otherwise the status carries the error, such as a timeout after 600 s or a code the CLI refused, and Refresh clears it.
 
-**Logout**: runs `claude auth logout`, drops the marker via `auth_service.remove_oauth_tokens()`, and broadcasts.
+**Logout**: cancels a sign-in that is still waiting, which stops its CLI (a shutdown hook does the same when the backend stops). Otherwise it runs `claude auth logout`, drops the marker via `auth_service.remove_oauth_tokens()`, and broadcasts.
 
 **Codex login**: `_codex_auth.py` installs the pinned `@openai/codex` package into the shared packages tree. Login, `codex login status`, logout, and task execution all use that binary with `CODEX_HOME=<DATA_DIR>/codex`. This keeps the app's login separate from a personal terminal session without changing `HOME`. The CLI owns credential storage; OpenCompany never parses `auth.json`. A successful status exit stores the catalogue marker. An in-flight login is single-flight, and logout cancels it before clearing native credentials and the marker. The frontend polls `codex_cli_status` while authentication is pending and shows failures instead of remaining indefinitely in Connecting.
 
@@ -400,7 +404,7 @@ the reference implementation). Four self-registration calls in
 | `_pool.py` | `ClaudeSessionPool` — subprocess + stream-json warm-reuse pool, MCP rebind on acquire, skill diff on warm reuse. |
 | `_skills.py` | `materialise_skills(workspace_dir, names, previous_skill_names)` — per-workflow SKILL.md materialisation + diff-based add/remove. |
 | `_oauth.py` | `OPENCOMPANY_CLAUDE_DIR`, `claude_binary_path`, `claude_auth_*` — project-local install + the documented CLI subcommands. |
-| `_handlers.py` | `claude_code_login` / `claude_code_logout` WS handlers (registered from `__init__.py` via `register_ws_handlers`). |
+| `_handlers.py` | `claude_code_login` / `claude_code_submit_code` / `claude_code_status` / `claude_code_logout` WS handlers and the sign-in's shutdown hook (registered from `__init__.py` via `register_ws_handlers` and `register_shutdown_hook`). |
 
 ### Other touchpoints
 

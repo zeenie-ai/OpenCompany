@@ -45,7 +45,7 @@ All claude-specific code is self-contained here; the generic framework at
 | `_pool.py` | `ClaudeSessionPool` — warm subprocess keyed by the RFC-0002 conversation key `context_bridge.pool_key` (legacy fallback: `simpleMemory.node_id`); stdout reader, session-UUID capture, crash-recovery respawn. |
 | `_skills.py` | `materialise_skills` — writes connected SKILL.md trees under `<workspace>/.claude/skills/`, diff-based on warm reuse. |
 | `_oauth.py` | Isolated `CLAUDE_CONFIG_DIR` (`<DATA_DIR>/claude/`), browser-OAuth bridge, binary install. |
-| `_handlers.py` | WebSocket handlers `handle_claude_code_login` / `handle_claude_code_logout`, exported through `WS_HANDLERS`. |
+| `_handlers.py` | WebSocket handlers for the CLI's own sign-in (`handle_claude_code_login` / `_submit_code` / `_status` / `_logout`), exported through `WS_HANDLERS`: the card opens the page `claude auth login` prints and passes the code it shows back to the CLI ([CLI Agent Framework](./cli_agent_framework.md)). |
 
 ## See also
 
