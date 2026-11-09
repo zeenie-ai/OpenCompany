@@ -1,11 +1,11 @@
-<img width="1600" alt="OpenCompany: professional AI cat employees turn tokens into finished work for a paying customer." src="media/brand/opencompany-readme-banner.jpg" />
+<a href="media/brand/opencompany-readme-banner.jpg"><img width="1600" alt="OpenCompany: professional AI cat employees turn tokens into finished work for a paying customer." src="media/brand/opencompany-readme-banner.jpg" /></a>
 
 # OpenCompany
 
-<a href="https://www.npmjs.com/package/@zeenie-ai/opencompany" target="_blank"><img src="https://img.shields.io/npm/v/%40zeenie-ai%2Fopencompany.svg" alt="npm version"></a>
-<a href="https://opensource.org/licenses/MIT" target="_blank"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-<a href="https://discord.gg/c9pCJ7d8Ce" target="_blank"><img src="https://img.shields.io/discord/1455977012308086895?logo=discord&logoColor=white&label=Discord" alt="Discord"></a>
-<a href="https://deepwiki.com/zeenie-ai/OpenCompany" target="_blank"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+<a href="https://www.npmjs.com/package/@zeenie-ai/opencompany"><img src="https://img.shields.io/npm/v/%40zeenie-ai%2Fopencompany.svg" alt="npm version"></a>
+<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+<a href="https://discord.gg/c9pCJ7d8Ce"><img src="https://img.shields.io/discord/1455977012308086895?logo=discord&logoColor=white&label=Discord" alt="Discord"></a>
+<a href="https://deepwiki.com/zeenie-ai/OpenCompany"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 
 **Self-improving AI employees, running on your own computer.**
 
