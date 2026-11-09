@@ -1,0 +1,173 @@
+[
+  {
+    "id": "github-readme",
+    "file": "exports/github-readme-1600x700.jpg",
+    "width": 1600,
+    "height": 700,
+    "bytes": 403208,
+    "jpeg_quality": 93,
+    "source": "masters/selected-persona-polish.png",
+    "source_crop": [
+      0,
+      0,
+      1894,
+      830
+    ],
+    "destination": [
+      1.33,
+      0.0,
+      1597.35,
+      700.0
+    ],
+    "note": "Custom README design size; uniform fit of selected full artwork.",
+    "safe_area": null
+  },
+  {
+    "id": "github-social-preview",
+    "file": "exports/github-social-preview-1280x640.jpg",
+    "width": 1280,
+    "height": 640,
+    "bytes": 295576,
+    "jpeg_quality": 93,
+    "source": "masters/selected-persona-polish.png",
+    "source_crop": [
+      0,
+      0,
+      1894,
+      830
+    ],
+    "destination": [
+      0.0,
+      39.54,
+      1280.0,
+      560.93
+    ],
+    "note": "Preserves selected artwork with warm cream vertical breathing room.",
+    "safe_area": null
+  },
+  {
+    "id": "x-header",
+    "file": "exports/x-header-1500x500.jpg",
+    "width": 1500,
+    "height": 500,
+    "bytes": 168146,
+    "jpeg_quality": 93,
+    "source": "masters/linkedin-company-frieze.png",
+    "source_crop": [
+      0,
+      0,
+      2172,
+      724
+    ],
+    "destination": [
+      0.0,
+      0.0,
+      1500.0,
+      500.0
+    ],
+    "note": "Uses shallow frieze to keep all essential content in the middle 380px. Avatar exclusion is a conservative illustrative preview, not a platform guarantee.",
+    "safe_area": [
+      0,
+      60,
+      1500,
+      380
+    ]
+  },
+  {
+    "id": "linkedin-personal",
+    "file": "exports/linkedin-personal-1584x396.jpg",
+    "width": 1584,
+    "height": 396,
+    "bytes": 199499,
+    "jpeg_quality": 93,
+    "source": "masters/linkedin-personal-panorama.png",
+    "source_crop": [
+      0,
+      25,
+      2172,
+      670
+    ],
+    "destination": [
+      270.13,
+      0.0,
+      1283.75,
+      396.0
+    ],
+    "note": "Keeps brand in upper middle-left; quiet left area for variable profile-photo overlap. Only empty outer background trimmed.",
+    "safe_area": null
+  },
+  {
+    "id": "linkedin-company",
+    "file": "exports/linkedin-company-1512x256.jpg",
+    "width": 1512,
+    "height": 256,
+    "bytes": 145543,
+    "jpeg_quality": 93,
+    "source": "masters/linkedin-company-frieze.png",
+    "source_crop": [
+      0,
+      200,
+      2172,
+      350
+    ],
+    "destination": [
+      25.0,
+      10.21,
+      1462.0,
+      235.59
+    ],
+    "note": "Very shallow cast arrangement, uniform scaling, cream margins; no content cut. Nameplates retained.",
+    "safe_area": null
+  },
+  {
+    "id": "youtube-channel",
+    "file": "exports/youtube-channel-2560x1440.jpg",
+    "width": 2560,
+    "height": 1440,
+    "bytes": 262187,
+    "jpeg_quality": 93,
+    "source": "masters/linkedin-personal-panorama.png",
+    "source_crop": [
+      0,
+      25,
+      2172,
+      670
+    ],
+    "destination": [
+      599.22,
+      510.0,
+      1361.55,
+      420.0
+    ],
+    "note": "All artwork fits within conservative centered 1540x420 text/logo-safe region. Cream surroundings remain visible on TV.",
+    "safe_area": [
+      510,
+      510,
+      1540,
+      420
+    ]
+  },
+  {
+    "id": "social-link-preview",
+    "file": "exports/social-link-preview-1200x630.jpg",
+    "width": 1200,
+    "height": 630,
+    "bytes": 267392,
+    "jpeg_quality": 93,
+    "source": "masters/selected-persona-polish.png",
+    "source_crop": [
+      0,
+      0,
+      1894,
+      830
+    ],
+    "destination": [
+      0.0,
+      52.06,
+      1200.0,
+      525.87
+    ],
+    "note": "Practical general-purpose link card; not a universal platform requirement.",
+    "safe_area": null
+  }
+]

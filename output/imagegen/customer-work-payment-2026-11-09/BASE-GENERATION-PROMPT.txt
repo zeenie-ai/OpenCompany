@@ -1,0 +1,45 @@
+EDIT the attached OpenCompany cat workplace banner to correct its visual storytelling. The previous image shows unattended trays labeled TOKENS, WORK and REVENUE while employees sit behind them. The new image must show the employees PHYSICALLY CONVERTING TOKENS INTO FINISHED WORK and a separate CUSTOMER RECEIVING THE WORK AND PAYING FOR IT. This is the highest-priority change.
+
+REMOVE AND REPLACE
+Remove the entire row of three foreground display trays and the passive piles of tokens, finished cards and money. Do not reproduce that decorative three-tray arrangement. Remove the large generic revenue coin pile. Replace it with a connected active workbench and an actual two-way customer transaction. Every main story object must be held by a character, entering an employee's active tool, emerging as a deliverable, or being exchanged between two characters.
+
+RETAIN THE APPROVED DESIGN FAMILY
+A recognizable silver laptop contains a beautiful miniature professional company: warm crafted wood, cream plaster, professional cat clothing, sophisticated mature feline character design, subtle fur detail and clear editorial typography. Keep the original grumpy brown Persian boss, the six existing role-specific cats, the brand and the overall warm artistic quality. The architecture and staff positions MAY change substantially to make actions clear. The prior rigid two-row role placement is NOT mandatory for this composition.
+
+EXACTLY SIX EMPLOYEES, ONE BOSS, ONE CUSTOMER — EIGHT CHARACTERS
+- Builder: ginger tabby, slate-blue rolled-cuff overshirt; focused software maker.
+- Grower: white coat with a charcoal ear patch, sage blazer and terracotta shirt; expressive content/campaign maker.
+- Chief of Staff: black-and-white tuxedo, navy waistcoat, cream collar; composed organizer.
+- Front Desk: cream colorpoint with sable ears, burgundy jacket and headset; welcoming service professional.
+- Researcher: calico, oatmeal cardigan and round spectacles; curious and analytical.
+- Treasurer: silver tabby, forest-green waistcoat; precise payment operator.
+- Boss: stocky chocolate-brown Persian with a cream muzzle, lowered brows, narrowed eyes and grumpy frown; charcoal suit and gold tie. He actively points at the employees' work in progress. A small dollar-shaped lapel pin or dollar-marked ledger keeps his money-minded personality visible, but he is NOT the paying customer.
+- Customer: a separate solid blue-gray shorthair cat wearing a bright teal coat with a small mustard shoulder bag, friendly interested expression, no employee headset or tools. The customer is visiting from OUTSIDE the laptop workplace and is the source of the payment. Distinct from the silver-striped Treasurer, the tuxedo coordinator and the boss.
+
+SHOW THE CAUSAL ACTIONS CLEARLY
+1. TOKEN INPUT: At the far-left end of the employee workbench, the Researcher's paw visibly holds a large cyan token tile HALFWAY INSERTED into a cyan-edged input dock attached directly to an active browser/AI workstation. The input dock has a large clear "TOKENS" label. Show just two spare cyan tiles nearby, not a huge unattended pile. The tile and paw must touch the input slot; it cannot simply float nearby.
+2. ACTIVE PRODUCTION: The ginger Builder works at a code screen and pulls an ivory software deliverable card from a slot on that same workstation. Beside this, the Grower creates a visual campaign page from their editing screen. A short transparent or open physical channel links the token-input dock to these active tools. Show the transition from cyan input marks to structured code, charts and document graphics inside the tools; simple bold iconography, not tiny text. The cats' paws must touch the keyboard, drawing surface or emerging work.
+3. ASSEMBLY AND REVIEW: The Chief of Staff visibly gathers the software, campaign and research sheets into ONE substantial ivory deliverable folder bearing a green approval check and the exact large title "FINISHED WORK". Make this deliverable look finished and valuable. It is handed onward toward Front Desk, not left in a disconnected tray.
+4. WORK DELIVERY: At the open far-right workplace boundary, Front Desk hands that same deliverable folder directly to the external teal-coated customer. Front Desk grips the folder's LEFT EDGE while the customer's LEFT PAW grips its RIGHT EDGE. BOTH touch the same folder at the same time. The finished-work exchange must be prominent and unobstructed.
+5. PAYMENT IN THE OPPOSITE DIRECTION: Simultaneously, the customer's RIGHT PAW extends ONE large generic green banknote with a bold "$" to the Treasurer. The Treasurer's paw grips the opposite edge of that SAME banknote. Both visibly touch the payment. Keep this cash exchange BELOW and separate from the work-folder exchange so the two directions are unmistakable. The customer receives work and pays money; they do not receive money. The Treasurer has a small payment terminal or ledger behind this exchange.
+6. BOSS GUIDANCE: The grumpy boss watches from behind the central workbench and points at the work being assembled. His gesture ties to the employees' actions. Keep him big enough to recognize, but less dominant than the production and customer exchange.
+
+All four critical visual actions must be easy to see: token insertion, employees making work, customer taking the work, customer handing over payment. Use shared-object paw contact, clear eye-lines and open space. Do not try to explain missing actions with arrows alone. No detached tokens-to-money machine bypassing the employees. No magical money creation.
+
+ROLE AND CUSTOMER LABELS
+Place clear cream nameplates or modest scene-anchored captions next to the matching characters, readable at small size:
+"Builder", "Grower", "Chief of Staff", "Front Desk", "Researcher", "Treasurer", "Boss", "Customer".
+Use exactly one of each. The customer label belongs outside the company boundary. The workbench can also carry the simple stage labels "TOKENS" at the input dock and "PAYMENT" beside the Treasurer's transaction point. The delivered folder itself reads "FINISHED WORK". Do not recreate a freestanding strip of disconnected process trays. Do not add explanatory paragraphs.
+
+BRAND COPY
+Keep these exact strings once each, clearly separated from the action:
+"OpenCompany"
+"AI employees, running on your computer."
+"Open source. Your tools. Your control."
+Large elegant Newsreader-like serif for the brand, simple readable sans-serif for the rest. Brand area may be compacted to give the full work-and-customer story room, but retain strong hierarchy and generous outside margins. No cropped text or faces.
+
+FORMAT AND QUALITY
+One coherent wide landscape banner, approximately 2.3:1. Request a small 1024 x 448 test generation, opaque background. Render for readability at 1024 pixels wide. Slightly enlarge the token tile, delivered folder and green dollar note so their paw contact is clear at draft size. All cats have feline faces, forepaws, ears, tails and tasteful professional attire. No human hands, duplicated arms, extra employees, merged characters, third-party logos, watermarks, earnings amounts, cluttered loose cash, neon or galaxy effects. Use a slightly elevated three-quarter view with enough depth of field for all actions. Prioritize storytelling and understandable physical interaction above decorative architectural detail.
+
+SPECIFIC COMPOSITION
+Use the sunlit skylight courtyard, but open up the foreground into one oval central production table. Researcher visibly inserts the cyan token at the rear-left end; Builder and Grower actively make the deliverable at the left/center tools; Chief of Staff assembles the folder at the center-right; Front Desk and Treasurer occupy two neighboring service positions at the open front-right entrance. The visiting teal-coated customer stands on the near side of the counter, external to the employee area. Make the report exchange and reverse-direction cash exchange the large foreground focal point. Boss watches from a small rear balcony, pointing down toward the assembled work. Keep an open clear courtyard center, wide light-oak surfaces, warm ivory plaster, terracotta accents, glass roof and a fully recognizable laptop below.

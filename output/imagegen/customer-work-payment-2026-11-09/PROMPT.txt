@@ -1,0 +1,57 @@
+Make a precise CHARACTER-PERSONA POLISH of this selected OpenCompany banner. Edit the six employee cats so their expressions, professional tailoring, gaze and small role-specific details clearly match their jobs. This is a refinement of the existing selected artwork, not a new composition.
+
+LOCK THE SELECTED DESIGN
+Preserve the camera, architecture, glass skylight, laptop silhouette, warm light, colors, object scale, overall layout, locations of all characters, and readable text. Preserve all eight characters and their identities: six employees, the grumpy Persian boss and the separate customer. Leave the boss and customer visually unchanged. Keep the distinctive coat patterns of all six employees. Their professional clothing should become more intentional and better fitted without changing each role's established color identity.
+
+LOCK THE CRITICAL STORY AND CONTACTS
+- Researcher's paw continues to hold the cyan token visibly halfway inside the TOKENS dock.
+- The transparent connection from token input to the employee tools remains clear.
+- Builder and Grower continue to operate the existing active software/content tools and produce visible work.
+- The finished folder remains jointly held between Front Desk and Customer.
+- The same green dollar note remains jointly held between Customer and Treasurer, below the folder exchange.
+- The customer receives the work and pays the company; never reverse the transaction.
+- Boss continues pointing toward the work. Do not add money piles or remove the payment interaction.
+Do not break, hide, merge or shift these shared-object paw contacts.
+
+REFINE EACH EMPLOYEE AS A DISTINCT MATURE PROFESSIONAL
+
+1. BUILDER — focused senior software craftsperson.
+Keep the ginger tabby and slate-blue overshirt, but make the shirt fit neatly, with crisp rolled cuffs over a simple dark undershirt. Give the cat a concentrated closed-mouth expression, subtly engaged brows and ears angled toward the code screen. Show quiet confidence and technical absorption rather than anger. Slightly purposeful forward lean, paws precisely engaged with the existing keyboard. Preserve the IDE, code deliverable and role label. No construction helmet, tools unrelated to software, extra gadgets or exaggerated nerd costume.
+
+2. GROWER — confident creative growth strategist.
+Keep the white cat with its charcoal ear patch, sage blazer and terracotta shirt. Improve blazer tailoring and give the face bright attentive eyes, raised ears and a small assured smile instead of a wide generic cartoon grin. The gaze follows the campaign material on the existing screen. The stylus gesture should look deliberate and imaginative, actively refining content. Upright energetic posture, poised rather than frantic. Preserve the current campaign tools and station. No new props.
+
+3. CHIEF OF STAFF — composed operations coordinator.
+Keep the tuxedo coat, navy waistcoat, cream shirt and restrained tie. Give this cat an upright, balanced posture and a calm, observant expression, looking toward the team's in-progress deliverables rather than staring upward. Replace the plain wooden box currently held by this cat with ONE slim, elegant project folio in the same position and at the same approximate scale. Preserve the existing paw grips. The folio is slightly open with three visible index tabs, a simple calendar grid and a short checklist made of abstract marks, no tiny readable writing. This should instantly read as organized priorities, schedules and briefings. Do not add another computer or expand the workstation.
+
+4. FRONT DESK — warm, attentive client-service professional.
+Keep the cream colorpoint cat, sable ears, burgundy jacket and discreet headset. Refine the jacket into a tidy well-fitted service blazer. Give the cat warm direct eye contact with the customer, relaxed ears and a reassuring professional smile, not an exaggerated open-mouth reaction. The posture is welcoming and the existing folder handoff is confident and careful. Preserve both characters' grips on the FINISHED WORK folder exactly in the same locations. Keep the headset believable and understated.
+
+5. RESEARCHER — thoughtful evidence-led analyst.
+Keep the calico markings, oatmeal cardigan and thin round spectacles. Refine the face with a small thoughtful head tilt, attentive eyes and a quietly inquisitive expression while inspecting the token-fed work process. Neaten the cardigan cuffs and keep the paws recognizably feline. Preserve the visible token insertion grip. Add only one slim open source-comparison notebook tucked flat beside the existing input dock, showing two simple columns of abstract notes; it must not cover the token tiles, TOKENS label, input slot or paw contact. The notebook is a restrained job cue, not a large new feature. No other added objects.
+
+6. TREASURER — precise, trustworthy payment-operations specialist.
+Keep the silver tabby markings, forest-green waistcoat, pale shirt and understated reading glasses. Improve the tailoring and give this cat a calm exacting expression, with gaze directed at the incoming payment and terminal. Closed-mouth composure and deliberate posture rather than a grin or excitement about cash. Preserve the extended paw gripping the same dollar note the customer holds, and the other paw's existing working position. Keep the payment terminal and PAYMENT label. Do not turn this role into a trader or depict speculative charts.
+
+COHESIVE CHARACTER CRAFT
+All six cats have distinct mature professional personas expressed through feline eyes, ears, muzzles, posture and tailoring. Retain natural feline paws, fur and tails. Improve subtle fur grooming, cloth seams and contact shadows where helpful, but avoid over-detailing or changing the warm handmade miniature aesthetic. No identical facial expressions, baby-cat proportions, human hands, extra limbs, exaggerated costumes or additional characters.
+
+TEXT — PRESERVE EVERY EXISTING STRING, SPELLING AND PLACEMENT
+"OpenCompany"
+"AI employees, running on your computer."
+"Open source. Your tools. Your control."
+"Researcher"
+"Builder"
+"Grower"
+"Chief of Staff"
+"Front Desk"
+"Treasurer"
+"Boss"
+"Customer"
+"TOKENS"
+"FINISHED WORK"
+"PAYMENT"
+Do not duplicate labels, add personality adjectives, change the brand typography or add any new readable text.
+
+OUTPUT
+Return one polished edit at the original wide landscape proportions with opaque background. Continue the lightweight draft workflow: request approximately 1024 pixels wide, prioritize legibility at 1024px. This is one carefully refined selected banner, not a grid of variants.

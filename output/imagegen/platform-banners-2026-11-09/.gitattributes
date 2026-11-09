@@ -1,0 +1,5 @@
+# Verbatim generation prompts retain original whitespace and LF line endings.
+prompts/*.txt text eol=lf whitespace=-blank-at-eol
+*.json text eol=lf
+*.md text eol=lf
+*.ps1 text eol=lf

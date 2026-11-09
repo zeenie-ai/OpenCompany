@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-09",
+  "generator": "built-in image_gen",
+  "input": "masters/selected-persona-polish.png",
+  "inputPrompt": "prompts/selected-persona-polish.txt",
+  "outputs": [
+    {
+      "id": "x-panorama",
+      "source": "C:/Users/Tgroh/.codex/generated_images/01a1aab0-da08-7111-be44-df13e9b7d4c5/exec-88d2644a-3de0-4dee-8911-e80faf42ca4a.png",
+      "master": "masters/x-panorama.png",
+      "prompt": "prompts/x-panorama.txt",
+      "reference": "masters/selected-persona-polish.png",
+      "status": "Alternate composition; export uses shallow frieze for better vertical crop protection."
+    },
+    {
+      "id": "linkedin-personal-panorama",
+      "source": "C:/Users/Tgroh/.codex/generated_images/01a1aab0-da08-7111-be44-df13e9b7d4c5/exec-fd445e2f-14a6-41fa-b486-2b92e6c314d3.png",
+      "master": "masters/linkedin-personal-panorama.png",
+      "prompt": "prompts/linkedin-personal-panorama.txt",
+      "reference": "masters/selected-persona-polish.png",
+      "status": "Final source for LinkedIn personal and YouTube."
+    },
+    {
+      "id": "linkedin-company-panorama",
+      "source": "C:/Users/Tgroh/.codex/generated_images/01a1aab0-da08-7111-be44-df13e9b7d4c5/exec-82111aa6-c510-4365-a523-255518a3ea77.png",
+      "master": "masters/linkedin-company-panorama-draft.png",
+      "prompt": "prompts/linkedin-company-panorama.txt",
+      "reference": "masters/selected-persona-polish.png",
+      "status": "Intermediate; too tall and missing Builder label."
+    },
+    {
+      "id": "linkedin-company-frieze",
+      "source": "C:/Users/Tgroh/.codex/generated_images/01a1aab0-da08-7111-be44-df13e9b7d4c5/exec-5dcfe393-f3b6-48de-a22b-a6ecc8ec1e47.png",
+      "master": "masters/linkedin-company-frieze-draft.png",
+      "prompt": "prompts/linkedin-company-panorama-refinement.txt",
+      "reference": "masters/linkedin-company-panorama-draft.png",
+      "status": "Intermediate; folder shared grip repaired in next edit."
+    },
+    {
+      "id": "linkedin-company-handoff-correction",
+      "source": "C:/Users/Tgroh/.codex/generated_images/01a1aab0-da08-7111-be44-df13e9b7d4c5/exec-3ed5f5b9-598c-4e1d-b1d6-57b5b045af8d.png",
+      "master": "masters/linkedin-company-frieze.png",
+      "prompt": "prompts/linkedin-company-handoff-correction.txt",
+      "reference": "masters/linkedin-company-frieze-draft.png",
+      "status": "Final source for LinkedIn company and X; shared work and cash contacts restored."
+    }
+  ],
+  "exportNote": "All exact-size exports use System.Drawing proportional fitting and canvas padding. See export-manifest.json for source crop and destination rectangles. No generated subjects or type stretched. Prompts record actual calls verbatim; generator output dimensions are recorded independently from requested dimensions."
+}

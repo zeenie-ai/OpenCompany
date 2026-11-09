@@ -1,0 +1,4 @@
+# Keep saved generation-prompt line endings stable across checkouts.
+*.txt text eol=lf
+*.json text eol=lf
+*.md text eol=lf
