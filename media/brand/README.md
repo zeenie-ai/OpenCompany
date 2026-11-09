@@ -35,3 +35,5 @@ The concept the mark was redrawn from, with the name below it, is
 [opencompany-readme-banner.jpg](./opencompany-readme-banner.jpg) is the 1600 × 700 banner used by the root README. It shows the professional AI cat employees turning tokens into finished work, with a customer receiving the work and paying the team.
 
 This is a byte-for-byte copy of the approved [GitHub README export](../../output/imagegen/platform-banners-2026-11-09/exports/github-readme-1600x700.jpg). Keep this stable publishing path in sync with that export when updating the artwork. The [platform banner kit](../../output/imagegen/platform-banners-2026-11-09/README.md) contains the exact prompts, masters, additional sizes, and export instructions.
+
+The root README embeds the banner with a relative `src`, but its click link points to the direct image on `raw.githubusercontent.com`, without a new-tab target. This opens the browser's full-image viewer in the same tab, matching the original uploaded banner. A relative image link instead opens GitHub's repository file page. Click previews use the published `main` artwork.

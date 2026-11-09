@@ -1,4 +1,4 @@
-<a href="media/brand/opencompany-readme-banner.jpg"><img width="1600" alt="OpenCompany: professional AI cat employees turn tokens into finished work for a paying customer." src="media/brand/opencompany-readme-banner.jpg" /></a>
+<a href="https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/media/brand/opencompany-readme-banner.jpg"><img width="1600" alt="OpenCompany: professional AI cat employees turn tokens into finished work for a paying customer." src="media/brand/opencompany-readme-banner.jpg" /></a>
 
 # OpenCompany
 
@@ -56,7 +56,7 @@ The builds are not signed with an Apple or Microsoft developer certificate yet, 
 
 ### How an employee works
 
-[![How AI employees work: jobs arrive through chat, email, messaging, schedules or webhooks; an employee team uses browsers, apps and computer tools to deliver results, with memory, skills and feedback informing the next job](docs/diagrams/how-ai-employees-work.png)](docs/diagrams/how-ai-employees-work.png)
+[![How AI employees work: jobs arrive through chat, email, messaging, schedules or webhooks; an employee team uses browsers, apps and computer tools to deliver results, with memory, skills and feedback informing the next job](docs/diagrams/how-ai-employees-work.png)](https://raw.githubusercontent.com/zeenie-ai/OpenCompany/main/docs/diagrams/how-ai-employees-work.png)
 
 Jobs can arrive through Home chat, email (Gmail, Outlook, or IMAP), WhatsApp, Telegram, or Discord, or start on a schedule. Dev mode also supports webhook inputs.
 
