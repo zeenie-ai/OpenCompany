@@ -1,0 +1,17 @@
+Use case: stylized-concept
+Asset type: OpenCompany AI employee profile picture, one square portrait for a small circular avatar.
+Primary request: Create the Builder cat employee as a polished individual professional portrait, matching the established OpenCompany cat cast.
+
+Input images: Image 1 is the approved OpenCompany workplace banner, used ONLY as character-identity, clothing, material and lighting reference. Extract only the specified employee into a new portrait composition; do not reproduce the workplace.
+
+Subject and role personality: A mature ginger orange tabby cat with fine darker orange stripes, cream muzzle, green-hazel eyes and the same triangular face and neat short fur as the ginger Builder seated at the code screen in the reference. Wear the same tailored slate-blue overshirt, open at the collar over a plain charcoal tee. Expression: concentrated, quietly confident, attentive; gently engaged brow but never angry or scowling. Head nearly upright, shoulders angled about ten degrees, steady direct eye contact. Personality feels like a thoughtful senior software engineer.
+
+Style/medium: Sophisticated warm 3D character illustration with the banner's handcrafted miniature aesthetic, subtle groomed fur, tactile woven cloth and refined tailoring. Mature feline proportions, appealing natural cat face, restrained expressive eyes, detailed whiskers, distinctly feline anatomy. A professional team-directory portrait with character and taste.
+
+Composition/framing: Exactly one cat, head-and-shoulders bust, facing the viewer, centered at a consistent camera height. Square 1:1 canvas. Full ears are visible with comfortable top and side breathing room; head including ears fills about 60 percent of image width. Eyes sit just above the horizontal center. Chest and shoulders continue naturally to the lower edge. Keep the complete ears, face, glasses or headset within an imaginary centered circular crop with an 8 percent safety inset. No border or visible crop circle. No paws, desk, props or other characters.
+
+Scene/backdrop: Seamless opaque warm ivory studio background with an extremely subtle pale apricot glow behind the head. Flat uncluttered visual field, no architecture or office scenery.
+Lighting/mood: Soft broad daylight from upper left, gentle warm fill, delicate contact shadows in fur and clothing, clear eyes with small natural catchlights. Consistent calm premium portrait lighting.
+Text: None. Role names will be displayed by the application outside the avatar.
+Constraints: Preserve this employee's distinctive coat, accessories, wardrobe colors and role personality from the banner. One finished square portrait only, approximately 1024 x 1024 pixels for lightweight experimentation. Clear recognizable silhouette and expression at 64 pixels.
+Avoid: Collage, grid, logo, watermark, badges, nameplate, embedded lettering, extra cats, human hands, oversized baby eyes, kitten proportions, toothy cartoon grin, heavy photographic realism, harsh dramatic shadows, shiny plastic fur, cropped ears, floating objects, busy backgrounds.

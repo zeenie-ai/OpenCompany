@@ -1,0 +1,82 @@
+{
+  "generator": "Built-in image_gen",
+  "created": "2026-11-09",
+  "use_case": "stylized-concept",
+  "intent": "Generate new individual portraits from approved character and style references",
+  "requested_size": "Approximately 1024x1024, 1:1",
+  "background": "Opaque warm ivory with subtle apricot glow",
+  "actual_master_dimensions": "1254x1254",
+  "assets": [
+    {
+      "slug": "builder",
+      "role": "Builder",
+      "persona": "Focused software craftsperson",
+      "source_file": "C:\\Users\\Tgroh\\.codex\\generated_images\\01a1aab0-da08-7111-be44-df13e9b7d4c5\\exec-6ebf785b-d023-47bb-969e-17a9197f78b3.png",
+      "master": "masters/builder.png",
+      "prompt": "prompts/builder.txt",
+      "references": [
+        "../platform-banners-2026-11-09/masters/selected-persona-polish.png"
+      ]
+    },
+    {
+      "slug": "grower",
+      "role": "Grower",
+      "persona": "Confident creative strategist",
+      "source_file": "C:\\Users\\Tgroh\\.codex\\generated_images\\01a1aab0-da08-7111-be44-df13e9b7d4c5\\exec-828e4a8b-c4f5-4b70-b155-656b849dc3f4.png",
+      "master": "masters/grower.png",
+      "prompt": "prompts/grower.txt",
+      "references": [
+        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "masters/builder.png"
+      ]
+    },
+    {
+      "slug": "chief-of-staff",
+      "role": "Chief of Staff",
+      "persona": "Calm operations coordinator",
+      "source_file": "C:\\Users\\Tgroh\\.codex\\generated_images\\01a1aab0-da08-7111-be44-df13e9b7d4c5\\exec-78a29e2f-1f8e-495f-91d4-b702501f39e8.png",
+      "master": "masters/chief-of-staff.png",
+      "prompt": "prompts/chief-of-staff.txt",
+      "references": [
+        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "masters/builder.png"
+      ]
+    },
+    {
+      "slug": "front-desk",
+      "role": "Front Desk",
+      "persona": "Warm client-service professional",
+      "source_file": "C:\\Users\\Tgroh\\.codex\\generated_images\\01a1aab0-da08-7111-be44-df13e9b7d4c5\\exec-0f960f2f-cc99-4390-92c6-0cb234246345.png",
+      "master": "masters/front-desk.png",
+      "prompt": "prompts/front-desk.txt",
+      "references": [
+        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "masters/builder.png"
+      ]
+    },
+    {
+      "slug": "researcher",
+      "role": "Researcher",
+      "persona": "Curious evidence-led analyst",
+      "source_file": "C:\\Users\\Tgroh\\.codex\\generated_images\\01a1aab0-da08-7111-be44-df13e9b7d4c5\\exec-630522fc-8399-4b88-9dca-150d89dd6e70.png",
+      "master": "masters/researcher.png",
+      "prompt": "prompts/researcher.txt",
+      "references": [
+        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "masters/builder.png"
+      ]
+    },
+    {
+      "slug": "treasurer",
+      "role": "Treasurer",
+      "persona": "Precise payment specialist",
+      "source_file": "C:\\Users\\Tgroh\\.codex\\generated_images\\01a1aab0-da08-7111-be44-df13e9b7d4c5\\exec-93dd080d-2694-4d38-9265-26e49cf229c2.png",
+      "master": "masters/treasurer.png",
+      "prompt": "prompts/treasurer.txt",
+      "references": [
+        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "masters/builder.png"
+      ]
+    }
+  ]
+}

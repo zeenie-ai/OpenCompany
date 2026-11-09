@@ -1,0 +1,183 @@
+{
+    "schema_version":  1,
+    "generated_by":  "export.ps1",
+    "resize_method":  "HighQualityBicubic; square sources required; no crop or stretching",
+    "roles":  [
+                  {
+                      "slug":  "builder",
+                      "role":  "Builder",
+                      "persona":  "Focused software craftsperson",
+                      "source":  {
+                                     "file":  "masters/builder.png",
+                                     "width":  1254,
+                                     "height":  1254,
+                                     "bytes":  2885090,
+                                     "sha256":  "4b07f2d4872429cae2d6e9302f2bd9bf83df79271cd221ac09f1343ba3eb08bc"
+                                 },
+                      "exports":  [
+                                      {
+                                          "file":  "avatars-512/builder.png",
+                                          "width":  512,
+                                          "height":  512,
+                                          "bytes":  569147,
+                                          "sha256":  "cd874bd371113b1719936cbf6a96ae057b33fb7298b3ba0177a49d3008b7bed4"
+                                      },
+                                      {
+                                          "file":  "avatars-256/builder.png",
+                                          "width":  256,
+                                          "height":  256,
+                                          "bytes":  140592,
+                                          "sha256":  "8fe5e2b3ed3c643832728b6db2140cf7bff7ab0f2ef067f826ba723901af3f47"
+                                      }
+                                  ]
+                  },
+                  {
+                      "slug":  "grower",
+                      "role":  "Grower",
+                      "persona":  "Confident creative strategist",
+                      "source":  {
+                                     "file":  "masters/grower.png",
+                                     "width":  1254,
+                                     "height":  1254,
+                                     "bytes":  2465234,
+                                     "sha256":  "b7d3c3ec8dca28bb196509110760b598f2c44a2e9986cb6c28b88e22070b4ecb"
+                                 },
+                      "exports":  [
+                                      {
+                                          "file":  "avatars-512/grower.png",
+                                          "width":  512,
+                                          "height":  512,
+                                          "bytes":  501650,
+                                          "sha256":  "d8186532bf298e4be414f7be83cb827b4c936cc5429eb196da0b57665b44ac5a"
+                                      },
+                                      {
+                                          "file":  "avatars-256/grower.png",
+                                          "width":  256,
+                                          "height":  256,
+                                          "bytes":  123371,
+                                          "sha256":  "12eb413684c26701cae0c17acf99e8b347c6addd301959ca99e0a8fc9e688fb2"
+                                      }
+                                  ]
+                  },
+                  {
+                      "slug":  "chief-of-staff",
+                      "role":  "Chief of Staff",
+                      "persona":  "Calm, organized coordinator",
+                      "source":  {
+                                     "file":  "masters/chief-of-staff.png",
+                                     "width":  1254,
+                                     "height":  1254,
+                                     "bytes":  2685728,
+                                     "sha256":  "7c4be4a5c37190bef3c0ad17f2ccfb582ed9057fa80dd4552d4651fa51f75793"
+                                 },
+                      "exports":  [
+                                      {
+                                          "file":  "avatars-512/chief-of-staff.png",
+                                          "width":  512,
+                                          "height":  512,
+                                          "bytes":  524624,
+                                          "sha256":  "58e7b5ec8e8414e0c5c6b7836aae6a5af96956a889668bd676c99a532fe493c6"
+                                      },
+                                      {
+                                          "file":  "avatars-256/chief-of-staff.png",
+                                          "width":  256,
+                                          "height":  256,
+                                          "bytes":  128339,
+                                          "sha256":  "2ede576a1327685e18f51eef8a6ac0c6c44e2fa8022e488b130264dba2dbb17d"
+                                      }
+                                  ]
+                  },
+                  {
+                      "slug":  "front-desk",
+                      "role":  "Front Desk",
+                      "persona":  "Warm, attentive client service",
+                      "source":  {
+                                     "file":  "masters/front-desk.png",
+                                     "width":  1254,
+                                     "height":  1254,
+                                     "bytes":  2582556,
+                                     "sha256":  "a356f287175629ce79a0140c8c4bb495b096642acb6a9b2cd6fb3179a2eed07c"
+                                 },
+                      "exports":  [
+                                      {
+                                          "file":  "avatars-512/front-desk.png",
+                                          "width":  512,
+                                          "height":  512,
+                                          "bytes":  539170,
+                                          "sha256":  "f599b578139e1c408885dd7683097c21ae208986b6e5aefcf25160c0ed328c7b"
+                                      },
+                                      {
+                                          "file":  "avatars-256/front-desk.png",
+                                          "width":  256,
+                                          "height":  256,
+                                          "bytes":  133172,
+                                          "sha256":  "06312e7a46ef0edcaeb041b9c4372498a8e7d1994b2ea731e97f057a2d7679a3"
+                                      }
+                                  ]
+                  },
+                  {
+                      "slug":  "researcher",
+                      "role":  "Researcher",
+                      "persona":  "Thoughtful, inquisitive analyst",
+                      "source":  {
+                                     "file":  "masters/researcher.png",
+                                     "width":  1254,
+                                     "height":  1254,
+                                     "bytes":  2658376,
+                                     "sha256":  "66d25af2719ab590caeba6ac1d7c4765649e00df49b6573ec09c5a1fc361d0e4"
+                                 },
+                      "exports":  [
+                                      {
+                                          "file":  "avatars-512/researcher.png",
+                                          "width":  512,
+                                          "height":  512,
+                                          "bytes":  581075,
+                                          "sha256":  "1f1736230f2e546c89e0697dbf6f23d012bda3c6de1b58be63176fb92dc3c986"
+                                      },
+                                      {
+                                          "file":  "avatars-256/researcher.png",
+                                          "width":  256,
+                                          "height":  256,
+                                          "bytes":  143295,
+                                          "sha256":  "09f68ad4174489897f0f6ae4934c7dd0c0721a626fcfbcce69286a1c6400b101"
+                                      }
+                                  ]
+                  },
+                  {
+                      "slug":  "treasurer",
+                      "role":  "Treasurer",
+                      "persona":  "Precise payment specialist",
+                      "source":  {
+                                     "file":  "masters/treasurer.png",
+                                     "width":  1254,
+                                     "height":  1254,
+                                     "bytes":  2816560,
+                                     "sha256":  "beb914df704c0a8e00c2f6399e4bb5933f01bfad62b9bb8ea5d2d68b817056db"
+                                 },
+                      "exports":  [
+                                      {
+                                          "file":  "avatars-512/treasurer.png",
+                                          "width":  512,
+                                          "height":  512,
+                                          "bytes":  550004,
+                                          "sha256":  "1d5d7bb167b66c5ce1fc27eef9dff1d1d6583b768c38bc8ec233df45eef68bcf"
+                                      },
+                                      {
+                                          "file":  "avatars-256/treasurer.png",
+                                          "width":  256,
+                                          "height":  256,
+                                          "bytes":  135805,
+                                          "sha256":  "512fd74135823a1a6ca72ea92259d0b820bf6709842d4a77e8c3d1fbb551d19e"
+                                      }
+                                  ]
+                  }
+              ],
+    "preview":  {
+                    "file":  "previews/employee-lineup.jpg",
+                    "width":  1200,
+                    "height":  900,
+                    "bytes":  156027,
+                    "sha256":  "9e6ee38a1430b6c8c3cc74a5549e1f690054aa44a5c623d3f48ef8ac8adaefcc",
+                    "note":  "Circular clips for QA; exported avatar PNGs remain square."
+                }
+}

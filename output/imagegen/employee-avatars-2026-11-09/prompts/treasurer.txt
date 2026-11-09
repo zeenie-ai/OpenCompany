@@ -1,0 +1,17 @@
+Use case: stylized-concept
+Asset type: OpenCompany AI employee profile picture, one square portrait for a small circular avatar.
+Primary request: Create the Treasurer cat employee as a polished individual professional portrait, matching the established OpenCompany cat cast.
+
+Input images: Image 1 is the approved OpenCompany workplace banner, used ONLY as character-identity, clothing, material and lighting reference. Extract only the specified employee into a new portrait composition; do not reproduce the workplace. Image 2 is the approved Builder portrait, used ONLY to match portrait framing, warm cream studio background, lighting, face scale and level of finish. Do not copy its ginger coat or blue clothing for this different employee.
+
+Subject and role personality: A mature silver-gray tabby cat with fine darker gray stripes, pale cream-gray muzzle, amber-gold eyes and the same rounder face as the Treasurer at the payment terminal in the banner. Wear the same forest-green tailored waistcoat over a cream shirt with a restrained ochre-brown tie and thin charcoal rectangular reading spectacles with optically clear lenses. Expression: composed, precise and trustworthy, attentive eyes, relaxed closed mouth, upright meticulous posture and direct eye contact. Personality feels like an experienced payment-operations specialist, never greedy or excited about cash.
+
+Style/medium: Sophisticated warm 3D character illustration with the banner's handcrafted miniature aesthetic, subtle groomed fur, tactile woven cloth and refined tailoring. Mature feline proportions, appealing natural cat face, restrained expressive eyes, detailed whiskers, distinctly feline anatomy. A professional team-directory portrait with character and taste.
+
+Composition/framing: Exactly one cat, head-and-shoulders bust, facing the viewer, centered at a consistent camera height. Square 1:1 canvas. Full ears are visible with comfortable top and side breathing room; head including ears fills about 60 percent of image width. Eyes sit just above the horizontal center. Chest and shoulders continue naturally to the lower edge. Keep the complete ears, face, glasses or headset within an imaginary centered circular crop with an 8 percent safety inset. No border or visible crop circle. No paws, desk, props or other characters.
+
+Scene/backdrop: Seamless opaque warm ivory studio background with an extremely subtle pale apricot glow behind the head. Flat uncluttered visual field, no architecture or office scenery.
+Lighting/mood: Soft broad daylight from upper left, gentle warm fill, delicate contact shadows in fur and clothing, clear eyes with small natural catchlights. Consistent calm premium portrait lighting.
+Text: None. Role names will be displayed by the application outside the avatar.
+Constraints: Preserve this employee's distinctive coat, accessories, wardrobe colors and role personality from the banner. One finished square portrait only, approximately 1024 x 1024 pixels for lightweight experimentation. Clear recognizable silhouette and expression at 64 pixels.
+Avoid: Collage, grid, logo, watermark, badges, nameplate, embedded lettering, extra cats, human hands, oversized baby eyes, kitten proportions, toothy cartoon grin, heavy photographic realism, harsh dramatic shadows, shiny plastic fur, cropped ears, floating objects, busy backgrounds.
