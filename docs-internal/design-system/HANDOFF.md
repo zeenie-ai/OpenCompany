@@ -1,4 +1,4 @@
-# Handoff: OpenCompany Theme System (3 themes × 17 panels)
+# Handoff: OpenCompany Theme System (2 themes × 17 panels)
 
 > **Merged copy (2026-08)** — this is the handoff brief from the external
 > `design_handoff_theme_system/` bundle, merged into
@@ -44,21 +44,28 @@
 > 6. **Themed glyphs: ten themes ship their own set** (renaissance, cyber,
 >    greek, edo, steampunk, atomic, wasteland, rot, plague, surveillance);
 >    only Light and Dark fall through to lucide. The "eight themes" claim
->    later in this brief is stale.
+>    later in this brief is stale. No longer applies: the last set went
+>    with Atomic (amendment 8).
 > 7. **Nine skins removed (2026-10-12).** The product ships Light, Dark and
 >    Atomic only; Renaissance, Greek, Edo, Steampunk, Cyber, Wasteland, Rot,
 >    Plague and Surveillance were removed, with their glyph sets (only
 >    Atomic's remain of amendment 6). Home, the editor and the sign-in screen
->    all show the chosen theme. The theme lists below are trimmed to the
->    three; the rest of the brief is unchanged.
+>    all show the chosen theme. The theme lists below were trimmed to the
+>    three; the rest of the brief was unchanged.
+> 8. **Atomic removed (2026-11-09).** The product ships Light and Dark only.
+>    Atomic was removed with its glyph set and the per-theme glyph
+>    mechanism, its `vibraphone` sound pack, its Google Fonts (Bevan, Lato,
+>    Space Mono) and its canvas colour overlay; the per-component decoration
+>    hook classes stay as the theme contract. The theme lists below are
+>    trimmed to the two, and the brief's Atomic examples are gone.
 
 ## Overview
 
-OpenCompany is a desktop workflow canvas for building agent workflows. It ships **3 visual themes** — two neutral base themes plus one "world" skin, Atomic (the brief was written for twelve; see amendment 7). Every theme reskins the *entire* application: surfaces, type (a different display/body/mono trio per theme), radii, iconography, canvas background texture, and motion.
+OpenCompany is a desktop workflow canvas for building agent workflows. It ships **2 visual themes**, the neutral base themes Light and Dark (the brief was written for twelve; see amendments 7 and 8). A theme can reskin the *entire* application: surfaces, type (its own display/body/mono trio), radii, iconography, canvas background texture, and motion.
 
 This bundle contains the design system's real source files plus a working reference mockup that renders **every panel in every theme on one canvas**, so you can diff your implementation against the intended result panel-by-panel.
 
-The theming architecture is the whole point: a component is written **once**, against tokens, and picks up every theme for free. If you find yourself writing `if (theme === 'atomic')` in a component, the token layer is missing something — add the token instead.
+The theming architecture is the whole point: a component is written **once**, against tokens, and picks up every theme for free. If you find yourself writing `if (theme === 'dark')` in a component, the token layer is missing something — add the token instead.
 
 ## About the Design Files
 
@@ -87,7 +94,7 @@ references.
 ```
 design_handoff_theme_system/
 ├─ themes/            ← historical external-bundle directory; not retained here.
-│                       Production source: client/src/themes/ (3 themes)
+│                       Production source: client/src/themes/ (2 themes)
 ├─ tokens/            ← 7 CSS files: the distilled token layer, well commented.
 │                       Read these first — they explain the system.
 ├─ components/        ← 106 files. The component library, grouped by family
@@ -111,7 +118,7 @@ design_handoff_theme_system/
 ```
 
 **For production:** read `client/src/themes/base.css`, the relevant live
-`client/src/themes/{light,dark,atomic}.css`, and the current frontend/theme
+`client/src/themes/{light,dark}.css`, and the current frontend/theme
 docs. For prototype anatomy, then read `tokens/*.css`, `guidelines/THEMES.md`
 and the relevant `components/*/**.prompt.md`. The historical tree above is
 not a current copying checklist.
@@ -124,7 +131,7 @@ not a current copying checklist.
 2. **`themes/base.css`** — the structural contract every theme must satisfy: which tokens exist, the node glow ladder, the canvas layer stack, motion defaults.
 3. **`themes/<name>.css`** — one theme = one `[data-theme="x"]` block that re-declares the token set. Themes may add signature keyframes and ornament layers, but must not restyle components directly.
 
-Theme switching is a single attribute on `<html>`: `data-theme="atomic"`. Nothing else changes.
+Theme switching is a single attribute on `<html>`: `data-theme="dark"`. Nothing else changes.
 
 ---
 
@@ -187,13 +194,13 @@ Every theme re-declares all five. A heading is written once as `font-family: var
 
 ### Spacing, radii, chrome
 Space scale 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 (`--space-1`…`--space-8`).
-Radii `--radius-sm` 4 · `--radius-md` 6 · `--radius-lg` 8 · `--radius-xl` 12 · `--radius-node` 10 · `--radius-pill` 999. In the live app each theme overrides `--radius-sm/md/lg/pill` (Atomic: 0 / 2 / 4px, pill 999), but no theme overrides `--radius`, `--radius-xl` or `--radius-node`. The Tailwind `rounded-sm/md/lg/xl` utilities are computed from `--radius` in `index.css`, so they stay 4/6/8/12px in every theme; a skin's radii reach `rounded-pill`, the Home radii (`--radius-row|card|panel|draft|composer`) and any CSS that reads `var(--radius-*)` directly.
+Radii `--radius-sm` 4 · `--radius-md` 6 · `--radius-lg` 8 · `--radius-xl` 12 · `--radius-node` 10 · `--radius-pill` 999. In the live app each theme declares `--radius-sm/md/lg/pill` (Light and Dark: 4 / 6 / 8px, pill 999), but no theme overrides `--radius`, `--radius-xl` or `--radius-node`. The Tailwind `rounded-sm/md/lg/xl` utilities are computed from `--radius` in `index.css`, so they stay 4/6/8/12px in every theme; a theme's own radii reach `rounded-pill`, the Home radii (`--radius-row|card|panel|draft|composer`) and any CSS that reads `var(--radius-*)` directly.
 Fixed chrome: `--h-toolbar` 48 · `--h-statusbar` 24 · `--h-control` 32 · `--w-sidebar` 280 · `--w-palette` 320.
 
 ### Shadows & motion
 `--shadow-card`, `--shadow-card-hover`, `--shadow-modal` (all darker in dark mode).
 `--dur-fast` 90ms · `--dur-default` 180ms · `--dur-slow` 320ms · `--ease-default` `cubic-bezier(.2,.7,.3,1)` · `--ease-emphasis` `cubic-bezier(.6,-.05,.3,1.4)`.
-**Themes override durations and easing, not just colors** — Atomic runs 100/200/380 on a bouncy 1.6-overshoot curve. Personality lives in the curve. See `guidelines/ANIMATIONS.md`.
+**A theme can override durations and easing, not just colors**; personality lives in the curve. Light and Dark share the values above. See `guidelines/ANIMATIONS.md`.
 
 ---
 
@@ -203,7 +210,6 @@ Fixed chrome: `--h-toolbar` 48 · `--h-statusbar` 24 · `--h-control` 32 · `--w
 |---|---|---|---|
 | Light | base | grey-blue paper workspace | Geist / Geist / JetBrains Mono |
 | Dark | base | neutral slate + Dracula neon | Geist / Geist / JetBrains Mono |
-| Atomic | skin | 1962 Eames optimism | Bevan / Lato / Space Mono |
 
 ---
 
@@ -234,14 +240,14 @@ Also: `--node-pulse-color` — not the node's own accent — drives the pulse, s
 Three stacked layers, bottom to top:
 
 1. **`--bg-canvas`** — the base fill.
-2. **The `.canvas` gradient stack** — per-theme atmosphere (Atomic's five confetti dots).
-3. **`--canvas-grid`** — the pattern. Atomic defines it as an SVG data-url, not a gradient: its starburst (160px tile).
+2. **The `.canvas` gradient stack** — per-theme atmosphere; Light and Dark add none.
+3. **`--canvas-grid`** — the pattern, a gradient or an SVG data-url tile; `none` in Light and Dark.
 
 ---
 
 ## Panels to implement (17)
 
-Each is in the reference mockup, rendered in all three themes.
+Each is in the reference mockup, rendered in both themes.
 
 | # | Panel | Size | Source |
 |---|---|---|---|
@@ -271,12 +277,12 @@ Each is in the reference mockup, rendered in all three themes.
 
 ## Layout traps under themed typography
 
-Atomic's `uppercase` + `.06em` tracking makes **every label wider** than in Light/Dark. Two consequences:
+A theme that sets `--type-uppercase: uppercase` and wide `--type-tracking-display` makes **every label wider** than in Light/Dark, which set neither. Two consequences:
 
-- **Pin your toolbar clusters.** The wordmark, workflow-name chip, mode toggle and action cluster all need `flex: none`; leave exactly one group (File/Edit/View) shrinkable. Without this the mode toggle collapses to a sliver in Atomic.
-- **Test the widest theme, not the default.** Anything that fits in Light can overflow in Atomic, the stress case.
+- **Pin your toolbar clusters.** The wordmark, workflow-name chip, mode toggle and action cluster all need `flex: none`; leave exactly one group (File/Edit/View) shrinkable. Without this the mode toggle collapses to a sliver under such a theme.
+- **Test the widest theme, not the default.** Anything that fits in Light can overflow under wide themed typography, the stress case.
 
-Also: canvas node icons are **36px** everywhere, and the size is a token, not a class — `theme.nodeSize.squareIcon` in `client/src/styles/theme.ts` (0.5625 x the 64px `nodeSize.square` box), passed to `NodeIcon` as `size=`; non-canvas surfaces use the `theme.iconSize.*` scale the same way. `NodeIcon` applies that one token as the box's width, height AND font size, so SVG, library and emoji icons all draw at the same edge. Never size an icon with Tailwind `h-*`/`text-*` classes: the theme type scale maps `text-3xl` to 44px, which is how emoji nodes once painted half again larger than every SVG-backed node beside them. Atomic ships its own glyph set; Light and Dark fall through to lucide.
+Also: canvas node icons are **36px** everywhere, and the size is a token, not a class — `theme.nodeSize.squareIcon` in `client/src/styles/theme.ts` (0.5625 x the 64px `nodeSize.square` box), passed to `NodeIcon` as `size=`; non-canvas surfaces use the `theme.iconSize.*` scale the same way. `NodeIcon` applies that one token as the box's width, height AND font size, so SVG, library and emoji icons all draw at the same edge. Never size an icon with Tailwind `h-*`/`text-*` classes: the theme type scale maps `text-3xl` to 44px, which is how emoji nodes once painted half again larger than every SVG-backed node beside them. No theme ships its own glyph set (amendment 8).
 
 ---
 
@@ -296,10 +302,9 @@ Also: canvas node icons are **36px** everywhere, and the size is a token, not a 
 ## Suggested implementation order
 
 1. Wire the token layer + `themes/base.css`, get Light and Dark correct. **Do not move on until a component has zero hardcoded colors.**
-2. Add the skin (Atomic) — it will expose missing tokens, especially in type and radii.
-3. Build the panels against tokens, checking each against the reference mockup.
-4. Add the canvas: node glow ladder first, then step edges, then the background stack.
-5. Wire `_source_docs/_adherence.oxlintrc.json` into CI to keep hardcoded values from creeping back.
+2. Build the panels against tokens, checking each against the reference mockup.
+3. Add the canvas: node glow ladder first, then step edges, then the background stack.
+4. Wire `_source_docs/_adherence.oxlintrc.json` into CI to keep hardcoded values from creeping back.
 
 ## Assets
 
@@ -308,5 +313,5 @@ Also: canvas node icons are **36px** everywhere, and the size is a token, not a 
 
 ## Files
 
-- `reference-mockup/Panel Theme Matrix.dc.html` — open in a browser. Left rail picks the panel; header zooms and toggles motion. Interactions are shared across themes on purpose: type in one palette search or toggle one switch and all three respond, so you can compare the same state across skins.
+- `reference-mockup/Panel Theme Matrix.dc.html` — open in a browser. Left rail picks the panel; header zooms and toggles motion. Interactions are shared across themes on purpose: type in one palette search or toggle one switch and both respond, so you can compare the same state across themes.
 - `reference-mockup/support.js` — runtime for the above; keep it beside the HTML.

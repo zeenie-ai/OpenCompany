@@ -11,17 +11,16 @@ Motion is a **first-class part of each theme's identity**, not a global constant
 | `--dur-fast / -default / -slow` | interaction / transition / panel timings |
 | `--ease-default` | the curve every transition uses — carries the personality |
 | `--ease-emphasis` | entrances, springy moments |
-| `--motion-style` | a name (smooth for light and dark, bouncy for Atomic) |
+| `--motion-style` | a name (smooth for light and dark) |
 | `--pulse-keyframe / -duration / -timing` | which executing-node pulse this theme uses |
 | `--node-pulse-color` | the glow color — **theme-chosen for contrast**, never the node's own role color |
 
-## All three themes
+## Both themes
 
 | Theme | fast/def/slow | ease-default | motion-style | exec pulse | ambient |
 |---|---|---|---|---|---|
 | Light | 90/180/320 | cubic(.2,.7,.3,1) | smooth | node-pulse 1.4s ease-in-out | — |
 | Dark | 90/180/320 | cubic(.2,.7,.3,1) | smooth | node-pulse 1.4s | — |
-| Atomic | 100/200/380 | **cubic(.34,1.6,.5,1)** | bouncy (1.6 overshoot) | node-pulse 1.4s | — |
 
 ## Signature keyframes (`tokens/animations.css`)
 
@@ -38,7 +37,7 @@ Motion is a **first-class part of each theme's identity**, not a global constant
 ## Usage
 
 ```html
-<html data-theme="atomic">          <!-- picks the whole motion contract -->
+<html data-theme="dark">            <!-- picks the whole motion contract -->
 <div class="opencompany-pulse node">…</div>  <!-- executing node: reads --pulse-keyframe + color -->
 ```
 
@@ -60,11 +59,11 @@ Triggers (`whatsappReceive`, `cronScheduler`, `webhookTrigger`, `start`) animate
 
 ## Glow color & visibility
 
-The glow is **never the node's own faint role tint** — it uses `--node-pulse-color` (or the component's `pulseColor`), a saturated accent the theme picks **for contrast against its own canvas**: turquoise on Atomic's cream, the info blue on light and dark. This keeps both the execution pulse and the trigger listening glow legible on light and dark themes alike. When adding a theme, choose its `--node-pulse-color` against the background, not to match the node.
+The glow is **never the node's own faint role tint** — it uses `--node-pulse-color` (or the component's `pulseColor`), a saturated accent the theme picks **for contrast against its own canvas**: the info blue on light and dark. This keeps both the execution pulse and the trigger listening glow legible on light and dark themes alike. When adding a theme, choose its `--node-pulse-color` against the background, not to match the node.
 
 ## Rules
 
 1. **Drive transitions from `var(--ease-default)` / `var(--dur-*)`** — never hardcode timing, so a theme swap restyles motion for free.
 2. **Loops only for live processes** (executing pulse, connection LED). No decorative perpetual motion on idle content.
-3. **The pulse color is the theme's, not the node's** — guarantees contrast on every canvas (turquoise on Atomic's cream).
+3. **The pulse color is the theme's, not the node's** — guarantees contrast on every canvas.
 4. **Always provide the static end-state** so print, PDF export and reduced-motion render meaningfully.

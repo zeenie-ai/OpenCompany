@@ -6,8 +6,8 @@ shadcn bridge, and lacked the `--code-*` / `--tint-*` tiers), and a second
 vendored copy is exactly how they went stale.
 
 **Read the live files instead:** [`client/src/themes/`](../../../../client/src/themes/)
-— 5 files (`base.css`, `animations.css`, `light.css`, `dark.css` and the
-one skin, `atomic.css`). They ARE the design system's theme layer; the external handoff
+— 4 files (`base.css`, `animations.css`, `light.css` and `dark.css`).
+They ARE the design system's theme layer; the external handoff
 bundle shipped a byte-identical copy of them and named them its source of
 truth.
 

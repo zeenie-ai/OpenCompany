@@ -232,7 +232,7 @@ client/src/
 │
 ├── adapters/
 │   └── nodeSpecToDescription.ts    # Backend NodeSpec -> legacy INodeTypeDescription shape
-├── assets/icons/                   # NodeIcon.tsx + themedGlyphs.ts + icon-ref resolver (index.ts)
+├── assets/icons/                   # NodeIcon.tsx + icon-ref resolver (index.ts)
 ├── config/api.ts                   # Backend base-URL config (env-driven)
 ├── lib/
 │   ├── nodeSpec.ts                 # TanStack-Query spec fetch, resolveNodeDescription, listCachedNodeSpecs
@@ -247,7 +247,7 @@ client/src/
 │   ├── canvasLock.ts               # Server-owned can_edit capability -> canvas lock
 │   ├── credentialProviderId.ts     # Which catalogue provider a canvas node's status dot reads (plugin credential ids pass through; legacy names mapped)
 │   ├── dynamicOptions.ts           # nextDynamicOptionValue: move a loadOptionsDependsOn field when its parent changes
-│   ├── sound.ts                    # WebAudio sound engine (3 packs)
+│   ├── sound.ts                    # WebAudio sound engine (2 packs)
 │   ├── motion.ts                   # The one place Web Animations start: --dur-* / --ease-* tokens,
 │   │                               # 1 ms under reduced motion or a hidden page, no loops then
 │   ├── pageActivity.ts / useReducedMotion.ts # Whether anyone can see the page; the motion preference
@@ -270,14 +270,14 @@ client/src/
 │   ├── shellDialogsStore.ts        # Settings / Credentials dialog flags (lifted out of Dashboard)
 │   └── workflowSettingsStore.ts    # Editor settings (auto-save etc.) read by the shell
 ├── test/                           # Vitest setup.ts, builders.ts, providers.tsx, README.md
-├── themes/                         # base.css + animations.css + light / dark / atomic CSS
+├── themes/                         # base.css + animations.css + light / dark CSS
 ├── types/                          # INodeProperties, NodeTypes, etc.
 └── utils/                          # formatters, apiKeySecurity, workflowExport, parameterSanitizer
 ```
 
 ## Tokens + theming
 
-The frontend ships **3 themes**: `light` · `dark` · `atomic` (the design handoff's nine other skins were removed on 2026-10-12). Home, the editor and the sign-in screen all show the chosen theme, and one theme button ([components/ui/ThemeButton.tsx](../client/src/components/ui/ThemeButton.tsx)) in both modes steps through them. Active theme is `<html data-theme="...">` set by `<ThemeProvider>` (see [contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)). Per-theme blocks live in [client/src/themes/](../client/src/themes/) and own all colour VALUES as **hex + `color-mix()`** (never HSL triplets); [src/index.css](../client/src/index.css) is **plumbing-only** (the `@theme inline` `var()` bridge — no literal colours). Full token contract, sound + decoration wiring, and the migration playbook in **[theme_system.md](./theme_system.md)** — read that before adding a theme or migrating a component.
+The frontend ships **2 themes**: `light` · `dark` (the design handoff's ten skins are gone: nine were removed on 2026-10-12, and the last, `atomic`, on 2026-11-09). Home, the editor and the sign-in screen all show the chosen theme, and one theme button ([components/ui/ThemeButton.tsx](../client/src/components/ui/ThemeButton.tsx)) in both modes toggles between them. Active theme is `<html data-theme="...">` set by `<ThemeProvider>` (see [contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)). Per-theme blocks live in [client/src/themes/](../client/src/themes/) and own all colour VALUES as **hex + `color-mix()`** (never HSL triplets); [src/index.css](../client/src/index.css) is **plumbing-only** (the `@theme inline` `var()` bridge — no literal colours). Full token contract, sound + decoration wiring, and the migration playbook in **[theme_system.md](./theme_system.md)** — read that before adding a theme or migrating a component.
 
 The bridge ([src/index.css](../client/src/index.css)) maps each Tailwind colour token to a raw `var(--X)`.
 
@@ -290,7 +290,7 @@ The bridge ([src/index.css](../client/src/index.css)) maps each Tailwind colour 
 @custom-variant dark (&:is(.dark *));
 
 /* Colour VALUES live in client/src/themes/*.css as hex + color-mix() — NOT here.
- * light.css defines them on bare :root (global); dark.css + the 10 skins override. */
+ * light.css defines them on bare :root (global); dark.css overrides. */
 :root, :root[data-theme="light"] {       /* client/src/themes/light.css */
   --background: #f5f7fa; --foreground: #1a1d21; --primary: #2563eb;
   --destructive: #dc2626; --success: #059669; --border: #d1d5db; --radius: 0.5rem;
@@ -328,8 +328,8 @@ The bridge ([src/index.css](../client/src/index.css)) maps each Tailwind colour 
 Rules:
 1. **Hex + `color-mix()`; bridge maps `--color-X: var(--X)`** (no `hsl()` wrapper). Tailwind v4 still composes `/opacity` (`bg-primary/50`) via `color-mix` for any colour format.
 2. **shadcn's variable names win** (`--background`, `--primary`, `--destructive`, etc.) so every shadcn-generated file resolves against our palette with no re-wiring.
-3. Theme switches via `[data-theme="<name>"]` set by `<ThemeProvider>`. Themes whose backgrounds are dark (only `dark` today) also flip Tailwind's `.dark` class so legacy `dark:` variants resolve correctly. The `THEME_OVERRIDES` map in [hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) layers Atomic's accents (primary, focus, action colours) on top of `lightColors` / `darkColors` for canvas surfaces.
-4. `styles/theme.ts` exports `lightColors` / `darkColors` base packs + raw `dracula` / `solarized` palette constants. Consumed only by `useAppTheme` (overlay merge) and canvas node components for inline per-definition gradients. New code uses Tailwind classes (`bg-primary`, `bg-action-run-soft`, `bg-node-agent-soft`, `bg-bg-app`, `text-fg-default`) or `var(--...)` inline. Palette names (`text-dracula-green`) are forbidden in components — go through the matching `--action-X` or `--node-X` semantic role token.
+3. Theme switches via `[data-theme="<name>"]` set by `<ThemeProvider>`. Themes whose backgrounds are dark (only `dark` today) also flip Tailwind's `.dark` class so legacy `dark:` variants resolve correctly. Canvas surfaces get `lightColors` or `darkColors` through [hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts), by that same family.
+4. `styles/theme.ts` exports `lightColors` / `darkColors` base packs + raw `dracula` / `solarized` palette constants. Consumed only by `useAppTheme` (which returns one of the packs) and canvas node components for inline per-definition gradients. New code uses Tailwind classes (`bg-primary`, `bg-action-run-soft`, `bg-node-agent-soft`, `bg-bg-app`, `text-fg-default`) or `var(--...)` inline. Palette names (`text-dracula-green`) are forbidden in components — go through the matching `--action-X` or `--node-X` semantic role token.
 
 ### Token tier — pick the most specific that fits
 
@@ -339,7 +339,7 @@ Rules:
 | **Node-type role** | `node-agent`, `node-model`, `node-skill`, `node-tool`, `node-trigger`, `node-workflow` (+ paired `-soft` and `-border` variants) | Anywhere a node type's identity should drive color: palette icons, parameter-panel sections, draggable variable cards, status badges, edge label tints. |
 | **Action role** | `action-run`, `action-stop`, `action-save`, `action-config`, `action-secret`, `action-tools` (each with `-soft` resting bg, `-hover` hover bg, and `-border` outline variants) | Toolbar icon buttons, File menu items, and the underlying tokens behind `<ActionButton intent="...">`. Semantic role names (run / stop / save / ...), never palette colors. The `-hover` triplet means ActionButton's hover state composes via `hover:bg-action-X-hover` instead of opacity arithmetic; disabled state is the shadcn-idiomatic `disabled:opacity-50` on the base class. Themes redefine without touching call sites. |
 | **Dracula raw** | `dracula-green`, `dracula-purple`, `dracula-pink`, `dracula-cyan`, `dracula-red`, `dracula-orange`, `dracula-yellow` | Constant across themes by design. Used as the underlying palette that `--action-X` and `--node-X` reference; do not consume directly in components. |
-| **Code & syntax** | `code-bg`, `code-gutter-bg`/`-fg`, `code-caret`, `code-border`, `code-text`, `code-comment`, `code-keyword`, `code-string`, `code-number`, `code-boolean`, `code-function`, `code-property`, `code-operator`, `code-punctuation`, `code-tag` | The code editor, console/output JSON viewers, and chat code blocks. Per-theme `--code-*` (one block per theme file; Atomic derives syntax from its role hues — keyword→trigger, string→success, number→agent, function→model). Consumed via `var(--code-*)` in `index.css` + `text-code-*` / `bg-code-bg` Tailwind utilities; the `OutputPanel` `@uiw/react-json-view` reads them too. Replaced the global dracula `--prism-*` block + dead `getPrismTokenCSS()`. |
+| **Code & syntax** | `code-bg`, `code-gutter-bg`/`-fg`, `code-caret`, `code-border`, `code-text`, `code-comment`, `code-keyword`, `code-string`, `code-number`, `code-boolean`, `code-function`, `code-property`, `code-operator`, `code-punctuation`, `code-tag` | The code editor, console/output JSON viewers, and chat code blocks. Per-theme `--code-*` (one block per theme file). Consumed via `var(--code-*)` in `index.css` + `text-code-*` / `bg-code-bg` Tailwind utilities; the `OutputPanel` `@uiw/react-json-view` reads them too. Replaced the global dracula `--prism-*` block + dead `getPrismTokenCSS()`. |
 
 ### No opacity arithmetic at call sites
 
@@ -770,6 +770,6 @@ The `OPENCOMPANY_INSTALLING=true` env var suppresses the recursive project posti
 
 This architecture is the post-migration state. Pre-migration was antd + `styled-components` + a custom theme.ts-driven palette. See [ui_migration_plan.md](./ARCHIVE/ui_migration_plan.md) for the phase-by-phase transition and the 17 commits that executed it.
 
-**`useAppTheme()` powers the canvas + maps surface across all three themes.** The hook returns a `theme` object with the legacy `Colors` shape (`theme.colors.X`, `theme.isDarkMode`) so existing call sites don't change. Under Atomic it merges an overlay (primary, focus, action palette) on top of the chosen base pack (`lightColors` for light-family themes, `darkColors` for `dark`). Adding a new theme overlay is a single entry in the `THEME_OVERRIDES` map in [hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts).
+**`useAppTheme()` powers the canvas + maps surface in both themes.** The hook returns a `theme` object with the legacy `Colors` shape (`theme.colors.X`, `theme.isDarkMode`) so existing call sites don't change. `theme.colors` is the base pack, `lightColors` for `light` and `darkColors` for `dark`; there is no per-theme overlay (Atomic's `THEME_OVERRIDES` entry went with it on 2026-11-09). See [hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts).
 
 Read sites: every canvas node component (`AIAgentNode`, `SquareNode`, `TriggerNode`, `StartNode`), `Dashboard.tsx`, and the Maps surface (`GoogleMapsPicker`, `MapsPreviewPanel`) — they interpolate JS-side colour values that Tailwind classes can't express (`EdgeConditionEditor` no longer calls it). Of the node components, only `AIAgentNode` uses the plugin's own colour (NodeSpec `color`); the others read `definition.defaults.color`, which the NodeSpec adapter never fills, so they use their role token (`--node-model`, `--node-trigger`, `--node-workflow`). Every other surface uses Tailwind + the token tiers above and retints automatically through the per-theme `[data-theme="..."]` block.

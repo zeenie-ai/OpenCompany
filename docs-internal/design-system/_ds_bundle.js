@@ -4129,7 +4129,7 @@ function SettingsModal({
     tone: "tool"
   }, /*#__PURE__*/React.createElement(SettingsRow, {
     label: "Sound Effects",
-    description: "Play per-theme click / hover / save / error sounds. Each theme has its own pack (parchment for Light, terminal for Dark, vibraphone for Atomic)"
+    description: "Play per-theme click / hover / save / error sounds. Each theme has its own pack (parchment for Light, terminal for Dark)"
   }, /*#__PURE__*/React.createElement(Switch, {
     defaultChecked: true
   }))), /*#__PURE__*/React.createElement(SettingsSection, {

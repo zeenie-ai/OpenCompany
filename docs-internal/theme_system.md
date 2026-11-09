@@ -1,6 +1,6 @@
-# Theme System — design-handoff token contract + 3 themes
+# Theme System — design-handoff token contract + 2 themes
 
-The OpenCompany frontend ships **three visual themes**: the two base themes `light` and `dark`, and one stylized skin, `atomic` (Atomic Modern, in the light family). The design handoff's nine other skins (renaissance, greek, edo, steampunk, cyber, wasteland, rot, plague, surveillance) were removed on 2026-10-12. Home, the editor and the sign-in screen all show the chosen theme, and one theme button steps through the three.
+The OpenCompany frontend ships **two visual themes**, `light` and `dark`. The design handoff's ten stylized skins are gone: nine (renaissance, greek, edo, steampunk, cyber, wasteland, rot, plague, surveillance) were removed on 2026-10-12, and the last, `atomic` (Atomic Modern), on 2026-11-09. Home, the editor and the sign-in screen all show the chosen theme, and one theme button toggles between the two.
 
 Selected at runtime via `<html data-theme="...">`. The system is purely CSS-variable-driven: components render against semantic token names, and the active `[data-theme="..."]` block in `client/src/themes/` rebinds those tokens to the theme's surface, foreground, accent, typography, geometry, motion, and sound-pack values.
 
@@ -22,7 +22,6 @@ client/src/themes/        (colour VALUES are hex + color-mix(); never HSL triple
 ├── light.css        :root + :root[data-theme="light"]  — light colour hex: shadcn + dracula
 │                    + node + action (+ -ink); defined on bare :root so they apply globally
 ├── dark.css         .dark + :root[data-theme="dark"]   — dark colour-hex overrides (+ -ink, shadows)
-├── atomic.css       :root[data-theme="atomic"]         — full palette (hex) + per-theme decorations
 └── animations.css   --pulse-keyframe/-duration/-timing + executing/trigger keyframes
                      + .opencompany-* helpers (.opencompany-pulse / -trigger-armed / -bolt / …)
 
@@ -34,12 +33,13 @@ client/src/index.css       PLUMBING ONLY — holds NO literal colour values:
 client/tailwind.config.js  second colour bridge — theme.extend.colors map var(--X) (no hsl() wrapper)
 
 client/src/contexts/ThemeContext.tsx
-├── ThemeName = 'light' | 'dark' | 'atomic'; AVAILABLE_THEMES in that order
+├── ThemeName = 'light' | 'dark'; AVAILABLE_THEMES in that order
 ├── THEME_LABEL — each theme's name wherever one is shown
 ├── DARK_FAMILY = {dark}
 ├── persists the chosen theme to localStorage['opencompany-theme']; a saved
 │   name that is no longer a theme falls back to the legacy 'darkMode' key,
-│   else dark
+│   else dark. A saved 'atomic' takes that path (there is no migration) and
+│   opens in dark, the first-launch default
 ├── migrates legacy 'darkMode' boolean on first load
 ├── sets <html data-theme="..."> + .dark class (only for DARK_FAMILY themes)
 ├── shows a theme chosen in another window or tab at once (the theme key's
@@ -50,12 +50,12 @@ client/src/contexts/ThemeContext.tsx
 
 client/src/components/ui/ThemeButton.tsx — the one theme control: the Home header,
                                            the editor's toolbar and the sign-in
-                                           screen; each press steps Light → Dark
-                                           → Atomic, and its icon and label name
-                                           the next theme
+                                           screen; each press toggles Light and
+                                           Dark, and its icon and label name
+                                           the other theme
 
-client/src/hooks/useAppTheme.ts        — Atomic's Colors overlay (canvas + maps)
-client/src/lib/sound.ts                — WebAudio engine, 3 packs × 9 events
+client/src/hooks/useAppTheme.ts        — the lightColors / darkColors pack (canvas + maps)
+client/src/lib/sound.ts                — WebAudio engine, 2 packs × 9 events
 client/src/hooks/useSound.ts           — useSoundSync() + useSound()
 client/src/components/ui/StatusBar.tsx     — fixed-bottom system console
 client/src/components/ui/CommandPalette.tsx + CommandPaletteHost.tsx — ⌘K launcher
@@ -97,7 +97,7 @@ Surface hierarchy across themes; every theme assigns these in its `:root[data-th
 
 | Tailwind utility | CSS var | Purpose |
 |---|---|---|
-| `font-display` | `--font-display` | Headings, panel titles, action labels (Bevan under Atomic) |
+| `font-display` | `--font-display` | Headings, panel titles, action labels |
 | `font-body` | `--font-body` | Paragraph + UI copy |
 | `font-mono` | `--font-mono` | Code, console, JSON, status bar, kbd |
 
@@ -126,7 +126,7 @@ Six tokens for canvas identity: `agent / model / skill / tool / trigger / workfl
 
 ### 6. Code & syntax tokens
 
-`--code-*` — the per-theme syntax palette for the code editor, console/output JSON viewers, and chat code blocks. Each theme defines its own `--code-*` block in its own CSS file (`client/src/themes/<theme>.css`): editor chrome (`--code-bg`, `--code-gutter-bg`, `--code-gutter-fg`, `--code-caret`, `--code-border`, `--code-line-active`, `--code-selection`) + syntax roles (`--code-text`, `--code-comment`, `--code-keyword`, `--code-string`, `--code-number`, `--code-boolean`, `--code-function`, `--code-property`, `--code-operator`, `--code-punctuation`, `--code-tag`). The per-theme `--code-*` blocks in `client/src/themes/*.css` are the only home of this tier (the vendored bundle ships no `tokens/code.css` — the tier postdates it); Atomic derives syntax from its own role hues — **keyword→trigger, string→success, number→agent, function→model, tag→tool, comment→faint, punctuation→muted** — on an adaptive dark/light code surface (`color-mix(#000 45%, --bg-panel)` dark, `color-mix(#000 5%, --surface-card)` light).
+`--code-*` — the per-theme syntax palette for the code editor, console/output JSON viewers, and chat code blocks. Each theme defines its own `--code-*` block in its own CSS file (`client/src/themes/<theme>.css`): editor chrome (`--code-bg`, `--code-gutter-bg`, `--code-gutter-fg`, `--code-caret`, `--code-border`, `--code-line-active`, `--code-selection`) + syntax roles (`--code-text`, `--code-comment`, `--code-keyword`, `--code-string`, `--code-number`, `--code-boolean`, `--code-function`, `--code-property`, `--code-operator`, `--code-punctuation`, `--code-tag`). The per-theme `--code-*` blocks in `client/src/themes/*.css` are the only home of this tier (the vendored bundle ships no `tokens/code.css` — the tier postdates it).
 
 Consumed as `var(--code-*)` in [index.css](../client/src/index.css) (`.code-editor-container`, `.console-json-output`, and in chat markdown `.chat-markdown pre`, whose surface, text and border are `--code-bg` / `--code-text` / `--code-border` on every theme; a reply's code block is framed in `.chat-markdown .chat-code` instead, with the same three on the frame, the fence's language and Copy on `--bg-panel` above and the line numbers in `--fg-faint`, at `max(0.8125em, var(--text-2xs))` (0.8125em of the reply text, never below `--text-2xs`) like the table frame `.chat-table`; plus the `.chat-markdown .token.*` colours shared with the editor) and exposed as Tailwind utilities (`text-code-tag`, `bg-code-bg`, …) via the `@theme inline` bridge; the `OutputPanel` `@uiw/react-json-view` viewer reads the same vars. This **replaced the old global dracula-hardcoded `--prism-*` block and the dead `getPrismTokenCSS()` helper** — code/JSON now paints in each theme's palette instead of one dracula scheme everywhere. (`prismjs` is still the tokenizer; only the colours moved to `--code-*`.)
 
@@ -206,10 +206,8 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   script. dark.css restates each one, because light.css's bare `:root` also
   matches the dark family.
 
-Home shows the chosen theme, Atomic included, as the editor and the sign-in
-screen do (owner decision, 2026-10-12; Home used to show only light and dark).
-Atomic inherits light.css's bare `:root`, so Home's tokens take the light
-family's values under it unless atomic.css overrides them.
+Home shows the chosen theme, as the editor and the sign-in screen do (owner
+decision, 2026-10-12).
 `setTheme(next, { reveal: true, origin })`
 grows the new theme as a circle from `origin` (View Transitions), falls back
 to a short colour fade, and is instant under reduced motion.
@@ -294,7 +292,6 @@ Heading surfaces under every theme use the same triplet. Keep them grouped in th
 
 Result by theme (display font / tracking / case):
 - **Light + Dark** — Geist Variable / 0 / `none`
-- **Atomic** — Bevan / 0.06em / `uppercase`
 
 ## Adding a new theme
 
@@ -335,68 +332,67 @@ Result by theme (display font / tracking / case):
 3. Add the name to `ThemeName`, `AVAILABLE_THEMES` (the theme button steps through it in order) and `THEME_LABEL` in [client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx). Add to `DARK_FAMILY` if the theme's background is dark, and add the name to the pre-paint lists in [client/index.html](../client/index.html) (`themePrePaint.test.ts` checks them).
 4. Give the theme an icon in `ICON` in [client/src/components/ui/ThemeButton.tsx](../client/src/components/ui/ThemeButton.tsx); the button shows the next theme's icon.
 5. Nothing else lists themes: Settings → Appearance, the command palette and the status bar read `AVAILABLE_THEMES` and `THEME_LABEL`.
-6. **(Optional, canvas)** Add a `THEME_OVERRIDES` entry in [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) so canvas selection rings, action buttons, and edge strokes pick up the theme's accents. Whichever keys you omit fall through to `lightColors` / `darkColors` (chosen by `DARK_FAMILY`, through `useTheme().isDarkMode`).
-7. **(Optional, fonts)** If the theme uses Google Fonts not already loaded, append the family to the deferred-load `<link>` in [client/index.html](../client/index.html).
-8. **(Optional, sound)** Pick one of the existing `SoundPackName` values (`parchment`, `terminal`, `vibraphone`) in `--sound-pack` (or add a new pack to [client/src/lib/sound.ts](../client/src/lib/sound.ts) and the `VALID_PACKS` set in [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts)).
+6. **(Canvas)** [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) gives canvas components `lightColors` or `darkColors`, chosen by `DARK_FAMILY` (through `useTheme().isDarkMode`); there is no per-theme overlay.
+7. **(Optional, fonts)** Light and dark use the bundled Geist and the system mono, and nothing loads from Google Fonts, so a theme that needs a font loads it in [client/index.html](../client/index.html).
+8. **(Optional, sound)** Pick one of the existing `SoundPackName` values (`parchment`, `terminal`) in `--sound-pack` (or add a new pack to [client/src/lib/sound.ts](../client/src/lib/sound.ts) and the `VALID_PACKS` set in [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts)).
 9. **(Optional, motion)** The theme inherits the default `node-pulse` executing glow and the `.opencompany-trigger-armed` trigger heartbeat automatically. For a bespoke executing pulse, add a `[data-theme="X"]` block in [client/src/themes/animations.css](../client/src/themes/animations.css) overriding `--pulse-keyframe` / `--pulse-duration` / `--pulse-timing` and define that keyframe there. Set the glow accent via `--node-pulse-color` in the theme's own block.
 
 **No component code changes.** That is the contract.
 
 ## Anti-patterns (forbidden)
 
-1. **Theme-conditional logic in components.** No `if (theme === 'atomic')` branches. Visual differences live in the per-theme CSS file.
+1. **Theme-conditional logic in components.** No `if (theme === 'dark')` branches. Visual differences live in the per-theme CSS file.
 2. **Whole-store Zustand destructure.** Always `useAppStore((s) => s.x)`, never `{ x } = useAppStore()`.
 3. **Ad-hoc opacity arithmetic on role/surface tokens.** Don't inline alpha (`bg-bg-app/10`, `bg-node-agent/30`, `bg-action-run/25`). Tailwind v4 *can* now color-mix `/opacity` on hex tokens, but the discipline is to reference a NAMED token: add/define a `-soft` / `-hover` / `-border` variant, or a `--tint-*` step in base.css, and use it by name.
 4. **Hardcoded colours.** No `bg-white`, `bg-black`, `text-gray-500`, `style={{ backgroundColor: '#fff' }}`. Use tokens.
 5. **`useAppTheme()` in new files.** Allowed only for surfaces that need JS-side hex values Tailwind can't express: canvas node components (`AIAgentNode`, `SquareNode`, `TriggerNode`, `StartNode`), `EdgeConditionEditor`, and the Google Maps SDK consumers (`GoogleMapsPicker`, `MapsPreviewPanel`) — note the map
 tiles themselves are deliberately left to Google's own styling; `useAppTheme` here covers only
-the surrounding chrome. Every other surface uses Tailwind + tokens. New themes contribute to `useAppTheme` via a `THEME_OVERRIDES` entry, never by importing `lightColors` / `darkColors` directly.
+the surrounding chrome. Every other surface uses Tailwind + tokens. Call sites read the colour pack through `useAppTheme`, never by importing `lightColors` / `darkColors` directly.
 6. **Hand-rolled modal backdrops.** Use `<Modal>` from `client/src/components/ui/Modal.tsx`.
 7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor. On Home and in the shared chat, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary, neutral `quiet` buttons (with a border where they are drawn as an outline), and `run` only to start an employee.
-8. **Static fallback theme palettes in TS.** Themes live in CSS (`client/src/themes/<name>.css`), not TS exports. `client/src/styles/theme.ts` ships only the two `lightColors` / `darkColors` base packs that `useAppTheme` overlays on top of — it is not a place to add a third / fourth / Nth palette.
+8. **Static fallback theme palettes in TS.** Themes live in CSS (`client/src/themes/<name>.css`), not TS exports. `client/src/styles/theme.ts` ships only the two `lightColors` / `darkColors` base packs that `useAppTheme` returns — it is not a place to add a third / fourth / Nth palette.
 
 ## What's done vs deferred
 
 ### Done
-- **`--node-pulse-color` contract** — executing-node glow color is independent of `--node-color` (the plugin accent). Atomic sets `--node-pulse-color` to its `--accent` (light/dark deliberately keep the base.css `var(--info)` fallback) so the glow stays visible against any canvas background. Defined in [base.css](../client/src/themes/base.css) at `:root`, overridden in the theme's own file. The executing keyframe (`node-pulse`) and the `--pulse-keyframe` / `--pulse-duration` / `--pulse-timing` tokens live in [animations.css](../client/src/themes/animations.css); base.css's `.sq-node[data-executing] .sq-node-box` / `.react-flow__node.executing .{sq-node-box,node}` rule reads `var(--pulse-keyframe, node-pulse)`, so a theme can pick its own pulse by overriding ONE token (the removed Cyber, Surveillance and Renaissance skins did; no remaining theme does). `node-pulse` is a triple-layer expanding box-shadow (12px ring + 32px mid halo + 56px outer halo) consuming `var(--node-pulse-color)` + the shared `--tint-pulse-*` alphas. Trigger nodes use a separate continuous `.opencompany-trigger-armed` "listening" heartbeat (`trigger-listening` keyframe) while waiting, plus `.opencompany-bolt` on the ⚡ badge — distinct from the one-shot execution pulse. **Never animate `opacity` on whole-node selectors** — it fades the node icon + content, not just the glow.
+- **`--node-pulse-color` contract** — executing-node glow color is independent of `--node-color` (the plugin accent). Light and dark deliberately keep the base.css `var(--info)` fallback; a theme may set its own accent so the glow stays visible against its canvas. Defined in [base.css](../client/src/themes/base.css) at `:root`, overridden in the theme's own file. The executing keyframe (`node-pulse`) and the `--pulse-keyframe` / `--pulse-duration` / `--pulse-timing` tokens live in [animations.css](../client/src/themes/animations.css); base.css's `.sq-node[data-executing] .sq-node-box` / `.react-flow__node.executing .{sq-node-box,node}` rule reads `var(--pulse-keyframe, node-pulse)`, so a theme can pick its own pulse by overriding ONE token (the removed Cyber, Surveillance and Renaissance skins did; no remaining theme does). `node-pulse` is a triple-layer expanding box-shadow (12px ring + 32px mid halo + 56px outer halo) consuming `var(--node-pulse-color)` + the shared `--tint-pulse-*` alphas. Trigger nodes use a separate continuous `.opencompany-trigger-armed` "listening" heartbeat (`trigger-listening` keyframe) while waiting, plus `.opencompany-bolt` on the ⚡ badge — distinct from the one-shot execution pulse. **Never animate `opacity` on whole-node selectors** — it fades the node icon + content, not just the glow.
 - **`data-page-hidden` animation pause** — `usePageActivitySync()` ([app/usePageActivitySync.ts](../client/src/app/usePageActivitySync.ts)), mounted once in [App.tsx](../client/src/App.tsx), above the sign-in gate, so it covers every screen (sign-in and Connecting included), listens to `visibilitychange` alone and toggles `data-page-hidden` on `<html>` (Chrome reports a minimised or fully covered window as hidden too; a visible window that is only unfocused, such as the app beside an editor, keeps animating); [base.css](../client/src/themes/base.css) declares `html[data-page-hidden] *, *::before, *::after { animation-play-state: paused !important; }`. Without this, paused CSS keyframes accumulate frames in the compositor queue while the tab is hidden; on tab return all 50+ executing nodes' triple-layer pulses resume simultaneously, stalling the GPU compositor 100-200ms and blocking input dispatch (first-click-feels-frozen pattern). The unpause is deferred two `requestAnimationFrame` ticks so input dispatch wins the frame before composite resumes.
-- **Parameter panel theme contract** — MasterSkillEditor, OutputPanel, MiddleSection, ParameterPanel removed `useAppTheme()`. Every surface renders against Tailwind tokens + new-contract CSS custom props. Section headers carry the display-typography triplet (`font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default`); action buttons use `<ActionButton intent="run|stop|save|config|tools">`; backgrounds use `bg-bg-elevated` / `bg-bg-panel` / `bg-bg-input` from the surface tier table above. EditableNodeLabel emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire under either topology. Scrollbar webkit rules (`::-webkit-scrollbar-thumb` etc.): the global token rules in index.css for every theme, plus Atomic's square-cornered ones.
-- **Canvas-node class topology alignment** (W26) — TriggerNode, StartNode, ToolkitNode migrated from `.node` (rectangular spec-card) topology to `.sq-node` / `.sq-node-box` (square-icon node) topology so per-theme decorations (Atomic's square-node styling) reach them. Status pips, gear buttons, and React Flow handles on every node component now carry `.sq-node-pip` / `.sq-node-gear` / `.sq-node-handle.in/.out` (square nodes) or `.node-pip` / `.node-gear` / `.node-handle.in/.out` (rectangular nodes — AIAgentNode, TeamMonitorNode; the former `GenericNode` was retired with the spec-driven canvas). Pip background is data-driven via `data-status="idle | executing | waiting | success | error"` — base.css picks the colour from shadcn semantic tokens; per-theme files override. Inline JS-computed `backgroundColor` / `border` / `animation` on these elements stripped — CSS owns visuals. Orphan `.node-output` rule removed. EditableNodeLabel now emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire. StartNode reads `nodeColor` from `definition?.defaults?.color` instead of hardcoded `theme.dracula.cyan`; the NodeSpec adapter never fills that field, so it resolves to `var(--node-workflow)`.
+- **Parameter panel theme contract** — MasterSkillEditor, OutputPanel, MiddleSection, ParameterPanel removed `useAppTheme()`. Every surface renders against Tailwind tokens + new-contract CSS custom props. Section headers carry the display-typography triplet (`font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default`); action buttons use `<ActionButton intent="run|stop|save|config|tools">`; backgrounds use `bg-bg-elevated` / `bg-bg-panel` / `bg-bg-input` from the surface tier table above. EditableNodeLabel emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire under either topology. Scrollbar webkit rules (`::-webkit-scrollbar-thumb` etc.): the global token rules in index.css for every theme.
+- **Canvas-node class topology alignment** (W26) — TriggerNode, StartNode, ToolkitNode migrated from `.node` (rectangular spec-card) topology to `.sq-node` / `.sq-node-box` (square-icon node) topology so per-theme decorations reach them. Status pips, gear buttons, and React Flow handles on every node component now carry `.sq-node-pip` / `.sq-node-gear` / `.sq-node-handle.in/.out` (square nodes) or `.node-pip` / `.node-gear` / `.node-handle.in/.out` (rectangular nodes — AIAgentNode, TeamMonitorNode; the former `GenericNode` was retired with the spec-driven canvas). Pip background is data-driven via `data-status="idle | executing | waiting | success | error"` — base.css picks the colour from shadcn semantic tokens; per-theme files override. Inline JS-computed `backgroundColor` / `border` / `animation` on these elements stripped — CSS owns visuals. Orphan `.node-output` rule removed. EditableNodeLabel now emits both `sq-node-label` and `node-label` classNames so per-theme typography rules fire. StartNode reads `nodeColor` from `definition?.defaults?.color` instead of hardcoded `theme.dracula.cyan`; the NodeSpec adapter never fills that field, so it resolves to `var(--node-workflow)`.
 - **Audio fix** (W20) — `--sound-pack: chime` typo in `light.css` + `dark.css` was silently falling through to `'none'` (`chime` not in the engine's pack registry), making sound silent for the most-used themes. Renamed `light` → `parchment`, `dark` → `terminal`. Added `Sounds.unlock()` exported from [lib/sound.ts](../client/src/lib/sound.ts) plus a one-shot `pointerdown / keydown / touchstart` capture-phase listener in `useSoundSync()` ([hooks/useSound.ts](../client/src/hooks/useSound.ts)) so the AudioContext resumes on the user's first gesture (Chrome / Safari autoplay policy compliance).
 - **Canvas-node visual contract** (W21) — every node component (`AIAgentNode`, `SquareNode`, `TriggerNode`, `StartNode`, `ToolkitNode`, `TeamMonitorNode`; `GenericNode` at the time, since retired) stripped its inline `background` / `border` / `borderRadius` / `boxShadow` / `animation` props. Each now exposes its accent via `style={{ '--node-color': accentColor }}` on its outer wrapper. Visual styling lives in [base.css](../client/src/themes/base.css) defaults + per-theme overrides; `var(--node-color)` carries that accent through CSS without fighting specificity. Only `AIAgentNode` passes the plugin's own colour (NodeSpec `color`); the other node components pass their role token (see "Canvas-node visual contract" below). New `NodeStyle` helper type in [client/src/types/NodeTypes.ts](../client/src/types/NodeTypes.ts) (`React.CSSProperties & Record<\`--${string}\`, string | number>`) makes the inline custom-prop typecheck-clean.
 - **Icon size is a token** — `NodeIcon` takes `size=` (`theme.nodeSize.squareIcon`, 36px, on every canvas node; a `theme.iconSize.*` step elsewhere) and applies it as width, height and emoji font size together. Sizing classes are never passed: `--text-3xl` is 44px in `base.css`, so a `text-3xl` emoji once dwarfed every SVG-backed node next to it.
-- **Per-theme icons** (W23) — [client/src/assets/icons/themedGlyphs.ts](../client/src/assets/icons/themedGlyphs.ts) holds Atomic's 29 SVG glyphs, ported from `design_handoff_machinaos_themes/app/icons.js` (the other nine skins' sets went with them). [NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) consults `THEMED_GLYPHS[activeTheme][key]` first; falls through to `lucide-react` / `lobehub:` / `asset:` dispatch on miss. Light and dark have no entries — they fall through to existing dispatch.
-- **Editor dot grid** — the Dev canvas renders React Flow's dots `<Background>` (Dashboard.tsx), filled with `--grid-dot` (index.css). base.css declares it `transparent`; only the base themes set it, in blocks that match `[data-theme="light"]` / `[data-theme="dark"]` alone (`--fg-muted` at 20% / 22%), so Atomic's `--canvas-grid` decoration never gets dots over it. The same light-only block sets `color-scheme: light` (dark.css already sets `dark`). Locked by `themes/__tests__/themeTokens.test.ts`.
-- **Scrollbars** — the global rules in index.css read `--scrollbar-track` / `--scrollbar-thumb` (hover `--fg-faint`), which every theme declares; Atomic's own scoped rules still apply on top.
-- **Canvas grid + cursors** (W24) — `--canvas-grid` and `--cursor-default` slots declared in [base.css](../client/src/themes/base.css) and bound to `.canvas-host`. Atomic draws its mid-century starburst through `--canvas-grid`; no remaining theme sets a custom cursor (the removed Cyber, Surveillance and Renaissance skins did).
-- **Decorative HTML primitives** (W25) — removed. `SvgFilterDefs` (the `#ink-blot` / `#noise` / `#crt` SVG filters) went on 2026-10-12 with the skins it was meant for; no CSS read its filters. The `DropCap` wrapper planned alongside it was never retained. The bare `.v-display` display-typography co-class remains; Atomic styles it.
-- **Token contract**: the three themes in [client/src/themes/](../client/src/themes) (light, dark and atomic, the one skin kept of the ten ported from the handoff), in five CSS files (base + animations + the three themes).
-- **ThemeProvider** ([client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)) — three-way `ThemeName`, `DARK_FAMILY` = `{dark}`, `cycleTheme`, legacy `darkMode` localStorage migration on first load
-- **ThemeButton** — one button in both modes and on the sign-in screen, stepping Light → Dark → Atomic. On 2026-10-12 it replaced the editor's grouped theme menu and Home's light/dark toggle.
+- **Per-theme icons** (W23) — removed. `themedGlyphs.ts` (Atomic's 29 SVG glyphs, ported from `design_handoff_machinaos_themes/app/icons.js`) and the themed-glyph branch of [NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) went on 2026-11-09 with Atomic, the last theme with a set (the other nine skins' sets went on 2026-10-12). `NodeIcon` resolves every icon through its `lucide-react` / `lobehub:` / `asset:` dispatch in both themes.
+- **Editor dot grid** — the Dev canvas renders React Flow's dots `<Background>` (Dashboard.tsx), filled with `--grid-dot` (index.css). base.css declares it `transparent`; light.css and dark.css set it, in blocks that match `[data-theme="light"]` / `[data-theme="dark"]` alone (`--fg-muted` at 20% / 22%). The same light-only block sets `color-scheme: light` (dark.css already sets `dark`). Locked by `themes/__tests__/themeTokens.test.ts`.
+- **Scrollbars** — the global rules in index.css read `--scrollbar-track` / `--scrollbar-thumb` (hover `--fg-faint`), which every theme declares.
+- **Canvas grid + cursors** (W24) — `--canvas-grid` and `--cursor-default` slots declared in [base.css](../client/src/themes/base.css) and bound to `.canvas-host`. Light and dark draw no `--canvas-grid` and keep the `auto` cursor. Atomic's mid-century starburst, the last `--canvas-grid` decoration, went with it on 2026-11-09; the removed Cyber, Surveillance and Renaissance skins set the custom cursors.
+- **Decorative HTML primitives** (W25) — removed. `SvgFilterDefs` (the `#ink-blot` / `#noise` / `#crt` SVG filters) went on 2026-10-12 with the skins it was meant for; no CSS read its filters. The `DropCap` wrapper planned alongside it was never retained. The bare `.v-display` display-typography co-class remains as a hook; no theme styles it (Atomic did until 2026-11-09).
+- **Token contract**: the two themes in [client/src/themes/](../client/src/themes) (light and dark), in four CSS files (base + animations + the two themes). Of the ten skins ported from the handoff, nine went on 2026-10-12 and the last, atomic, on 2026-11-09.
+- **ThemeProvider** ([client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx)) — two-way `ThemeName`, `DARK_FAMILY` = `{dark}`, `cycleTheme`, legacy `darkMode` localStorage migration on first load
+- **ThemeButton** — one button in both modes and on the sign-in screen, toggling Light and Dark. On 2026-10-12 it replaced the editor's grouped theme menu and Home's light/dark toggle.
 - **Tailwind v4 `@theme inline`** exposing new-contract utilities (`bg-bg-app`, `text-fg-default`, `border-border-default`, `font-display`, `font-body`, `rounded-pill`)
-- **Decorative wrappers** — the React Flow host carries `canvas-host` (aliased as `canvas` so handoff selectors resolve), which Atomic's starburst targets. The `app-frame` (app shell) and `modal-frame` (Modal) hooks went with the removed skins, the only CSS that styled them.
+- **Decorative wrappers** — the React Flow host carries `canvas-host` (aliased as `canvas` so handoff selectors resolve), where base.css paints `--canvas-grid`. The `app-frame` (app shell) and `modal-frame` (Modal) hooks went with the removed skins, the only CSS that styled them.
 - **Per-component structural classNames** (W15) — every chrome / interactive / canvas component carries the handoff selector co-class so per-theme decorative rules resolve without component-level branching. See [Per-component decorations](#per-component-decorations) for the full list.
-- **Per-theme decorative CSS** (W16) — every per-component rule from `design_handoff_machinaos_themes/themes/*.css` is now ported into `client/src/themes/<theme>.css`. Each skin owned its panel textures, canvas decorations, node pseudo-element overlays, and keyframes. CSS bundle: 145 KB → 244 KB (+99 KB); removing nine of the ten skins on 2026-10-12 took the main CSS bundle from 339 kB to 217 kB.
-- **Selection state** (W17, shipped as part of W15) — every canvas node component carries the `selected` co-class when React Flow's `selected` prop is true, activating per-theme selection effects (Atomic's selected square node).
+- **Per-theme decorative CSS** (W16) — every per-component rule from `design_handoff_machinaos_themes/themes/*.css` was ported into `client/src/themes/<theme>.css`. Each skin owned its panel textures, canvas decorations, node pseudo-element overlays, and keyframes. CSS bundle: 145 KB → 244 KB (+99 KB); removing nine of the ten skins on 2026-10-12 took the main CSS bundle from 339 kB to 217 kB, and the last, Atomic, went on 2026-11-09. light.css and dark.css add no decorative rules; the hook classes stay as the theme contract (see [Per-component decorations](#per-component-decorations)).
+- **Selection state** (W17, shipped as part of W15) — every canvas node component carries the `selected` co-class when React Flow's `selected` prop is true, activating per-theme selection effects.
 - **Sound event wiring** (W18) — 9 events (`click`, `hover`, `type`, `success`, `error`, `run`, `save`, `modalOpen`, `modalClose`) fire automatically across the React tree. See [Sound system → Event wiring](#event-wiring-w18).
 - **Success is a moment, not a state** — terminal node statuses persist in `nodeStatusStore` until the next run, so the static `--success` ring/stroke on `.react-flow__node.completed` (base.css) and `.react-flow__edge.completed` (styles/canvasAnimations.ts) previously left every completed agent/tool node and traversed edge glowing green indefinitely. Both are now one-shot fades (`node-completed-fade` in animations.css / `edgeCompletedFade`): hold the success token briefly, then settle back to the resting border/stroke. `prefers-reduced-motion` keeps the static ring (legible outcome, no motion). Error states deliberately stay painted until acted on.
 - **Reduced-motion accessibility** (W19) — `@media (prefers-reduced-motion: reduce)` block in [client/src/themes/base.css](../client/src/themes/base.css) disables every keyframe across all themes. See [Reduced motion](#reduced-motion).
 - **Sound throttling** (W19) — `type` and `hover` events throttled to a 30 ms last-fire window inside the engine to prevent OscillatorNode flooding. See [Throttling](#throttling).
 - **Migrated chrome**: TopToolbar, WorkflowSidebar, ComponentPalette + ComponentItem + CollapsibleSection, ConsolePanel chrome, SettingsPanel, Modal, ParameterPanel modal title, AIResultModal title, InputSection title
 - **New shell components**: StatusBar (fixed-bottom system line with WS connection / workflow / theme / clock), CommandPalette (`⌘K`), CommandPaletteHost (canonical command list with Workflow / Run / Open / View / Theme groups)
-- **Google Fonts** — the deferred-load `<link>` covers Atomic's typefaces only (Bevan, Lato, Space Mono); light and dark use the bundled Geist and the system mono. It loaded seventeen families for the twelve themes until 2026-10-12.
-- **Sound contract** — [client/src/lib/sound.ts](../client/src/lib/sound.ts) ports the upstream WebAudio engine with the packs the themes use (`parchment` for light, `terminal` for dark, `vibraphone` for atomic; the other seven went with the removed skins). [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts) reads `--sound-pack` from `:root` on theme change and mirrors the `soundEnabled` Zustand slice into `Sounds.setEnabled()`. Settings panel ships the toggle (Audio section). Persists to `localStorage['opencompany-sound']`; **default ON** (browsers gesture-gate WebAudio without a separate permission API — the AudioContext starts suspended and resumes on the user's first pointerdown / keydown / touchstart via `Sounds.unlock()`, registered as a one-shot capture-phase listener in `useSoundSync()`).
-- **Canvas overlay packs** — [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) applies a small `THEME_OVERRIDES` overlay (primary, focus, focusRing, action colours) on top of `lightColors` / `darkColors`; Atomic is the only theme with one. Existing call sites continue to read `theme.colors.X` and `theme.isDarkMode` unchanged.
+- **Google Fonts** — none load: light and dark use the bundled Geist and the system mono. The deferred-load `<link>` in [client/index.html](../client/index.html) loaded seventeen families for the twelve themes until 2026-10-12, then Atomic's three (Bevan, Lato, Space Mono), and went with Atomic on 2026-11-09.
+- **Sound contract** — [client/src/lib/sound.ts](../client/src/lib/sound.ts) ports the upstream WebAudio engine with the packs the themes use (`parchment` for light, `terminal` for dark; `vibraphone` went with Atomic on 2026-11-09, and the other seven with the skins removed on 2026-10-12). [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts) reads `--sound-pack` from `:root` on theme change and mirrors the `soundEnabled` Zustand slice into `Sounds.setEnabled()`. Settings panel ships the toggle (Audio section). Persists to `localStorage['opencompany-sound']`; **default ON** (browsers gesture-gate WebAudio without a separate permission API — the AudioContext starts suspended and resumes on the user's first pointerdown / keydown / touchstart via `Sounds.unlock()`, registered as a one-shot capture-phase listener in `useSoundSync()`).
+- **Canvas colour packs** — [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) returns `lightColors` or `darkColors` as `theme.colors`, chosen by the theme's family, with no per-theme overlay (see [Canvas colour packs](#canvas-colour-packs-useapptheme)). Existing call sites continue to read `theme.colors.X` and `theme.isDarkMode` unchanged.
 
 ### Deferred (future PRs)
-- **`--*-soft` token family** — RESOLVED (theme fidelity pass): `--info-soft` / `--success-soft` / `--warning-soft` / `--danger-soft` (plus the `--danger` alias for `--destructive`) are now declared in `base.css` `:root` as `color-mix(in srgb, var(--X) var(--tint-semantic-soft), transparent)` with `--tint-semantic-soft: 15%` on the shared tint scale. Theme rules that read them (Atomic's selected workflow card reads `--warning-soft`) render their intended tinted fills instead of computing to invalid-and-transparent. Themes may override any of them.
-- **Atomic canvas-host pseudo-element decoration** — Atomic's richer canvas overlay (the dot constellation) is a pseudo-element decoration rather than a tileable `--canvas-grid` pattern; W24 ported the tileable layer only. Wire via `.canvas::before/::after` rules in a future pass if needed.
+- **`--*-soft` token family** — RESOLVED (theme fidelity pass): `--info-soft` / `--success-soft` / `--warning-soft` / `--danger-soft` (plus the `--danger` alias for `--destructive`) are now declared in `base.css` `:root` as `color-mix(in srgb, var(--X) var(--tint-semantic-soft), transparent)` with `--tint-semantic-soft: 15%` on the shared tint scale. Rules that read them render their intended tinted fills instead of computing to invalid-and-transparent. Themes may override any of them.
 - **Parameter panel internals** — RESOLVED: `ParameterRenderer`, `MiddleSection`, `MasterSkillEditor` are fully on shadcn primitives + tokens (zero `useAppTheme` / `theme.colors`); section headers carry the display-typography triplet. The panel modal also picks up per-theme `.modal` / `.modal-head` / `.modal-title` decoration via `Modal.tsx`.
 - **Credentials modal sub-panels** — `OAuthPanel`, `EmailPanel`, `ApiKeyPanel`, `QrPairingPanel` headers same pattern.
 
 ## Per-component decorations
 
-Wave 15 added structural classNames across the React tree so the handoff CSS selectors resolve without component-level branching. Wave 16 ported the matching decorative rules from `design_handoff_machinaos_themes/themes/*.css` into `client/src/themes/<theme>.css`; since 2026-10-12 only Atomic's remain.
+Wave 15 added structural classNames across the React tree so the handoff CSS selectors resolve without component-level branching. Wave 16 ported the matching decorative rules from `design_handoff_machinaos_themes/themes/*.css` into `client/src/themes/<theme>.css`; nine skins' rules went on 2026-10-12 and Atomic's, the last, on 2026-11-09. light.css and dark.css add no rules of their own to these hooks; the classes stay as the theme contract.
 
 ### Class registry
 
@@ -424,17 +420,15 @@ Wave 15 added structural classNames across the React tree so the handoff CSS sel
 | Trigger node variant | `.node-trigger` | TriggerNode |
 | Square canvas node | `.sq-node`, `.sq-node-box`, `.sq-node-pip`, `.sq-node-gear`, `.sq-node-handle.in`, `.sq-node-handle.out`, `.selected` | SquareNode |
 
-The `.selected` co-class is bound to React Flow's `selected` prop on every canvas node component, activating per-theme selection effects (Atomic's selected square node).
+The `.selected` co-class is bound to React Flow's `selected` prop on every canvas node component, activating per-theme selection effects.
 
-A reply has no bubble in light and dark (design handoff chat): only the owner's message is one. Atomic still paints `.chat-msg-bot` as a bubble, so its rule carries the padding the bare reply lacks (`padding: 8px 12px`).
+A reply has no bubble (design handoff chat): only the owner's message is one. `.chat-msg-bot` stays on the reply's text as a hook.
 
 ### Decorative content per theme
 
-| Theme | Panel textures | Canvas decoration | Node pseudo overlay | Keyframes |
-|---|---|---|---|---|
-| atomic | flat solid | starburst + grid lines | boomerang corners | — |
+None: light and dark add no panel textures, canvas decoration, node pseudo-element overlays or keyframes.
 
-Token reads use `var(--token)` directly (no `hsl()` wrapper) — every colour value is hex / `color-mix()`, including the shadcn-bridged tokens and Atomic's spot colours (`--mustard`, `--slate`, `--turquoise`).
+Token reads use `var(--token)` directly (no `hsl()` wrapper) — every colour value is hex / `color-mix()`, including the shadcn-bridged tokens.
 
 ## Canvas-node visual contract (W21)
 
@@ -507,7 +501,6 @@ Each theme declares `--sound-pack: "<pack>"` in its `:root[data-theme="..."]` bl
 |---|---|---|
 | light | `parchment` (light.css) | Soft sine plucks + low-pass |
 | dark | `terminal` (dark.css) | Square-wave terminal beeps |
-| atomic | `vibraphone` | Mid-century jazz mallet |
 
 ### Event wiring (W18)
 
@@ -559,26 +552,15 @@ Two events flood under rapid input and are throttled inside the engine to preven
 
 Implementation lives in [client/src/lib/sound.ts](../client/src/lib/sound.ts): `Sounds.play()` consults a `THROTTLE_MS` map per event name and a `lastFireMs` map keyed by event before each `OscillatorNode` schedule. Other events (`click`, `success`, `error`, `run`, `save`, `modalOpen`, `modalClose`) fire on every call.
 
-## Canvas overlay packs (`useAppTheme`)
+## Canvas colour packs (`useAppTheme`)
 
-The hook returns a `theme` object with the same shape every call site already destructures — `theme.colors.X` and `theme.isDarkMode` continue to work. Under Atomic a small overlay merges into the base pack:
+The hook returns a `theme` object with the same shape every call site already destructures — `theme.colors.X` and `theme.isDarkMode` continue to work. `theme.colors` is the base pack for the theme's family: `darkColors` when `useTheme().isDarkMode`, `lightColors` otherwise. There is no per-theme overlay: Atomic's `THEME_OVERRIDES` entry, which re-bound primary, focus and the action colours on top of the light pack, went with it on 2026-11-09.
 
-```typescript
-const THEME_OVERRIDES: Partial<Record<ThemeName, ColorOverride>> = {
-  atomic: {
-    primary: '#e85a26',           // atomic orange
-    focus: '#e85a26',
-    actionSave: '#3a9aa0',         // turquoise
-    /* ... */
-  },
-};
-```
-
-The overlay only re-binds the keys most visible on the canvas (primary, focus, action buttons). **Canvas edge strokes are no longer part of the packs** — the design-handoff edge migration moved them to CSS tokens (`--edge-*` in base.css + semantic status recolors in `canvasAnimations.ts`); do not reintroduce `edge*` keys here. Everything else (background, text, border) stays on the chosen base pack (`darkColors` when `useTheme().isDarkMode`, `lightColors` otherwise). Adding a new theme means adding one `THEME_OVERRIDES` entry; missing entries are a no-op (theme falls back to pure light/dark).
+**Canvas edge strokes are not part of the packs** — the design-handoff edge migration moved them to CSS tokens (`--edge-*` in base.css + semantic status recolors in `canvasAnimations.ts`); do not reintroduce `edge*` keys here.
 
 ## Verification checklist
 
-When changing a component, verify under all three themes, on Home and in the editor (both show the chosen theme):
+When changing a component, verify under both themes, on Home and in the editor (both show the chosen theme):
 
 ```bash
 cd client && bun run dev
@@ -586,7 +568,6 @@ cd client && bun run dev
 
 1. `<html data-theme="light">` — clean default, near-white surfaces
 2. `<html data-theme="dark">` — neutral slate + Dracula
-3. `<html data-theme="atomic">` — mid-century: Bevan headings, Lato body, Space Mono code, orange and turquoise accents
 
 Build + typecheck must stay clean:
 
@@ -607,25 +588,23 @@ cd client && bun x eslint <files>
 | [client/src/themes/base.css](../client/src/themes/base.css) | Shared scalars (space / radii / chrome / shadow / type) + `--tint-*` alpha scale + node-visual contract |
 | [client/src/themes/light.css](../client/src/themes/light.css) | Light colour hex (shadcn + dracula + node + action + `-ink`); on bare `:root` so global |
 | [client/src/themes/dark.css](../client/src/themes/dark.css) | Dark colour-hex overrides (+ `-ink`, deeper shadows) |
-| [client/src/themes/atomic.css](../client/src/themes/atomic.css) | Atomic Modern theme + bridge |
 | [client/src/themes/animations.css](../client/src/themes/animations.css) | `--pulse-keyframe` tokens + executing / trigger keyframes + `.opencompany-*` helpers |
 | [client/tailwind.config.js](../client/tailwind.config.js) | Colour bridge (`theme.extend.colors` → `var(--X)`, no `hsl()`) |
 | [client/src/index.css](../client/src/index.css) | Plumbing: global resets + `@theme inline` `var()` bridge (no literal colours) |
-| [client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx) | `<ThemeProvider>` + `useTheme()` (three themes, `cycleTheme`, `THEME_LABEL`) |
-| [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) | Canvas overlay pack (Atomic's Colors override) |
-| [client/src/lib/sound.ts](../client/src/lib/sound.ts) | WebAudio engine — 3 sound packs, 9 events |
+| [client/src/contexts/ThemeContext.tsx](../client/src/contexts/ThemeContext.tsx) | `<ThemeProvider>` + `useTheme()` (two themes, `cycleTheme`, `THEME_LABEL`) |
+| [client/src/hooks/useAppTheme.ts](../client/src/hooks/useAppTheme.ts) | Canvas colour pack (`lightColors` / `darkColors`) |
+| [client/src/lib/sound.ts](../client/src/lib/sound.ts) | WebAudio engine — 2 sound packs, 9 events |
 | [client/src/hooks/useSound.ts](../client/src/hooks/useSound.ts) | `useSoundSync()` + `useSound()` React glue |
-| [client/src/components/ui/ThemeButton.tsx](../client/src/components/ui/ThemeButton.tsx) | The theme button (both modes + sign-in): steps Light → Dark → Atomic |
+| [client/src/components/ui/ThemeButton.tsx](../client/src/components/ui/ThemeButton.tsx) | The theme button (both modes + sign-in): toggles Light and Dark |
 | [client/src/components/ui/StatusBar.tsx](../client/src/components/ui/StatusBar.tsx) | Fixed-bottom system line |
 | [client/src/components/ui/CommandPalette.tsx](../client/src/components/ui/CommandPalette.tsx) | ⌘K palette primitive |
 | [client/src/components/ui/CommandPaletteHost.tsx](../client/src/components/ui/CommandPaletteHost.tsx) | Registered command set |
 | [client/src/components/ui/action-button.tsx](../client/src/components/ui/action-button.tsx) | CVA action role primitive (fires `play('click')`) |
 | [client/src/components/ui/Modal.tsx](../client/src/components/ui/Modal.tsx) | Shared modal layout (fires `play('modalOpen'/'modalClose')`) |
-| [client/src/assets/icons/themedGlyphs.ts](../client/src/assets/icons/themedGlyphs.ts) | Per-theme SVG glyph map (Atomic's 29 glyphs) — Wave 23 |
-| [client/src/assets/icons/NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) | Theme-aware icon resolver (consults THEMED_GLYPHS first) |
+| [client/src/assets/icons/NodeIcon.tsx](../client/src/assets/icons/NodeIcon.tsx) | Icon renderer: resolves a backend-declared icon string at the `size` token |
 | [client/src/types/NodeTypes.ts](../client/src/types/NodeTypes.ts) | `NodeStyle` helper type for inline `--*` custom props — Wave 21 |
-| [client/index.html](../client/index.html) | Pre-paint theme script + Google Fonts loading (Atomic's typefaces) |
+| [client/index.html](../client/index.html) | Pre-paint theme script |
 | `design_handoff_machinaos_themes/` (external design handoff, not in repo) | Reference HTML mocks + token spec |
-| `design_handoff_machinaos_themes/app/icons.js` (external) | Upstream icon source (ported by Wave 23) |
+| `design_handoff_machinaos_themes/app/icons.js` (external) | Upstream icon source (ported by Wave 23; the port went with Atomic on 2026-11-09) |
 | `design_handoff_machinaos_themes/MIGRATION_PLAYBOOK.md` (external) | Upstream recipe — all originally-deferred items now landed (W14–W25) |
 | `design_handoff_theme_system/` (external, 2026-08 — **fully migrated, removed from disk**) | Second handoff drop: its `themes/` CSS was byte-identical to live, `tokens/`/`components/`/`guidelines/` matched the vendored bundle; the new content (handoff brief + 17-panel × 12-theme mockup) was merged as [design-system/HANDOFF.md](./design-system/HANDOFF.md) + [design-system/reference-mockup/](./design-system/reference-mockup/), and the fidelity-pass contracts it specified (step edges, outcome glow, toolbar pinning, font substitutions, reduced-motion coverage) are implemented |

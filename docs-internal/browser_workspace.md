@@ -59,7 +59,9 @@ the Browser tab as one row of page controls over the page:
   address in its tooltip (an address that is not a web page shows as it
   is);
 - **Open in new tab** for an http(s) page;
-- **Take over**, while the owner does not have control.
+- **Take over**, while the owner does not have control and the browser
+  could grant it (live, not in a protected login, where the server refuses
+  every claim).
 
 The page-tab picker shows on a line of its own while the browser has
 several tabs, and the browser picker stays for an employee with several

@@ -30,8 +30,8 @@
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  /* Tracking + case — light/dark themes use none; kept as tokens because
-   * the product's themed skins flip these (uppercase + wide tracking). */
+  /* Tracking + case — light/dark themes use none; kept as tokens so a
+   * theme can flip them (uppercase + wide tracking). */
   --type-uppercase: none;
   --type-tracking-display: 0;
   --tracking-label: 0.04em;  /* uppercase micro-labels, status bar */

@@ -9,7 +9,7 @@ prototype anatomy; their APIs, fonts, effects and layout are not universal
 production constraints. The canvas recreation predates today's Home/Dev shell.
 
 **Sources** (explore these to design even better against this product):
-- GitHub: https://github.com/zeenie-ai/OpenCompany — primary source. Key design files: `client/src/index.css` (Tailwind v4 bridge), `client/src/themes/{base,light,dark,atomic}.css` (live tokens: surfaces, type, motion), `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
+- GitHub: https://github.com/zeenie-ai/OpenCompany — primary source. Key design files: `client/src/index.css` (Tailwind v4 bridge), `client/src/themes/{base,light,dark}.css` (live tokens: surfaces, type, motion), `client/src/components/ui/` (TopToolbar, ComponentPalette, ActionButton, StatusBar, WorkflowSidebar…), `client/src/components/SquareNode.tsx` (canvas node anatomy), `client/src/assets/icons/index.ts` (icon resolver).
 - Hosted docs: https://docs.opencompany.sh/ · DeepWiki: https://deepwiki.com/zeenie-ai/OpenCompany
 - Reference screenshot: `assets/product-canvas-screenshot.png` (real product — dark canvas, neon nodes, WhatsApp automation demo).
 
@@ -17,7 +17,7 @@ production constraints. The canvas recreation predates today's Home/Dev shell.
 1. **OpenCompany app** (default `localhost:5678`; see `.env.template`) — Home hires and supervises AI employees; Dev mode exposes their workflow canvas. `ui_kits/opencompany/` recreates an earlier canvas-only shell, with mock data and local interactions.
 2. **Marketing/docs** (opencompany.sh, docs.opencompany.sh) — not in the repo; no UI kit was fabricated for them. Use the foundations here plus the README voice when designing those.
 
-The app ships 3 visual themes: light, dark and Atomic. This design system encodes the two canonical ones: **light** (default `:root`) and **dark** (`class="dark"` — the signature look used in every screenshot and demo).
+The app ships 2 visual themes, and this design system encodes both: **light** (default `:root`) and **dark** (`class="dark"` — the signature look used in every screenshot and demo).
 
 ---
 
@@ -73,7 +73,7 @@ The app ships 3 visual themes: light, dark and Atomic. This design system encode
 - `guidelines/` — foundation specimen cards (Design System tab), plus `THEMES.md` (the app's theme architecture).
 - `reference/themes/` — pointer README only; the snapshots went stale and were retired in favor of the authoritative `client/src/themes/`.
 - `HANDOFF.md` — merged design-handoff brief + recorded product amendments (read alongside `IMPLEMENTATION.md`).
-- `reference-mockup/` — 17-panel × 3-theme fidelity target (`Panel Theme Matrix.dc.html`, open in a browser).
+- `reference-mockup/` — 17-panel × 2-theme fidelity target (`Panel Theme Matrix.dc.html`, open in a browser).
 - `assets/` — `product-canvas-screenshot.png`; `diagrams/` is a pointer to the live [`docs/diagrams/`](../../docs/diagrams/), the only copy of the 20 diagrams.
 - `components/buttons/` — ActionButton (6 intents), Button (shadcn variants).
 - `components/forms/` — Input, Select, RadioGroup, Textarea, Switch, Checkbox, Slider, ApiKeyInput.
@@ -89,5 +89,4 @@ The app ships 3 visual themes: light, dark and Atomic. This design system encode
 - **Fonts substituted:** Geist served from Google Fonts instead of the app's bundled `@fontsource-variable/geist` (same typeface, different delivery). Drop real `.woff2` files into `tokens/` + add `@font-face` if pixel-exact metrics matter.
 - **Logo:** the Open Council mark and the outlined Newsreader wordmark live in the app as SVG paths (`client/src/components/brand/geometry.ts`); the wordmark card copies them and draws them in `--fg-default`, as the app does (black on light, white on dark). The favicon, the desktop icon and the icon-only logo files in `media/brand/` (SVGs, plus square PNG renders) use the same mark path. The README hero is still a GitHub user-attachment.
 - opencompany.sh marketing site isn't in the repo; no marketing UI kit was invented.
-- The app's one themed skin, Atomic, is analyzed in `guidelines/THEMES.md` (token contract, theme table, porting recipe) with the authoritative source in `client/src/themes/atomic.css` — but only light/dark are encoded as live token scopes here. Ask to port Atomic into `tokens/` if you want it usable.
-- **Motion** is documented in `guidelines/ANIMATIONS.md` and encoded in `tokens/animations.css` (per-theme `--dur`/`--ease`/`--motion-style` scopes + signature keyframes for the three themes).
+- **Motion** is documented in `guidelines/ANIMATIONS.md` and encoded in `tokens/animations.css` (the `--motion-style` and pulse tokens + signature keyframes, shared by both themes).

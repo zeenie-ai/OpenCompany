@@ -1,14 +1,16 @@
 /* ============================================================================
- * OpenCompany — animation system (light, dark, atomic)
+ * OpenCompany — animation system (light, dark)
  *
  * Source: client/src/themes/base.css + each theme file's Motion block and
  * decorative keyframes. This file declares:
- *   1. Per-theme motion scopes — dur/ease/motion-style by [data-theme].
+ *   1. The motion-style label and executing-pulse tokens both themes share.
  *   2. The signature keyframes every theme draws from.
  *   3. Reusable helper classes (pulse, blink).
  *
  * Motion personality lives in the EASING FUNCTION, not just duration:
- *   smooth (light/dark) · bouncy 1.6 overshoot (atomic).
+ *   light and dark share one smooth curve (tokens/motion.css); a theme with
+ *   another personality overrides dur/ease/motion-style in a [data-theme]
+ *   scope.
  *
  * The executing-node pulse uses --node-pulse-color (a theme-chosen high
  * contrast accent), NEVER the node's own role color, so the glow stays
@@ -25,20 +27,12 @@
   --pulse-timing: ease-in-out; /* @kind other */
 }
 
-/* ---- Per-theme motion contracts ---- */
-[data-theme="atomic"] {
-  --dur-fast: 100ms; /* @kind other */ --dur-default: 200ms; /* @kind other */ --dur-slow: 380ms; /* @kind other */
-  --ease-default: cubic-bezier(0.34, 1.6, 0.5, 1); /* @kind other */
-  --ease-emphasis: cubic-bezier(0.34, 1.6, 0.5, 1); /* @kind other */
-  --motion-style: bouncy; /* @kind other */
-}
-
 /* ============================================================================
  * Signature keyframes
  * ========================================================================== */
 
-/* Default 3-layer executing pulse (light, dark and atomic). Glow scales
- * out and back. */
+/* Default 3-layer executing pulse (light and dark). Glow scales out and
+ * back. */
 @keyframes node-pulse {
   0%, 100% {
     box-shadow:

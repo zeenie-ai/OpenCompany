@@ -10,7 +10,7 @@
 <helmet data-dc-atomics>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bevan&family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Lato:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>
   *{box-sizing:border-box}
   body{margin:0;background:#0d0f13;color:#e8eaed;font-family:'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -42,7 +42,7 @@
   <header style="flex:none;display:flex;align-items:center;gap:20px;padding:0 22px;height:56px;border-bottom:1px solid #2b2f37;background:#15171c;position:sticky;top:0;z-index:20">
     <div style="display:flex;align-items:baseline;gap:10px">
       <span style="font-size:15px;font-weight:600;letter-spacing:-.01em">OpenCompany · panel × theme matrix</span>
-      <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">17 PANELS × 3 THEMES · {{ selName }}</span>
+      <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">17 PANELS × 2 THEMES · {{ selName }}</span>
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
       <button type="button" onClick="{{ togglePlay }}" style="position:relative;font:500 11px/1 'Geist',sans-serif;padding:6px 11px;border-radius:6px;cursor:pointer;background:transparent;border:1px solid #3c424c;color:#9aa1ac">
@@ -73,7 +73,7 @@
         </button>
       </sc-for>
       <div style="padding:20px 16px 8px;font:500 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#a3abb8">SHOWING</div>
-      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+      <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
         <div style="display:flex;align-items:center;gap:8px;padding:5px 16px">
           <span style="display:flex;flex:none;width:34px;height:16px;border-radius:3px;overflow:hidden;border:1px solid #2b2f37">
             <span style="flex:1;background:{{ t.bg }}"></span>
@@ -98,7 +98,7 @@
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">280px · client/src/components/ui/WorkflowSidebar.tsx</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -155,7 +155,7 @@
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">320px · ui/ComponentPalette.tsx · search filters every theme at once</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -217,7 +217,7 @@
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">3-column modal · ParameterPanel.tsx · press Run to fill the output column</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -321,7 +321,7 @@
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">ui/SettingsPanel.tsx · switches + slider are live</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -417,7 +417,7 @@
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">credentials/CredentialsModal.tsx + ApiKeyPanel.tsx</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -465,10 +465,10 @@
           <div style="display:flex;align-items:baseline;gap:12px;margin:0 0 16px">
             <span style="font:600 11.5px/1 ui-monospace,Menlo,monospace;background:#1b1e25;border:1px solid #2b2f37;color:#8be9fd;padding:4px 8px;border-radius:5px">06</span>
             <span style="font-size:16px;font-weight:600">Console Dock</span>
-            <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">ui/ConsolePanel.tsx · tabs switch all three together</span>
+            <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">ui/ConsolePanel.tsx · tabs switch both together</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -528,7 +528,7 @@
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">output/OutputPanel.tsx · Response / Thinking / Raw JSON collapsibles</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -586,7 +586,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">350px · ui/InputNodesPanel.tsx on shared/DataPanel.tsx</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -632,7 +632,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">parameterPanel/ContextPanel.tsx · journal + active replay</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -713,7 +713,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">parameterPanel/MemoryToolPanel.tsx</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -757,7 +757,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">parameterPanel/TaskManagerPanel.tsx · click a row</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -814,7 +814,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">parameterPanel/TeamMonitorPanel.tsx</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -856,7 +856,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">parameterPanel/ProcessManagerPanel.tsx · 9-column process table</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -935,7 +935,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">parameterPanel/GalleryPanel.tsx · gallery/WorkspaceBrowser.tsx · fileIcons.tsx tones</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -1026,7 +1026,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">48px + 24px chrome · ui_kits Toolbar.jsx · ModeToggle.jsx · StatusBar.jsx</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -1094,12 +1094,11 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">Dashboard.tsx · SquareNode.tsx · per-theme --canvas-grid + ornaments · one node per glow state: selected, executing ×2, armed, success</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
                   <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#9aa3b0">pulse {{ t.pulseName }} · grid {{ t.mStyle }}</span>
-                  <sc-if value="{{ t.themedIcons }}"><span style="font:600 11px/1 ui-monospace,Menlo,monospace;padding:2px 5px;border-radius:3px;background:rgba(139,233,253,.14);color:#8be9fd">OWN GLYPHS</span></sc-if>
                 </div>
                 <div style="position:relative;width:620px;height:488px;overflow:hidden;border:1px solid var(--border-default);border-radius:var(--radius-lg);background:var(--bg-canvas);font-family:var(--font-body);color:var(--fg-default);box-shadow:0 8px 22px rgba(0,0,0,.3)">
                   <div style="{{ t.stack }}"></div>
@@ -1192,7 +1191,7 @@ https://github.com/zeenie-ai/OpenCompany/pull/482
             <span style="font:400 11px/1 ui-monospace,Menlo,monospace;color:#a3abb8">tokens/animations.css + themes/base.css · easing carries the personality; the glow ladder is rest → hover → selected → executing → success → error</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:26px">
-            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="3">
+            <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
               <div style="{{ t.vars }}">
                 <div style="display:flex;align-items:baseline;gap:7px;margin:0 0 7px 2px">
                   <span style="font:600 11px/1 ui-monospace,Menlo,monospace;letter-spacing:.09em;text-transform:uppercase;color:#e8eaed">{{ t.name }}</span>
@@ -1299,21 +1298,11 @@ const THEMES = [
     ok:'#22c55e', warn:'#f59e0b', bad:'#ef4444', info:'#38bdf8',
     na:'#bd93f9', nm:'#8be9fd', nt:'#50fa7b', ng:'#ff79c6', nw:'#ffb86c',
     type:'Geist · sentence case', motion:'90/180/320 smooth', snd:'terminal' },
-  { k:'atomic', n:'Atomic', fam:'SKIN', w:'1962 Eames optimism', dark:false,
-    bg:'#f0e6d2', pan:'#faf2dc', cv:'#e8dcc0', el:'#ffffff', inp:'#ffffff',
-    fg:'#2a3a4a', mu:'#4a5867', fa:'#8a9aaa', bd:'#c8b890', st:'#a09880',
-    disp:"'Bevan',serif", body:"'Lato',sans-serif", mono:"'Space Mono',monospace", monoLabel:'Space Mono',
-    caps:'uppercase', tr:'0.06em', base:'14px', r:[0,2,4,999],
-    run:'hsl(130 60% 28%)', stop:'hsl(14 90% 42%)', save:'hsl(14 90% 42%)', cfg:'hsl(41 80% 38%)', sec:'hsl(184 70% 30%)', tools:'hsl(184 70% 30%)',
-    ok:'hsl(120 21% 45%)', warn:'hsl(41 67% 53%)', bad:'hsl(14 81% 53%)', info:'hsl(184 46% 43%)',
-    na:'#e85a26', nm:'#3a9aa0', nt:'hsl(130 60% 28%)', ng:'#d8a838', nw:'#2a3a4a',
-    type:'Bevan + Lato · UPPER .06em', motion:'100/200/380 bouncy', snd:'vibraphone' },
 ];
 
 /* Motion contract + canvas decoration, per theme.
- * dur/ease/style/pulse from tokens/animations.css; canvas grids are the
- * verbatim --canvas-grid / decoration rules from reference/themes/*.css
- * where the repo expresses them as gradients. */
+ * dur/ease/style/pulse from tokens/animations.css; light and dark draw no
+ * --canvas-grid. */
 const MOTION = {
   light: { d:[90,180,320], ease:'cubic-bezier(0.2,0.7,0.3,1)', style:'smooth',
     curve:'M0,100 C20,30 30,0 100,0', pulse:'node-pulse 1.4s ease-in-out infinite', glow:'#0891b2',
@@ -1321,37 +1310,12 @@ const MOTION = {
   dark: { d:[90,180,320], ease:'cubic-bezier(0.2,0.7,0.3,1)', style:'smooth',
     curve:'M0,100 C20,30 30,0 100,0', pulse:'node-pulse 1.4s ease-in-out infinite', glow:'#38bdf8',
     grid:'none', gsize:'auto', gop:1 },
-  atomic: { d:[100,200,380], ease:'cubic-bezier(0.34,1.6,0.5,1)', style:'bouncy',
-    curve:'M0,100 C34,-60 50,0 100,0', pulse:'node-pulse 1.4s ease-in-out infinite', glow:'#3a9aa0',
-    grid:`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><g stroke='%232a3a4a' stroke-width='0.6' fill='none' opacity='0.18'><path d='M40 80 L120 80 M80 40 L80 120 M50 50 L110 110 M110 50 L50 110'/></g></svg>")`, gsize:'auto',
-    stack:`radial-gradient(circle at 12% 15%,var(--node-agent) 0%,transparent 0.8%),radial-gradient(circle at 88% 12%,var(--node-model) 0%,transparent 0.6%),radial-gradient(circle at 18% 88%,var(--node-trigger) 0%,transparent 0.7%),radial-gradient(circle at 82% 90%,var(--node-agent) 0%,transparent 0.5%),radial-gradient(circle at 50% 50%,var(--node-model) 0%,transparent 0.4%)`, ssize:'auto', gop:1 },
 };
 
 
-/* THEMED_GLYPHS subset — verbatim inner markup from
- * client/src/assets/icons/themedGlyphs.ts (six of the 29 IconKeys the panels
- * use); Atomic is the only theme with a set. Themes with no entry fall
- * through to the neutral lucide set, exactly as <NodeIcon> does. */
-const SVG_OPEN = '<svg viewBox="0 0 32 32" fill="none" width="100%" height="100%">';
-const w = (i) => SVG_OPEN + i + '</svg>';
 const LU = (i) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="100%" height="100%">' + i + '</svg>';
 
-const GLYPHS = {
-  atomic: {
-    send: w('<g stroke="#2a3a4a" stroke-width="2" fill="#e85a26" stroke-linejoin="round"><path d="M4 28 L28 4 L18 14 L12 11 L11 19 Z"/></g>'),
-    tool: w('<g stroke="#2a3a4a" stroke-width="2" fill="#3a9aa0" stroke-linejoin="round"><path d="M5 25 L18 12 M22 8 L26 12 M22 8 Q28 2, 22 4 L18 8 Z"/></g>'),
-    trigger: w('<g stroke="#2a3a4a" stroke-width="2" fill="#d8a838" stroke-linejoin="round"><path d="M16 3 L11 16 L16 16 L13 29 L23 13 L17 13 L21 3 Z"/></g>'),
-    agent: w('<g stroke="#2a3a4a" stroke-width="2" fill="#e85a26" stroke-linejoin="round"><circle cx="16" cy="11" r="4"/><path d="M8 25 Q8 18, 16 18 Q24 18, 24 25"/></g>'),
-    folder: w('<g stroke="#2a3a4a" stroke-width="2" fill="#d8a838" stroke-linejoin="round"><path d="M4 11 L13 11 L15 13 L28 13 L28 25 L4 25 Z"/></g>'),
-    search: w('<g stroke="#2a3a4a" stroke-width="2.4" fill="#d8a838" stroke-linecap="round"><circle cx="13" cy="13" r="6"/><path d="M18 18 L26 26"/></g>'),
-    settings: w('<g stroke="#2a3a4a" stroke-width="2" fill="#3a9aa0"><circle cx="16" cy="16" r="4"/><path d="M16 3 L16 8 M16 24 L16 29 M3 16 L8 16 M24 16 L29 16" stroke-linecap="round"/></g>'),
-    credentials: w('<g stroke="#2a3a4a" stroke-width="2" fill="#d8a838"><circle cx="12" cy="16" r="4"/><path d="M16 16 L28 16 L28 20 M23 16 L23 21 M19 16 L19 19"/></g>'),
-    memory: w('<g stroke="#2a3a4a" stroke-width="2" fill="#3a9aa0"><rect x="5" y="9" width="22" height="14" rx="3"/><path d="M5 14 L27 14 M5 19 L27 19" stroke="#2a3a4a"/></g>'),
-  },
-};
-
-/* Neutral lucide fallback — light and dark declare no THEMED_GLYPHS
- * entries, so <NodeIcon> resolves them through lucide. */
+/* The lucide icons the panels use, the set the app draws in both themes. */
 const LUCIDE = {
   folder: LU('<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>'),
   search: LU('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
@@ -1365,7 +1329,7 @@ const LUCIDE = {
 };
 
 const glyph = (themeKey, key, size) => {
-  const svg = (GLYPHS[themeKey] || {})[key] || LUCIDE[key];
+  const svg = LUCIDE[key];
   return React.createElement('span', {
     key: themeKey + key,
     style: { display: 'inline-flex', flex: 'none', width: size, height: size, lineHeight: 0 },
@@ -1474,7 +1438,6 @@ class Component extends DCLogic {
           backgroundSize: '20px 20px' },
         pulseAnim: m.pulse, glow: m.glow,
         pulseAnimSq: m.pulse.replace(/ [\d.]+s /, ' 1.5s '),
-        themedIcons: !!GLYPHS[t.k],
         icon: {
           folder: glyph(t.k, 'folder', 20),
           search: glyph(t.k, 'search', 14),

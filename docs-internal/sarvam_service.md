@@ -227,8 +227,7 @@ with no coloured variant. That is a problem here, because the frontend
 requests `/api/schemas/nodes/<type>/icon` with **no `?variant=` parameter**
 (the backend supports `light` / `dark` and `icon.dark.svg`, but nothing calls
 it). A single monochrome file would therefore be invisible on some theme
-whichever colour it took: a black mark on Dark, a white one on Light and
-Atomic.
+whichever colour it took: a black mark on Dark, a white one on Light.
 
 So the mark is composed onto a rounded tile in Sarvam's primary navy
 `#1E2033`, drawn in white — the same "avatar" treatment `@lobehub/icons` uses

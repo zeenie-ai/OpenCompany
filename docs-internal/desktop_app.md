@@ -96,7 +96,7 @@ shell reads it directly (`stage/runtime/<os>-<arch>/`), in a packaged app
    a `<meta name="theme-color">` at its theme's `--background`; on
    `did-change-theme-color` the shell paints the window in that colour and
    keeps it in `desktop-state.json`, and the next launch opens in it
-   (`#12141f` until a page has set one), so Light and Atomic do not open dark.
+   (`#12141f` until a page has set one), so Light does not open dark.
 8. `checkForUpdatesAndNotify`.
 
 Quit: `POST /api/desktop/shutdown` with the per-launch token, close stdin,

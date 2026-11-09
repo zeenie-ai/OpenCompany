@@ -73,7 +73,7 @@ function SettingsModal({ open, onClose }) {
         </SettingsSection>
 
         <SettingsSection title="Audio" icon={<Icon name="Volume2" size={16} />} tone="tool">
-          <SettingsRow label="Sound Effects" description="Play per-theme click / hover / save / error sounds. Each theme has its own pack (parchment for Light, terminal for Dark, vibraphone for Atomic)">
+          <SettingsRow label="Sound Effects" description="Play per-theme click / hover / save / error sounds. Each theme has its own pack (parchment for Light, terminal for Dark)">
             <Switch defaultChecked />
           </SettingsRow>
         </SettingsSection>

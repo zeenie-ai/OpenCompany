@@ -67,11 +67,11 @@ Approval waiting is implemented; activation for ordinary new generations remains
   rather than in `Dashboard`: the `.app-frame`, boot effects (current workflow,
   sound sync, page activity, UI defaults, the shortcut), and the Settings and
   Credentials dialogs.
-- **Themes**: Home shows the chosen theme, as the editor does: Light, Dark or
-  Atomic (until 2026-10-12 Home showed only light and dark). The theme button
+- **Themes**: Home shows the chosen theme, Light or Dark, as the editor does
+  (a third, Atomic, was removed on 2026-11-09). The theme button
   ([components/ui/ThemeButton.tsx](../client/src/components/ui/ThemeButton.tsx)),
-  the same in the Home header and the editor's toolbar, steps through them, and
-  Settings → Profile → Appearance offers all three. See
+  the same in the Home header and the editor's toolbar, toggles between them,
+  and Settings → Profile → Appearance offers both. See
   [Theme System](./theme_system.md).
 
 ## The Home screen
@@ -311,7 +311,8 @@ are is on their page's header, not in the dock.
   row of page controls sits over the page: back, forward and reload, which
   work only while the owner has control; a read-only pill with the page's
   domain (a lock for https, the whole address in its tooltip); Open in new
-  tab for an http(s) page; and Take over. Several page tabs get a picker on
+  tab for an http(s) page; and Take over, while the browser is live and not
+  in a protected login (when the server would refuse it). Several page tabs get a picker on
   a line of its own; it, like a page's dialog, works only while the owner
   has control (a dialog says "Take over to respond"). The view shows the
   employee's cursor (an arrow with their name) gliding to each click,
@@ -344,8 +345,9 @@ are is on their page's header, not in the dock.
   closing the dock or leaving the window no longer answers the employee's
   request for help; only the owner who took control hands it back (see [Browser workspace](./browser_workspace.md#when-the-agent-asks-for-help)).
 - **Status pill**: centred 14px above the dock's foot, it says what is
-  going on, after the status dot: "You have the screen" while the owner
-  has it; their status while they are not live (Stopped, Needs you, …);
+  going on, after the status dot: while the owner has the screen it is
+  the banner with Hand back (see Take over); their status while they are
+  not live (Stopped, Needs you, …);
   while they are, their latest step and its time; before the first,
   "Waiting for work". Normal mode no longer lists the steps (the dock's
   footer timeline went with the Nov 5 handoff); the pill shows only the
@@ -367,9 +369,14 @@ are is on their page's header, not in the dock.
   `components/workspace/surface.ts`: Browser asks for control and waits
   for the server's answer; Mobile takes the phone's lease), and the owner
   is in control from that moment: the body under the row is framed in the
-  config colour (`--action-config-border`), a centred banner says "You’re in control · {Name} is waiting"
-  with the one **Hand back** (the invert button) whichever tab shows, and
-  the keyboard focus moves to Hand back. Then it stops a running employee
+  config colour (`--action-config-border`), and the status pill at the
+  dock's foot becomes the banner, "You’re in control · {Name} is waiting",
+  with the one **Hand back** (the invert button) whichever tab shows. At
+  the foot it covers nothing (under the Browser's toolbar it hid the
+  employee's request and the page-tab picker), and the live page keeps
+  its size. The keyboard moves to Hand back, unless the owner went on
+  elsewhere while the screen was being taken, and to the tab on show once
+  the takeover ends. Then it stops a running employee
   (`pause_workflow`), also while they wait for the owner in the browser
   (`request_user`), so the employee never acts on the screen again once
   the owner has it. A screen can let go of the owner meanwhile: the
@@ -394,7 +401,9 @@ are is on their page's header, not in the dock.
   `homeStore.takeovers` keeps each employee's takeover (the tab whose
   screen was taken, the way to give it back, and Take over's Stop), so it
   holds across a closed dock, a changed tab or another employee's Take
-  over. A browser that is not running answers Take over's request `idle`,
+  over. Taking a screen or handing it back is busy per employee
+  (`homeStore.takeoverBusy`), so a Hand back that waits for one employee's
+  drain never holds another's. A browser that is not running answers Take over's request `idle`,
   which the claim takes as no. Toasts: "You have control — {Name} will
   wait", "Handed back to {Name}".
 - **Size and motion**: 460px wide by default. The left edge drags from
@@ -406,8 +415,9 @@ are is on their page's header, not in the dock.
   and its contents mount on the first open. Open, width and tab persist
   under `home_workspace_v1`; Expand and the employee last only for the
   session. While the dock is open, the Get started card and its folded pill
-  sit at its left edge and move with it (`dockWidth` in `homeStore` gives
-  both one width; see [onboarding.md](./onboarding.md#get-started-checklist)).
+  sit at its left edge and move with it, at once while the edge is dragged
+  (`dockWidth` in `homeStore` gives both one width, and `workspaceResizing`
+  says when the edge is dragged; see [onboarding.md](./onboarding.md#get-started-checklist)).
 
 ## Hiring
 
