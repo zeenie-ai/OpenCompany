@@ -330,8 +330,9 @@ newer version wins in place.
   the handoff's `*.patches.jsonl` line for line). Only the agent answering the owner's chat message can show UI; a
   call anywhere else says nothing was shown.
 - **Owner edits.** `$bindState` writes go to the interface's own state store and to `chat_ui_state`; the last write
-  per path wins, and the client sends after 300 ms idle, when the page hides, when the chat closes and before a
-  button press goes (`features/chat/data/uiState.ts`). The server keeps them on the part (`state`,
+  per path wins, and the client sends after 300 ms idle, when the page hides, when the chat closes and before
+  anything the owner sends goes: a message, a suggested question or a button press (`features/chat/data/uiState.ts`,
+  `ChatPane`). The server keeps them on the part (`state`,
   `state_revision`), on the reply once it is saved, so a reload shows them.
 - **Buttons.** A press resolves `$state` params at click time; the client tags each press with its element and label
   (json-render hands a handler the params only). `ask` sends its text as the owner's message only when it is what

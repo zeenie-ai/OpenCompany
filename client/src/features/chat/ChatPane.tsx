@@ -151,7 +151,18 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   );
   const messageSent = useCallback(() => onSent?.('message'), [onSent]);
   const send = useSendChatMessage(sessionId, scope, onRefused, messageSent);
-  const stop = useStopChatRun(sessionId, () => notify('Couldn’t stop the reply. Try again.', 'error'), control);
+  // What the owner set in an interface the employee showed goes before
+  // anything the owner sends, so the turn that message starts reads it.
+  const uiState = useUiStateSync(sessionId);
+  const sendMutate = send.mutate;
+  const sendMessage = useCallback(
+    (message: Parameters<typeof sendMutate>[0]) => {
+      uiState.flush();
+      sendMutate(message);
+    },
+    [uiState, sendMutate],
+  );
+  const stop =useStopChatRun(sessionId, () => notify('Couldn’t stop the reply. Try again.', 'error'), control);
 
   // Changing the conversation: edit, try again, another version, a rating.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -243,7 +254,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
     if (sendBusy || !ready || box.some((item) => item.state === 'uploading') || !(hasText || hasFiles)) return;
     const draft = store.takeForSend(sessionId);
     const attachments = replying ? [] : useAttachmentStore.getState().takeReady(sessionId);
-    send.mutate({
+    sendMessage({
       ...draft,
       text: draft.text.trim(),
       ...(attachments.length ? { attachments } : {}),
@@ -258,18 +269,15 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
 
   // What an interface's buttons do. Read through a ref, so the handlers an
   // interface made once keep reaching the current pane.
-  const uiState = useUiStateSync(sessionId);
-  const live = useRef({ busy, ready, send: send.mutate, notify, uiState });
+  const live = useRef({ busy, ready, send: sendMessage, notify });
   useLayoutEffect(() => {
-    live.current = { busy, ready, send: send.mutate, notify, uiState };
+    live.current = { busy, ready, send: sendMessage, notify };
   });
   const uiActions = useMemo<ChatUiActions>(
     () => ({
       ask: (text, label) => {
         const pane = live.current;
         if (asksWhatItSays(text, label) && !pane.busy && pane.ready) {
-          // What the owner set goes first, as it does before a press.
-          pane.uiState.flush();
           pane.send({ text, clientMessageId: newClientMessageId(), options: optionsRef.current });
           return;
         }
@@ -283,7 +291,6 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
           pane.notify(`${persona.name} is still answering. Try that again once they finish.`, 'info');
           return;
         }
-        pane.uiState.flush(event.partId);
         pane.send({
           text: event.label || event.action,
           clientMessageId: newClientMessageId(),

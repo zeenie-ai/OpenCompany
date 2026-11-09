@@ -16,6 +16,13 @@ import { REVEAL_STEP_MS } from '@/lib/jsonRender';
 import { writePath } from '@/lib/jsonRender/paths';
 import { setReducedMotion } from '@/test/waapi';
 import ChatUi from '../genui/ChatUi';
+import { prepareChatState } from '../genui/prepare';
+
+// The real one, watched: what the owner set reaches json-render through it.
+vi.mock('../genui/prepare', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../genui/prepare')>();
+  return { ...actual, prepareChatState: vi.fn(actual.prepareChatState) };
+});
 
 const SPEC = JSON.parse(readFileSync(join(__dirname, '..', '__fixtures__', 'saturday-booking.spec.json'), 'utf-8'));
 const ACTIONS = { ask: vi.fn(), event: vi.fn() };
@@ -143,7 +150,10 @@ describe('ChatUi', () => {
 
   it('reports what the owner sets, and starts from what they set before', () => {
     const onStateChange = vi.fn();
-    render(<ChatUi partId="ui_1" spec={SPEC} state={writePath({}, REMIND_PATH, false)} live={false} actions={ACTIONS} onStateChange={onStateChange} />);
+    const saved = writePath({}, REMIND_PATH, false);
+    render(<ChatUi partId="ui_1" spec={SPEC} state={saved} live={false} actions={ACTIONS} onStateChange={onStateChange} />);
+    // Made safe the way a spec's own state is.
+    expect(prepareChatState).toHaveBeenCalledWith(saved);
     const toggle = screen.getByRole('switch', { name: 'Remind her the day before' });
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);

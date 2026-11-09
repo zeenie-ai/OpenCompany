@@ -2,12 +2,12 @@
  * An interface the employee shows in its reply, against a fake server: it
  * streams in with the run, its buttons ask (sending only what they say) or
  * go back to the employee once the answer is done, what the owner sets goes
- * to the server after a pause or before a press that sends, and the saved
- * reply keeps it.
+ * to the server after a pause or before anything the owner sends, and the
+ * saved reply keeps it.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const sendRequest = vi.fn();
@@ -174,6 +174,25 @@ describe('an interface in a reply', () => {
       expect(sendRequest).toHaveBeenCalledWith('send_chat_message', expect.objectContaining({ message: 'Show Sunday instead' })),
     );
     // The change did not wait for the pause: it went before the message.
+    const kinds = sendRequest.mock.calls.map(([kind]) => kind);
+    expect(kinds).toContain('chat_ui_state');
+    expect(kinds.indexOf('chat_ui_state')).toBeLessThan(kinds.indexOf('send_chat_message'));
+  });
+
+  it('sends what the owner set before a message they type', async () => {
+    renderPane();
+    await screen.findByText('Thinking');
+    runEvents(...uiFrames(2));
+    await finishRun();
+    fireEvent.click(screen.getByRole('radio', { name: 'Highlights' }));
+    const box = screen.getByRole('textbox', { name: 'Message Maya' });
+    fireEvent.change(box, { target: { value: 'Book that one' } });
+    const send = within(box.closest('.chat-composer') as HTMLElement).getByRole('button', { name: 'Send' });
+    await waitFor(() => expect(send).toBeEnabled());
+    fireEvent.click(send);
+    await waitFor(() =>
+      expect(sendRequest).toHaveBeenCalledWith('send_chat_message', expect.objectContaining({ message: 'Book that one' })),
+    );
     const kinds = sendRequest.mock.calls.map(([kind]) => kind);
     expect(kinds).toContain('chat_ui_state');
     expect(kinds.indexOf('chat_ui_state')).toBeLessThan(kinds.indexOf('send_chat_message'));

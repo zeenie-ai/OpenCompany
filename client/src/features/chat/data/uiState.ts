@@ -3,7 +3,7 @@
  * (`chat_ui_state`, docs-internal/chat_protocol.md). Changes to one
  * interface coalesce per state path (the last value wins) and go out 300 ms
  * after the owner stops, when the page hides, when the chat closes, and
- * before a press of one of its buttons goes. The server keeps them on the
+ * before anything the owner sends goes (ChatPane). The server keeps them on the
  * reply, so a reload shows them, and tells the employee on its next turn.
  *
  * Best effort: a change that does not reach the server is sent again with
