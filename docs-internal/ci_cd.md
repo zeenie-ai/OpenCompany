@@ -93,7 +93,7 @@ After tool install the composite installs the supervisor CLI editably (`uv pip i
 
 Reusable `workflow_call` workflow with four independent jobs (no plan/change-detection gate, no aggregator — every job runs on every call):
 
-- `build-and-lint` — `bun install --frozen-lockfile` + `bun run build`, then client lint (`bun run --filter react-flow-client lint`), TypeScript check (`... typecheck`), frontend tests (`... test`, vitest), and the JS dependency audit (`bun run audit:deps` at the root and in `desktop/`; see "Dependency update policy" below). Runs on `ubuntu-latest`.
+- `build-and-lint` — `bun install --frozen-lockfile` + `bun run build`, then client lint (`bun run --filter react-flow-client lint`), TypeScript check (`... typecheck`), frontend tests (`... test`, vitest), and the JS dependency audit (`bun run audit:deps` at the root, in `desktop/` and in `server/pi/`; see "Dependency update policy" below). Runs on `ubuntu-latest`.
 - `backend-tests` — cross-OS matrix (`ubuntu-latest`, `windows-latest`, `macos-latest`, `fail-fast: false`; RFC-0005 Phase 1). On Linux only, `uv lock --check` (the committed `server/uv.lock` must match `pyproject.toml`; the desktop app installs from it with `--frozen`) and a pinned `pip-audit` check of the locked Python dependencies including all extras. Then, on every OS:
   - **Pinned Temporal CLI.** The app's own installer (`services.temporal._install.ensure_temporal_binaries`) puts the CLI pinned in `server/config/temporal_cli.json` into a throwaway `DATA_DIR`, and the step writes its path to `$GITHUB_ENV` as `TEMPORAL_TEST_CLI`. The real-server tests that skip without it then run.
   - **Full history.** The checkout uses `fetch-depth: 0`, because two replay tests `git show` older commits.
@@ -295,9 +295,10 @@ This suppresses scheduled updates but does not disable GitHub's
 alert-triggered security-update attempts. Enforce the policy with the
 repository setting described below. Dependencies move by hand with tests:
 
-- JS: bump the range in the relevant `package.json` (or the top-level
-  `overrides` block in the root manifest for transitive pins), `bun install`,
-  `bun run audit:deps` (at the root and in `desktop/`), run the suites.
+- JS: bump the range in the relevant `package.json` (or its top-level
+  `overrides` block for transitive pins: the root, `desktop/` and
+  `server/pi/` each have one), `bun install`, `bun run audit:deps` (at the
+  root, in `desktop/` and in `server/pi/`), run the suites.
 - pip: `uv lock --upgrade-package <name>` in `server/`, `uv sync`, run the
   suites (`predeploy.yml` runs `uv lock --check` and the audit below). The
   gateway's test dependencies (`gateway/uv.lock`) move the same way, in
@@ -359,15 +360,22 @@ the latest checks instead.
 GitHub's dependency graph does not read `bun.lock`; it sees only the ranges
 in each `package.json`, so no Dependabot alert ever covers a resolved JS
 version. `bun run audit:deps` is the check: `predeploy.yml` runs it at the
-root and in `desktop/` (`bun audit` reads the lockfile). Both audits fail on
-any advisory but one, ignored since 2026-11-02: GHSA-g3hv-75wg-m249,
+root, in `desktop/` and in `server/pi/` (`bun audit` reads the lockfile).
+`server/pi/` is not a root workspace, so the root audit never read its
+lockfile until it got its own step on 2026-11-09; its production tree ships
+as the Pi runtime archive. Every audit fails on any advisory but one,
+ignored since 2026-11-02: GHSA-g3hv-75wg-m249,
 minimatch's glob-pattern denial of service. It is fixed only in minimatch 11,
 which no consumer accepts yet (eslint, `@eslint/config-array` and
 typescript-estree pin 10.x; Electron Builder's chain needs 3.x to 10.x), and
 it needs an attacker-supplied pattern, while every consumer is lint or build
-tooling matching this repository's own patterns. Drop the `--ignore` from
-both `audit:deps` scripts once eslint, typescript-eslint and Electron Builder
-accept minimatch 11.0.1 or later.
+tooling matching this repository's own patterns. The Pi SDK
+(`@earendil-works/pi-coding-agent` 1.1.0) also pins minimatch 10.2.6. It
+uses it only on configured patterns (model-scope globs in
+`dist/core/model-resolver.js`, package filters in
+`dist/core/package-manager.js`), never on a tool call's arguments. Drop the `--ignore` from
+the three `audit:deps` scripts once eslint, typescript-eslint, Electron
+Builder and the Pi SDK accept minimatch 11.0.1 or later.
 
 The desktop chain Electron Builder → app-builder-lib → @electron/get 3.1.0
 → got → cacheable-request uses `http-cache-semantics`. To address

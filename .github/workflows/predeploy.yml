@@ -37,9 +37,11 @@ jobs:
       - name: Frontend tests (vitest)
         run: bun run --filter react-flow-client test
       # GitHub's dependency graph cannot read bun.lock, so no Dependabot alert
-      # covers the JS trees. Both audits run without exclusions; desktop/
-      # has its own lockfile and a Bun security patch. Test that patch after
-      # a frozen install because the audit cannot inspect its behavior.
+      # covers the JS trees. Each lockfile is audited: the root, desktop/
+      # (with its own Bun security patch) and server/pi, whose production
+      # tree ships as the Pi runtime archive. The one ignored advisory is in
+      # docs-internal/ci_cd.md. Test the desktop patch after a frozen install
+      # because the audit cannot inspect its behavior.
       - name: Audit JS dependencies
         run: bun run audit:deps
       - name: Verify desktop cache security patch
@@ -49,6 +51,9 @@ jobs:
           bun run test:security
       - name: Audit desktop JS dependencies
         working-directory: desktop
+        run: bun run audit:deps
+      - name: Audit Pi runtime JS dependencies
+        working-directory: server/pi
         run: bun run audit:deps
 
   # The whole server suite runs on every OS the desktop app ships for, with
