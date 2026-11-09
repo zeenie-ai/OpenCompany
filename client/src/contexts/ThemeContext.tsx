@@ -250,11 +250,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Another window or tab saved a theme: show it here at once. Going through
   // setTheme moves the requested theme too, so a later cycleTheme steps on
-  // from it and a pending revealed switch cannot override it.
+  // from it and a pending revealed switch cannot override it. An event can
+  // arrive after a newer save (this window's own, say): storage then holds
+  // something else, and the event is ignored, so windows never diverge.
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       const next = event.newValue;
       if (event.key !== THEME_STORAGE_KEYS.canonical || !isThemeName(next) || next === requestedRef.current) return;
+      if (localStorage.getItem(THEME_STORAGE_KEYS.canonical) !== next) return;
       storedRef.current = next;
       setTheme(next);
     };

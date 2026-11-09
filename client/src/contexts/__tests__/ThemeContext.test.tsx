@@ -15,8 +15,12 @@ function resetDom(): void {
 
 /** What the browser fires in this window when another window or tab writes
  *  localStorage (`key` null: the other window cleared it). */
+/** Another window saves `newValue` under `key`: it lands in the shared
+ *  storage first, then this window hears of it. */
 function otherWindowWrites(key: string | null, newValue: string | null): void {
   act(() => {
+    if (key !== null && newValue !== null) localStorage.setItem(key, newValue);
+    else if (key !== null) localStorage.removeItem(key);
     window.dispatchEvent(new StorageEvent('storage', { key, newValue }));
   });
 }
@@ -165,8 +169,9 @@ describe('a theme chosen in another window', () => {
       expect(result.current.theme).toBe('light');
       expect(html.dataset.theme).toBe('light');
       expect(html.classList.contains('dark')).toBe(false);
-      // Writing it back could echo an older theme to the other window.
-      expect(setItem).not.toHaveBeenCalled();
+      // Only the other window saved it: writing it back could echo an older
+      // theme to that window.
+      expect(setItem).toHaveBeenCalledOnce();
 
       // The next press steps on from the synced theme, and is saved.
       act(() => result.current.cycleTheme());
@@ -175,6 +180,19 @@ describe('a theme chosen in another window', () => {
     } finally {
       setItem.mockRestore();
     }
+  });
+
+  it('ignores a save older than the one storage holds', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
+    act(() => result.current.setTheme('light'));
+    // Another window saved dark before this window saved light, and its event
+    // arrives only now: storage holds light, so this window keeps it.
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'opencompany-theme', newValue: 'dark' }));
+    });
+    expect(result.current.theme).toBe('light');
+    expect(html.dataset.theme).toBe('light');
+    expect(localStorage.getItem('opencompany-theme')).toBe('light');
   });
 
   it('ignores other keys, a cleared key and unknown names', () => {
