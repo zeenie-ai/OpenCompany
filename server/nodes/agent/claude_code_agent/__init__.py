@@ -58,9 +58,11 @@ from services.cli_agent.factory import (  # noqa: E402
     register_session_pool,
     register_skill_materialiser,
 )
+from services.plugin.shutdown_hooks import register_shutdown_hook  # noqa: E402
 from services.ws_handler_registry import register_ws_handlers  # noqa: E402
 
 from ._handlers import WS_HANDLERS as _CLAUDE_WS_HANDLERS  # noqa: E402
+from ._handlers import shutdown_claude_login as _claude_shutdown_login  # noqa: E402
 from ._pool import get_session_pool as _claude_get_session_pool  # noqa: E402
 from ._provider import AnthropicClaudeProvider  # noqa: E402
 from ._skills import materialise_skills as _claude_materialise_skills  # noqa: E402
@@ -69,6 +71,7 @@ register_provider("claude", AnthropicClaudeProvider)
 register_session_pool("claude", _claude_get_session_pool)
 register_skill_materialiser("claude", _claude_materialise_skills)
 register_ws_handlers(_CLAUDE_WS_HANDLERS)
+register_shutdown_hook("claude_code_login", _claude_shutdown_login)
 
 
 # Claude Code-supported models. Per

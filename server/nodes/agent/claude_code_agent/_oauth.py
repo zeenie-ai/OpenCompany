@@ -13,18 +13,20 @@ against the generic ``core.paths`` helpers (``data_path`` /
 ``packages_dir``) — see the module docstring on ``core.paths`` for
 the no-per-plugin-wrapper convention.
 
-Every subprocess call goes through ``services.events.cli.run_cli_command``
+The one-shot subcommands go through ``services.events.cli.run_cli_command``
 — the canonical one-shot CLI helper used by Stripe / future plugins. Auth
 surface follows https://code.claude.com/docs/en/cli-reference verbatim:
 
-- ``claude auth login``  — opens the browser, writes credentials.
+- ``claude auth login``  — prints the URL of its sign-in page, opens a
+  browser where it can, reads the code that page shows from standard
+  input, writes credentials.
 - ``claude auth status`` — prints JSON; exits 0 when logged in / 1 otherwise.
 - ``claude auth logout`` — log out (CLI clears its own credentials).
 
 The CLI owns its own credentials file; we never read or write it.
-``login`` is a long-running one-shot (waits for the browser flow to
-complete) so callers schedule it as ``asyncio.create_task`` — same shape
-Stripe uses for ``stripe login --complete``.
+``login`` is long-running (it waits for the sign-in to finish), so it has
+its own runner, :func:`run_claude_login`, which callers schedule as an
+``asyncio.create_task``.
 
 This module lives alongside the ``claude_code_agent`` plugin so all
 claude-specific code stays in one folder per the canonical plugin
@@ -38,13 +40,17 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from services.process_environment import without_onepassword_environment
-from typing import Any, Dict, Mapping
+from typing import Any, Callable, Dict, Mapping, Optional
+from urllib.parse import urlsplit
 
+from core.ansi import strip_ansi
 from core.js_runtime import add_package, shared_tree_bin
 from core.logging import get_logger
 from core.paths import data_path, packages_dir
+from services._supervisor.util import kill_tree
 from services.events.cli import run_cli_command
 
 logger = get_logger(__name__)
@@ -131,21 +137,13 @@ def _claude_env() -> Dict[str, str]:
 
 
 async def _run_auth(subcommand: str, *, timeout: float) -> Dict[str, Any]:
-    """Run ``claude auth <subcommand>`` via the canonical helper. Returns
-    the ``run_cli_command`` envelope (``{success, result, stdout, stderr,
-    error}``).
-
-    ``login`` is spawned with ``stdin=PIPE`` (un-written) so the native
-    claude binary's stdin reader blocks indefinitely instead of EOFing
-    against the FastAPI parent's closed stdin. Without this guard the
-    CLI exits before the browser hits its localhost callback URL and
-    the success page never renders — see ``run_cli_command``'s
-    ``stdin`` parameter doc for the full failure mode. ``status`` and
-    ``logout`` are one-shot, don't read stdin, and stay on the
-    inherit-stdin default.
+    """Run the one-shot ``claude auth status`` / ``logout`` via the canonical
+    helper. Returns the ``run_cli_command`` envelope (``{success, result,
+    stdout, stderr, error}``). The first call on a new install installs the
+    CLI, off the event loop. ``login`` has its own runner below.
     """
     try:
-        binary = claude_binary_path()
+        binary = await asyncio.to_thread(claude_binary_path)
     except (FileNotFoundError, RuntimeError) as e:
         return {"success": False, "error": str(e), "stdout": "", "stderr": ""}
 
@@ -155,7 +153,6 @@ async def _run_auth(subcommand: str, *, timeout: float) -> Dict[str, Any]:
         argv=["auth", subcommand],
         timeout=timeout,
         env=_claude_env(),
-        stdin=asyncio.subprocess.PIPE if subcommand == "login" else None,
     )
     logger.info(
         "[claude auth %s] success=%s stdout=%r stderr=%r",
@@ -198,14 +195,98 @@ async def claude_auth_status() -> bool:
     return bool(info.get("loggedIn"))
 
 
-async def run_claude_login() -> Dict[str, Any]:
-    """Run ``claude auth login`` to completion. The CLI opens the user's
-    browser, runs its own callback server, and exits when the flow ends.
+#: Where Claude's sign-in pages live. Of everything ``claude auth login``
+#: prints, only an https URL on one of these domains whose path ends in
+#: ``/oauth/authorize`` is passed to the browser.
+_SIGN_IN_DOMAINS = ("claude.ai", "claude.com", "anthropic.com")
+_URL = re.compile(r"https://[^\s<>\"']+")
+#: Longest stretch of output kept while waiting for the end of a line.
+_MAX_LINE_BYTES = 16384
+LOGIN_FAILED = "Claude sign-in did not finish. Click Login to try again, and paste the whole code the sign-in page shows."
 
-    Long-running: callers should schedule this via ``asyncio.create_task``
-    (Stripe ``stripe login --complete`` precedent). Returns the envelope
-    from ``run_cli_command``."""
-    return await _run_auth("login", timeout=LOGIN_TIMEOUT_SECONDS)
+
+def _sign_in_url(text: str) -> Optional[str]:
+    """The sign-in page's URL in one line of the CLI's output, if it has one."""
+    for value in _URL.findall(strip_ansi(text)):
+        value = value.rstrip(".,)")
+        parts = urlsplit(value)
+        host = parts.hostname or ""
+        if parts.path.endswith("/oauth/authorize") and any(host == domain or host.endswith("." + domain) for domain in _SIGN_IN_DOMAINS):
+            return value
+    return None
+
+
+async def run_claude_login(*, on_prompt: Callable[[Dict[str, str]], None], codes: "asyncio.Queue[str]") -> Dict[str, Any]:
+    """Run ``claude auth login`` and relay its sign-in page and code.
+
+    The CLI does the whole sign-in. It prints the URL of its sign-in page,
+    which shows a code after the owner signs in, reads that code from
+    standard input, then stores the login under ``CLAUDE_CONFIG_DIR``
+    (Anthropic's troubleshooting guide, "OAuth login fails in WSL2, SSH, or
+    containers"). The URL goes to ``on_prompt`` as ``{"url": ...}``, and each
+    code put on ``codes`` is written to the CLI's input. Where the CLI can
+    open a browser itself, its own window finishes without a code.
+
+    Standard input stays open until the CLI exits: it gives up when its
+    input closes. Nothing the CLI prints is logged, since the URL carries
+    the sign-in's state. Long-running: callers schedule it as a task.
+    """
+    proc = None
+    tasks: list[asyncio.Task[None]] = []
+    try:
+        binary = await asyncio.to_thread(claude_binary_path)
+        OPENCOMPANY_CLAUDE_DIR.mkdir(parents=True, exist_ok=True)
+        proc = await asyncio.create_subprocess_exec(
+            binary,
+            "auth",
+            "login",
+            env=_claude_env(),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        async def read(stream: asyncio.StreamReader) -> None:
+            # Publish a URL only once its line is complete: a pipe can split
+            # it at any byte.
+            pending = b""
+            while chunk := await stream.read(4096):
+                pending += chunk.replace(b"\r", b"\n")
+                *lines, pending = pending.split(b"\n")
+                for line in lines:
+                    if url := _sign_in_url(line.decode(errors="replace")):
+                        on_prompt({"url": url})
+                if len(pending) > _MAX_LINE_BYTES:
+                    raise RuntimeError("Claude sign-in output exceeded the line limit")
+            if url := _sign_in_url(pending.decode(errors="replace")):
+                on_prompt({"url": url})
+
+        async def feed(stdin: asyncio.StreamWriter) -> None:
+            while True:
+                code = await codes.get()
+                stdin.write(code.encode() + b"\n")
+                await stdin.drain()
+
+        readers = [asyncio.create_task(read(proc.stdout)), asyncio.create_task(read(proc.stderr))]
+        tasks = [*readers, asyncio.create_task(feed(proc.stdin))]
+        async with asyncio.timeout(LOGIN_TIMEOUT_SECONDS):
+            await asyncio.gather(*readers)
+            returncode = await proc.wait()
+        return {"success": returncode == 0, "error": None if returncode == 0 else LOGIN_FAILED}
+    except asyncio.CancelledError:
+        raise
+    except TimeoutError:
+        return {"success": False, "error": "Claude sign-in timed out. Click Login to start again."}
+    except (OSError, RuntimeError):
+        return {"success": False, "error": "Claude sign-in could not start. Check the Claude Code installation, then try again."}
+    finally:
+        if proc is not None and proc.returncode is None:
+            kill_tree(proc.pid)
+            await proc.wait()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def claude_auth_logout() -> bool:
