@@ -135,8 +135,8 @@ const Modal: React.FC<ModalProps> = ({
             // tokens directly so modals inherit the surface hierarchy
             // defined by the active theme.
             //
-            // `modal` is the design-handoff structural hook; Atomic's CSS
-            // styles it (with `.modal-head` / `.modal-title`).
+            // `modal` is the design-handoff structural hook a theme can
+            // style (with `.modal-head` on the header).
             //
             // `font-body`: the dialog is portalled to <body>, outside the
             // app shell's `font-body`, so it would otherwise miss the
@@ -156,9 +156,8 @@ const Modal: React.FC<ModalProps> = ({
           {showHeader ? (
             // Header: bg-bg-panel sits one elevation step above bg-bg-app
             // (panel surface above page surface). font-display + tracking
-            // + text-transform are theme-driven so titles read as Bevan
-            // uppercase under Atomic, while staying clean sans-serif
-            // under light/dark.
+            // + text-transform are theme-driven; titles read as clean
+            // sans-serif under light/dark.
             <div className="modal-head relative flex min-h-14 w-full shrink-0 items-center border-b border-border-default bg-bg-panel px-5 py-3">
               <DialogTitle className="absolute left-5 flex max-w-[calc(100%_-_5rem)] items-center gap-2 font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
                 {titleIcon}

@@ -163,7 +163,7 @@
   --font-sans: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   /* Self-bridge, like --font-display / --font-body below: every theme file
    * declares --font-mono unlayered, so `font-mono` now follows the theme
-   * (light / dark keep the same system stack; skins get their own mono).
+   * (light / dark keep the same system stack; a theme may set its own).
    * A literal stack here compiled `font-mono` to a fixed value. */
   --font-mono: var(--font-mono);
 
@@ -337,13 +337,12 @@
  * `--canvas-grid` + multi-layer gradient stack) paints through.
  * Per the upstream v11 stylesheet, `.react-flow` ships with only
  * `direction: ltr;` — no background. Painting one here would hide
- * the per-theme decoration (Atomic's starburst). When migrating
- * to @xyflow/react v12, set `--xy-background-color: transparent;`
- * on `.xy-flow` (v12 sets a default opaque background via custom
- * property). */
+ * the per-theme decoration. When migrating to @xyflow/react v12, set
+ * `--xy-background-color: transparent;` on `.xy-flow` (v12 sets a
+ * default opaque background via custom property). */
 
 /* The editor's dot grid (Dashboard's <Background>): drawn in light and
- * dark, transparent in Atomic (--grid-dot, themes/*.css). */
+ * dark, transparent where a theme sets no --grid-dot (themes/*.css). */
 .react-flow__background pattern circle {
   fill: var(--grid-dot) !important;
 }

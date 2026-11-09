@@ -14,7 +14,7 @@
     -->
     <script>
       (function () {
-        var THEMES = ['light', 'dark', 'atomic'];
+        var THEMES = ['light', 'dark'];
         var DARK_FAMILY = ['dark'];
         var theme = 'dark';
         try {
@@ -38,27 +38,8 @@
       Theme typography. Each theme picks its display + body + mono via
       the --font-display / --font-body / --font-mono tokens. Light and
       dark use Geist (@fontsource-variable/geist, bundled at build time)
-      and the system mono. Loading Atomic's fonts as `media="print"
-      onload=...` defers the network cost, so light and dark render
-      without blocking and Atomic's fonts swap in once their stylesheet
-      lands.
-
-      Atomic: Bevan (display), Lato (body), Space Mono (mono).
+      and the system mono, so no font is fetched from another site.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Bevan&family=Lato:wght@400;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
-      media="print"
-      onload="this.media='all'"
-    />
-    <noscript>
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Bevan&family=Lato:wght@400;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
-      />
-    </noscript>
     <title>OpenCompany</title>
   </head>
   <body>

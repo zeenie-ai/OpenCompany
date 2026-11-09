@@ -146,7 +146,7 @@ function createMainWindow(port: number): BrowserWindow {
     minHeight: 600,
     show: false,
     title: "OpenCompany",
-    // The theme's background from last time, so Light and Atomic do not open dark.
+    // The theme's background from last time, so Light does not open dark.
     backgroundColor: loadState(layout.stateFile).windowBackground ?? "#12141f",
     autoHideMenuBar: process.platform !== "darwin",
     webPreferences: {

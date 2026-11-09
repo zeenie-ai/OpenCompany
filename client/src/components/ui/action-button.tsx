@@ -9,7 +9,7 @@
  * --action-X-hover (hover fill) / --action-X-border (outline) /
  * --action-X-ink (readable label colour). These are hex / color-mix()
  * values owned by the per-theme files (client/src/themes/light.css,
- * dark.css, + skins); -ink is the legibility fix so the label stays
+ * dark.css); -ink is the legibility fix so the label stays
  * readable on the soft fill (light: a darkened accent; dark: the raw
  * accent). Disabled state is the shadcn-idiomatic disabled:opacity-50
  * on the base class so call sites never do opacity arithmetic.
@@ -28,10 +28,9 @@ import { Sounds } from '@/lib/sound';
 export const actionButtonVariants = cva(
   // Base: 32px tall pill with icon-text gap, semibold, focus ring, smooth hover.
   // `action-btn` + `btn` co-classes are the design-handoff structural
-  // hooks for per-theme decorations (the hard offset shadow on Atomic)
-  // and the global hover sound delegate. Disabled state uses shadcn-idiomatic
-  // `disabled:opacity-50` so we don't do per-token opacity arithmetic
-  // at the call site.
+  // hooks for per-theme decorations and the global hover sound delegate.
+  // Disabled state uses shadcn-idiomatic `disabled:opacity-50` so we
+  // don't do per-token opacity arithmetic at the call site.
   'action-btn btn inline-flex h-8 items-center gap-1.5 rounded-md border px-3.5 text-[13px] font-semibold transition-all outline-none select-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring/40',
   {
     variants: {

@@ -3,8 +3,8 @@
  *
  * Durations and easings come from CSS tokens (`--dur-*` / `--ease-*` in
  * themes/base.css), read from the computed style of <html> and cached per
- * theme. A theme that retunes its motion (Atomic's bounce) therefore
- * retunes every animation that names the token. Two
+ * theme. A theme that retunes its motion therefore retunes every
+ * animation that names the token. Two
  * policies are applied here instead of at each call site:
  *
  * - prefers-reduced-motion: durations become 1 ms and delays 0, so elements

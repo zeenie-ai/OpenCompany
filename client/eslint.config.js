@@ -61,9 +61,8 @@ export default tseslint.config(
     ignores: [
       // Grandfathered: legacy JS-side palettes and SVG glyph assets that
       // legitimately hold literal values (canvas/maps color packs, brand
-      // icons, Atomic's themed glyphs). New code goes through theme tokens.
+      // icons). New code goes through theme tokens.
       'src/styles/theme.ts',
-      'src/hooks/useAppTheme.ts',
       'src/components/icons/**',
       'src/assets/icons/**',
       'src/**/__tests__/**',

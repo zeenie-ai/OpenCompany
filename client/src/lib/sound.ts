@@ -36,7 +36,6 @@ export type SoundEvent =
 export type SoundPackName =
   | 'none'
   | 'parchment'
-  | 'vibraphone'
   | 'terminal';
 
 interface OscConfig {
@@ -151,18 +150,6 @@ const PARCHMENT: EventTable = {
   modalClose: { type: 'sine',     freq: 392, dur: 0.14,  vol: 0.06, attack: 0.005, decay: 0.14, sweep: 0.7 },
 };
 
-const VIBRAPHONE: EventTable = {
-  click:      { type: 'triangle', freq: 880,  dur: 0.10, vol: 0.06, attack: 0.001, decay: 0.10 },
-  hover:      { type: 'triangle', freq: 1320, dur: 0.05, vol: 0.025, attack: 0.001, decay: 0.05 },
-  type:       { type: 'sine',     freq: 660,  dur: 0.06, vol: 0.04, attack: 0.001, decay: 0.06 },
-  success:    { type: 'triangle', freq: 988,  dur: 0.5,  vol: 0.09, attack: 0.001, decay: 0.5,  sweep: 1.5 },
-  error:      { type: 'sawtooth', freq: 233,  dur: 0.25, vol: 0.10, attack: 0.005, decay: 0.25, sweep: 0.6 },
-  run:        { type: 'triangle', freq: 1175, dur: 0.30, vol: 0.10, attack: 0.001, decay: 0.30, sweep: 1.4 },
-  save:       { type: 'triangle', freq: 880,  dur: 0.40, vol: 0.10, attack: 0.001, decay: 0.40 },
-  modalOpen:  { type: 'triangle', freq: 988,  dur: 0.18, vol: 0.06, attack: 0.001, decay: 0.18, sweep: 1.4 },
-  modalClose: { type: 'triangle', freq: 988,  dur: 0.18, vol: 0.06, attack: 0.001, decay: 0.18, sweep: 0.65 },
-};
-
 const TERMINAL: EventTable = {
   click:      { type: 'square',   freq: 1200, dur: 0.025, vol: 0.06, attack: 0.001, decay: 0.025 },
   hover:      { type: 'square',   freq: 1800, dur: 0.012, vol: 0.025, attack: 0.001, decay: 0.012 },
@@ -178,7 +165,6 @@ const TERMINAL: EventTable = {
 const PACKS: Record<SoundPackName, EventTable> = {
   none: {},
   parchment: PARCHMENT,
-  vibraphone: VIBRAPHONE,
   terminal: TERMINAL,
 };
 

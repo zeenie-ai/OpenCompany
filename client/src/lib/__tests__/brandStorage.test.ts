@@ -19,11 +19,11 @@ describe('OpenCompany browser-storage migration', () => {
 
   it('keeps a canonical value when both keys exist and removes the stale alias', () => {
     const keys = BRAND_STORAGE_KEYS.theme;
-    localStorage.setItem(keys.canonical, 'atomic');
+    localStorage.setItem(keys.canonical, 'light');
     localStorage.setItem(keys.legacy, 'dark');
 
-    expect(readAndMigrateStorageValue(localStorage, keys)).toBe('atomic');
-    expect(localStorage.getItem(keys.canonical)).toBe('atomic');
+    expect(readAndMigrateStorageValue(localStorage, keys)).toBe('light');
+    expect(localStorage.getItem(keys.canonical)).toBe('light');
     expect(localStorage.getItem(keys.legacy)).toBeNull();
   });
 

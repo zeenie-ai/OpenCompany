@@ -67,7 +67,7 @@ const WorkflowCard: React.FC<WorkflowCardProps> = ({
       </div>
       <h4
         className={cn(
-          // Display typography on the workflow name — Bevan under Atomic.
+          // Display typography on the workflow name (the theme's --font-display).
           'm-0 flex-1 truncate font-display text-sm font-medium tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)]',
           isSelected ? 'text-accent' : 'text-fg-default'
         )}
@@ -76,8 +76,7 @@ const WorkflowCard: React.FC<WorkflowCardProps> = ({
       </h4>
     </div>
 
-    {/* Metadata uses font-mono — Space Mono under Atomic, the system
-        mono under light/dark. */}
+    {/* Metadata uses font-mono — the system mono under light/dark. */}
     <div
       className={cn(
         'flex items-center justify-between font-mono text-xs',

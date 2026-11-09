@@ -47,7 +47,7 @@
   --fg-on-danger: #ffffff;
   --fg-on-warning: #1a1d21;
 
-  /* Type — system stack for light/dark; Atomic overrides */
+  /* Type — system stack for light/dark */
   --font-display: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-body: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
@@ -180,7 +180,7 @@
    * button: -fill 15%, -hover 25%, -edge 60%. -ink is the readable text
    * colour: a darkened accent in light (identical to the matching action
    * ink), the raw accent in dark (dark.css). Global like the node roles
-   * above; skins inherit the light or .dark values by family. ─────────── */
+   * above. ───────────────────────────────────────────────────────────── */
   --node-agent-fill:      color-mix(in srgb, var(--dracula-purple) var(--tint-action-soft), transparent);
   --node-agent-hover:     color-mix(in srgb, var(--dracula-purple) var(--tint-action-hover), transparent);
   --node-agent-edge:      color-mix(in srgb, var(--dracula-purple) var(--tint-action-border), transparent);
@@ -233,8 +233,8 @@
   --status-paused-dot: #9aa1ac;
 }
 
-/* The light theme only, not Atomic, which inherits :root above: the
- * editor canvas's dot grid, and native controls drawn light. */
+/* The light theme only, not the bare :root above: the editor canvas's
+ * dot grid, and native controls drawn light. */
 :root[data-theme="light"] {
   --grid-dot: color-mix(in srgb, var(--fg-muted) 20%, transparent);
 

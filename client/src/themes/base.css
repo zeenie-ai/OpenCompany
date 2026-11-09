@@ -7,7 +7,7 @@
  *
  * This file owns the THEME-AGNOSTIC scalars: space / radius / chrome /
  * shadow / type scales, motion, and the tint-alpha scale. Literal COLOR
- * values live in the per-theme files (light.css / dark.css / skins);
+ * values live in the per-theme files (light.css / dark.css);
  * literal PERCENTAGES live only in the `--tint-*` block below. Every
  * consumer rule references a var() — no bare hex or % outside these
  * token blocks.
@@ -155,8 +155,8 @@
   --blur-scrim: 6px;         /* backdrop blur behind Home dialogs */
 
   /* ── Home radii — multiples of the per-theme --radius-lg (8px in light and
-   * dark, 4px in Atomic), so a theme with squarer corners stays
-   * square instead of growing pills. ─────────────────────────────── */
+   * dark), so a theme with squarer corners stays square instead of
+   * growing pills. ───────────────────────────────────────────────── */
   --radius-row: calc(var(--radius-lg, 8px) * 1.25);      /* 10 — rows, tiles */
   --radius-card: calc(var(--radius-lg, 8px) * 1.5);      /* 12 — cards */
   --radius-panel: calc(var(--radius-lg, 8px) * 2);       /* 16 — settings */
@@ -294,17 +294,15 @@
    * unread — .canvas-host consumes only --canvas-grid.) */
   --canvas-grid: none;
   --canvas-grid-opacity: 0.4;
-  /* The editor canvas's dot grid (React Flow <Background>, index.css). Only
-   * the two base themes draw it (light.css, dark.css); Atomic keeps its own
-   * --canvas-grid decoration alone. */
+  /* The editor canvas's dot grid (React Flow <Background>, index.css).
+   * Transparent unless a theme sets it; light.css and dark.css do. */
   --grid-dot: transparent;
 
   /* Node execution pulse colour (Wave 30). Independent of `--node-color`
    * (the node's accent) so the executing-node glow stays high-contrast
    * against the canvas background regardless of which plugin is running.
-   * A theme may override this with its most visible accent (Atomic uses
-   * its turquoise accent). The default resolves to the theme's `--info`
-   * accent. */
+   * A theme may override this with its most visible accent. The default
+   * resolves to the theme's `--info` accent. */
   --node-pulse-color: var(--info);
 
   /* Canvas-edge tokens (design-handoff contract). Resting edges are one
@@ -321,9 +319,9 @@
   --edge-dash-active: 8 4;            /* executing / pending dash-march rhythm */
 
   /* Semantic-status alias + soft fills. Theme decoration rules read
-   * `--danger` and the `--*-soft` family (Atomic's selected workflow card
-   * uses `--warning-soft`); before these fallback declarations existed
-   * such var() reads computed to invalid and the fills silently dropped. The color side (--info/--success/--warning/
+   * `--danger` and the `--*-soft` family; before these fallback declarations
+   * existed such var() reads computed to invalid and the fills silently
+   * dropped. The color side (--info/--success/--warning/
    * --destructive) resolves per-theme at computed-value time; themes may
    * override any of these wholesale. */
   --danger: var(--destructive);
@@ -448,9 +446,8 @@ html[data-page-hidden] *::after {
  * --tint-pulse-* alpha scale node-pulse consumes is defined in :root above. */
 
 /* Square-node default visuals — outer wrapper is layout-only, the inner
-   `.sq-node-box` carries the bordered icon-square. Per-theme CSS
-   already in `client/src/themes/*.css` overrides these for material
-   identity. */
+   `.sq-node-box` carries the bordered icon-square. Per-theme CSS in
+   `client/src/themes/*.css` may override these for material identity. */
 .sq-node {
   position: relative;
 }
@@ -511,7 +508,7 @@ html[data-page-hidden] *::after {
  * across all themes that don't override. Status pips are driven by
  * `data-status` set inline by the React component; CSS picks the colour
  * from shadcn semantic tokens. Per-theme CSS in client/src/themes/<theme>.css
- * overrides these for material-specific identity.
+ * may override these for material-specific identity.
  * ============================================================================ */
 
 /* Status pip — square-node and rectangular-node variants */

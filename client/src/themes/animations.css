@@ -29,7 +29,7 @@
  * node-pulse references the shared --tint-pulse-* scale (base.css).
  * ========================================================================== */
 
-/* Default 3-layer glow — light, dark and atomic all draw from this. */
+/* Default 3-layer glow — light and dark both draw from this. */
 @keyframes node-pulse {
   0%, 100% {
     box-shadow:

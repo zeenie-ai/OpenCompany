@@ -6,11 +6,10 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 // blocks register their tokens before Tailwind compiles `@theme inline`
 // against the cascade. Order within the theme list matches specificity:
 // base.css (neutral defaults) → light.css (default :root + [data-theme="light"])
-// → dark.css (.dark + [data-theme="dark"]) → atomic.css ([data-theme="atomic"]).
+// → dark.css (.dark + [data-theme="dark"]).
 import './themes/base.css'
 import './themes/light.css'
 import './themes/dark.css'
-import './themes/atomic.css'
 // Animation system — pulse-keyframe tokens, trigger armed/listening motion,
 // .opencompany-* helpers. Loaded after the themes so its keyframes and
 // --pulse-* tokens are authoritative.

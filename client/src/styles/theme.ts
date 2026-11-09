@@ -1,12 +1,9 @@
-// Theme constants — exported for the canvas + maps surface and the
-// useAppTheme overlay map.
+// Theme constants — exported for the canvas + maps surface.
 //
 // SCOPE (post-Wave-14):
-//   - `lightColors` / `darkColors` are the two BASE PACKS. The 10-way
-//     `THEME_OVERRIDES` map in `client/src/hooks/useAppTheme.ts` merges
-//     a per-theme overlay (primary, focus, action palette) on top of
-//     whichever base pack matches the active theme's dark / light
-//     family — see `theme_system.md` for the contract. Canvas edge
+//   - `lightColors` / `darkColors` are the two colour packs.
+//     `client/src/hooks/useAppTheme.ts` returns whichever matches the
+//     active theme's dark / light family. Canvas edge
 //     strokes are NOT part of the packs anymore: the design-handoff
 //     edge migration moved them to CSS tokens (--edge-stroke in
 //     themes/base.css + semantic status recolors in
@@ -20,7 +17,7 @@
 //     and a few non-color UI primitives.
 //
 // AUTHORITATIVE SOURCE for color tokens: the `:root[data-theme="..."]`
-// blocks in `client/src/themes/<name>.css` (light, dark, atomic) plus the shadcn
+// blocks in `client/src/themes/<name>.css` (light, dark) plus the shadcn
 // HSL-triplet bridge in `client/src/index.css`. New components consume
 // those via Tailwind utilities (`bg-bg-app`, `text-fg-default`,
 // `bg-action-run-soft`, `bg-node-agent-soft`) — never `theme.colors.X`

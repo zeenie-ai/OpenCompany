@@ -549,8 +549,7 @@ const DashboardContent: React.FC = () => {
   // `.canvas-host` / `.canvas` background-image (per-theme
   // `--canvas-grid` + multi-layer gradient stack from
   // client/src/themes/<theme>.css) paints through. Painting a
-  // backgroundColor here would hide the theme's canvas decoration
-  // (Atomic's starburst).
+  // backgroundColor here would hide the theme's canvas decoration.
   const reactFlowStyle = React.useMemo(() => ({
     width: '100%',
     height: '100%',
@@ -1215,19 +1214,17 @@ const DashboardContent: React.FC = () => {
             position: 'relative',
           }}>
             {/* `canvas-host` + `canvas` activate the per-theme canvas
-                decoration (Atomic's starburst). The `canvas` co-class is
-                the handoff selector per-theme CSS uses. Decorative pseudo-
-                elements declare pointer-events: none. */}
+                decoration. The `canvas` co-class is the handoff selector
+                per-theme CSS uses. Decorative pseudo-elements declare
+                pointer-events: none. */}
             <div
               className="canvas-host canvas"
               style={{
                 flex: 1,
-                // `backgroundColor` intentionally omitted — the per-theme
-                // CSS in client/src/themes/<theme>.css owns the canvas
-                // surface paint via the `:root[data-theme="..."] .canvas`
-                // multi-layer `background` declaration (radial-gradient
-                // vignette + grid pattern + noise texture + var(--bg-canvas)).
-                // base.css `.canvas-host { background-image: var(--canvas-grid); }`
+                // `backgroundColor` intentionally omitted so a theme's
+                // `:root[data-theme="..."] .canvas` rule in
+                // client/src/themes/<theme>.css can own the canvas surface
+                // paint. base.css `.canvas-host { background-image: var(--canvas-grid); }`
                 // provides the fallback grid layer.
                 position: 'relative',
               }}

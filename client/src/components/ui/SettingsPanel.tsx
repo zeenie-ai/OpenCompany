@@ -67,8 +67,8 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, Icon, tone, children }) => (
   // bg-bg-elevated + border-default — settings sections are elevated
-  // cards stacked inside the modal body. font-display + tracking gives
-  // Atomic its display type on section headers.
+  // cards stacked inside the modal body. font-display + tracking give
+  // section headers the theme's display type.
   <div className="mb-4 rounded-md border border-border-default bg-bg-elevated p-4">
     <div className="mb-4 flex items-center gap-2 border-b border-border-default pb-3">
       <div className={`flex h-8 w-8 items-center justify-center rounded-md ${TONE_CLASSES[tone]}`}>
@@ -450,7 +450,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
           <Section title="Audio" Icon={Volume2} tone="tool">
             <Row
               label="Sound Effects"
-              description="Play per-theme click / hover / save / error sounds. Each theme has its own pack (parchment for Light, terminal for Dark, vibraphone for Atomic). Enabled by default — toggle off if you prefer silence."
+              description="Play per-theme click / hover / save / error sounds. Each theme has its own pack (parchment for Light, terminal for Dark). Enabled by default — toggle off if you prefer silence."
             >
               <Switch
                 checked={soundEnabled}

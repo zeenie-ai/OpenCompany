@@ -297,8 +297,8 @@ const SquareNode: React.FC<NodeProps<NodeData>> = ({ id, type, data, isConnectab
 
   return (
     // `sq-node` + `selected` co-classes are the design-handoff structural
-    // hooks for per-theme square-node styling (Atomic's `.sq-node-box`
-    // and its selected state).
+    // hooks for per-theme square-node styling (`.sq-node-box` and its
+    // selected state).
     <div
       className={`sq-node ${selected ? 'selected' : ''}`}
       data-executing={isExecuting ? '' : undefined}

@@ -67,7 +67,7 @@ afterEach(resetDom);
 
 describe('theme helpers', () => {
   it('steps through the themes in order and wraps round', () => {
-    expect(AVAILABLE_THEMES.map(nextTheme)).toEqual(['dark', 'atomic', 'light']);
+    expect(AVAILABLE_THEMES.map(nextTheme)).toEqual(['dark', 'light']);
   });
 });
 
@@ -81,17 +81,17 @@ describe('initial theme', () => {
   });
 
   it('restores a stored theme', () => {
-    localStorage.setItem('opencompany-theme', 'atomic');
+    localStorage.setItem('opencompany-theme', 'light');
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
-    expect(result.current.theme).toBe('atomic');
+    expect(result.current.theme).toBe('light');
     expect(html.classList.contains('dark')).toBe(false);
   });
 
   it('migrates the pre-rebrand key', () => {
-    localStorage.setItem('machinaos-theme', 'atomic');
+    localStorage.setItem('machinaos-theme', 'light');
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
-    expect(result.current.theme).toBe('atomic');
-    expect(localStorage.getItem('opencompany-theme')).toBe('atomic');
+    expect(result.current.theme).toBe('light');
+    expect(localStorage.getItem('opencompany-theme')).toBe('light');
     expect(localStorage.getItem('machinaos-theme')).toBeNull();
   });
 
@@ -103,7 +103,7 @@ describe('initial theme', () => {
   });
 
   it('opens in dark when the saved theme no longer exists', () => {
-    localStorage.setItem('opencompany-theme', 'cyber');
+    localStorage.setItem('opencompany-theme', 'atomic');
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     expect(result.current.theme).toBe('dark');
     expect(localStorage.getItem('opencompany-theme')).toBe('dark');
@@ -114,14 +114,14 @@ describe('setTheme', () => {
   it('writes <html> before React state changes', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     act(() => {
-      result.current.setTheme('atomic');
-      expect(html.dataset.theme).toBe('atomic');
+      result.current.setTheme('light');
+      expect(html.dataset.theme).toBe('light');
       expect(html.classList.contains('dark')).toBe(false);
       expect(result.current.theme).toBe('dark');
     });
-    expect(result.current.theme).toBe('atomic');
+    expect(result.current.theme).toBe('light');
     expect(result.current.isDarkMode).toBe(false);
-    expect(localStorage.getItem('opencompany-theme')).toBe('atomic');
+    expect(localStorage.getItem('opencompany-theme')).toBe('light');
   });
 
   it('lets a child effect read the new theme tokens (the sound pack read)', () => {
@@ -145,16 +145,14 @@ describe('setTheme', () => {
   });
 
   it('cycles through the themes from the stored one', () => {
-    localStorage.setItem('opencompany-theme', 'atomic');
+    localStorage.setItem('opencompany-theme', 'light');
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
-    act(() => result.current.cycleTheme());
-    expect(result.current.theme).toBe('light');
     act(() => result.current.cycleTheme());
     expect(result.current.theme).toBe('dark');
     act(() => result.current.cycleTheme());
-    expect(result.current.theme).toBe('atomic');
-    expect(html.dataset.theme).toBe('atomic');
-    expect(localStorage.getItem('opencompany-theme')).toBe('atomic');
+    expect(result.current.theme).toBe('light');
+    expect(html.dataset.theme).toBe('light');
+    expect(localStorage.getItem('opencompany-theme')).toBe('light');
   });
 });
 
@@ -163,17 +161,17 @@ describe('a theme chosen in another window', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     try {
-      otherWindowWrites('opencompany-theme', 'atomic');
-      expect(result.current.theme).toBe('atomic');
-      expect(html.dataset.theme).toBe('atomic');
+      otherWindowWrites('opencompany-theme', 'light');
+      expect(result.current.theme).toBe('light');
+      expect(html.dataset.theme).toBe('light');
       expect(html.classList.contains('dark')).toBe(false);
       // Writing it back could echo an older theme to the other window.
       expect(setItem).not.toHaveBeenCalled();
 
       // The next press steps on from the synced theme, and is saved.
       act(() => result.current.cycleTheme());
-      expect(result.current.theme).toBe('light');
-      expect(setItem).toHaveBeenCalledWith('opencompany-theme', 'light');
+      expect(result.current.theme).toBe('dark');
+      expect(setItem).toHaveBeenCalledWith('opencompany-theme', 'dark');
     } finally {
       setItem.mockRestore();
     }
@@ -181,7 +179,7 @@ describe('a theme chosen in another window', () => {
 
   it('ignores other keys, a cleared key and unknown names', () => {
     const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
-    otherWindowWrites('machinaos-theme', 'atomic');
+    otherWindowWrites('machinaos-theme', 'light');
     otherWindowWrites('opencompany-theme', null);
     otherWindowWrites(null, null);
     otherWindowWrites('opencompany-theme', 'neon');
@@ -274,10 +272,10 @@ describe('revealed switch', () => {
       await act(async () => {
         for (const t of vt.transitions) t.runUpdate();
       });
-      // Two presses from dark step on to light; stepping from the rendered
-      // theme would have landed on atomic twice.
-      expect(result.current.theme).toBe('light');
-      expect(html.dataset.theme).toBe('light');
+      // Two presses from dark step on to light and back to dark; stepping
+      // from the rendered theme would have landed on light twice.
+      expect(result.current.theme).toBe('dark');
+      expect(html.dataset.theme).toBe('dark');
     } finally {
       vt.restore();
     }
@@ -288,13 +286,13 @@ describe('revealed switch', () => {
     try {
       const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
       act(() => result.current.setTheme('light', { reveal: true }));
-      act(() => result.current.setTheme('atomic'));
-      expect(result.current.theme).toBe('atomic');
+      act(() => result.current.setTheme('dark'));
+      expect(result.current.theme).toBe('dark');
       await act(async () => {
         vt.transitions[0].runUpdate();
       });
-      expect(result.current.theme).toBe('atomic');
-      expect(html.dataset.theme).toBe('atomic');
+      expect(result.current.theme).toBe('dark');
+      expect(html.dataset.theme).toBe('dark');
     } finally {
       vt.restore();
     }
@@ -305,13 +303,13 @@ describe('revealed switch', () => {
     try {
       const { result } = renderHook(() => useTheme(), { wrapper: ThemeProvider });
       act(() => result.current.setTheme('light', { reveal: true }));
-      otherWindowWrites('opencompany-theme', 'atomic');
-      expect(result.current.theme).toBe('atomic');
+      otherWindowWrites('opencompany-theme', 'dark');
+      expect(result.current.theme).toBe('dark');
       await act(async () => {
         vt.transitions[0].runUpdate();
       });
-      expect(result.current.theme).toBe('atomic');
-      expect(html.dataset.theme).toBe('atomic');
+      expect(result.current.theme).toBe('dark');
+      expect(html.dataset.theme).toBe('dark');
     } finally {
       vt.restore();
     }

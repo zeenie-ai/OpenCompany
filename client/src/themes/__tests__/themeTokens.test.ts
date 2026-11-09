@@ -1,7 +1,7 @@
 /**
  * Where the editor's dot grid, the light colour scheme, the scrollbars and
  * the employee's accent face get their values. The grid is drawn by the two
- * base themes only: light.css also styles Atomic through `:root`, so
+ * base themes only: light.css's shared block also matches a bare `:root`, so
  * `--grid-dot` (and the light `color-scheme`) must live in blocks that match
  * only `[data-theme="light"]` / `[data-theme="dark"]`.
  */

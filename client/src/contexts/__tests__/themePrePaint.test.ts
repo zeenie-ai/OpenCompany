@@ -57,15 +57,15 @@ describe('pre-paint theme script', () => {
 
   it.each<[string, Record<string, string>]>([
     ['nothing stored', {}],
-    ['a stored theme', { 'opencompany-theme': 'atomic' }],
+    ['a stored theme', { 'opencompany-theme': 'light' }],
     ['a stored dark theme', { 'opencompany-theme': 'dark' }],
-    ['only the pre-rebrand key', { 'machinaos-theme': 'atomic' }],
-    ['both brand keys', { 'opencompany-theme': 'atomic', 'machinaos-theme': 'dark' }],
+    ['only the pre-rebrand key', { 'machinaos-theme': 'light' }],
+    ['both brand keys', { 'opencompany-theme': 'light', 'machinaos-theme': 'dark' }],
     ['legacy darkMode false', { darkMode: 'false' }],
     ['legacy darkMode true', { darkMode: 'true' }],
     ['an unknown stored name', { 'opencompany-theme': 'neon' }],
     ['an unknown name with darkMode false', { 'opencompany-theme': 'neon', darkMode: 'false' }],
-    ['a removed theme', { 'opencompany-theme': 'cyber' }],
+    ['a removed theme', { 'opencompany-theme': 'atomic' }],
   ])('agrees with ThemeProvider for %s', (_label, stored) => {
     for (const [key, value] of Object.entries(stored)) localStorage.setItem(key, value);
     new Function(prePaintScript())();
@@ -81,9 +81,9 @@ describe('pre-paint theme script', () => {
   });
 
   it.each<[string, Record<string, string>, string]>([
-    ['Home shows the stored theme', { 'opencompany-theme': 'atomic', ui_shell_mode: 'normal' }, 'atomic'],
-    ['the editor shows the stored theme', { 'opencompany-theme': 'atomic', ui_shell_mode: 'dev' }, 'atomic'],
-    ['a removed theme opens in dark', { 'opencompany-theme': 'cyber' }, 'dark'],
+    ['Home shows the stored theme', { 'opencompany-theme': 'light', ui_shell_mode: 'normal' }, 'light'],
+    ['the editor shows the stored theme', { 'opencompany-theme': 'light', ui_shell_mode: 'dev' }, 'light'],
+    ['a removed theme opens in dark', { 'opencompany-theme': 'atomic' }, 'dark'],
   ])('%s', (_label, stored, expected) => {
     for (const [key, value] of Object.entries(stored)) localStorage.setItem(key, value);
     new Function(prePaintScript())();

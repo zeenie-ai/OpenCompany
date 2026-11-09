@@ -53,7 +53,7 @@ describe('mode switch', () => {
   });
 
   it('shows the chosen theme in both modes', async () => {
-    localStorage.setItem('opencompany-theme', 'atomic');
+    localStorage.setItem('opencompany-theme', 'light');
     const user = userEvent.setup();
     render(
       <ThemeProvider>
@@ -62,16 +62,16 @@ describe('mode switch', () => {
       </ThemeProvider>,
     );
     await screen.findByText('Workflow editor');
-    expect(html.dataset.theme).toBe('atomic');
+    expect(html.dataset.theme).toBe('light');
 
     await user.click(screen.getByRole('radio', { name: 'Normal' }));
     await screen.findByText('Home screen');
-    expect(html.dataset.theme).toBe('atomic');
-    expect(localStorage.getItem('opencompany-theme')).toBe('atomic');
+    expect(html.dataset.theme).toBe('light');
+    expect(localStorage.getItem('opencompany-theme')).toBe('light');
 
     await user.click(screen.getByRole('radio', { name: 'Dev' }));
     await screen.findByText('Workflow editor');
-    expect(html.dataset.theme).toBe('atomic');
+    expect(html.dataset.theme).toBe('light');
   });
 
   it('ignores a click on the mode already showing', async () => {

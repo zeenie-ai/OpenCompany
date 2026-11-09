@@ -8,8 +8,8 @@
  * A document an agent wrote opens from its card in the Canvas dock.
  *
  * The console's font size applies to the conversation. The `chat` panel
- * hook stays on ConsolePanel's root; the turns carry `chat-msg-user` /
- * `chat-msg-bot` for the theme (Atomic paints them).
+ * hook stays on ConsolePanel's root; the turns carry the `chat-msg-user`
+ * / `chat-msg-bot` theme hooks.
  */
 
 import type { Ref } from 'react';

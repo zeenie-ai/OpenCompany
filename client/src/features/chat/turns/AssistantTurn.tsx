@@ -14,8 +14,8 @@
  * call, the status line says so, and that call's step follows its card
  * (RFC-0007 §4.7).
  *
- * `chat-msg chat-msg-bot` (on the text only) is the theme hook Atomic
- * paints as a bubble.
+ * `chat-msg chat-msg-bot` (on the text only) is the hook a theme can
+ * paint as a bubble.
  */
 
 import { CircleAlert, Pause, RotateCcw, Square } from 'lucide-react';

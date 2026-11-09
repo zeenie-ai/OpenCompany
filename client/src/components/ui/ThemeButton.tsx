@@ -1,13 +1,13 @@
 /**
  * The theme button (design handoff "theme button"), the same in the Home
- * header, the editor's toolbar and the sign-in screen: each press steps to
- * the next theme (Light, Dark, Atomic), revealing it as a circle grown from
+ * header, the editor's toolbar and the sign-in screen: each press switches
+ * between Light and Dark, revealing the new theme as a circle grown from
  * the button while the button spins once with a squash. The icon and label
  * name the theme a press switches to.
  */
 
 import type { ComponentProps } from 'react';
-import { Atom, Moon, Sun, type LucideIcon } from 'lucide-react';
+import { Moon, Sun, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { THEME_LABEL, nextTheme, useTheme, type ThemeName } from '@/contexts/ThemeContext';
 import { SPIKE, spikeOrb } from '@/features/home/orb/orb';
@@ -19,7 +19,7 @@ const SPIN: Keyframe[] = [
   { transform: 'rotate(360deg) scale(1)' },
 ];
 
-const ICON: Record<ThemeName, LucideIcon> = { light: Sun, dark: Moon, atomic: Atom };
+const ICON: Record<ThemeName, LucideIcon> = { light: Sun, dark: Moon };
 
 type ThemeButtonProps = Pick<ComponentProps<typeof Button>, 'variant' | 'size' | 'className'>;
 

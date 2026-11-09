@@ -2,8 +2,8 @@
  * The owner's message: a bubble on the right (design handoff chat,
  * "Thread"). A button they pressed in an interface the employee showed
  * (`kind: "action"`) reads as the press: the button's label beside a
- * pointer, in a quieter pill. `chat-msg chat-msg-user` is the theme hook
- * Atomic paints.
+ * pointer, in a quieter pill. `chat-msg chat-msg-user` is the hook a
+ * theme can paint.
  *
  * Files sent with it show above it (images as thumbnails, other files as
  * chips); a message that is only files has no bubble.

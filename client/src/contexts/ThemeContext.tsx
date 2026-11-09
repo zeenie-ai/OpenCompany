@@ -41,17 +41,16 @@ import { BRAND_STORAGE_KEYS, readAndMigrateStorageValue } from '../lib/brandStor
 import { animate, dur, invalidateMotionTokens } from '../lib/motion';
 import { prefersReducedMotion } from '../lib/useReducedMotion';
 
-export type ThemeName = 'light' | 'dark' | 'atomic';
+export type ThemeName = 'light' | 'dark';
 
 /** Order matters: the theme button steps through it in this order, and it
  *  is the order of Settings → Appearance and the command palette. */
-export const AVAILABLE_THEMES: readonly ThemeName[] = ['light', 'dark', 'atomic'];
+export const AVAILABLE_THEMES: readonly ThemeName[] = ['light', 'dark'];
 
 /** Each theme's name, wherever one is shown. */
 export const THEME_LABEL: Record<ThemeName, string> = {
   light: 'Light',
   dark: 'Dark',
-  atomic: 'Atomic',
 };
 
 const THEME_STORAGE_KEYS = BRAND_STORAGE_KEYS.theme;

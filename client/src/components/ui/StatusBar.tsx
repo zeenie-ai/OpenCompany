@@ -40,12 +40,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({ workflowName, nodeCount })
   const wsTone = isReady ? 'text-success' : isConnected ? 'text-warning' : 'text-destructive';
 
   return (
-    // Fixed-bottom strip: bg-bg-panel + 1px top rule. font-mono carries
-    // through to Space Mono under Atomic, system mono under light/dark.
+    // Fixed-bottom strip: bg-bg-panel + 1px top rule. font-mono follows
+    // the theme's --font-mono (the system mono under light/dark).
     <div
       className={cn(
         // `statusbar` is the handoff structural hook for per-theme
-        // decorations (Atomic's slate bar).
+        // decorations.
         'statusbar flex h-6 items-center gap-3 border-t border-border-default bg-bg-panel px-3.5',
         'font-mono text-[11px] tracking-[0.04em] text-fg-muted',
         '[text-transform:var(--type-uppercase)]',
@@ -54,8 +54,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ workflowName, nodeCount })
       aria-label="Status bar"
     >
       <span className={cn('flex items-center gap-1.5 font-medium', wsTone)}>
-        {/* `pip` is the handoff hook for the per-theme dot (Atomic
-            colours it). */}
+        {/* `pip` is the handoff hook for the per-theme dot. */}
         <span
           className={cn(
             'pip inline-block h-1.5 w-1.5 rounded-full',

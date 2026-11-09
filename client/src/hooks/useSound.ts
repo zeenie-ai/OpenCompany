@@ -32,7 +32,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAppStore } from '../store/useAppStore';
 import { Sounds, type SoundPackName, type SoundEvent } from '../lib/sound';
 
-const VALID_PACKS: ReadonlySet<SoundPackName> = new Set(['none', 'parchment', 'vibraphone', 'terminal']);
+const VALID_PACKS: ReadonlySet<SoundPackName> = new Set(['none', 'parchment', 'terminal']);
 
 /** Selector for the global hover delegate. Mirrors the upstream
  *  `app/sound.js` auto-capture list, modulo class additions from W15

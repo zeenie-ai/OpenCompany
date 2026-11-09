@@ -97,7 +97,7 @@ describe('token reads', () => {
     // Same theme: the cached value stands until invalidated...
     expect(dur('glow')).toBe(100);
     // ...a theme change drops the cache on its own.
-    root.dataset.theme = 'atomic';
+    root.dataset.theme = 'light';
     expect(dur('glow')).toBe(200);
   });
 });

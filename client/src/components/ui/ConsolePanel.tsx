@@ -322,7 +322,7 @@ const ConsolePanel: React.FC<ConsolePanelProps> = ({
 
   return (
     // `chat` co-class is the design-handoff structural hook for per-theme
-    // panel decorations (Atomic's slate top rule).
+    // panel decorations.
     <div
       className="chat relative"
       onWheel={e => {
