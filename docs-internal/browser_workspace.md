@@ -206,7 +206,11 @@ The request waits for the owner until they take control or it times out. A
 viewer that never took control cannot answer it: switching tabs, closing the
 dock, blurring the window or hiding the page sends a release, and
 `LiveControlQueue.release` hands control back only for the viewer in control,
-so the request keeps waiting (it used to resolve as `control_lost`).
+so the request keeps waiting (it used to resolve as `control_lost`). The
+viewer in control is different: its release (a blur, a hidden view) answers
+the request with `control_lost`, by design, so the agent hears what happened
+and may ask again, also after Home's Hand back (the owner chose this on
+2026-11-09).
 
 Every `control_request` gets a `control` answer, granted or not: a hidden or
 closed viewer, a protected login (`reason: "protected_login"`), a full queue,

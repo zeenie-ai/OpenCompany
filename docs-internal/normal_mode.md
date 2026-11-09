@@ -382,8 +382,11 @@ are is on their page's header, not in the dock.
   the owner has it. A screen can let go of the owner meanwhile: the
   browser when the window loses focus or its view hides, the phone when
   its view hides. Take over then shows again on that screen, and on no
-  other, and taking it again sends no second Stop. A Stop that fails gives
-  the screen back, unless Hand back already has.
+  other, and taking it again sends no second Stop. A browser that lets go
+  answers the employee's open request with control lost, as the browser
+  always does for the viewer in control, so after Hand back they may ask
+  for help again (kept on purpose). A Stop that fails gives the screen
+  back, unless Hand back already has.
 
   **Hand back** first gives back the screen that was taken, which lets the
   call the employee waits in go on: a granted `claim` resolves to that
