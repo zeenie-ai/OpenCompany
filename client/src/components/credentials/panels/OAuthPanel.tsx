@@ -58,6 +58,7 @@ const OAuthPanel: React.FC<CredentialPanelProps> = ({
         onDeleteApiKey={() => panel.actions.remove(config.id)}
         onLogin={() => panel.actions.oauthLogin()}
         onDeviceLogin={config.ws?.device_login ? () => panel.actions.oauthLogin(true) : undefined}
+        onSubmitCode={config.ws?.submit_code ? (code) => panel.actions.submitCode(code) : undefined}
         onLogout={() => panel.actions.oauthLogout()}
         onRefresh={() => panel.actions.oauthRefresh()}
         extraSection={

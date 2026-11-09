@@ -4,10 +4,12 @@
  * Accepts optional `extraSection` slot for panel-specific content (e.g., API usage).
  */
 
-import React from 'react';
+import React, { useId, useState } from 'react';
 import { Loader2, RotateCcw } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ActionButton } from '@/components/ui/action-button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import ApiKeyInput from '../../ui/ApiKeyInput';
 import FieldRenderer from './FieldRenderer';
 import ActionBar, { type ActionDef } from './ActionBar';
@@ -45,15 +47,51 @@ interface Props {
   onDeleteApiKey?: () => void;
   onLogin: () => void;
   onDeviceLogin?: () => void;
+  /** Hands the code a CLI's sign-in page shows to the CLI waiting for it
+   * (`ws.submit_code`, Claude Code); offered while a sign-in waits. */
+  onSubmitCode?: (code: string) => void;
   onLogout: () => void;
   onRefresh: () => void;
   /** Optional slot rendered below the info box, above the ActionBar. */
   extraSection?: React.ReactNode;
 }
 
+/** The box for that code. It mounts only while a sign-in waits, so each
+ * sign-in starts with it empty. */
+const SignInCodeForm: React.FC<{ busy: boolean; onSubmit: (code: string) => void }> = ({ busy, onSubmit }) => {
+  const id = useId();
+  const [code, setCode] = useState('');
+  const trimmed = code.trim();
+  return (
+    <form
+      className="mt-3 flex flex-col gap-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (trimmed) onSubmit(trimmed);
+      }}
+    >
+      <Label htmlFor={id} className="text-xs">Code from the sign-in page</Label>
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          className="font-mono"
+        />
+        <ActionButton type="submit" intent="save" disabled={!trimmed || busy}>
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+          Submit code
+        </ActionButton>
+      </div>
+    </form>
+  );
+};
+
 const OAuthConnect: React.FC<Props> = ({
   config, form, connected, stored, loading, error, verificationCode, pending, loginUrl, loginMessage, icon,
-  onSaveCredentials, onValidateApiKey, onDeleteApiKey, onLogin, onDeviceLogin, onLogout, onRefresh, extraSection,
+  onSaveCredentials, onValidateApiKey, onDeleteApiKey, onLogin, onDeviceLogin, onSubmitCode, onLogout, onRefresh, extraSection,
 }) => {
   // Some providers (e.g. Stripe) delegate auth entirely to an external
   // CLI tool — they have no OpenCompany-side credentials to paste, so
@@ -171,6 +209,7 @@ const OAuthConnect: React.FC<Props> = ({
             <a className="mt-2 block text-accent underline" href={loginUrl} target="_blank" rel="noopener noreferrer">Open sign-in page</a>
           )}
         </div>
+        {pending && onSubmitCode && <SignInCodeForm busy={loading === 'code'} onSubmit={onSubmitCode} />}
       </div>
 
       {extraSection}

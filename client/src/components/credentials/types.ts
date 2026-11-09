@@ -101,8 +101,9 @@ export interface ProviderConfig {
 
   /** Credential input fields. */
   fields?: FieldDef[];
-  /** WebSocket commands for OAuth flows. */
-  ws?: { login: string; logout: string; status: string; device_login?: string };
+  /** WebSocket commands for OAuth flows. `submit_code` hands the code a
+   *  CLI's sign-in page shows to the CLI waiting for it (Claude Code). */
+  ws?: { login: string; logout: string; status: string; device_login?: string; submit_code?: string };
   /** Which status hook to read. */
   statusHook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram' | 'microsoft';
   /** Config-driven status rows (replaces per-provider conditionals). */

@@ -174,7 +174,33 @@ describe.each([false, true])('connection forms with technical sections %s', (sho
     expect(screen.getByRole('button', { name: 'Cancel sign-in' })).toBeEnabled();
     expect(screen.getByText('Connected')).toBeInTheDocument();
     expect(screen.queryByText(preparationError)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Code from the sign-in page')).not.toBeInTheDocument();
     expect(openWindow).toHaveBeenCalledWith(instructions.url, '_blank', 'noopener,noreferrer');
+    openWindow.mockRestore();
+  });
+
+  it('passes the code a CLI sign-in page shows to the CLI waiting for it', async () => {
+    const user = userEvent.setup();
+    const openWindow = vi.spyOn(window, 'open').mockReturnValue(null);
+    const waiting = {
+      success: true, connected: false, pending: true,
+      url: 'https://claude.ai/oauth/authorize?code=true&state=test',
+      message: 'Sign in to Claude in your browser. If the sign-in page then shows a code, paste it here.',
+    };
+    mocks.sendRequest.mockResolvedValue(waiting);
+    mount({
+      ...BASE, id: 'claude_code', name: 'Claude Code CLI',
+      ws: { ...BASE.ws!, submit_code: 'provider_submit_code' },
+    }, showTechnicalSections);
+
+    await user.click(await screen.findByRole('button', { name: 'Login with Claude Code CLI' }));
+    expect(openWindow).toHaveBeenCalledWith(waiting.url, '_blank', 'noopener,noreferrer');
+    expect(screen.getByText(waiting.message)).toBeInTheDocument();
+    const submit = screen.getByRole('button', { name: 'Submit code' });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByLabelText('Code from the sign-in page'), '  abc#def  ');
+    await user.click(submit);
+    expect(mocks.sendRequest).toHaveBeenCalledWith('provider_submit_code', { code: 'abc#def' });
     openWindow.mockRestore();
   });
 

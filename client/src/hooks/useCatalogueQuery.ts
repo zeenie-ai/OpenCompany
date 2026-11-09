@@ -147,7 +147,7 @@ export interface ServerProviderConfig {
   kind: 'apiKey' | 'oauth' | 'qrPairing' | 'email' | 'browserProfiles' | 'mcp' | 'mcpAdd';
   icon_ref?: string;
   fields?: ServerFieldDef[];
-  ws?: { login: string; logout: string; status: string; device_login?: string };
+  ws?: { login: string; logout: string; status: string; device_login?: string; submit_code?: string };
   status_hook?: 'whatsapp' | 'android' | 'twitter' | 'google' | 'telegram' | 'microsoft';
   status_rows?: ServerStatusRowDef[];
   actions?: ServerActionDef[];

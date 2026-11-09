@@ -274,6 +274,12 @@ export function useCredentialPanel(config: ProviderConfig, visible: boolean) {
       if (applyOAuthStatus(res, sequence) && res.success && res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
       return res;
     }),
+    submitCode: (code: string) => execute('code', async () => {
+      const sequence = actionSequence.current;
+      const res = await sendRequest(config.ws!.submit_code!, { code });
+      applyOAuthStatus(res, sequence);
+      return res;
+    }),
     oauthLogout: () => execute('logout', async () => {
       setOauthPending(false);
       setVerificationCode(null);
