@@ -1,4 +1,4 @@
-<img width="1584" height="672" alt="OpenCompany banner" src="https://github.com/user-attachments/assets/cebd0198-4c09-4757-9407-a7ad79a7d71e" />
+<img width="1600" alt="OpenCompany: professional AI cat employees turn tokens into finished work for a paying customer." src="media/brand/opencompany-readme-banner.jpg" />
 
 # OpenCompany
 
