@@ -649,8 +649,10 @@ What an employee sends to someone waits for the owner's OK while its workflow as
   - **A send whose generation ended** (a Reset, a failure, a newer generation) is cancelled, and the employee told.
     A manual run's send (generation 0) is not held.
   - **A send that never reported** ends `failed` with an unknown outcome.
-- **At most once.** Temporal runs an activity again only when an attempt broke off (the worker stopped, a timeout);
-  a failure the node reports comes back as a result and is not retried. A later attempt runs only a call that is
+- **At most once.** Temporal runs an activity again only when an attempt broke off (the worker stopped, a timeout)
+  or, for a call that is safe to repeat and is not a send, after a failure that clears by itself (an HTTP 408, 429 or
+  5xx, see [Plugin System](./plugin_system.md)); any other failure the node reports comes back as a result and is
+  not retried. A later attempt runs only a call that is
   safe to repeat (`services/approvals/repeats.py`: reads, waits, keyed calls, operations that do the same thing
   twice); any other call is not run again (`tool_calls.redo_refusal`, checked in `BaseNode.as_activity` after the
   approvals check, in the Coding Agent's workspace tools and in the legacy node activity). It answers

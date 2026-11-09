@@ -623,8 +623,14 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   `raise NodeUserError("...")` (exported from `services.plugin`) gives
   the user/LLM a clean one-line WARN + structured envelope with no
   traceback, and the shared Temporal retry policy skips retries for it
-  (`services/plugin/scaling.py`). Bare `Exception` is for genuine
-  server bugs only — it keeps the full `logger.exception` traceback.
+  (`services/plugin/scaling.py`). An HTTP refusal that clears by itself
+  (408, 429, 5xx) is not user-correctable, so do not wrap it in
+  `NodeUserError`: let it escape (a plain `response.raise_for_status()`
+  is enough). It gets one WARN line, and on Temporal the framework
+  retries it when the call is safe to repeat and is not a send (see
+  [`docs-internal/plugin_system.md`](../../docs-internal/plugin_system.md)).
+  Any other bare `Exception` is for genuine server bugs only — it keeps
+  the full `logger.exception` traceback.
 - **Coerce LLM-stringified JSON args at the Params boundary.** Gemini
   (and others) sometimes pass array/object tool args as JSON-encoded
   strings. Fields that can receive them declare a

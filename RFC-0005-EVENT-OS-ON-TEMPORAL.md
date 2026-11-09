@@ -1319,7 +1319,7 @@ Phase 1b's items were done on 2026-11-02, apart from AP.7. Test-only fixes (a34f
 ### 25.2 Still open
 
 - **History encryption** with a payload codec on hosted instances (RFC-0004 Q13). RFC-0006 §24.1 proposes no codec, 7-day retention and encrypted backups.
-- **Temporal retries for graph nodes** marked safe (RFC-0004 Q9). This depends on Phase 1b's redo guard (1b.1). RFC-0006 §24.2 proposes retries for `read_only` and `idempotent` plugins, and for `unsafe` ones only when the failure came before the provider was contacted.
+- **Temporal retries for graph nodes** marked safe (RFC-0004 Q9). This depends on Phase 1b's redo guard (1b.1). RFC-0006 §24.2 proposes retries for `read_only` and `idempotent` plugins, and for `unsafe` ones only when the failure came before the provider was contacted. Answered on 2026-11-04: Temporal retries a transient failure only when the call is listed as safe to repeat and is not a send (RFC-0006 §11.4 item 3).
 - **When old generations are upgraded automatically** (§24.2, Phase 10), and what the owner is told.
 
 **Settled on 2026-10-24** (RFC-0006 §3.1):
