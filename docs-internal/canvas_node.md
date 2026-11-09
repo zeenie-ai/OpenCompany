@@ -119,7 +119,8 @@ lone op regardless of `parameters["operation"]`). Item sources, in order:
 An empty call raises `NodeUserError("Nothing to display — pass paths, url,
 or content …")` so the LLM gets a one-line correctable error.
 
-Each display also adds a line to the employee's Workspace timeline
+Each display also adds a line to the employee's Workspace step log,
+whose newest shows on Home's Workspace status pill
 (`services/workspace_steps.py`, best effort, see
 [Normal Mode](./normal_mode.md#the-workspace)): "Showed {title} on the
 Canvas", "Showed {n} items on the Canvas", or "Updated {title} on the

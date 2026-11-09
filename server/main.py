@@ -180,7 +180,8 @@ async def lifespan(app: FastAPI):
     import services.approvals  # noqa: F401
 
     # services/workspace_steps.py self-registers workspace_steps_list (the
-    # Workspace timeline) and its cleanup on workflow delete.
+    # steps behind the Workspace's status pill) and its cleanup on workflow
+    # delete.
     import services.workspace_steps  # noqa: F401
 
     # services/attention.py self-registers list_attention_items (Home's

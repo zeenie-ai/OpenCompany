@@ -1,5 +1,7 @@
-"""The Workspace's step log: what an employee did on each surface, in order
-(design handoff "Workspace panel", the footer timeline).
+"""The Workspace's step log: what an employee did on each surface, in order.
+Home's Workspace dock shows the newest on its floating status pill while the
+employee works (the Nov 5 handoff, chat/V2.md 4b/4c; Normal mode no longer
+lists the steps).
 
 The Browser node records its site actions and screenshots, the Canvas node
 each display, and the phone each action of an AI task and the owner taking

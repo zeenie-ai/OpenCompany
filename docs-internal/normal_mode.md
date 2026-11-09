@@ -81,12 +81,12 @@ Approval waiting is implemented; activation for ordinary new generations remains
 | Folder | Contents |
 |---|---|
 | `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the AI models dialog, the Get started checklist (on the hire view only) and the orb's stage |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, on an employee's page the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace pill, the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
-| `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist (connect a model, hire, say hello, approve a first draft) until it is hidden, as a card in the hire view's corner and a header pill on an employee's page; and the AI models dialog, which opens whenever Home needs an AI model ([onboarding.md](./onboarding.md)) |
+| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, on an employee's page the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace button (opens and closes the dock), the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist (connect a model, hire, say hello, approve a first draft) until it is hidden, as a card in the hire view's corner (at the Workspace dock's left edge while the dock is open) and a header pill on an employee's page; and the AI models dialog, which opens whenever Home needs an AI model ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
-| `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, Retry reset while a Reset waits, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace header offers generation Stop and Resume too |
-| `workspace/` | The Workspace dock (below), its header pill, its Canvas tab (which loads in its own chunk), and its footer: the timeline of steps (`steps.ts`, `WorkspaceTimeline.tsx`) and Take over (`takeover.ts`) |
+| `employee/` | One employee's page, which is the conversation with them (`EmployeeChat` over the shared chat, Talk below); the header names them. What to act on shows only while there is something to do: the drafts waiting for the owner after the conversation, and above the message box their main action while they can't read messages (Resume, Start, Retry reset while a Reset waits, or connect what is missing; `useEmployeeControl`, `PrimaryActionButton`) or Help in browser while they wait there. The conversation's Stop controls its run's owning generation; the Workspace's row offers generation Stop and Resume too |
+| `workspace/` | The Workspace dock (below), the header's Workspace button (`WorkspaceButton.tsx`), the dock's Canvas tab (which loads in its own chunk), the steps that feed its status pill (`steps.ts`) and Take over (`takeover.ts`) |
 | `settings/` | Settings pages (App access, Profile, Billing, Help, Skills, Connectors, Plugins). Catalog primitives live in `components/catalog`; Connectors embeds the shared `components/credentials/CredentialsBrowser`. Provider dialogs belong to AppShell. |
 | `approvals/` | The drafts query, the decide mutation (optimistic), the approval broadcast listener |
 | `data/` | zod-parsed queries for employees, connectors and the profile; `employeeCache.ts`, the team's query keys and `removeEmployee` (shared with the app store's delete); `talk.ts`, Turn on Talk, Apply and the retry note (the thread itself is the shared chat's); `presentation.ts` maps server state to pills, actions and the message box's mode without deriving new rules |
@@ -112,7 +112,8 @@ Status comes from the server: an employee summary is `working` (control
 `watch_node_ids`, or their Talk agent (`talk.agent_node_id`), is `executing`
 in the node status store (`useAnswering` in `data/liveTask.ts`). The hire
 view's "N working now" counts the same way (`useAnsweringCount`). The
-Workspace header keeps its own **Live** pill for a running employee. Durable
+Workspace says **Live**, in red, while an employee works
+(`workspaceStatus`, see [The Workspace](#the-workspace)). Durable
 control transitions display **Stopping…** or **Resuming…** on the main button
 even after the local request has ended. A pending draft
 shows as "Needs you". So does a browser waiting for the owner: when an agent
@@ -139,12 +140,14 @@ before money and deletes".
 Colour on Home marks a state or a role, never an action it does not mean
 ([Theme System](./theme_system.md#colour-marks-state-or-role)). An employee's
 main action is the green `run` button only when it starts them (Start, Start
-again, Resume; `PrimaryActionButton`); Stop, Retry reset and connecting what
-they are missing are neutral outlines, in the Workspace header, above the
-message box and on a new hire's first-day strip. A screen's or card's one
+again, Resume; `PrimaryActionButton`, and the Workspace's round Resume);
+Stop, Retry reset and connecting what they are missing are neutral: outlines
+above the message box, on a new hire's first-day strip and in the
+Workspace's row, where Stop is a round quiet button. A screen's or card's one
 primary action is the invert button (Create, the setup card's Hire, Turn on
 Talk, Save changes in Settings > Profile, Add in the skill form and in the
-custom connector form, Connect on the AI models dialog's plain page), and the
+custom connector form, Connect on the AI models dialog's plain page, the
+Workspace's Hand back, Set up phone), and the
 other buttons are neutral: outlines (Hire now, Apply and Stop work and apply,
 the app-access and delivery choices, the draft panel's Connect an AI model and
 Try again, Help in browser, Refresh progress) or plain quiet buttons, such as
@@ -252,25 +255,43 @@ fallback now answers missing file paths with a 404 and sends its shell with
 ## The Workspace
 
 A dock on the right of Home ([workspace/WorkspaceDock.tsx](../client/src/features/home/workspace/WorkspaceDock.tsx))
-that shows what one employee is working on. The header's Workspace pill
-opens and closes it, and carries a blinking dot while it is closed and
-someone is working. It shows the employee last opened (their page, or their
-Help in browser), else the first on the team.
+that shows what one employee is working on, drawn after the ChatGPT agent
+panel (the Nov 5 handoff, `design_handoff_opencompany_home/chat/V2.md`,
+sections 4b and 4c): one row as tall as Home's header, the page under it,
+and a status pill floating at its foot.
+The header's Workspace button ([workspace/WorkspaceButton.tsx](../client/src/features/home/workspace/WorkspaceButton.tsx))
+opens and closes it. It is borderless like New conversation, with the
+PanelRight icon, and filled while the dock is open; while the dock is
+closed it carries a red blinking dot when the employee the dock would show
+is live, unless the owner has their screen. The dock shows the employee
+last opened (their page, or their Help in browser), else the first on the
+team (`dockEmployee` in `homeStore`, which the button reads too). Who they
+are is on their page's header, not in the dock.
 
-- **Header**: the avatar, "{Name}’s workspace", the live task line when
-  there is one (`useLiveTask`, else the summary's task), and a pill: Live
-  while the employee runs, otherwise their status (Not started, Starting…,
-  Stopped, Needs attention, Needs you). Then their main action (Stop, Resume, Start, or
-  connect what is missing), and Expand and Close. Stop shows Stopping while
-  admitted work drains; the header follows authoritative generation control
-  instead of treating a completed browser request as a completed Stop. A
-  Reset the server has not finished, such as one whose Workspace cleanup
-  took over 240 s, leaves the control `resetting`; the main action, here and
-  above the message box, is then Retry reset (the editor's Retry Reset). It
-  reads the control status first and sends the Reset again, with the
-  summary's revision, only while the generation the summary shows is still
-  resetting, so it never resets one started since; otherwise it says that
-  changed and refetches the team.
+- **The row** (`WorkspaceTabs` with `chrome="home"`): pill tabs (Browser,
+  Canvas, Mobile; the selected one raised on the elevated surface, the
+  list scrolling sideways when the dock is narrow), then at its end:
+  - the employee's status as a dot, named in its tooltip (`workspaceStatus`
+    in `data/presentation.ts`, first match wins): Waiting while the owner
+    has their screen, Needs you, **Live** in red while they work, otherwise
+    the status pill's own label (Not started, Stopped, Needs attention);
+  - their main action (`useEmployeeControl`): a round Stop while they run
+    and a round green Resume while they are stopped, each named in its
+    tooltip, otherwise a small labelled Start, Start again, Connect {app or
+    AI model} or Retry reset (`PrimaryActionButton`);
+  - Expand and Close.
+
+  Stop becomes Stopping… while admitted work drains; the row follows
+  authoritative generation control instead of treating a completed browser
+  request as a completed Stop. A Reset the server has not finished, such as
+  one whose Workspace cleanup took over 240 s, leaves the control
+  `resetting`; the main action, here and above the message box, is then
+  Retry reset (the editor's Retry Reset). It reads the control status first
+  and sends the Reset again, with the summary's revision, only while the
+  generation the summary shows is still resetting, so it never resets one
+  started since; otherwise it says that changed and refetches the team.
+  With no one on the team, or while the team loads or cannot be read, a
+  plain row says "Workspace" beside Expand and Close.
 - **Canvas**: the board named by the summary's `canvas_node_id`, drawn by
   the editor's Canvas renderer (`CanvasContent`, see [Canvas Node](./canvas_node.md)).
   It loads in its own chunk, which keeps the board's markdown, code and
@@ -283,76 +304,110 @@ Help in browser), else the first on the team.
   Under the item: Library (the count), the six newest items as chips, and
   Latest while an older one is shown; the Library lists the board's
   Artifacts (notes) and Files (screenshots, uploads, pages).
-- **Browser**: the shared `components/browser/BrowserWorkspace` attaches to
-  the employee's saved Browser nodes, supplied by `browser_nodes` in its
-  summary. Multiple nodes get a selector. Running sessions appear automatically;
-  Start browser opens an idle session. The view supports navigation, tabs,
-  Take control / Hand back, and browser dialogs, and shows the employee's
-  cursor (an arrow with their name) gliding to each click, hover, field
-  typed into or list chosen from (`agent_action`). Frames use `/ws/browser`,
-  not a URL iframe. Help in browser, above the message box on the
-  employee's page while the agent waits for the owner, opens the Workspace
-  on this tab. See
-  [Browser workspace](./browser_workspace.md).
+- **Browser**: the shared `components/browser/BrowserWorkspace`, in Home's
+  look, attaches to the employee's saved Browser nodes, supplied by
+  `browser_nodes` in its summary. Multiple nodes get a selector. Running
+  sessions appear automatically; Start browser opens an idle session. One
+  row of page controls sits over the page: back, forward and reload, which
+  work only while the owner has control; a read-only pill with the page's
+  domain (a lock for https, the whole address in its tooltip); Open in new
+  tab for an http(s) page; and Take over. Several page tabs get a picker on
+  a line of its own; it, like a page's dialog, works only while the owner
+  has control (a dialog says "Take over to respond"). The view shows the
+  employee's cursor (an arrow with their name) gliding to each click,
+  hover, field typed into or list chosen from (`agent_action`). Frames use
+  `/ws/browser`, not a URL iframe. Help in browser, above the message box
+  on the employee's page while the agent waits for the owner, opens the
+  Workspace on this tab. The editor's Take control, browser controls, Full
+  view and browser tasks are Dev mode's only. See [Browser workspace](./browser_workspace.md).
 - **Mobile**: the managed local Android phone, streamed live through the
-  shared `MobileWorkspace` (see [Mobile Workspace](../docs/mobile-workspace.md))
+  shared `MobileWorkspace` in Home's look (see [Mobile Workspace](../docs/mobile-workspace.md))
   in a phone frame shaped by its screen, under the server's line for which
   phone it is. The device bar has Back, Home, Recent apps and Rotate (while
-  the owner uses the phone) and Screenshot to Canvas, which saves the screen
-  to the workspace and puts it on the employee's Canvas.
-  Dev mode uses the same three workspace tabs, browser viewer and phone.
-- **Tabs**: an inactive tab whose surface is busy shows a pulsing dot:
-  Browser while one of the employee's Browser nodes runs or they wait for
-  the owner there (`browser_request`), Mobile while a phone node runs. A
-  switch brings the new body in with a short rise. Browser offers Open in new
-  tab for the web page it shows. Switching tabs, closing the dock or leaving
-  the window no longer answers the employee's request for help; only the
-  owner who took control hands it back (see [Browser workspace](./browser_workspace.md#when-the-agent-asks-for-help)).
-- **Timeline** ([workspace/WorkspaceTimeline.tsx](../client/src/features/home/workspace/WorkspaceTimeline.tsx)),
-  in the footer: a segment for each step the employee took, coloured by its
-  surface (Browser cyan, Mobile green, Canvas purple), and under them the
-  step shown, "n/N", its words and its time. It follows the newest step;
-  picking an older one shows that step, opens its surface's tab and offers
-  Jump to live. It lists what happened and replays nothing: the surfaces
-  stay live. The steps are the server's step log
+  the owner uses the phone), Screenshot to Canvas, which saves the screen
+  to the workspace and puts it on the employee's Canvas, and at its end
+  Take over. Around the phone: setup, Start phone on the screen area while
+  the phone is set up and off ("Starting phone…" beside it while it boots),
+  Type on phone while the owner uses the phone, and a Help & diagnostics
+  disclosure. The editor's toolbar (Use phone, Let AI continue, Finish
+  using phone, Stop phone), its controls (refresh, APK install, setup
+  history), the AI activity list and Ask AI are Dev mode's only.
+  Dev mode uses the same three workspace tabs, browser viewer and phone in
+  the editor's look: `WorkspaceTabs`, `FullView`, `BrowserWorkspace` and
+  `MobileWorkspace` each take `chrome?: 'dev' | 'home'`, `'dev'` by
+  default, and only Home's dock passes `'home'`.
+- **Tabs**: an inactive tab whose surface is busy shows a pulsing red dot
+  (the editor's is pink): Browser while one of the employee's Browser nodes
+  runs or they wait for the owner there (`browser_request`), Mobile while a
+  phone node runs. A switch brings the new body in with a short rise. Each
+  body keeps 60px free at its foot for the status pill. Switching tabs,
+  closing the dock or leaving the window no longer answers the employee's
+  request for help; only the owner who took control hands it back (see [Browser workspace](./browser_workspace.md#when-the-agent-asks-for-help)).
+- **Status pill**: centred 14px above the dock's foot, it says what is
+  going on, after the status dot: "You have the screen" while the owner
+  has it; their status while they are not live (Stopped, Needs you, …);
+  while they are, their latest step and its time; before the first,
+  "Waiting for work". Normal mode no longer lists the steps (the dock's
+  footer timeline went with the Nov 5 handoff); the pill shows only the
+  newest. The steps are the server's step log
   ([services/workspace_steps.py](../server/services/workspace_steps.py),
-  read with `workspace_steps_list` and again on each `workspace_step`): the
-  Browser node's site actions and screenshots ("Opened example.com"), each
-  Canvas display ("Showed The plan on the Canvas"), each action of an AI
-  task on the phone ("Tapped the screen"), and the owner taking the phone
-  over and handing it back, one line each, worded by whatever took the step.
-  A step never says what was typed or shown, nothing is recorded during a
-  protected login or for an action that failed, recording never fails the
-  action, and a workflow keeps its newest 200 steps (deleted with it).
-- **Take over** ([workspace/takeover.ts](../client/src/features/home/workspace/takeover.ts)),
-  at the end of the footer's line while the Browser or Mobile tab shows:
-  takes the screen the tab shows (the
-  surface's `claim`, `components/workspace/surface.ts`: Browser asks for
-  control and waits for the server's answer; Mobile takes the phone's
-  lease), and only then Stops a running employee (`pause_workflow`), so the
-  employee never acts on the screen again once the owner has it. While the
-  owner has it the body is framed in orange and a banner says "You’re in
-  control · {Name} is waiting". **Hand back** gives back the screen that
-  was taken, whichever tab the dock shows: a granted `claim` resolves to
-  that screen's way of giving it back, which works after its view went
-  away (an inactive tab is unmounted). Browser hands control back (hiding
-  the view already did); Mobile releases the lease and lets a waiting
-  phone task go on, through `/resume` when the view no longer holds the
-  lease (the server resumes only this workflow's task, since the phone is
-  shared). It resumes the employee only when Take over stopped them.
-  `homeStore.takeovers` keeps each employee's, so it holds across a closed
-  dock, a changed tab or another employee's Take over. A browser that is
-  not running answers Take over's request `idle`, which the claim takes
-  as no. Toasts: "You have control — {Name} will wait", "Handed back to
-  {Name}".
+  read by `workspace/steps.ts` with `workspace_steps_list` and again on
+  each `workspace_step` for this workflow): the Browser node's site actions
+  and screenshots ("Opened example.com"), each Canvas display ("Showed The
+  plan on the Canvas"), each action of an AI task on the phone ("Tapped the
+  screen"), and the owner taking the phone over and handing it back, one
+  line each, worded by whatever took the step. A step never says what was
+  typed or shown, nothing is recorded during a protected login or for an
+  action that failed, recording never fails the action, and a workflow
+  keeps its newest 200 steps (deleted with it).
+- **Take over** ([workspace/takeover.ts](../client/src/features/home/workspace/takeover.ts))
+  sits with the screen it takes: in the Browser tab's row of page controls
+  and at the end of the phone's device bar, each while the owner does not
+  hold that screen. It takes the screen (the surface's `claim`,
+  `components/workspace/surface.ts`: Browser asks for control and waits
+  for the server's answer; Mobile takes the phone's lease), and the owner
+  is in control from that moment: the body under the row is framed in the
+  config colour (`--action-config-border`), a centred banner says "You’re in control · {Name} is waiting"
+  with the one **Hand back** (the invert button) whichever tab shows, and
+  the keyboard focus moves to Hand back. Then it stops a running employee
+  (`pause_workflow`), also while they wait for the owner in the browser
+  (`request_user`), so the employee never acts on the screen again once
+  the owner has it. A screen can let go of the owner meanwhile: the
+  browser when the window loses focus or its view hides, the phone when
+  its view hides. Take over then shows again on that screen, and on no
+  other, and taking it again sends no second Stop. A Stop that fails gives
+  the screen back, unless Hand back already has.
+
+  **Hand back** first gives back the screen that was taken, which lets the
+  call the employee waits in go on: a granted `claim` resolves to that
+  screen's way of giving it back, which works after its view went away (an
+  inactive tab is unmounted). Browser hands control back (hiding the view
+  already did); Mobile releases the lease and lets a waiting phone task go
+  on, through `/resume` when the view no longer holds the lease (the server
+  resumes only this workflow's task, since the phone is shared). Then, only
+  when Take over stopped them, it resumes the employee, from the newer of
+  the summary's control and the Stop's answer. A Stop answers `pausing`
+  after 10 s while admitted work still drains (the browser call the
+  employee waited in is one), so while the control is still pausing Hand
+  back sends the Stop again (each waits up to 10 s for the drain), then
+  resumes at the paused revision, never a stale one.
+  `homeStore.takeovers` keeps each employee's takeover (the tab whose
+  screen was taken, the way to give it back, and Take over's Stop), so it
+  holds across a closed dock, a changed tab or another employee's Take
+  over. A browser that is not running answers Take over's request `idle`,
+  which the claim takes as no. Toasts: "You have control — {Name} will
+  wait", "Handed back to {Name}".
 - **Size and motion**: 460px wide by default. The left edge drags from
   360px to the window less 420px, and Expand gives a bigger dock without
   a drag. At 1100px and wider the dock pushes the page aside; narrower, it
-  lies over it with `--shadow-dock`. Like the sidebar it stays mounted and
-  transitions its width (`--dur-dock-in` to open, `--dur-sidebar-out` to
-  close), so a reload with it open does not animate, and its contents
-  mount on the first open. Open, width and tab persist under
-  `home_workspace_v1`; Expand and the employee last only for the session.
+  lies over it with the modal shadow (`shadow-modal`). Like the sidebar it
+  stays mounted and transitions its width (`--dur-dock-in` to open,
+  `--dur-sidebar-out` to close), so a reload with it open does not animate,
+  and its contents mount on the first open. Open, width and tab persist
+  under `home_workspace_v1`; Expand and the employee last only for the
+  session. While the dock is open, the Get started card and its folded pill
+  sit at its left edge and move with it (`dockWidth` in `homeStore` gives
+  both one width; see [onboarding.md](./onboarding.md#get-started-checklist)).
 
 ## Hiring
 
@@ -852,7 +907,7 @@ sending and drafts belong to the chat (wire and client rules in
   - *start* (never started, ready, resetting, failed): no box; a line says
     they can't read messages, beside their main action (Start, Start again,
     Retry reset while a Reset waits, or what they are missing), which the
-    Workspace header offers too.
+    Workspace's row offers too.
   - *wait* (a new hire still starting, before the conversation's first
     message): the box shows, disabled, saying "{Name} is starting…".
   - While the agent waits for the owner in the browser, the server's line
@@ -1239,7 +1294,7 @@ every frame but `workflow_ops_apply` carries the whole envelope:
 | `approval_lifecycle` | `com.opencompany.approval.{requested,decided,expired,cancelled}` | Identity only, never the message or the recipient |
 | `workflow_lifecycle` | gains `created` and `deleted` stages | So open editors refresh their workflow lists. `deleted` also makes every tab forget the workflow and its employee (`forgetWorkflow`, see [Deleting an employee](#deleting-an-employee)) |
 | `chat.updated` | `com.opencompany.chat.updated` | Sent after every chat insert and clear (`services/chat_thread.py`), and when a chat run ends. Data `{workflow_id, session_id, role}`, identity only: `role` is null for a clear or a run's end, `workflow_id` null for session `"default"`. Home's thread and the editor's chat pane refetch |
-| `workspace_step` | `com.opencompany.workspace.step` | A step was recorded (`services/workspace_steps.py`). Subject is the workflow id; data `{workflow_id, surface, step_id}`, identity only. The Workspace's timeline for that workflow refetches |
+| `workspace_step` | `com.opencompany.workspace.step` | A step was recorded (`services/workspace_steps.py`). Subject is the workflow id; data `{workflow_id, surface, step_id}`, identity only. Home's Workspace reads that workflow's steps again, for its status pill |
 | `attention_lifecycle` | `com.opencompany.attention.{opened,resolved}` | An attention item opened or was resolved (`services/attention.py`). Subject is the item's kind; data `{kind}`, identity only. Home's attention line under the header (`header/AttentionLine.tsx`) refetches; it also refetches once a minute, because an item drops off an hour after it was last seen without an event, and a standalone worker's broadcast stays in its process |
 | `workflow_ops_apply` | `com.opencompany.workflow.ops.applied` | The frame is the event's flat data, `{workflow_id, caller_node_id, operations, persisted?}`, not the envelope. `persisted: true` marks a batch the server already saved (`apply_graph_additions`: Turn on Talk, the Agent Builder), whose ops carry the server's ids; editors adopt it without saving. See [Workflow Operations Protocol](./workflow_ops_protocol.md#persisted-batches) |
 
@@ -1305,9 +1360,9 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   in multi-user mode, like the team list.
 - An employee hired before Canvas has no Canvas node, so its
   `canvas_node_id` is null. Adding one in Dev mode fills it in.
-- The Workspace's timeline replays nothing: it lists what an employee did,
-  and the surfaces show only what is live now. A step recorded by a
-  standalone worker reaches the timeline when it next reads the steps (on
+- The Workspace replays nothing: its status pill shows an employee's latest
+  step, and the surfaces show only what is live now. A step recorded by a
+  standalone worker reaches the pill when the dock next reads the steps (on
   opening, or on another step's broadcast), not at once: the
   `workspace_step` broadcast stays in the worker's process.
 - The Web browser app counts as connected even on a machine with no

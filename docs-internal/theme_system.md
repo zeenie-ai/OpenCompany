@@ -42,6 +42,10 @@ client/src/contexts/ThemeContext.tsx
 │   else dark
 ├── migrates legacy 'darkMode' boolean on first load
 ├── sets <html data-theme="..."> + .dark class (only for DARK_FAMILY themes)
+├── shows a theme chosen in another window or tab at once (the theme key's
+│   storage event), without saving it again, so two windows never echo
+├── keeps <meta name="theme-color"> at the theme's --background, the colour
+│   the desktop shell paints its window with (desktop_app.md)
 └── cycleTheme / nextTheme — step to the next theme, wrapping round
 
 client/src/components/ui/ThemeButton.tsx — the one theme control: the Home header,
@@ -171,7 +175,11 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   steps. The dot is the raw role colour; light.css
   keeps the paused dot at the design's mid grey. `--shadow-pip`
   (`shadow-pip`) is a dot's glow in its own colour: give the dot a
-  `text-status-*-dot` colour and `bg-current`.
+  `text-status-*-dot` colour and `bg-current`. Live, the Workspace's
+  status while an employee works, has no status token of its own: on Home
+  it is red, `--destructive`, for its blinking dot (the dock's status dot
+  and the header Workspace button's dot) and for the dock's tab activity
+  dots. The editor's tab dots keep `--node-trigger` (pink).
 - **The employee's face**: `--accent-edge`, the rim (`--accent` mixed toward
   `--fg-default` at `--tint-accent-edge`, 70%), and `--shadow-avatar`, a soft
   highlight along the top edge, bridged in `index.css` as `border-accent-edge`
@@ -181,13 +189,14 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   puts them on a solid `--accent` disc with the `--accent-foreground` initial:
   the employee beside their turns (`ChatAvatar`, on Home and in Dev), on their
   page's header and on a new hire's first-day strip (`Avatar` with `accent`).
-  The team's lists, the Workspace header, the setup card and the owner's own
-  avatar keep the role tints (`AVATAR_CLASS`).
+  The team's lists, the setup card and the owner's own avatar keep the role
+  tints (`AVATAR_CLASS`).
 - **Errors**: `--danger-soft` (15%) and `--danger-border` (45%) tint
   `--destructive` for an error on a Home surface (`bg-danger-soft`,
   `border-danger-border`).
-- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog |
-  dock` (`dock` is the Workspace's left shadow when it lies over the page),
+- **Per family** (light.css / dark.css): `--shadow-float | popover | dialog`
+  (the Workspace dock has no shadow of its own: lying over the page below
+  1100px, it casts `--shadow-modal`),
   the node-role `-fill / -edge / -hover / -ink` variants, and Home's glows:
   `--glow-connect | hire | hire-settle | refine | refine-out | task` plus the
   working pip's `--tint-pip-ring`. Dark keeps the neon; light swaps each neon
@@ -215,16 +224,18 @@ colour pass of 4 Nov (`design_handoff_opencompany_home/chat/V2.md`, section 3)
 and the onboarding v3 handoff:
 
 - **Green `run` only starts an employee**: Start, Start again and Resume
-  (`features/home/employee/PrimaryActionButton.tsx`), and the Workspace's
-  Hand back, which resumes them when Take over stopped them. Their other main
-  actions (Stop, Retry reset, connecting what is missing) are neutral.
+  (`features/home/employee/PrimaryActionButton.tsx`, and the Workspace's
+  round Resume). Their other main actions (Stop, Retry reset, connecting
+  what is missing) are neutral.
 - **One primary action per screen or card** may be `Button variant="invert"`
   (the foreground as the fill): Create on the hire view, Hire on the setup
   card, Send in the message box (Stop or Resume while a run holds it) and Use
   dictation, Send or Allow on an approval card, a generated interface's
   primary button, Connect on the AI models dialog's plain page, Turn on Talk,
-  Save changes in Settings > Profile, and Add in the skill form and in the
-  custom connector form.
+  Save changes in Settings > Profile, Add in the skill form and in the
+  custom connector form, Hand back in the Workspace's "You’re in control"
+  banner (it resumes the employee when Take over stopped them), and Set up
+  phone on the phone's setup card.
 - **Every other button is neutral**: `variant="quiet"`, with
   `border-border-default` (or `border-border-strong`) and `text-fg-default`
   where it is drawn as an outline, written per call site, as a module constant
@@ -234,12 +245,14 @@ and the onboarding v3 handoff:
   is neutral: the Toggle `chips` variant's picked state is `bg-bg-active` with
   `border-border-strong`, and a picked starter chip is a raised surface with a
   foreground border.
-- **Status colours stay**: the Ask first chip and an approval card's waiting
-  frame, header and pill (config); the Web chip and the source and citation
-  numbers (save); an approval card's Sending and Sent pill and its dot (run)
-  and a failure's frame, header and footer (stop); live dots and the streaming
-  caret; a done step's tick and the copied tick; the hire view's pip, green
-  only while someone is working; a stat's delta and a chart's bars.
+- **Status colours stay**: the Ask first chip, an approval card's waiting
+  frame, header and pill, and the Workspace's takeover frame and banner
+  (config); the Web chip and the source and citation numbers (save); an
+  approval card's Sending and Sent pill and its dot (run) and a failure's
+  frame, header and footer (stop); live dots (red on Home) and the
+  streaming caret; a done step's tick and the copied tick; the hire view's
+  pip, green only while someone is working; a stat's delta and a chart's
+  bars.
 - **The Welcome guide keeps its own colours** (`WelcomeGuide`, `WelcomeStep`,
   `WelcomeDemo`, `FirstHireStep`). The shared pieces it shows (the starter
   chips, the catalog cards, the AI model list) follow the rule there too.
