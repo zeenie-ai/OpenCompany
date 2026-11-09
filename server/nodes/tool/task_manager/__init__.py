@@ -219,6 +219,7 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
             "delegation": delegation,
             "delegation_request": {
                 "team_task_id": task["id"], "assignee_node_id": teammate["node_id"],
+                "attempt_number": int(task.get("current_attempt", 0)),
                 "delegate_name": teammate["delegate_tool_name"], "task": args["mission"],
                 "context": args.get("context") or {},
                 "acceptance_criteria": args.get("acceptance_criteria"),
@@ -279,9 +280,12 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         # row and the work silently never re-ran.
         result["delegation_request"] = {
             "team_task_id": task["id"],
+            "attempt_number": int(task.get("current_attempt", 0)),
             "assignee_node_id": delegate["node_id"],
             "delegate_name": delegate["delegate_tool_name"],
             "task": str(task.get("mission") or task.get("description") or ""),
             "context": task.get("context") or {},
+            "acceptance_criteria": task.get("acceptance_criteria"),
+            "depends_on": task.get("depends_on") or [],
         }
     return result

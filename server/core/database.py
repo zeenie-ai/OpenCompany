@@ -3658,6 +3658,12 @@ class Database:
             ))).scalar_one_or_none()
             if task is None or task.current_attempt != attempt_number:
                 return None
+            attempt_id = f"{task_id}:attempt:{attempt_number}"
+            attempt = (await session.execute(select(TeamTaskAttempt).where(
+                TeamTaskAttempt.id == attempt_id,
+            ))).scalar_one_or_none()
+            if runner_run_id and attempt and attempt.runner_run_id and attempt.runner_run_id != runner_run_id:
+                return None
             values = {
                 key: value for key, value in {
                     "runner_workflow_id": runner_workflow_id, "runner_run_id": runner_run_id,
@@ -3665,12 +3671,22 @@ class Database:
                     "parent_workflow_id": parent_workflow_id, "parent_run_id": parent_run_id,
                 }.items() if value
             }
-            for key, value in values.items():
-                setattr(task, key, value)
-            attempt_id = f"{task_id}:attempt:{attempt_number}"
-            attempt = (await session.execute(select(TeamTaskAttempt).where(
-                TeamTaskAttempt.id == attempt_id,
-            ))).scalar_one_or_none()
+            if values:
+                ownership = []
+                if runner_run_id:
+                    old_owner = (await session.execute(select(TeamTaskAttempt.id).where(
+                        TeamTaskAttempt.task_id == task_id, TeamTaskAttempt.attempt_number < attempt_number,
+                        TeamTaskAttempt.runner_run_id == task.runner_run_id,
+                    ))).first() if task.runner_run_id else None
+                    ownership.append(or_(TeamTask.runner_run_id.is_(None), TeamTask.runner_run_id == runner_run_id,
+                                         *([TeamTask.runner_run_id == task.runner_run_id] if old_owner and not (attempt and attempt.runner_run_id) else [])))
+                registered = await session.execute(update(TeamTask).where(
+                    TeamTask.id == task_id, TeamTask.team_id == team_id,
+                    TeamTask.current_attempt == attempt_number, *ownership,
+                ).values(**values))
+                if registered.rowcount != 1:
+                    await session.rollback()
+                    return None
             if attempt is None:
                 attempt = TeamTaskAttempt(
                     id=attempt_id, task_id=task_id, team_id=team_id,
@@ -3706,7 +3722,7 @@ class Database:
             logger.error(f"Failed to get team tasks: {e}")
             return []
 
-    async def claim_task(self, task_id: str, agent_node_id: str) -> Optional[Dict[str, Any]]:
+    async def claim_task(self, task_id: str, agent_node_id: str, *, expected_attempt: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Atomically claim a pending task; same-agent retries are safe."""
         try:
             async with self.get_session() as session:
@@ -3715,6 +3731,7 @@ class Database:
                     .where(
                         TeamTask.id == task_id,
                         TeamTask.status.in_(["queued", "pending"]),
+                        *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                         or_(TeamTask.assigned_to.is_(None), TeamTask.assigned_to == agent_node_id),
                     )
                     .values(
@@ -3738,6 +3755,7 @@ class Database:
                 same_agent_retry = (
                     task.status == "running"
                     and task.assigned_to == agent_node_id
+                    and (expected_attempt is None or task.current_attempt == expected_attempt)
                 )
                 if not won and not same_agent_retry:
                     await session.rollback()
@@ -3753,7 +3771,7 @@ class Database:
             logger.error(f"Failed to claim task: {e}")
             return None
 
-    async def complete_task(self, task_id: str, result_data: Optional[Dict[str, Any]] = None) -> bool:
+    async def complete_task(self, task_id: str, result_data: Optional[Dict[str, Any]] = None, *, expected_attempt: Optional[int] = None) -> bool:
         """Atomically submit a running task for lead review."""
         try:
             usage = (
@@ -3767,6 +3785,7 @@ class Database:
                     .where(
                         TeamTask.id == task_id,
                         TeamTask.status == "running",
+                        *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                     )
                     .values(
                         status="submitted",
@@ -3791,6 +3810,7 @@ class Database:
                 return {
                     "success": bool(
                         task is not None and task.status == "submitted"
+                        and (expected_attempt is None or task.current_attempt == expected_attempt)
                     )
                 }
 
@@ -3805,7 +3825,7 @@ class Database:
             logger.error(f"Failed to complete task: {e}")
             return False
 
-    async def fail_task(self, task_id: str, error: str) -> bool:
+    async def fail_task(self, task_id: str, error: str, *, expected_attempt: Optional[int] = None) -> bool:
         """Atomically record one failed attempt and release or fail it."""
         try:
             async def _fail(session: AsyncSession) -> Dict[str, Any]:
@@ -3816,6 +3836,7 @@ class Database:
                     .where(
                         TeamTask.id == task_id,
                         TeamTask.status == "running",
+                        *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                     )
                     .values(
                         error=error,
@@ -3852,6 +3873,7 @@ class Database:
                         task is not None
                         and task.status in {"queued", "failed"}
                         and task.error == error
+                        and (expected_attempt is None or task.current_attempt == expected_attempt)
                     )
                 }
 
@@ -3871,6 +3893,7 @@ class Database:
         team_id: str,
         task_id: str,
         reason: str,
+        *, expected_attempt: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         """Terminally cancel active delegated work without applying retry policy.
 
@@ -3899,6 +3922,7 @@ class Database:
                     TeamTask.id == task_id,
                     TeamTask.team_id == team_id,
                     TeamTask.status.in_(active_statuses),
+                    *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                 )
                 .values(
                     status="cancelled",
@@ -3918,6 +3942,8 @@ class Database:
             ).scalar_one_or_none()
             if task is None:
                 return {"found": False}
+            if expected_attempt is not None and task.current_attempt != expected_attempt:
+                return {"found": True, "valid_state": False, "cancellation_applied": False}
 
             cancellation_applied = changed.rowcount == 1
             if cancellation_applied:

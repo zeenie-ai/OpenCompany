@@ -2056,6 +2056,53 @@ async def clear_agent_skills(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"cleared": True}
 
 
+def _delegation_attempt(task: Dict[str, Any], payload: Dict[str, Any], *, registering: bool = False) -> Optional[int]:
+    """Resolve immutable ownership for old activity inputs without guessing a retry.
+
+    New scheduling envelopes contain the durable attempt. Recorded inputs do
+    not, so their runner/run identity must match the persisted attempt history.
+    Only initial registration may attach a fresh runner to an unowned attempt.
+    """
+    if "attempt_number" in payload:
+        return int(payload["attempt_number"])
+    try:
+        info = activity.info()
+        workflow_id, run_id = info.workflow_id, info.workflow_run_id
+    except RuntimeError:  # Unit calls outside an activity, and legacy inline callers.
+        workflow_id, run_id = payload.get("runner_workflow_id"), payload.get("runner_run_id")
+    attempts = task.get("attempts") or []
+    if workflow_id and run_id:
+        for prefix in ("runner", "parent"):
+            matches = [item for item in attempts
+                       if item.get(f"{prefix}_workflow_id") == workflow_id and item.get(f"{prefix}_run_id") == run_id]
+            if len(matches) == 1:
+                return int(matches[0]["attempt_number"])
+        # Older rows may have registration on the task but no attempt record.
+        if int(task.get("current_attempt", 0)) == 0 and task.get("runner_workflow_id") == workflow_id and task.get("runner_run_id") == run_id:
+            return 0
+    current = int(task.get("current_attempt", 0))
+    if current == 0:
+        return 0
+    if registering:
+        current_row = next((item for item in attempts if item["attempt_number"] == current), {})
+        previous_owner = any(item["attempt_number"] < current and item.get("runner_run_id") == task.get("runner_run_id") for item in attempts)
+        if not current_row.get("runner_run_id") and (not task.get("runner_run_id") or previous_owner):
+            return current
+    return None
+
+
+def _delegation_event_id(payload: Dict[str, Any], task_id: str, suffix: str, attempt: int) -> str:
+    base = str(payload.get(f"{suffix}_event_id") or f"{task_id}:{suffix}")
+    return f"{base}:attempt:{attempt}" if attempt else base
+
+
+def _require_current_delegation_attempt(task: Dict[str, Any], payload: Dict[str, Any], *, registering: bool = False) -> int:
+    attempt = _delegation_attempt(task, payload, registering=registering)
+    if attempt is None or attempt != int(task.get("current_attempt", 0)):
+        raise ApplicationError("Delegated task attempt was superseded", type="DelegationAttemptSuperseded", non_retryable=True)
+    return attempt
+
+
 @activity.defn(name="agent.begin_delegation")
 async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Idempotently persist and claim a delegation before child startup."""
@@ -2071,8 +2118,7 @@ async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Incomplete durable delegation payload")
 
     service = get_agent_team_service()
-    tasks = await service.database.get_team_tasks(team_id)
-    task = next((item for item in tasks if item.get("id") == task_id), None)
+    task = await service.database.get_durable_team_task(team_id, task_id)
     if task is None:
         task = await service.add_task(
             team_id, title=mission[:200], description=mission,
@@ -2080,6 +2126,7 @@ async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         if not task:
             raise RuntimeError("Failed to persist delegated team task")
+    attempt = _require_current_delegation_attempt(task, payload)
 
     terminal_statuses = {
         "submitted",
@@ -2099,7 +2146,7 @@ async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     status = str(task.get("status") or "")
     if status in {"pending", "queued"}:
-        claimed = await service.claim_task(team_id, task_id, child_id)
+        claimed = await service.claim_task(team_id, task_id, child_id, expected_attempt=attempt)
         tasks = await service.database.get_team_tasks(team_id)
         task = next((item for item in tasks if item.get("id") == task_id), None)
         status = str((task or {}).get("status") or "")
@@ -2119,9 +2166,10 @@ async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     message = await service.send_message(
         team_id, parent_id, f"Assigned task to {child_id}: {mission}",
         to_agent=child_id, message_type="assignment",
-        event_id=str(payload.get("assignment_event_id") or f"{task_id}:assigned"),
+        event_id=_delegation_event_id({"assigned_event_id": payload.get("assignment_event_id")}, task_id, "assigned", attempt),
         extra_data={
             "status": "started", "task_id": task_id,
+            "attempt_number": attempt,
             "root_execution_id": payload.get("root_execution_id"),
             "delegation_depth": payload.get("delegation_depth"),
             "trace_id": payload.get("trace_id"),
@@ -2136,6 +2184,8 @@ async def begin_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     tasks = await service.database.get_team_tasks(team_id)
     task = next((item for item in tasks if item.get("id") == task_id), None)
     status = str((task or {}).get("status") or "")
+    if task:
+        _require_current_delegation_attempt(task, {**payload, "attempt_number": attempt})
     if status in terminal_statuses:
         raise_terminal(status)
     if (
@@ -2171,11 +2221,14 @@ async def queue_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         if not task:
             raise RuntimeError("Failed to persist queued delegation")
+    attempt = int(payload.get("attempt_number", task.get("current_attempt", 0)))
+    if attempt != int(task.get("current_attempt", 0)):
+        return {"team_id": team_id, "team_task_id": task_id, "status": "superseded"}
     message = await service.send_message(
         team_id, parent_id, f"Queued task for {child_id}: {mission}",
         to_agent=child_id, message_type="assignment",
-        event_id=str(payload.get("queued_event_id") or f"{task_id}:queued"),
-        extra_data={"status": "queued", "task_id": task_id},
+        event_id=_delegation_event_id(payload, task_id, "queued", attempt),
+        extra_data={"status": "queued", "task_id": task_id, "attempt_number": attempt},
     )
     if not message:
         raise RuntimeError("Failed to persist delegation queue event")
@@ -2203,7 +2256,12 @@ async def cancel_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("Incomplete delegation cancellation payload")
 
     service = get_agent_team_service()
-    task = await service.cancel_delegation(team_id, task_id, reason)
+    existing = await service.database.get_durable_team_task(team_id, task_id)
+    attempt = _delegation_attempt(existing, payload) if existing else 0
+    if existing and (attempt is None or attempt != int(existing.get("current_attempt", 0))):
+        return {"team_id": team_id, "team_task_id": task_id, "status": "superseded",
+                "cancelled": False, "cancellation_applied": False, "reason": None}
+    task = await service.cancel_delegation(team_id, task_id, reason, expected_attempt=attempt)
     if task is None:
         # A cancel can come before agent.queue_delegation wrote the row (a lead
         # parked while stopped): there is nothing to cancel. A failed write
@@ -2224,12 +2282,11 @@ async def cancel_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
             f"Task {task_id} cancelled: {persisted_reason}",
             to_agent=parent_id,
             message_type="error",
-            event_id=str(
-                payload.get("terminal_event_id") or f"{task_id}:cancelled"
-            ),
+            event_id=_delegation_event_id({"cancelled_event_id": payload.get("terminal_event_id")}, task_id, "cancelled", attempt),
             extra_data={
                 "status": "cancelled",
                 "task_id": task_id,
+                "attempt_number": attempt,
                 "reason": persisted_reason,
                 "root_execution_id": payload.get("root_execution_id"),
                 "trace_id": payload.get("trace_id"),
@@ -2254,9 +2311,17 @@ def _subagent_lease_id(
     permit_id: str,
     temporal_activity_id: str,
     attempt: int,
+    *,
+    workflow_id: str,
+    workflow_run_id: str,
 ) -> str:
-    """Return the bounded physical lease identity for one activity attempt."""
-    identity = f"{permit_id}\0{temporal_activity_id}\0{attempt}".encode()
+    """Identify one physical activity attempt, including its owning run.
+
+    A Task Manager retry keeps the logical task/permit ID, and a fresh runner
+    can schedule the same activity ID at attempt 1. Without the workflow/run
+    namespace it would wait forever on the original runner's released lease.
+    """
+    identity = f"{workflow_id}\0{workflow_run_id}\0{permit_id}\0{temporal_activity_id}\0{attempt}".encode()
     return f"subagent-lease-v2-{hashlib.sha256(identity).hexdigest()}"
 
 
@@ -2277,20 +2342,32 @@ async def acquire_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
     service = get_agent_team_service()
     lease_id = permit_id
     attempt = 1
+    owner: Dict[str, str] = {}
     if lease_version == 2:
         info = activity.info()
         temporal_activity_id = str(info.activity_id)
+        owner = {
+            "workflow_id": str(info.workflow_id or ""),
+            "workflow_run_id": str(info.workflow_run_id or ""),
+        }
+        if not all(owner.values()):
+            raise ValueError("A version 2 subagent lease requires its Temporal workflow/run identity")
         attempt = max(1, int(info.attempt))
         lease_id = _subagent_lease_id(
             permit_id,
             temporal_activity_id,
             attempt,
+            **owner,
         )
+        # Only this run's earlier physical attempts can be reconciled. The
+        # old unscoped hash may belong to a different runner, so never release
+        # that lease while migrating an already-scheduled version 2 request.
         for prior_attempt in range(1, attempt):
             prior_lease_id = _subagent_lease_id(
                 permit_id,
                 temporal_activity_id,
                 prior_attempt,
+                **owner,
             )
             if not await service.release_subagent_permit(
                 root_id,
@@ -2327,6 +2404,8 @@ async def acquire_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
                     "lease_version": 2,
                     "lease_id": lease_id,
                     "attempt": attempt,
+                    "activity_id": temporal_activity_id,
+                    **owner,
                 })
             activity.heartbeat(heartbeat)
             await asyncio.sleep(1)
@@ -2394,19 +2473,21 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not all((team_id, task_id, child_id, parent_id)):
         raise ValueError("Incomplete delegation completion payload")
     service = get_agent_team_service()
-    tasks = await service.database.get_team_tasks(team_id)
-    task = next((item for item in tasks if item.get("id") == task_id), None)
+    task = await service.database.get_durable_team_task(team_id, task_id)
     if task is None:
         raise RuntimeError("Delegated team task does not exist")
+    attempt = _delegation_attempt(task, payload)
+    if attempt is None or attempt != int(task.get("current_attempt", 0)):
+        return {"team_id": team_id, "team_task_id": task_id, "status": "superseded"}
 
     succeeded = bool(payload.get("success"))
     target_status = "submitted" if succeeded else "failed"
     if task.get("status") not in {"submitted", "accepted", "failed", "cancelled", "skipped"}:
         if succeeded:
-            ok = await service.complete_task(team_id, task_id, payload.get("result") or {})
+            ok = await service.complete_task(team_id, task_id, payload.get("result") or {}, expected_attempt=attempt)
         else:
             ok = await service.fail_task(
-                team_id, task_id, str(payload.get("error") or "Delegated agent failed")
+                team_id, task_id, str(payload.get("error") or "Delegated agent failed"), expected_attempt=attempt
             )
         if not ok:
             raise RuntimeError(f"Failed to mark delegated task {target_status}")
@@ -2415,6 +2496,8 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     # attempt, so the requested failure is not necessarily terminal.
     tasks = await service.database.get_team_tasks(team_id)
     task = next((item for item in tasks if item.get("id") == task_id), task)
+    if attempt != int(task.get("current_attempt", 0)):
+        return {"team_id": team_id, "team_task_id": task_id, "status": "superseded"}
     persisted_status = str(task.get("status") or target_status)
     is_requeued = (not succeeded) and persisted_status in {"pending", "queued", "blocked"}
     target_status = "requeued" if is_requeued else persisted_status
@@ -2424,9 +2507,10 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     message = await service.send_message(
         team_id, child_id, content, to_agent=parent_id,
         message_type="result" if succeeded else "error",
-        event_id=str(payload.get("terminal_event_id") or f"{task_id}:{target_status}"),
+        event_id=_delegation_event_id({"terminal_event_id": payload.get("terminal_event_id") or f"{task_id}:{target_status}"}, task_id, "terminal", attempt),
         extra_data={
             "status": target_status, "task_id": task_id,
+            "attempt_number": attempt,
             "root_execution_id": payload.get("root_execution_id"),
             "trace_id": payload.get("trace_id"),
         },
@@ -2445,12 +2529,13 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         lifecycle_data = {
             "team_id": team_id,
+            "attempt_number": attempt,
             "execution_id": task.get("execution_id"),
             "root_execution_id": payload.get("root_execution_id"),
             "trace_id": payload.get("trace_id"),
             "parent_agent_workflow_id": payload.get("parent_agent_workflow_id"),
         }
-        event_id = str(payload.get("terminal_event_id") or f"{task_id}:{target_status}")
+        event_id = _delegation_event_id({"terminal_event_id": payload.get("terminal_event_id") or f"{task_id}:{target_status}"}, task_id, "terminal", attempt)
         if succeeded:
             result = payload.get("result") or {}
             if isinstance(result, dict):
@@ -2494,9 +2579,10 @@ async def register_task_execution(payload: Dict[str, Any]) -> Dict[str, Any]:
     task = await get_agent_team_service().database.get_durable_team_task(team_id, task_id)
     if not task:
         raise ValueError("Delegated team task does not exist")
+    attempt = _require_current_delegation_attempt(task, payload, registering=True)
     registered = await get_agent_team_service().database.register_team_task_execution(
         team_id=team_id, task_id=task_id,
-        attempt_number=int(payload.get("attempt_number", task.get("current_attempt", 0))),
+        attempt_number=attempt,
         runner_workflow_id=payload.get("runner_workflow_id"),
         runner_run_id=payload.get("runner_run_id"),
         child_workflow_id=payload.get("child_workflow_id"),
@@ -2505,7 +2591,8 @@ async def register_task_execution(payload: Dict[str, Any]) -> Dict[str, Any]:
         parent_run_id=payload.get("parent_run_id"),
     )
     if not registered:
-        raise RuntimeError("Failed to register delegated Temporal execution")
+        raise ApplicationError("Delegated task attempt is no longer owned by this runner",
+                               type="DelegationAttemptSuperseded", non_retryable=True)
     return {"team_id": team_id, "team_task_id": task_id, "registered": True}
 
 

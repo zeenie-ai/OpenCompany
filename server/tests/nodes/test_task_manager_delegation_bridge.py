@@ -80,6 +80,7 @@ async def test_assign_without_legacy_services_returns_temporal_envelope_only():
 
     assert result["delegation"] is None
     assert result["delegation_request"]["team_task_id"] == "task-2"
+    assert result["delegation_request"]["attempt_number"] == 0
 
 
 @pytest.mark.asyncio
@@ -117,6 +118,8 @@ async def test_reassign_returns_delegation_request_for_the_new_assignee():
     service = SimpleNamespace(
         mutate_durable_task=AsyncMock(return_value={
             "id": "task-3", "revision": 6, "status": "queued",
+            "current_attempt": 2, "acceptance_criteria": {"checks": ["Evidence"]},
+            "depends_on": ["source-task"],
             "assigned_to": "child-1", "mission": "Find evidence",
             "context": {"topic": "queues"},
         }),
@@ -130,6 +133,9 @@ async def test_reassign_returns_delegation_request_for_the_new_assignee():
     assert result["task"]["status"] == "queued"
     envelope = result["delegation_request"]
     assert envelope["team_task_id"] == "task-3"
+    assert envelope["attempt_number"] == 2
+    assert envelope["acceptance_criteria"] == {"checks": ["Evidence"]}
+    assert envelope["depends_on"] == ["source-task"]
     assert envelope["assignee_node_id"] == "child-1"
     assert envelope["delegate_name"]
     assert envelope["task"] == "Find evidence"
@@ -145,7 +151,7 @@ async def test_retry_returns_delegation_request_for_the_current_assignee():
     service = SimpleNamespace(
         get_durable_task=AsyncMock(return_value=row),
         mutate_durable_task=AsyncMock(return_value={
-            **row, "revision": 3, "status": "queued",
+            **row, "revision": 3, "status": "queued", "current_attempt": 1,
         }),
     )
     with patch("services.agent_team.get_agent_team_service", return_value=service):
@@ -155,6 +161,7 @@ async def test_retry_returns_delegation_request_for_the_current_assignee():
 
     envelope = result["delegation_request"]
     assert envelope["team_task_id"] == "task-4"
+    assert envelope["attempt_number"] == 1
     assert envelope["assignee_node_id"] == "child-1"
     assert envelope["task"] == "Find evidence"
 

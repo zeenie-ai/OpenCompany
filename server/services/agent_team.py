@@ -243,7 +243,8 @@ class AgentTeamService:
             "modify": (["blocked", "queued"], {k: payload[k] for k in ("title", "mission", "context", "acceptance_criteria") if payload.get(k) is not None}, False),
             "cancel": (["blocked", "queued", "running"], {"status": "cancelled", "cancellation_requested": True, "cancellation_reason": payload.get("reason"), "completed_at": now}, False),
             "accept": (["submitted"], {"status": "accepted", "completed_at": now, "progress": 100}, False),
-            "retry": (["failed", "submitted", "cancelled"], {"status": "queued", "current_attempt": task["current_attempt"] + 1, "retry_count": task["retry_count"] + 1, "result": None, "error": None, "completed_at": None, "cancellation_requested": False, "cancellation_reason": None}, True),
+            "retry": (["failed", "submitted", "cancelled"], {"status": "queued", "current_attempt": task["current_attempt"] + 1, "retry_count": task["retry_count"] + 1, "result": None, "error": None, "completed_at": None, "cancellation_requested": False, "cancellation_reason": None,
+                **{key: None for key in ("runner_workflow_id", "runner_run_id", "child_workflow_id", "child_run_id", "parent_workflow_id", "parent_run_id")}}, True),
         }
         if operation == "reassign":
             assignee = payload.get("assignee_node_id")
@@ -318,9 +319,9 @@ class AgentTeamService:
 
         return task
 
-    async def claim_task(self, team_id: str, task_id: str, agent_node_id: str) -> Optional[Dict[str, Any]]:
+    async def claim_task(self, team_id: str, task_id: str, agent_node_id: str, *, expected_attempt: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Claim a task for an agent."""
-        task = await self.database.claim_task(task_id, agent_node_id)
+        task = await self.database.claim_task(task_id, agent_node_id, **({"expected_attempt": expected_attempt} if expected_attempt is not None else {}))
 
         # Only the winner of the conditional database claim becomes working.
         # Updating first left every losing parallel contender stuck in the
@@ -333,13 +334,13 @@ class AgentTeamService:
 
         return task
 
-    async def complete_task(self, team_id: str, task_id: str, result: Optional[Dict[str, Any]] = None) -> bool:
+    async def complete_task(self, team_id: str, task_id: str, result: Optional[Dict[str, Any]] = None, *, expected_attempt: Optional[int] = None) -> bool:
         """Submit a worker result for lead review."""
         # Get task to find assigned agent
         tasks = await self.database.get_team_tasks(team_id)
         task = next((t for t in tasks if t["id"] == task_id), None)
 
-        success = await self.database.complete_task(task_id, result)
+        success = await self.database.complete_task(task_id, result, **({"expected_attempt": expected_attempt} if expected_attempt is not None else {}))
 
         if success:
             # Update member status back to idle
@@ -351,12 +352,12 @@ class AgentTeamService:
 
         return success
 
-    async def fail_task(self, team_id: str, task_id: str, error: str) -> bool:
+    async def fail_task(self, team_id: str, task_id: str, error: str, *, expected_attempt: Optional[int] = None) -> bool:
         """Mark a task as failed."""
         tasks = await self.database.get_team_tasks(team_id)
         task = next((t for t in tasks if t["id"] == task_id), None)
 
-        success = await self.database.fail_task(task_id, error)
+        success = await self.database.fail_task(task_id, error, **({"expected_attempt": expected_attempt} if expected_attempt is not None else {}))
 
         if success:
             if task and task.get("assigned_to"):
@@ -372,9 +373,10 @@ class AgentTeamService:
         team_id: str,
         task_id: str,
         reason: str,
+        *, expected_attempt: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         """Terminally cancel delegated work without failing or requeueing it."""
-        task = await self.database.cancel_team_task(team_id, task_id, reason)
+        task = await self.database.cancel_team_task(team_id, task_id, reason, **({"expected_attempt": expected_attempt} if expected_attempt is not None else {}))
         if not task:
             return None
 

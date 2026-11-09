@@ -114,6 +114,12 @@ blocked, and one sibling failure does not cancel successful siblings. Multiple
 the assignment and returns without polling. The runner owns admission, claim,
 child execution, terminal persistence, event emission, and permit release.
 
+Physical concurrency leases belong to one Temporal workflow run and Activity
+attempt. A Task Manager retry keeps the durable task ID but starts a new
+runner, so it must acquire a different lease from the one its previous runner
+released. Capacity being free does not make a released lease reusable. Acquire
+retries reconcile only leases from the same owning workflow run.
+
 Each child receives an isolated AgentWorkflow context containing only its
 bounded mission, relevant context, and its own connected tools, skills, and
 memory. The parent receives a compact result; full child output remains
@@ -159,6 +165,18 @@ as `team.task.submitted`, `team.task.accepted`, `team.task.failed`, and
 `taskTrigger` with owning team/execution/root, task, trace, result/error, and
 usage context. A connected lead starts a separate review invocation scoped to
 the original execution, reads Task Manager, and reports without duplicating work.
+
+Assignment and completion identities distinguish durable task attempts while
+remaining stable when an Activity retries. The first attempt keeps its original
+event IDs; later attempts use an attempt namespace. Lifecycle writes check the
+owning attempt, so a delayed result from an earlier runner cannot finish the
+newer task. Legacy runner inputs recover their attempt from the stored runner
+identity instead of assuming the task's latest attempt.
+
+The specialist does not call Task Completed manually: its runner persists the
+finished result and emits the completion event. A lead may then accept the
+submission or request revisions with `retry_task`; that review is a separate
+invocation with its own Temporal history.
 
 ## Human interfaces
 

@@ -1988,6 +1988,10 @@ class AgentWorkflow:
                     "trace_id": trace_id,
                     "assignment_event_id": f"{task_id}:assigned",
                 }
+                # Only new Task Manager activity results carry this field.
+                # Recorded legacy results keep their existing command payloads.
+                if "attempt_number" in request:
+                    lifecycle["attempt_number"] = int(request["attempt_number"])
                 # queue_delegation is intentionally retained: it is
                 # idempotent for the pre-created task and records the same
                 # lifecycle event as direct delegation without duplicating it.

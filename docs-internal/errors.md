@@ -747,3 +747,39 @@ logs and Temporal details, distinguishing `thinking_prefix_mismatch` from
 `thinking_signature_invalid` without exposing provider response text. Restart
 the backend/workers to load the adapter and configuration, then retry the
 failed task; terminal failures do not retry themselves.
+
+## 35. Task Manager revisions stay queued after Task Completed already fired
+
+**Symptom**: specialists finish their first tasks, but a lead's `retry_task`
+requests remain queued in Temporal. Their detached runners wait in
+`agent.acquire_subagent_permit` despite available concurrency capacity.
+
+**Observed history (2 November 2026)**: workflow 2, generation 5 received three
+completion events at 18:58:25, 19:00:12, and 19:00:24 IST. Each launched a lead
+review. The lead requested revisions because the submissions lacked requested
+information. All three new runners then heartbeated `queued` at the permit
+Activity. The root's active counter was zero; their computed physical lease
+IDs matched released rows from the original runners. The workers were polling
+and healthy.
+
+**Root cause**: the lease hash included the durable task ID, Activity ID, and
+Activity retry number, but omitted the owning workflow run. A fresh runner
+reused those inputs and collided with the previous runner's released lease.
+The database intentionally rejects a released lease, so polling could never
+admit the revision. A second defect reused `<task_id>:terminal` for every
+durable attempt: after fixing admission, the retry's completion could be
+discarded by event deduplication.
+
+**Fix**: scope physical leases to the Temporal workflow/run and Activity
+attempt, and reconcile retries only within that owner. Keep existing recorded
+lease-version inputs compatible. Carry the durable task attempt through the
+scheduling/lifecycle boundary, namespace later attempts' assignment/completion
+events, and fence lifecycle mutations against stale attempts. Old recorded
+runner inputs resolve their attempt through their persisted Temporal identity.
+
+**Recovery**: load the fix in the backend/workers. Already-running permit loops
+hold the old implementation in memory and need a worker restart or Activity
+retry. Continue the existing attempts; clearing task history or deleting
+concurrency counters is unnecessary. Inspect `agent.acquire_subagent_permit`
+heartbeats, task-attempt runner identities, and completion events to distinguish
+waiting for capacity from reusing a released lease.
