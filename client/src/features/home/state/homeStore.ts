@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { create } from 'zustand';
+import type { WorkflowControlStatus } from '@/contexts/WebSocketContext';
 import type { CanvasFocus } from '@/lib/canvasBoard';
 import type { CredentialsIntent } from '@/stores/shellDialogsStore';
 import { SPIKE, spikeOrb } from '../orb/orb';
@@ -45,12 +46,15 @@ export interface ConnectAIState {
   closeOnConnect: boolean;
 }
 
-/** An employee's screen the owner took (Take over). */
+/** An employee's screen the owner took (Take over, workspace/takeover.ts). */
 export interface Takeover {
-  /** Take over stopped them, so Hand back resumes them. */
-  stopped: boolean;
-  /** Gives back the screen that was taken (components/workspace/surface.ts). */
+  /** The Workspace tab whose screen it is. */
+  screen: WorkspaceTab;
+  /** Gives back that screen (components/workspace/surface.ts). */
   giveBack: () => void;
+  /** Take over's Stop, when it stopped them: Hand back resumes them from its
+   *  answer. */
+  stop?: Promise<WorkflowControlStatus>;
 }
 
 // View ids, not node types: the Canvas tab is 'board' so no id reads as the

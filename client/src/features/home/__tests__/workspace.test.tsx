@@ -59,18 +59,32 @@ interface SurfaceProps {
 // way to give back what a claim took.
 const screenControl = vi.hoisted(() => ({ claim: vi.fn(), giveBack: vi.fn() }));
 // The Browser and phone views: their nodes, their look and their `action`
-// slot, where the dock puts Take over.
+// slot, where the dock puts Take over. As the real views, they show it only
+// while the owner does not hold their screen: from a granted claim until it
+// is given back or the view hides.
 const surface = vi.hoisted(() => (testId: string) => async () => {
-  const { useImperativeHandle } = await import('react');
+  const { useImperativeHandle, useState } = await import('react');
   return {
     default: function Surface({ workflowId, nodes, visible, chrome, action, ref }: SurfaceProps) {
-      useImperativeHandle(ref, () => ({ claim: screenControl.claim }));
+      const [held, setHeld] = useState(false);
+      if (held && !visible) setHeld(false);
+      useImperativeHandle(ref, () => ({
+        claim: async () => {
+          const giveBack = (await screenControl.claim()) as (() => void) | null;
+          if (!giveBack) return null;
+          setHeld(true);
+          return () => {
+            setHeld(false);
+            giveBack();
+          };
+        },
+      }));
       return (
         <div data-testid={testId} data-workflow={workflowId} data-visible={String(visible)} data-chrome={chrome}>
           {nodes.map((node) => (
             <span key={node.node_id}>{node.label}</span>
           ))}
-          {action}
+          {!held && action}
         </div>
       );
     },
@@ -249,7 +263,7 @@ describe('WorkspaceDock', () => {
   });
 
   it('shows Waiting in the status dot while the owner has the screen', () => {
-    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser', takeovers: { w1: { stopped: true, giveBack: vi.fn() } } });
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser', takeovers: { w1: { screen: 'browser', giveBack: vi.fn() } } });
     renderWith([employee({ status: 'paused' })]);
     expect(statusDot('Waiting')).toHaveAttribute('title', 'Waiting');
     expect(screen.queryByRole('status', { name: 'Stopped' })).toBeNull();
@@ -377,7 +391,7 @@ describe('WorkspaceDock', () => {
     expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
     expect(screenControl.claim.mock.invocationCallOrder[0]).toBeLessThan(actions.pauseWorkflow.mock.invocationCallOrder[0]);
     expect(await screen.findByText(BANNER)).toBeInTheDocument();
-    expect(useHomeStore.getState().takeovers).toMatchObject({ w1: { stopped: true, giveBack: screenControl.giveBack } });
+    expect(useHomeStore.getState().takeovers).toMatchObject({ w1: { screen: 'browser', stop: expect.any(Promise) } });
     // The body under the row is framed, and Take over is gone while the owner has the screen.
     expect(frame()).toHaveClass('border-action-config-border', 'top-(--h-home-header)');
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
@@ -388,6 +402,29 @@ describe('WorkspaceDock', () => {
     expect(actions.resumeWorkflow.mock.calls[0][0]).toBe('w1');
     expect(screen.queryByText(BANNER)).toBeNull();
     expect(frame()).toBeNull();
+    expect(useHomeStore.getState().takeovers).toEqual({});
+  });
+
+  it('offers Take over again on the screen that let go of the owner, and stops no one twice', async () => {
+    takeOverAnswers();
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
+    renderWith([employee({ control: running(4) })]);
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    // The phone was not taken: it offers nothing while the owner has Maya.
+    await userEvent.click(screen.getByRole('tab', { name: 'Mobile' }));
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    // The browser let go when its view hid, and offers Take over again.
+    await userEvent.click(screen.getByRole('tab', { name: 'Browser' }));
+    await userEvent.click(within(screen.getByTestId('browser-workspace')).getByRole('button', { name: 'Take over' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull());
+    expect(screenControl.claim).toHaveBeenCalledTimes(2);
+    expect(actions.pauseWorkflow).toHaveBeenCalledOnce();
+    expect(screen.getByText(BANNER)).toBeInTheDocument();
+
+    await userEvent.click(within(banner()).getByRole('button', { name: 'Hand back' }));
+    expect(screenControl.giveBack).toHaveBeenCalledOnce();
+    expect(actions.resumeWorkflow).toHaveBeenCalledOnce();
     expect(useHomeStore.getState().takeovers).toEqual({});
   });
 
@@ -583,7 +620,7 @@ describe('The Workspace status pill', () => {
   });
 
   it('says the owner has the screen while they do', async () => {
-    useHomeStore.setState({ takeovers: { w1: { stopped: true, giveBack: vi.fn() } } });
+    useHomeStore.setState({ takeovers: { w1: { screen: 'browser', giveBack: vi.fn() } } });
     renderWith([employee()]);
     await waitFor(() => expect(stepCalls()).toHaveLength(1));
     await act(async () => {});
@@ -626,7 +663,7 @@ describe('WorkspaceButton', () => {
   it('shows no dot while the employee needs the owner, or the owner has their screen', () => {
     renderWith([employee({ pending_approvals: 1 }), employee({ workflow_id: 'w2', name: 'Leo' })], <WorkspaceButton />);
     expect(dot()).toBeNull();
-    act(() => useHomeStore.setState({ workspaceFor: 'w2', takeovers: { w2: { stopped: false, giveBack: vi.fn() } } }));
+    act(() => useHomeStore.setState({ workspaceFor: 'w2', takeovers: { w2: { screen: 'browser', giveBack: vi.fn() } } }));
     expect(dot()).toBeNull();
     act(() => useHomeStore.setState({ takeovers: {} }));
     expect(dot()).not.toBeNull();

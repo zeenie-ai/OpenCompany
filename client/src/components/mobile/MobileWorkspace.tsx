@@ -27,7 +27,8 @@ export default function MobileWorkspace({ workflowId, nodes, visible = true, can
    *  diagnostics stays, and there is no AI activity or Ask AI. The editor's
    *  look is the default. */
   chrome?: 'dev' | 'home';
-  /** Home only: the dock's Take over, at the end of the phone's buttons. */
+  /** Home only: the dock's Take over, at the end of the phone's buttons
+   *  while the owner does not hold the phone. */
   action?: ReactNode;
 }) {
   const { addEventListener } = useWebSocketActions();
@@ -336,7 +337,7 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
             <span aria-hidden className="mx-1 h-4.5 w-px bg-border-default" />
             {canvasNodeId && <DeviceButton label="Screenshot to Canvas" disabled={!!busy} onClick={() => void screenshot()}><ScanLine /></DeviceButton>}
             <DeviceButton label="Rotate" disabled={!held || !!busy} onClick={() => void rotate()}><RotateCcwSquare /></DeviceButton>
-            {home && action && <>
+            {home && action && !held && <>
               <span aria-hidden className="mx-1 h-4.5 w-px bg-border-default" />
               {/* As tall as the buttons beside it, so the bar keeps its height. */}
               <span className="flex *:h-7.5">{action}</span>

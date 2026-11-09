@@ -14,7 +14,8 @@
  * tab's row of page controls and in the phone's buttons, and stops a
  * running employee while the owner uses that screen. Meanwhile the body
  * below the row is framed, and a banner says the employee is waiting, with
- * the one Hand back, on every tab.
+ * the one Hand back, on every tab. A screen that lets go of the owner (the
+ * window lost focus, the view hid) offers Take over again.
  *
  * At 1100px and wider the dock pushes the page aside; narrower, it lies
  * over the page with a modal's shadow. The left edge drags from 360px to
@@ -45,7 +46,7 @@ import { workspaceStatus, type StatusTone } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
 import { PrimaryActionButton } from '../employee/PrimaryActionButton';
 import { useEmployeeControl } from '../employee/useEmployeeControl';
-import { dockEmployee, dockWidth, useHomeStore } from '../state/homeStore';
+import { dockEmployee, dockWidth, useHomeStore, type WorkspaceTab } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
 import { StatusDot } from '../ui/primitives';
 import { useWorkspaceSteps } from './steps';
@@ -196,7 +197,7 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
   const setTab = useHomeStore((s) => s.setWorkspaceTab);
   const browserRef = useRef<SurfaceControl>(null);
   const mobileRef = useRef<SurfaceControl>(null);
-  const takeover = useTakeOver(employee, () =>
+  const takeover = useTakeOver(employee, tab, () =>
     tab === 'browser' ? browserRef.current : tab === 'android' ? mobileRef.current : null,
   );
   const status = workspaceStatus(employee, takeover.active);
@@ -208,16 +209,21 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
   const browserRunning = useSurfaceRunning(employee.workflow_id, browserIds);
   const mobileRunning = useSurfaceRunning(employee.workflow_id, mobileIds);
 
-  const takeOverButton = takeover.active ? undefined : (
-    <Button
-      variant="quiet"
-      disabled={takeover.busy}
-      onClick={() => void takeover.takeOver()}
-      className="h-8.5 shrink-0 rounded-pill border-border-default bg-bg-elevated px-3.5 text-sm font-medium text-fg-default"
-    >
-      Take over
-    </Button>
-  );
+  // Each view shows Take over while the owner does not hold its screen.
+  // While they have this employee, only the screen they took offers it: it
+  // lets go when the window loses focus or the view hides, and they take it
+  // again.
+  const takeOverOn = (screen: WorkspaceTab) =>
+    takeover.active && takeover.screen !== screen ? undefined : (
+      <Button
+        variant="quiet"
+        disabled={takeover.busy}
+        onClick={() => void takeover.takeOver()}
+        className="h-8.5 shrink-0 rounded-pill border-border-default bg-bg-elevated px-3.5 text-sm font-medium text-fg-default"
+      >
+        Take over
+      </Button>
+    );
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -244,7 +250,7 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
             visible={visible && tab === 'browser'}
             agentName={employee.name}
             chrome="home"
-            action={takeOverButton}
+            action={takeOverOn('browser')}
           />
         }
         android={
@@ -257,7 +263,7 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
             canvasNodeId={employee.canvas_node_id}
             notify={(message, tone) => pillToast(message, { tone })}
             chrome="home"
-            action={takeOverButton}
+            action={takeOverOn('android')}
           />
         }
         board={<CanvasTab employee={employee} />}

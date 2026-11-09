@@ -393,13 +393,19 @@ describe('BrowserWorkspace in Home', () => {
     expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull();
   });
 
-  it('ends the row of page controls with the dock’s action', () => {
-    home({ action: <button type="button">Take over</button> });
+  it('ends the row of page controls with the dock’s action, while the owner does not have control', () => {
+    const socket = home({ action: <button type="button">Take over</button> });
     const takeOver = screen.getByRole('button', { name: 'Take over' });
     const row = takeOver.parentElement!;
     expect(row).toHaveClass('h-13', 'border-b', 'border-border-default');
     expect(row).toContainElement(screen.getByRole('button', { name: 'Back' }));
     expect(row.lastElementChild).toBe(takeOver);
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    // The window lost focus, which hands control back: the action is offered again.
+    act(() => { window.dispatchEvent(new Event('blur')); });
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_release', outcome: 'control_lost' });
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
   });
 
   it('leaves out the editor’s Take control, browser controls, Full view and browser tasks', () => {

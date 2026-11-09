@@ -40,7 +40,7 @@ function deferred<T>() {
 function takeOverHook() {
   const giveBack = vi.fn();
   const screen = { claim: vi.fn(async () => giveBack) };
-  const hook = renderHook(({ employee }) => useTakeOver(employee, () => screen), { initialProps: { employee: maya() } });
+  const hook = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen), { initialProps: { employee: maya() } });
   return { ...hook, giveBack, screen };
 }
 
@@ -61,7 +61,7 @@ describe('Hand back lifecycle recovery', () => {
       const giveBack = vi.fn();
       const screen = { claim: vi.fn(async () => giveBack) };
       mocks.resumeWorkflow.mockRejectedValue(new Error(error));
-      const { result } = renderHook(() => useTakeOver(employee, () => screen));
+      const { result } = renderHook(() => useTakeOver(employee, 'browser', () => screen));
       await act(async () => result.current.takeOver());
       expect(result.current.active).toBe(true);
       mocks.pillToast.mockClear();
@@ -95,8 +95,9 @@ describe('Take over', () => {
 
     expect(screen.claim.mock.invocationCallOrder[0]).toBeLessThan(mocks.pauseWorkflow.mock.invocationCallOrder[0]);
     expect(mocks.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
-    expect(result.current).toMatchObject({ active: true, busy: false });
-    expect(useHomeStore.getState().takeovers).toEqual({ w1: { stopped: true, giveBack } });
+    expect(result.current).toMatchObject({ active: true, screen: 'browser', busy: false });
+    expect(useHomeStore.getState().takeovers.w1).toEqual({ screen: 'browser', giveBack, stop: stop.promise });
+    expect(useHomeStore.getState().takeovers.w1.stop).toBe(stop.promise);
     expect(mocks.pillToast).toHaveBeenCalledWith('You have control — Maya will wait');
 
     await act(async () => {
@@ -121,6 +122,58 @@ describe('Take over', () => {
     expect(useHomeStore.getState().takeovers).toEqual({});
     if (message) expect(mocks.pillToast).toHaveBeenLastCalledWith(message, { tone: 'error' });
     else expect(mocks.pillToast).not.toHaveBeenCalledWith(expect.anything(), { tone: 'error' });
+  });
+});
+
+describe('Taking the screen again', () => {
+  /** The hook over a screen that grants two claims, each with its own way back. */
+  function twoClaims() {
+    const first = vi.fn();
+    const second = vi.fn();
+    const screen = { claim: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second) };
+    const { result } = renderHook(() => useTakeOver(maya(), 'browser', () => screen));
+    return { result, first, second, screen };
+  }
+
+  it('sends no second Stop, and Hand back gives back the screen taken last', async () => {
+    const { result, first, second, screen } = twoClaims();
+    await act(async () => result.current.takeOver());
+    mocks.pillToast.mockClear();
+
+    // The screen let go of the owner (the window lost focus): they take it again.
+    await act(async () => result.current.takeOver());
+
+    expect(screen.claim).toHaveBeenCalledTimes(2);
+    expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
+    expect(mocks.pillToast).not.toHaveBeenCalled();
+    expect(useHomeStore.getState().takeovers.w1).toMatchObject({ screen: 'browser', giveBack: second });
+
+    await act(async () => result.current.handBack());
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 5);
+  });
+
+  it('gives back the screen taken last when the Stop fails', async () => {
+    const stop = deferred<WorkflowControlStatus>();
+    mocks.pauseWorkflow.mockReturnValue(stop.promise);
+    const { result, first, second } = twoClaims();
+    let taking!: Promise<void>;
+    await act(async () => {
+      taking = result.current.takeOver();
+    });
+    await act(async () => result.current.takeOver());
+
+    await act(async () => {
+      stop.reject(new Error('control_revision_conflict'));
+      await taking;
+    });
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+    expect(result.current.active).toBe(false);
+    expect(useHomeStore.getState().takeovers).toEqual({});
+    expect(mocks.pillToast).toHaveBeenLastCalledWith('That changed a moment ago. Try again.', { tone: 'error' });
   });
 });
 

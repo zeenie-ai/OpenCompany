@@ -19,7 +19,8 @@ export interface BrowserWorkspaceProps {
   flushCanvas?: () => void;
   /** `home`: Home's dock look; the editor's is the default. */
   chrome?: 'dev' | 'home';
-  /** The end of Home's row of page controls: the dock's Take over. */
+  /** The end of Home's row of page controls while the owner does not have
+   *  control: the dock's Take over. */
   action?: ReactNode;
 }
 type Phase = 'connecting' | 'idle' | 'live' | 'error';
@@ -51,8 +52,9 @@ function webPage(url: string): boolean {
 /** `ref`: the Workspace's Take over (SurfaceControl), for the browser shown.
  *  `chrome="home"` is Home's dock (chat/V2.md §4b): one row of page controls
  *  over the page (back, forward and reload, which work while the owner has
- *  control; the page's domain; Open in new tab; `action`), and none of the
- *  editor's Take control, browser controls, Full view or browser tasks. */
+ *  control; the page's domain; Open in new tab; `action` while they do
+ *  not), and none of the editor's Take control, browser controls, Full view
+ *  or browser tasks. */
 export default function BrowserWorkspace({ workflowId, nodes, visible = true, agentName, flushCanvas, chrome = 'dev', action, ref }: BrowserWorkspaceProps & { ref?: Ref<SurfaceControl> }) {
   const [selected, setSelected] = useState('');
   const nodeId = nodes.some((n) => n.node_id === selected) ? selected : nodes[0]?.node_id;
@@ -467,7 +469,7 @@ function BrowserSessionView({ workflowId, nodeId, visible, agentName, chrome, ac
               </a>
             </Button>
           )}
-          {action}
+          {!control && action}
         </div>
         {tabPicker && <div className="shrink-0 border-b border-border-default px-2.5 py-2">{tabPicker}</div>}
         {body}

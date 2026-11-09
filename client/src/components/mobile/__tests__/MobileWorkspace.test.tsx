@@ -444,7 +444,7 @@ describe('Mobile Workspace in Home', () => {
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
   });
 
-  it('types on the phone once the Workspace’s Take over has it', async () => {
+  it('types on the phone once the Workspace’s Take over has it, and drops the dock’s action meanwhile', async () => {
     snapshot.running = true;
     fetchMock.mockImplementation(async (url: string) => {
       if (url.endsWith('/takeover')) {
@@ -455,12 +455,14 @@ describe('Mobile Workspace in Home', () => {
       return json(url.endsWith('/doctor') ? ready : snapshot);
     });
     const control = createRef<SurfaceControl>();
-    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" ref={control} />);
-    await screen.findByRole('toolbar', { name: 'Phone buttons' });
+    render(<MobileWorkspace workflowId="flow" nodes={nodes} chrome="home" ref={control} action={<button type="button">Take over</button>} />);
+    const bar = await screen.findByRole('toolbar', { name: 'Phone buttons' });
+    expect(within(bar).getByRole('button', { name: 'Take over' })).toBeInTheDocument();
     await act(async () => { await control.current!.claim(); });
     // The next status read shows this view holding the phone.
     const field = await screen.findByRole('textbox', { name: 'Text to type on phone' }, { timeout: 3000 });
     expect(screen.getByRole('button', { name: 'Home' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
     // Hand back is the dock's; the editor's lease buttons and APK install stay out.
     for (const name of ['Let AI continue', 'Finish using phone']) expect(screen.queryByRole('button', { name, hidden: true })).toBeNull();
     expect(screen.queryByLabelText('Install APK')).toBeNull();
