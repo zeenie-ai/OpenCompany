@@ -426,8 +426,9 @@ export function WorkspaceDock({ onConnect }: { onConnect: (providerId: string) =
         title="Drag to resize"
         onMouseDown={resize.start}
         className={cn(
-          'absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize transition-colors hover:bg-node-agent-soft',
-          resize.isResizing && 'bg-node-agent-soft',
+          // Neutral: on Home colour marks state or role, and a handle is neither.
+          'absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize transition-colors hover:bg-border-strong',
+          resize.isResizing && 'bg-border-strong',
         )}
       />
       {visited && (

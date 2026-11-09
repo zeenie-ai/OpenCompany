@@ -245,8 +245,13 @@ describe('WorkspaceDock', () => {
   it('says while its edge is dragged, for what sits beside it', () => {
     useHomeStore.setState({ workspaceOpen: true });
     renderWith([employee()]);
-    fireEvent.mouseDown(screen.getByRole('separator', { name: 'Resize workspace' }), { clientX: 900 });
+    const handle = screen.getByRole('separator', { name: 'Resize workspace' });
+    // Neutral, never a role colour (the editor's handles keep their purple).
+    expect(handle).toHaveClass('hover:bg-border-strong');
+    expect(handle.className).not.toMatch(/node-agent/);
+    fireEvent.mouseDown(handle, { clientX: 900 });
     expect(useHomeStore.getState().workspaceResizing).toBe(true);
+    expect(handle).toHaveClass('bg-border-strong');
     fireEvent.mouseUp(document);
     expect(useHomeStore.getState().workspaceResizing).toBe(false);
   });
