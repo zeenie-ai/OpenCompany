@@ -25,13 +25,15 @@ import { useGetStarted, type GetStartedRow } from './useGetStarted';
  * Where the card or its pill sits: the bottom-right corner or, while the
  * Workspace dock is open, at its left edge, moving with it on the dock's
  * own timing and never past the screen's left (21rem: the card's 20rem and
- * the margin). The dock's width, a dynamic value, comes in as
- * `--dock-width`. It reads the dock itself, so a drag moves only this.
+ * the margin), and at once while its edge is dragged. The dock's width, a
+ * dynamic value, comes in as `--dock-width`. It reads the dock itself, so a
+ * drag moves only this.
  */
 function BesideDock({ children }: { children: ReactNode }) {
   const dockOpen = useHomeStore((s) => s.workspaceOpen);
   const dockPx = useHomeStore((s) => s.workspaceWidth);
   const dockWide = useHomeStore((s) => s.workspaceWide);
+  const dragged = useHomeStore((s) => s.workspaceResizing);
   return (
     <div
       className={cn(
@@ -39,6 +41,7 @@ function BesideDock({ children }: { children: ReactNode }) {
         dockOpen
           ? 'right-[min(calc(var(--dock-width)_+_1rem),calc(100vw_-_21rem))] duration-(--dur-dock-in) ease-spring'
           : 'right-4 duration-(--dur-sidebar-out) ease-(--ease-default)',
+        dragged && 'transition-none',
       )}
       style={dockOpen ? ({ '--dock-width': dockWidth(dockPx, dockWide) } as CSSProperties) : undefined}
     >

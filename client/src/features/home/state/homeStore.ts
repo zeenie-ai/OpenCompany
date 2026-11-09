@@ -166,6 +166,8 @@ interface HomeState {
   workspaceWidth: number;
   workspaceTab: WorkspaceTab;
   workspaceWide: boolean;
+  /** The dock's edge is being dragged: what moves with it follows at once. */
+  workspaceResizing: boolean;
   /** Whose workspace it shows: the employee last opened or watched
    *  (dockEmployee falls back to the first on the team). */
   workspaceFor: string | null;
@@ -175,6 +177,9 @@ interface HomeState {
   /** The employees whose screen the owner took from the Workspace (Take
    *  over), by workflow id. */
   takeovers: Record<string, Takeover>;
+  /** The employees whose screen is being taken or handed back, by workflow
+   *  id: one employee's slow Hand back never holds another's. */
+  takeoverBusy: Record<string, true>;
   /** The Welcome guide (onboarding/WelcomeGuide). */
   guide: GuideState;
   /** The AI models dialog. */
@@ -210,6 +215,8 @@ interface HomeState {
   setWorkspaceWidth: (px: number) => void;
   /** null: handed back. */
   setTakeover: (workflowId: string, takeover: Takeover | null) => void;
+  setTakeoverBusy: (workflowId: string, busy: boolean) => void;
+  setWorkspaceResizing: (resizing: boolean) => void;
   toggleWorkspaceWide: () => void;
   /** Open the Workspace on the Canvas tab, at an item and version of an
    *  employee's board. */
@@ -252,9 +259,11 @@ export const useHomeStore = create<HomeState>((set, get) => ({
   workspaceWidth: workspace.widthPx,
   workspaceTab: workspace.tab,
   workspaceWide: false,
+  workspaceResizing: false,
   workspaceFor: null,
   workspaceFocus: null,
   takeovers: {},
+  takeoverBusy: {},
   guide: { open: false, step: 'welcome', furthest: 0, checked: false, provider: null, pendingDraft: false },
   connectAI: { open: false, provider: null, closeOnConnect: true },
   getStartedFolded: false,
@@ -317,6 +326,14 @@ export const useHomeStore = create<HomeState>((set, get) => ({
       else delete takeovers[workflowId];
       return { takeovers };
     }),
+  setTakeoverBusy: (workflowId, busy) =>
+    set((state) => {
+      const takeoverBusy = { ...state.takeoverBusy };
+      if (busy) takeoverBusy[workflowId] = true;
+      else delete takeoverBusy[workflowId];
+      return { takeoverBusy };
+    }),
+  setWorkspaceResizing: (resizing) => set({ workspaceResizing: resizing }),
   setWorkspaceTab: (tab) => {
     set({ workspaceTab: tab });
     saveWorkspacePrefs(get());

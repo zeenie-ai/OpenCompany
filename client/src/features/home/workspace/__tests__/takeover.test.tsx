@@ -46,7 +46,7 @@ function takeOverHook() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  useHomeStore.setState({ takeovers: {} });
+  useHomeStore.setState({ takeovers: {}, takeoverBusy: {} });
   mocks.pauseWorkflow.mockReset().mockResolvedValue(status('paused', 5));
   mocks.resumeWorkflow.mockReset().mockResolvedValue(status('running', 6));
 });
@@ -122,6 +122,46 @@ describe('Take over', () => {
     expect(useHomeStore.getState().takeovers).toEqual({});
     if (message) expect(mocks.pillToast).toHaveBeenLastCalledWith(message, { tone: 'error' });
     else expect(mocks.pillToast).not.toHaveBeenCalledWith(expect.anything(), { tone: 'error' });
+  });
+});
+
+describe('One dock, several employees', () => {
+  it('never holds one employee’s Take over while another’s Hand back waits for a drain', async () => {
+    const stop = deferred<WorkflowControlStatus>();
+    mocks.pauseWorkflow.mockReturnValue(stop.promise);
+    const screen = { claim: vi.fn(async () => vi.fn()) };
+    const leo = parseEmployee({
+      workflow_id: 'w2', name: 'Leo', role: 'Researcher', status: 'working',
+      control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 9 }, 'w2'),
+    })!;
+    // The dock's one hook instance follows whichever employee it shows.
+    const { result, rerender } = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen), {
+      initialProps: { employee: maya() },
+    });
+    let taking!: Promise<void>;
+    await act(async () => {
+      taking = result.current.takeOver();
+    });
+    let handing!: Promise<void>;
+    await act(async () => {
+      handing = result.current.handBack();
+    });
+    expect(result.current.busy).toBe(true);
+
+    // Maya's Hand back waits for her Stop's drain; Leo is free meanwhile.
+    rerender({ employee: leo });
+    expect(result.current.busy).toBe(false);
+    await act(async () => {
+      void result.current.takeOver();
+    });
+    expect(result.current.active).toBe(true);
+    expect(mocks.pauseWorkflow).toHaveBeenLastCalledWith('w2', 9);
+
+    await act(async () => {
+      stop.resolve(status('paused', 6));
+      await Promise.all([taking, handing]);
+    });
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
   });
 });
 

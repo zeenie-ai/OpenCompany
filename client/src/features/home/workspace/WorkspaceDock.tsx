@@ -13,9 +13,10 @@
  * Take over (takeover.ts) sits with the screen it takes, in the Browser
  * tab's row of page controls and in the phone's buttons, and stops a
  * running employee while the owner uses that screen. Meanwhile the body
- * below the row is framed, and a banner says the employee is waiting, with
- * the one Hand back, on every tab. A screen that lets go of the owner (the
- * window lost focus, the view hid) offers Take over again.
+ * below the row is framed, and the pill at the foot is the banner saying
+ * the employee is waiting, with the one Hand back, on every tab. A screen
+ * that lets go of the owner (the window lost focus, the view hid) offers
+ * Take over again.
  *
  * At 1100px and wider the dock pushes the page aside; narrower, it lies
  * over the page with a modal's shadow. The left edge drags from 360px to
@@ -33,7 +34,7 @@ import { useSurfaceRunning } from '@/components/workspace/activity';
 import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
 import MobileWorkspace from '@/components/mobile/MobileWorkspace';
 import type { SurfaceControl } from '@/components/workspace/surface';
-import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,7 +51,7 @@ import { dockEmployee, dockWidth, useHomeStore, type WorkspaceTab } from '../sta
 import { pillToast } from '../ui/pillToast';
 import { StatusDot } from '../ui/primitives';
 import { useWorkspaceSteps } from './steps';
-import { useTakeOver } from './takeover';
+import { useTakeOver, type TakeOver } from './takeover';
 
 // Its own chunk: the board's viewers (markdown, code, JSON) stay out of Home's.
 const WorkspaceCanvas = lazy(() => import('./WorkspaceCanvas'));
@@ -157,31 +158,58 @@ function clock(at: string): string {
 
 /**
  * The pill floating at the dock's foot, over the room each tab body keeps
- * free there: their status dot and what is going on. "You have the screen"
- * while the owner has it; their status while they are not live (Stopped,
- * Needs you…); while they are, their latest step (steps.ts) and its time,
- * or Waiting for work before the first.
+ * free there: their status dot and what is going on. While the owner has
+ * the screen it is the banner, "You’re in control · {Name} is waiting",
+ * with the one Hand back; at the foot it covers nothing (under the
+ * toolbar it hid the employee's request). Otherwise their status while
+ * they are not live (Stopped, Needs you…); while they are, their latest
+ * step (steps.ts) and its time, or Waiting for work before the first. The
+ * same live region carries all of it, so each change is read out.
  */
-function StatusLine({ workflowId, status, takenOver }: { workflowId: string; status: { label: string; tone: StatusTone }; takenOver: boolean }) {
-  const steps = useWorkspaceSteps(workflowId).data ?? [];
+function StatusLine({ employee, status, takeover, handBack }: {
+  employee: EmployeeSummary;
+  status: { label: string; tone: StatusTone };
+  takeover: TakeOver;
+  handBack: Ref<HTMLButtonElement>;
+}) {
+  const steps = useWorkspaceSteps(employee.workflow_id).data ?? [];
   const step = steps[steps.length - 1];
-  const [text, at] = takenOver
-    ? ['You have the screen', null]
+  const [text, at] = takeover.active
+    ? [`You’re in control · ${employee.name} is waiting`, null]
     : status.tone !== 'live'
       ? [status.label, null]
       : step
         ? [step.text, clock(step.at)]
         : ['Waiting for work', null];
   return (
-    <div className="pointer-events-none absolute inset-x-4 bottom-3.5 z-10 flex justify-center">
-      <p
-        aria-live="polite"
-        className="m-0 flex h-8 min-w-0 items-center gap-2 rounded-pill border border-border-default bg-bg-elevated px-3.5 text-xs font-medium whitespace-nowrap text-fg-default shadow-card-hover"
+    <div className="pointer-events-none absolute inset-x-4 bottom-3.5 z-30 flex justify-center">
+      <div
+        data-slot="workspace-status"
+        className={cn(
+          'flex h-8 min-w-0 items-center gap-2.5 rounded-pill border bg-bg-elevated text-xs font-medium whitespace-nowrap shadow-card-hover',
+          takeover.active
+            ? 'pointer-events-auto border-action-config-border pr-0.75 pl-3.5 text-action-config-ink'
+            : 'border-border-default px-3.5 text-fg-default',
+        )}
       >
-        <StatusDot tone={status.tone} className="shrink-0" />
-        <span className="truncate">{text}</span>
-        {at && <span className="shrink-0 text-fg-faint">{at}</span>}
-      </p>
+        <span aria-live="polite" className="flex min-w-0 items-center gap-2">
+          <StatusDot tone={status.tone} className="shrink-0" />
+          <span className="truncate">{text}</span>
+          {at && <span className="shrink-0 text-fg-faint">{at}</span>}
+        </span>
+        {takeover.active && (
+          <Button
+            ref={handBack}
+            variant="invert"
+            size="xs"
+            disabled={takeover.busy}
+            onClick={() => void takeover.handBack()}
+            className="rounded-pill px-2.5 font-semibold"
+          >
+            Hand back
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -189,9 +217,10 @@ function StatusLine({ workflowId, status, takenOver }: { workflowId: string; sta
 /**
  * The tabs and their row, the floating status, and Take over: the Browser
  * and phone views hold it next to their controls while the owner does not
- * have the screen; while they do, the body below the row is framed and a
- * banner under it holds Hand back, whichever tab shows, and the keyboard
- * goes there once they take a screen.
+ * have the screen; while they do, the body below the row is framed and the
+ * pill at its foot is the banner holding Hand back, whichever tab shows.
+ * The keyboard goes to Hand back once they take a screen, and to the tab on
+ * show once the takeover ends.
  */
 function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary; visible: boolean; onConnect: (providerId: string) => void }) {
   const tab = useHomeStore((s) => s.workspaceTab);
@@ -211,13 +240,24 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
   const mobileRunning = useSurfaceRunning(employee.workflow_id, mobileIds);
 
   // Take over leaves the screen the owner now holds, so taking one moves the
-  // keyboard to Hand back, after the render that shows it.
+  // keyboard to Hand back, after the render that shows it, unless they went
+  // on elsewhere while the screen was being taken. When the takeover ends
+  // (Hand back, or a Stop that failed) Hand back goes with the keyboard on
+  // it, so the keyboard goes to the tab on show.
+  const root = useRef<HTMLDivElement>(null);
   const handBack = useRef<HTMLButtonElement>(null);
   const focusHandBack = useRef(false);
+  const wasActive = useRef(takeover.active);
   useEffect(() => {
-    if (!focusHandBack.current) return;
-    focusHandBack.current = false;
-    handBack.current?.focus();
+    const focused = document.activeElement;
+    if (focusHandBack.current) {
+      focusHandBack.current = false;
+      if (!focused || focused === document.body || root.current?.contains(focused)) handBack.current?.focus();
+    }
+    if (wasActive.current && !takeover.active && focused === document.body) {
+      root.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+    }
+    wasActive.current = takeover.active;
   });
 
   // Each view shows Take over while the owner does not hold its screen.
@@ -241,7 +281,7 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
     );
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div ref={root} className="relative flex min-h-0 flex-1 flex-col">
       <WorkspaceTabs
         chrome="home"
         tab={tab}
@@ -283,30 +323,13 @@ function DockBody({ employee, visible, onConnect }: { employee: EmployeeSummary;
         }
         board={<CanvasTab employee={employee} />}
       />
-      <StatusLine workflowId={employee.workflow_id} status={status} takenOver={takeover.active} />
+      <StatusLine employee={employee} status={status} takeover={takeover} handBack={handBack} />
       {takeover.active && (
-        <>
-          <div
-            aria-hidden
-            data-slot="workspace-takeover-frame"
-            className="pointer-events-none absolute inset-x-0 top-(--h-home-header) bottom-0 z-20 border-2 border-action-config-border"
-          />
-          <div className="pointer-events-none absolute inset-x-4 top-(--h-home-header) z-30 flex justify-center pt-16">
-            <div className="pointer-events-auto flex h-8 min-w-0 items-center gap-2.5 rounded-pill border border-action-config-border bg-bg-elevated pr-0.75 pl-3.5 text-xs font-medium text-action-config-ink shadow-card-hover">
-              <span className="truncate">You’re in control · {employee.name} is waiting</span>
-              <Button
-                ref={handBack}
-                variant="invert"
-                size="xs"
-                disabled={takeover.busy}
-                onClick={() => void takeover.handBack()}
-                className="rounded-pill px-2.5 font-semibold"
-              >
-                Hand back
-              </Button>
-            </div>
-          </div>
-        </>
+        <div
+          aria-hidden
+          data-slot="workspace-takeover-frame"
+          className="pointer-events-none absolute inset-x-0 top-(--h-home-header) bottom-0 z-20 border-2 border-action-config-border"
+        />
       )}
     </div>
   );
@@ -373,6 +396,9 @@ export function WorkspaceDock({ onConnect }: { onConnect: (providerId: string) =
     [],
   );
   const resize = usePanelResize({ axis: 'x', cursor: 'ew-resize', onMove, getStartValue });
+  // What sits beside the dock (the Get started card) follows a drag at once.
+  const setResizing = useHomeStore((s) => s.setWorkspaceResizing);
+  useEffect(() => setResizing(resize.isResizing), [resize.isResizing, setResizing]);
 
   const employee = dockEmployee(team.data, workspaceFor);
   const width = dockWidth(widthPx, wide);

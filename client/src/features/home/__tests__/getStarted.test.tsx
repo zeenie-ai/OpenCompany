@@ -96,6 +96,7 @@ beforeEach(() => {
     composerFocus: 0,
     workspaceOpen: false,
     workspaceWide: false,
+    workspaceResizing: false,
   }));
   server = { settings: { onboarding_completed: true }, employees: [], messages: [] };
   sendRequest.mockReset().mockImplementation(async (type: string, data: Wire) => {
@@ -221,6 +222,11 @@ describe('Get started on Home', () => {
     expect(card.style.getPropertyValue('--dock-width')).toBe('min(500px, max(340px, 100vw - 40px))');
     act(() => useHomeStore.setState({ workspaceWide: true }));
     expect(card.style.getPropertyValue('--dock-width')).toBe('max(420px, min(1100px, 100vw - 420px))');
+    // While the dock's edge is dragged the card follows at once, not on the dock's timing.
+    expect(card).not.toHaveClass('transition-none');
+    act(() => useHomeStore.setState({ workspaceResizing: true }));
+    expect(card).toHaveClass('transition-none');
+    act(() => useHomeStore.setState({ workspaceResizing: false }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Fold the checklist' }));
     const pill = screen.getByRole('button', { name: /Get started · 0\/4/ }).parentElement!;

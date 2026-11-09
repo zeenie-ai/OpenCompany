@@ -150,7 +150,8 @@ const statusDot = (name: string) => screen.getByRole('status', { name });
 /** The pill floating at the dock's foot. */
 const statusPill = () => screen.getByRole('complementary').querySelector('[aria-live="polite"]');
 const frame = () => document.querySelector('[data-slot="workspace-takeover-frame"]');
-const banner = () => screen.getByText(BANNER).parentElement!;
+/** The pill at the foot while the owner has the screen: the text and Hand back. */
+const banner = () => screen.getByText(BANNER).closest<HTMLElement>('[data-slot="workspace-status"]')!;
 
 function takeOverAnswers() {
   screenControl.claim.mockReset().mockResolvedValue(screenControl.giveBack);
@@ -174,6 +175,8 @@ beforeEach(() => {
     workspaceWide: false,
     workspaceFor: null,
     takeovers: {},
+    takeoverBusy: {},
+    workspaceResizing: false,
   });
 });
 
@@ -237,6 +240,15 @@ describe('WorkspaceDock', () => {
     renderWith([employee()]);
     expect(screen.queryByText('Maya’s workspace')).toBeNull();
     expect(screen.queryByText('Replying to Priya')).toBeNull();
+  });
+
+  it('says while its edge is dragged, for what sits beside it', () => {
+    useHomeStore.setState({ workspaceOpen: true });
+    renderWith([employee()]);
+    fireEvent.mouseDown(screen.getByRole('separator', { name: 'Resize workspace' }), { clientX: 900 });
+    expect(useHomeStore.getState().workspaceResizing).toBe(true);
+    fireEvent.mouseUp(document);
+    expect(useHomeStore.getState().workspaceResizing).toBe(false);
   });
 
   it('expands and closes from round buttons at the end of the row', () => {
@@ -394,6 +406,11 @@ describe('WorkspaceDock', () => {
     expect(useHomeStore.getState().takeovers).toMatchObject({ w1: { screen: 'browser', stop: expect.any(Promise) } });
     // Take over left the screen the owner now holds: the keyboard is on Hand back.
     expect(within(banner()).getByRole('button', { name: 'Hand back' })).toHaveFocus();
+    // The banner is the pill at the dock's foot, in the room each body keeps free: it
+    // covers nothing under the toolbar, such as the employee's request.
+    expect(banner().parentElement).toHaveClass('absolute', 'bottom-3.5');
+    expect(statusPill()).toHaveTextContent(new RegExp(`^${BANNER}$`));
+    expect(banner()).toHaveClass('border-action-config-border', 'text-action-config-ink');
     // The body under the row is framed, and Take over is gone while the owner has the screen.
     expect(frame()).toHaveClass('border-action-config-border', 'top-(--h-home-header)');
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
@@ -405,6 +422,26 @@ describe('WorkspaceDock', () => {
     expect(screen.queryByText(BANNER)).toBeNull();
     expect(frame()).toBeNull();
     expect(useHomeStore.getState().takeovers).toEqual({});
+    // Hand back went with the keyboard on it: the keyboard is on the tab on show.
+    expect(screen.getByRole('tab', { name: 'Browser' })).toHaveFocus();
+  });
+
+  it('leaves the keyboard alone when the owner went on elsewhere while the screen was being taken', async () => {
+    takeOverAnswers();
+    let grant!: (giveBack: () => void) => void;
+    screenControl.claim.mockReset().mockReturnValue(new Promise((resolve) => (grant = resolve)));
+    useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
+    renderWith([employee({ control: running(4) })], (
+      <>
+        <input aria-label="Message Maya" />
+        <WorkspaceDock onConnect={vi.fn()} />
+      </>
+    ));
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    await userEvent.click(screen.getByRole('textbox', { name: 'Message Maya' }));
+    await act(async () => grant(screenControl.giveBack));
+    expect(await screen.findByText(BANNER)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Message Maya' })).toHaveFocus();
   });
 
   it('offers Take over again on the screen that let go of the owner, and stops no one twice', async () => {
@@ -623,12 +660,13 @@ describe('The Workspace status pill', () => {
     expect(statusPill()).toHaveTextContent(/^Stopped$/);
   });
 
-  it('says the owner has the screen while they do', async () => {
+  it('is the banner while the owner has the screen', async () => {
     useHomeStore.setState({ takeovers: { w1: { screen: 'browser', giveBack: vi.fn() } } });
     renderWith([employee()]);
     await waitFor(() => expect(stepCalls()).toHaveLength(1));
     await act(async () => {});
-    expect(statusPill()).toHaveTextContent(/^You have the screen$/);
+    expect(statusPill()).toHaveTextContent(new RegExp(`^${BANNER}$`));
+    expect(within(banner()).getByRole('button', { name: 'Hand back' })).toHaveAttribute('data-variant', 'invert');
   });
 });
 

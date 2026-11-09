@@ -408,6 +408,21 @@ describe('BrowserWorkspace in Home', () => {
     expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
   });
 
+  it('offers the dock’s action only while the browser could grant control', () => {
+    const action = <button type="button">Take over</button>;
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} chrome="home" action={action} />);
+    const socket = MockSocket.instances.at(-1)!;
+    // Connecting, then stopped: the server would answer no.
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    act(() => { socket.open(); socket.message({ type: 'attached', running: false }); socket.message({ type: 'idle', reason: 'not running' }); });
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    act(() => socket.message({ type: 'state', state: 'agent', controller: null }));
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
+    // A protected login refuses every claim.
+    act(() => socket.message({ type: 'sensitive', enabled: true }));
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+  });
+
   it('leaves out the editor’s Take control, browser controls, Full view and browser tasks', () => {
     const { unmount } = render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
     act(() => { MockSocket.instances[0].open(); MockSocket.instances[0].message({ type: 'state', state: 'agent', controller: null }); });

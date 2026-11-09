@@ -29,9 +29,11 @@
  * whose screen was taken, the way to give it back, and Take over's Stop. So
  * Hand back gives back the screen that was taken and knows whether to resume
  * them, even after the dock was closed or moved to another tab or employee.
+ * Taking a screen or handing it back is `busy` per employee too
+ * (`takeoverBusy`), since one dock serves them all: a Hand back that waits
+ * for a long drain never holds another employee's Take over.
  */
 
-import { useState } from 'react';
 import { mergeWorkflowControlStatus, useWebSocketActions } from '@/contexts/WebSocketContext';
 import type { SurfaceControl } from '@/components/workspace/surface';
 import { presentEmployee } from '../data/presentation';
@@ -58,14 +60,16 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
   const { pauseWorkflow, resumeWorkflow } = useWebSocketActions();
   const mine = useHomeStore((s) => s.takeovers[employee.workflow_id]);
   const setTakeover = useHomeStore((s) => s.setTakeover);
-  const [busy, setBusy] = useState(false);
+  const busy = useHomeStore((s) => Boolean(s.takeoverBusy[employee.workflow_id]));
+  const setBusy = useHomeStore((s) => s.setTakeoverBusy);
+  const busyNow = (id: string) => Boolean(useHomeStore.getState().takeoverBusy[id]);
 
   const takeOver = async (onTaken?: () => void) => {
     const screen = surface();
-    if (!screen || busy) return;
     const id = employee.workflow_id;
-    setBusy(true);
-    const giveBack = await screen.claim().finally(() => setBusy(false));
+    if (!screen || busyNow(id)) return;
+    setBusy(id, true);
+    const giveBack = await screen.claim().finally(() => setBusy(id, false));
     if (!giveBack) {
       pillToast('Couldn’t take the screen. Try again.', { tone: 'error' });
       return;
@@ -97,9 +101,9 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
   };
 
   const handBack = async () => {
-    if (!mine || busy) return;
     const id = employee.workflow_id;
-    setBusy(true);
+    if (!mine || busyNow(id)) return;
+    setBusy(id, true);
     // The screen first, so the call the employee waits in can go on.
     mine.giveBack();
     setTakeover(id, null);
@@ -117,7 +121,7 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
       if (error instanceof Error && error.message === 'workflow_control_superseded') return;
       pillToast(controlErrorMessage(error), { tone: 'error' });
     } finally {
-      setBusy(false);
+      setBusy(id, false);
     }
   };
 
