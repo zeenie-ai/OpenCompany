@@ -35,10 +35,11 @@ import { Sounds, type SoundPackName, type SoundEvent } from '../lib/sound';
 const VALID_PACKS: ReadonlySet<SoundPackName> = new Set(['none', 'parchment', 'terminal']);
 
 /** Selector for the global hover delegate. Mirrors the upstream
- *  `app/sound.js` auto-capture list, modulo class additions from W15
- *  (`.action-btn`, `.wf-card`, `.comp`, `.cmdk-item`). */
+ *  `app/sound.js` auto-capture list, modulo additions from W15
+ *  (`.action-btn`, `.wf-card`, `.comp`, and command list items, which cmdk
+ *  marks with a `cmdk-item` attribute, not a class). */
 const HOVER_SELECTOR =
-  '.btn, .action-btn, .row, .menu-pop-item, .wf-card, .comp, .cmdk-item, [data-sound-hover]';
+  '.btn, .action-btn, .row, .menu-pop-item, .wf-card, .comp, [cmdk-item], [data-sound-hover]';
 
 function readSoundPack(): SoundPackName {
   if (typeof document === 'undefined') return 'none';
