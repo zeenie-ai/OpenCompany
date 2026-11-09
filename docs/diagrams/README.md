@@ -11,7 +11,7 @@ labeled proposal views. Each includes an ImageGen PNG, editable Mermaid, source 
 Current technical guide embeds use this suite; existing SVG URLs are retained for compatibility.
 
 ## Earlier SVG and product illustrations
-Dark-theme architecture diagrams in SVG and a generated product explainer in PNG.
+Dark-theme architecture diagrams in SVG and a warm courtyard product explainer in PNG.
 This folder holds the project assets; nothing under `docs-internal/` vendors them.
 
 **Original overview assets** (product views remain linked from the README):
@@ -22,9 +22,11 @@ This folder holds the project assets; nothing under `docs-internal/` vendors the
   Telegram, Discord, Schedules, and Webhooks (Dev mode).
   App tiles show Gmail, Google Calendar, Google Drive, Google Sheets, GitHub,
   and Stripe.
-  Created with built-in ImageGen using the
-  onboarding's product style; the [generation prompt](how-ai-employees-work.prompt.txt)
-  records the brief and source references. It is a conceptual product illustration.
+  Restyled with built-in ImageGen to match the README banner's professional cat
+  employees, cream/oak courtyard and laptop frame. Memory (when enabled) and
+  editable Skills appear together in the feedback path. The [generation prompt](how-ai-employees-work.prompt.txt)
+  records the exact redesign and refinement prompts; the [generation record](../../output/imagegen/work-cycle-cats-2026-11-09/generation-record.json)
+  preserves the inputs and previous design. It is a conceptual product illustration.
 - `how-it-works.svg` (editable hiring overview: connect AI, describe a job,
   review the setup, hire, and coach)
 - `default-workflows.svg` (README's technical section: example workflow structures)

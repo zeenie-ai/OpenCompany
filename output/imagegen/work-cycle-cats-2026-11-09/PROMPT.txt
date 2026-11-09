@@ -1,0 +1,59 @@
+Use case: style-transfer / infographic-diagram.
+Asset type: OpenCompany GitHub README work-cycle illustration, a wide companion to the selected cat workplace banner.
+
+INPUTS
+Image 1 is the EDIT TARGET: the current dark "How AI employees work" infographic. Preserve its explanation, four-stage reading order, all seven job input channels, all six supported app names, and the feedback/memory/skills loop. Replace its dark dashboard aesthetic.
+Image 2 is the STYLE AND CHARACTER REFERENCE: the selected professional AI-cat courtyard banner. Match its premium polished 3D illustration, warm cream background, apricot stone, honey oak, glass skylight, soft sunlight, tailored cat clothing, distinctive faces, and refined black serif OpenCompany wordmark. Do not copy the token-to-money sales story into this explanatory diagram.
+
+ART DIRECTION
+Create one carefully composed 16:9 landscape illustration, around 1920 by 1080, intended to stay readable at 1000 pixels wide. A miniature warm courtyard office inside a subtle silver laptop frame connects four shallow work bays from left to right. No tall roof stealing space; restrained plants and arches are backdrop only. Use crisp near-black typography on generous pale cream surfaces. Primary content and labels sit flat toward the viewer, not receding in perspective. Keep the diagram's meaning more prominent than decoration. Keep every word completely inside the image with comfortable outer margins. No grid of separate variants or mockup page.
+
+TOP COPY, EXACT
+Small elegant serif wordmark: "OpenCompany"
+Large strong headline: "How AI employees work"
+Smaller subtitle: "An operating system for AI employees"
+
+FOUR STAGES, connected by three clean short amber arrows pointing right. Stage 3 gets about 40% of the usable width. Stages 1, 2 and 4 share the rest.
+
+1. "Give a job"
+A cream job card on a warm wooden intake desk, exact text: "Research competitors and prepare a brief."
+A simple person icon represents the owner. Below, the small heading "INPUT CHANNELS" and seven readable pale chips. Use an orderly 2-column grid:
+"Chat" | "Email"
+"WhatsApp" | "Telegram"
+"Discord" | "Schedules"
+One full-width chip: "Webhooks (Dev mode)"
+Simple tasteful recognizable channel icons. Keep all seven labels large enough to read. No tiny paragraphs.
+
+2. "Employee team"
+The grumpy brown Persian boss from Image 2, cream muzzle, charcoal suit and gold tie, becomes a purposeful employee-team lead in a shallow planning bay. He points at a small project folio, not at money. His expression is stern and competent, not angry or abusive. Clear label "Lead".
+Two connected task cards beneath him, exactly labeled "Research" and "Writing", show how he assigns work to specialists. Thin branching connectors must visibly link Lead to both task cards. This is coordination, not a list of employee headshots. The following work bay shows the specialists carrying out these assignments.
+
+3. "Do the work"
+The largest, most engaging bay; active tools are clearly visible. Three compact distinct workstations with exact headings:
+"Browser"
+"Apps & integrations"
+"Computer & tools"
+Browser: the thoughtful calico Researcher in oatmeal cardigan and round glasses actively compares a browser search/results screen with an open notebook.
+Apps & integrations: the confident white Grower with charcoal ear patch, sage blazer and terracotta shirt works with a stylus at a raised app board. Preserve six recognizable supported app tiles in exactly a 3-column by 2-row grid:
+Top: "Gmail", "Calendar", "Drive"
+Bottom: "Sheets", "GitHub", "Stripe"
+Use recognizable Gmail multicolor M, Google Calendar 31, Drive triangle, Sheets green document, GitHub Octocat and Stripe purple S. All six names readable, not scattered tiny background logos.
+Computer & tools: the focused ginger Builder in slate-blue rolled sleeves types at a computer with a file list, abstract code lines and small terminal prompt. His paws visibly contact the keyboard.
+Small restrained green activity badge: "LIVE WORK".
+Do not let cats hide the tool screens or the six app names. Professional adult personas and well-fitted clothing, not generic baby faces.
+
+4. "Deliver results"
+The welcoming cream colorpoint Front Desk cat in a burgundy blazer and headset presents a finished report to the blue-gray owner/customer cat in the teal coat from the banner. Both have a visible paw on opposite sides of the SAME report. Give the report one large exact title: "Competitor brief", a clear green check and a small "Ready" badge. Show abstract bar-chart/report content so it clearly differs from the initial job card.
+Below this handoff, a readable card labeled "Review & feedback".
+There is no payment, cash, dollar sign, Treasurer station or token machine in this explainer. The deliverable is the completed research brief.
+
+CONTINUITY / FEEDBACK
+Across the lower part of the image, an unambiguous warm amber path runs from "Review & feedback" back toward the employee team. It branches to two adjacent pale resource cards labeled "Memory" and "Skills", then rejoins and returns upward to the team. Do NOT make a mandatory Skills-then-Memory serial pipeline.
+Under Memory, a short readable qualifier: "Saved knowledge, when enabled".
+Under Skills: "Editable playbooks".
+Use a small notebook/archive icon and a small playbook icon. This represents retained knowledge and editable instructions; no brain growth, training machinery or model-retraining claim.
+Footer caption, exactly: "Carry knowledge and instructions into the next job"
+A discreet ongoing-control strip, outside the numbered flow: "You set access and ground rules"
+
+TYPOGRAPHY AND FINISH
+Refined black serif for OpenCompany only; clean bold dark sans serif for section headings and body. Warm cream high-contrast label surfaces with precise English text. Four numbered medallions, 1 through 4, aligned with the four headings. Natural 3D fur and soft fabric, oak edges and apricot walls; small orange accents and restrained green checks. Flat crisp logical arrows, never wiring across faces. Favor clarity and breathing room. Preserve the selected cats' coat patterns, clothing colors and distinctive personalities. No watermarks, cropped letters, gibberish, extra panels, black dashboard backgrounds, neon cyberpunk, extra limbs or hands. Output one complete opaque image.

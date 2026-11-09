@@ -1,0 +1,72 @@
+OpenCompany AI employee work-cycle image
+Generated: 2026-10-24
+Mode: built-in ImageGen (generation and targeted edits)
+Asset: docs/diagrams/how-ai-employees-work.png
+Purpose: README / How an employee works
+User choices: polished static image; onboarding product visuals; full work cycle.
+Sources: docs-internal/onboarding.md; design_handoff_onboarding/README.md; client/src/features/home/onboarding/steps/WelcomeDemo.tsx; docs/diagrams/how-it-works.svg; server/config/employee_apps.json; server/services/employees/builder.py; server/nodes/trigger/webhook_trigger/__init__.py.
+Reference images sent to ImageGen: none for the initial generation. The targeted edit used docs/diagrams/how-ai-employees-work.png as its edit target.
+User refinements: add the proper input channels in the Give a job section; add recognizable supported apps to the Apps & integrations UI.
+Integration sources: server/config/employee_apps.json; server/nodes/github/__init__.py.
+
+Initial generation prompt:
+
+Use case: infographic-diagram.
+Asset type: a polished static explanatory image for the OpenCompany GitHub README, for nontechnical readers.
+Primary request: Explain how AI employees complete work inside OpenCompany, an open-source operating system for AI employees. Show the FULL work cycle: a person gives a job, an AI employee lead coordinates specialists, the team uses browsers, apps, integrations and the computer, completed work appears in Workspace, and feedback plus memory and skills inform future work.
+
+This is a new image. Use the visual language of the project's onboarding: calm, high-fidelity desktop-product graphics, rounded cards, hairline borders, restrained floating shadows, pill status indicators, circular initial avatars, simple line icons, and ample negative space. Create a product explainer illustration, not a screenshot of a workflow editor. Browser/app/computer execution must be the dominant scene.
+
+Composition: wide landscape, approximately 16:9, high resolution, intended to remain legible when displayed around 1100 pixels wide. Quiet dark charcoal background. Four clearly readable stages across the image, connected by a few clean, short directional arrows. The middle work area should have the most visual weight and width. A subtle rounded enclosing surface visually unifies the team, its tools, and results as one employee operating system. Do not crowd the margins.
+
+Top: refined white serif wordmark text "OpenCompany" at modest size, followed by a large clean sans-serif heading "How AI employees work". Subtitle, exactly: "An operating system for AI employees". Do not invent a logo symbol.
+
+Stage 1, heading "1  Give a job": a compact owner message card, with the exact text "Research competitors and prepare a brief." Use a small person/profile line icon. The job clearly flows into the employee team.
+
+Stage 2, heading "2  Employee team": an elegant lead card with a purple circular avatar and label "Lead", coordinating two smaller specialist cards labeled "Research" and "Writing". Make their relationship clear with delicate connectors. A small checkmark near the lead communicates review. The team is software agents, not humans sitting at desks.
+
+Stage 3, heading "3  Do the work": the largest area, showing a realistic but simplified OpenCompany workspace panel with the micro-label "LIVE WORK". Within it, three distinct visible capabilities, each with a large readable title:
+- "Browser": a miniature browser window with tabs, a search field and clean research-result/document shapes; no dense text.
+- "Apps & integrations": a calm row/grid of generic envelope, calendar, document and repository line icons, showing connected services; no fabricated brand marks.
+- "Computer & tools": a small file-and-code workspace with document/file shapes, a few abstract code lines and a terminal icon. Convey reading/writing files, running code and using computer tools.
+These are active ways to complete the job, not merely lists of connectors. Use subtle activity marks/checks, not a glowing science-fiction network. Keep all inset UI large enough to understand.
+
+Stage 4, heading "4  Deliver results": a Workspace output card with the exact title "Competitor brief", a document/report preview using abstract chart and text blocks, and a green checkmark with the pill label "Ready". Nearby include a small understated card labeled "Review & feedback" to show the owner can inspect and coach. The completed artifact must be visually distinct from the initial job.
+
+Bottom: an elegant feedback path connects the delivered work and owner feedback back toward the employee team. Along that path place two compact reusable-resource cards with the exact labels "Memory" and "Skills", with database/notebook and playbook line icons. A short caption, exactly: "Carry knowledge and instructions into the next job". Make the feedback direction unambiguous. This represents retained knowledge and editable skills, not training the underlying AI model.
+
+Palette grounded in onboarding: application background #0d0f13; panel #15171c; elevated surfaces #1b1e25; borders #2b2f37; primary text #e8eaed; muted text #9aa1ac. Restrained agent purple #bd93f9, browser/interface cyan #8be9fd, tools/results green #50fa7b, optional very small warm-orange feedback accent #ffb86c. Do not use every accent equally. No heavy neon glow.
+Typography: Geist-like clean modern sans-serif for all labels and copy; small monospaced uppercase only for LIVE WORK; white serif only for the OpenCompany wordmark. Excellent hierarchy and readable type, no tiny decorative microcopy. Render all quoted wording accurately and do not add other text.
+Avoid: robots, humanoid employee cartoons, gears, conveyor belts, workflow-node palettes, cables everywhere, n8n-style node graphs, dark cyberpunk, stock-photo people, fake product claims, automatic-model-retraining imagery, watermarks, extra brand logos, dense paragraphs, busy dashboard filler. This must communicate an OS that equips AI employees to complete real work across browsers, apps and the computer.
+
+Input-channel edit prompt:
+
+Use case: precise-object-edit.
+Edit the supplied OpenCompany explainer image. Make one targeted change: add the proper job input channels inside the existing leftmost "1 Give a job" panel.
+
+Keep the overall image dimensions, framing, layout, background, title, subtitle, serif OpenCompany wordmark, all existing stages 2-4, work windows, report, arrows, memory/skills feedback path, colors, typography and visual style unchanged. Do not redesign or rearrange the overall image. Only change the inside of stage 1, whose panel occupies approximately x=20..252 and y=258..714 in the 1672x941 source.
+
+Keep the heading "Give a job" and the example "Research competitors and prepare a brief." The example can be made a little more compact within its current panel if necessary. Use the existing empty lower portion of this panel for a clean, readable input-channel group.
+
+Add a small uppercase micro-label "INPUT CHANNELS", then six tasteful compact chips arranged in two columns and three rows, in this exact order:
+Row 1: "Chat" and "Email"
+Row 2: "WhatsApp" and "Telegram"
+Row 3: "Discord" and "Schedules"
+Under them, add one full-width compact chip labeled exactly "Webhooks (Dev mode)".
+
+Each chip has a clear little line icon appropriate to the channel: chat bubble, envelope, phone/chat, paper plane, community chat, clock/calendar, and webhook connection. Generic channel icons are fine; do not add inaccurate brand logos. Use the same calm charcoal elevated cards, hairline gray borders, clean light sans-serif labels, subtle purple/cyan accents and restrained shadows as the existing image. All seven channel labels must be legible and spelled exactly as supplied. Keep the chips comfortably within the stage-1 panel, with consistent spacing and enough padding; no overlap with the example message, heading, outgoing arrow or border. Do not add descriptions or extra tiny text.
+
+Semantics: external messages or scheduled work can give an AI employee a job; webhooks are available in configured Dev-mode workflows. Do not show internal teammate task completion as an external input channel. Do not modify any labels, content, text or composition outside the stage-1 panel.
+
+Final app-tile edit prompt:
+
+Use case: precise-object-edit.
+Edit the supplied OpenCompany explainer image with ONE targeted change: make the apps recognizable in the "Apps & integrations" area.
+
+Change only the six app tiles inside the existing "Apps & integrations" inset panel, approximately x=815..1052, y=329..656 in the 1672x941 image. Keep the panel heading and its border. Replace the six generic unlabeled icons with six clearly recognizable real application tiles in the existing three-column, two-row grid:
+Top row: "Gmail", "Calendar", "Drive".
+Bottom row: "Sheets", "GitHub", "Stripe".
+
+Each tile must show the recognizable app logo above its exact readable name. Use Gmail's multicolor M-envelope; Google Calendar's blue calendar with 31; Google Drive's green/yellow/blue triangular mark; Google Sheets' green document/spreadsheet mark; GitHub's white Octocat silhouette; and Stripe's purple wordmark or stylized S. These are supported integrations, not made-up applications. Use proper recognizable app logos, keeping them small enough to fit cleanly. The Calendar/Drive/Sheets names refer to Google's apps. Do not change their labels to longer names that would crowd the tiles. Use clean light sans-serif labels and generous icon-to-label spacing. Preserve subtle green connection dots and the calm dark elevated-card styling, hairline borders, and restrained shadows. Make the tiles and names crisp and legible.
+
+Critical invariants: do not modify the overall dimensions, composition, wordmark, heading, subtitle, "Give a job" panel, any of its seven input channels, employee-team cards, Browser panel, Computer & tools panel, report, feedback card, memory/skills path, or any text outside these six app tiles. Keep every input-channel label, including "Webhooks (Dev mode)", intact. Do not add new sections or enlarge the integration panel. No redesign, no new artwork outside this one grid.

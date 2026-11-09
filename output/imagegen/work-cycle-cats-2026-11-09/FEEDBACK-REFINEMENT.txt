@@ -1,0 +1,8 @@
+Make one precise edit to the supplied OpenCompany cat-workplace infographic. Keep every pixel of the four stages, cats, title, channels, app tiles, clothing, expressions, laptop frame, courtyard, typography and all existing wording unchanged outside the bottom Memory/Skills resource area.
+Correct the feedback-loop semantics in the bottom strip. Memory and Skills should read as two parallel resources used together, not an ordered Skills-then-Memory pipeline.
+Place the existing Memory card and existing Skills card side by side inside ONE subtle shared pale-cream rounded resource tray. Preserve their exact text, sizes and icons:
+"Memory" / "Saved knowledge, when enabled"
+"Skills" / "Editable playbooks"
+Replace the left-pointing arrow BETWEEN these cards with a simple dark plus sign "+".
+The amber feedback path from "Review & feedback" must enter the RIGHT EDGE OF THE SHARED TRAY, not a particular individual card. ONE amber return path leaves the LEFT EDGE OF THE SHARED TRAY and turns upward into Employee team. There should be no arrow going from either individual resource to the other. This is one grouped resource stage, not two mandatory sequential processing steps.
+Keep the shared tray visually quiet and within the same bottom-strip footprint, clear of the footer caption and control strip. Preserve exactly "Carry knowledge and instructions into the next job" and "You set access and ground rules". Do not change any other labels or artwork. No additional text, no extra stages. Output a single complete opaque image at the same dimensions.

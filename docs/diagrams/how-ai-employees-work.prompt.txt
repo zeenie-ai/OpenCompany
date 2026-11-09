@@ -1,72 +1,91 @@
 OpenCompany AI employee work-cycle image
-Generated: 2026-10-24
-Mode: built-in ImageGen (generation and targeted edits)
+Updated: 2026-11-09
+Mode: built-in image_gen (style transfer and targeted feedback-loop refinement)
 Asset: docs/diagrams/how-ai-employees-work.png
 Purpose: README / How an employee works
-User choices: polished static image; onboarding product visuals; full work cycle.
-Sources: docs-internal/onboarding.md; design_handoff_onboarding/README.md; client/src/features/home/onboarding/steps/WelcomeDemo.tsx; docs/diagrams/how-it-works.svg; server/config/employee_apps.json; server/services/employees/builder.py; server/nodes/trigger/webhook_trigger/__init__.py.
-Reference images sent to ImageGen: none for the initial generation. The targeted edit used docs/diagrams/how-ai-employees-work.png as its edit target.
-User refinements: add the proper input channels in the Give a job section; add recognizable supported apps to the Apps & integrations UI.
-Integration sources: server/config/employee_apps.json; server/nodes/github/__init__.py.
+Style: warm cream courtyard, professional AI cats and silver laptop frame, matching the approved README banner.
+Composition: four stages, job input channels, browser/apps/computer work, delivered brief, and grouped Memory + Skills feedback resources.
 
-Initial generation prompt:
+Input 1 / edit target:
+output/imagegen/work-cycle-cats-2026-11-09/work-cycle-before.png
+This preserves the previous diagram from commit 730533c9c8dcf5ed0b29fa1235026d37cfa187e0.
+Input 2 / style and character reference:
+output/imagegen/platform-banners-2026-11-09/masters/selected-persona-polish.png
 
-Use case: infographic-diagram.
-Asset type: a polished static explanatory image for the OpenCompany GitHub README, for nontechnical readers.
-Primary request: Explain how AI employees complete work inside OpenCompany, an open-source operating system for AI employees. Show the FULL work cycle: a person gives a job, an AI employee lead coordinates specialists, the team uses browsers, apps, integrations and the computer, completed work appears in Workspace, and feedback plus memory and skills inform future work.
+Source explanation: README.md, "How an employee works"; the previous diagram and its saved prompts.
+All seven input channels and six app tiles are retained. Memory is qualified "when enabled"; skills are editable playbooks. The feedback path uses one shared resource tray, not a mandatory Skills-then-Memory sequence.
+The previous generation history is preserved in output/imagegen/work-cycle-cats-2026-11-09/previous-prompts.txt.
+The README keeps the canonical image path and its verified direct-image browser-preview link.
 
-This is a new image. Use the visual language of the project's onboarding: calm, high-fidelity desktop-product graphics, rounded cards, hairline borders, restrained floating shadows, pill status indicators, circular initial avatars, simple line icons, and ample negative space. Create a product explainer illustration, not a screenshot of a workflow editor. Browser/app/computer execution must be the dominant scene.
+Exact style-transfer prompt:
 
-Composition: wide landscape, approximately 16:9, high resolution, intended to remain legible when displayed around 1100 pixels wide. Quiet dark charcoal background. Four clearly readable stages across the image, connected by a few clean, short directional arrows. The middle work area should have the most visual weight and width. A subtle rounded enclosing surface visually unifies the team, its tools, and results as one employee operating system. Do not crowd the margins.
+Use case: style-transfer / infographic-diagram.
+Asset type: OpenCompany GitHub README work-cycle illustration, a wide companion to the selected cat workplace banner.
 
-Top: refined white serif wordmark text "OpenCompany" at modest size, followed by a large clean sans-serif heading "How AI employees work". Subtitle, exactly: "An operating system for AI employees". Do not invent a logo symbol.
+INPUTS
+Image 1 is the EDIT TARGET: the current dark "How AI employees work" infographic. Preserve its explanation, four-stage reading order, all seven job input channels, all six supported app names, and the feedback/memory/skills loop. Replace its dark dashboard aesthetic.
+Image 2 is the STYLE AND CHARACTER REFERENCE: the selected professional AI-cat courtyard banner. Match its premium polished 3D illustration, warm cream background, apricot stone, honey oak, glass skylight, soft sunlight, tailored cat clothing, distinctive faces, and refined black serif OpenCompany wordmark. Do not copy the token-to-money sales story into this explanatory diagram.
 
-Stage 1, heading "1  Give a job": a compact owner message card, with the exact text "Research competitors and prepare a brief." Use a small person/profile line icon. The job clearly flows into the employee team.
+ART DIRECTION
+Create one carefully composed 16:9 landscape illustration, around 1920 by 1080, intended to stay readable at 1000 pixels wide. A miniature warm courtyard office inside a subtle silver laptop frame connects four shallow work bays from left to right. No tall roof stealing space; restrained plants and arches are backdrop only. Use crisp near-black typography on generous pale cream surfaces. Primary content and labels sit flat toward the viewer, not receding in perspective. Keep the diagram's meaning more prominent than decoration. Keep every word completely inside the image with comfortable outer margins. No grid of separate variants or mockup page.
 
-Stage 2, heading "2  Employee team": an elegant lead card with a purple circular avatar and label "Lead", coordinating two smaller specialist cards labeled "Research" and "Writing". Make their relationship clear with delicate connectors. A small checkmark near the lead communicates review. The team is software agents, not humans sitting at desks.
+TOP COPY, EXACT
+Small elegant serif wordmark: "OpenCompany"
+Large strong headline: "How AI employees work"
+Smaller subtitle: "An operating system for AI employees"
 
-Stage 3, heading "3  Do the work": the largest area, showing a realistic but simplified OpenCompany workspace panel with the micro-label "LIVE WORK". Within it, three distinct visible capabilities, each with a large readable title:
-- "Browser": a miniature browser window with tabs, a search field and clean research-result/document shapes; no dense text.
-- "Apps & integrations": a calm row/grid of generic envelope, calendar, document and repository line icons, showing connected services; no fabricated brand marks.
-- "Computer & tools": a small file-and-code workspace with document/file shapes, a few abstract code lines and a terminal icon. Convey reading/writing files, running code and using computer tools.
-These are active ways to complete the job, not merely lists of connectors. Use subtle activity marks/checks, not a glowing science-fiction network. Keep all inset UI large enough to understand.
+FOUR STAGES, connected by three clean short amber arrows pointing right. Stage 3 gets about 40% of the usable width. Stages 1, 2 and 4 share the rest.
 
-Stage 4, heading "4  Deliver results": a Workspace output card with the exact title "Competitor brief", a document/report preview using abstract chart and text blocks, and a green checkmark with the pill label "Ready". Nearby include a small understated card labeled "Review & feedback" to show the owner can inspect and coach. The completed artifact must be visually distinct from the initial job.
+1. "Give a job"
+A cream job card on a warm wooden intake desk, exact text: "Research competitors and prepare a brief."
+A simple person icon represents the owner. Below, the small heading "INPUT CHANNELS" and seven readable pale chips. Use an orderly 2-column grid:
+"Chat" | "Email"
+"WhatsApp" | "Telegram"
+"Discord" | "Schedules"
+One full-width chip: "Webhooks (Dev mode)"
+Simple tasteful recognizable channel icons. Keep all seven labels large enough to read. No tiny paragraphs.
 
-Bottom: an elegant feedback path connects the delivered work and owner feedback back toward the employee team. Along that path place two compact reusable-resource cards with the exact labels "Memory" and "Skills", with database/notebook and playbook line icons. A short caption, exactly: "Carry knowledge and instructions into the next job". Make the feedback direction unambiguous. This represents retained knowledge and editable skills, not training the underlying AI model.
+2. "Employee team"
+The grumpy brown Persian boss from Image 2, cream muzzle, charcoal suit and gold tie, becomes a purposeful employee-team lead in a shallow planning bay. He points at a small project folio, not at money. His expression is stern and competent, not angry or abusive. Clear label "Lead".
+Two connected task cards beneath him, exactly labeled "Research" and "Writing", show how he assigns work to specialists. Thin branching connectors must visibly link Lead to both task cards. This is coordination, not a list of employee headshots. The following work bay shows the specialists carrying out these assignments.
 
-Palette grounded in onboarding: application background #0d0f13; panel #15171c; elevated surfaces #1b1e25; borders #2b2f37; primary text #e8eaed; muted text #9aa1ac. Restrained agent purple #bd93f9, browser/interface cyan #8be9fd, tools/results green #50fa7b, optional very small warm-orange feedback accent #ffb86c. Do not use every accent equally. No heavy neon glow.
-Typography: Geist-like clean modern sans-serif for all labels and copy; small monospaced uppercase only for LIVE WORK; white serif only for the OpenCompany wordmark. Excellent hierarchy and readable type, no tiny decorative microcopy. Render all quoted wording accurately and do not add other text.
-Avoid: robots, humanoid employee cartoons, gears, conveyor belts, workflow-node palettes, cables everywhere, n8n-style node graphs, dark cyberpunk, stock-photo people, fake product claims, automatic-model-retraining imagery, watermarks, extra brand logos, dense paragraphs, busy dashboard filler. This must communicate an OS that equips AI employees to complete real work across browsers, apps and the computer.
+3. "Do the work"
+The largest, most engaging bay; active tools are clearly visible. Three compact distinct workstations with exact headings:
+"Browser"
+"Apps & integrations"
+"Computer & tools"
+Browser: the thoughtful calico Researcher in oatmeal cardigan and round glasses actively compares a browser search/results screen with an open notebook.
+Apps & integrations: the confident white Grower with charcoal ear patch, sage blazer and terracotta shirt works with a stylus at a raised app board. Preserve six recognizable supported app tiles in exactly a 3-column by 2-row grid:
+Top: "Gmail", "Calendar", "Drive"
+Bottom: "Sheets", "GitHub", "Stripe"
+Use recognizable Gmail multicolor M, Google Calendar 31, Drive triangle, Sheets green document, GitHub Octocat and Stripe purple S. All six names readable, not scattered tiny background logos.
+Computer & tools: the focused ginger Builder in slate-blue rolled sleeves types at a computer with a file list, abstract code lines and small terminal prompt. His paws visibly contact the keyboard.
+Small restrained green activity badge: "LIVE WORK".
+Do not let cats hide the tool screens or the six app names. Professional adult personas and well-fitted clothing, not generic baby faces.
 
-Input-channel edit prompt:
+4. "Deliver results"
+The welcoming cream colorpoint Front Desk cat in a burgundy blazer and headset presents a finished report to the blue-gray owner/customer cat in the teal coat from the banner. Both have a visible paw on opposite sides of the SAME report. Give the report one large exact title: "Competitor brief", a clear green check and a small "Ready" badge. Show abstract bar-chart/report content so it clearly differs from the initial job card.
+Below this handoff, a readable card labeled "Review & feedback".
+There is no payment, cash, dollar sign, Treasurer station or token machine in this explainer. The deliverable is the completed research brief.
 
-Use case: precise-object-edit.
-Edit the supplied OpenCompany explainer image. Make one targeted change: add the proper job input channels inside the existing leftmost "1 Give a job" panel.
+CONTINUITY / FEEDBACK
+Across the lower part of the image, an unambiguous warm amber path runs from "Review & feedback" back toward the employee team. It branches to two adjacent pale resource cards labeled "Memory" and "Skills", then rejoins and returns upward to the team. Do NOT make a mandatory Skills-then-Memory serial pipeline.
+Under Memory, a short readable qualifier: "Saved knowledge, when enabled".
+Under Skills: "Editable playbooks".
+Use a small notebook/archive icon and a small playbook icon. This represents retained knowledge and editable instructions; no brain growth, training machinery or model-retraining claim.
+Footer caption, exactly: "Carry knowledge and instructions into the next job"
+A discreet ongoing-control strip, outside the numbered flow: "You set access and ground rules"
 
-Keep the overall image dimensions, framing, layout, background, title, subtitle, serif OpenCompany wordmark, all existing stages 2-4, work windows, report, arrows, memory/skills feedback path, colors, typography and visual style unchanged. Do not redesign or rearrange the overall image. Only change the inside of stage 1, whose panel occupies approximately x=20..252 and y=258..714 in the 1672x941 source.
+TYPOGRAPHY AND FINISH
+Refined black serif for OpenCompany only; clean bold dark sans serif for section headings and body. Warm cream high-contrast label surfaces with precise English text. Four numbered medallions, 1 through 4, aligned with the four headings. Natural 3D fur and soft fabric, oak edges and apricot walls; small orange accents and restrained green checks. Flat crisp logical arrows, never wiring across faces. Favor clarity and breathing room. Preserve the selected cats' coat patterns, clothing colors and distinctive personalities. No watermarks, cropped letters, gibberish, extra panels, black dashboard backgrounds, neon cyberpunk, extra limbs or hands. Output one complete opaque image.
 
-Keep the heading "Give a job" and the example "Research competitors and prepare a brief." The example can be made a little more compact within its current panel if necessary. Use the existing empty lower portion of this panel for a clean, readable input-channel group.
+Exact targeted refinement prompt:
 
-Add a small uppercase micro-label "INPUT CHANNELS", then six tasteful compact chips arranged in two columns and three rows, in this exact order:
-Row 1: "Chat" and "Email"
-Row 2: "WhatsApp" and "Telegram"
-Row 3: "Discord" and "Schedules"
-Under them, add one full-width compact chip labeled exactly "Webhooks (Dev mode)".
-
-Each chip has a clear little line icon appropriate to the channel: chat bubble, envelope, phone/chat, paper plane, community chat, clock/calendar, and webhook connection. Generic channel icons are fine; do not add inaccurate brand logos. Use the same calm charcoal elevated cards, hairline gray borders, clean light sans-serif labels, subtle purple/cyan accents and restrained shadows as the existing image. All seven channel labels must be legible and spelled exactly as supplied. Keep the chips comfortably within the stage-1 panel, with consistent spacing and enough padding; no overlap with the example message, heading, outgoing arrow or border. Do not add descriptions or extra tiny text.
-
-Semantics: external messages or scheduled work can give an AI employee a job; webhooks are available in configured Dev-mode workflows. Do not show internal teammate task completion as an external input channel. Do not modify any labels, content, text or composition outside the stage-1 panel.
-
-Final app-tile edit prompt:
-
-Use case: precise-object-edit.
-Edit the supplied OpenCompany explainer image with ONE targeted change: make the apps recognizable in the "Apps & integrations" area.
-
-Change only the six app tiles inside the existing "Apps & integrations" inset panel, approximately x=815..1052, y=329..656 in the 1672x941 image. Keep the panel heading and its border. Replace the six generic unlabeled icons with six clearly recognizable real application tiles in the existing three-column, two-row grid:
-Top row: "Gmail", "Calendar", "Drive".
-Bottom row: "Sheets", "GitHub", "Stripe".
-
-Each tile must show the recognizable app logo above its exact readable name. Use Gmail's multicolor M-envelope; Google Calendar's blue calendar with 31; Google Drive's green/yellow/blue triangular mark; Google Sheets' green document/spreadsheet mark; GitHub's white Octocat silhouette; and Stripe's purple wordmark or stylized S. These are supported integrations, not made-up applications. Use proper recognizable app logos, keeping them small enough to fit cleanly. The Calendar/Drive/Sheets names refer to Google's apps. Do not change their labels to longer names that would crowd the tiles. Use clean light sans-serif labels and generous icon-to-label spacing. Preserve subtle green connection dots and the calm dark elevated-card styling, hairline borders, and restrained shadows. Make the tiles and names crisp and legible.
-
-Critical invariants: do not modify the overall dimensions, composition, wordmark, heading, subtitle, "Give a job" panel, any of its seven input channels, employee-team cards, Browser panel, Computer & tools panel, report, feedback card, memory/skills path, or any text outside these six app tiles. Keep every input-channel label, including "Webhooks (Dev mode)", intact. Do not add new sections or enlarge the integration panel. No redesign, no new artwork outside this one grid.
+Make one precise edit to the supplied OpenCompany cat-workplace infographic. Keep every pixel of the four stages, cats, title, channels, app tiles, clothing, expressions, laptop frame, courtyard, typography and all existing wording unchanged outside the bottom Memory/Skills resource area.
+Correct the feedback-loop semantics in the bottom strip. Memory and Skills should read as two parallel resources used together, not an ordered Skills-then-Memory pipeline.
+Place the existing Memory card and existing Skills card side by side inside ONE subtle shared pale-cream rounded resource tray. Preserve their exact text, sizes and icons:
+"Memory" / "Saved knowledge, when enabled"
+"Skills" / "Editable playbooks"
+Replace the left-pointing arrow BETWEEN these cards with a simple dark plus sign "+".
+The amber feedback path from "Review & feedback" must enter the RIGHT EDGE OF THE SHARED TRAY, not a particular individual card. ONE amber return path leaves the LEFT EDGE OF THE SHARED TRAY and turns upward into Employee team. There should be no arrow going from either individual resource to the other. This is one grouped resource stage, not two mandatory sequential processing steps.
+Keep the shared tray visually quiet and within the same bottom-strip footprint, clear of the footer caption and control strip. Preserve exactly "Carry knowledge and instructions into the next job" and "You set access and ground rules". Do not change any other labels or artwork. No additional text, no extra stages. Output a single complete opaque image at the same dimensions.
