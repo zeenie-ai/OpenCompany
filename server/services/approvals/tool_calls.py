@@ -543,24 +543,48 @@ def _sends(spec: Any, data: Mapping[str, Any]) -> bool:
     return spec is not None and not spec.restrict_while_asking and spec.sends(data)
 
 
-async def repeatable_call(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> bool:
-    """Whether a call may run again after an attempt broke off
-    (services/approvals/repeats.py), judged on what it runs with: the node's
-    settings with the call's data over them, locked fields put back. Not
-    safe when the settings cannot be read."""
-    from services.approvals.repeats import REPEATABLE, REPEATABLE_WHEN, repeatable
+async def _runs_with(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    """What a call runs with: the node's settings with the call's data over
+    them, locked fields put back. None when the settings cannot be read."""
     from services.plugin.base import restore_locked_fields, saved_settings
 
-    node_type = getattr(node_cls, "type", "")
-    if node_type in REPEATABLE or node_type not in REPEATABLE_WHEN:
-        return node_type in REPEATABLE
     try:
         saved = await saved_settings(_database(), str(context.get("node_id") or ""), context.get("parameter_snapshot"))
     except Exception:
         logger.warning("Could not read a node's settings; the call will not run again", node_id=context.get("node_id"), exc_info=True)
+        return None
+    return restore_locked_fields(node_cls, {**saved, **dict(node_data or {})}, context.get("tool_args"), saved)
+
+
+async def repeatable_call(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> bool:
+    """Whether a call may run again after an attempt broke off
+    (services/approvals/repeats.py), judged on what it runs with
+    (:func:`_runs_with`). Not safe when the settings cannot be read."""
+    from services.approvals.repeats import REPEATABLE, REPEATABLE_WHEN, repeatable
+
+    node_type = getattr(node_cls, "type", "")
+    if node_type in REPEATABLE or node_type not in REPEATABLE_WHEN:
+        return node_type in REPEATABLE
+    data = await _runs_with(context, node_cls, node_data)
+    return data is not None and repeatable(node_cls, data, tool_call=is_agent_tool_call(context))
+
+
+async def retryable_call(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> bool:
+    """Whether a call that failed transiently (a rate limit, a server
+    error) may run again: it is safe to repeat, and it is not a send, which
+    is never sent again automatically (RFC-0004 Q8), since an operation can
+    fail after its send went out (``BaseNode.as_activity``). Both are judged
+    on what the call runs with, so a share the node's saved settings make
+    counts as a send even when the call's data does not name it."""
+    from services.plugin.approval import approval_spec
+
+    if not await repeatable_call(context, node_cls, node_data):
         return False
-    data = restore_locked_fields(node_cls, {**saved, **dict(node_data or {})}, context.get("tool_args"), saved)
-    return repeatable(node_cls, data, tool_call=is_agent_tool_call(context))
+    spec = approval_spec(node_cls)
+    if spec is None:
+        return True
+    data = await _runs_with(context, node_cls, node_data)
+    return data is not None and not _sends(spec, data)
 
 
 def unknown_answer(context: Mapping[str, Any], node_cls: Any, node_data: Mapping[str, Any]) -> Dict[str, Any]:
@@ -759,5 +783,6 @@ __all__ = [
     "record_unknown",
     "redo_refusal",
     "repeatable_call",
+    "retryable_call",
     "unknown_answer",
 ]

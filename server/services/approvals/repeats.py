@@ -240,7 +240,9 @@ REPEATABLE_WHEN: Dict[str, Tuple[str, FrozenSet[str]]] = {
     ),
     "proxyRequest": ("method", frozenset({"GET", "PUT", "DELETE"})),
     "tikhubAction": ("operation", frozenset({"list_endpoints", "fetch_url", "account"})),
-    "vectorStore": ("operation", frozenset({"store", "query", "delete"})),
+    # Not "store": each call gives its chunks new random ids, so a repeat
+    # stores them a second time.
+    "vectorStore": ("operation", frozenset({"query", "delete"})),
     "vercelAction": ("operation", frozenset({"inspect", "list"})),
     "whatsappBusinessMedia": ("operation", frozenset({"upload", "get_url", "download", "delete"})),
     "whatsappBusinessSend": ("operation", frozenset({"send_reaction", "list_templates"})),

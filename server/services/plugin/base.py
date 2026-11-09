@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, ClassVar, Dict, Mapping, Optional, Sequence, Type
 
 from opentelemetry import trace
@@ -152,6 +152,93 @@ class NodeWaitInterrupted(Exception):
     in-process path there is no retry, and the run fails as it would for any
     other error.
     """
+
+
+#: Where the per-type activity wrapper (:meth:`BaseNode.as_activity`) gives
+#: the node it runs a place, in ``NodeContext.raw``, to report a transient
+#: failure: ``{node_id: {"error_type", "retry_after"}}``. Nothing else sets
+#: it, so a call made in process, or by another node, reports nowhere, and
+#: no result, envelope or tool payload ever carries the report.
+TRANSIENT_FAILURES_KEY = "_transient_failures"
+
+
+def _transient_failure(node_type: str, exc: BaseException) -> Optional[Dict[str, Any]]:
+    """How a failure that clears by itself failed, or None.
+
+    An exception the operation did not classify counts when it came with an
+    HTTP status that the shared provider-error classifier
+    (``LLMError.from_exception``) marks retryable: a request timeout (408),
+    a rate limit (429) or a server error (5xx). A spent quota or bill is
+    told apart only from a 402 or from the error body an SDK error carries;
+    a 429 from a bare ``response.raise_for_status()`` counts as a rate
+    limit. ``retry_after`` is the wait the response asked for, when it gave
+    one. A failure without a status (a refused connection, a bug) is not
+    one: it may have run, or it fails the same way again.
+    """
+    from services.llm.protocol import LLMError
+
+    error = LLMError.from_exception(node_type, exc)
+    if not error.retryable or error.status_code is None:
+        return None
+    return {"error_type": type(exc).__name__, "retry_after": error.retry_after}
+
+
+async def _planned_retry(
+    node_cls: Any,
+    context: Mapping[str, Any],
+    node_data: Mapping[str, Any],
+    transient: Mapping[str, Any],
+    message: Optional[str],
+):
+    """The retryable ``ApplicationError`` that has Temporal run a call that
+    failed transiently again under the activity's retry policy (RFC-0004
+    Q9), or None when its result stands, as on the last attempt.
+
+    The call must be one that may run again
+    (``approval_calls.retryable_call``: safe to repeat, and not a send).
+    The attempt must also be one Temporal would make: the policy has one
+    left, does not list the error type as non-retryable, and the wait the
+    provider asked for fits its ``maximum_interval`` and what is left of the
+    schedule-to-close budget. That wait is the ``next_retry_delay``;
+    without one the policy's backoff applies. A call of a chat run the owner
+    is stopping answers at once instead, so the run's next model step ends
+    the run rather than waiting through the backoff.
+    """
+    from temporalio import activity
+    from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
+
+    from services.approvals import tool_calls as approval_calls
+    from services.chat import steps as chat_steps
+
+    info = activity.info()
+    policy = info.retry_policy
+    error_type = str(transient.get("error_type") or "Error")
+    if policy is None or (policy.maximum_attempts and info.attempt >= policy.maximum_attempts):
+        return None
+    if error_type in (policy.non_retryable_error_types or ()):
+        return None
+    wait = transient.get("retry_after")
+    delay = timedelta(seconds=wait) if wait else None
+    if delay is not None:
+        if policy.maximum_interval is None or delay > policy.maximum_interval:
+            return None
+        budget = info.schedule_to_close_timeout
+        if budget and info.scheduled_time + budget - datetime.now(timezone.utc) <= delay:
+            return None
+    if await chat_steps.run_stopped(context):
+        return None
+    if not await approval_calls.retryable_call(context, node_cls, node_data):
+        return None
+    return ApplicationError(
+        str(message or error_type),
+        {"retry_after": wait},
+        type=error_type,
+        non_retryable=False,
+        next_retry_delay=delay,
+        # A planned retry is no failure: the SDK logs it at DEBUG and counts
+        # no failure metric, as for the LLM step's own retries.
+        category=ApplicationErrorCategory.BENIGN,
+    )
 
 
 # Sentinel used by Params-less nodes so .model_validate({}) works.
@@ -775,7 +862,19 @@ class BaseNode:
                 error_type=NODE_WAIT_INTERRUPTED,
             )
         except Exception as e:
-            logger.exception("[%s] operation %s failed", self.type, op_name)
+            # A refusal that clears by itself (an HTTP 408, 429 or 5xx) is an
+            # expected failure: one WARN line, reported to the activity
+            # wrapper when it runs this node (TRANSIENT_FAILURES_KEY). The
+            # envelope is the same either way. Anything else is a bug and
+            # keeps its traceback.
+            transient = _transient_failure(self.type, e)
+            if transient is None:
+                logger.exception("[%s] operation %s failed", self.type, op_name)
+            else:
+                logger.warning("[%s] %s op %s: %s", self.type, op_name, type(e).__name__, e)
+                reports = context.raw.get(TRANSIENT_FAILURES_KEY) if isinstance(context.raw, dict) else None
+                if isinstance(reports, dict):
+                    reports[node_id] = transient
             return self._wrap_error(start_time=start_time, error=str(e), error_type=type(e).__name__)
 
         return self._wrap_success(start_time=start_time, result=result)
@@ -1118,7 +1217,7 @@ class BaseNode:
         into ``activities=[...]``.
         """
         from temporalio import activity
-        from temporalio.exceptions import ApplicationError
+        from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 
         activity_name = f"node.{cls.type}.v{cls.version}"
 
@@ -1178,10 +1277,23 @@ class BaseNode:
             # stopped is answered without running, unless the owner allowed
             # it and it is claimed (it must run or be recorded as not run);
             # a tool call of the agent answering a chat run shows as a
-            # working step.
+            # working step. A later attempt of a call that is not safe to
+            # repeat follows one that broke off and may have run, so it goes on
+            # to the redo guard below instead of answering that it did not run.
+            from services.approvals import tool_calls as approval_calls
             from services.chat import steps as chat_steps
 
-            if context.get("approval_execution") is None and await chat_steps.run_stopped(context):
+            later = activity.info().attempt > 1
+            if (
+                context.get("approval_execution") is None
+                and await chat_steps.run_stopped(context)
+                and (not later or await approval_calls.repeatable_call(context, cls, node_data))
+            ):
+                if later:
+                    # The step an earlier attempt left open (a planned retry
+                    # or an interrupted wait) ends here (the hub drops the
+                    # repeated start).
+                    await chat_steps.end(chat_steps.begin(context, cls), state="skipped")
                 result = {
                     "success": True,
                     "node_id": node_id,
@@ -1202,8 +1314,6 @@ class BaseNode:
             # Approvals (services/approvals/tool_calls.py): a tool call that
             # sends waits for the owner while the workflow asks first, and a
             # send the owner approved runs only under its claim.
-            from services.approvals import tool_calls as approval_calls
-
             checked = await approval_calls.check(context, cls)
             if checked.result is not None:
                 result = {
@@ -1333,6 +1443,9 @@ class BaseNode:
                 ):
                     if key in context:
                         extras[key] = context[key]
+                # Where this node's body reports a transient failure.
+                transient_failures: Dict[str, Any] = {}
+                extras[TRANSIENT_FAILURES_KEY] = transient_failures
                 result = await workflow_service.execute_node(
                     node_id=node_id,
                     node_type=cls.type,
@@ -1361,10 +1474,24 @@ class BaseNode:
                 success, payload, error = cls.interpret_result(result)
                 if success:
                     await chat_steps.number_sources(context, cls, result)
-                if chat_step is not None and not (
+                # A call whose body reported a transient failure runs again
+                # under the activity's retry policy (RFC-0004 Q9). The report,
+                # not the result, says it failed: a ToolNode's tool error is
+                # a flat payload. Like an interrupted wait below, the attempt
+                # ends no step, records nothing and shows no error.
+                transient = transient_failures.get(node_id)
+                retry = (
+                    await _planned_retry(cls, context, node_data, transient, result.get("error"))
+                    if transient is not None
+                    else None
+                )
+                if chat_step is not None and retry is None and not (
                     not success and result.get("error_type") == NODE_WAIT_INTERRUPTED
                 ):
                     await chat_steps.end(chat_step, state="done" if success else "failed", detail=step_detail)
+                if retry is not None:
+                    activity.logger.info(f"Node {node_id} failed transiently; the attempt will be retried: {retry.message}")
+                    raise retry
                 if not success and result.get("error_type") == NODE_WAIT_INTERRUPTED:
                     # The body stopped waiting because this worker is going
                     # away, not because the work failed. Fail the attempt
@@ -1449,7 +1576,9 @@ class BaseNode:
                     return answer
                 raise
             except Exception as e:
-                if isinstance(e, ApplicationError) and e.type == NODE_WAIT_INTERRUPTED:
+                if isinstance(e, ApplicationError) and (
+                    e.type == NODE_WAIT_INTERRUPTED or e.category == ApplicationErrorCategory.BENIGN
+                ):
                     raise
                 error_msg = f"{type(e).__name__}: {e}"
                 activity.logger.error(f"Node {node_id} crashed: {error_msg}")

@@ -47,6 +47,9 @@ def test_each_listed_value_is_one_the_field_accepts(node_type):
         ("awsAction", {"operation": "call", "api_operation": "describe_vpcs"}, False, False),
         ("approvalGate", {}, False, True),
         ("whatsappSend", {"message": "hi"}, True, False),
+        # Each store gives its chunks new random ids: a repeat writes them twice.
+        ("vectorStore", {}, False, False),
+        ("vectorStore", {"operation": "query"}, False, True),
     ],
 )
 def test_a_call_repeats_only_when_listed(node_type, data, tool_call, expected):
