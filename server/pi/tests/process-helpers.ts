@@ -30,7 +30,7 @@ export async function captureProcess(command:string[],phase:string,milliseconds:
   }
 }
 
-export async function smokeHost(entrypoint:string,env:Record<string,string|undefined>={}):Promise<void> {
+export async function smokeHost(entrypoint:string,env:Record<string,string|undefined>={},milliseconds=10000):Promise<void> {
   const child=Bun.spawn([process.execPath,entrypoint],{stdin:"pipe",stdout:"pipe",stderr:"pipe",env:{...process.env,...env}});
   let buffer="";let ended=false;let stderr="";const observed:string[]=[];
   const stderrDrain=(async()=>{const decoder=new TextDecoder();for await(const chunk of child.stderr)stderr+=decoder.decode(chunk,{stream:true});stderr+=decoder.decode();})();
@@ -50,7 +50,7 @@ export async function smokeHost(entrypoint:string,env:Record<string,string|undef
   const drains=Promise.all([stdoutDrain,stderrDrain]);
   try {
     child.stdin.write(encodeFrame(run()));
-    const [exitCode]=await within(Promise.all([child.exited,drains]),10000,"Pi host checkpoint and exit");
+    const [exitCode]=await within(Promise.all([child.exited,drains]),milliseconds,"Pi host checkpoint and exit");
     expect(ended).toBe(true);expect(observed).toEqual(["operation","assistant_ready","operation","turn_checkpoint"]);
     expect(exitCode).toBe(0);expect(stderr).toBe("");
   } catch(error) {

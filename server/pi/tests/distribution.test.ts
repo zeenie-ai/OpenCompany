@@ -14,6 +14,10 @@ describe.skipIf(!await Bun.file(manifestPath).exists())("production archive",()=
   let buildRoot:string;let isolated:string|undefined;
   // Cold Windows extraction and removal can dominate this large dependency
   // tree. Keep fixture work separate from the bounded host startup contract.
+  // Each budget only catches a hang. Unpacking ran past 25 s on the Windows
+  // runner (2026-11-09), and the fresh tree's first start ran past 10 s on a
+  // loaded Windows machine: thousands of new files, each read cold and
+  // scanned by Defender on first open.
   beforeAll(async()=>{
     manifest=JSON.parse(await readFile(manifestPath,"utf8"));
     const archive=join(root,"dist",manifest.archive);
@@ -25,20 +29,20 @@ describe.skipIf(!await Bun.file(manifestPath).exists())("production archive",()=
     // server/pi/node_modules, root node_modules or any development workspace.
     buildRoot=await realpath(tmpdir());
     isolated=await realpath(await mkdtemp(join(buildRoot,"opencompany-pi-offline-")));
-    const unpack=await captureProcess([tarBinary(),"-xzf",archive,"-C",isolated],"Offline runtime archive extraction",25000);
+    const unpack=await captureProcess([tarBinary(),"-xzf",archive,"-C",isolated],"Offline runtime archive extraction",120000);
     expect(unpack.exitCode,`Archive extraction failed: ${unpack.stderr}`).toBe(0);
     for (const platform of ["darwin-arm64","darwin-x64","linux-x64","win32-x64"]) {
       const binary=join(isolated,"node_modules","@esbuild",platform,platform.startsWith("win32-") ? "esbuild.exe" : "bin/esbuild");
       expect(await Bun.file(binary).exists()).toBe(true);
     }
-  },30000);
+  },130000);
   afterAll(async()=>{
     if(!isolated)return;
     if (!resolve(isolated).startsWith(resolve(buildRoot)+sep)) throw new Error("Invalid offline test scratch path");
-    await within(rm(isolated,{recursive:true,force:true,maxRetries:3,retryDelay:100}),25000,"Offline runtime scratch cleanup");
-  },30000);
+    await within(rm(isolated,{recursive:true,force:true,maxRetries:3,retryDelay:100}),120000,"Offline runtime scratch cleanup");
+  },130000);
   test("runs offline without source or root dependency resolution",async()=>{
     if(!isolated)throw new Error("Offline runtime extraction did not create a fixture");
-    await smokeHost(join(isolated,manifest.entrypoint),{NODE_PATH:"",PI_PACKAGE_DIR:join(isolated,manifest.sdk_package_dir),PI_OFFLINE:"1"});
-  },15000);
+    await smokeHost(join(isolated,manifest.entrypoint),{NODE_PATH:"",PI_PACKAGE_DIR:join(isolated,manifest.sdk_package_dir),PI_OFFLINE:"1"},60000);
+  },70000);
 });
