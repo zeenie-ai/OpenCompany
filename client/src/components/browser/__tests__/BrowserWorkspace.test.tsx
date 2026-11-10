@@ -391,6 +391,13 @@ describe('BrowserWorkspace in Home', () => {
     act(() => socket.message({ type: 'page', url: 'chrome://settings' }));
     expect(screen.getByText('chrome://settings')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull();
+    // Only http(s) pages get the link: a script or data address never does.
+    for (const url of ['javascript:alert(document.cookie)', 'data:text/html,<script>alert(1)</script>']) {
+      act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
+      expect(screen.getByRole('link', { name: 'Open in new tab' })).toBeInTheDocument();
+      act(() => socket.message({ type: 'page', url }));
+      expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull();
+    }
   });
 
   it('ends the row of page controls with the dock’s action, while the owner does not have control', () => {
