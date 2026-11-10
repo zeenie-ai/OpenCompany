@@ -45,7 +45,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { ActionButton } from '@/components/ui/action-button';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -71,13 +70,14 @@ import { AI_PROVIDER_META } from '../icons/AIProviderIcons';
 const Divider = () => <div className="mx-1 h-6 w-px bg-border-default" />;
 
 // Colour marks state or role (docs-internal/theme_system.md): the toolbar's
-// controls are neutral outlines. Green only starts the workflow (Start,
-// Resume), and the save dot shows a state.
+// controls are neutral outlines, Start and Resume are its one `invert`
+// primary, and only the save dot carries a colour, for a state.
 const NEUTRAL = 'border-border-default text-fg-default';
 // A panel's toggle is filled while its panel shows.
 const NEUTRAL_TOGGLE = `${NEUTRAL} aria-pressed:bg-bg-active`;
-// A labelled button beside Start, in ActionButton's shape.
-const NEUTRAL_ACTION = `${NEUTRAL} rounded-md px-3.5 text-[13px] font-semibold`;
+// The shape the labelled buttons share (Start, Stop, Reset, Save).
+const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
+const NEUTRAL_ACTION = `${NEUTRAL} ${ACTION_SHAPE}`;
 
 interface TopToolbarProps {
   workflowName: string;
@@ -420,25 +420,22 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             {controlTransitionLabel}
           </Button>
         ) : workflowControl.can_start ? (
-          <ActionButton
-            intent="run"
-            onClick={onStartWorkflow}
-            title="Start workflow"
-          >
-            <Play className="h-3 w-3 fill-current" />
+          <Button variant="invert" onClick={onStartWorkflow} title="Start workflow" className={ACTION_SHAPE}>
+            <Play className="size-3 fill-current" />
             Start
-          </ActionButton>
+          </Button>
         ) : canResumeWorkflow ? (
-          <ActionButton
-            intent="run"
+          <Button
+            variant="invert"
             onClick={onResumeWorkflow}
             title={workflowControl.state === 'resuming'
               ? 'Retry the interrupted resume transition'
               : 'Resume this workflow execution'}
+            className={ACTION_SHAPE}
           >
-            <Play className="h-3 w-3 fill-current" />
+            <Play className="size-3 fill-current" />
             {workflowControl.state === 'resuming' ? 'Retry Resume' : 'Resume'}
-          </ActionButton>
+          </Button>
         ) : canPauseWorkflow ? (
           <Button
             variant="quiet"
@@ -504,13 +501,9 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         </Button>
 
         {/* Status Indicator — font-mono tracks the new-contract --font-mono
-            (the system mono under light/dark). */}
-        <div
-          className={cn(
-            'flex items-center gap-2 rounded-sm px-3 py-1 text-xs font-mono',
-            hasUnsavedChanges ? 'text-warning' : 'text-success'
-          )}
-        >
+            (the system mono under light/dark). The dot carries the state's
+            colour; the label is neutral. */}
+        <div className="flex items-center gap-2 rounded-sm px-3 py-1 font-mono text-xs text-fg-muted">
           <div
             className={cn(
               'h-2 w-2 rounded-full',

@@ -98,19 +98,38 @@ beforeEach(() => {
 });
 
 // Colour marks state or role (docs-internal/theme_system.md): the toolbar's
-// controls are neutral, and green only starts the workflow.
+// controls are neutral, Start is its one invert primary, and only the save
+// dot carries a colour.
 describe('TopToolbar colour', () => {
+  // An action, node-role or status colour among an element's classes. Every
+  // Button carries `aria-invalid:border-destructive`, which is no colour of
+  // its own.
+  const COLOUR = /(^|:)(bg|text|border)-(action|node|success|warning|destructive|info)(-|$)/;
   const coloured = (container: HTMLElement) =>
-    [...container.querySelectorAll('*')].filter((element) => /\b(bg|text|border)-(action|node)-/.test(element.getAttribute('class') ?? ''));
+    [...container.querySelectorAll('*')].filter((element) =>
+      (element.getAttribute('class') ?? '').split(/\s+/).some((name) => !name.includes('aria-invalid:') && COLOUR.test(name)),
+    );
   const withGlobalModel = { providers: [{ provider: 'openai', models: ['gpt-4.1'] }], global_provider: 'openai', global_model: 'gpt-4.1' };
+  const ready = { ...running, state: 'ready' as const, can_start: true, can_pause: false, can_reset: false, can_edit: true };
 
-  it('keeps green for Start alone', async () => {
+  it('draws Start as the invert primary, with no colour but the save dot', async () => {
     mocks.sendRequest.mockResolvedValue(withGlobalModel);
-    const ready = { ...running, state: 'ready' as const, can_start: true, can_pause: false, can_reset: false, can_edit: true };
     const { container } = render(<TopToolbar {...toolbarProps()} workflowControl={ready} hasUnsavedChanges />);
     expect(await screen.findByRole('button', { name: 'Apply All' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
-    expect(coloured(container)).toEqual([screen.getByRole('button', { name: 'Start' })]);
+    expect(screen.getByRole('button', { name: 'Start' })).toHaveAttribute('data-variant', 'invert');
+    const label = screen.getByText('Modified');
+    expect(label).toHaveClass('text-fg-muted');
+    expect(coloured(container)).toEqual([label.querySelector('div')]);
+    expect(label.querySelector('div')).toHaveClass('bg-warning');
+  });
+
+  it('draws Resume as the invert primary too', async () => {
+    mocks.sendRequest.mockResolvedValue({});
+    const paused = { ...running, state: 'paused' as const, can_pause: false, can_resume: true, can_edit: true };
+    render(<TopToolbar {...toolbarProps()} workflowControl={paused} />);
+    await waitFor(() => expect(mocks.sendRequest).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Resume' })).toHaveAttribute('data-variant', 'invert');
   });
 
   it('draws Stop and Reset without a colour of their own', async () => {
@@ -119,7 +138,9 @@ describe('TopToolbar colour', () => {
     expect(await screen.findByRole('button', { name: 'Apply All' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
-    expect(coloured(container)).toEqual([]);
+    const dot = screen.getByText('Saved').querySelector('div');
+    expect(dot).toHaveClass('bg-success');
+    expect(coloured(container)).toEqual([dot]);
   });
 
   it('fills a panel toggle while its panel shows', async () => {
