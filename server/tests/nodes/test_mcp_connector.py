@@ -7,9 +7,10 @@ from __future__ import annotations
 import contextlib
 import functools
 import json
+import socketserver
 import threading
 from datetime import datetime, timedelta, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
 from unittest.mock import AsyncMock
@@ -283,9 +284,11 @@ def elsewhere():
         def log_message(self, *args):
             pass
 
-    server = HTTPServer(("127.0.0.1", 0), Handler)
+    # TCPServer, not HTTPServer: HTTPServer.server_bind also asks DNS for this
+    # host's name (socket.getfqdn), which took 35 s on every macOS CI run.
+    server = socketserver.TCPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_port}/schema.json", hits=hits)
+    yield SimpleNamespace(url=f"http://127.0.0.1:{server.server_address[1]}/schema.json", hits=hits)
     server.shutdown()
     server.server_close()
 
