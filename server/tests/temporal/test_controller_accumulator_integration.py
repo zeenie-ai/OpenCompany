@@ -268,7 +268,12 @@ async def _run_accumulator_gate():
                 # duplicate-start rejection must not poison the queue head.
                 existing = await client.start_workflow("MachinaWorkflow", {"probe_event": "E"},
                     id=f"{slug}-trigger-E", task_queue=queue)
-                assert await existing.result() == "E"
+                # A handle from start_workflow unlocks test-server time while
+                # its result is awaited. Once this child is done only the idle
+                # controller is left, and the server would jump to the ten-year
+                # timeout it gives every workflow and close the controller.
+                with environment.auto_time_skipping_disabled():
+                    assert await existing.result() == "E"
                 await controller.signal("on_event", _event("E"))
                 await controller.signal("on_event", _event("F"))
                 await _wait_recorded("F")

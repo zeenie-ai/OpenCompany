@@ -108,80 +108,86 @@ async def _run_gate_with_pressure():
     _started, _release, _calls = asyncio.Event(), asyncio.Event(), []
     queue = "control-native-" + uuid4().hex
     async with await WorkflowEnvironment.start_time_skipping() as environment:
-        client = environment.client
-        definitions = [ExecutionControlProbeWorkflow, WorkflowControlWorkflow]
-        activities = [_tool, *ExecutionControlActivities(client).activities()]
-        controller_id = "controller-" + uuid4().hex
-        root_id = "root-" + uuid4().hex
-        async with Worker(client, task_queue=queue, workflows=definitions, activities=activities, max_cached_workflows=0,
-                          identity="control-probe-before-restart"):
-            controller = await client.start_workflow("WorkflowControlWorkflow", {
-                "execution_control_version": 1, "generation": 7,
-            }, id=controller_id, task_queue=queue)
-            root = await client.start_workflow("ExecutionControlProbeWorkflow", {
-                "execution_control_version": 1, "generation": 7,
-                "controller_workflow_id": controller_id,
-            }, id=root_id, task_queue=queue)
-            await asyncio.wait_for(_started.wait(), timeout=15)
-            pause = {"state": "paused", "revision": 1, "generation": 7}
-            await controller.execute_update("set_control_state", pause)
-            admitted = await root.execute_update("set_control_state", {**pause, "first_execution_run_id": root.first_execution_run_id})
-            assert admitted["active_actions"] == 1
-            checkpoint = asyncio.create_task(root.execute_update("wait_for_checkpoint", pause))
-            await asyncio.sleep(0.05)
-            assert not checkpoint.done()
-            _release.set()
-            assert (await asyncio.wait_for(checkpoint, timeout=15))["checkpoint"] is True
-            stopped = await root.query("execution_control_status")
-            assert stopped["results"] == ["A-result"]
-            assert _calls == ["A"]
-            # The acknowledged pause Update pressures this original run.
-            # Its chain roster and state survive while the root is stopped.
-            for _ in range(100):
-                description = await controller.describe()
-                if description.run_id != controller.first_execution_run_id:
-                    break
-                await asyncio.sleep(0.02)
-            assert description.run_id != controller.first_execution_run_id
-            status = await controller.query("status")
-            assert status["live_roots"][root_id]["first_execution_run_id"] == root.first_execution_run_id
-            assert status["participant_state"] == "paused"
+        # Nothing in this gate waits on a timer. Awaiting a result would
+        # otherwise unlock test-server time, and once the root is done and
+        # only the idle controller is left, the server jumps to the ten-year
+        # timeout it gives every workflow and closes the controller before
+        # the reset below.
+        with environment.auto_time_skipping_disabled():
+            client = environment.client
+            definitions = [ExecutionControlProbeWorkflow, WorkflowControlWorkflow]
+            activities = [_tool, *ExecutionControlActivities(client).activities()]
+            controller_id = "controller-" + uuid4().hex
+            root_id = "root-" + uuid4().hex
+            async with Worker(client, task_queue=queue, workflows=definitions, activities=activities, max_cached_workflows=0,
+                              identity="control-probe-before-restart"):
+                controller = await client.start_workflow("WorkflowControlWorkflow", {
+                    "execution_control_version": 1, "generation": 7,
+                }, id=controller_id, task_queue=queue)
+                root = await client.start_workflow("ExecutionControlProbeWorkflow", {
+                    "execution_control_version": 1, "generation": 7,
+                    "controller_workflow_id": controller_id,
+                }, id=root_id, task_queue=queue)
+                await asyncio.wait_for(_started.wait(), timeout=15)
+                pause = {"state": "paused", "revision": 1, "generation": 7}
+                await controller.execute_update("set_control_state", pause)
+                admitted = await root.execute_update("set_control_state", {**pause, "first_execution_run_id": root.first_execution_run_id})
+                assert admitted["active_actions"] == 1
+                checkpoint = asyncio.create_task(root.execute_update("wait_for_checkpoint", pause))
+                await asyncio.sleep(0.05)
+                assert not checkpoint.done()
+                _release.set()
+                assert (await asyncio.wait_for(checkpoint, timeout=15))["checkpoint"] is True
+                stopped = await root.query("execution_control_status")
+                assert stopped["results"] == ["A-result"]
+                assert _calls == ["A"]
+                # The acknowledged pause Update pressures this original run.
+                # Its chain roster and state survive while the root is stopped.
+                for _ in range(100):
+                    description = await controller.describe()
+                    if description.run_id != controller.first_execution_run_id:
+                        break
+                    await asyncio.sleep(0.02)
+                assert description.run_id != controller.first_execution_run_id
+                status = await controller.query("status")
+                assert status["live_roots"][root_id]["first_execution_run_id"] == root.first_execution_run_id
+                assert status["participant_state"] == "paused"
 
-        # A new SDK Worker rebuilds all Python workflow state from history.
-        async with Worker(client, task_queue=queue, workflows=definitions, activities=activities, max_cached_workflows=0,
-                          identity="control-probe-after-restart"):
-            # Synchronize the restarted worker with an idempotent Update before
-            # querying the workflow state reconstructed by its first task.
-            await root.execute_update("set_control_state", {"state": "paused", "revision": 1, "generation": 7})
-            stopped = await root.query("execution_control_status")
-            assert stopped["results"] == ["A-result"]
-            resume = {"state": "running", "revision": 2, "generation": 7, "producers_held": True}
-            await controller.execute_update("set_control_state", resume)
-            await root.execute_update("set_control_state", resume)
-            assert (await root.query("execution_control_status"))["results"] == ["A-result"]
-            assert _calls == ["A"]
-            await root.execute_update("set_control_state", {**resume, "producers_held": False})
-            await controller.execute_update("set_control_state", {**resume, "producers_held": False})
-            assert await root.result() == ["A-result", "B-result", "C-result"]
-            assert _calls == ["A", "B", "C"]
-            assert (await controller.query("status"))["live_roots"] == {}
-            await controller.signal("reset")
-            await controller.result()
-            legacy = await client.start_workflow("ExecutionControlProbeWorkflow", {"phase": 2},
-                id="legacy-" + uuid4().hex, task_queue=queue)
-            assert await legacy.result() == ["C-result"]
-            legacy_history = await legacy.fetch_history()
+            # A new SDK Worker rebuilds all Python workflow state from history.
+            async with Worker(client, task_queue=queue, workflows=definitions, activities=activities, max_cached_workflows=0,
+                              identity="control-probe-after-restart"):
+                # Synchronize the restarted worker with an idempotent Update before
+                # querying the workflow state reconstructed by its first task.
+                await root.execute_update("set_control_state", {"state": "paused", "revision": 1, "generation": 7})
+                stopped = await root.query("execution_control_status")
+                assert stopped["results"] == ["A-result"]
+                resume = {"state": "running", "revision": 2, "generation": 7, "producers_held": True}
+                await controller.execute_update("set_control_state", resume)
+                await root.execute_update("set_control_state", resume)
+                assert (await root.query("execution_control_status"))["results"] == ["A-result"]
+                assert _calls == ["A"]
+                await root.execute_update("set_control_state", {**resume, "producers_held": False})
+                await controller.execute_update("set_control_state", {**resume, "producers_held": False})
+                assert await root.result() == ["A-result", "B-result", "C-result"]
+                assert _calls == ["A", "B", "C"]
+                assert (await controller.query("status"))["live_roots"] == {}
+                await controller.signal("reset")
+                await controller.result()
+                legacy = await client.start_workflow("ExecutionControlProbeWorkflow", {"phase": 2},
+                    id="legacy-" + uuid4().hex, task_queue=queue)
+                assert await legacy.result() == ["C-result"]
+                legacy_history = await legacy.fetch_history()
 
-        roots = await _histories(client, root_id, root.first_execution_run_id)
-        controllers = await _histories(client, controller_id, controller.first_execution_run_id)
-        assert len(roots) == 3
-        assert len(controllers) == 2
-        for history in [*roots, *controllers, legacy_history]:
-            result = await Replayer(workflows=definitions).replay_workflow(history)
-            assert result.replay_failure is None
-        legacy_activities = [event.activity_task_scheduled_event_attributes.activity_type.name
-            for event in legacy_history.events if event.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED]
-        assert legacy_activities == ["control.probe.tool"]
+            roots = await _histories(client, root_id, root.first_execution_run_id)
+            controllers = await _histories(client, controller_id, controller.first_execution_run_id)
+            assert len(roots) == 3
+            assert len(controllers) == 2
+            for history in [*roots, *controllers, legacy_history]:
+                result = await Replayer(workflows=definitions).replay_workflow(history)
+                assert result.replay_failure is None
+            legacy_activities = [event.activity_task_scheduled_event_attributes.activity_type.name
+                for event in legacy_history.events if event.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED]
+            assert legacy_activities == ["control.probe.tool"]
 
 
 def test_control_restart_rollover_and_histories_replay():
