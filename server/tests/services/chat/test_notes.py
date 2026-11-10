@@ -9,6 +9,7 @@ Generated UI is on, as the guide asks for it only then."""
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -51,6 +52,19 @@ async def test_a_newer_note_replaces_an_untold_one_and_is_told_again(database):
     assert [n.text for n in await notes.claim_notes(database, session_id="wf", run_id="r_3")] == ["slot s3"]
     await notes.clear_notes(database, "wf")
     assert await notes.claim_notes(database, session_id="wf", run_id="r_4") == []
+
+
+async def test_a_note_changed_in_the_clock_tick_of_its_claim_is_told_again(database, monkeypatch):
+    # Windows' clock moves in steps of about 15 ms, so a claim and the change
+    # after it can carry the same time. The change still counts.
+    tick = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(notes, "_utcnow", lambda: tick)
+    await notes.upsert_note(database, session_id="wf", key="k", kind="ui-state", text="slot s1")
+    await notes.claim_notes(database, session_id="wf", run_id="r_1")
+    await notes.upsert_note(database, session_id="wf", key="k", kind="ui-state", text="slot s2")
+    assert await notes.deliver_notes(database, "r_1") == 0
+    [note] = await notes.claim_notes(database, session_id="wf", run_id="r_2")
+    assert note.text == "slot s2"
 
 
 async def test_a_finished_run_tells_its_notes_and_a_failed_one_does_not(database, hub):

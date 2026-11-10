@@ -7,8 +7,9 @@ owner changed without pressing anything). The next run's payload claims the
 session's untold notes (``claim_notes``, from ``agent.prepare_payload``) and
 puts them ahead of the owner's message; the run's end marks them told
 (``deliver_notes``) when it finished or stopped. A run that failed leaves
-them untold, so the next turn offers them again, and a note changed after it
-was claimed stays untold too.
+them untold, so the next turn offers them again. A note changed after it was
+claimed stays untold too: the change takes the claim away, which holds even
+when the claim and the change fall in one tick of the clock.
 """
 
 from __future__ import annotations
@@ -31,15 +32,10 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _aware(moment: Any) -> Any:
-    if moment is not None and moment.tzinfo is None:
-        return moment.replace(tzinfo=timezone.utc)
-    return moment
-
-
 async def upsert_note(database: Any, *, session_id: str, key: str, kind: str, text: str) -> None:
     """Keep ``text`` as the note under ``key``: a new note, or the newer
-    version of one (told again even when the older one was told)."""
+    version of one (told again even when the older one was told). The run
+    that claimed the older version no longer holds the note."""
     now = _utcnow()
     async with database.reserved_session() as session:
         found = await session.execute(select(ChatNote).where(ChatNote.session_id == session_id, ChatNote.key == key))
@@ -51,6 +47,8 @@ async def upsert_note(database: Any, *, session_id: str, key: str, kind: str, te
             note.text = text
             note.updated_at = now
             note.delivered_at = None
+            note.claimed_run_id = None
+            note.claimed_at = None
         session.add(note)
         await session.commit()
 
@@ -78,21 +76,17 @@ async def claim_notes(database: Any, *, session_id: str, run_id: str) -> List[Ch
 
 
 async def deliver_notes(database: Any, run_id: str) -> int:
-    """Mark the notes ``run_id`` claimed as told, except any changed since
-    it claimed them. Returns how many."""
+    """Mark the notes ``run_id`` still holds as told. Returns how many. A
+    note changed since the claim is not among them (``upsert_note``)."""
     async with database.reserved_session() as session:
         found = await session.execute(select(ChatNote).where(ChatNote.claimed_run_id == run_id, ChatNote.delivered_at.is_(None)))
-        told = 0
+        held = list(found.scalars().all())
         now = _utcnow()
-        for note in found.scalars().all():
-            claimed, updated = _aware(note.claimed_at), _aware(note.updated_at)
-            if claimed is not None and updated is not None and updated > claimed:
-                continue
+        for note in held:
             note.delivered_at = now
             session.add(note)
-            told += 1
         await session.commit()
-        return told
+        return len(held)
 
 
 async def drop_note(database: Any, *, session_id: str, key: str) -> None:
