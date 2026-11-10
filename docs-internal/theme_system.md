@@ -114,7 +114,7 @@ Standard shadcn keys (`background`, `foreground`, `card`, `popover`, `primary`, 
 
 ### 3. Action role tokens
 
-Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home, in the shared chat and in the editor's top toolbar they mark a state, and colour a control only where it means the intent: on Home, `run` starts an employee ([Colour marks state or role](#colour-marks-state-or-role)).
+Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home, in the shared chat and in the editor's top toolbar they mark a state and colour no button ([Colour marks state or role](#colour-marks-state-or-role)).
 
 ### 4. Node-type role tokens
 
@@ -361,7 +361,7 @@ Result by theme (display font / tracking / case):
 tiles themselves are deliberately left to Google's own styling; `useAppTheme` here covers only
 the surrounding chrome. Every other surface uses Tailwind + tokens. Call sites read the colour pack through `useAppTheme`, never by importing `lightColors` / `darkColors` directly.
 6. **Hand-rolled modal backdrops.** Use `<Modal>` from `client/src/components/ui/Modal.tsx`.
-7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor's panels. On Home, in the shared chat and in the editor's top toolbar, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary (the toolbar's Start and Resume), neutral `quiet` buttons (with a border where they are drawn as an outline), and `run` only to start an employee on Home.
+7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor's panels. On Home, in the shared chat and in the editor's top toolbar, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary (Start and Resume included), neutral `quiet` buttons (with a border where they are drawn as an outline), and no button in an intent's colour.
 8. **Static fallback theme palettes in TS.** Themes live in CSS (`client/src/themes/<name>.css`), not TS exports. `client/src/styles/theme.ts` ships only the two `lightColors` / `darkColors` base packs that `useAppTheme` returns — it is not a place to add a third / fourth / Nth palette.
 
 ## What's done vs deferred
