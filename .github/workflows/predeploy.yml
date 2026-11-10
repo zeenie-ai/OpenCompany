@@ -130,9 +130,13 @@ jobs:
         shell: bash
         # --durations ends the log with the slowest test phases, so a slow run
         # says where its time went (setup counts: a fixture can be the cost).
+        # --basetemp keeps every test's temp folder, and so its SQLite files,
+        # in the runner's temp folder. On Windows that is on D:, the runner's
+        # working drive; the default is on C:, which is slow there
+        # (actions/runner-images#8755).
         run: |
           uv sync
-          uv run pytest ${{ matrix.tests }} -v --durations=25
+          uv run pytest ${{ matrix.tests }} -v --durations=25 --basetemp="${RUNNER_TEMP}/pytest"
 
   cli-tests:
     name: CLI tests
