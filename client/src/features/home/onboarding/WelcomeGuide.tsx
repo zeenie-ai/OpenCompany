@@ -88,7 +88,7 @@ export function WelcomeGuide() {
               const Icon = done && i !== index ? CircleCheck : icon;
               return (
                 <TabsPrimitive.Trigger key={id} value={id} disabled={i > furthest && id !== 'connect'} className={NAV_ITEM}>
-                  <Icon aria-hidden strokeWidth={1.75} className={cn('size-4.25', done && 'text-action-run-ink')} />
+                  <Icon aria-hidden strokeWidth={1.75} className={cn('size-4.25', done && 'text-fg-default')} />
                   {title}
                 </TabsPrimitive.Trigger>
               );

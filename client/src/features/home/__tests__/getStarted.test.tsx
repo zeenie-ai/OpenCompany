@@ -154,7 +154,7 @@ describe('Get started on Home', () => {
     expect(await screen.findByText('Maya joined your team')).toBeInTheDocument();
     expect(screen.getByText('OpenAI is connected')).toBeInTheDocument();
     expect(screen.getByText('2 of 4 done')).toBeInTheDocument();
-    // The bar is ink: only a done step's tick carries a colour.
+    // The bar is ink, as a done step's tick is.
     expect(screen.getByRole('progressbar', { name: 'Steps done' }).className).toContain('[&>[data-slot=progress-indicator]]:bg-fg-default');
     fireEvent.click(step(/Say hello/));
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
@@ -248,8 +248,9 @@ describe('Get started on Home', () => {
     renderChecklist();
     const card = await screen.findByRole('region', { name: 'Get started' });
     expect(await within(card).findByRole('heading', { name: 'You’re all set!' })).toBeInTheDocument();
-    // A done step is a state, so its disc takes the working colour.
-    expect(card.querySelectorAll('.bg-status-working-fill')).toHaveLength(4);
+    // A done step's disc is ink, like the bar: no green.
+    expect(card.querySelectorAll('.bg-fg-default.text-bg-panel')).toHaveLength(4);
+    expect(card.innerHTML).not.toMatch(/status-working|action-run/);
     // Done is neutral, never an action's colour.
     const done = within(card).getByRole('button', { name: 'Done' });
     expect(done).toHaveClass('border-border-default');

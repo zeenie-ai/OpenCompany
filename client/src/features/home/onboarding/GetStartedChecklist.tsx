@@ -56,7 +56,7 @@ function Step({ row }: { row: GetStartedRow }) {
       <span
         className={cn(
           'grid size-6 shrink-0 place-items-center rounded-full border',
-          row.done ? 'border-status-working-border bg-status-working-fill text-status-working-ink' : 'border-border-default text-fg-muted',
+          row.done ? 'border-fg-default bg-fg-default text-bg-panel' : 'border-border-default text-fg-muted',
         )}
       >
         {row.done ? <Check aria-hidden className="size-3.5" strokeWidth={2.5} /> : <row.icon aria-hidden className="size-3.5" />}

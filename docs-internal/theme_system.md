@@ -171,8 +171,7 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   Home's message box, which is at least 64px tall, of the owner's bubble and
   of its edit box; Dev's compact chat keeps `leading-normal`.
 - **Status**: `--status-{working,ready,paused,attention,waiting}-{dot,fill,border,ink}`
-  for the employee pills and dots, and for the Get started checklist's done
-  steps. The dot is the raw role colour; light.css
+  for the employee pills and dots. The dot is the raw role colour; light.css
   keeps the paused dot at the design's mid grey. `--shadow-pip`
   (`shadow-pip`) is a dot's glow in its own colour: give the dot a
   `text-status-*-dot` colour and `bg-current`. Live, the Workspace's
