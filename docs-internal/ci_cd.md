@@ -85,6 +85,8 @@ Desktop builds use no certificates: macOS is signed ad-hoc (`mac.identity: "-"` 
 
 After tool install the composite installs the supervisor CLI editably (`uv pip install --system -e .`).
 
+On Windows it ends with one more step, which points `BUN_INSTALL_CACHE_DIR` and `UV_CACHE_DIR` at folders under `RUNNER_TEMP`. A Windows runner's `C:` drive is slow and `D:` is its working drive ([actions/runner-images#8755](https://github.com/actions/runner-images/issues/8755); the checkout and `RUNNER_TEMP` are on `D:`). bun and uv keep their caches on `C:` by default, so every install unpacked there and then copied each file to the checkout, and uv said so in each job (`Failed to hardlink files; falling back to full copy`). From a cache on the checkout's drive both hardlink. The step comes after the CLI install because that one goes to the hosted Python on `C:`. Nothing is kept between runs: these are the same per-job caches in another place, and on a runner without a `D:` drive `RUNNER_TEMP` is on `C:` and nothing changes.
+
 ---
 
 ## Predeploy validation

@@ -34,3 +34,15 @@ runs:
     - name: Install supervisor CLI
       shell: bash
       run: uv pip install --system -e .
+    # A Windows runner's C: drive is slow and D: is its working drive
+    # (actions/runner-images#8755). bun and uv keep their package caches on
+    # C: by default, so every install unpacked there and then copied each
+    # file to the checkout on D:. RUNNER_TEMP is on D:, and from a cache
+    # there both tools hardlink instead. This step is last because the CLI
+    # install above goes to the hosted Python, which is on C:.
+    - name: Package caches on the working drive (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        echo "BUN_INSTALL_CACHE_DIR=${RUNNER_TEMP}/bun-cache" >> "$GITHUB_ENV"
+        echo "UV_CACHE_DIR=${RUNNER_TEMP}/uv-cache" >> "$GITHUB_ENV"
