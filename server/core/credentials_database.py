@@ -76,6 +76,15 @@ class EncryptedOAuthToken(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+# The tables credentials.db holds. SQLModel.metadata also carries every other
+# model the process has imported, and this file needs none of them.
+CREDENTIAL_TABLES = [
+    CredentialsMetadata.__table__,
+    EncryptedAPIKey.__table__,
+    EncryptedOAuthToken.__table__,
+]
+
+
 # --- Database Class ---
 
 
@@ -126,14 +135,18 @@ class CredentialsDatabase:
         """
         Initialize database tables and return encryption salt.
 
-        Creates tables if they don't exist. Generates and stores a new salt
-        on first run, or retrieves existing salt on subsequent runs.
+        Creates this database's own tables if they don't exist. Generates and
+        stores a new salt on first run, or retrieves existing salt on
+        subsequent runs.
 
         Returns:
             Salt bytes for PBKDF2 key derivation
         """
+        # Only CREDENTIAL_TABLES: creating the whole metadata put an empty copy
+        # of every workflow.db table here, each one a separate journal commit
+        # (seconds on a slow Windows disk, on first start and in every test).
         async with self.engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
+            await conn.run_sync(SQLModel.metadata.create_all, tables=CREDENTIAL_TABLES)
 
         # Get or create salt
         salt_hex = await self._get_metadata("encryption_salt")

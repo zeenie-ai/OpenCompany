@@ -224,3 +224,25 @@ class TestSalt:
 
         assert salt1 == salt2
         assert len(salt1) == 32
+
+
+class TestSchema:
+    async def test_holds_only_its_own_tables(self, tmp_path):
+        """credentials.db gets its three tables, not every model the process imported."""
+        from sqlalchemy import inspect
+        from sqlmodel import SQLModel
+
+        from core.encryption import EncryptionService
+        from models.cache import CacheEntry  # a workflow.db model in the same metadata
+
+        assert CacheEntry.__tablename__ in SQLModel.metadata.tables
+
+        db = CredentialsDatabase(str(tmp_path / "credentials.db"), EncryptionService())
+        await db.initialize()
+        try:
+            async with db.engine.connect() as conn:
+                names = await conn.run_sync(lambda sync: set(inspect(sync).get_table_names()))
+        finally:
+            await db.engine.dispose()
+
+        assert names == {"credentials_metadata", "encrypted_api_keys", "oauth_tokens"}
