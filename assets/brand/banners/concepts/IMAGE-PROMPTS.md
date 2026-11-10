@@ -19,6 +19,7 @@ The current version refines the six employee personas while preserving the selec
 
 - Generator: built-in image_gen.
 - Current test export: 1024 × 449 JPEG, quality 90; downscaled without changing proportions.
+- Current repository copy of the full-resolution polish: [selected-persona-polish.png](../masters/selected-persona-polish.png).
 - Original-resolution polished output: C:\Users\Tgroh\.codex\generated_images\01a1aab0-da08-7111-be44-df13e9b7d4c5\exec-161149bf-9233-4eff-ae62-25fb15df547c.png
 - Exact input image for this polish: C:\Users\Tgroh\.codex\generated_images\01a1aab0-da08-7111-be44-df13e9b7d4c5\exec-47659dd0-9099-4b64-b01b-8c64f039441c.png
 - PROMPT.txt contains the exact current edit prompt, without rewriting.

@@ -1,7 +1,7 @@
 # Employee portraits
 
 These six 256 x 256 PNGs are exact copies of the approved exports in
-`output/imagegen/employee-avatars-2026-11-09/avatars-256/`.
+`assets/employees/avatars/avatars-256/`.
 That source pack retains the masters, generation prompts, and provenance.
 
 The application imports these files through Vite so they are included in

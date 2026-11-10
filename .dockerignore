@@ -53,8 +53,12 @@ desktop
 # node_modules, rendered audio and video output).
 marketing
 
-# Generated artwork (output/) and local scratch space (tmp/); the image uses
-# neither. Both patterns match only at the context root.
+# Source artwork and generation masters stay outside the build context.
+# This root-only exclusion does not affect client/src/assets runtime images.
+/assets
+
+# Generated output and local scratch space; both patterns match only at the
+# context root.
 output
 tmp
 

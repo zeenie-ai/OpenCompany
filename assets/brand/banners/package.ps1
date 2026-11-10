@@ -2,7 +2,7 @@ param([string]$OutputRoot = $PSScriptRoot)
 $ErrorActionPreference = 'Stop'
 $resolvedRoot = (Resolve-Path -LiteralPath $OutputRoot).Path
 $archivePath = Join-Path $resolvedRoot 'opencompany-platform-banners.zip'
-$inputNames = @('exports','previews','masters','prompts','README.md','export.ps1','package.ps1','generation-plan.json','generation-record.json','export-manifest.json')
+$inputNames = @('exports','previews','masters','prompts','concepts','README.md','export.ps1','package.ps1','generation-plan.json','generation-record.json','export-manifest.json')
 $archiveInputs = foreach ($inputName in $inputNames) {
     $inputPath = Join-Path $resolvedRoot $inputName
     if (-not (Test-Path -LiteralPath $inputPath)) { throw ('Missing package input: ' + $inputName) }

@@ -1,21 +1,21 @@
 OpenCompany AI employee work-cycle image
 Updated: 2026-11-09
 Mode: built-in image_gen (style transfer and targeted feedback-loop refinement)
-Asset: docs/diagrams/how-ai-employees-work.png
+Asset: assets/illustrations/employee-workflow/how-ai-employees-work.png
 Purpose: README / How an employee works
 Style: warm cream courtyard, professional AI cats and silver laptop frame, matching the approved README banner.
 Composition: four stages, job input channels, browser/apps/computer work, delivered brief, and grouped Memory + Skills feedback resources.
 
 Input 1 / edit target:
-output/imagegen/work-cycle-cats-2026-11-09/work-cycle-before.png
+assets/illustrations/employee-workflow/work-cycle-before.png
 This preserves the previous diagram from commit 730533c9c8dcf5ed0b29fa1235026d37cfa187e0.
 Input 2 / style and character reference:
-output/imagegen/platform-banners-2026-11-09/masters/selected-persona-polish.png
+assets/brand/banners/masters/selected-persona-polish.png
 
 Source explanation: README.md, "How an employee works"; the previous diagram and its saved prompts.
 All seven input channels and six app tiles are retained. Memory is qualified "when enabled"; skills are editable playbooks. The feedback path uses one shared resource tray, not a mandatory Skills-then-Memory sequence.
-The previous generation history is preserved in output/imagegen/work-cycle-cats-2026-11-09/previous-prompts.txt.
-The README keeps the canonical image path and its verified direct-image browser-preview link.
+The previous generation history is preserved in assets/illustrations/employee-workflow/previous-prompts.txt.
+The README links to the canonical image at its current assets/illustrations/employee-workflow/ location. The generation record retains original paths as provenance; the exact prompts below are unchanged.
 
 Exact style-transfer prompt:
 

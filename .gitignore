@@ -146,7 +146,7 @@ bun.lockb
 .cache/
 *.cache
 
-# Archived logo explorations; selected logos remain in output/imagegen/.
+# Archived logo explorations; selected concepts remain in assets/brand/logo-concepts/.
 /tmp/logo-explorations/
 
 # =============================================================================

@@ -25,11 +25,11 @@ Six professional AI cat employees, generated with the built-in image_gen tool fr
 
 Use a centered circular mask with `object-fit: cover` and `object-position: center`, or retain the complete square. The circular preview was checked for ear, eyewear and headset clearance. Keep the employee's name and role as accessible application text outside the image. Portraits contain no embedded labels.
 
-This is a reusable asset pack for future employee profiles. Application assignment is not part of this generation.
+This directory holds the reusable source pack. The application uses runtime copies in [client/src/assets/employee-avatars](../../../client/src/assets/employee-avatars/); keep those copies in sync when replacing a portrait.
 
 ## Art direction and provenance
 
-The [approved persona-polished workplace banner](../platform-banners-2026-11-09/masters/selected-persona-polish.png) supplied character identities, clothing and the warm crafted 3D style. Builder was generated first; its portrait was the second reference for the remaining five portraits to maintain camera height, face scale, background and lighting. The banner remained the first reference for all six.
+The [approved persona-polished workplace banner](../../brand/banners/masters/selected-persona-polish.png) supplied character identities, clothing and the warm crafted 3D style. Builder was generated first; its portrait was the second reference for the remaining five portraits to maintain camera height, face scale, background and lighting. The banner remained the first reference for all six.
 
 Distinct identities: ginger Builder in slate blue; white Grower with a charcoal ear patch and sage blazer; tuxedo Chief of Staff in navy; cream colorpoint Front Desk with blue eyes, burgundy blazer and headset; calico Researcher with round glasses and oatmeal knitwear; silver tabby Treasurer with rectangular glasses and a forest-green waistcoat.
 
@@ -40,7 +40,7 @@ The tool was asked for approximately 1024 x 1024 draft portraits and returned 12
 From the repository root on Windows:
 
 ```powershell
-powershell -NoProfile -File output/imagegen/employee-avatars-2026-11-09/export.ps1
+powershell -NoProfile -File assets/employees/avatars/export.ps1
 ```
 
 The script validates all six square sources, recreates 512 px and 256 px PNGs with high-quality bicubic resampling, and rebuilds the lineup and manifest. It does not call image generation.

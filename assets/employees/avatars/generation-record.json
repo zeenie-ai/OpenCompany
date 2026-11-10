@@ -6,6 +6,9 @@
   "requested_size": "Approximately 1024x1024, 1:1",
   "background": "Opaque warm ivory with subtle apricot glow",
   "actual_master_dimensions": "1254x1254",
+  "path_note": "Master, prompt and reference paths are relative to this file. source_file paths are historical tool outputs. Original locations below preserve generation provenance.",
+  "original_asset_directory": "output/imagegen/employee-avatars-2026-11-09",
+  "original_reference": "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
   "assets": [
     {
       "slug": "builder",
@@ -15,7 +18,7 @@
       "master": "masters/builder.png",
       "prompt": "prompts/builder.txt",
       "references": [
-        "../platform-banners-2026-11-09/masters/selected-persona-polish.png"
+        "../../brand/banners/masters/selected-persona-polish.png"
       ]
     },
     {
@@ -26,7 +29,7 @@
       "master": "masters/grower.png",
       "prompt": "prompts/grower.txt",
       "references": [
-        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "../../brand/banners/masters/selected-persona-polish.png",
         "masters/builder.png"
       ]
     },
@@ -38,7 +41,7 @@
       "master": "masters/chief-of-staff.png",
       "prompt": "prompts/chief-of-staff.txt",
       "references": [
-        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "../../brand/banners/masters/selected-persona-polish.png",
         "masters/builder.png"
       ]
     },
@@ -50,7 +53,7 @@
       "master": "masters/front-desk.png",
       "prompt": "prompts/front-desk.txt",
       "references": [
-        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "../../brand/banners/masters/selected-persona-polish.png",
         "masters/builder.png"
       ]
     },
@@ -62,7 +65,7 @@
       "master": "masters/researcher.png",
       "prompt": "prompts/researcher.txt",
       "references": [
-        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "../../brand/banners/masters/selected-persona-polish.png",
         "masters/builder.png"
       ]
     },
@@ -74,7 +77,7 @@
       "master": "masters/treasurer.png",
       "prompt": "prompts/treasurer.txt",
       "references": [
-        "../platform-banners-2026-11-09/masters/selected-persona-polish.png",
+        "../../brand/banners/masters/selected-persona-polish.png",
         "masters/builder.png"
       ]
     }

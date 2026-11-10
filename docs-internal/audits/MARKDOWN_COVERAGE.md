@@ -339,7 +339,7 @@ The two SKILL.v1.md bodies are active conditional defaults, not archive document
 | [docs/mobile-workspace.md](../../docs/mobile-workspace.md) | Current UI/desktop/test entrypoint | Implementation and current lifecycle/contract source review | [review](REFERENCE_DOCS.md) |
 | [gateway/README.md](../../gateway/README.md) | Current entrypoint/test guide | Commands/manifests and implementation references reviewed | [review](OPERATIONS_DOCS.md) |
 | [media/brand/README.md](../../media/brand/README.md) | Artifact / diagram reference | Local assets, links and source/provenance boundaries checked; no visual remeasurement | [review](OPERATIONS_DOCS.md) |
-| [output/imagegen/opencompany-selected/README.md](../../output/imagegen/opencompany-selected/README.md) | Artifact / diagram reference | Local assets, links and source/provenance boundaries checked; no visual remeasurement | [review](OPERATIONS_DOCS.md) |
+| [assets/brand/logo-concepts/README.md](../../assets/brand/logo-concepts/README.md) | Artifact / diagram reference | Local assets, links and source/provenance boundaries checked; no visual remeasurement | [review](OPERATIONS_DOCS.md) |
 | [server/nodes/README.md](../../server/nodes/README.md) | Current entrypoint/test guide | Commands/manifests and implementation references reviewed | [review](OPERATIONS_DOCS.md) |
 | [server/pi/README.md](../../server/pi/README.md) | Current entrypoint/test guide | Commands/manifests and implementation references reviewed | [review](OPERATIONS_DOCS.md) |
 | [server/skills/GUIDE.md](../../server/skills/GUIDE.md) | Active skill / authoring guide | Metadata plus callable/schema/instructions reviewed; live external claims unverified | [review](CORE_NODES.md) |

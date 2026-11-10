@@ -19,6 +19,7 @@ Dimensions were checked against the linked platform guidance on 2026-11-09. Avat
 ## Source and reproduction
 
 - [Selected persona master](masters/selected-persona-polish.png): preserved source artwork with the six employee personas, grumpy boss, customer, token input, finished-work handoff and payment.
+- [Selected banner concepts and original prompts](concepts/IMAGE-PROMPTS.md): the retained base image and persona polish that led to this banner kit.
 - [Exact generation prompts](prompts/): the composition adaptations use the built-in `image_gen` tool.
 - [Export script](export.ps1): produces exact-size files using proportional fitting and padding, without stretching the artwork.
 - [Packaging script](package.ps1): recreates `opencompany-platform-banners.zip` from the tracked kit and verifies the seven exports. The generated archive is ignored by Git.
@@ -33,3 +34,12 @@ The `previews/*-crop-guide.jpg` files show conservative crop/avatar simulations 
 The export files are the ready-to-upload deliverables. Keep the masters and prompts for future revisions.
 
 On Windows, run `./export.ps1` from this directory to regenerate the JPEGs and previews, then `./package.ps1` to recreate the download archive. The export script uses Windows System.Drawing; no image-generation API call is needed to rebuild these files.
+
+From the repository root:
+
+```powershell
+powershell -NoProfile -File assets/brand/banners/export.ps1
+powershell -NoProfile -File assets/brand/banners/package.ps1
+```
+
+Current file references are relative to this kit. Original tool output paths and `original_reference` values are retained as historical provenance; they are not required for export or packaging.

@@ -1,6 +1,6 @@
 # Diagrams
 
-Canonical project assets live here. Internal guides link to these files rather than vendoring copies.
+Canonical technical diagrams live here. Product artwork lives under `assets/illustrations/`. Internal guides link to these files rather than vendoring copies.
 
 ## Maintainer architecture suite
 
@@ -12,11 +12,11 @@ Current technical guide embeds use this suite; existing SVG URLs are retained fo
 
 ## Earlier SVG and product illustrations
 Dark-theme architecture diagrams in SVG and a warm courtyard product explainer in PNG.
-This folder holds the project assets; nothing under `docs-internal/` vendors them.
+This folder holds the technical diagrams; the product explainer lives under `assets/illustrations/employee-workflow/`. Nothing under `docs-internal/` vendors them.
 
 **Original overview assets** (product views remain linked from the README):
 
-- [how-ai-employees-work.png](how-ai-employees-work.png) (README's guide for
+- [how-ai-employees-work.png](../../assets/illustrations/employee-workflow/how-ai-employees-work.png) (README's guide for
   everyone: input channels, employee team, browser/app/computer work, results,
   and the memory/skills feedback loop). Inputs show Chat, Email, WhatsApp,
   Telegram, Discord, Schedules, and Webhooks (Dev mode).
@@ -24,8 +24,8 @@ This folder holds the project assets; nothing under `docs-internal/` vendors the
   and Stripe.
   Restyled with built-in ImageGen to match the README banner's professional cat
   employees, cream/oak courtyard and laptop frame. Memory (when enabled) and
-  editable Skills appear together in the feedback path. The [generation prompt](how-ai-employees-work.prompt.txt)
-  records the exact redesign and refinement prompts; the [generation record](../../output/imagegen/work-cycle-cats-2026-11-09/generation-record.json)
+  editable Skills appear together in the feedback path. The [generation prompt](../../assets/illustrations/employee-workflow/how-ai-employees-work.prompt.txt)
+  records the exact redesign and refinement prompts; the [generation record](../../assets/illustrations/employee-workflow/generation-record.json)
   preserves the inputs and previous design. It is a conceptual product illustration.
 - `how-it-works.svg` (editable hiring overview: connect AI, describe a job,
   review the setup, hire, and coach)

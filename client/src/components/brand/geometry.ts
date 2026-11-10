@@ -2,7 +2,7 @@
  * The logo's geometry: the Open Council mark and the wordmark, as SVG paths.
  *
  * The mark is the chosen "Open Council Three" artwork
- * (output/imagegen/opencompany-selected/open-council-three.png), measured and
+ * (assets/brand/logo-concepts/open-council-three.png), measured and
  * redrawn with exact three-fold symmetry. Units are the artwork's pixels
  * (1254 px wide), with the ring's centre at the origin:
  * - the C: a ring (radii 177 and 258.5) open 12.5 degrees either side of the
