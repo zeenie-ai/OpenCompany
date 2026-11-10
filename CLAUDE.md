@@ -427,11 +427,18 @@ unbounded log growth.
 - `PermissionError` annotated with `.provider` / `.reason` / `.auth` →
   `error_type="PermissionDeniedError"` + `credential` envelope block +
   CloudEvents `credential.{auth}.runtime_failed` broadcast
-- Bare `Exception` → `logger.exception` with full traceback
+- Bare `Exception` → `logger.exception` with full traceback, unless it
+  carries an HTTP 408, 429 or 5xx: that is one WARN line, and on Temporal
+  a call that is safe to repeat and is not a send runs again under the
+  plugin's `retry_policy` (RFC-0004 Q9; see
+  [Plugin System](./docs-internal/plugin_system.md))
 
 Reach for `NodeUserError` for any user-correctable failure
 (missing required field, unknown enum value, bad regex). Reserve
-`RuntimeError` / `Exception` for genuinely unexpected server bugs.
+`RuntimeError` / `Exception` for genuinely unexpected server bugs. A
+provider's 408, 429 or 5xx is neither: let it escape (a plain
+`response.raise_for_status()`), since wrapping it in `NodeUserError`
+turns the retry off.
 
 **Output contract enforcement** (`BaseNode._serialize_result` in
 `services/plugin/base.py`): the declared `Output` Pydantic model is
