@@ -34,6 +34,9 @@ const note = (id: string, content: string): CanvasItem => ({
   created_at: null,
 });
 
+/** An item under a name, which is what its chip on the Library strip says. */
+const titled = (item: CanvasItem, title: string): CanvasItem => ({ ...item, title });
+
 const urlItem = (id: string, url: string): CanvasItem => ({
   ...note(id, ''),
   kind: 'url',
@@ -80,24 +83,33 @@ describe('CanvasContent carousel', () => {
     expect(screen.getByText('third')).toBeInTheDocument();
   });
 
-  it('pins on prev, stays pinned across pushes, resumes follow at the end', () => {
-    const items = [note('a', 'first'), note('b', 'second')];
+  it('pins on stepping back, stays pinned across pushes, resumes follow at the end', () => {
+    const items = [titled(note('a', 'first'), 'One'), titled(note('b', 'second'), 'Two')];
     const { rerender } = render(<CanvasContent items={items} workflowId="wf-1" />);
+    const group = screen.getByRole('group', { name: 'Canvas items' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Previous item' }));
+    fireEvent.keyDown(group, { key: 'ArrowLeft' });
     expect(screen.getByText('first')).toBeInTheDocument();
 
     // Pinned: a new push does NOT yank the view.
-    const grown = [...items, note('c', 'third')];
+    const grown = [...items, titled(note('c', 'third'), 'Three')];
     rerender(<CanvasContent items={grown} workflowId="wf-1" />);
     expect(screen.getByText('first')).toBeInTheDocument();
-    expect(screen.getByText('1/3')).toBeInTheDocument();
+    // The first of three: its chip is the one on show, and Latest is offered.
+    expect(screen.getByRole('button', { name: 'Library, 3 items' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'One' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Three' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
 
     // Navigating to the last item resumes follow-newest.
-    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
-    rerender(<CanvasContent items={[...grown, note('d', 'fourth')]} workflowId="wf-1" />);
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(screen.getByText('second')).toBeInTheDocument();
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(screen.getByText('third')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Latest' })).not.toBeInTheDocument();
+    rerender(<CanvasContent items={[...grown, titled(note('d', 'fourth'), 'Four')]} workflowId="wf-1" />);
     expect(screen.getByText('fourth')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Four' })).toHaveAttribute('aria-current', 'true');
   });
 
   it('navigates with arrow keys on the focused group only', () => {
@@ -253,7 +265,7 @@ describe('CanvasContent notes as documents', () => {
 
   it('opens on the item and version a reply asks for, and holds it while others arrive', async () => {
     wsMock.sendRequest.mockResolvedValue(versionReply('draft of a', 1, 2));
-    const items = [doc('a', 'a, final', { version: 2 }), doc('b', 'b')];
+    const items = [doc('a', 'a, final', { version: 2, title: 'Plan' }), doc('b', 'b', { title: 'Notes' })];
     const focus = { itemId: 'a', version: 1, nonce: 1 };
     const { rerender } = render(
       <CanvasContent items={items} workflowId="wf-1" nodeId="canvas-1" focus={focus} />,
@@ -261,24 +273,44 @@ describe('CanvasContent notes as documents', () => {
     expect(await screen.findByText('draft of a')).toBeInTheDocument();
     expect(screen.getByText('v1/2')).toBeInTheDocument();
 
-    rerender(<CanvasContent items={[...items, doc('c', 'c')]} workflowId="wf-1" nodeId="canvas-1" focus={focus} />);
+    rerender(
+      <CanvasContent items={[...items, doc('c', 'c', { title: 'Report' })]} workflowId="wf-1" nodeId="canvas-1" focus={focus} />,
+    );
     expect(screen.getByText('draft of a')).toBeInTheDocument();
-    expect(screen.getByText('1/3')).toBeInTheDocument();
+    // Still the first of three, with Latest offered.
+    expect(screen.getByRole('button', { name: 'Library, 3 items' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
 
     // Moving on lets go of it: back on the item, the latest shows.
-    fireEvent.click(screen.getByRole('button', { name: 'Next item' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Previous item' }));
+    const group = screen.getByRole('group', { name: 'Canvas items' });
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(screen.getByText('b')).toBeInTheDocument();
+    fireEvent.keyDown(group, { key: 'ArrowLeft' });
     expect(screen.getByText('a, final')).toBeInTheDocument();
+    expect(screen.getByText('v2/2')).toBeInTheDocument();
   });
 
   it('waits for the item a reply asks for to reach the board', () => {
     const focus = { itemId: 'b', version: null, nonce: 1 };
+    const first = doc('a', 'a', { title: 'First' });
     const { rerender } = render(
-      <CanvasContent items={[doc('a', 'a')]} workflowId="wf-1" nodeId="canvas-1" focus={focus} />,
+      <CanvasContent items={[first]} workflowId="wf-1" nodeId="canvas-1" focus={focus} />,
     );
-    rerender(<CanvasContent items={[doc('a', 'a'), doc('b', 'b'), doc('c', 'c')]} workflowId="wf-1" nodeId="canvas-1" focus={focus} />);
+    expect(screen.getByText('a')).toBeInTheDocument();
+    rerender(
+      <CanvasContent
+        items={[first, doc('b', 'b', { title: 'Second' }), doc('c', 'c', { title: 'Third' })]}
+        workflowId="wf-1"
+        nodeId="canvas-1"
+        focus={focus}
+      />,
+    );
     expect(screen.getByText('b')).toBeInTheDocument();
-    expect(screen.getByText('2/3')).toBeInTheDocument();
+    // The second of three, not the newest.
+    expect(screen.getByRole('button', { name: 'Library, 3 items' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Second' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.queryByText('c')).not.toBeInTheDocument();
   });
 
   it('copies the text and downloads it as a .md file', async () => {
@@ -311,7 +343,8 @@ describe('CanvasContent notes as documents', () => {
   });
 });
 
-describe('CanvasContent library (Home)', () => {
+// The one footer, in every host: the Library strip, then Remove item.
+describe('CanvasContent library', () => {
   const image = (id: string, filename: string): CanvasItem => ({
     ...htmlItem(id),
     title: null,
@@ -325,7 +358,6 @@ describe('CanvasContent library (Home)', () => {
       size_bytes: 2048,
     },
   });
-  const titled = (item: CanvasItem, title: string): CanvasItem => ({ ...item, title });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -334,12 +366,12 @@ describe('CanvasContent library (Home)', () => {
 
   it('shows the six newest items on the strip and returns to the newest with Latest', () => {
     const items = Array.from({ length: 8 }, (_, index) => titled(note(`n${index}`, `body ${index}`), `Note ${index}`));
-    render(<CanvasContent items={items} workflowId="wf-1" library />);
+    render(<CanvasContent items={items} workflowId="wf-1" />);
     const chips = screen.getAllByRole('button', { name: /^Note \d$/ });
     expect(chips.map((chip) => chip.textContent)).toEqual(['MDNote 7', 'MDNote 6', 'MDNote 5', 'MDNote 4', 'MDNote 3', 'MDNote 2']);
     expect(chips[0]).toHaveAttribute('aria-current', 'true');
     expect(screen.queryByRole('button', { name: 'Latest' })).not.toBeInTheDocument();
-    // No prev/next in the library footer.
+    // No prev/next in the footer.
     expect(screen.queryByRole('button', { name: 'Previous item' })).not.toBeInTheDocument();
 
     fireEvent.click(chips[2]);
@@ -348,9 +380,37 @@ describe('CanvasContent library (Home)', () => {
     expect(screen.getByText('body 7')).toBeInTheDocument();
   });
 
+  it('ends in the Library strip and Remove item, with no previous and next buttons, position counter or item label', () => {
+    const onRemove = vi.fn();
+    const items = [titled(note('a', 'first'), 'One'), titled(note('b', 'second'), 'Two')];
+    render(<CanvasContent items={items} workflowId="wf-1" onRemove={onRemove} />);
+    expect(screen.queryByRole('button', { name: 'Previous item' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next item' })).not.toBeInTheDocument();
+    expect(screen.queryByText('2/2')).not.toBeInTheDocument();
+    // The footer is the last thing on the board. Its buttons, in order: the
+    // Library, a chip for each item (the newest first), and Remove item,
+    // which a host that can remove passes.
+    const buttons = screen.getAllByRole('button');
+    const footer = buttons.slice(buttons.indexOf(screen.getByRole('button', { name: 'Library, 2 items' })));
+    expect(footer.map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
+      'Library, 2 items',
+      'MDTwo',
+      'MDOne',
+      'Remove item',
+    ]);
+    // An item's name is on its chip only.
+    expect(screen.getAllByText('Two')).toHaveLength(1);
+  });
+
+  it('shows no Remove item where the host passes no way to remove', () => {
+    render(<CanvasContent items={[note('a', 'first'), note('b', 'second')]} workflowId="wf-1" />);
+    expect(screen.getByRole('button', { name: 'Library, 2 items' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove item' })).not.toBeInTheDocument();
+  });
+
   it('lists artifacts and files in the Library and opens one', () => {
     const items = [titled(note('n1', 'the plan'), 'Weekly plan'), image('i1', 'booking.png'), urlItem('u1', 'https://example.com/menu')];
-    render(<CanvasContent items={items} workflowId="wf-1" library />);
+    render(<CanvasContent items={items} workflowId="wf-1" />);
     fireEvent.click(screen.getByRole('button', { name: 'Library, 3 items' }));
     const library = screen.getByRole('region', { name: 'Library' });
     expect(library).toHaveTextContent('Artifacts · 1');
@@ -363,5 +423,22 @@ describe('CanvasContent library (Home)', () => {
     expect(screen.queryByRole('region', { name: 'Library' })).not.toBeInTheDocument();
     expect(screen.getByText('the plan')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
+  });
+
+  it('goes back from the Library to the item that was on show', () => {
+    const items = [titled(note('n1', 'the plan'), 'Weekly plan'), titled(note('n2', 'the menu'), 'Menu')];
+    render(<CanvasContent items={items} workflowId="wf-1" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Library, 2 items' }));
+    // The Library takes the item's place, and marks the one that was on show.
+    const library = screen.getByRole('region', { name: 'Library' });
+    expect(screen.queryByText('the menu')).not.toBeInTheDocument();
+    expect(within(library).getByRole('button', { name: /Menu/ })).toHaveAttribute('aria-current', 'true');
+    expect(within(library).getByRole('button', { name: /Weekly plan/ })).not.toHaveAttribute('aria-current');
+
+    fireEvent.click(within(library).getByRole('button', { name: 'Back' }));
+    expect(screen.queryByRole('region', { name: 'Library' })).not.toBeInTheDocument();
+    expect(screen.getByText('the menu')).toBeInTheDocument();
+    // Still following the newest.
+    expect(screen.queryByRole('button', { name: 'Latest' })).not.toBeInTheDocument();
   });
 });

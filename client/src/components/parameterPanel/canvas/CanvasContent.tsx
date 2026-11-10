@@ -1,27 +1,25 @@
 /**
- * The one shared Canvas board renderer — hosted by both the parameter-panel
- * CanvasPanel and the docked CanvasDock.
+ * The one shared Canvas board renderer — hosted by the Workspace dock's
+ * Canvas tab (on Home and in the editor) and the parameter-panel
+ * CanvasPanel, and the same in all of them.
  *
- * The item list IS the carousel: one active item, prev/next in the footer,
- * `pinnedId: null` meaning "follow newest" (the chat stick-to-bottom rule —
- * a pushed item surfaces automatically unless the user deliberately
- * navigated back). Keyboard arrows work on the focused content region only;
- * no document-level listeners, which would fight React Flow node nudging.
+ * The item list IS the carousel: one active item, `pinnedId: null` meaning
+ * "follow newest" (the chat stick-to-bottom rule — a pushed item surfaces
+ * automatically unless the user deliberately navigated back). Keyboard
+ * arrows work on the focused content region only; no document-level
+ * listeners, which would fight React Flow node nudging.
  *
  * Only the ACTIVE item mounts — no N live videos/iframes.
  *
- * With `library` (Home's Workspace) the footer is the Library strip in place
- * of prev/next: the Library button with the count, the six newest items, and
- * Latest while an older one is shown; the Library lists every item by what
- * it is (CanvasLibrary.tsx).
+ * The footer is the Library strip: the Library button with the count, the
+ * six newest items, and Latest while an older one is shown; the Library
+ * lists every item by what it is (CanvasLibrary.tsx).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   Download,
   File as FileIcon,
   X,
@@ -38,7 +36,6 @@ import type {
 } from '../../../types/workspaceFiles';
 import { formatBytes } from '../gallery/fileIcons';
 import {
-  itemLabel,
   parentDirOf,
   prismLanguageFor,
   resolveRenderKind,
@@ -64,8 +61,6 @@ interface Props {
   /** Initial state of the follow-latest toggle (dock persists it). */
   followLatestDefault?: boolean;
   onFollowLatestChange?: (value: boolean) => void;
-  /** The Library strip and view in place of prev/next (Home's Workspace). */
-  library?: boolean;
 }
 
 const HonestFallback: React.FC<{ failed: boolean; hasUrl: boolean }> = ({
@@ -116,7 +111,6 @@ const CanvasContent: React.FC<Props> = ({
   emptyHint,
   followLatestDefault = false,
   onFollowLatestChange,
-  library = false,
 }) => {
   const { sendRequest, isReady } = useWebSocketActions();
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -310,7 +304,7 @@ const CanvasContent: React.FC<Props> = ({
       aria-label="Canvas items"
       onKeyDown={handleKeyDown}
     >
-      {library && libraryOpen ? (
+      {libraryOpen ? (
         <LibraryView items={items} activeId={active.id} onOpen={openItem} onBack={() => setLibraryOpen(false)} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded border border-border-default bg-bg-panel p-3">
@@ -318,7 +312,7 @@ const CanvasContent: React.FC<Props> = ({
         </div>
       )}
 
-      {verdict === 'media-image' && workflowId && !(library && libraryOpen) && (
+      {verdict === 'media-image' && workflowId && !libraryOpen && (
         <div className="mt-2 flex shrink-0 items-center gap-2">
           <Switch
             id="canvas-follow-latest"
@@ -335,52 +329,17 @@ const CanvasContent: React.FC<Props> = ({
       )}
 
       <div className="mt-2 flex shrink-0 items-center gap-1">
-        {library ? (
-          <LibraryStrip
-            items={items}
-            activeId={active.id}
-            following={pinnedId === null}
-            onOpen={openItem}
-            onLibrary={() => setLibraryOpen(true)}
-            onLatest={() => {
-              setPinnedId(null);
-              setHeldFocus(null);
-            }}
-          />
-        ) : (
-          <>
-            {items.length > 1 && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => goTo(activeIndex - 1)}
-                  disabled={activeIndex === 0}
-                  aria-label="Previous item"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => goTo(activeIndex + 1)}
-                  disabled={activeIndex === items.length - 1}
-                  aria-label="Next item"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-            <span className="min-w-0 flex-1 truncate text-xs text-fg-default" title={itemLabel(active)}>
-              {itemLabel(active)}
-            </span>
-            {items.length > 1 && (
-              <span className="shrink-0 text-xs tabular-nums text-fg-muted">
-                {activeIndex + 1}/{items.length}
-              </span>
-            )}
-          </>
-        )}
+        <LibraryStrip
+          items={items}
+          activeId={active.id}
+          following={pinnedId === null}
+          onOpen={openItem}
+          onLibrary={() => setLibraryOpen(true)}
+          onLatest={() => {
+            setPinnedId(null);
+            setHeldFocus(null);
+          }}
+        />
         {onRemove && (
           <Button
             variant="ghost"
@@ -418,7 +377,6 @@ function canvasContentPropsEqual(prev: Props, next: Props): boolean {
     prev.focus?.itemId === next.focus?.itemId &&
     prev.followLatestDefault === next.followLatestDefault &&
     prev.emptyHint === next.emptyHint &&
-    prev.library === next.library &&
     prev.items.length === next.items.length &&
     prev.items.every((item, index) => item === next.items[index])
   );

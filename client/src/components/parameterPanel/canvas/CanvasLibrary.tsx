@@ -164,7 +164,7 @@ export function LibraryStrip({
         variant="quiet"
         onClick={onLibrary}
         title="All artifacts and files"
-        aria-label={`Library, ${items.length} items`}
+        aria-label={`Library, ${items.length} ${items.length === 1 ? 'item' : 'items'}`}
         className="h-7.5 shrink-0 gap-1.5 border-border-default bg-bg-panel px-2.5 text-meta text-fg-default"
       >
         <LayoutGrid aria-hidden className="size-3.5" strokeWidth={1.75} />
