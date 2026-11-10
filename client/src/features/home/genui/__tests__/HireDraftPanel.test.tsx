@@ -46,6 +46,7 @@ import * as core from '@json-render/core';
 import corpus from '../__fixtures__/replies.json';
 import { EMPLOYEES_QUERY_KEY } from '../../data/employees';
 import { useHomeStore } from '../../state/homeStore';
+import { getDefaultEmployeeAvatar } from '../../data/avatars';
 import { pillToast } from '../../ui/pillToast';
 import { HireDraftPanel } from '../HireDraftPanel';
 import { resetDraftForTests, useDraftStore } from '../draftStore';
@@ -180,6 +181,8 @@ describe('HireDraftPanel', () => {
     // The labels say each step's role; nothing is tinted by it.
     expect(card.querySelectorAll('[data-routine-row]').length).toBeGreaterThan(1);
     expect(card.innerHTML).not.toMatch(/node-(agent|trigger|tool|workflow|model)/);
+    // The face is one of the team's portraits, not a letter.
+    expect(card.querySelector('img')).toHaveAttribute('src', getDefaultEmployeeAvatar('Maya'));
   });
 
   it('keeps the header for a card with no one to introduce', async () => {

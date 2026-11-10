@@ -579,8 +579,10 @@ when it is primary ("Connect {App}", "Open apps"), so Hire stays the card's one
 strong control; every switch on the card is the ink tone at the `md` size.
 Nothing on the card takes a role's colour: the routine's dots and labels are
 neutral (the label names the role: When, Using, They, Then), the draft's face
-is the plain avatar (`Avatar plain`, as the owner's in the sidebar and in
-Settings > Profile), and a `tone` in the spec is not drawn by any component.
+is one of the team's portraits in a plain ring (`Avatar plain`, as the
+owner's in the sidebar and in Settings > Profile; the portrait is picked by
+the name, since a draft has no workflow id yet, so Hire may give them
+another), and a `tone` in the spec is not drawn by any component.
 The panel's header (NEW EMPLOYEE, the job, Discard) shows only while the
 setup is written or after it failed, or for a screen with no agent card, and
 the model's one-line introduction is not shown.

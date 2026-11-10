@@ -34,6 +34,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LiveUiContext, readPath, type GuardedComponentProps } from '@/lib/jsonRender';
 import { animate, RISE, stagger } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { getDefaultEmployeeAvatar } from '../data/avatars';
 import { Avatar, MicroLabel } from '../ui/primitives';
 import { RoutineRow, RoutineTimeline } from '../ui/routine';
 import { STATE_PATHS, type PROP_SCHEMAS, type PropsOf, type StepRole } from './catalog';
@@ -392,12 +393,14 @@ export function ScheduleView({ props, bindings }: ViewProps<'Schedule'>) {
 }
 
 /** Who they are: the setup card's identity row. The description goes into
- *  their instructions, so it shows too, kept to two lines. */
+ *  their instructions, so it shows too, kept to two lines. The face is one
+ *  of the team's portraits, picked by the name: a draft has no workflow id
+ *  yet, which picks a hired employee's, so Hire may give them another. */
 export function AgentCardView({ props, enterRef }: ViewProps<'AgentCard'>) {
   const sub = [props.role, props.apps.join(', ')].filter(Boolean).join(' · ');
   return (
     <div ref={enterRef} className="flex min-w-0 items-center gap-3.5">
-      <Avatar name={props.name} colorRole="agent" size="card" plain />
+      <Avatar name={props.name} colorRole="agent" size="card" plain fallbackPhoto={getDefaultEmployeeAvatar(props.name)} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-lg leading-tight font-semibold tracking-[-0.02em] text-fg-default">{props.name}</span>
         {sub && <span className="truncate text-sm text-fg-muted">{sub}</span>}
