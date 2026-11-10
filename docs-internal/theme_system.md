@@ -251,9 +251,11 @@ and the onboarding v3 handoff:
   streaming caret; a done step's tick and the copied tick; the hire view's
   pip, green only while someone is working; a stat's delta and a chart's
   bars.
-- **The Welcome guide keeps its own colours** (`WelcomeGuide`, `WelcomeStep`,
-  `WelcomeDemo`, `FirstHireStep`). The shared pieces it shows (the starter
-  chips, the catalog cards, the AI model list) follow the rule there too.
+- **The Welcome guide follows the rule too** (since 2026-11-10): Next and
+  Connect an AI model are `invert`, and its labels and notice are neutral.
+  Only the demo illustration (`WelcomeDemo`) keeps its own colours, as a
+  picture of the product. The Normal/Dev switch is a neutral segmented
+  control for the same reason.
 
 ## Migration recipe
 

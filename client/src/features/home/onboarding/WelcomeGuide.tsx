@@ -18,7 +18,6 @@ import { ArrowLeft, ArrowRight, CircleCheck, KeyRound, Sparkles, UserPlus, X, ty
 import { Tabs as TabsPrimitive } from 'radix-ui';
 import { OcLogo } from '@/components/brand/Logo';
 import { staggerSettings } from '@/components/catalog/stagger';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import Modal from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
@@ -125,10 +124,10 @@ export function WelcomeGuide() {
               </Button>
             )}
             {showNext && guide.next && (
-              <ActionButton intent="tools" onClick={guide.next}>
+              <Button variant="invert" onClick={guide.next} className="h-8 gap-1.5 px-3.5 font-semibold">
                 Next
                 <ArrowRight aria-hidden className="size-4" />
-              </ActionButton>
+              </Button>
             )}
             {showLater && guide.next && (
               <Button variant="quiet" onClick={guide.next} className="h-8 px-3 font-semibold">

@@ -8,7 +8,7 @@
  * (`pendingDraft`, ConnectStep).
  */
 
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import { useConnectors } from '../../data/connectors';
 import { useJobComposer } from '../../genui';
 import { Composer } from '../../hire/Composer';
@@ -64,13 +64,13 @@ export function FirstHireStep({ onFinish, onNeedsModel }: { onFinish: () => void
       {needsAi && (
         <div
           data-stagger
-          className="flex flex-wrap items-center gap-3 rounded-card border border-node-trigger-border bg-node-trigger-soft px-3.5 py-3"
+          className="flex flex-wrap items-center gap-3 rounded-card border border-border-default bg-bg-elevated px-3.5 py-3"
         >
-          <span aria-hidden className="size-2 shrink-0 rounded-full bg-node-trigger" />
+          <span aria-hidden className="size-2 shrink-0 rounded-full bg-warning" />
           <span className="min-w-50 flex-1 text-sm text-fg-muted">Connect an AI model first.</span>
-          <ActionButton intent="run" onClick={toConnect}>
+          <Button variant="invert" onClick={toConnect} className="h-8 px-3.5 font-semibold">
             Connect an AI model
-          </ActionButton>
+          </Button>
         </div>
       )}
     </div>
