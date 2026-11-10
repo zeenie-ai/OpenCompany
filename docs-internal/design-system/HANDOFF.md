@@ -58,6 +58,14 @@
 >    Space Mono) and its canvas colour overlay; the per-component decoration
 >    hook classes stay as the theme contract. The theme lists below are
 >    trimmed to the two, and the brief's Atomic examples are gone.
+> 9. **Colour marks state or role (2026-11-04 to 2026-11-10).** No button
+>    takes an action intent's colour any more. The toolbar's soft-tinted
+>    buttons described below are neutral outlines, Start and Resume are the
+>    `invert` primary (the foreground as the fill), and the Normal/Dev
+>    switch is a neutral segmented control; Home and the shared chat follow
+>    the same rule. The six intents stay as tokens, for the editor's panel
+>    buttons (`<ActionButton>`) and for state marks. The rule of record is
+>    [theme_system.md](../theme_system.md#colour-marks-state-or-role).
 
 ## Overview
 
