@@ -36,7 +36,7 @@ import { animate, RISE, stagger } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { Avatar, MicroLabel } from '../ui/primitives';
 import { RoutineRow, RoutineTimeline } from '../ui/routine';
-import { STATE_PATHS, type PROP_SCHEMAS, type PropsOf, type StepRole, type Tone } from './catalog';
+import { STATE_PATHS, type PROP_SCHEMAS, type PropsOf, type StepRole } from './catalog';
 import { HireSpecContext } from './hireSpecContext';
 import {
   LAST_MONTH_DAY,
@@ -51,44 +51,6 @@ import {
 import { MessagePreview } from './MessagePreview';
 
 type ViewProps<T extends keyof typeof PROP_SCHEMAS> = GuardedComponentProps<PropsOf<T>>;
-
-// ----- token maps (Tailwind scans these literals) -----
-
-const TONE_CARD: Record<Tone, string> = {
-  agent: 'border-node-agent-border bg-linear-135/srgb from-node-agent-soft to-bg-elevated to-60%',
-  model: 'border-node-model-border bg-linear-135/srgb from-node-model-soft to-bg-elevated to-60%',
-  tool: 'border-node-tool-border bg-linear-135/srgb from-node-tool-soft to-bg-elevated to-60%',
-  trigger: 'border-node-trigger-border bg-linear-135/srgb from-node-trigger-soft to-bg-elevated to-60%',
-  workflow: 'border-node-workflow-border bg-linear-135/srgb from-node-workflow-soft to-bg-elevated to-60%',
-  neutral: 'border-border-default bg-bg-elevated',
-};
-
-const TONE_INK: Record<Tone, string> = {
-  agent: 'text-node-agent-ink',
-  model: 'text-node-model-ink',
-  tool: 'text-node-tool-ink',
-  trigger: 'text-node-trigger-ink',
-  workflow: 'text-node-workflow-ink',
-  neutral: 'text-fg-default',
-};
-
-const TONE_DOT: Record<Tone, string> = {
-  agent: 'bg-node-agent',
-  model: 'bg-node-model',
-  tool: 'bg-node-tool',
-  trigger: 'bg-node-trigger',
-  workflow: 'bg-node-workflow',
-  neutral: 'bg-fg-faint',
-};
-
-const TONE_BADGE: Record<Tone, string> = {
-  agent: 'border-node-agent-edge bg-node-agent-fill text-node-agent-ink',
-  model: 'border-node-model-edge bg-node-model-fill text-node-model-ink',
-  tool: 'border-node-tool-edge bg-node-tool-fill text-node-tool-ink',
-  trigger: 'border-node-trigger-edge bg-node-trigger-fill text-node-trigger-ink',
-  workflow: 'border-node-workflow-edge bg-node-workflow-fill text-node-workflow-ink',
-  neutral: 'border-border-default bg-bg-hover text-fg-default',
-};
 
 const EVERY_LABEL: Record<NonNullable<HireTrigger['every']>, string> = {
   hour: 'Every hour',
@@ -135,10 +97,12 @@ export function GridView({ props, children, enterRef }: ViewProps<'Grid'>) {
 }
 
 /** A compact section of the card: the model's own rules, choices and
- *  notes, kept in view so nothing is hired unseen. */
+ *  notes, kept in view so nothing is hired unseen. A spec's `tone` is not
+ *  drawn here or on any other component: colour marks state, and nothing on
+ *  a setup screen has one. */
 export function CardView({ props, children, enterRef }: ViewProps<'Card'>) {
   return (
-    <div ref={enterRef} className={cn('flex flex-col gap-2.5 rounded-row border px-3.5 py-3', TONE_CARD[props.tone ?? 'neutral'])}>
+    <div ref={enterRef} className="flex flex-col gap-2.5 rounded-row border border-border-default bg-bg-elevated px-3.5 py-3">
       {(props.title || props.subtitle) && (
         <div className="flex flex-col gap-0.5">
           {props.title && <MicroLabel>{props.title}</MicroLabel>}
@@ -170,7 +134,7 @@ export function MetricView({ props, enterRef }: ViewProps<'Metric'>) {
   return (
     <div ref={enterRef} className="flex flex-col gap-1 rounded-card border border-border-default bg-bg-elevated p-3.5">
       <span className="text-xs text-fg-muted">{props.label}</span>
-      <span className={cn('text-xl font-semibold tracking-[-0.02em]', TONE_INK[props.tone ?? 'neutral'])}>{props.value}</span>
+      <span className="text-xl font-semibold tracking-[-0.02em] text-fg-default">{props.value}</span>
       {props.hint && <span className="text-xs text-fg-faint">{props.hint}</span>}
     </div>
   );
@@ -180,10 +144,7 @@ export function BadgeView({ props, enterRef }: ViewProps<'Badge'>) {
   return (
     <span
       ref={enterRef}
-      className={cn(
-        'inline-flex h-5.5 items-center self-start rounded-pill border px-2.25 text-2xs font-medium whitespace-nowrap',
-        TONE_BADGE[props.tone ?? 'neutral'],
-      )}
+      className="inline-flex h-5.5 items-center self-start rounded-pill border border-border-default bg-bg-hover px-2.25 text-2xs font-medium whitespace-nowrap text-fg-default"
     >
       {props.label}
     </span>
@@ -436,7 +397,7 @@ export function AgentCardView({ props, enterRef }: ViewProps<'AgentCard'>) {
   const sub = [props.role, props.apps.join(', ')].filter(Boolean).join(' · ');
   return (
     <div ref={enterRef} className="flex min-w-0 items-center gap-3.5">
-      <Avatar name={props.name} colorRole="agent" size="card" />
+      <Avatar name={props.name} colorRole="agent" size="card" plain />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-lg leading-tight font-semibold tracking-[-0.02em] text-fg-default">{props.name}</span>
         {sub && <span className="truncate text-sm text-fg-muted">{sub}</span>}
@@ -451,7 +412,7 @@ export function ListView({ props, enterRef }: ViewProps<'List'>) {
     <div ref={enterRef} className="flex flex-col rounded-card border border-border-default bg-bg-elevated p-1.5">
       {props.items.map((item, index) => (
         <div key={index} className={cn('flex items-start gap-2.5 p-2.5', index > 0 && 'border-t border-border-default')}>
-          <Pip className={cn('mt-1.5', TONE_DOT[item.tone ?? 'neutral'])} />
+          <Pip className="mt-1.5 bg-fg-faint" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-base font-medium text-fg-default">{item.title}</span>
             {item.detail && <span className="text-meta leading-snug text-fg-muted">{item.detail}</span>}
@@ -487,11 +448,7 @@ export function ProgressView({ props, enterRef }: ViewProps<'Progress'>) {
       </div>
       <div className="h-1.5 overflow-hidden rounded-pill bg-border-default">
         {/* Width is the runtime value. */}
-        <div
-          ref={barRef}
-          className={cn('h-full rounded-pill', TONE_DOT[!props.tone || props.tone === 'neutral' ? 'model' : props.tone])}
-          style={{ width: `${props.value}%` }}
-        />
+        <div ref={barRef} className="h-full rounded-pill bg-fg-default" style={{ width: `${props.value}%` }} />
       </div>
     </div>
   );

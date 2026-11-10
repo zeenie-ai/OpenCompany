@@ -8,8 +8,7 @@
  *   muted colour. A row may end in an action (the setup card's "Change" on
  *   the When row).
  * - On one line (onboarding v3, a new hire's first-day strip): each step's
- *   mono label and title only, a faint separator between steps, and no role
- *   colour.
+ *   mono label and title only, with a faint separator between steps.
  */
 
 import type { ReactNode, Ref } from 'react';
@@ -20,21 +19,6 @@ import { MicroLabel } from './primitives';
 export type RoutineRole = Extract<ColorRole, 'trigger' | 'agent' | 'tool' | 'workflow'>;
 
 const LABEL: Record<RoutineRole, string> = { trigger: 'When', agent: 'They', tool: 'Using', workflow: 'Then' };
-
-// Tailwind scans these literals.
-const DOT: Record<RoutineRole, string> = {
-  trigger: 'bg-node-trigger',
-  agent: 'bg-node-agent',
-  tool: 'bg-node-tool',
-  workflow: 'bg-node-workflow',
-};
-
-const INK: Record<RoutineRole, string> = {
-  trigger: 'text-node-trigger-ink',
-  agent: 'text-node-agent-ink',
-  tool: 'text-node-tool-ink',
-  workflow: 'text-node-workflow-ink',
-};
 
 export function RoutineTimeline({ children, className, ref }: { children: ReactNode; className?: string; ref?: Ref<HTMLDivElement> }) {
   return (
@@ -58,8 +42,8 @@ export function RoutineRow({
 }) {
   return (
     <div data-routine-row className="relative grid min-h-9 grid-cols-[12px_52px_minmax(0,1fr)_auto] items-center gap-2.5">
-      <span aria-hidden className={cn('size-2.25 justify-self-center rounded-full ring-3 ring-bg-panel', DOT[role])} />
-      <span className={cn('font-mono text-2xs font-medium tracking-label uppercase', INK[role])}>{LABEL[role]}</span>
+      <span aria-hidden className="size-2.25 justify-self-center rounded-full bg-fg-faint ring-3 ring-bg-panel" />
+      <MicroLabel className="text-fg-muted">{LABEL[role]}</MicroLabel>
       <span className="truncate text-base leading-snug">
         <span className="text-fg-default">{title}</span>
         {detail && <span className="text-fg-muted"> · {detail}</span>}

@@ -50,4 +50,11 @@ describe('Avatar', () => {
     expect(avatar()).toHaveClass('bg-node-tool-fill', 'border-node-tool-edge');
     expect(avatar()).not.toHaveClass('bg-accent');
   });
+
+  it('takes no role tint when plain: a draft, and the owner', () => {
+    const { container } = render(<Avatar name="Skye" colorRole="agent" plain />);
+    expect(container.firstElementChild).toHaveClass('border-border-default', 'bg-bg-hover', 'text-fg-default');
+    expect(container.firstElementChild?.className).not.toMatch(/node-/);
+    expect(container.firstElementChild).toHaveTextContent('S');
+  });
 });

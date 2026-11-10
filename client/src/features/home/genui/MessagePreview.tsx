@@ -24,7 +24,7 @@ export function MessagePreview({
   return (
     <div className={cn('overflow-hidden rounded-card border border-border-default bg-bg-elevated', className)}>
       <div className="flex items-center gap-2 border-b border-border-default bg-bg-panel px-3.5 py-2.5">
-        <MicroLabel className="text-node-model-ink">{channel || 'Draft'}</MicroLabel>
+        <MicroLabel className="text-fg-muted">{channel || 'Draft'}</MicroLabel>
         <span className="truncate text-sm text-fg-muted">to {to || '…'}</span>
       </div>
       {subject && <div className="px-3.5 pt-3 text-base font-semibold text-fg-default">{subject}</div>}

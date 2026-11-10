@@ -127,7 +127,7 @@ export function Composer({
       className={cn(
         'relative flex w-full max-w-(--w-composer) shrink-0 scroll-mt-4 flex-col gap-2 rounded-composer border bg-bg-panel pt-3 pr-3 pb-2.5 pl-4 transition-colors duration-(--dur-slow)',
         !flat && 'shadow-float',
-        refining ? 'border-node-agent-edge' : 'border-border-default focus-within:border-border-strong',
+        refining ? 'border-border-strong' : 'border-border-default focus-within:border-border-strong',
       )}
     >
       <Textarea
@@ -172,7 +172,7 @@ export function Composer({
             {apps.length} {apps.length === 1 ? 'app' : 'apps'}
           </span>
         </Button>
-        {refining && <span className="text-xs font-medium text-node-agent-ink">Editing the draft</span>}
+        {refining && <span className="text-xs font-medium text-fg-muted">Editing the draft</span>}
         <Button
           ref={createRef}
           variant="invert"

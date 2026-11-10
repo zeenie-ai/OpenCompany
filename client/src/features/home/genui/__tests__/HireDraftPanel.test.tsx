@@ -173,6 +173,15 @@ describe('HireDraftPanel', () => {
     }
   });
 
+  it('draws the setup card without role colours: the face, the routine and its sections', async () => {
+    renderPanel();
+    await hireButton();
+    const card = screen.getByRole('region', { name: 'New employee' });
+    // The labels say each step's role; nothing is tinted by it.
+    expect(card.querySelectorAll('[data-routine-row]').length).toBeGreaterThan(1);
+    expect(card.innerHTML).not.toMatch(/node-(agent|trigger|tool|workflow|model)/);
+  });
+
   it('keeps the header for a card with no one to introduce', async () => {
     const setup = JSON.parse(reply);
     delete setup.spec.elements.b;

@@ -154,6 +154,8 @@ describe('Get started on Home', () => {
     expect(await screen.findByText('Maya joined your team')).toBeInTheDocument();
     expect(screen.getByText('OpenAI is connected')).toBeInTheDocument();
     expect(screen.getByText('2 of 4 done')).toBeInTheDocument();
+    // The bar is ink: only a done step's tick carries a colour.
+    expect(screen.getByRole('progressbar', { name: 'Steps done' }).className).toContain('[&>[data-slot=progress-indicator]]:bg-fg-default');
     fireEvent.click(step(/Say hello/));
     expect(useHomeStore.getState().view).toEqual({ kind: 'employee', workflowId: 'w1' });
     // The card goes with the hire view: focus waits in their message box.

@@ -91,7 +91,7 @@ export function ProfileTab({ onDone }: { onDone: () => void }) {
         </div>
 
         <div data-stagger className="flex items-center gap-4 rounded-card border border-border-default bg-bg-elevated p-4">
-          <Avatar name={fullName || 'You'} colorRole="agent" size="lg" className="shadow-[0_0_24px_var(--node-agent-fill)]" />
+          <Avatar name={fullName || 'You'} colorRole="agent" size="lg" plain />
           <div className="flex min-w-0 flex-col gap-0.75">
             <span className="truncate text-lead font-semibold text-fg-default">{fullName || 'Your name'}</span>
             <span className="truncate font-mono text-xs text-fg-faint">

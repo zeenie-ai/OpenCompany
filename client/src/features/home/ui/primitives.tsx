@@ -33,6 +33,7 @@ export function Avatar({
   status,
   pulse = false,
   accent = false,
+  plain = false,
   className,
 }: {
   name: string;
@@ -48,6 +49,9 @@ export function Avatar({
   /** The solid accent face in place of the role tint: the employee on
    *  their own page's header, as beside their turns in the chat. */
   accent?: boolean;
+  /** No role tint: someone who is not an employee yet (a setup card's
+   *  draft) and the owner. */
+  plain?: boolean;
   className?: string;
 }) {
   return (
@@ -55,7 +59,7 @@ export function Avatar({
       aria-hidden
       className={cn(
         'relative grid shrink-0 place-items-center rounded-full border font-semibold',
-        accent ? ACCENT_AVATAR_CLASS : AVATAR_CLASS[colorRole],
+        accent ? ACCENT_AVATAR_CLASS : plain ? 'border-border-default bg-bg-hover text-fg-default' : AVATAR_CLASS[colorRole],
         AVATAR_SIZE[size],
         className,
       )}

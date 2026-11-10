@@ -214,7 +214,7 @@ function ProfileRow() {
         onClick={() => openSettings('profile')}
         className="flex w-full items-center gap-2.5 rounded-row p-2 text-left text-fg-default transition-colors hover:bg-bg-hover"
       >
-        <Avatar name={name || 'You'} colorRole="agent" size="sm" />
+        <Avatar name={name || 'You'} colorRole="agent" size="sm" plain />
         <span className="truncate text-sm font-medium">{name || 'Your profile'}</span>
         <Settings aria-hidden className="ml-auto size-3.75 shrink-0 text-fg-faint" />
         <span className="sr-only">Settings</span>

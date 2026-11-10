@@ -139,7 +139,7 @@ export function GetStartedChecklist() {
           </Button>
         </div>
         <div className="px-2 pb-1.5">
-          <Progress value={(doneCount / total) * 100} aria-label="Steps done" className="h-1.5" />
+          <Progress value={(doneCount / total) * 100} aria-label="Steps done" className="h-1.5 bg-border-default [&>[data-slot=progress-indicator]]:bg-fg-default" />
         </div>
         <ul className="m-0 flex list-none flex-col p-0">
           {rows.map((row) => (
