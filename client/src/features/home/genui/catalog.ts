@@ -2,11 +2,11 @@
  * The setup screen's vocabulary: the components and actions a model may
  * use when it describes a new employee, and what each component's props
  * look like once resolved. The vocabulary is
- * server/config/genui_catalog.json, which the server writes the model's
- * prompt from; the lists below are imported from it, and a test holds the
- * prop schemas to its components and props. The screen is drawn by
- * json-render; HIRE_CATALOG is the vocabulary in the shape its
- * defineCatalog takes.
+ * server/config/genui_catalog.json, which `bun run genui:prompts` writes
+ * the model's prompt from (lib/jsonRender/prompts.ts); the lists below are
+ * imported from it, and a test holds the prop schemas to its components and
+ * props. The screen is drawn by json-render; HIRE_CATALOG is the vocabulary
+ * in the shape its defineCatalog takes.
  *
  * Prop schemas are forgiving by design: a model's odd value degrades that
  * one prop (a default, a clamped string) instead of failing the element.
