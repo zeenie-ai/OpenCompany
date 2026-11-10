@@ -114,7 +114,7 @@ Standard shadcn keys (`background`, `foreground`, `card`, `popover`, `primary`, 
 
 ### 3. Action role tokens
 
-Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home and in the shared chat they mark a state, and colour a control only where it means the intent: `run` starts an employee ([Colour marks state or role](#colour-marks-state-or-role)).
+Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home, in the shared chat and in the editor's top toolbar they mark a state, and colour a control only where it means the intent: `run` starts an employee or a workflow ([Colour marks state or role](#colour-marks-state-or-role)).
 
 ### 4. Node-type role tokens
 
@@ -256,6 +256,13 @@ and the onboarding v3 handoff:
   Only the demo illustration (`WelcomeDemo`) keeps its own colours, as a
   picture of the product. The Normal/Dev switch is a neutral segmented
   control for the same reason.
+- **So does the editor's top toolbar** (since 2026-11-10,
+  `components/ui/TopToolbar.tsx`): Start and Resume are the green `run`
+  button and the save dot shows a state; every other control (the File menu
+  and its items, Apply All, Settings, Credentials, the theme button, Logout,
+  Stop, Reset, Save, the labels) is neutral, and the sidebar, Components and
+  Workspace toggles fill with `bg-bg-active` while their panel shows. The
+  editor's panels keep `<ActionButton intent="...">`.
 
 ## Migration recipe
 
@@ -280,7 +287,7 @@ Concrete swaps when migrating an existing component:
 | Hover row | `hover:bg-bg-hover` | Lists, menu items |
 | Selected row | `bg-bg-active` | Selected workflow cards, active tabs |
 | Modal scrim | `bg-bg-overlay` | Dialog overlays |
-| `<ActionButton intent="...">` | unchanged | All toolbar / panel action buttons in the editor (Home: [Colour marks state or role](#colour-marks-state-or-role)) |
+| `<ActionButton intent="...">` | unchanged | Panel action buttons in the editor, and Start / Resume in its top toolbar (Home, the shared chat and the rest of that toolbar: [Colour marks state or role](#colour-marks-state-or-role)) |
 
 ### Display-typography helper
 
@@ -351,7 +358,7 @@ Result by theme (display font / tracking / case):
 tiles themselves are deliberately left to Google's own styling; `useAppTheme` here covers only
 the surrounding chrome. Every other surface uses Tailwind + tokens. Call sites read the colour pack through `useAppTheme`, never by importing `lightColors` / `darkColors` directly.
 6. **Hand-rolled modal backdrops.** Use `<Modal>` from `client/src/components/ui/Modal.tsx`.
-7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor. On Home and in the shared chat, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary, neutral `quiet` buttons (with a border where they are drawn as an outline), and `run` only to start an employee.
+7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor's panels. On Home, in the shared chat and in the editor's top toolbar, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary, neutral `quiet` buttons (with a border where they are drawn as an outline), and `run` only to start an employee or a workflow.
 8. **Static fallback theme palettes in TS.** Themes live in CSS (`client/src/themes/<name>.css`), not TS exports. `client/src/styles/theme.ts` ships only the two `lightColors` / `darkColors` base packs that `useAppTheme` returns — it is not a place to add a third / fourth / Nth palette.
 
 ## What's done vs deferred

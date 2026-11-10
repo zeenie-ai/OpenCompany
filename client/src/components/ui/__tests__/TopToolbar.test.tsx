@@ -97,6 +97,43 @@ beforeEach(() => {
   useCanvasDockStore.setState({ open: false });
 });
 
+// Colour marks state or role (docs-internal/theme_system.md): the toolbar's
+// controls are neutral, and green only starts the workflow.
+describe('TopToolbar colour', () => {
+  const coloured = (container: HTMLElement) =>
+    [...container.querySelectorAll('*')].filter((element) => /\b(bg|text|border)-(action|node)-/.test(element.getAttribute('class') ?? ''));
+  const withGlobalModel = { providers: [{ provider: 'openai', models: ['gpt-4.1'] }], global_provider: 'openai', global_model: 'gpt-4.1' };
+
+  it('keeps green for Start alone', async () => {
+    mocks.sendRequest.mockResolvedValue(withGlobalModel);
+    const ready = { ...running, state: 'ready' as const, can_start: true, can_pause: false, can_reset: false, can_edit: true };
+    const { container } = render(<TopToolbar {...toolbarProps()} workflowControl={ready} hasUnsavedChanges />);
+    expect(await screen.findByRole('button', { name: 'Apply All' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(coloured(container)).toEqual([screen.getByRole('button', { name: 'Start' })]);
+  });
+
+  it('draws Stop and Reset without a colour of their own', async () => {
+    mocks.sendRequest.mockResolvedValue(withGlobalModel);
+    const { container } = render(<TopToolbar {...toolbarProps()} />);
+    expect(await screen.findByRole('button', { name: 'Apply All' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    expect(coloured(container)).toEqual([]);
+  });
+
+  it('fills a panel toggle while its panel shows', async () => {
+    mocks.sendRequest.mockResolvedValue({});
+    render(<TopToolbar {...toolbarProps()} />);
+    await waitFor(() => expect(mocks.sendRequest).toHaveBeenCalled());
+    const workspace = screen.getByRole('button', { name: 'Workspace' });
+    expect(workspace).toHaveAttribute('aria-pressed', 'false');
+    expect(workspace).toHaveClass('aria-pressed:bg-bg-active');
+    fireEvent.click(workspace);
+    expect(workspace).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
 describe('TopToolbar credential responses during a workflow run', () => {
   it.each([
     ['an error payload', { success: false, error: 'Unable to load providers' }],

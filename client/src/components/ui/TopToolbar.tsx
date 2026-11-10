@@ -70,6 +70,15 @@ import { AI_PROVIDER_META } from '../icons/AIProviderIcons';
 // Same colour as `bg-border` under light/dark.
 const Divider = () => <div className="mx-1 h-6 w-px bg-border-default" />;
 
+// Colour marks state or role (docs-internal/theme_system.md): the toolbar's
+// controls are neutral outlines. Green only starts the workflow (Start,
+// Resume), and the save dot shows a state.
+const NEUTRAL = 'border-border-default text-fg-default';
+// A panel's toggle is filled while its panel shows.
+const NEUTRAL_TOGGLE = `${NEUTRAL} aria-pressed:bg-bg-active`;
+// A labelled button beside Start, in ActionButton's shape.
+const NEUTRAL_ACTION = `${NEUTRAL} rounded-md px-3.5 text-[13px] font-semibold`;
+
 interface TopToolbarProps {
   workflowName: string;
   onWorkflowNameChange: (name: string) => void;
@@ -203,12 +212,12 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           cluster collapse before the name does. */}
       <div className="flex shrink-0 items-center gap-1.5">
         <Button
-          variant="outline"
+          variant="quiet"
           size="icon-sm"
           onClick={onToggleSidebar}
           aria-pressed={sidebarVisible}
           title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-          className="border-action-save-border bg-action-save-soft text-action-save-ink hover:bg-action-save-hover aria-pressed:bg-action-save-hover"
+          className={NEUTRAL_TOGGLE}
         >
           {sidebarVisible ? <PanelLeftClose /> : <PanelLeftOpen />}
         </Button>
@@ -218,11 +227,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         {/* File menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-action-save-border bg-action-save-soft text-action-save-ink hover:bg-action-save-hover"
-            >
+            <Button variant="quiet" size="sm" className={NEUTRAL}>
               <FileText />
               {/* font-display + tracking-display drive the per-theme display
                   font + letter-spacing; uppercase is gated by --type-uppercase
@@ -238,25 +243,25 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
               File Operations
             </DropdownMenuLabel>
-            <DropdownMenuItem onSelect={onNew} className="text-action-run focus:text-action-run">
+            <DropdownMenuItem onSelect={onNew}>
               <FilePlus />
               New Workflow
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={onOpen} className="text-action-save focus:text-action-save">
+            <DropdownMenuItem onSelect={onOpen}>
               <FolderOpen />
               Open
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onExportFile} className="text-action-save focus:text-action-save">
+            <DropdownMenuItem onSelect={onExportFile}>
               <Download />
               Export
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={onImportJSON} className="text-action-save focus:text-action-save">
+            <DropdownMenuItem onSelect={onImportJSON}>
               <Upload />
               Import
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onExportJSON} className="text-action-tools focus:text-action-tools">
+            <DropdownMenuItem onSelect={onExportJSON}>
               <Clipboard />
               Copy as JSON
             </DropdownMenuItem>
@@ -296,7 +301,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
       {/* ---------- Global Model Selector (pinned) ---------- */}
       {globalModelState.providers.length > 0 && (
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-sm font-semibold whitespace-nowrap text-node-model-ink">
+          <span className="text-sm font-semibold whitespace-nowrap text-fg-muted">
             Set Global Model
           </span>
           <Select value={globalSelectValue} onValueChange={handleSelectGlobalModel}>
@@ -338,15 +343,15 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             </SelectContent>
           </Select>
           {globalSelectValue && (
-            <ActionButton
-              intent="config"
+            <Button
+              variant="quiet"
               onClick={() => globalModelState.global_provider && globalModelState.global_model && onOverrideAllAgents?.(globalModelState.global_provider, globalModelState.global_model)}
               title="Override all agent nodes in this workflow to use the selected model"
-              className="h-8 px-3 text-xs"
+              className={cn(NEUTRAL_ACTION, 'px-3 text-xs')}
             >
-              <Repeat className="h-3 w-3" />
+              <Repeat className="size-3" />
               Apply All
-            </ActionButton>
+            </Button>
           )}
         </div>
       )}
@@ -356,7 +361,7 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         {/* Mode Toggle - segmented control. With Normal mode on it switches
             screens (Home / this editor); otherwise it filters the palette. */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-node-model-ink">Mode:</span>
+          <span className="text-sm font-semibold text-fg-muted">Mode:</span>
           {featureFlags.normalMode ? <ModeToggle /> : <div
             className="flex items-center rounded-md border border-border bg-card p-0.5"
             title={proMode ? 'Dev mode: All components visible' : 'Normal mode: Only AI components'}
@@ -366,8 +371,8 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
               className={cn(
                 'flex items-center gap-1 rounded-sm border px-2.5 py-1 text-xs font-semibold transition-all',
                 !proMode
-                  ? 'border-node-skill-border bg-node-skill-soft text-node-skill-ink cursor-default'
-                  : 'cursor-pointer border-transparent text-node-workflow-ink hover:bg-muted'
+                  ? 'border-border-default bg-bg-elevated text-fg-default shadow-card cursor-default'
+                  : 'cursor-pointer border-transparent text-fg-muted hover:bg-bg-hover'
               )}
             >
               <Clock className="h-3 w-3" />
@@ -378,8 +383,8 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
               className={cn(
                 'flex items-center gap-1 rounded-sm border px-2.5 py-1 text-xs font-semibold transition-all',
                 proMode
-                  ? 'border-node-agent-border bg-node-agent-soft text-node-agent-ink cursor-default'
-                  : 'cursor-pointer border-transparent text-node-workflow-ink hover:bg-muted'
+                  ? 'border-border-default bg-bg-elevated text-fg-default shadow-card cursor-default'
+                  : 'cursor-pointer border-transparent text-fg-muted hover:bg-bg-hover'
               )}
             >
               <Zap className="h-3 w-3" />
@@ -390,40 +395,18 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
         <Divider />
 
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={onOpenSettings}
-          title="Settings"
-          className="border-action-config-border bg-action-config-soft text-action-config-ink hover:bg-action-config-hover"
-        >
+        <Button variant="quiet" size="icon-sm" onClick={onOpenSettings} title="Settings" className={NEUTRAL}>
           <SettingsIcon />
         </Button>
 
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={onOpenCredentials}
-          title="API Credentials"
-          className="border-action-secret-border bg-action-secret-soft text-action-secret-ink hover:bg-action-secret-hover"
-        >
+        <Button variant="quiet" size="icon-sm" onClick={onOpenCredentials} title="API Credentials" className={NEUTRAL}>
           <KeyRound />
         </Button>
 
-        <ThemeButton
-          variant="outline"
-          size="icon-sm"
-          className="border-action-secret-border bg-action-secret-soft text-action-secret-ink hover:bg-action-secret-hover"
-        />
+        <ThemeButton size="icon-sm" className={NEUTRAL} />
 
         {user && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={logout}
-            title={`Logout ${user.display_name}`}
-            className="border-action-stop-border bg-action-stop-soft text-action-stop-ink hover:bg-action-stop-hover"
-          >
+          <Button variant="quiet" size="icon-sm" onClick={logout} title={`Logout ${user.display_name}`} className={NEUTRAL}>
             <LogOut />
           </Button>
         )}
@@ -432,14 +415,10 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
         {/* Durable workflow lifecycle */}
         {hasPendingControlMutation ? (
-          <ActionButton
-            intent="run"
-            disabled
-            title={`Workflow is ${controlTransitionLabel}`}
-          >
-            <LoaderCircle className="h-3 w-3 animate-spin" />
+          <Button variant="quiet" disabled title={`Workflow is ${controlTransitionLabel}`} className={NEUTRAL_ACTION}>
+            <LoaderCircle className="size-3 animate-spin" />
             {controlTransitionLabel}
-          </ActionButton>
+          </Button>
         ) : workflowControl.can_start ? (
           <ActionButton
             intent="run"
@@ -461,43 +440,41 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
             {workflowControl.state === 'resuming' ? 'Retry Resume' : 'Resume'}
           </ActionButton>
         ) : canPauseWorkflow ? (
-          <ActionButton
-            intent="stop"
+          <Button
+            variant="quiet"
             onClick={onPauseWorkflow}
             title={workflowControl.state === 'pausing'
               ? 'Check progress of the Stop request'
               : 'Stop after current work finishes; Resume continues from the next pending action'}
+            className={NEUTRAL_ACTION}
           >
-            <Pause className="h-3 w-3 fill-current" />
+            <Pause className="size-3 fill-current" />
             {workflowControl.state === 'pausing' ? 'Stopping…' : 'Stop'}
-          </ActionButton>
+          </Button>
         ) : isAuthoritativeTransition ? (
-          <ActionButton
-            intent="run"
-            disabled
-            title={`Workflow is ${controlTransitionLabel}`}
-          >
-            <LoaderCircle className="h-3 w-3 animate-spin" />
+          <Button variant="quiet" disabled title={`Workflow is ${controlTransitionLabel}`} className={NEUTRAL_ACTION}>
+            <LoaderCircle className="size-3 animate-spin" />
             {controlTransitionLabel}
-          </ActionButton>
+          </Button>
         ) : (
-          <ActionButton intent="run" disabled title={`Workflow is ${workflowControl.state}`}>
+          <Button variant="quiet" disabled title={`Workflow is ${workflowControl.state}`} className={NEUTRAL_ACTION}>
             {workflowControl.state.replace('_', ' ')}
-          </ActionButton>
+          </Button>
         )}
 
         {workflowControl.can_reset && (
-          <ActionButton
-            intent="stop"
+          <Button
+            variant="quiet"
             onClick={() => setResetOpen(true)}
             disabled={resetBlocked}
             title={isRetryingReset
               ? 'Retry the interrupted reset transition'
               : 'Stop active work and reset this workflow'}
+            className={NEUTRAL_ACTION}
           >
-            <RotateCcw className="h-3 w-3" />
+            <RotateCcw className="size-3" />
             {isRetryingReset ? 'Retry Reset' : 'Reset'}
-          </ActionButton>
+          </Button>
         )}
 
         {/* Canvas-lock indicator — renders the server-owned `can_edit`
@@ -515,15 +492,16 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
         <AlertDialog open={resetOpen} onOpenChange={setResetOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Reset workflow execution?</AlertDialogTitle><AlertDialogDescription>This stops active work, cancels phone tasks, and archives the current generation. Reset waits for phone actions to finish cleaning up. Task history remains available. The workflow will remain stopped until you press Start.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Keep current execution</AlertDialogCancel><AlertDialogAction disabled={resetBlocked} onClick={onResetWorkflow}>{isRetryingReset ? 'Retry reset' : 'Reset workflow'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
 
-        <ActionButton
-          intent="save"
+        <Button
+          variant="quiet"
           onClick={() => typeof onSave === 'function' && onSave()}
           disabled={!hasUnsavedChanges}
           title={hasUnsavedChanges ? 'Save changes' : 'No changes to save'}
+          className={NEUTRAL_ACTION}
         >
-          <Save className="h-3 w-3" />
+          <Save className="size-3" />
           Save
-        </ActionButton>
+        </Button>
 
         {/* Status Indicator — font-mono tracks the new-contract --font-mono
             (the system mono under light/dark). */}
@@ -545,24 +523,24 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         <Divider />
 
         <Button
-          variant="outline"
+          variant="quiet"
           size="icon-sm"
           onClick={onToggleComponentPalette}
           aria-pressed={componentPaletteVisible}
           title={componentPaletteVisible ? 'Hide components' : 'Show components'}
-          className="border-action-tools-border bg-action-tools-soft text-action-tools-ink hover:bg-action-tools-hover aria-pressed:bg-action-tools-hover"
+          className={NEUTRAL_TOGGLE}
         >
           {componentPaletteVisible ? <PanelRightClose /> : <PanelRightOpen />}
         </Button>
 
         <Button
-          variant="outline"
+          variant="quiet"
           size="icon-sm"
           onClick={toggleCanvasDock}
           aria-pressed={canvasDockOpen}
           title={canvasDockOpen ? 'Hide workspace' : 'Show workspace'}
           aria-label="Workspace"
-          className="border-action-tools-border bg-action-tools-soft text-action-tools-ink hover:bg-action-tools-hover aria-pressed:bg-action-tools-hover"
+          className={NEUTRAL_TOGGLE}
         >
           <Monitor />
         </Button>
