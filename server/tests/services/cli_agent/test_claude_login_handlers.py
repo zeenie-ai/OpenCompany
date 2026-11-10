@@ -157,6 +157,26 @@ async def test_cancel_stops_the_waiting_sign_in_without_signing_out(monkeypatch)
     handlers.mark_logged_out.assert_not_awaited()
 
 
+async def test_incomplete_code_is_not_sent_and_the_sign_in_keeps_waiting(monkeypatch):
+    release = asyncio.Event()
+    received = []
+
+    async def login(*, on_prompt, codes):
+        on_prompt({"url": SIGN_IN_URL})
+        await release.wait()
+        while not codes.empty():
+            received.append(codes.get_nowait())
+        return {"success": False, "error": "stopped"}
+
+    monkeypatch.setattr(handlers, "run_claude_login", login)
+    await handlers.handle_claude_code_login({}, None)
+    result = await handlers.handle_claude_code_submit_code({"code": "only-the-first-half"}, None)
+    assert result["success"] and result["pending"] and "incomplete" in result["message"]
+    release.set()
+    await handlers._login_task
+    assert received == []
+
+
 async def test_code_without_a_waiting_sign_in_is_refused():
     result = await handlers.handle_claude_code_submit_code({"code": "abc"}, None)
     assert not result["success"] and not result["pending"] and result["error"]

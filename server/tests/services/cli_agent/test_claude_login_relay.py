@@ -132,6 +132,16 @@ async def test_cancel_stops_the_cli(cli):
         ("Visit https://claude.ai/oauth/authorize?code=true&state=s", "https://claude.ai/oauth/authorize?code=true&state=s"),
         ("\x1b[36mhttps://platform.claude.com/oauth/authorize?state=s\x1b[39m.", "https://platform.claude.com/oauth/authorize?state=s"),
         ("https://claude.com/cai/oauth/authorize?state=s", "https://claude.com/cai/oauth/authorize?state=s"),
+        # What claude 2.1.258 prints, plain and as an OSC 8 hyperlink.
+        (
+            "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&state=s",
+            "https://claude.com/cai/oauth/authorize?code=true&state=s",
+        ),
+        (
+            "If the browser didn't open, visit: \x1b]8;;https://claude.com/cai/oauth/authorize?code=true&state=s\x07"
+            "\x1b[94mhttps://claude.com/cai/oauth/authorize?code=true&state=s\x1b[39m\x1b]8;;\x07",
+            "https://claude.com/cai/oauth/authorize?code=true&state=s",
+        ),
         ("https://console.anthropic.com/oauth/authorize?state=s", "https://console.anthropic.com/oauth/authorize?state=s"),
         ("https://example.com/oauth/authorize?state=s", None),
         ("https://claude.ai.example.com/oauth/authorize?state=s", None),

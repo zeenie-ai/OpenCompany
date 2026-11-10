@@ -199,7 +199,10 @@ async def claude_auth_status() -> bool:
 #: prints, only an https URL on one of these domains whose path ends in
 #: ``/oauth/authorize`` is passed to the browser.
 _SIGN_IN_DOMAINS = ("claude.ai", "claude.com", "anthropic.com")
-_URL = re.compile(r"https://[^\s<>\"']+")
+# A URL ends at any control character: started from a terminal that supports
+# hyperlinks, the CLI prints the link as an OSC 8 sequence (ESC ]8;;URL BEL),
+# which ``strip_ansi`` leaves in place.
+_URL = re.compile(r"https://[^\s<>\"'\x00-\x1f\x7f]+")
 #: Longest stretch of output kept while waiting for the end of a line.
 _MAX_LINE_BYTES = 16384
 LOGIN_FAILED = "Claude sign-in did not finish. Click Login to try again, and paste the whole code the sign-in page shows."

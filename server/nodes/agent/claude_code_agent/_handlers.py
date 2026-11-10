@@ -184,9 +184,14 @@ async def handle_claude_code_submit_code(
         }
     # A code holds no whitespace: drop what a copy across wrapped lines adds.
     code = "".join(str(data.get("code") or "").split())
-    if code:
+    # The CLI takes the code as "<code>#<state>" and ignores anything else, so
+    # an incomplete paste is answered here and the sign-in keeps waiting.
+    first, _, second = code.partition("#")
+    if first and second:
         _login_codes.put_nowait(code)
         _login_state["message"] = "Code sent. Claude Code is finishing the sign-in."
+    else:
+        _login_state["message"] = "That code is incomplete. Copy the whole code from the sign-in page, including the part after #."
     return _response()
 
 
