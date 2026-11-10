@@ -189,8 +189,10 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   puts them on a solid `--accent` disc with the `--accent-foreground` initial:
   the employee beside their turns (`ChatAvatar`, on Home and in Dev), on their
   page's header and on a new hire's first-day strip (`Avatar` with `accent`).
-  The team's lists, the setup card and the owner's own avatar keep the role
-  tints (`AVATAR_CLASS`).
+  The team's lists keep the role tints (`AVATAR_CLASS`). A draft on the
+  setup card and the owner's own avatar are plain (`Avatar` with `plain`:
+  `bg-bg-hover`, `border-border-default`, `text-fg-default`), and nothing
+  else on the setup card takes a role's colour either.
 - **Errors**: `--danger-soft` (15%) and `--danger-border` (45%) tint
   `--destructive` for an error on a Home surface (`bg-danger-soft`,
   `border-danger-border`).

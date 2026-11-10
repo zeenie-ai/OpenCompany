@@ -415,14 +415,24 @@ are is on their page's header, not in the dock.
 - **Size and motion**: 460px wide by default. The left edge drags from
   360px to the window less 420px, and Expand gives a bigger dock without
   a drag. At 1100px and wider the dock pushes the page aside; narrower, it
-  lies over it with the modal shadow (`shadow-modal`). Like the sidebar it
+  lies over it with the modal shadow (`shadow-modal`). While it pushes, the
+  dock is never drawn wider than the window less what the page keeps
+  (`useHomeDockWidth` in `workspace/dockWidth.ts`: the sidebar and 560px
+  with the sidebar open, 760px with it closed; never under the 360px
+  minimum), whatever width was dragged or saved, so the page's header and
+  message box always have room. Home's header fits what it is left
+  (`HomeHeader`): it clips sideways, and by its own width (a container
+  query, so the dock and the sidebar both count) its buttons drop their
+  words and keep their icons, the Get started pill goes, and on an
+  employee's page at the narrowest so does Guide. A button's word is the
+  span marked `data-label`, still read to a screen reader. Like the sidebar it
   stays mounted and transitions its width (`--dur-dock-in` to open,
   `--dur-sidebar-out` to close), so a reload with it open does not animate,
   and its contents mount on the first open. Open, width and tab persist
   under `home_workspace_v1`; Expand and the employee last only for the
   session. While the dock is open, the Get started card and its folded pill
   sit at its left edge and move with it, at once while the edge is dragged
-  (`dockWidth` in `components/workspace/dockSize.ts` gives both one width,
+  (`useHomeDockWidth` gives both one width,
   and `workspaceResizing` says when the edge is dragged; see
   [onboarding.md](./onboarding.md#get-started-checklist)).
 - **In Dev mode**: the editor shows the same dock for the open workflow
@@ -567,6 +577,10 @@ The model's other rules, choices and inputs stay in view in compact cards, so
 nothing is hired unseen. A button the model places in the body is neutral even
 when it is primary ("Connect {App}", "Open apps"), so Hire stays the card's one
 strong control; every switch on the card is the ink tone at the `md` size.
+Nothing on the card takes a role's colour: the routine's dots and labels are
+neutral (the label names the role: When, Using, They, Then), the draft's face
+is the plain avatar (`Avatar plain`, as the owner's in the sidebar and in
+Settings > Profile), and a `tone` in the spec is not drawn by any component.
 The panel's header (NEW EMPLOYEE, the job, Discard) shows only while the
 setup is written or after it failed, or for a screen with no agent card, and
 the model's one-line introduction is not shown.

@@ -300,7 +300,9 @@ prefix `['canvasBoard']` for broadcast-driven invalidation.
   for the open workflow, sized by
   [`dockSize.ts`](../client/src/components/workspace/dockSize.ts) as on Home
   (460 px by default, dragging from 360 px to the window less 420 px, with a
-  4000 px bound on persisted values). In the Canvas tab the editor adds,
+  4000 px bound on persisted values; while it pushes the canvas aside it is
+  never drawn wider than the window less the panels on show and 320 px of
+  canvas, `pageKeeps` from `Dashboard.tsx`). In the Canvas tab the editor adds,
   above the board: a node
   selector (a Select when the workflow has more than one Canvas node —
   ConsolePanel's node-selector precedent; nodes are found by
