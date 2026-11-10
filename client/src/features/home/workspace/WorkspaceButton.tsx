@@ -32,7 +32,7 @@ export function WorkspaceButton() {
       className="h-8 gap-1.75 rounded-lg px-2.5 text-sm aria-pressed:bg-bg-active aria-pressed:text-fg-default"
     >
       <PanelRight aria-hidden className="size-4" strokeWidth={1.75} />
-      Workspace
+      <span data-label>Workspace</span>
       {live && <StatusDot tone="live" className="size-1.5" />}
     </Button>
   );

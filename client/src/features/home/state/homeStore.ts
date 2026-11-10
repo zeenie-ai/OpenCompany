@@ -9,7 +9,7 @@
 
 import { z } from 'zod';
 import { create } from 'zustand';
-import { DOCK_DEFAULT_WIDTH, DOCK_MAX_STORED_WIDTH, DOCK_MIN_WIDTH, clampDockWidth, dockWidth } from '@/components/workspace/dockSize';
+import { DOCK_DEFAULT_WIDTH, DOCK_MAX_STORED_WIDTH, DOCK_MIN_WIDTH, clampDockWidth } from '@/components/workspace/dockSize';
 import type { WorkflowControlStatus } from '@/contexts/WebSocketContext';
 import type { CanvasFocus } from '@/lib/canvasBoard';
 import type { CredentialsIntent } from '@/stores/shellDialogsStore';
@@ -68,10 +68,6 @@ const WORKSPACE_KEY = 'home_workspace_v1';
 /** Narrowest the Workspace drags to: the dock's own limit, shared with the
  *  editor's (components/workspace/dockSize). */
 export const WORKSPACE_MIN_WIDTH = DOCK_MIN_WIDTH;
-
-/** The Workspace dock's width, as CSS. The Get started card sits at its
- *  left edge while it is open. */
-export { dockWidth };
 
 /** Whose workspace the dock shows: `workspaceFor`, else the first on the
  *  team. The header's Workspace button reads the same one for its dot. */

@@ -142,6 +142,11 @@ const moduleEdgeTypes = {
   smoothstep: StepEdge,
 };
 
+/** The workflow sidebar's width while it shows. */
+const WORKFLOW_SIDEBAR_WIDTH = '280px';
+/** The least the canvas keeps beside the Workspace dock. */
+const CANVAS_KEEPS = '320px';
+
 // Inner component that uses useReactFlow() - must be inside ReactFlowProvider
 const DashboardContent: React.FC = () => {
   const theme = useAppTheme();
@@ -153,6 +158,13 @@ const DashboardContent: React.FC = () => {
   const hasUnsavedChanges = useAppStore((s) => s.hasUnsavedChanges);
   const sidebarVisible = useAppStore((s) => s.sidebarVisible);
   const componentPaletteVisible = useAppStore((s) => s.componentPaletteVisible);
+  // What the rest of the row keeps while the Workspace dock pushes the canvas
+  // aside: the panels on show, and the canvas's own least width.
+  const dockPageKeeps = `calc(${[
+    sidebarVisible && WORKFLOW_SIDEBAR_WIDTH,
+    componentPaletteVisible && theme.layout.sidebarWidth,
+    CANVAS_KEEPS,
+  ].filter(Boolean).join(' + ')})`;
   const loadWorkflow = useAppStore((s) => s.loadWorkflow);
   const deleteWorkflow = useAppStore((s) => s.deleteWorkflow);
   const migrateCurrentWorkflow = useAppStore((s) => s.migrateCurrentWorkflow);
@@ -1188,7 +1200,7 @@ const DashboardContent: React.FC = () => {
         }}>
           {/* Left Workflow Sidebar */}
           <div style={{
-            width: sidebarVisible ? '280px' : '0px',
+            width: sidebarVisible ? WORKFLOW_SIDEBAR_WIDTH : '0px',
             overflow: 'hidden',
             transition: 'width 0.3s ease',
             borderRight: sidebarVisible ? '1px solid var(--border-default)' : 'none',
@@ -1301,8 +1313,10 @@ const DashboardContent: React.FC = () => {
             {/* The Workspace dock, the one Home shows, at the rightmost
                 edge, for the open workflow. Owns its own state
                 (canvasDockStore); auto-opens on canvas_updated for the
-                current workflow. Under 1100px it lies over this box. */}
-            <CanvasDock nodes={nodes} flushCanvas={flushCanvas} />
+                current workflow. It leaves the canvas and the panels
+                on show their room (dockPageKeeps); under 1100px it
+                lies over this box. */}
+            <CanvasDock nodes={nodes} flushCanvas={flushCanvas} pageKeeps={dockPageKeeps} />
           </div>
         </div>
 

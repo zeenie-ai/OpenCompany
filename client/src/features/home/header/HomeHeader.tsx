@@ -11,6 +11,14 @@
  * on an employee's page the Get started pill comes first, standing in for
  * the checklist card (onboarding/GetStartedPill). The bottom border appears
  * only once the content has scrolled, so the hero reads as one surface.
+ *
+ * The header fits the page it has. The Workspace dock takes room from the
+ * page, so the header watches its own width, not the window's: when there
+ * is no room for everything, its buttons keep their icons and drop their
+ * words (each button marks its words `data-label`), the Get started pill
+ * goes, and on the narrowest page the Guide pill too (Settings has the
+ * guide). The dock stops before the page is narrower than that
+ * (workspace/dockWidth), and nothing ever shows past the header's edge.
  */
 
 import { useRef, useState } from 'react';
@@ -36,6 +44,16 @@ import { pillToast } from '../ui/pillToast';
 import { WorkspaceButton } from '../workspace/WorkspaceButton';
 import { GuideButton } from './GuideButton';
 import { NewConversationButton } from './NewConversationButton';
+
+/**
+ * When the header drops its buttons' words, by the width left beside the
+ * logo: an employee's page has more to show (who they are, New
+ * conversation, the Get started pill), so it runs out of room sooner.
+ */
+const FIT = {
+  hire: '@max-[580px]:[&_[data-label]]:sr-only',
+  employee: '@max-[1100px]:[&_[data-label]]:sr-only',
+} as const;
 
 /** "Receptionist · WhatsApp, Google Calendar". */
 function subtitleOf(employee: EmployeeSummary): string {
@@ -177,7 +195,8 @@ export function HomeHeader({ title, employee, scrolled }: { title: string; emplo
   return (
     <header
       className={cn(
-        'relative z-10 flex h-(--h-home-header) shrink-0 items-center gap-2 border-b px-3.5 transition-colors duration-(--dur-slow)',
+        // Clipped sideways: nothing in the header shows over the dock beside the page.
+        'relative z-10 flex h-(--h-home-header) shrink-0 items-center gap-2 overflow-x-clip border-b px-3.5 transition-colors duration-(--dur-slow)',
         scrolled ? 'border-border-default' : 'border-transparent',
       )}
     >
@@ -190,14 +209,22 @@ export function HomeHeader({ title, employee, scrolled }: { title: string; emplo
           <span aria-hidden className="h-5 w-px bg-border-default" />
         </>
       )}
-      {employee ? <Identity employee={employee} /> : <h2 className="truncate px-1.5 text-lead font-semibold text-fg-default">{title}</h2>}
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        {employee && employee.talk.state === 'on' && <NewConversationButton employee={employee} />}
-        {employeeId && <GetStartedPill />}
-        <GuideButton />
-        <WorkspaceButton />
-        <ModeToggle workflowId={employeeId} />
-        <ThemeButton />
+      <div className={cn('@container flex min-w-0 flex-1 items-center gap-2', FIT[employeeId ? 'employee' : 'hire'])}>
+        {employee ? <Identity employee={employee} /> : <h2 className="truncate px-1.5 text-lead font-semibold text-fg-default">{title}</h2>}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {employee && employee.talk.state === 'on' && <NewConversationButton employee={employee} />}
+          {employeeId && (
+            <span className="contents @max-[1100px]:hidden">
+              <GetStartedPill />
+            </span>
+          )}
+          <span className={cn('contents', employeeId && '@max-[580px]:hidden')}>
+            <GuideButton />
+          </span>
+          <WorkspaceButton />
+          <ModeToggle workflowId={employeeId} />
+          <ThemeButton />
+        </div>
       </div>
     </header>
   );

@@ -17,7 +17,7 @@ export function GuideButton() {
       className="h-8.5 gap-1.75 rounded-pill border-border-default px-3 text-sm text-fg-default hover:border-border-strong"
     >
       <CircleHelp aria-hidden className="size-3.75" strokeWidth={1.75} />
-      Guide
+      <span data-label>Guide</span>
     </Button>
   );
 }

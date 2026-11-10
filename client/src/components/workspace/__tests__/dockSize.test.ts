@@ -3,9 +3,10 @@
  * drag is kept to, and the width the dock is given as CSS.
  */
 
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clampDockWidth, dockWidth } from '../dockSize';
+import { clampDockWidth, dockWidth, useDockPushes } from '../dockSize';
 
 /** The window is this wide. */
 const windowIs = (px: number) => vi.stubGlobal('innerWidth', px);
@@ -70,5 +71,62 @@ describe('dockWidth', () => {
   it('is Expand’s width while expanded, whatever was dragged', () => {
     expect(dockWidth(460, true)).toBe('max(420px, min(1100px, 100vw - 420px))');
     expect(dockWidth(612, true)).toBe(dockWidth(460, true));
+  });
+
+  it('stops at the room the page keeps while it pushes the page aside, never under its narrowest', () => {
+    expect(dockWidth(460, false, '760px')).toBe('min(460px, max(360px, 100vw - 760px))');
+    // However far it was dragged: the page's room wins.
+    expect(dockWidth(2000, false, '760px')).toBe('min(2000px, max(360px, 100vw - 760px))');
+    expect(dockWidth(460, false, 'calc(var(--w-home-sidebar) + 560px)')).toBe(
+      'min(460px, max(360px, 100vw - calc(var(--w-home-sidebar) + 560px)))',
+    );
+  });
+
+  it('gives Expand the same room beside the page', () => {
+    expect(dockWidth(460, true, '760px')).toBe('min(1100px, max(360px, 100vw - 760px))');
+    expect(dockWidth(612, true, '760px')).toBe(dockWidth(460, true, '760px'));
+  });
+});
+
+describe('useDockPushes', () => {
+  /** A window whose width the test sets, with the listeners the hook adds. */
+  function windowThat(pushes: boolean) {
+    const state = { pushes, asked: [] as string[], listeners: new Set<() => void>() };
+    vi.stubGlobal('matchMedia', (query: string) => {
+      state.asked.push(query);
+      return {
+        get matches() {
+          return state.pushes;
+        },
+        media: query,
+        addEventListener: (_type: string, listener: () => void) => state.listeners.add(listener),
+        removeEventListener: (_type: string, listener: () => void) => state.listeners.delete(listener),
+      };
+    });
+    return state;
+  }
+
+  it('says the dock pushes the page aside in a window of 1100px and wider', () => {
+    const wide = windowThat(true);
+    const { result } = renderHook(() => useDockPushes());
+    expect(result.current).toBe(true);
+    expect(new Set(wide.asked)).toEqual(new Set(['(min-width: 1100px)']));
+  });
+
+  it('says it lies over the page in a narrower one', () => {
+    windowThat(false);
+    expect(renderHook(() => useDockPushes()).result.current).toBe(false);
+  });
+
+  it('follows the window as it is resized, and stops listening once gone', () => {
+    const resized = windowThat(true);
+    const { result, unmount } = renderHook(() => useDockPushes());
+    act(() => {
+      resized.pushes = false;
+      resized.listeners.forEach((listener) => listener());
+    });
+    expect(result.current).toBe(false);
+    unmount();
+    expect(resized.listeners.size).toBe(0);
   });
 });

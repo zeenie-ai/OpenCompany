@@ -749,6 +749,13 @@ describe('WorkspaceButton', () => {
     expect(useHomeStore.getState().workspaceOpen).toBe(false);
   });
 
+  it('marks its word, which a narrow header drops while the icon stays', () => {
+    renderWith([employee()], <WorkspaceButton />);
+    const button = screen.getByRole('button', { name: 'Workspace' });
+    expect(button.querySelector('[data-label]')).toHaveTextContent(/^Workspace$/);
+    expect(button.querySelector('svg')).toBeInTheDocument();
+  });
+
   it('blinks red only while the dock is closed and its employee is live', () => {
     renderWith([employee()], <WorkspaceButton />);
     expect(dot()).toHaveClass('opencompany-pip-pulse');

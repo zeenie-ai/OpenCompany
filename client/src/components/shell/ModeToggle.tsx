@@ -36,11 +36,11 @@ export function ModeToggle({ className, workflowId }: { className?: string; work
     >
       <ToggleGroupItem value="normal" className={ITEM}>
         <Clock aria-hidden />
-        Normal
+        <span data-label>Normal</span>
       </ToggleGroupItem>
       <ToggleGroupItem value="dev" className={ITEM}>
         <Zap aria-hidden />
-        Dev
+        <span data-label>Dev</span>
       </ToggleGroupItem>
     </ToggleGroup>
   );

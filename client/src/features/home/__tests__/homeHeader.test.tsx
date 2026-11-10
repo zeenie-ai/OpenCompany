@@ -220,3 +220,70 @@ describe('HomeHeader', () => {
     expect(enterDev).toHaveBeenCalledWith({ workflowId: undefined });
   });
 });
+
+/**
+ * The header fits the page it has: the Workspace dock takes room from the
+ * page, so the header watches its own width, not the window's.
+ */
+describe('HomeHeader on a narrow page', () => {
+  beforeEach(() => {
+    sendRequest.mockReset().mockResolvedValue({ success: true });
+    useHomeStore.setState({ sidebarOpen: true });
+    useNodeStatusStore.setState({ allStatuses: {} });
+  });
+
+  const header = () => document.querySelector('header') as HTMLElement;
+  /** The part that watches its own width: who is on screen, and the buttons. */
+  const fitted = () => header().querySelector('[class~="@container"]') as HTMLElement;
+  const onHire = () => {
+    useHomeStore.setState({ view: { kind: 'hire' } });
+    wrap(<HomeHeader title="New employee" employee={null} scrolled={false} />);
+  };
+  const onMaya = () => {
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+  };
+
+  it('clips sideways, so nothing in it shows over the dock beside the page', () => {
+    onHire();
+    expect(header()).toHaveClass('overflow-x-clip');
+  });
+
+  it('drops its buttons’ words below 580px of its own width while hiring, and keeps the Guide pill', () => {
+    onHire();
+    expect(fitted()).toHaveClass('@container', 'min-w-0', 'flex-1', '@max-[580px]:[&_[data-label]]:sr-only');
+    expect(fitted()).not.toHaveClass('@max-[1100px]:[&_[data-label]]:sr-only');
+    const guide = screen.getByRole('button', { name: 'Guide' }).parentElement;
+    expect(guide).toHaveClass('contents');
+    expect(guide).not.toHaveClass('@max-[580px]:hidden');
+  });
+
+  it('drops them sooner on an employee’s page, where the Get started pill goes with them and the Guide pill last', () => {
+    onMaya();
+    expect(fitted()).toHaveClass('@container', '@max-[1100px]:[&_[data-label]]:sr-only');
+    expect(fitted()).not.toHaveClass('@max-[580px]:[&_[data-label]]:sr-only');
+    expect(screen.getByText('Get started pill').parentElement).toHaveClass('contents', '@max-[1100px]:hidden');
+    expect(screen.getByRole('button', { name: 'Guide' }).parentElement).toHaveClass('contents', '@max-[580px]:hidden');
+  });
+
+  it.each([
+    ['button', 'Guide'],
+    ['button', 'New conversation'],
+    ['radio', 'Normal'],
+    ['radio', 'Dev'],
+  ])('marks the word on the %s %s, so the icon and the name stay when the word goes', (role, name) => {
+    onMaya();
+    const control = screen.getByRole(role, { name });
+    expect(control.querySelector('[data-label]')).toHaveTextContent(new RegExp(`^${name}$`));
+    expect(control.querySelector('svg')).toBeInTheDocument();
+  });
+
+  it('watches the width beside the logo, which it keeps whole', () => {
+    useHomeStore.setState({ sidebarOpen: false });
+    onMaya();
+    expect(fitted()).toContainElement(screen.getByRole('heading', { name: 'Maya' }));
+    expect(fitted()).toContainElement(screen.getByRole('button', { name: 'Guide' }));
+    expect(fitted()).not.toContainElement(screen.getByRole('button', { name: 'Open sidebar' }));
+    expect(fitted().parentElement).toBe(header());
+  });
+});

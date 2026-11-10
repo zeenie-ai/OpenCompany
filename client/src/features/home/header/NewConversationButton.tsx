@@ -45,7 +45,7 @@ export function NewConversationButton({ employee }: { employee: EmployeeSummary 
         className="h-8 gap-1.75 rounded-lg px-2.5 text-sm"
       >
         <SquarePen aria-hidden className="size-4" strokeWidth={1.75} />
-        <span className="hidden lg:inline">New conversation</span>
+        <span data-label>New conversation</span>
       </Button>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>

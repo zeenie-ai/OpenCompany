@@ -47,7 +47,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useCanvasDockStore } from '../../stores/canvasDockStore';
 import CanvasContent from '../parameterPanel/canvas/CanvasContent';
 import { workspaceNodes } from '../workspace/descriptors';
-import { dockWidth } from '../workspace/dockSize';
+import { dockWidth, useDockPushes } from '../workspace/dockSize';
 import type { Notify } from '../workspace/surface';
 import { WorkspaceDockShell } from '../workspace/WorkspaceDockShell';
 import { LlmWaitNote } from './LlmWaitNote';
@@ -55,6 +55,9 @@ import { LlmWaitNote } from './LlmWaitNote';
 interface CanvasDockProps {
   nodes: Node[];
   flushCanvas?: () => void;
+  /** What the rest of the editor's row keeps while the dock pushes the
+   *  canvas aside, as a CSS length: the panels on show and the canvas. */
+  pageKeeps?: string;
 }
 
 const isCanvasNode = (node: Node): boolean =>
@@ -69,7 +72,7 @@ const notify: Notify = (message, tone) => {
   else toast.success(message);
 };
 
-const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
+const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas, pageKeeps }) => {
   const open = useCanvasDockStore((s) => s.open);
   const tab = useCanvasDockStore((s) => s.tab);
   const setTab = useCanvasDockStore((s) => s.setTab);
@@ -87,6 +90,7 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
   const focus = useCanvasDockStore((s) => s.focus);
 
   const workflowId = useAppStore((s) => s.currentWorkflow?.id);
+  const pushes = useDockPushes();
 
   // Every workflow is an employee: the open one's summary is the dock's
   // status, pill and Take over. Read while the dock is open, and again when
@@ -144,7 +148,7 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
   }, [setWidth]);
 
   return (
-    <WorkspaceDockShell open={open} width={dockWidth(widthPx, wide)} onWidth={onWidth}>
+    <WorkspaceDockShell open={open} width={dockWidth(widthPx, wide, pushes ? pageKeeps : undefined)} onWidth={onWidth}>
       <WorkspaceView
         workflowId={workflowId}
         employee={employee}

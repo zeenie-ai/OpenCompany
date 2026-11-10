@@ -12,7 +12,8 @@
  *
  * Open, width and tab persist (state/homeStore); the left edge drags from
  * 360px to the window less 420px, and Expand gives a bigger dock without a
- * drag (components/workspace/dockSize).
+ * drag (components/workspace/dockSize). While it pushes the page aside the
+ * dock leaves the page room for its header (dockWidth.ts).
  */
 
 import type { LucideIcon } from 'lucide-react';
@@ -20,7 +21,6 @@ import { Code, Monitor, PanelsTopLeft, Pause, Play } from 'lucide-react';
 import { Suspense, lazy, useMemo, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { dockWidth } from '@/components/workspace/dockSize';
 import type { Notify } from '@/components/workspace/surface';
 import { DockButtons, WorkspaceDockShell } from '@/components/workspace/WorkspaceDockShell';
 import { enterDev } from '../../../app/useShellActions';
@@ -30,6 +30,7 @@ import { PrimaryActionButton } from '../employee/PrimaryActionButton';
 import { useEmployeeControl } from '../employee/useEmployeeControl';
 import { dockEmployee, useHomeStore } from '../state/homeStore';
 import { pillToast } from '../ui/pillToast';
+import { useHomeDockWidth } from './dockWidth';
 import { WorkspaceView } from './WorkspaceView';
 
 // Its own chunk: the board's viewers (markdown, code, JSON) stay out of Home's.
@@ -178,8 +179,7 @@ function NoEmployee({ status }: { status: 'pending' | 'error' | 'success' }) {
 /** `onConnect`: opens an app's connect dialog, for a main action that connects one. */
 export function WorkspaceDock({ onConnect }: { onConnect: (providerId: string) => void }) {
   const open = useHomeStore((s) => s.workspaceOpen);
-  const widthPx = useHomeStore((s) => s.workspaceWidth);
-  const wide = useHomeStore((s) => s.workspaceWide);
+  const width = useHomeDockWidth();
   const workspaceFor = useHomeStore((s) => s.workspaceFor);
   const setWidth = useHomeStore((s) => s.setWorkspaceWidth);
   // What sits beside the dock (the Get started card) follows a drag at once.
@@ -188,7 +188,7 @@ export function WorkspaceDock({ onConnect }: { onConnect: (providerId: string) =
   const employee = dockEmployee(team.data, workspaceFor);
 
   return (
-    <WorkspaceDockShell open={open} width={dockWidth(widthPx, wide)} onWidth={setWidth} onResizing={setResizing}>
+    <WorkspaceDockShell open={open} width={width} onWidth={setWidth} onResizing={setResizing}>
       {employee ? <EmployeeWorkspace employee={employee} visible={open} onConnect={onConnect} /> : <NoEmployee status={team.status} />}
     </WorkspaceDockShell>
   );

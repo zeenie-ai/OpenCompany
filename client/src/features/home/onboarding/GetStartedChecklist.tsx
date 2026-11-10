@@ -17,7 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { rise } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { dockWidth, useHomeStore } from '../state/homeStore';
+import { useHomeStore } from '../state/homeStore';
+import { useHomeDockWidth } from '../workspace/dockWidth';
 import { pillToast } from '../ui/pillToast';
 import { useGetStarted, type GetStartedRow } from './useGetStarted';
 
@@ -31,8 +32,7 @@ import { useGetStarted, type GetStartedRow } from './useGetStarted';
  */
 function BesideDock({ children }: { children: ReactNode }) {
   const dockOpen = useHomeStore((s) => s.workspaceOpen);
-  const dockPx = useHomeStore((s) => s.workspaceWidth);
-  const dockWide = useHomeStore((s) => s.workspaceWide);
+  const dockWidth = useHomeDockWidth();
   const dragged = useHomeStore((s) => s.workspaceResizing);
   return (
     <div
@@ -43,7 +43,7 @@ function BesideDock({ children }: { children: ReactNode }) {
           : 'right-4 duration-(--dur-sidebar-out) ease-(--ease-default)',
         dragged && 'transition-none',
       )}
-      style={dockOpen ? ({ '--dock-width': dockWidth(dockPx, dockWide) } as CSSProperties) : undefined}
+      style={dockOpen ? ({ '--dock-width': dockWidth } as CSSProperties) : undefined}
     >
       {children}
     </div>
