@@ -51,6 +51,16 @@ def emit(event):
     return f"print({json.dumps(json.dumps(event))}, flush=True)\n"
 
 
+def ended(pid: int) -> bool:
+    """Whether the process is over: gone, or a zombie not yet reaped. One
+    question, because a killed process can still be listed (``pid_exists``)
+    for a few milliseconds after psutil stops describing it."""
+    try:
+        return psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return True
+
+
 def test_codex_environment_matches_login_and_keeps_batch_token_out_of_argv(make_session, monkeypatch, tmp_path):
     from services.cli_agent import _codex_auth
     from services.cli_agent.providers.openai_codex import MCP_TOKEN_ENV
@@ -165,7 +175,7 @@ async def test_codex_cancellation_reaps_wrapper_and_descendant(make_session):
         with pytest.raises(asyncio.CancelledError):
             await waiter
         assert proc.returncode is not None
-        assert not psutil.pid_exists(child_pid) or psutil.Process(child_pid).status() == psutil.STATUS_ZOMBIE
+        assert ended(child_pid)
         assert not session.is_running()
     finally:
         if not waiter.done():
