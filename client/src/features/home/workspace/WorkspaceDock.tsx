@@ -35,7 +35,6 @@ import { WorkspaceTabs } from '@/components/workspace/WorkspaceTabs';
 import MobileWorkspace from '@/components/mobile/MobileWorkspace';
 import type { SurfaceControl } from '@/components/workspace/surface';
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePanelResize } from '@/hooks/usePanelResize';
@@ -87,7 +86,7 @@ function DockButtons() {
 }
 
 /** Their main action (useEmployeeControl), named in its title: a round
- *  Stop, or a round Resume, green as starting them is; Start, Start again,
+ *  Stop, or a round Resume, the invert primary as starting them is; Start, Start again,
  *  Connect and Retry reset small and labelled (PrimaryActionButton, which
  *  shows nothing where Home has no action for them). */
 function DockAction({ employee, onConnect }: { employee: EmployeeSummary; onConnect: (providerId: string) => void }) {
@@ -110,8 +109,9 @@ function DockAction({ employee, onConnect }: { employee: EmployeeSummary; onConn
   }
   if (kind === 'resume') {
     return (
-      <ActionButton
-        intent="run"
+      <Button
+        variant="invert"
+        size="icon-sm"
         disabled={control.busy}
         onClick={control.act}
         aria-label={control.label}
@@ -119,7 +119,7 @@ function DockAction({ employee, onConnect }: { employee: EmployeeSummary; onConn
         className="size-7.5 shrink-0 justify-center rounded-full p-0"
       >
         <Play aria-hidden fill="currentColor" className="size-3.25" />
-      </ActionButton>
+      </Button>
     );
   }
   return <PrimaryActionButton control={control} className="h-7.5 px-3" />;

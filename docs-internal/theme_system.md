@@ -221,7 +221,8 @@ colour for an action it does not mean. This is the owner's rule, from the chat
 colour pass of 4 Nov (`design_handoff_opencompany_home/chat/V2.md`, section 3)
 and the onboarding v3 handoff:
 
-- **Green `run` only starts an employee**: Start, Start again and Resume
+- **No green buttons** (since 2026-11-10; until then green `run` started an
+  employee): Start, Start again and Resume are the `invert` primary
   (`features/home/employee/PrimaryActionButton.tsx`, and the Workspace's
   round Resume). Their other main actions (Stop, Retry reset, connecting
   what is missing) are neutral.

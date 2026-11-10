@@ -157,7 +157,7 @@ describe('a new hire’s first day', () => {
     renderPage(employee('never_started', { activation_state: 'failed' }));
     const day = await strip();
     expect(within(day).getByText('Maya couldn’t start.')).toBeInTheDocument();
-    expect(within(day).getByRole('button', { name: 'Start' })).toHaveClass('bg-action-run-soft');
+    expect(within(day).getByRole('button', { name: 'Start' })).toHaveAttribute('data-variant', 'invert');
     expect(within(day).getByText('Not started')).toBeInTheDocument();
     expect(within(day).queryByText('Starting Maya…')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Message Maya' })).not.toBeInTheDocument();
@@ -168,7 +168,7 @@ describe('a new hire’s first day', () => {
     const day = await strip();
     expect(within(day).getByText('Maya is paused.')).toBeInTheDocument();
     expect(within(day).getByText('Stopped')).toBeInTheDocument();
-    expect(within(day).getByRole('button', { name: 'Resume' })).toHaveClass('bg-action-run-soft');
+    expect(within(day).getByRole('button', { name: 'Resume' })).toHaveAttribute('data-variant', 'invert');
     expect(screen.getByRole('textbox', { name: 'Message Maya' })).toBeEnabled();
     expect(screen.queryByText(/They’ll read your message when you resume them/)).not.toBeInTheDocument();
   });

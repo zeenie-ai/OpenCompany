@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
@@ -48,13 +48,22 @@ beforeEach(() => {
 
 afterEach(() => { cache.clear(); vi.useRealTimers(); });
 
+/** The pill, and the detail it opens to. */
+const pill = () => screen.getByRole('region', { name: 'Employee work progress' });
+const openPill = () => fireEvent.click(pill().querySelector('button')!);
+
 describe('employee live work', () => {
   it('reads detailed progress even when the employee already exists in the team list', async () => {
     show();
     await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledWith('get_employee', { workflow_id: 'w1' }));
-    const panel = screen.getByRole('region', { name: 'Employee work progress' });
-    expect(panel).toHaveTextContent('Live work');
+    const panel = pill();
+    // One pill, never a card: what is going on, the steps finished and how long.
+    expect(panel).not.toHaveTextContent('Live work');
+    expect(panel.querySelector('button')).toHaveClass('h-8.5');
     expect(panel).toHaveTextContent('Research is gathering information');
+    expect(panel).toHaveTextContent(/1\/3 · 3m \d+s/);
+    expect(panel).not.toHaveTextContent('Research · In progress');
+    openPill();
     expect(panel).toHaveTextContent('Research · In progress');
     expect(panel).toHaveTextContent('Appointments · Finished');
     expect(panel).toHaveTextContent('1 of 3 steps finished');
@@ -66,7 +75,8 @@ describe('employee live work', () => {
   it('shows an approval wait without labelling it as a slow task or retrying delivery', () => {
     show({ work_progress: { ...progress, state: 'waiting', message: 'Their result is waiting for you to approve.' },
       job_progress: { request_id: 'job-1', state: 'waiting_for_approval', message: 'Their result is ready for you to check before sending.' } });
-    expect(screen.getByRole('region', { name: 'Employee work progress' })).toHaveTextContent('waiting for you to approve');
+    expect(pill()).toHaveTextContent('waiting for you to approve');
+    openPill();
     expect(screen.queryByText(/This is taking longer/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
     expect(actions.sendRequest.mock.calls.every(([type]) => type === 'get_employee')).toBe(true);
@@ -75,14 +85,15 @@ describe('employee live work', () => {
   it('shows stale activity as last known when disconnected and preserves it through reconnect', async () => {
     actions.isReady = false;
     const view = show();
-    expect(screen.getByText('Last known activity')).toBeInTheDocument();
+    expect(screen.getByText(/Last known activity/)).toBeInTheDocument();
     expect(screen.getByText(/Connection lost/)).toBeInTheDocument();
+    openPill();
     expect(screen.queryByText(/This is taking longer/)).not.toBeInTheDocument();
     expect(actions.sendRequest).not.toHaveBeenCalled();
     actions.isReady = true;
     view.rerender(<QueryClientProvider client={cache}><EmployeeWork employee={parseEmployee({ workflow_id: 'w1', name: 'Maya' })!} /></QueryClientProvider>);
     await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledTimes(1));
-    expect(screen.getByText('Live work')).toBeInTheDocument();
+    expect(pill()).toBeInTheDocument();
     expect(screen.queryByText(/Connection lost/)).not.toBeInTheDocument();
   });
 
@@ -97,6 +108,7 @@ describe('employee live work', () => {
     expect(refresh).toHaveClass('border-border-default', 'text-fg-default');
     expect(refresh.className).not.toMatch(/action-/);
     expect(screen.queryByText('internal execution error')).not.toBeInTheDocument();
+    openPill();
     expect(screen.getByText('Gather information')).toBeInTheDocument();
   });
 
@@ -130,6 +142,7 @@ describe('employee live work', () => {
       return <><button onClick={() => setEmployee(b)}>Switch employee</button><EmployeeWork key={employee.workflow_id} employee={employee} /></>;
     }
     render(<QueryClientProvider client={cache}><Switch /></QueryClientProvider>);
+    openPill();
     expect(screen.getByText('Gather information')).toBeInTheDocument();
     act(() => screen.getByRole('button', { name: 'Switch employee' }).click());
     await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledWith('get_employee', { workflow_id: 'w2' }));
@@ -149,6 +162,7 @@ describe('employee live work', () => {
   it('offers refresh for an unavailable snapshot without leaking backend errors', () => {
     show({ work_progress: { state: 'unavailable', message: 'Work progress could not be loaded. Try refreshing.' } });
     expect(screen.getByRole('button', { name: 'Refresh progress' })).toHaveClass('border-border-default', 'text-fg-default');
+    openPill();
     expect(screen.queryByText(/This is taking longer/)).not.toBeInTheDocument();
   });
 });

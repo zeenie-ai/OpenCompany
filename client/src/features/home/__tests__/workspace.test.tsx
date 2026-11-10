@@ -292,8 +292,10 @@ describe('WorkspaceDock', () => {
     const resume = screen.getByRole('button', { name: 'Resume' });
     expect(resume).toBeEnabled();
     expect(resume).toHaveAttribute('title', 'Resume');
-    // Green, as starting them is, and round, with no words on it.
-    expect(resume).toHaveClass('bg-action-run-soft', 'size-7.5', 'rounded-full');
+    // The invert primary, as starting them is (no green button on Home), and round, with no words on it.
+    expect(resume).toHaveAttribute('data-variant', 'invert');
+    expect(resume.className).not.toMatch(/action-run/);
+    expect(resume).toHaveClass('size-7.5', 'rounded-full');
     expect(resume).toHaveTextContent('');
   });
 
@@ -329,7 +331,8 @@ describe('WorkspaceDock', () => {
     renderWith([employee({ status: 'ready', control: normalizeWorkflowControlStatus({ generation: 0, state: 'never_started' }, 'w1') })]);
     const start = screen.getByRole('button', { name: 'Start' });
     expect(start).toHaveTextContent('Start');
-    expect(start).toHaveClass('h-7.5', 'bg-action-run-soft');
+    expect(start).toHaveClass('h-7.5');
+    expect(start).toHaveAttribute('data-variant', 'invert');
     fireEvent.click(start);
     expect(actions.startEmployee).toHaveBeenCalledWith('w1', 0);
   });

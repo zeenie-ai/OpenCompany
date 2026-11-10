@@ -139,8 +139,8 @@ before money and deletes".
 
 Colour on Home marks a state or a role, never an action it does not mean
 ([Theme System](./theme_system.md#colour-marks-state-or-role)). An employee's
-main action is the green `run` button only when it starts them (Start, Start
-again, Resume; `PrimaryActionButton`, and the Workspace's round Resume);
+main action is the `invert` primary when it starts them (Start, Start
+again, Resume; `PrimaryActionButton`, and the Workspace's round Resume; never green);
 Stop, Retry reset and connecting what they are missing are neutral: outlines
 above the message box, on a new hire's first-day strip and in the
 Workspace's row, where Stop is a round quiet button. A screen's or card's one
@@ -276,7 +276,7 @@ are is on their page's header, not in the dock.
     has their screen, Needs you, **Live** in red while they work, otherwise
     the status pill's own label (Not started, Stopped, Needs attention);
   - their main action (`useEmployeeControl`): a round Stop while they run
-    and a round green Resume while they are stopped, each named in its
+    and a round Resume (the invert primary) while they are stopped, each named in its
     tooltip, otherwise a small labelled Start, Start again, Connect {app or
     AI model} or Retry reset (`PrimaryActionButton`);
   - Expand and Close.
@@ -860,10 +860,14 @@ sending and drafts belong to the chat (wire and client rules in
   above the message box says what they are doing: the step under way and
   "2/3 · 4s" (the steps finished of those begun, and the time so far),
   opening to the steps' names, or "Waiting for your OK" while a call waits on
-  the owner ([chat_protocol.md](./chat_protocol.md#client)). The work panel
-  above the box (`employee/EmployeeWork.tsx`) leaves a reply under way to the
-  pill and shows the employee's own work: team tasks, scheduled work and
-  waits; its Refresh progress buttons are neutral. A run that failed says so
+  the owner ([chat_protocol.md](./chat_protocol.md#client)). The employee's
+  own work (`employee/EmployeeWork.tsx`: team tasks, scheduled work and
+  waits) shows as the same kind of pill above the box while no reply is
+  under way: the state's mark, its message and "1/3 · 3m 2s", opening to
+  when it last moved and each step with who has it (a list that scrolls). It
+  was a card until 2026-11-10 and crowded the conversation. A lost
+  connection or a failed refresh says so under the pill; its Refresh
+  progress buttons are neutral. A run that failed says so
   where the answer would be ("{Name} didn't pick up this message.", "…took too
   long to answer.", or "{Name} couldn't answer." with the error and its hint),
   also after a reload; a late answer replaces a failure that only said none

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Check, Circle, LoaderCircle, X } from 'lucide-react';
+import { Check, ChevronDown, Circle, Pause, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { RingSpinner } from '@/components/ui/ring-spinner';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { useLaneRun } from '@/features/chat';
 import { useEmployeeDetailQuery } from '../data/employees';
+import { cn } from '@/lib/utils';
 import type { EmployeeSummary, WorkProgress } from '../data/schemas';
 import { JobProgress } from './JobProgress';
 
@@ -28,10 +31,30 @@ function duration(seconds: number): string {
   return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+/** The spinner in the pill's neutral ink, as the chat's live work pill. */
+const SPINNER = 'size-3 border-border-default border-t-fg-default';
+const WORKING = ['running', 'working', 'reviewing', 'stopping', 'delivering'];
+
+/** The mark before a state's text: a spinner while it works, else an icon. */
+function StateMark({ state }: { state: string }) {
+  if (WORKING.includes(state)) return <RingSpinner className={SPINNER} />;
+  const Mark = state === 'done' ? Check : state === 'failed' ? X : state === 'paused' || state === 'cancelled' ? Pause : Circle;
+  return <Mark aria-hidden className="size-3 shrink-0 text-fg-muted" strokeWidth={2.2} />;
+}
+
+/**
+ * The employee's own work as one pill above the message box, like the chat's
+ * live work pill (design handoff chat V2 section 3, "Live work"): the state's
+ * mark, what is going on, the steps finished of those known and how long it
+ * has run ("1/3 · 3m 2s"). It opens to the detail: when it last moved and each
+ * step with who has it, in a list that scrolls. Never a card that crowds the
+ * conversation. A lost connection or a failed refresh says so under the pill.
+ */
 function WorkPanel({ progress, connected, failed, refresh }: {
   progress: WorkProgress; connected: boolean; failed: boolean; refresh: () => void;
 }) {
   const [now, setNow] = useState(Date.now);
+  const [open, setOpen] = useState(false);
   const active = ACTIVE.has(progress.state);
   useEffect(() => {
     if (!active || !connected) return;
@@ -41,47 +64,58 @@ function WorkPanel({ progress, connected, failed, refresh }: {
   const elapsed = age(progress.started_at, now);
   const updated = age(progress.updated_at, now);
   const finished = progress.steps.filter((step) => step.status === 'done').length;
-  // Keep the active step visible without expanding a long history.
-  const current = progress.steps.filter((step) => ['running', 'reviewing', 'waiting', 'stopping'].includes(step.status));
-  const recent = [...current, ...progress.steps.filter((step) => !current.includes(step)).slice(-3)].slice(0, 3);
-  const renderStep = (step: WorkProgress['steps'][number]) => (
-    <li key={step.id} className="flex items-start gap-2 py-1 text-sm">
-      {['running', 'reviewing', 'stopping'].includes(step.status)
-        ? <LoaderCircle aria-hidden className="mt-0.5 size-4 shrink-0 motion-safe:animate-spin text-fg-muted" />
-        : step.status === 'done' ? <Check aria-hidden className="mt-0.5 size-4 shrink-0" />
-          : step.status === 'failed' ? <X aria-hidden className="mt-0.5 size-4 shrink-0" />
-            : <Circle aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-muted" />}
-      <div className="min-w-0 flex-1 break-words">
-        <span>{step.label}</span>
-        <span className="block text-xs text-fg-muted">{step.member ? `${step.member} · ` : ''}{LABELS[step.status] ?? 'Waiting'}</span>
-      </div>
-    </li>
-  );
+  const slow = connected && !failed && active && !['waiting', 'queued', 'stopping'].includes(progress.state) && updated !== null && updated >= 60;
+  const meta = [
+    progress.steps.length > 0 ? `${finished}/${progress.steps.length}` : null,
+    elapsed !== null ? (active ? duration(elapsed) : `${duration(elapsed)} ago`) : null,
+  ].filter(Boolean).join(' · ');
   return (
-    <section aria-label="Employee work progress" className="flex max-h-64 flex-col gap-2 overflow-y-auto rounded-card border border-border-default bg-bg-panel p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="m-0 text-sm font-medium">{connected ? 'Live work' : 'Last known activity'}</h2>
-        {elapsed !== null && <span className="shrink-0 text-xs text-fg-muted">{active ? 'Elapsed' : 'Started'} {duration(elapsed)}{!active && ' ago'}</span>}
-      </div>
-      <p role="status" className="m-0 break-words text-sm">{progress.message}</p>
-      {!connected && <p className="m-0 text-xs text-fg-muted">Connection lost. Updates will resume when you reconnect.</p>}
+    <div className="flex max-w-full flex-col items-center gap-1.5 self-center">
+      <Collapsible asChild open={open} onOpenChange={setOpen}>
+        <section
+          aria-label="Employee work progress"
+          className="flex max-w-full flex-col overflow-hidden rounded-card border border-border-default bg-bg-panel"
+        >
+          <CollapsibleTrigger className="flex h-8.5 max-w-full items-center gap-2 pr-2.5 pl-3 text-xs font-medium text-fg-default hover:bg-bg-hover focus-visible:-outline-offset-2">
+            <StateMark state={progress.state} />
+            <span role="status" className="min-w-0 truncate">{progress.message}</span>
+            {/* Out of the button's name, which would otherwise change every second. */}
+            {meta && <span aria-hidden className="shrink-0 text-fg-muted tabular-nums">{meta}</span>}
+            <ChevronDown
+              aria-hidden
+              strokeWidth={2.2}
+              className={cn('size-3 shrink-0 text-fg-muted transition-transform duration-(--dur-default) motion-reduce:transition-none', open && 'rotate-180')}
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="flex max-h-40 flex-col gap-1 overflow-y-auto border-t border-border-default px-3 pt-2 pb-2.5 text-xs text-fg-muted">
+              <p className="m-0 break-words text-fg-default">{progress.message}</p>
+              {elapsed !== null && <p className="m-0">{active ? 'Elapsed' : 'Started'} {duration(elapsed)}{!active && ' ago'}</p>}
+              {connected && !failed && updated !== null && <p className="m-0">Last activity {updated < 5 ? 'just now' : `${duration(updated)} ago`}</p>}
+              {slow && <p className="m-0">This is taking longer. The last reported step is shown below; no new activity has been reported yet.</p>}
+              {progress.steps.length > 0 && <>
+                <p className="m-0">{finished} of {progress.steps.length}{progress.truncated ? ' shown' : ''} steps finished</p>
+                <ol aria-label="Steps" className="m-0 flex list-none flex-col gap-0.5 p-0">
+                  {progress.steps.map((step) => (
+                    <li key={step.id} className={cn('flex min-h-6 items-center gap-2', WORKING.includes(step.status) && 'text-fg-default')}>
+                      <StateMark state={step.status} />
+                      <span className="min-w-0 truncate">{step.label}</span>
+                      <span className="shrink-0">{step.member ? `${step.member} · ` : ''}{LABELS[step.status] ?? 'Waiting'}</span>
+                    </li>
+                  ))}
+                </ol>
+                {progress.truncated && <p className="m-0">Showing the most recent activity.</p>}
+              </>}
+            </div>
+          </CollapsibleContent>
+        </section>
+      </Collapsible>
+      {!connected && <p className="m-0 text-xs text-fg-muted">Last known activity. Connection lost; updates will resume when you reconnect.</p>}
       {connected && failed && <div className="flex flex-wrap items-center gap-2">
         <p className="m-0 text-xs text-fg-muted">Couldn’t refresh progress. Showing the last update.</p>
         <Button variant="quiet" size="sm" onClick={refresh} className={REFRESH_BUTTON}>Refresh progress</Button>
       </div>}
-      {connected && !failed && updated !== null && <p className="m-0 text-xs text-fg-muted">Last activity {updated < 5 ? 'just now' : `${duration(updated)} ago`}</p>}
-      {connected && !failed && active && !['waiting', 'queued', 'stopping'].includes(progress.state) && updated !== null && updated >= 60 &&
-        <p className="m-0 text-xs text-fg-muted">This is taking longer. The last reported step is shown below; no new activity has been reported yet.</p>}
-      {progress.steps.length > 0 && <>
-        <p className="m-0 text-xs text-fg-muted">{finished} of {progress.steps.length}{progress.truncated ? ' shown' : ''} steps finished</p>
-        <ul aria-label="Current activity" className="m-0 list-none p-0">{recent.map(renderStep)}</ul>
-        {progress.steps.length > recent.length && <details>
-          <summary className="cursor-pointer text-xs text-fg-muted">Show all activity ({progress.steps.length})</summary>
-          <ul aria-label="All activity" className="m-0 list-none p-0">{progress.steps.map(renderStep)}</ul>
-        </details>}
-        {progress.truncated && <p className="m-0 text-xs text-fg-muted">Showing the most recent activity.</p>}
-      </>}
-    </section>
+    </div>
   );
 }
 
