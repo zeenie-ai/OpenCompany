@@ -107,11 +107,13 @@ jobs:
       - name: pytest
         working-directory: server
         shell: bash
+        # --durations ends the log with the slowest test phases, so a slow run
+        # says where its time went (setup counts: a fixture can be the cost).
         run: |
           bun --cwd=pi install --frozen-lockfile
           bun --cwd=pi run build
           uv sync
-          uv run pytest tests/ -v
+          uv run pytest tests/ -v --durations=25
 
   cli-tests:
     name: CLI tests
