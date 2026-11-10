@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 
-import { ActionButton } from '@/components/ui/action-button';
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
@@ -177,28 +177,30 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
         <span>Settings</span>
       </div>
       <div className="flex items-center gap-2">
-        <ActionButton
-          intent="config"
+        {/* Save is the panel's one primary action; Reset and Close are neutral. */}
+        <Button
+          variant="quiet" className="h-8 gap-1.5 border-border-default px-3 font-semibold text-fg-default"
           onClick={handleReset}
           disabled={isSaving}
           title="Reset to default settings"
         >
           <RotateCcw className="h-3 w-3" />
           Reset
-        </ActionButton>
-        <ActionButton
-          intent="run"
+        </Button>
+        <Button
+          variant="invert"
+          className="h-8 gap-1.5 px-3 font-semibold"
           onClick={handleSave}
           disabled={isSaving || !settingsQuery.data}
           title="Save settings"
         >
           <Save className="h-3 w-3" />
           {isSaving ? 'Saving...' : 'Save'}
-        </ActionButton>
-        <ActionButton intent="stop" onClick={onClose} title="Close settings">
+        </Button>
+        <Button variant="quiet" className="h-8 gap-1.5 border-border-default px-3 font-semibold text-fg-default" onClick={onClose} title="Close settings">
           <X className="h-3 w-3" />
           Close
-        </ActionButton>
+        </Button>
       </div>
     </div>
   );
