@@ -114,12 +114,13 @@ named `tsgo` — stopped publishing the day before and must not come back.
 
 - `client/vite.config.js` → extend `build` block:
   - `target: 'es2022'`
-  - `chunkSizeWarningLimit: 850` (down from 1500; the plan said 600, but `vendor-icons` — lucide + lobehub brand SVGs — is ~830 KB on its own, so the ceiling sits just above it and other chunks still trip it)
+  - `chunkSizeWarningLimit: 850` (down from 1500; the plan said 600, but `vendor-icons`, all of lucide-react, is about 630 KB on its own: `lucide:<Name>` icons are looked up by name at run time, so the whole library ships. Other chunks still trip the ceiling)
   - `rollupOptions.output.manualChunks` mapping:
     - `vendor-react`: `react`, `react-dom`, `react-hook-form`, `@hookform/resolvers`
     - `vendor-flow`: `reactflow`
     - `vendor-radix`: `radix-ui` (the single umbrella package; no `@radix-ui/*` scoped entries)
-    - `vendor-icons`: `lucide-react`, `@lobehub/icons`
+    - `vendor-icons`: `lucide-react`
+    - `vendor-brand-icons`: `@lobehub/icons` (about 310 KB; split from `vendor-icons` on 2026-11-10, when the two together reached 937 KB and tripped the ceiling)
     - `vendor-query`: `@tanstack/react-query`, `@tanstack/query-sync-storage-persister`, `@tanstack/react-query-persist-client`, `@lukemorales/query-key-factory`
     - `vendor-markdown`: `react-markdown`, `remark-gfm`, `remark-breaks`, `prismjs`, `react-simple-code-editor`, `@uiw/react-json-view`
     - `vendor-misc`: `idb-keyval`, `fuzzysort`, `cmdk`, `sonner`, `qrcode.react`
@@ -202,7 +203,7 @@ Idempotent on re-runs (compileall only rewrites stale pyc; `bun build` is determ
 ## Verification
 
 1. `bun run --filter react-flow-client typecheck` → <5s, zero errors.
-2. `ANALYZE=1 bun run --filter react-flow-client build` → open `client/dist/stats.html`. Expect: no chunk trips the 850 KB `chunkSizeWarningLimit` (`vendor-icons` is the ~830 KB outlier it is sized for), main < 200 KB gz, `vendor-flow` split.
+2. `ANALYZE=1 bun run --filter react-flow-client build` → open `client/dist/stats.html`. Expect: no chunk trips the 850 KB `chunkSizeWarningLimit` (`vendor-icons`, at about 630 KB, is the largest), main < 200 KB gz, `vendor-flow` split.
 3. `cd server/nodejs && bun run build && NODEJS_EXECUTOR_PORT=<port> bun dist/index.js` → starts on `NODEJS_EXECUTOR_PORT` (required env; no fallback literal) in <100ms; `GET /health` reports `runtime: "bun"`.
 4. `cd server && uv run python -m compileall -q -j 0 services` → plain `__pycache__/*.pyc` present (no `.opt-1.pyc` — nothing loads those).
 5. Cold-start: clean install + `company start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s).

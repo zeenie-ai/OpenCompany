@@ -163,16 +163,24 @@ export default defineConfig(({ mode }) => {
       // Firefox 93+, Safari 15.4+ — within React 19 / Tailwind 4's range.
       target: 'es2022',
       // Lowered from 1500 KB once manualChunks splits out the heavy libs.
-      // 850 KB covers the largest legitimate chunk today (`vendor-icons`,
-      // ~800 KB raw / 210 KB gz from lucide-react + @lobehub/icons brand
-      // SVGs that resist tree-shaking). The cap still catches new chunk
-      // bloat in the entry / route bundles.
+      // 850 KB sits above the largest chunk today: `vendor-icons`, all of
+      // lucide-react at about 630 KB raw, whole because `lucide:<Name>`
+      // icons are looked up by name at run time. The cap still catches new
+      // chunk bloat in the entry / route bundles.
       chunkSizeWarningLimit: 850,
       // Emit sourcemaps only when running the bundle analyzer so the
       // visualizer can attribute bytes to source files accurately.
       // Skipped in normal production builds to keep build time down.
       sourcemap: analyze,
       rollupOptions: {
+        // Rollup warns when a comment mentions `@__PURE__` where it cannot
+        // attach the annotation, then drops the comment. zod 4.6 has two
+        // such comments, in prose. There is nothing to act on in a
+        // dependency; the same warning from src/ still prints.
+        onwarn(warning, warn) {
+          if (warning.code === 'INVALID_ANNOTATION' && warning.id?.includes('node_modules')) return
+          warn(warning)
+        },
         output: {
           // Split heavy npm libs into their own cacheable chunks so the
           // main bundle stays lean and unrelated dependency churn doesn't
@@ -180,7 +188,9 @@ export default defineConfig(({ mode }) => {
           //   vendor-react    — core framework + form runtime
           //   vendor-flow     — reactflow is huge and only canvas pages use it
           //   vendor-radix    — accessibility primitives, used widely
-          //   vendor-icons    — lucide + lobehub brand icons
+          //   vendor-icons    — lucide, the generic UI glyphs
+          //   vendor-brand-icons — the lobehub brand marks; apart from
+          //                     lucide, which changes far more often
           //   vendor-query    — TanStack Query + persistence
           //   vendor-markdown — markdown rendering stack (chat / docs panels)
           //   vendor-three    — WebGL for Normal mode's orb, loaded on demand
@@ -202,7 +212,8 @@ export default defineConfig(({ mode }) => {
             ],
             'vendor-flow': ['reactflow'],
             'vendor-radix': ['radix-ui'],
-            'vendor-icons': ['lucide-react', '@lobehub/icons'],
+            'vendor-icons': ['lucide-react'],
+            'vendor-brand-icons': ['@lobehub/icons'],
             'vendor-query': [
               '@tanstack/react-query',
               '@tanstack/query-sync-storage-persister',

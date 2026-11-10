@@ -308,9 +308,10 @@ ANALYZE=1 bun run vite build
 ```
 
 The `850 KB` chunk-size warning ceiling lives in
-[client/vite.config.js](../client/vite.config.js). `vendor-icons` is
-~830 KB (lucide + lobehub brand SVGs); the limit is set just above so
-real regressions in other chunks fire while the icons baseline doesn't.
+[client/vite.config.js](../client/vite.config.js). `vendor-icons` (all of
+lucide-react) is about 630 KB and `vendor-brand-icons` (lobehub) about
+310 KB; the limit sits above both so real regressions in other chunks fire
+while the icons baseline doesn't.
 
 ### Frontend retry envelope sanity
 
