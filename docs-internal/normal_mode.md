@@ -801,7 +801,7 @@ sending and drafts belong to the chat (wire and client rules in
   the header's status as a dot and a label (Starting… while the hire's own
   start is under way). Until the conversation has a message, and again after
   a Reset empties the thread, the strip also offers their main action when
-  the start did not go ahead (green for Start, Start again or Resume, neutral
+  the start did not go ahead (the `invert` primary for Start, Start again or Resume, neutral
   for the rest), so the line above the box stays away rather than say it
   twice, and under its first row lists their routine on one line from the
   hire's `plan` (`get_employee`), each step's label and title with no role

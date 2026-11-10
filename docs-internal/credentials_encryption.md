@@ -103,7 +103,7 @@ The derived Fernet key lives only in `EncryptionService._fernet` in process memo
 Server startup (main.py lifespan)
     |
     v
-CredentialsDatabase.initialize()  -> creates tables, returns existing or new salt
+CredentialsDatabase.initialize()  -> creates its own three tables (CREDENTIAL_TABLES), returns existing or new salt
     |
     v
 container.encryption_service().initialize(password=API_KEY_ENCRYPTION_KEY, salt=<bytes>)
