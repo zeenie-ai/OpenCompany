@@ -1,7 +1,8 @@
 /**
  * The Normal / Dev switch, shared by the editor toolbar and the Home header
- * (design handoff "Mode toggle"). Normal takes the skill role's green, Dev
- * the agent role's purple, each as the soft chip tint. Switching goes
+ * (design handoff "Mode toggle"). A neutral segmented control: the mode on
+ * show is the raised segment in the foreground colour, the other is muted,
+ * since colour marks state or role and a mode is neither. Switching goes
  * through the shell actions, so the unsaved-work guard and the transition
  * always run. `workflowId`: the workflow Dev opens (Home passes the
  * employee on screen); without one the shell resolves Home's visible employee
@@ -10,11 +11,11 @@
 
 import { Clock, Zap } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { cn } from '@/lib/utils';
 import { useShellMode } from '../../app/ShellModeSwitch';
 import { enterDev, enterNormal } from '../../app/useShellActions';
 
-const ITEM = 'rounded-md data-[state=on]:shadow-none';
+// The picked segment: a raised surface with a hairline, in both themes.
+const ITEM = 'data-[state=on]:border-border-default data-[state=on]:shadow-card';
 
 export function ModeToggle({ className, workflowId }: { className?: string; workflowId?: string }) {
   const mode = useShellMode();
@@ -31,19 +32,13 @@ export function ModeToggle({ className, workflowId }: { className?: string; work
         if (next === 'normal') void enterNormal();
         else if (next === 'dev') void enterDev({ workflowId });
       }}
-      className={cn('rounded-lg bg-bg-elevated p-0.5', className)}
+      className={className}
     >
-      <ToggleGroupItem
-        value="normal"
-        className={cn(ITEM, 'data-[state=on]:border-node-skill-border data-[state=on]:bg-node-skill-soft data-[state=on]:text-node-skill-ink')}
-      >
+      <ToggleGroupItem value="normal" className={ITEM}>
         <Clock aria-hidden />
         Normal
       </ToggleGroupItem>
-      <ToggleGroupItem
-        value="dev"
-        className={cn(ITEM, 'data-[state=on]:border-node-agent-border data-[state=on]:bg-node-agent-soft data-[state=on]:text-node-agent-ink')}
-      >
+      <ToggleGroupItem value="dev" className={ITEM}>
         <Zap aria-hidden />
         Dev
       </ToggleGroupItem>

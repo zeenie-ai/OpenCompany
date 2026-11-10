@@ -31,7 +31,7 @@ function ScreenLoading() {
   return (
     <div className="flex h-screen items-center justify-center bg-background text-foreground">
       <div className="text-center">
-        <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-node-agent" />
+        <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-fg-muted" />
         <p>Loading...</p>
       </div>
     </div>

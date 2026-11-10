@@ -74,7 +74,7 @@ function WorkingLine({ token, onCancel }: { token: string | null; onCancel: () =
   return (
     <div className="flex flex-col gap-1.5 px-0.5 py-1">
       <div className="flex items-center gap-2.5">
-        <RingSpinner className="mx-0.5 size-3.5 border-node-agent-border border-t-node-agent" />
+        <RingSpinner className="mx-0.5 size-3.5 border-border-default border-t-fg-default" />
         <span role="status" className="text-base text-fg-default">
           Writing their setup…
         </span>
@@ -242,7 +242,7 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
       <div className="flex flex-col gap-3.5 rounded-draft border border-border-default bg-bg-panel p-4.5 shadow-float">
         {showHeader && (
           <div className="flex items-center gap-2.5">
-            <MicroLabel className="shrink-0 text-node-agent-ink">New employee</MicroLabel>
+            <MicroLabel className="shrink-0 text-fg-muted">New employee</MicroLabel>
             <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">{job}</span>
             {discardButton}
           </div>
