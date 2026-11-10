@@ -251,9 +251,16 @@ and the onboarding v3 handoff:
   (config); the Web chip and the source and citation numbers (save); an
   approval card's Sending and Sent pill and its dot (run) and a failure's
   frame, header and footer (stop); live dots (red) and the
-  streaming caret; a done step's tick and the copied tick; the hire view's
+  streaming caret; in the chat a done step's tick and the copied tick; the hire view's
   pip, green only while someone is working; a stat's delta and a chart's
   bars.
+- **The setup card and the Get started checklist have no colour** (since
+  2026-11-10): on a new employee's setup card the routine's dots and labels
+  are neutral (`features/home/ui/routine.tsx`), a `tone` in the generated
+  spec is not drawn (`features/home/genui/views.tsx`), the draft's face is a
+  team portrait in a plain ring, and the composer's "Editing the draft" is
+  muted text. The checklist's bar and a done step's disc are ink, and so is
+  a finished step's icon in the Welcome guide's list.
 - **The Welcome guide follows the rule too** (since 2026-11-10): Next and
   Connect an AI model are `invert`, and its labels and notice are neutral.
   Only the demo illustration (`WelcomeDemo`) keeps its own colours, as a
