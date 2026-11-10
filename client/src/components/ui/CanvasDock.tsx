@@ -1,16 +1,28 @@
 /**
- * Docked, resizable workflow workspace — the persistent right-hand viewing
- * surface (Claude-sidebar posture): stays open while working on the graph,
- * auto-opens when content is pushed (canvas_updated -> notifyPushed), and
- * doubles as the ephemeral click-to-preview surface for workspace files.
+ * The editor's Workspace: the dock Home shows, for the open workflow. The
+ * dock itself is shared: the shell (components/workspace/WorkspaceDockShell:
+ * the sliding panel whose left edge drags) and what it shows
+ * (features/home/workspace/WorkspaceView: the row of tabs with the
+ * employee's status, the Browser, Canvas and Mobile views, the floating
+ * status pill, Take over and Hand back). Every workflow is an employee, so
+ * the open one's summary gives the status.
  *
- * Two modes (canvasDockStore):
- * - 'node': renders the selected Canvas node's durable board.
- * - 'ephemeral': renders one transient item that lives in no board.
+ * This file is what the editor adds:
+ * - its nodes come from the canvas as it is now (a Browser, Canvas or phone
+ *   node shows before a save), with a picker when there are several Canvas
+ *   nodes;
+ * - the Canvas tab doubles as the click-to-preview surface for workspace
+ *   files (canvasDockStore `ephemeral` mode, with Back to the board);
+ * - it opens when content is pushed (canvas_updated -> notifyPushed) or an
+ *   agent asks for help in its browser;
+ * - Dev mode's extras in the Browser and phone views (WorkspaceView `dev`),
+ *   and the note about a slow model at its foot.
+ * The workflow's Start, Stop and Resume are in the toolbar, so the row has
+ * no main action.
  */
 
-import React, { useMemo, useState, useSyncExternalStore } from 'react';
-import { Maximize2, Minimize2, Monitor, PanelRightClose, Undo2 } from 'lucide-react';
+import React, { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { Undo2 } from 'lucide-react';
 import type { Node } from 'reactflow';
 import { toast } from 'sonner';
 
@@ -23,25 +35,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { usePanelResize } from '../../hooks/usePanelResize';
+import { useEmployeeDetailQuery, useEmployeeLifecycle } from '../../features/home/data/employees';
+import { WorkspaceView } from '../../features/home/workspace/WorkspaceView';
 import {
   useCanvasBoardQuery,
   useCanvasRemove,
 } from '../../hooks/useCanvasBoard';
 import { resolveNodeDescription } from '../../lib/nodeSpec';
-import { useAppStore } from '../../store/useAppStore';
-import {
-  DOCK_MAX_WIDTH,
-  DOCK_MIN_WIDTH,
-  useCanvasDockStore,
-} from '../../stores/canvasDockStore';
-import CanvasContent from '../parameterPanel/canvas/CanvasContent';
-import BrowserWorkspace from '../browser/BrowserWorkspace';
-import { WorkspaceTabs } from '../workspace/WorkspaceTabs';
-import { useSurfaceRunning } from '../workspace/activity';
-import { workspaceNodes } from '../workspace/descriptors';
-import MobileWorkspace from '../mobile/MobileWorkspace';
 import { queryClient } from '../../lib/queryClient';
+import { useAppStore } from '../../store/useAppStore';
+import { useCanvasDockStore } from '../../stores/canvasDockStore';
+import CanvasContent from '../parameterPanel/canvas/CanvasContent';
+import { workspaceNodes } from '../workspace/descriptors';
+import { dockWidth } from '../workspace/dockSize';
+import type { Notify } from '../workspace/surface';
+import { WorkspaceDockShell } from '../workspace/WorkspaceDockShell';
 import { LlmWaitNote } from './LlmWaitNote';
 
 interface CanvasDockProps {
@@ -54,6 +62,12 @@ const isCanvasNode = (node: Node): boolean =>
 
 const nodeLabel = (node: Node): string =>
   (node.data?.label as string | undefined) || node.type || node.id;
+
+/** The editor says what happened in its toasts. */
+const notify: Notify = (message, tone) => {
+  if (tone === 'error') toast.error(message);
+  else toast.success(message);
+};
 
 const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
   const open = useCanvasDockStore((s) => s.open);
@@ -74,11 +88,20 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
 
   const workflowId = useAppStore((s) => s.currentWorkflow?.id);
 
+  // Every workflow is an employee: the open one's summary is the dock's
+  // status, pill and Take over. Read while the dock is open, and again when
+  // the server says they changed (Home's own listener is not mounted here).
+  useEmployeeLifecycle();
+  const summary = useEmployeeDetailQuery(open && workflowId ? workflowId : null);
+  // None for a workflow not saved yet (no id, or the server knows none);
+  // otherwise not known until the server answers, also while a read fails.
+  const employee = workflowId ? summary.data : null;
+
   // Schema hydration can finish after the graph mounts. Subscribe to hints
   // so newly available Browser/Canvas definitions appear without a graph edit.
   const hintsVersion = useSyncExternalStore(
-    (notify) => queryClient.getQueryCache().subscribe((event) => {
-      if (event.query.queryKey[0] === 'nodeSpec') notify();
+    (notifyChange) => queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === 'nodeSpec') notifyChange();
     }),
     () => nodes.map((node) => {
       const hints = resolveNodeDescription(node.type || '')?.uiHints;
@@ -92,15 +115,11 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
     .map((node) => ({ node_id: node.id, label: nodeLabel(node) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hintsVersion tracks external schema hydration.
     [nodes, hintsVersion]);
-  const shownWidth = wide ? Math.min(1100, window.innerWidth - 160) : Math.min(widthPx, window.innerWidth - 40);
-  const mobileNodes = workspaceNodes(nodes).filter((node) => node.kind === 'mobile');
-  // A dot on the Browser and Mobile tabs while one of their nodes runs.
-  const browserIds = useMemo(() => browserNodes.map((node) => node.node_id), [browserNodes]);
-  const mobileKey = mobileNodes.map((node) => node.node_id).join('|');
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the ids, not the array rebuilt each render.
-  const mobileIds = useMemo(() => mobileNodes.map((node) => node.node_id), [mobileKey]);
-  const browserRunning = useSurfaceRunning(workflowId, browserIds);
-  const mobileRunning = useSurfaceRunning(workflowId, mobileIds);
+  // The same list while its nodes and their names stay the same, not one rebuilt each render.
+  const phoneNodes = workspaceNodes(nodes).filter((node) => node.kind === 'mobile');
+  const mobileKey = phoneNodes.map((node) => `${node.node_id}\n${node.label}`).join('\n');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the ids and labels.
+  const mobileNodes = useMemo(() => phoneNodes, [mobileKey]);
 
   // A stale selection (workflow switch, node deleted) falls back to the
   // first Canvas node rather than a dead board.
@@ -118,145 +137,104 @@ const CanvasDock: React.FC<CanvasDockProps> = ({ nodes, flushCanvas }) => {
   );
   const removeItem = useCanvasRemove(workflowId, effectiveNodeId);
 
-  const resize = usePanelResize({
-    axis: 'x',
-    cursor: 'ew-resize',
-    onMove: (deltaPx, startValue) => {
-      // The handle sits on the dock's LEFT edge — dragging left widens.
-      // Ceiling is viewport-relative and deliberately generous: the dock may
-      // take nearly the whole window; the 160px remainder keeps the handle
-      // and a sliver of canvas reachable to drag it back.
-      const viewportCap = Math.min(DOCK_MAX_WIDTH, window.innerWidth - 160);
-      setWide(false);
-      setWidth(
-        Math.min(viewportCap, Math.max(DOCK_MIN_WIDTH, startValue - deltaPx)),
-      );
-    },
-    getStartValue: () => shownWidth,
-  });
+  // A drag sets the width, and with it ends Expand.
+  const onWidth = useCallback((px: number) => {
+    setWide(false);
+    setWidth(px);
+  }, [setWidth]);
 
   return (
-    <div
-      className={`relative flex h-full shrink-0 overflow-hidden bg-bg-panel ${
-        open ? 'border-l border-border-default' : ''
-      } ${resize.isResizing ? '[transition:none]' : 'transition-[width] duration-300'}`}
-      style={{ width: open ? shownWidth : 0 }}
-      aria-hidden={!open}
-      inert={!open}
-      role="complementary"
-      aria-label="Workspace"
-    >
-      <div
-        className={`h-full w-1.5 shrink-0 cursor-ew-resize transition-colors ${
-          resize.isResizing
-            ? 'bg-node-agent transition-none'
-            : 'bg-border hover:bg-node-agent-soft'
-        }`}
-        onMouseDown={resize.start}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize workspace"
-      />
-
-      {/* pointer-events-none while dragging: an embedded iframe (web/PDF
-          items) would otherwise swallow the document mousemove and freeze
-          the resize the moment the cursor crosses it. */}
-      <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col ${
-          resize.isResizing ? 'pointer-events-none' : ''
-        }`}
-      >
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border-default px-3">
-          <Monitor className="h-4 w-4 shrink-0 text-fg-muted" />
-          <span className="min-w-0 flex-1 text-sm font-semibold text-fg-default">Workspace</span>
-          <Button variant="ghost" size="icon-sm" onClick={() => setWide(!wide)} aria-label={wide ? 'Restore size' : 'Expand'}>
-            {wide ? <Minimize2 /> : <Maximize2 />}
-          </Button>
-          <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close workspace"><PanelRightClose /></Button>
-        </div>
-        {open && <WorkspaceTabs
-          tab={tab}
-          onTabChange={setTab}
-          activity={{ browser: browserRunning, android: mobileRunning }}
-          browser={<BrowserWorkspace key={workflowId ?? 'unsaved'} workflowId={workflowId} nodes={browserNodes} visible={open && tab === 'browser'} flushCanvas={flushCanvas} />}
-          android={<MobileWorkspace key={workflowId ?? 'unsaved'} workflowId={workflowId} nodes={mobileNodes} visible={open && tab === 'android'}
-            canvasNodeId={effectiveNodeId ?? null} notify={(message, tone) => (tone === 'error' ? toast.error(message) : toast.success(message))} />}
-          board={<>
-        <div className="mb-2 flex shrink-0 items-center gap-2">
-          {mode === 'ephemeral' ? (
-            <>
-              <Badge variant="secondary" className="shrink-0">Preview</Badge>
-              <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
-                {ephemeralItem?.title || ephemeralItem?.ref?.filename || ''}
-              </span>
-              {canvasNodes.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={backToNode}
-                  className="shrink-0"
+    <WorkspaceDockShell open={open} width={dockWidth(widthPx, wide)} onWidth={onWidth}>
+      <WorkspaceView
+        workflowId={workflowId}
+        employee={employee}
+        browserNodes={browserNodes}
+        mobileNodes={mobileNodes}
+        canvasNodeId={effectiveNodeId}
+        tab={tab}
+        onTabChange={setTab}
+        visible={open}
+        wide={wide}
+        onToggleWide={() => setWide((value) => !value)}
+        onClose={close}
+        notify={notify}
+        dev
+        flushCanvas={flushCanvas}
+        board={<>
+          {/* The editor's: which board this is, or that it is a file's preview. */}
+          <div className="mb-2 flex shrink-0 items-center gap-2">
+            {mode === 'ephemeral' ? (
+              <>
+                <Badge variant="secondary" className="shrink-0">Preview</Badge>
+                <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+                  {ephemeralItem?.title || ephemeralItem?.ref?.filename || ''}
+                </span>
+                {canvasNodes.length > 0 && (
+                  <Button
+                    variant="quiet"
+                    size="sm"
+                    onClick={backToNode}
+                    className="shrink-0 border-border-default text-fg-default"
+                  >
+                    <Undo2 className="h-3.5 w-3.5" /> Back
+                  </Button>
+                )}
+              </>
+            ) : canvasNodes.length > 1 ? (
+              <div className="min-w-0 flex-1">
+                <Select
+                  value={effectiveNodeId ?? undefined}
+                  onValueChange={selectNode}
                 >
-                  <Undo2 className="h-3.5 w-3.5" /> Back
-                </Button>
-              )}
-            </>
-          ) : canvasNodes.length > 1 ? (
-            <div className="min-w-0 flex-1">
-              <Select
-                value={effectiveNodeId ?? undefined}
-                onValueChange={selectNode}
-              >
-                <SelectTrigger className="h-7 text-xs">
-                  <SelectValue placeholder="Select canvas node" />
-                </SelectTrigger>
-                <SelectContent>
-                  {canvasNodes.map((node) => (
-                    <SelectItem key={node.id} value={node.id}>
-                      {nodeLabel(node)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
-              {canvasNodes[0] ? nodeLabel(canvasNodes[0]) : ''}
-            </span>
-          )}
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue placeholder="Select canvas node" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {canvasNodes.map((node) => (
+                      <SelectItem key={node.id} value={node.id}>
+                        {nodeLabel(node)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">
+                {canvasNodes[0] ? nodeLabel(canvasNodes[0]) : ''}
+              </span>
+            )}
+          </div>
 
-        </div>
-
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {mode === 'ephemeral' && ephemeralItem ? (
-            <CanvasContent items={[ephemeralItem]} workflowId={workflowId} />
-          ) : !effectiveNodeId ? (
-            <div className="flex flex-1 items-center justify-center p-4 text-center text-sm text-fg-muted">
-              No Canvas node in this workflow yet — add one from the palette,
-              or open a file&apos;s preview and choose &quot;Open in side
-              panel&quot;.
-            </div>
-          ) : (
-            <CanvasContent
-              items={board.data?.items ?? []}
-              workflowId={workflowId}
-              nodeId={effectiveNodeId}
-              focus={focus?.nodeId === effectiveNodeId ? focus : null}
-              followLatestDefault={followMode}
-              onFollowLatestChange={setFollowMode}
-              onRemove={(itemId) =>
-                removeItem.mutate(itemId, {
-                  onError: (error) => toast.error(error.message),
-                })
-              }
-              emptyHint="Nothing here yet — agents push content with the canvas tool, or wire a node into the Canvas input."
-            />
-          )}
-        </div>
-          </>}
-        />}
-        {open && <LlmWaitNote workflowId={workflowId} className="shrink-0 border-t border-border-default px-3 py-2" />}
-      </div>
-    </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {mode === 'ephemeral' && ephemeralItem ? (
+              <CanvasContent items={[ephemeralItem]} workflowId={workflowId} />
+            ) : !effectiveNodeId ? (
+              <div className="flex flex-1 items-center justify-center p-4 text-center text-sm text-fg-muted">
+                No Canvas node in this workflow yet — add one from the palette,
+                or open a file&apos;s preview and choose &quot;Open in side
+                panel&quot;.
+              </div>
+            ) : (
+              <CanvasContent
+                items={board.data?.items ?? []}
+                workflowId={workflowId}
+                nodeId={effectiveNodeId}
+                focus={focus?.nodeId === effectiveNodeId ? focus : null}
+                followLatestDefault={followMode}
+                onFollowLatestChange={setFollowMode}
+                onRemove={(itemId) =>
+                  removeItem.mutate(itemId, {
+                    onError: (error) => toast.error(error.message),
+                  })
+                }
+                emptyHint="Nothing here yet — agents push content with the canvas tool, or wire a node into the Canvas input."
+              />
+            )}
+          </div>
+        </>}
+      />
+      {open && <LlmWaitNote workflowId={workflowId} className="shrink-0 border-t border-border-default px-3 py-2" />}
+    </WorkspaceDockShell>
   );
 };
 

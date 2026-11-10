@@ -37,7 +37,7 @@ export function PhoneActivity({ task }: { task?: Record<string, unknown> | null 
       </section>}
       <p className="m-0 text-fg-muted" title="An engine step may include several phone actions.">Engine step {Number(task.steps || 0)} / {Number(task.max_steps || 0)}</p>
       {!ended && <p className="m-0" role="status">Current phase: {seconds(task.phase_started_at, now)}s · Last activity: {quiet}s ago</p>}
-      {!ended && quiet >= 30 && <p className="m-0 text-amber-600">No new activity for {quiet}s. The last reported phase is shown above. This may be a slow request; it does not confirm the task is stuck. Use “Use phone” to take control.</p>}
+      {!ended && quiet >= 30 && <p className="m-0 text-warning">No new activity for {quiet}s. The last reported phase is shown above. This may be a slow request; it does not confirm the task is stuck. Take over to use the phone yourself.</p>}
       {ended && task.error_code != null && <p className="m-0 text-destructive">Stopped during {String(task.phase || 'startup')} · {String(task.error_code)}</p>}
       {!!plan.length && <details aria-label="Android task plan">
         <summary className="cursor-pointer font-medium">Plan · {plan.filter((item) => item.status === 'success').length} / {plan.length} done</summary>

@@ -33,6 +33,6 @@ panel retains the latest 40 events: model requests/responses and actual device o
 Completed operations include duration. The last task remains visible after completion,
 failure, or cancellation until another task runs; history is in memory and clears on restart.
 A 30-second quiet period shows a notice, not a claim that the engine is stuck. Use the last
-phase to distinguish a model wait from device I/O; take manual control using Use phone if needed.
+phase to distinguish a model wait from device I/O; take manual control using Take over if needed.
 The panel is outside the phone canvas and hidden in full-screen mode. Activity contains
 operational summaries, never private model reasoning, typed text, URLs, or prompt content.

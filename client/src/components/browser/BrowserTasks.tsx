@@ -7,6 +7,9 @@ import { CreationError, createSavedGraphResource } from '@/services/agentCreatio
 import { queryClient } from '@/lib/queryClient';
 import { EMPLOYEES_QUERY_KEY, employeeDetailKey } from '@/features/home/data/employeeCache';
 
+/** A neutral outline, like the buttons of the browser above it. */
+const SECONDARY = { variant: 'quiet', className: 'border-border-default text-fg-default' } as const;
+
 interface Agent { node_id: string; label: string }
 interface Task {
   invocation_id: string; submission_id: string; node_id: string; prompt: string; status: string;
@@ -117,14 +120,14 @@ export default function BrowserTasks({ workflowId, browserNodeId, visible, onBro
 
   if (agents === null) return <section aria-label="Browser AI tasks" className="shrink-0 border-t border-border-default px-3 py-2 text-xs text-fg-muted">
     <p>{error || 'Loading Browser AI Agent…'}</p>
-    {error && <Button size="sm" variant="outline" onClick={() => { setError(''); void discover().catch(() => setError('Browser tasks are temporarily unavailable.')); }}>Retry task connection</Button>}
+    {error && <Button size="sm" {...SECONDARY} onClick={() => { setError(''); void discover().catch(() => setError('Browser tasks are temporarily unavailable.')); }}>Retry task connection</Button>}
   </section>;
   return <section aria-label="Browser AI tasks" className="shrink-0 border-t border-border-default bg-bg-panel px-3 py-2 text-xs">
-    {!agentId ? <div className="flex items-center justify-between gap-3"><span className="text-fg-muted">{needsPrivateBrowser ? 'This agent needs its own Browser profile. Sign in again after creating it.' : 'Give this browser a task with a Browser AI Agent.'}</span><Button size="sm" variant="outline" disabled={busy} onClick={() => void addAgent(needsPrivateBrowser)}>{busy ? 'Adding…' : needsPrivateBrowser ? 'Create separate Browser' : 'Add Browser AI Agent'}</Button></div> : <>
+    {!agentId ? <div className="flex items-center justify-between gap-3"><span className="text-fg-muted">{needsPrivateBrowser ? 'This agent needs its own Browser profile. Sign in again after creating it.' : 'Give this browser a task with a Browser AI Agent.'}</span><Button size="sm" {...SECONDARY} disabled={busy} onClick={() => void addAgent(needsPrivateBrowser)}>{busy ? 'Adding…' : needsPrivateBrowser ? 'Create separate Browser' : 'Add Browser AI Agent'}</Button></div> : <>
       {agents.length > 1 && <select aria-label="Browser AI Agent" value={agentId} onChange={(event) => setSelected(event.target.value)} className="mb-2 w-full rounded border border-border-default bg-bg-panel p-1">{agents.map((agent) => <option key={agent.node_id} value={agent.node_id}>{agent.label || 'Browser AI Agent'}</option>)}</select>}
       <form className="flex items-end gap-2" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <textarea aria-label="Browser task" placeholder="Describe a task for this browser…" maxLength={20000} rows={2} className="min-w-0 flex-1 resize-y rounded border border-border-default bg-bg-panel p-2 outline-none focus-visible:ring-2 focus-visible:ring-ring" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={busy} />
-        <Button type="submit" size="sm" disabled={busy || !prompt.trim()}>{busy ? 'Submitting…' : 'Run task'}</Button>
+        <Button type="submit" size="sm" variant="invert" disabled={busy || !prompt.trim()}>{busy ? 'Submitting…' : 'Run task'}</Button>
       </form>
       <button type="button" className="mt-2 text-fg-muted hover:text-fg-default" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>Recent tasks{items.some((item) => active.has(item.status)) ? ' · task in progress' : ''}</button>
       {expanded && <div className="mt-2 max-h-60 space-y-2 overflow-y-auto">
@@ -137,7 +140,7 @@ export default function BrowserTasks({ workflowId, browserNodeId, visible, onBro
           {task.result?.error && <p className="mt-2 text-destructive">{task.result.error}</p>}
           {task.result?.artifacts?.map((file) => file.url?.startsWith('/api/') ? <a key={file.path} href={buildApiUrl(file.url)} download={file.filename} className="mt-1 block underline">{file.filename}</a> : null)}
         </article>)}
-        {cursor && <Button size="sm" variant="outline" onClick={() => void history(cursor).catch(() => setError('Could not load older tasks.'))}>Load older tasks</Button>}
+        {cursor && <Button size="sm" {...SECONDARY} onClick={() => void history(cursor).catch(() => setError('Could not load older tasks.'))}>Load older tasks</Button>}
       </div>}
     </>}
     {error && <p role="alert" className="mt-2 text-destructive">{error}</p>}

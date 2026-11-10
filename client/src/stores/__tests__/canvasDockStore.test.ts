@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CanvasItem } from '../../lib/canvasBoard';
 import { useCanvasDockStore } from '../canvasDockStore';
+
+const PREFS_KEY = 'canvas_dock_prefs_v1';
 
 const ephemeral: CanvasItem = {
   id: 'ephemeral-x',
@@ -18,7 +20,7 @@ const ephemeral: CanvasItem = {
 const resetStore = () =>
   useCanvasDockStore.setState({
     open: false,
-    widthPx: 380,
+    widthPx: 460,
     autoOpen: true,
     followMode: false,
     tab: 'board',
@@ -94,32 +96,67 @@ describe('canvasDockStore prefs', () => {
     resetStore();
   });
 
-  it('persists open/width/autoOpen/followMode and clamps width', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('persists open/width/autoOpen/followMode and keeps a dragged width inside the dock’s limits', () => {
+    vi.stubGlobal('innerWidth', 1280);
+    // The dock's own limits (components/workspace/dockSize), as on Home: the
+    // window less 420px at the widest, 360px at the narrowest, whole pixels.
     useCanvasDockStore.getState().setWidth(5000);
-    expect(useCanvasDockStore.getState().widthPx).toBe(4000);
+    expect(useCanvasDockStore.getState().widthPx).toBe(860);
+    useCanvasDockStore.getState().setWidth(512.6);
+    expect(useCanvasDockStore.getState().widthPx).toBe(513);
     useCanvasDockStore.getState().setWidth(10);
-    expect(useCanvasDockStore.getState().widthPx).toBe(280);
+    expect(useCanvasDockStore.getState().widthPx).toBe(360);
 
     useCanvasDockStore.getState().toggle();
     useCanvasDockStore.getState().setFollowMode(true);
 
-    const raw = localStorage.getItem('canvas_dock_prefs_v1');
+    const raw = localStorage.getItem(PREFS_KEY);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw as string);
-    expect(parsed).toMatchObject({ open: true, widthPx: 280, followMode: true });
+    expect(parsed).toMatchObject({ open: true, widthPx: 360, followMode: true });
     // Session-only fields never persist.
     expect(parsed).not.toHaveProperty('selectedNodeId');
     expect(parsed).not.toHaveProperty('ephemeralItem');
   });
 
   it('falls back to defaults on corrupt stored prefs', async () => {
-    localStorage.setItem('canvas_dock_prefs_v1', '{not json');
+    localStorage.setItem(PREFS_KEY, '{not json');
     vi.resetModules();
     const fresh = await import('../canvasDockStore');
     const state = fresh.useCanvasDockStore.getState();
     expect(state.open).toBe(false);
-    expect(state.widthPx).toBe(380);
+    expect(state.widthPx).toBe(460);
     expect(state.autoOpen).toBe(true);
+  });
+
+  it.each([
+    // Inside the limits, the earlier dock's 380px default among them: kept.
+    [360, 360],
+    [380, 380],
+    [4000, 4000],
+    // Outside them (the earlier dock went down to 280px), or no number at all.
+    [300, 460],
+    [359, 460],
+    [4001, 460],
+    ['wide', 460],
+  ])('restores a stored width of %s as %spx, and the other fields as stored', async (stored, widthPx) => {
+    localStorage.setItem(
+      PREFS_KEY,
+      JSON.stringify({ open: true, widthPx: stored, autoOpen: false, followMode: true, tab: 'browser' }),
+    );
+    vi.resetModules();
+    const fresh = await import('../canvasDockStore');
+    expect(fresh.useCanvasDockStore.getState()).toMatchObject({
+      open: true,
+      widthPx,
+      autoOpen: false,
+      followMode: true,
+      tab: 'browser',
+    });
   });
 
   it('showEphemeral opens the dock and backToNode returns to the board', () => {

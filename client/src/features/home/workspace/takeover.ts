@@ -2,7 +2,8 @@
  * Take over (design handoff "Workspace panel"): the owner takes the screen
  * the Workspace shows (Browser or Mobile) and the employee stops while they
  * use it; Hand back gives that screen back and, when Take over stopped them,
- * resumes them.
+ * resumes them. The same on Home and in the editor, where the employee is
+ * the open workflow.
  *
  * Take over claims the screen first, so the employee never acts on it again
  * once the owner has it, and the owner is in control from that moment. Then
@@ -28,19 +29,19 @@
  * What happened is kept in homeStore (`takeovers`, by employee): the tab
  * whose screen was taken, the way to give it back, and Take over's Stop. So
  * Hand back gives back the screen that was taken and knows whether to resume
- * them, even after the dock was closed or moved to another tab or employee.
- * Taking a screen or handing it back is `busy` per employee too
- * (`takeoverBusy`), since one dock serves them all: a Hand back that waits
- * for a long drain never holds another employee's Take over.
+ * them, even after the dock was closed or moved to another tab or employee,
+ * or the owner went from Home to the editor or back. Taking a screen or
+ * handing it back is `busy` per employee too (`takeoverBusy`), since one
+ * dock serves them all: a Hand back that waits for a long drain never holds
+ * another employee's Take over.
  */
 
 import { mergeWorkflowControlStatus, useWebSocketActions } from '@/contexts/WebSocketContext';
-import type { SurfaceControl } from '@/components/workspace/surface';
+import type { Notify, SurfaceControl } from '@/components/workspace/surface';
 import { presentEmployee } from '../data/presentation';
 import type { EmployeeSummary } from '../data/schemas';
 import { controlErrorMessage } from '../employee/useEmployeeControl';
 import { useHomeStore, type WorkspaceTab } from '../state/homeStore';
-import { pillToast } from '../ui/pillToast';
 
 export interface TakeOver {
   /** The owner has this employee's screen. */
@@ -54,24 +55,32 @@ export interface TakeOver {
   handBack: () => Promise<void>;
 }
 
-/** `tab`: the Workspace tab on show; `surface`: its screen, or null on the
- *  Canvas tab. */
-export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surface: () => SurfaceControl | null): TakeOver {
+/** `employee`: whose screen it is; null where there is no one or they are
+ *  not known yet (the editor's unsaved workflow, or its summary still being
+ *  read), when nothing is taken. `tab`: the Workspace tab on
+ *  show; `surface`: its screen, or null on the Canvas tab. `notify`: says
+ *  what happened, the way the screen hosting the Workspace does. */
+export function useTakeOver(
+  employee: EmployeeSummary | null,
+  tab: WorkspaceTab,
+  surface: () => SurfaceControl | null,
+  notify: Notify,
+): TakeOver {
   const { pauseWorkflow, resumeWorkflow } = useWebSocketActions();
-  const mine = useHomeStore((s) => s.takeovers[employee.workflow_id]);
+  const id = employee?.workflow_id ?? '';
+  const mine = useHomeStore((s) => s.takeovers[id]);
   const setTakeover = useHomeStore((s) => s.setTakeover);
-  const busy = useHomeStore((s) => Boolean(s.takeoverBusy[employee.workflow_id]));
+  const busy = useHomeStore((s) => Boolean(s.takeoverBusy[id]));
   const setBusy = useHomeStore((s) => s.setTakeoverBusy);
-  const busyNow = (id: string) => Boolean(useHomeStore.getState().takeoverBusy[id]);
+  const busyNow = () => Boolean(useHomeStore.getState().takeoverBusy[id]);
 
   const takeOver = async (onTaken?: () => void) => {
     const screen = surface();
-    const id = employee.workflow_id;
-    if (!screen || busyNow(id)) return;
+    if (!employee || !screen || busyNow()) return;
     setBusy(id, true);
     const giveBack = await screen.claim().finally(() => setBusy(id, false));
     if (!giveBack) {
-      pillToast('Couldn’t take the screen. Try again.', { tone: 'error' });
+      notify('Couldn’t take the screen. Try again.', 'error');
       return;
     }
     // Taken again after it let go: they still wait, on the Stop they had.
@@ -85,7 +94,7 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
     const stop = presentEmployee(employee).primary.kind === 'pause' ? pauseWorkflow(id, employee.control.revision) : undefined;
     setTakeover(id, { screen: tab, giveBack, stop });
     onTaken?.();
-    pillToast(`You have control — ${employee.name} will wait`);
+    notify(`You have control — ${employee.name} will wait`, 'success');
     if (!stop) return;
     try {
       await stop;
@@ -96,13 +105,12 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
       now.giveBack();
       setTakeover(id, null);
       if (error instanceof Error && error.message === 'workflow_control_superseded') return;
-      pillToast(controlErrorMessage(error), { tone: 'error' });
+      notify(controlErrorMessage(error), 'error');
     }
   };
 
   const handBack = async () => {
-    const id = employee.workflow_id;
-    if (!mine || busyNow(id)) return;
+    if (!employee || !mine || busyNow()) return;
     setBusy(id, true);
     // The screen first, so the call the employee waits in can go on.
     mine.giveBack();
@@ -116,10 +124,10 @@ export function useTakeOver(employee: EmployeeSummary, tab: WorkspaceTab, surfac
         while (control.state === 'pausing') control = await pauseWorkflow(id, control.revision);
         await resumeWorkflow(id, control.revision);
       }
-      pillToast(`Handed back to ${employee.name}`);
+      notify(`Handed back to ${employee.name}`, 'success');
     } catch (error) {
       if (error instanceof Error && error.message === 'workflow_control_superseded') return;
-      pillToast(controlErrorMessage(error), { tone: 'error' });
+      notify(controlErrorMessage(error), 'error');
     } finally {
       setBusy(id, false);
     }

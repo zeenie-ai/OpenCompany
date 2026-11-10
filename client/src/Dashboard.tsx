@@ -1298,9 +1298,10 @@ const DashboardContent: React.FC = () => {
               )}
             </div>
 
-            {/* Docked Canvas sidebar — persistent content viewer at the
-                rightmost edge. Owns its own state (canvasDockStore);
-                auto-opens on canvas_updated for the current workflow. */}
+            {/* The Workspace dock, the one Home shows, at the rightmost
+                edge, for the open workflow. Owns its own state
+                (canvasDockStore); auto-opens on canvas_updated for the
+                current workflow. Under 1100px it lies over this box. */}
             <CanvasDock nodes={nodes} flushCanvas={flushCanvas} />
           </div>
         </div>

@@ -90,7 +90,7 @@ export default function BrowserLoginBindings({ visible, profiles }: {
       <h3 className="m-0 text-sm font-medium">1Password website logins</h3>
       {!draft && <ActionButton intent="secret" disabled={!isReady || busy} onClick={() => { setError(''); setDraft(empty()); }}>Add website login</ActionButton>}
     </div>
-    <p className="m-0 text-xs text-muted-foreground">Save username and password field references using vault and item IDs. The browser reads credentials privately when an approved login needs them. Multi-step login and MFA use Take control.</p>
+    <p className="m-0 text-xs text-muted-foreground">Save username and password field references using vault and item IDs. The browser reads credentials privately when an approved login needs them. Multi-step login and MFA use Take over.</p>
     <OnePasswordSetup visible={visible} />
     {!isReady ? <p className="m-0 text-xs text-muted-foreground">Reconnect to manage website logins.</p>
       : bindings.isPending ? <Loader2 aria-label="Loading website logins" className="size-4 animate-spin text-muted-foreground" />

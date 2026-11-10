@@ -622,7 +622,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
           {/* The node's live browser, above its settings. */}
           {isBrowserNode && (
             <div className="mb-4 flex h-90 min-h-0 flex-col overflow-hidden rounded-md border border-border-default">
-              <BrowserWorkspace workflowId={currentWorkflow?.id} nodes={[{ node_id: nodeId, label: 'Browser' }]} />
+              <BrowserWorkspace workflowId={currentWorkflow?.id} nodes={[{ node_id: nodeId, label: 'Browser' }]} dev />
             </div>
           )}
           {/* Parameters Container */}

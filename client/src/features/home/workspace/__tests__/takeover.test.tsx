@@ -1,20 +1,24 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   pauseWorkflow: vi.fn(),
   resumeWorkflow: vi.fn(),
-  pillToast: vi.fn(),
+  /** The host's way of saying what happened (Home: the pill toast; the editor: a toast). */
+  notify: vi.fn(),
 }));
 vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/contexts/WebSocketContext')>()),
   useWebSocketActions: () => mocks,
 }));
-vi.mock('../../ui/pillToast', () => ({ pillToast: mocks.pillToast }));
+// Take over says nothing through Home's toast itself: every message goes to
+// `notify` (checked after each test).
+vi.mock('../../ui/pillToast', () => ({ pillToast: vi.fn() }));
 
 import { normalizeWorkflowControlStatus, type WorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { parseEmployee } from '../../data/schemas';
 import { useHomeStore } from '../../state/homeStore';
+import { pillToast } from '../../ui/pillToast';
 import { useTakeOver } from '../takeover';
 
 const status = (state: string, revision: number) => normalizeWorkflowControlStatus({ generation: 1, state, revision }, 'w1');
@@ -40,7 +44,7 @@ function deferred<T>() {
 function takeOverHook() {
   const giveBack = vi.fn();
   const screen = { claim: vi.fn(async () => giveBack) };
-  const hook = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen), { initialProps: { employee: maya() } });
+  const hook = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen, mocks.notify), { initialProps: { employee: maya() } });
   return { ...hook, giveBack, screen };
 }
 
@@ -49,6 +53,10 @@ beforeEach(() => {
   useHomeStore.setState({ takeovers: {}, takeoverBusy: {} });
   mocks.pauseWorkflow.mockReset().mockResolvedValue(status('paused', 5));
   mocks.resumeWorkflow.mockReset().mockResolvedValue(status('running', 6));
+});
+
+afterEach(() => {
+  expect(pillToast).not.toHaveBeenCalled();
 });
 
 describe('Hand back lifecycle recovery', () => {
@@ -61,10 +69,10 @@ describe('Hand back lifecycle recovery', () => {
       const giveBack = vi.fn();
       const screen = { claim: vi.fn(async () => giveBack) };
       mocks.resumeWorkflow.mockRejectedValue(new Error(error));
-      const { result } = renderHook(() => useTakeOver(employee, 'browser', () => screen));
+      const { result } = renderHook(() => useTakeOver(employee, 'browser', () => screen, mocks.notify));
       await act(async () => result.current.takeOver());
       expect(result.current.active).toBe(true);
-      mocks.pillToast.mockClear();
+      mocks.notify.mockClear();
 
       await act(async () => result.current.handBack());
 
@@ -74,9 +82,10 @@ describe('Hand back lifecycle recovery', () => {
       expect(result.current).toMatchObject({ active: false, busy: false });
       expect(useHomeStore.getState().takeovers).toEqual({});
       if (error === 'workflow_control_superseded') {
-        expect(mocks.pillToast).not.toHaveBeenCalled();
+        expect(mocks.notify).not.toHaveBeenCalled();
       } else {
-        expect(mocks.pillToast).toHaveBeenCalledWith('That did not work. Try again.', { tone: 'error' });
+        // The error only: a Resume that failed never says they were handed back.
+        expect(mocks.notify.mock.calls).toEqual([['That did not work. Try again.', 'error']]);
       }
     },
   );
@@ -98,7 +107,7 @@ describe('Take over', () => {
     expect(result.current).toMatchObject({ active: true, screen: 'browser', busy: false });
     expect(useHomeStore.getState().takeovers.w1).toEqual({ screen: 'browser', giveBack, stop: stop.promise });
     expect(useHomeStore.getState().takeovers.w1.stop).toBe(stop.promise);
-    expect(mocks.pillToast).toHaveBeenCalledWith('You have control — Maya will wait');
+    expect(mocks.notify).toHaveBeenCalledWith('You have control — Maya will wait', 'success');
 
     await act(async () => {
       stop.resolve(status('paused', 6));
@@ -120,8 +129,85 @@ describe('Take over', () => {
     expect(giveBack).toHaveBeenCalledOnce();
     expect(result.current).toMatchObject({ active: false, busy: false });
     expect(useHomeStore.getState().takeovers).toEqual({});
-    if (message) expect(mocks.pillToast).toHaveBeenLastCalledWith(message, { tone: 'error' });
-    else expect(mocks.pillToast).not.toHaveBeenCalledWith(expect.anything(), { tone: 'error' });
+    if (message) expect(mocks.notify).toHaveBeenLastCalledWith(message, 'error');
+    else expect(mocks.notify).not.toHaveBeenCalledWith(expect.anything(), 'error');
+  });
+
+  it('says a screen that refuses as an error, and stops no one', async () => {
+    const screen = { claim: vi.fn(async () => null) };
+    const { result } = renderHook(() => useTakeOver(maya(), 'browser', () => screen, mocks.notify));
+
+    await act(async () => result.current.takeOver());
+
+    expect(screen.claim).toHaveBeenCalledOnce();
+    expect(mocks.notify.mock.calls).toEqual([['Couldn’t take the screen. Try again.', 'error']]);
+    expect(mocks.pauseWorkflow).not.toHaveBeenCalled();
+    expect(result.current).toMatchObject({ active: false, screen: null, busy: false });
+    expect(useHomeStore.getState().takeovers).toEqual({});
+  });
+
+  it('claims the screen once, however often Take over is pressed while it is being taken', async () => {
+    const claim = deferred<(() => void) | null>();
+    const screen = { claim: vi.fn(() => claim.promise) };
+    const { result } = renderHook(() => useTakeOver(maya(), 'browser', () => screen, mocks.notify));
+    let taking!: Promise<void>;
+    await act(async () => {
+      taking = result.current.takeOver();
+    });
+    expect(result.current).toMatchObject({ active: false, busy: true });
+
+    await act(async () => result.current.takeOver());
+    expect(screen.claim).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      claim.resolve(vi.fn());
+      await taking;
+    });
+    expect(result.current).toMatchObject({ active: true, busy: false });
+    expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
+    expect(mocks.notify.mock.calls).toEqual([['You have control — Maya will wait', 'success']]);
+  });
+
+  it('takes nothing on the Canvas tab, which has no screen', async () => {
+    const { result } = renderHook(() => useTakeOver(maya(), 'board', () => null, mocks.notify));
+
+    await act(async () => result.current.takeOver());
+
+    expect(result.current).toMatchObject({ active: false, screen: null, busy: false });
+    expect(mocks.pauseWorkflow).not.toHaveBeenCalled();
+    expect(mocks.notify).not.toHaveBeenCalled();
+    expect(useHomeStore.getState().takeovers).toEqual({});
+  });
+});
+
+describe('No one to take over from', () => {
+  it('takes nothing while no employee is known, as for the editor’s unsaved workflow', async () => {
+    const screen = { claim: vi.fn(async () => vi.fn()) };
+    const { result } = renderHook(() => useTakeOver(null, 'browser', () => screen, mocks.notify));
+    expect(result.current).toMatchObject({ active: false, screen: null, busy: false });
+
+    await act(async () => result.current.takeOver());
+    await act(async () => result.current.handBack());
+
+    expect(screen.claim).not.toHaveBeenCalled();
+    expect(mocks.pauseWorkflow).not.toHaveBeenCalled();
+    expect(mocks.resumeWorkflow).not.toHaveBeenCalled();
+    expect(mocks.notify).not.toHaveBeenCalled();
+    expect(useHomeStore.getState().takeovers).toEqual({});
+  });
+
+  it('reports nothing taken while the owner has another employee’s screen', async () => {
+    const giveBack = vi.fn();
+    useHomeStore.setState({ takeovers: { w1: { screen: 'browser', giveBack } }, takeoverBusy: { w1: true } });
+    const { result } = renderHook(() => useTakeOver(null, 'browser', () => ({ claim: vi.fn(async () => null) }), mocks.notify));
+    expect(result.current).toMatchObject({ active: false, screen: null, busy: false });
+
+    await act(async () => result.current.handBack());
+
+    // Maya's screen stays taken: only her own Workspace hands it back.
+    expect(giveBack).not.toHaveBeenCalled();
+    expect(useHomeStore.getState().takeovers).toHaveProperty('w1');
+    expect(mocks.notify).not.toHaveBeenCalled();
   });
 });
 
@@ -135,7 +221,7 @@ describe('One dock, several employees', () => {
       control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 9 }, 'w2'),
     })!;
     // The dock's one hook instance follows whichever employee it shows.
-    const { result, rerender } = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen), {
+    const { result, rerender } = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen, mocks.notify), {
       initialProps: { employee: maya() },
     });
     let taking!: Promise<void>;
@@ -171,21 +257,21 @@ describe('Taking the screen again', () => {
     const first = vi.fn();
     const second = vi.fn();
     const screen = { claim: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second) };
-    const { result } = renderHook(() => useTakeOver(maya(), 'browser', () => screen));
+    const { result } = renderHook(() => useTakeOver(maya(), 'browser', () => screen, mocks.notify));
     return { result, first, second, screen };
   }
 
   it('sends no second Stop, and Hand back gives back the screen taken last', async () => {
     const { result, first, second, screen } = twoClaims();
     await act(async () => result.current.takeOver());
-    mocks.pillToast.mockClear();
+    mocks.notify.mockClear();
 
     // The screen let go of the owner (the window lost focus): they take it again.
     await act(async () => result.current.takeOver());
 
     expect(screen.claim).toHaveBeenCalledTimes(2);
     expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
-    expect(mocks.pillToast).not.toHaveBeenCalled();
+    expect(mocks.notify).not.toHaveBeenCalled();
     expect(useHomeStore.getState().takeovers.w1).toMatchObject({ screen: 'browser', giveBack: second });
 
     await act(async () => result.current.handBack());
@@ -213,7 +299,7 @@ describe('Taking the screen again', () => {
     expect(second).toHaveBeenCalledOnce();
     expect(result.current.active).toBe(false);
     expect(useHomeStore.getState().takeovers).toEqual({});
-    expect(mocks.pillToast).toHaveBeenLastCalledWith('That changed a moment ago. Try again.', { tone: 'error' });
+    expect(mocks.notify).toHaveBeenLastCalledWith('That changed a moment ago. Try again.', 'error');
   });
 });
 
@@ -243,7 +329,7 @@ describe('Hand back', () => {
     expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
     expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
     expect(result.current).toMatchObject({ active: false, busy: false });
-    expect(mocks.pillToast).toHaveBeenLastCalledWith('Handed back to Maya');
+    expect(mocks.notify).toHaveBeenLastCalledWith('Handed back to Maya', 'success');
   });
 
   it('from pausing, sends the Stop once more and resumes with the revision it answers', async () => {
@@ -309,8 +395,8 @@ describe('Hand back', () => {
 
     // The screen given back once and no error: Hand back goes on from the summary.
     expect(giveBack).toHaveBeenCalledOnce();
-    expect(mocks.pillToast).not.toHaveBeenCalledWith(expect.anything(), { tone: 'error' });
+    expect(mocks.notify).not.toHaveBeenCalledWith(expect.anything(), 'error');
     expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 4);
-    expect(mocks.pillToast).toHaveBeenLastCalledWith('Handed back to Maya');
+    expect(mocks.notify).toHaveBeenLastCalledWith('Handed back to Maya', 'success');
   });
 });

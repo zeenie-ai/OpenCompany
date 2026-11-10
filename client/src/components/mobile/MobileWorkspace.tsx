@@ -1,5 +1,6 @@
 import { PhoneActivity } from './PhoneActivity';
-import { FullView } from '../workspace/FullView';
+import { FullView, FullViewButton } from '../workspace/FullView';
+import { TakeOverButton } from '../workspace/TakeOverButton';
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode, Ref } from 'react';
 import { ArrowLeft, Home, LayoutList, Play, RotateCw, RotateCcwSquare, ScanLine, Smartphone, Square } from 'lucide-react';
@@ -7,29 +8,33 @@ import { Button } from '@/components/ui/button';
 import { buildApiUrl } from '@/config/api';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { mobilePath, mobilePoint, mobileRequest, type Doctor, type Geometry, type Invocation, type MobileStatus } from './api';
-import type { SurfaceControl } from '../workspace/surface';
+import type { Notify, SurfaceControl } from '../workspace/surface';
 
 const fieldClass = 'min-w-0 rounded border border-border-default bg-bg-input px-2 py-1.5 text-sm text-fg-default outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const finished = new Set(['completed', 'success', 'succeeded', 'failed', 'cancelled', 'canceled']);
 const taskState = (task: Invocation | null) => task?.status ?? task?.state ?? '';
 const describe = (value: unknown): string => typeof value === 'string' ? value : value == null ? '' : JSON.stringify(value);
 
-export default function MobileWorkspace({ workflowId, nodes, visible = true, canvasNodeId = null, notify, chrome = 'dev', action, ref }: {
+/** The phone, the same on Home and in the editor: setup, the phone and its
+ *  buttons (with Take over at their end), Type on phone while the owner
+ *  holds it, Start phone on the screen while it is off, and Help &
+ *  diagnostics. `dev` adds Dev mode's extras. */
+export default function MobileWorkspace({ workflowId, nodes, visible = true, canvasNodeId = null, notify, action, dev = false, ref }: {
   workflowId?: string | null; nodes: { node_id: string; label: string }[]; visible?: boolean;
   /** The Workspace's Take over (SurfaceControl), for the phone shown. */
   ref?: Ref<SurfaceControl>;
   /** The Canvas board a screenshot goes to; without one there is no Screenshot to Canvas. */
   canvasNodeId?: string | null;
-  /** A short message for the owner (Home: the pill toast; Dev: a toast). */
-  notify?: (message: string, tone: 'success' | 'error') => void;
-  /** Home's dock: setup, the phone, its buttons and Type on phone, with Start
-   *  phone on the screen; of the editor's toolbar and controls only Help &
-   *  diagnostics stays, and there is no AI activity or Ask AI. The editor's
-   *  look is the default. */
-  chrome?: 'dev' | 'home';
-  /** Home only: the dock's Take over, at the end of the phone's buttons
-   *  while the owner does not hold the phone. */
+  notify?: Notify;
+  /** A host that runs Take over itself (the Workspace dock, which also stops
+   *  the employee and holds Hand back in its banner) puts its button here,
+   *  or null to show none. It shows at the end of the phone's buttons while
+   *  the owner does not hold the phone. Left out, the phone's own Take over
+   *  and Hand back sit there. */
   action?: ReactNode;
+  /** Dev mode's extras: Full view, the AI's activity, Ask AI to use the
+   *  phone, and Phone controls (Stop phone, refresh, install an app file). */
+  dev?: boolean;
 }) {
   const { addEventListener } = useWebSocketActions();
   const [selected, setSelected] = useState('');
@@ -53,7 +58,7 @@ export default function MobileWorkspace({ workflowId, nodes, visible = true, can
     {nodes.length > 1 && <select className={`${fieldClass} mx-2 mt-2 shrink-0`} aria-label="Mobile agent" value={nodeId} onChange={(event) => setSelected(event.target.value)}>
       {nodes.map((node) => <option key={node.node_id} value={node.node_id}>{node.label}</option>)}
     </select>}
-    <MobileSession key={`${workflowId}:${nodeId}:${sessionVersion}`} workflowId={workflowId} nodeId={nodeId} visible={visible} isCurrentSession={isCurrentSession} canvasNodeId={canvasNodeId} notify={notify} chrome={chrome} action={action} ref={ref} />
+    <MobileSession key={`${workflowId}:${nodeId}:${sessionVersion}`} workflowId={workflowId} nodeId={nodeId} visible={visible} isCurrentSession={isCurrentSession} canvasNodeId={canvasNodeId} notify={notify} action={action} dev={dev} ref={ref} />
   </div>;
 }
 
@@ -61,10 +66,10 @@ function Empty({ message }: { message: string }) {
   return <div className="m-auto flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Smartphone aria-hidden className="size-6" />{message}</div>;
 }
 
-function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNodeId, notify, chrome, action, ref }: {
+function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNodeId, notify, action, dev, ref }: {
   workflowId: string; nodeId: string; visible: boolean; isCurrentSession: () => boolean;
-  canvasNodeId: string | null; notify?: (message: string, tone: 'success' | 'error') => void;
-  chrome: 'dev' | 'home'; action?: ReactNode; ref?: Ref<SurfaceControl>;
+  canvasNodeId: string | null; notify?: Notify;
+  action?: ReactNode; dev: boolean; ref?: Ref<SurfaceControl>;
 }) {
   const { sendRequest } = useWebSocketActions();
   const path = mobilePath(workflowId, nodeId);
@@ -216,7 +221,7 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
     setSubmission(attempt.id); setTask(response); setPrompt(''); pendingSubmission.current = null;
     try { sessionStorage.setItem(`mobile-task:${workflowId}:${nodeId}`, attempt.id); } catch { /* optional recovery */ }
   });
-  // Use phone, and the Workspace's Take over: the phone's lease for this view.
+  // Take over: the phone's lease for this view.
   const takeControl = async () => {
     const claim = await mobileRequest<{ epoch: number; owner: string }>(`${path}/takeover`, { viewer_id: viewerId });
     if (!active.current || !isCurrentSession() || !viewActive.current) {
@@ -253,9 +258,14 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
   const installed = doctor?.adb && doctor?.emulator && doctor?.image && doctor?.engine && doctor?.video;
   const setupActive = typeof status?.setup === 'string' && status.setup.startsWith('installing_');
   const setupFailed = status?.setup === 'error' || status?.setup === 'interrupted' || !!status?.setup_error;
-  const home = chrome === 'home';
-  // Home's outline-style buttons are neutral, as its colour rule asks; the editor's stay outline.
-  const outline = home ? { variant: 'quiet' as const, className: 'border-border-default text-fg-default' } : { variant: 'outline' as const };
+  // A neutral outline, a quiet button with a border: colour marks a state or a role.
+  const outline = { variant: 'quiet' as const, className: 'border-border-default text-fg-default' };
+  // Without a host's Take over, the phone's own: it takes the phone for this
+  // view and hands it back, letting a task waiting for the owner go on.
+  const ownTakeOver = held
+    ? <TakeOverButton disabled={!!busy} onClick={() => void perform('handing back', handBack)}>Hand back</TakeOverButton>
+    : <TakeOverButton disabled={!!busy} onClick={() => void perform('taking over', async () => { await takeControl(); })} />;
+  const takeOver = action === undefined ? ownTakeOver : !held && action;
   const powerControl = (
     <Button size="sm" {...outline} disabled={!!busy || setupActive || status?.starting || !status || doctor?.supported === false || (!running && !installed)} onClick={() => void perform(running ? 'stopping' : 'starting', async () => { await mobileRequest(`${path}/${running ? 'stop' : 'start'}`, {}); setEpoch(null); })}>
       {running ? <Square className="size-3.5" /> : <Play className="size-3.5" />}{running ? 'Stop phone' : 'Start phone'}
@@ -264,25 +274,21 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
   const diagnostics = doctor?.acceleration && <details className="rounded border border-border-default px-3 py-2 text-xs text-fg-muted">
     <summary className="cursor-pointer font-medium">Help &amp; diagnostics</summary>
     <p className="mb-0 mt-2">If the phone will not start, share the details below when asking for help.</p><pre className="mb-0 mt-2 whitespace-pre-wrap break-words">{doctor.acceleration}</pre>
-    <p className="mb-0 mt-2">If acceleration is unavailable on Windows, enable virtualization in your computer’s firmware and Windows Hypervisor Platform in Windows Features, then restart Windows and refresh mobile status.</p>
+    <p className="mb-0 mt-2">If acceleration is unavailable on Windows, enable virtualization in your computer’s firmware and Windows Hypervisor Platform in Windows Features, then restart Windows and open the Mobile tab again.</p>
     {!!status?.diagnostics?.length && <details className="mt-2"><summary className="cursor-pointer">Recent phone activity</summary><pre className="max-h-40 overflow-auto whitespace-pre-wrap">{status.diagnostics.map((item) => `${item.at} ${item.level} ${item.event}${item.operation ? ` (${item.operation})` : ''}${item.error_type ? `: ${item.error_type}` : ''}${item.code ? ` [${item.code}]` : ''}`).join('\n')}</pre></details>}
   </details>;
-  return <FullView label="Phone" chrome={chrome} toolbar={<>
-      <Smartphone aria-hidden className="size-4 shrink-0 text-fg-muted" />
-      <span role="status" className="min-w-0 flex-1 truncate text-xs text-fg-muted">{setupActive ? 'Setting up' : status?.starting ? 'Starting phone…' : busy ? `${busy}…` : running ? (held ? 'You’re using the phone' : status.active?.status === 'running' ? 'AI is working' : status.control_state === 'recovering' ? 'Reconnecting…' : 'Ready') : status ? 'Phone is off' : 'Connecting…'}</span>
-      {running && status?.active?.run_id != null && <span role="status" className="text-xs text-fg-muted">{String(status.active.phase || status.active.status || 'Working')} · Engine step {Number(status.active.steps || 0)} / {Number(status.active.max_steps || 0)}</span>}
-      {!running && powerControl}
-      {running && (held ? <>
-        <Button size="sm" onClick={() => void perform('releasing', async () => { await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch, resume: true }); leaseEpoch.current = null; setEpoch(null); })} disabled={!!busy}>Let AI continue</Button>
-        <Button size="sm" variant="outline" onClick={() => void perform('releasing', async () => { await mobileRequest(`${path}/release`, { viewer_id: viewerId, epoch, resume: false }); leaseEpoch.current = null; setEpoch(null); })} disabled={!!busy}>Finish using phone</Button>
-      </> : <Button size="sm" variant="outline" disabled={!!busy} onClick={() => void perform('taking control', async () => { await takeControl(); })}>Use phone</Button>)}
-    </>} controls={<>
+  // Dev mode's Phone controls: turning the phone off, reading its status
+  // again, and, while the owner holds it, installing an app file.
+  const phoneControls = <details aria-label="Phone controls" className="max-h-[45%] shrink-0 overflow-y-auto border-t border-border-default text-xs group-data-[full-view=true]/fullview:hidden">
+    <summary className="cursor-pointer px-2 py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">Phone controls
+      {busy && <span role="status" className="ml-2 font-normal text-fg-muted">{busy}…</span>}
+    </summary>
+    <div className="space-y-2 px-2 pb-2">
       <div className="flex flex-wrap items-center gap-2">
         {running && powerControl}
-        <Button size="icon-sm" variant="ghost" aria-label="Refresh mobile status" onClick={() => void perform('refresh', async () => { setDoctor(await mobileRequest(`${path}/doctor`)); })}><RotateCw /></Button>
+        <Button size="icon-sm" variant="quiet" aria-label="Refresh mobile status" title="Refresh mobile status" onClick={() => void perform('refresh', async () => { setDoctor(await mobileRequest(`${path}/doctor`)); })}><RotateCw /></Button>
       </div>
-      <p className="m-0 text-xs text-fg-muted">{held ? 'Tap or swipe the screen, just like a phone. Finish when you want the AI to use it.' : 'Watch your phone here. Choose Use phone to tap and type yourself.'}</p>
-      {held && <label className="flex items-center gap-2 text-xs text-fg-muted">Install an app file (.apk, up to 256 MB)
+      {held && <label className="flex items-center gap-2 text-fg-muted">Install an app file (.apk, up to 256 MB)
         <input type="file" accept=".apk" aria-label="Install APK" disabled={!!busy} className="min-w-0 flex-1 text-xs" onChange={(event) => {
           const file = event.target.files?.[0]; event.target.value = '';
           if (!file) return;
@@ -294,11 +300,12 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
           });
         }} />
       </label>}
-      {status?.setup === 'ready' && installed && !setupFailed && status.setup_progress && <details aria-label="Completed mobile setup" className="rounded border border-border-default p-3 text-xs text-fg-muted"><summary className="cursor-pointer">Setup finished · View details</summary>
+      {status?.setup === 'ready' && installed && !setupFailed && status.setup_progress && <details aria-label="Completed mobile setup" className="rounded border border-border-default p-3 text-fg-muted"><summary className="cursor-pointer">Setup finished · View details</summary>
         <SetupProgress status={status} ticking={visible && pageVisible} />
       </details>}
-      {diagnostics}
-    </>}>
+    </div>
+  </details>;
+  return <FullView>
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       {(connectionError || error || setupFailed || doctor?.supported === false || !running || setupActive) && <div className={`space-y-2 overflow-y-auto p-2 ${running ? 'max-h-[40%] shrink-0' : 'min-h-0 flex-1'}`}>
         {connectionError && <p role="status" className="m-0 text-sm text-fg-muted">{connectionError}</p>}
@@ -311,15 +318,15 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
           <details><summary className="cursor-pointer text-xs text-fg-muted">Download details</summary><ul className="m-0 list-none space-y-1 p-0 text-xs text-fg-muted">{(['adb', 'emulator', 'image', 'engine', 'video'] as const).map((key) => <li key={key}>{key === 'adb' ? 'Android tools' : key === 'engine' ? 'Agent runtime' : key === 'video' ? 'Live video' : key === 'image' ? 'Android image' : 'Emulator'}: {doctor?.[key] ? 'Ready' : 'Needed'}</li>)}</ul></details>
           <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} aria-label="Accept Android SDK license terms" />
             <span>I accept the <a className="underline" href="https://developer.android.com/studio/terms" target="_blank" rel="noreferrer">Android SDK license terms</a> and want to download the required components.</span></label>
-          <Button size="sm" variant={home ? 'invert' : 'default'} disabled={!accepted || !!busy || setupActive || doctor?.supported === false} onClick={() => void perform('setup', async () => {
+          <Button size="sm" variant="invert" disabled={!accepted || !!busy || setupActive || doctor?.supported === false} onClick={() => void perform('setup', async () => {
             await mobileRequest(`${path}/setup`, { licenses_accepted: true }); setDoctor(await mobileRequest(`${path}/doctor`));
           })}>{setupFailed ? 'Retry setup' : 'Set up phone'}</Button>
           {(setupActive || setupFailed || status?.setup_progress) && <SetupProgress status={status} ticking={visible && pageVisible} />}
         </section>}
         {!error && status?.start_error && <p role="alert" className="m-0 text-sm text-destructive">{status.start_error}</p>}
         {!running && !status?.starting && installed && !status?.start_error && <p className="m-0 text-sm text-fg-muted">Your phone is ready to turn on. Click Start phone to use it.</p>}
-        {/* Home has no toolbar: Start phone, and that the phone is starting, show here. */}
-        {home && !running && installed && <div className="flex items-center gap-2">{powerControl}<span role="status" className="text-sm text-fg-muted">{status?.starting ? 'Starting phone…' : ''}</span></div>}
+        {/* Start phone, and that the phone is starting. */}
+        {!running && installed && <div className="flex items-center gap-2">{powerControl}<span role="status" className="text-sm text-fg-muted">{status?.starting ? 'Starting phone…' : ''}</span></div>}
       </div>}
       {running && <>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center gap-2.5 p-3">
@@ -337,10 +344,11 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
             <span aria-hidden className="mx-1 h-4.5 w-px bg-border-default" />
             {canvasNodeId && <DeviceButton label="Screenshot to Canvas" disabled={!!busy} onClick={() => void screenshot()}><ScanLine /></DeviceButton>}
             <DeviceButton label="Rotate" disabled={!held || !!busy} onClick={() => void rotate()}><RotateCcwSquare /></DeviceButton>
-            {home && action && !held && <>
+            {dev && <FullViewButton label="Phone" className="rounded-lg [&_svg]:size-4" />}
+            {takeOver && <>
               <span aria-hidden className="mx-1 h-4.5 w-px bg-border-default" />
               {/* As tall as the buttons beside it, so the bar keeps its height. */}
-              <span className="flex *:h-7.5">{action}</span>
+              <span className="flex *:h-7.5">{takeOver}</span>
             </>}
           </div>
         </div>
@@ -350,9 +358,9 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
           <Button size="sm" {...outline} disabled={!text || !!busy} onClick={() => void perform('input', async () => { await input('text', { text }); setText(''); })}>Type</Button>
         </div>}
       </>}
-      {/* The editor's: in Home the employee does the phone's AI work, and the dock shows their latest step. */}
-      {!home && <PhoneActivity task={status?.active?.run_id ? status.active : status?.last_task} />}
-      {!home && <details aria-label="Phone AI task" className="max-h-[45%] shrink-0 overflow-y-auto border-t border-border-default group-data-[full-view=true]/fullview:hidden">
+      {/* Dev mode's: on Home the employee does the phone's AI work, and the dock shows their latest step. */}
+      {dev && <PhoneActivity task={status?.active?.run_id ? status.active : status?.last_task} />}
+      {dev && <details aria-label="Phone AI task" className="max-h-[45%] shrink-0 overflow-y-auto border-t border-border-default group-data-[full-view=true]/fullview:hidden">
         <summary className="cursor-pointer px-2 py-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">Ask AI to use the phone
           {task && <span role="status" className="ml-2 font-normal text-fg-muted">{({queued: 'Waiting for the phone', running: 'Working on your request', completed: 'Done', failed: 'Could not finish', cancelled: 'Cancelled', awaiting_user: 'Waiting for you'})[taskState(task)] || 'Request received'}</span>}
         </summary>
@@ -360,14 +368,15 @@ function MobileSession({ workflowId, nodeId, visible, isCurrentSession, canvasNo
           <label htmlFor={`task-${nodeId}`} className="sr-only">Ask AI to use the phone</label>
           <textarea id={`task-${nodeId}`} className={`${fieldClass} resize-none`} rows={2} maxLength={12000} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="For example: Open Settings and turn on dark mode" />
           <p className="m-0 text-xs text-fg-muted">Uses your global AI model unless this phone has a model override. Only one person or AI can use the phone at a time.</p>
-          <div className="flex items-center gap-2"><Button size="sm" type="submit" disabled={!running || !prompt.trim() || !!busy || hasTask}>Run task</Button>
-            {hasTask && <Button size="sm" type="button" variant="outline" disabled={!!busy} onClick={() => void perform('cancelling', async () => { setTask(await mobileRequest(`${path}/tasks/${encodeURIComponent(submission!)}/cancel`, {})); })}>Cancel task</Button>}
+          <div className="flex items-center gap-2"><Button size="sm" type="submit" variant="invert" disabled={!running || !prompt.trim() || !!busy || hasTask}>Run task</Button>
+            {hasTask && <Button size="sm" type="button" {...outline} disabled={!!busy} onClick={() => void perform('cancelling', async () => { setTask(await mobileRequest(`${path}/tasks/${encodeURIComponent(submission!)}/cancel`, {})); })}>Cancel task</Button>}
           </div>
           {task?.error != null && <p role="alert" className="m-0 break-words text-sm text-destructive">{describe(task.error)}</p>}
           {task?.result != null && <pre className="m-0 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-bg-panel p-2 text-xs">{describe(task.result)}</pre>}
         </form>
       </details>}
-      {home && diagnostics && <div className="max-h-[40%] shrink-0 overflow-y-auto px-2 pb-2">{diagnostics}</div>}
+      {dev && phoneControls}
+      {diagnostics && <div className="max-h-[40%] shrink-0 overflow-y-auto px-2 pb-2">{diagnostics}</div>}
     </div>
   </FullView>;
 }

@@ -10,3 +10,7 @@ export interface SurfaceControl {
    *  the screen that was taken. */
   claim: () => Promise<(() => void) | null>;
 }
+
+/** A short message for the owner, shown the way the screen hosting the
+ *  Workspace shows them (Home: the pill toast; the editor: a toast). */
+export type Notify = (message: string, tone: 'success' | 'error') => void;

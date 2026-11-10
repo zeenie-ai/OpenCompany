@@ -92,7 +92,7 @@ const BinaryView: React.FC<{ refFile: WorkspaceFileRef }> = ({ refFile }) => {
         </p>
       </div>
       {href && (
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="quiet" size="sm" className="border-border-default text-fg-default">
           <a href={href} download={refFile.filename} target="_blank" rel="noreferrer">
             <Download className="h-4 w-4" /> Download
           </a>

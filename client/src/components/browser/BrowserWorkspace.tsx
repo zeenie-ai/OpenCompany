@@ -1,4 +1,5 @@
-import { FullView } from '../workspace/FullView';
+import { FullView, FullViewButton } from '../workspace/FullView';
+import { TakeOverButton } from '../workspace/TakeOverButton';
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent, ReactNode, Ref } from 'react';
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, Lock, RotateCw } from 'lucide-react';
@@ -14,20 +15,24 @@ export interface BrowserWorkspaceProps {
   workflowId?: string | null;
   nodes: { node_id: string; label: string }[];
   visible?: boolean;
-  /** The name on the agent's cursor (the employee's, on Home). */
+  /** The name on the agent's cursor (the employee's). */
   agentName?: string;
-  flushCanvas?: () => void;
-  /** `home`: Home's dock look; the editor's is the default. */
-  chrome?: 'dev' | 'home';
-  /** The end of Home's row of page controls while the owner could take
-   *  control and does not have it (a live browser, not in a protected
-   *  login): the dock's Take over. */
+  /** A host that runs Take over itself (the Workspace dock, which also stops
+   *  the employee and holds Hand back in its banner) puts its button here,
+   *  or null to show none. It shows at the end of the row of page controls
+   *  while the owner could take control and does not have it (a live
+   *  browser, not in a protected login). Left out, the row holds the
+   *  browser's own Take over and Hand back. */
   action?: ReactNode;
+  /** Dev mode's extras: an address box to go to a page while in control,
+   *  Full view, and Browser AI tasks under the page. */
+  dev?: boolean;
+  /** Dev mode: saves the canvas before Browser AI tasks adds an agent to it. */
+  flushCanvas?: () => void;
 }
 type Phase = 'connecting' | 'idle' | 'live' | 'error';
 interface BrowserState {
   state: string;
-  challenge_required?: boolean;
   sensitive_login?: boolean;
   controller?: string | null;
   request?: { message?: string; reason?: string } | null;
@@ -35,13 +40,11 @@ interface BrowserState {
 interface Tab { target_id: string; title?: string; url?: string; active?: boolean }
 const inputClass = 'min-w-0 rounded border border-border-default bg-bg-panel px-2 py-1 text-xs text-fg-default outline-none focus-visible:ring-2 focus-visible:ring-ring';
 /** The buttons on the page (Start browser, Reconnect, Close browser, a page
- *  dialog's answers): the editor's outline ones, and on Home a neutral
- *  outline, a quiet button with a border, since colour there marks a state
- *  or a role. */
-const SECONDARY = {
-  dev: { variant: 'outline' },
-  home: { variant: 'quiet', className: 'border-border-default text-fg-default' },
-} as const;
+ *  dialog's answers): a neutral outline, a quiet button with a border, since
+ *  colour marks a state or a role. */
+const SECONDARY = { variant: 'quiet', className: 'border-border-default text-fg-default' } as const;
+/** The address, a pill in the row of page controls. */
+const ADDRESS = 'h-8.5 min-w-0 flex-1 rounded-pill border border-border-default bg-bg-elevated px-3.5 text-sm';
 
 /** A page the owner's own browser can open: http(s) only. */
 function webPage(url: string): boolean {
@@ -50,13 +53,12 @@ function webPage(url: string): boolean {
   return protocol === 'http:' || protocol === 'https:';
 }
 
-/** `ref`: the Workspace's Take over (SurfaceControl), for the browser shown.
- *  `chrome="home"` is Home's dock (chat/V2.md §4b): one row of page controls
- *  over the page (back, forward and reload, which work while the owner has
- *  control; the page's domain; Open in new tab; `action` while they could
- *  take control and do not have it), and none of the editor's Take control,
- *  browser controls, Full view or browser tasks. */
-export default function BrowserWorkspace({ workflowId, nodes, visible = true, agentName, flushCanvas, chrome = 'dev', action, ref }: BrowserWorkspaceProps & { ref?: Ref<SurfaceControl> }) {
+/** The live browser, the same on Home and in the editor (chat/V2.md §4b):
+ *  one row of page controls over the page (back, forward and reload, which
+ *  work while the owner has control; the page's domain; Open in new tab;
+ *  Take over). `ref`: the Workspace's Take over (SurfaceControl), for the
+ *  browser shown. `dev` adds Dev mode's extras. */
+export default function BrowserWorkspace({ workflowId, nodes, visible = true, agentName, action, dev = false, flushCanvas, ref }: BrowserWorkspaceProps & { ref?: Ref<SurfaceControl> }) {
   const [selected, setSelected] = useState('');
   const nodeId = nodes.some((n) => n.node_id === selected) ? selected : nodes[0]?.node_id;
   if (!workflowId) return <EmptyBrowser message="Save this workflow to open its browser." />;
@@ -68,8 +70,8 @@ export default function BrowserWorkspace({ workflowId, nodes, visible = true, ag
           {nodes.map((node) => <option key={node.node_id} value={node.node_id}>{node.label || 'Browser'}</option>)}
         </select>
       )}
-      <BrowserSessionView key={`${workflowId}:${nodeId}`} workflowId={workflowId} nodeId={nodeId} visible={visible} agentName={agentName} chrome={chrome} action={action} ref={ref} />
-      {chrome === 'dev' && <BrowserTasks key={`tasks:${workflowId}:${nodeId}`} workflowId={workflowId} browserNodeId={nodeId} visible={visible} onBrowserCreated={setSelected} flushCanvas={flushCanvas} />}
+      <BrowserSessionView key={`${workflowId}:${nodeId}`} workflowId={workflowId} nodeId={nodeId} visible={visible} agentName={agentName} action={action} dev={dev} ref={ref} />
+      {dev && <BrowserTasks key={`tasks:${workflowId}:${nodeId}`} workflowId={workflowId} browserNodeId={nodeId} visible={visible} onBrowserCreated={setSelected} flushCanvas={flushCanvas} />}
     </div>
   );
 }
@@ -78,12 +80,12 @@ function EmptyBrowser({ message }: { message: string }) {
   return <div className="m-auto flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Globe aria-hidden className="size-6" />{message}</div>;
 }
 
-/** A round quiet button in Home's row of page controls. */
+/** A round quiet button in the row of page controls. */
 function PageButton({ label, disabled, onClick, children }: { label: string; disabled: boolean; onClick: () => void; children: ReactNode }) {
   return <Button size="icon-sm" variant="quiet" aria-label={label} title={label} disabled={disabled} onClick={onClick} className="size-7.5 rounded-full">{children}</Button>;
 }
 
-function BrowserSessionView({ workflowId, nodeId, visible, agentName, chrome, action, ref }: { workflowId: string; nodeId: string; visible: boolean; agentName?: string; chrome: 'dev' | 'home'; action?: ReactNode; ref?: Ref<SurfaceControl> }) {
+function BrowserSessionView({ workflowId, nodeId, visible, agentName, action, dev, ref }: { workflowId: string; nodeId: string; visible: boolean; agentName?: string; action?: ReactNode; dev: boolean; ref?: Ref<SurfaceControl> }) {
   const { sendRequest, isReady } = useWebSocketActions();
   const socketRef = useRef<WebSocket | null>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -412,12 +414,12 @@ function BrowserSessionView({ workflowId, nodeId, visible, agentName, chrome, ac
     send({ type: 'key', action, key: event.key, code: event.code, key_code: event.keyCode, location: event.location, repeat: event.repeat, modifiers: browserModifiers(event) });
   };
   const navigate = (action: string) => send({ type: 'navigate', action, ...(action === 'goto' ? { url: address } : {}) });
-  const statusLabel = phase === 'connecting' ? 'Connecting…' : phase === 'idle' ? 'Browser is stopped' : phase === 'error' ? 'Disconnected' : control ? 'You have control' : state.challenge_required ? 'Paused for site verification' : state.state === 'agent' ? 'Employee is browsing' : state.state === 'awaiting_user' ? 'Your help is needed' : state.controller === 'other' ? 'Another viewer has control' : 'Live browser';
-  const secondary = SECONDARY[chrome];
+  // What the page says while there is no picture and no browser to start: connecting, or the connection lost.
+  const connection = phase === 'connecting' ? 'Connecting…' : 'Disconnected';
   const tabPicker = tabs.length > 1 && <select aria-label="Browser tab" className={`${inputClass} w-full`} disabled={!control} value={tabs.find((tab) => tab.active)?.target_id || ''} onChange={(e) => send({ type: 'tab', action: 'activate', target_id: e.target.value })}>
     {tabs.map((tab) => <option key={tab.target_id} value={tab.target_id}>{tab.title || tab.url || 'New tab'}</option>)}
   </select>;
-  // The employee's request, errors, the page and its dialogs: the same in both looks.
+  // The employee's request, errors, the page and its dialogs.
   const body = <>
     {state.request && <div className="max-h-[25%] shrink-0 overflow-y-auto border-b border-border-default p-2 text-sm text-fg-default">{state.request.message || state.request.reason || 'The employee needs your help.'}</div>}
     {error && <div role="alert" className="flex max-h-[25%] shrink-0 items-start gap-2 overflow-y-auto p-2 text-xs text-destructive"><span className="min-w-0 flex-1 break-words">{error}</span><button aria-label="Dismiss browser error" onClick={() => setError('')}>×</button></div>}
@@ -433,74 +435,75 @@ function BrowserSessionView({ workflowId, nodeId, visible, agentName, chrome, ac
         <AgentCursor action={agentAction.action} picture={agentAction.picture} name={agentName} hidden={control || state.controller === 'other'} />
       )}
       {!hasFrame && <div className="relative flex max-w-80 flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted"><Globe aria-hidden className="size-6" />
-        <span>{state.sensitive_login ? 'Browser observations are paused during protected login.' : phase === 'live' ? 'Waiting for the browser picture…' : phase === 'idle' ? 'The browser will appear when the employee uses it. You can also open it now.' : statusLabel}</span>
-        {state.sensitive_login && <Button {...secondary} disabled={stopping || !isReady} onClick={() => void closeProtectedBrowser()}>{stopping ? 'Closing…' : 'Close browser for manual login'}</Button>}
-        {phase === 'idle' && <Button {...secondary} disabled={starting || installing || !isReady} onClick={() => void start()}>{starting ? 'Starting…' : installing ? 'Installing…' : 'Start browser'}</Button>}
-        {phase === 'error' && <Button {...secondary} onClick={() => setAttempt((n) => n + 1)}>Reconnect</Button>}
+        <span>{state.sensitive_login ? 'Browser observations are paused during protected login.' : phase === 'live' ? 'Waiting for the browser picture…' : phase === 'idle' ? 'The browser will appear when the employee uses it. You can also open it now.' : connection}</span>
+        {state.sensitive_login && <Button {...SECONDARY} disabled={stopping || !isReady} onClick={() => void closeProtectedBrowser()}>{stopping ? 'Closing…' : 'Close browser for manual login'}</Button>}
+        {phase === 'idle' && <Button {...SECONDARY} disabled={starting || installing || !isReady} onClick={() => void start()}>{starting ? 'Starting…' : installing ? 'Installing…' : 'Start browser'}</Button>}
+        {phase === 'error' && <Button {...SECONDARY} onClick={() => setAttempt((n) => n + 1)}>Reconnect</Button>}
       </div>}
     </div>
     {dialog && <div role="dialog" aria-label="Browser page dialog" className="flex max-h-[40%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-border-default bg-bg-panel p-3 text-sm">
       <p className="break-words text-fg-default">{dialog.message}</p>
       {dialog.kind === 'prompt' && <input aria-label="Dialog response" className={inputClass} value={promptText} onChange={(e) => setPromptText(e.target.value)} disabled={!control} />}
-      <div className="flex gap-2">{[true, false].map((accept) => <Button key={String(accept)} size="sm" {...secondary} disabled={!control} onClick={() => { send({ type: 'dialog_reply', accept, prompt_text: promptText }); setDialog(null); }}>{accept ? 'OK' : 'Cancel'}</Button>)}</div>
-      {!control && <span className="text-xs text-fg-muted">{chrome === 'home' ? 'Take over to respond.' : 'Take control to respond.'}</span>}
+      <div className="flex gap-2">{[true, false].map((accept) => <Button key={String(accept)} size="sm" {...SECONDARY} disabled={!control} onClick={() => { send({ type: 'dialog_reply', accept, prompt_text: promptText }); setDialog(null); }}>{accept ? 'OK' : 'Cancel'}</Button>)}</div>
+      {!control && <span className="text-xs text-fg-muted">Take over to respond.</span>}
     </div>}
   </>;
 
-  if (chrome === 'home') {
-    // A web page shows as its domain; any other address as it is.
-    const page = webPage(pageUrl) ? new URL(pageUrl) : null;
-    return (
-      <FullView label="Browser" chrome="home">
-        <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border-default px-2.5">
-          <div className="flex h-8.5 shrink-0 items-center rounded-pill border border-border-default bg-bg-elevated px-0.5">
-            <PageButton label="Back" disabled={!control} onClick={() => navigate('back')}><ArrowLeft aria-hidden className="size-3.5" strokeWidth={1.75} /></PageButton>
-            <PageButton label="Forward" disabled={!control} onClick={() => navigate('forward')}><ArrowRight aria-hidden className="size-3.5" strokeWidth={1.75} /></PageButton>
-            <span aria-hidden className="h-4 w-px bg-border-default" />
-            <PageButton label="Reload page" disabled={!control} onClick={() => navigate('reload')}><RotateCw aria-hidden className="size-3.5" strokeWidth={1.75} /></PageButton>
-          </div>
-          <span title={pageUrl || undefined} className="flex h-8.5 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-pill border border-border-default bg-bg-elevated px-3.5 text-sm text-fg-muted">
+  // A web page shows as its domain; any other address as it is.
+  const page = webPage(pageUrl) ? new URL(pageUrl) : null;
+  // The owner could take control: a live browser, not in a protected login.
+  const canTake = phase === 'live' && !state.sensitive_login;
+  // Without a host's Take over, the browser's own: it takes control here and
+  // hands it back, and leaves whoever drives the browser running.
+  const ownTakeOver = (
+    <TakeOverButton
+      disabled={takingControl}
+      onClick={() => {
+        setError('');
+        if (control) send({ type: 'control_release' });
+        else { setTakingControl(true); send({ type: 'control_request', ...(state.controller === 'other' ? { force: true } : {}) }); }
+      }}
+    >
+      {control ? 'Hand back' : takingControl ? 'Taking over…' : 'Take over'}
+    </TakeOverButton>
+  );
+  return (
+    <FullView>
+      <div className="flex h-13 shrink-0 items-center gap-2 border-b border-border-default px-2.5">
+        <div className="flex h-8.5 shrink-0 items-center rounded-pill border border-border-default bg-bg-elevated px-0.5">
+          <PageButton label="Back" disabled={!control} onClick={() => navigate('back')}><ArrowLeft aria-hidden className="size-3.5" strokeWidth={1.75} /></PageButton>
+          <PageButton label="Forward" disabled={!control} onClick={() => navigate('forward')}><ArrowRight aria-hidden className="size-3.5" strokeWidth={1.75} /></PageButton>
+          <span aria-hidden className="h-4 w-px bg-border-default" />
+          <PageButton label="Reload page" disabled={!control} onClick={() => navigate('reload')}><RotateCw aria-hidden className="size-3.5" strokeWidth={1.75} /></PageButton>
+        </div>
+        {dev && control ? (
+          // Dev mode: while the owner has control, the address is a box to go to a page from.
+          <form className="flex min-w-0 flex-1" onSubmit={(e) => { e.preventDefault(); navigate('goto'); }}>
+            <input
+              aria-label="Browser address"
+              className={`${ADDRESS} text-fg-default outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+              value={address}
+              placeholder="Enter a website"
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </form>
+        ) : (
+          <span title={pageUrl || undefined} className={`${ADDRESS} flex items-center justify-center gap-1.5 text-fg-muted`}>
             {page?.protocol === 'https:' && <Lock aria-hidden className="size-2.75 shrink-0 text-fg-faint" strokeWidth={2.2} />}
             <span className="truncate">{page ? page.hostname : pageUrl}</span>
           </span>
-          {page && (
-            <Button asChild size="icon-sm" variant="quiet" className="size-7.5 rounded-full">
-              <a href={pageUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in new tab" title="Open in new tab">
-                <ExternalLink aria-hidden className="size-3.5" strokeWidth={1.75} />
-              </a>
-            </Button>
-          )}
-          {phase === 'live' && !state.sensitive_login && !control && action}
-        </div>
-        {tabPicker && <div className="shrink-0 border-b border-border-default px-2.5 py-2">{tabPicker}</div>}
-        {body}
-      </FullView>
-    );
-  }
-  return (
-    <FullView label="Browser" toolbar={<>
-        <span role="status" className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={statusLabel}>{installing ? 'Installing browser…' : starting ? 'Starting browser…' : statusLabel}</span>
-        {phase === 'live' && !state.sensitive_login && <Button size="sm" variant="outline" disabled={takingControl} onClick={() => {
-          setError('');
-          if (control) send({ type: 'control_release' });
-          else { setTakingControl(true); send({ type: 'control_request', ...(state.controller === 'other' ? { force: true } : {}) }); }
-        }}>{control ? (state.challenge_required ? 'Hand back and resume' : 'Hand back') : takingControl ? 'Taking control…' : state.controller === 'other' ? 'Take over here' : 'Take control'}</Button>}
-      </>} controls={<>
-      <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); if (control) navigate('goto'); }}>
-        <Button type="button" size="icon-sm" variant="ghost" aria-label="Back" disabled={!control} onClick={() => navigate('back')}><ArrowLeft className="size-4" /></Button>
-        <Button type="button" size="icon-sm" variant="ghost" aria-label="Forward" disabled={!control} onClick={() => navigate('forward')}><ArrowRight className="size-4" /></Button>
-        <Button type="button" size="icon-sm" variant="ghost" aria-label="Reload page" disabled={!control} onClick={() => navigate('reload')}><RotateCw className="size-4" /></Button>
-        <input aria-label="Browser address" className={`${inputClass} flex-1`} value={address} disabled={!control} placeholder="Enter a website" onChange={(e) => setAddress(e.target.value)} />
-        {webPage(pageUrl) && (
-          <Button asChild size="icon-sm" variant="ghost">
+        )}
+        {page && (
+          <Button asChild size="icon-sm" variant="quiet" className="size-7.5 rounded-full">
             <a href={pageUrl} target="_blank" rel="noopener noreferrer" aria-label="Open in new tab" title="Open in new tab">
-              <ExternalLink className="size-4" />
+              <ExternalLink aria-hidden className="size-3.5" strokeWidth={1.75} />
             </a>
           </Button>
         )}
-      </form>
-      {tabPicker}
-      </>}>
+        {dev && <FullViewButton label="Browser" />}
+        {canTake && (action === undefined ? ownTakeOver : !control && action)}
+      </div>
+      {tabPicker && <div className="shrink-0 border-b border-border-default px-2.5 py-2">{tabPicker}</div>}
       {body}
     </FullView>
   );

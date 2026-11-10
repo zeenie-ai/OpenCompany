@@ -43,6 +43,18 @@ function mockFrameRenderer(deferred = false) {
   return { draw, create, revoke, frame, loads };
 }
 
+/** The browser, live, while the employee is using it. */
+function browsing(props: Partial<ComponentProps<typeof BrowserWorkspace>> = {}) {
+  render(<BrowserWorkspace workflowId="wf" nodes={nodes} {...props} />);
+  const socket = MockSocket.instances.at(-1)!;
+  act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); });
+  return socket;
+}
+/** The row of page controls. */
+const row = () => screen.getByRole('button', { name: 'Back' }).parentElement!.parentElement!;
+/** Every button and link the browser shows, by name, in order. */
+const controls = () => Array.from(row().closest('[data-full-view]')!.querySelectorAll('button, a'), (control) => control.getAttribute('aria-label') ?? control.textContent);
+
 beforeEach(() => {
   MockSocket.instances = []; actions.isReady = true; actions.sendRequest.mockReset();
   actions.sendRequest.mockResolvedValue({ success: true });
@@ -83,31 +95,19 @@ describe('BrowserWorkspace session lifecycle', () => {
     const { unmount } = render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
     const socket = MockSocket.instances[0];
     act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); });
-    fireEvent.click(screen.getByRole('button', { name: 'Browser controls' }));
-    expect(screen.getByRole('textbox', { name: 'Browser address' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    const page = screen.getByRole('group', { name: 'Live browser page' });
+    expect(screen.getByRole('button', { name: 'Reload page' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_request' });
+    // Asking is not having: nothing works until the server says so.
+    expect(screen.getByRole('button', { name: 'Reload page' })).toBeDisabled();
+    fireEvent.keyDown(page, { key: 'Enter', code: 'Enter', keyCode: 13 });
     expect(socket.sent.at(-1)).toEqual({ type: 'control_request' });
     act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
-    expect(screen.getByRole('textbox', { name: 'Browser address' })).toBeEnabled();
-    fireEvent.keyDown(screen.getByRole('group', { name: 'Live browser page' }), { key: 'Enter', code: 'Enter', keyCode: 13 });
+    expect(screen.getByRole('button', { name: 'Reload page' })).toBeEnabled();
+    fireEvent.keyDown(page, { key: 'Enter', code: 'Enter', keyCode: 13 });
     expect(socket.sent.at(-1)).toMatchObject({ type: 'key', action: 'down', key: 'Enter', key_code: 13 });
     unmount(); expect(socket.sent.at(-1)).toEqual({ type: 'control_release', outcome: 'control_lost' });
-  });
-  it('offers the page the browser shows in a new tab, for web pages only', () => {
-    render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
-    const socket = MockSocket.instances[0];
-    act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); });
-    fireEvent.click(screen.getByRole('button', { name: 'Browser controls' }));
-    expect(screen.queryByRole('link', { name: 'Open in new tab' })).not.toBeInTheDocument();
-    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
-    const link = screen.getByRole('link', { name: 'Open in new tab' });
-    expect(link).toHaveAttribute('href', 'https://example.com/book');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-    for (const url of ['chrome://settings', 'javascript:alert(document.cookie)', 'data:text/html,<script>alert(1)</script>']) {
-      act(() => socket.message({ type: 'page', url }));
-      expect(screen.queryByRole('link', { name: 'Open in new tab' })).not.toBeInTheDocument();
-    }
   });
   it('acknowledges malformed binary frames so a bad frame cannot stall the stream', async () => {
     render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
@@ -156,7 +156,9 @@ describe('BrowserWorkspace session lifecycle', () => {
       socket.message({ type: 'error', code: 'screencast', retrying: true, message: 'Retrying live view…' });
     });
     expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Employee is browsing');
+    // Still live: the picture is awaited and Take over is on offer.
+    expect(screen.getByText('Waiting for the browser picture…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled();
     act(() => socket.onmessage?.({ data: frame.buffer }));
     await waitFor(() => expect(draw).toHaveBeenCalledOnce());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -176,10 +178,11 @@ describe('browser frame and input lifecycle boundaries', () => {
     render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
     const socket = MockSocket.instances[0];
     act(() => { socket.open(); socket.message({ type: 'state', state: 'awaiting_user', challenge_required: true, request: { reason: 'captcha', message: 'Finish the site verification.' } }); });
-    expect(screen.getByRole('status')).toHaveTextContent('Paused for site verification');
+    // What the site asks for shows over the page, with Take over on offer.
     expect(screen.getByText('Finish the site verification.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled();
     act(() => socket.message({ type: 'state', state: 'user', controller: 'you', challenge_required: true }));
-    fireEvent.click(screen.getByRole('button', { name: 'Hand back and resume' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hand back' }));
     expect(socket.sent.at(-1)).toEqual({ type: 'control_release' });
     fireEvent(window, new Event('blur'));
     expect(socket.sent.at(-1)).toEqual({ type: 'control_release', outcome: 'control_lost' });
@@ -216,7 +219,9 @@ describe('browser frame and input lifecycle boundaries', () => {
     act(() => { socket.readyState = 3; socket.onclose?.({ code: 4004, reason: 'Session closed' }); });
     await act(async () => loads[0]());
     expect(draw).not.toHaveBeenCalled(); expect(revoke).toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('Disconnected');
+    // Not live again: the page says so and Take over is not on offer.
+    expect(screen.getByText('Disconnected')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
     expect(screen.getByLabelText('Browser screenshot')).not.toBeVisible();
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeInTheDocument();
   });
@@ -262,9 +267,11 @@ describe('browser frame and input lifecycle boundaries', () => {
     act(() => { socket.open(); socket.message({ type: 'state', state: 'agent' }); });
     let claim!: Promise<(() => void) | null>;
     act(() => { claim = control.current!.claim(); });
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_request', force: true });
     act(() => { socket.message({ type: 'control', granted: true }); socket.message({ type: 'state', state: 'user', controller: 'you' }); });
     const giveBack = await claim;
     expect(giveBack).toBeTypeOf('function');
+    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
     act(() => giveBack!());
     expect(socket.sent.at(-1)).toEqual({ type: 'control_release' });
   });
@@ -272,12 +279,13 @@ describe('browser frame and input lifecycle boundaries', () => {
     render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
     const socket = MockSocket.instances[0];
     act(() => { socket.open(); socket.message({ type: 'state', state: 'agent' }); });
-    fireEvent.click(screen.getByRole('button', { name: 'Take control' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Take over' }));
     expect(socket.sent.at(-1)).toEqual({ type: 'control_request' });
+    expect(screen.getByRole('button', { name: 'Taking over…' })).toBeDisabled();
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     fireEvent(document, new Event('visibilitychange'));
     expect(socket.sent.slice(-2)).toEqual([{ type: 'visibility', visible: false }, { type: 'control_release', outcome: 'control_lost' }]);
-    expect(screen.getByRole('button', { name: 'Take control' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled();
   });
   it('bounds decoding when a sender exceeds its two-frame credit', async () => {
     const { frame, loads } = mockFrameRenderer(true);
@@ -297,10 +305,11 @@ describe('browser frame and input lifecycle boundaries', () => {
     const socket = MockSocket.instances[0];
     act(() => { socket.open(); socket.message({ type: 'state', state: 'agent' }); socket.onmessage?.({ data: frame.buffer }); });
     await waitFor(() => expect(loads).toHaveLength(1));
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
     act(() => socket.message({ type: 'sensitive', enabled: true }));
     await act(async () => loads[0]());
     expect(draw).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'Take control' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Take over' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close browser for manual login' }));
     await waitFor(() => expect(actions.sendRequest).toHaveBeenCalledWith('browser_session_stop', { workflow_id: 'wf', node_id: 'browser-1' }, 60_000));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Start browser' })).toBeInTheDocument());
@@ -354,17 +363,9 @@ describe('The agent’s cursor', () => {
   });
 });
 
-describe('BrowserWorkspace in Home', () => {
-  /** Home's browser, while the employee is using it. */
-  function home(props: Partial<ComponentProps<typeof BrowserWorkspace>> = {}) {
-    render(<BrowserWorkspace workflowId="wf" nodes={nodes} chrome="home" {...props} />);
-    const socket = MockSocket.instances.at(-1)!;
-    act(() => { socket.open(); socket.message({ type: 'state', state: 'agent', controller: null }); });
-    return socket;
-  }
-
+describe('The page and its row of controls', () => {
   it('works back, forward and reload only while the owner has control', () => {
-    const socket = home();
+    const socket = browsing();
     for (const name of ['Back', 'Forward', 'Reload page']) expect(screen.getByRole('button', { name })).toBeDisabled();
     act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
     for (const [name, action] of [['Back', 'back'], ['Forward', 'forward'], ['Reload page', 'reload']]) {
@@ -374,25 +375,32 @@ describe('BrowserWorkspace in Home', () => {
   });
 
   it('shows the page’s domain, locked for https, with the whole address in its title', () => {
-    const socket = home();
+    const socket = browsing();
     act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
     const address = screen.getByText('example.com').parentElement!;
     expect(address).toHaveAttribute('title', 'https://example.com/book');
     expect(address.querySelector('.lucide-lock')).toBeInTheDocument();
     // Nothing to type into.
     expect(screen.queryByRole('textbox')).toBeNull();
+    act(() => socket.message({ type: 'page', url: 'http://example.org/menu' }));
+    expect(screen.getByText('example.org').parentElement!.querySelector('.lucide-lock')).toBeNull();
+    // Any other address shows as it is.
+    act(() => socket.message({ type: 'page', url: 'chrome://settings' }));
+    expect(screen.getByText('chrome://settings')).toBeInTheDocument();
+  });
+
+  it('offers the page the browser shows in a new tab, for web pages only', () => {
+    const socket = browsing();
+    expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull();
+    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
     const link = screen.getByRole('link', { name: 'Open in new tab' });
     expect(link).toHaveAttribute('href', 'https://example.com/book');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     act(() => socket.message({ type: 'page', url: 'http://example.org/menu' }));
-    expect(screen.getByText('example.org').parentElement!.querySelector('.lucide-lock')).toBeNull();
-    // Any other address shows as it is, and opens nowhere.
-    act(() => socket.message({ type: 'page', url: 'chrome://settings' }));
-    expect(screen.getByText('chrome://settings')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Open in new tab' })).toBeNull();
-    // Only http(s) pages get the link: a script or data address never does.
-    for (const url of ['javascript:alert(document.cookie)', 'data:text/html,<script>alert(1)</script>']) {
+    expect(screen.getByRole('link', { name: 'Open in new tab' })).toHaveAttribute('href', 'http://example.org/menu');
+    // Only http(s) pages get the link: a browser page, a script or a data address never does.
+    for (const url of ['chrome://settings', 'javascript:alert(document.cookie)', 'data:text/html,<script>alert(1)</script>']) {
       act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
       expect(screen.getByRole('link', { name: 'Open in new tab' })).toBeInTheDocument();
       act(() => socket.message({ type: 'page', url }));
@@ -400,24 +408,109 @@ describe('BrowserWorkspace in Home', () => {
     }
   });
 
-  it('ends the row of page controls with the dock’s action, while the owner does not have control', () => {
-    const socket = home({ action: <button type="button">Take over</button> });
+  it('puts the page-tab picker on a line of its own while the browser has several tabs', () => {
+    const socket = browsing();
+    act(() => socket.message({ type: 'tabs', tabs: [{ target_id: 't1', title: 'Bookings', active: true }] }));
+    expect(screen.queryByRole('combobox', { name: 'Browser tab' })).toBeNull();
+    act(() => {
+      socket.message({ type: 'tabs', tabs: [{ target_id: 't1', title: 'Bookings', active: true }, { target_id: 't2', title: 'Calendar' }] });
+      socket.message({ type: 'state', state: 'user', controller: 'you' });
+    });
+    const picker = screen.getByRole('combobox', { name: 'Browser tab' });
+    expect(row()).not.toContainElement(picker);
+    expect(row().nextElementSibling).toContainElement(picker);
+    fireEvent.change(picker, { target: { value: 't2' } });
+    expect(socket.sent.at(-1)).toEqual({ type: 'tab', action: 'activate', target_id: 't2' });
+  });
+
+  it('draws the buttons on the page neutral, and says to take over before answering a page dialog', () => {
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
+    const socket = MockSocket.instances[0];
+    // Colour marks a state or a role, and these are neither.
+    const neutral = (name: string) => {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('data-variant', 'quiet');
+      expect(button).toHaveClass('border-border-default', 'text-fg-default');
+    };
+    act(() => { socket.open(); socket.message({ type: 'attached', running: false }); });
+    neutral('Start browser');
+    act(() => { socket.message({ type: 'state', state: 'agent', controller: null }); socket.message({ type: 'dialog', kind: 'confirm', message: 'Leave this page?' }); });
+    neutral('OK'); neutral('Cancel');
+    expect(screen.getByText('Take over to respond.')).toBeInTheDocument();
+    act(() => socket.message({ type: 'sensitive', enabled: true }));
+    neutral('Close browser for manual login');
+    act(() => { socket.readyState = 3; socket.onclose?.({ code: 4004, reason: 'Session closed' }); });
+    neutral('Reconnect');
+  });
+});
+
+describe('Take over', () => {
+  it('takes over and hands back with the browser’s own button where the host leaves the action out', () => {
+    const socket = browsing();
     const takeOver = screen.getByRole('button', { name: 'Take over' });
-    const row = takeOver.parentElement!;
-    expect(row).toHaveClass('h-13', 'border-b', 'border-border-default');
-    expect(row).toContainElement(screen.getByRole('button', { name: 'Back' }));
-    expect(row.lastElementChild).toBe(takeOver);
-    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    // A neutral pill at the end of the row.
+    expect(takeOver).toHaveAttribute('data-variant', 'quiet');
+    expect(row().lastElementChild).toBe(takeOver);
+    fireEvent.click(takeOver);
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_request' });
+    expect(screen.getByRole('button', { name: 'Taking over…' })).toBeDisabled();
+    act(() => { socket.message({ type: 'control', granted: true }); socket.message({ type: 'state', state: 'user', controller: 'you' }); });
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    const handBack = screen.getByRole('button', { name: 'Hand back' });
+    expect(handBack).toBeEnabled();
+    expect(handBack).toHaveAttribute('data-variant', 'quiet');
+    expect(row().lastElementChild).toBe(handBack);
+    fireEvent.click(handBack);
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_release' });
+    act(() => socket.message({ type: 'state', state: 'agent', controller: null }));
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled();
+  });
+
+  it('takes the browser from another viewer by force', () => {
+    const socket = browsing();
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'other' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(socket.sent.at(-1)).toEqual({ type: 'control_request', force: true });
+  });
+
+  it('offers Take over again when the server refuses', () => {
+    const socket = browsing();
+    fireEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    act(() => socket.message({ type: 'control', granted: false, reason: 'viewer_unavailable' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Control could not be granted. Try again.');
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeEnabled();
+  });
+
+  it('ends the row of page controls with the host’s action, while the owner does not have control', () => {
+    const onTakeOver = vi.fn();
+    const socket = browsing({ action: <button type="button" onClick={onTakeOver}>Take over</button> });
+    const takeOver = screen.getByRole('button', { name: 'Take over' });
+    expect(row()).toHaveClass('h-13', 'border-b', 'border-border-default');
+    expect(row().lastElementChild).toBe(takeOver);
+    // It is the host's button, which runs the takeover itself: the browser asks for nothing.
+    fireEvent.click(takeOver);
+    expect(onTakeOver).toHaveBeenCalledOnce();
+    expect(socket.sent.some((message) => message.type === 'control_request')).toBe(false);
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    // The host holds Hand back too: the browser shows neither.
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hand back' })).toBeNull();
     // The window lost focus, which hands control back: the action is offered again.
     act(() => { window.dispatchEvent(new Event('blur')); });
     expect(socket.sent.at(-1)).toEqual({ type: 'control_release', outcome: 'control_lost' });
     expect(screen.getByRole('button', { name: 'Take over' })).toBeInTheDocument();
   });
 
-  it('offers the dock’s action only while the browser could grant control', () => {
-    const action = <button type="button">Take over</button>;
-    render(<BrowserWorkspace workflowId="wf" nodes={nodes} chrome="home" action={action} />);
+  it('shows no Take over and no Hand back where the host passes a null action', () => {
+    const socket = browsing({ action: null });
+    expect(controls()).toEqual(['Back', 'Forward', 'Reload page']);
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    expect(controls()).toEqual(['Back', 'Forward', 'Reload page']);
+  });
+
+  it.each(['its own Take over', 'the host’s action'])('offers %s only while the browser could grant control', (whose) => {
+    const action = whose === 'the host’s action' ? <button type="button">Take over</button> : undefined;
+    render(<BrowserWorkspace workflowId="wf" nodes={nodes} action={action} />);
     const socket = MockSocket.instances.at(-1)!;
     // Connecting, then stopped: the server would answer no.
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
@@ -429,69 +522,76 @@ describe('BrowserWorkspace in Home', () => {
     act(() => socket.message({ type: 'sensitive', enabled: true }));
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
   });
+});
 
-  it('leaves out the editor’s Take control, browser controls, Full view and browser tasks', () => {
-    const { unmount } = render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
-    act(() => { MockSocket.instances[0].open(); MockSocket.instances[0].message({ type: 'state', state: 'agent', controller: null }); });
-    const editorOnly = ['Take control', 'Browser controls', 'Browser full view'];
-    for (const name of editorOnly) expect(screen.getByRole('button', { name })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Browser AI tasks' })).toBeInTheDocument();
-    unmount();
-    home();
-    for (const name of editorOnly) expect(screen.queryByRole('button', { name })).toBeNull();
+describe('Dev mode’s extras', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  // Browser AI tasks asks the server for this browser's agents: none here.
+  beforeEach(() => {
+    fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ agents: [] }) }));
+    vi.stubGlobal('fetch', fetchMock);
+  });
+  /** Dev mode's browser while the employee is using it, once Browser AI tasks has loaded. */
+  async function devBrowsing() {
+    const socket = browsing({ dev: true });
+    await screen.findByRole('button', { name: 'Add Browser AI Agent' });
+    return socket;
+  }
+
+  it('leaves out the address box, Full view and Browser AI tasks unless the host asks for them', () => {
+    const socket = browsing();
+    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
+    // All the browser shows is its row of page controls, with no Full view in it.
+    expect(controls()).toEqual(['Back', 'Forward', 'Reload page', 'Open in new tab', 'Take over']);
     expect(screen.queryByRole('region', { name: 'Browser AI tasks' })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    // It has no status text of its own.
+    expect(screen.queryByRole('status')).toBeNull();
+    // With control too, the address stays the page's domain: nothing to type into.
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByText('example.com')).toBeInTheDocument();
+  });
+
+  it('turns the address into a box to go to a page from, only while the owner has control', async () => {
+    const socket = await devBrowsing();
+    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
+    // Without control it is the same read-only domain.
+    expect(screen.queryByRole('textbox', { name: 'Browser address' })).toBeNull();
+    expect(screen.getByText('example.com').parentElement).toHaveAttribute('title', 'https://example.com/book');
+    // Asking for control is not having it.
+    fireEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(screen.queryByRole('textbox', { name: 'Browser address' })).toBeNull();
+    act(() => socket.message({ type: 'state', state: 'user', controller: 'you' }));
+    const address = screen.getByRole('textbox', { name: 'Browser address' });
+    expect(address).toBeEnabled();
+    expect(address).toHaveValue('https://example.com/book');
+    fireEvent.change(address, { target: { value: 'https://example.org/menu' } });
+    fireEvent.submit(address.closest('form')!);
+    expect(socket.sent.at(-1)).toEqual({ type: 'navigate', action: 'goto', url: 'https://example.org/menu' });
+    // Control gone, the domain is back.
+    act(() => socket.message({ type: 'state', state: 'agent', controller: null }));
+    expect(screen.queryByRole('textbox', { name: 'Browser address' })).toBeNull();
+    expect(screen.getByText('example.com')).toBeInTheDocument();
+  });
+
+  it('adds Full view to the row of page controls, before Take over', async () => {
+    const socket = await devBrowsing();
+    act(() => socket.message({ type: 'page', url: 'https://example.com/book' }));
+    const fullView = screen.getByRole('button', { name: 'Browser full view' });
+    expect(fullView).toHaveAttribute('aria-pressed', 'false');
+    expect(fullView).toHaveAttribute('data-variant', 'quiet');
+    expect(row()).toContainElement(fullView);
+    // The same browser otherwise: the same controls, and no status text of its own.
+    expect(controls()).toEqual(['Back', 'Forward', 'Reload page', 'Open in new tab', 'Browser full view', 'Take over']);
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('takes the screen for the dock’s Take over and gives it back', async () => {
-    const control = createRef<SurfaceControl>();
-    const socket = home({ ref: control });
-    let claim!: Promise<(() => void) | null>;
-    act(() => { claim = control.current!.claim(); });
-    expect(socket.sent.at(-1)).toEqual({ type: 'control_request', force: true });
-    act(() => { socket.message({ type: 'control', granted: true }); socket.message({ type: 'state', state: 'user', controller: 'you' }); });
-    const giveBack = await claim;
-    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
-    act(() => giveBack!());
-    expect(socket.sent.at(-1)).toEqual({ type: 'control_release' });
-  });
-
-  it('puts the page-tab picker on a line of its own while the browser has several tabs', () => {
-    const socket = home();
-    act(() => socket.message({ type: 'tabs', tabs: [{ target_id: 't1', title: 'Bookings', active: true }] }));
-    expect(screen.queryByRole('combobox', { name: 'Browser tab' })).toBeNull();
-    act(() => {
-      socket.message({ type: 'tabs', tabs: [{ target_id: 't1', title: 'Bookings', active: true }, { target_id: 't2', title: 'Calendar' }] });
-      socket.message({ type: 'state', state: 'user', controller: 'you' });
-    });
-    const picker = screen.getByRole('combobox', { name: 'Browser tab' });
-    const row = screen.getByRole('button', { name: 'Back' }).parentElement!.parentElement!;
-    expect(row).not.toContainElement(picker);
-    expect(row.nextElementSibling).toContainElement(picker);
-    fireEvent.change(picker, { target: { value: 't2' } });
-    expect(socket.sent.at(-1)).toEqual({ type: 'tab', action: 'activate', target_id: 't2' });
-  });
-
-  it.each([
-    { chrome: 'home', variant: 'quiet', note: 'Take over to respond.' },
-    { chrome: 'dev', variant: 'outline', note: 'Take control to respond.' },
-  ] as const)('draws the page’s buttons $variant in $chrome', ({ chrome, variant, note }) => {
-    render(<BrowserWorkspace workflowId="wf" nodes={nodes} chrome={chrome} />);
-    const socket = MockSocket.instances[0];
-    const drawn = (name: string) => {
-      const button = screen.getByRole('button', { name });
-      expect(button).toHaveAttribute('data-variant', variant);
-      // Home's are neutral outlines: colour there marks a state or a role.
-      if (chrome === 'home') expect(button).toHaveClass('border-border-default', 'text-fg-default');
-    };
-    act(() => { socket.open(); socket.message({ type: 'attached', running: false }); });
-    drawn('Start browser');
-    act(() => { socket.message({ type: 'state', state: 'agent', controller: null }); socket.message({ type: 'dialog', kind: 'confirm', message: 'Leave this page?' }); });
-    drawn('OK'); drawn('Cancel');
-    expect(screen.getByText(note)).toBeInTheDocument();
-    act(() => socket.message({ type: 'sensitive', enabled: true }));
-    drawn('Close browser for manual login');
-    act(() => { socket.readyState = 3; socket.onclose?.({ code: 4004, reason: 'Session closed' }); });
-    drawn('Reconnect');
+  it('adds Browser AI tasks under the page, for the browser shown', async () => {
+    await devBrowsing();
+    const tasks = screen.getByRole('region', { name: 'Browser AI tasks' });
+    // Right under the browser's own box.
+    expect(tasks.previousElementSibling).toContainElement(screen.getByRole('group', { name: 'Live browser page' }));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/browser/tasks/discovery?workflow_id=wf&browser_node_id=browser-1'), expect.anything());
   });
 });

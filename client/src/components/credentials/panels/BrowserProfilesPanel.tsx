@@ -3,7 +3,7 @@
  *
  * A profile is a browser's own cookies and logins. Each workflow's Browser
  * node uses that workflow's profile unless it picks a shared one, which is
- * added here. Logins come in two ways: sign in by hand with Take control in
+ * added here. Logins come in two ways: sign in by hand with Take over in
  * the Browser workspace, or import a session file here (Playwright storage
  * state, Cookie-Editor JSON or cookies.txt). Sites show as domains and
  * cookie counts only; no cookie value ever reaches the client.
@@ -133,7 +133,7 @@ const BrowserProfilesPanel: React.FC<{ config: ProviderConfig; visible: boolean 
     <div className="flex flex-col gap-4 p-6">
       <p className="m-0 text-sm text-muted-foreground">
         A profile keeps a browser's logins. Each workflow's browser has its own; add a shared one to use the same logins in
-        several workflows. To sign in to a site, use Take control in the Browser workspace, or import a session file here.
+        several workflows. To sign in to a site, use Take over in the Browser workspace, or import a session file here.
       </p>
 
       <form onSubmit={(event) => void create(event)} className="flex gap-2">

@@ -1,38 +1,36 @@
 /**
- * Docked Canvas sidebar state.
+ * The editor's Workspace dock state (Home keeps its own in homeStore; the
+ * dock they show is the same one).
  *
  * A small Zustand store (nodeStatusStore shape: slice-selector reads,
  * `getState()` writes from the WS handler and click-to-preview call sites)
  * — deliberately NOT on useAppStore or WebSocketContext.value, both of
  * which are context fan-out traps for high-frequency or unrelated state.
  *
- * Prefs (open / width / autoOpen / followMode) persist to localStorage via
+ * Prefs (open / width / autoOpen / followMode / tab) persist to localStorage via
  * a zod-validated envelope, the ConsolePanel idiom — no persist middleware.
  * Node selection and ephemeral items are session-only: node ids are
- * workflow-scoped and meaningless across reloads.
+ * workflow-scoped and meaningless across reloads. The width's limits are the
+ * dock's own (components/workspace/dockSize), the same as on Home.
  */
 
 import { z } from 'zod';
 import { create } from 'zustand';
 
 import type { CanvasFocus, CanvasItem } from '../lib/canvasBoard';
+import { DOCK_DEFAULT_WIDTH, DOCK_MAX_STORED_WIDTH, DOCK_MIN_WIDTH, clampDockWidth } from '../components/workspace/dockSize';
 import type { WorkspaceTab } from '../components/workspace/WorkspaceTabs';
 
 const dockPrefsSchema = z.object({
   open: z.boolean().default(false),
-  widthPx: z.number().min(280).max(4000).default(380),
+  // A width stored before the dock's limits changed falls back on its own.
+  widthPx: z.number().min(DOCK_MIN_WIDTH).max(DOCK_MAX_STORED_WIDTH).catch(DOCK_DEFAULT_WIDTH),
   autoOpen: z.boolean().default(true),
   followMode: z.boolean().default(false),
   tab: z.enum(['browser', 'board', 'android']).catch('board'),
 });
 type CanvasDockPrefs = z.infer<typeof dockPrefsSchema>;
 const DOCK_PREFS_KEY = 'canvas_dock_prefs_v1';
-
-export const DOCK_MIN_WIDTH = 280;
-// Sanity bound for persisted/corrupt values only — NOT a UX limit. The live
-// ceiling while dragging is viewport-relative (CanvasDock's onMove), so the
-// dock can take nearly the whole window.
-export const DOCK_MAX_WIDTH = 4000;
 
 function loadDockPrefs(): CanvasDockPrefs {
   try {
@@ -125,8 +123,7 @@ export const useCanvasDockStore = create<CanvasDockState>((set, get) => ({
     persist(get());
   },
   setWidth: (px) => {
-    const clamped = Math.min(DOCK_MAX_WIDTH, Math.max(DOCK_MIN_WIDTH, Math.round(px)));
-    set({ widthPx: clamped });
+    set({ widthPx: clampDockWidth(px) });
     persist(get());
   },
   setAutoOpen: (value) => {

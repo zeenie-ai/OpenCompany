@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { create } from 'zustand';
+import { DOCK_DEFAULT_WIDTH, DOCK_MAX_STORED_WIDTH, DOCK_MIN_WIDTH, clampDockWidth, dockWidth } from '@/components/workspace/dockSize';
 import type { WorkflowControlStatus } from '@/contexts/WebSocketContext';
 import type { CanvasFocus } from '@/lib/canvasBoard';
 import type { CredentialsIntent } from '@/stores/shellDialogsStore';
@@ -64,17 +65,13 @@ export type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
 
 const SIDEBAR_KEY = 'home_sidebar_open';
 const WORKSPACE_KEY = 'home_workspace_v1';
-/** Narrowest the Workspace drags to (design handoff "Workspace panel"). */
-export const WORKSPACE_MIN_WIDTH = 360;
-/** Room a drag always leaves for the rest of the screen. */
-const WORKSPACE_KEEP_PX = 420;
+/** Narrowest the Workspace drags to: the dock's own limit, shared with the
+ *  editor's (components/workspace/dockSize). */
+export const WORKSPACE_MIN_WIDTH = DOCK_MIN_WIDTH;
 
-/** The Workspace dock's width, as CSS: the dragged width, or Expand's,
- *  always leaving the window some room. The Get started card sits at its
+/** The Workspace dock's width, as CSS. The Get started card sits at its
  *  left edge while it is open. */
-export function dockWidth(widthPx: number, wide: boolean): string {
-  return wide ? 'max(420px, min(1100px, 100vw - 420px))' : `min(${widthPx}px, max(340px, 100vw - 40px))`;
-}
+export { dockWidth };
 
 /** Whose workspace the dock shows: `workspaceFor`, else the first on the
  *  team. The header's Workspace button reads the same one for its dot. */
@@ -85,7 +82,7 @@ export function dockEmployee<T extends { workflow_id: string }>(team: readonly T
 const workspacePrefsSchema = z.object({
   open: z.boolean().catch(false),
   // A bound for stored values only; while dragging, the window sets the limit.
-  widthPx: z.number().min(WORKSPACE_MIN_WIDTH).max(4000).catch(460),
+  widthPx: z.number().min(DOCK_MIN_WIDTH).max(DOCK_MAX_STORED_WIDTH).catch(DOCK_DEFAULT_WIDTH),
   tab: z.enum(WORKSPACE_TABS).catch('board'),
 });
 type WorkspacePrefs = z.infer<typeof workspacePrefsSchema>;
@@ -339,8 +336,7 @@ export const useHomeStore = create<HomeState>((set, get) => ({
     saveWorkspacePrefs(get());
   },
   setWorkspaceWidth: (px) => {
-    const max = Math.max(WORKSPACE_MIN_WIDTH, window.innerWidth - WORKSPACE_KEEP_PX);
-    set({ workspaceWidth: Math.round(Math.min(max, Math.max(WORKSPACE_MIN_WIDTH, px))), workspaceWide: false });
+    set({ workspaceWidth: clampDockWidth(px), workspaceWide: false });
     saveWorkspacePrefs(get());
   },
   toggleWorkspaceWide: () => set((state) => ({ workspaceWide: !state.workspaceWide })),

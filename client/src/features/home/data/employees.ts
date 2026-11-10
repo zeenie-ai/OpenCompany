@@ -3,8 +3,9 @@
  * employee's detail (`get_employee`). Both go through the stable
  * `useWebSocketActions()`, so Home never re-renders on a console line.
  *
- * `useEmployeeLifecycle()` keeps the cache current from broadcasts, and is
- * mounted once by the Home shell:
+ * `useEmployeeLifecycle()` keeps the cache current from broadcasts. The Home
+ * shell mounts it, and in Dev mode the editor's Workspace dock does, for the
+ * open workflow's summary:
  * - `employee_lifecycle` hired / updated refresh the server queries. Event
  *   summaries may already be out of date, so they never replace cached rows.
  *   Confirmed removals prune the cache and refresh the remaining team.
@@ -46,8 +47,8 @@ export function useEmployeesQuery() {
     },
     enabled: isReady || fixture,
     staleTime: 30_000,
-    // Home's lifecycle listener is absent in Dev; re-entry must reconcile
-    // even a warm cache whose removal broadcasts arrived while unmounted.
+    // Nothing reads the list in Dev; re-entry must reconcile even a warm
+    // cache whose removal broadcasts arrived while it had no reader.
     refetchOnMount: 'always',
   });
 }
