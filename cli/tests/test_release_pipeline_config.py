@@ -428,20 +428,33 @@ def test_backend_tests_run_on_every_os_with_the_pinned_temporal_cli(predeploy_ym
     the app's own installer, as ``TEMPORAL_TEST_CLI``. Without it every one
     of them skips. Two replay tests run workflow code from older commits
     with ``git show``, so the checkout carries full history.
+
+    Each OS runs the suite as two jobs side by side: ``tests/temporal`` and
+    the rest. The rest is the suite with that folder left out, so every test
+    is in one of the two jobs. Both install the CLI, so a real-server test
+    added outside ``tests/temporal`` still runs.
     """
     job = predeploy_yml["jobs"]["backend-tests"]
     assert job["runs-on"] == "${{ matrix.os }}"
     assert job["strategy"]["fail-fast"] is False
-    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "windows-latest", "macos-latest"}
+    matrix = job["strategy"]["matrix"]
+    assert set(matrix["os"]) == {"ubuntu-latest", "windows-latest", "macos-latest"}
+    assert set(matrix["shard"]) == {"temporal", "rest"}
+    targets = {leg["shard"]: leg["tests"] for leg in matrix["include"]}
+    assert targets == {"temporal": "tests/temporal", "rest": "tests --ignore=tests/temporal"}
     checkout = job["steps"][0]
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"]["fetch-depth"] == 0
     names = [step.get("name") for step in job["steps"]]
     cli = _step_by_name(job, "Pinned Temporal CLI")
     assert cli is not None, "backend-tests must install the pinned Temporal CLI"
+    assert "if" not in cli, "both jobs of an OS install the pinned Temporal CLI"
     assert "ensure_temporal_binaries" in cli["run"]
     assert "TEMPORAL_TEST_CLI=" in cli["run"] and "GITHUB_ENV" in cli["run"]
     assert names.index("Pinned Temporal CLI") < names.index("pytest")
+    tests = _step_by_name(job, "pytest")
+    assert "if" not in tests, "both jobs of an OS run their tests"
+    assert "uv run pytest ${{ matrix.tests }} " in tests["run"]
 
 
 def test_the_current_version_has_its_replay_histories(root: Path, root_pkg: dict):

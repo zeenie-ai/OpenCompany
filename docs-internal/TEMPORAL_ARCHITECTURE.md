@@ -880,7 +880,8 @@ keep that release's command identities:
   `fixtures/<version>/`. It also fails a set recorded on another CLI than the
   one pinned when it was recorded. It reads only `fixtures/<version>/`;
   supplementary sets are replayed but not checked here.
-- **CI.** `backend-tests` runs the gate as its own step before the full suite.
+- **CI.** `backend-tests` runs the gate as its own step, in the job that runs
+  `tests/temporal` on each OS, before that job's tests.
   That step first checks that `TEMPORAL_TEST_CLI` reports the pinned version
   (`_install.binary_versions`). The job sets `TEMPORAL_REQUIRE_NATIVE_REPLAY=1`,
   so a missing CLI fails the gate instead of skipping it.

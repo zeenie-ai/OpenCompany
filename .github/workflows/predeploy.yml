@@ -1,7 +1,8 @@
-# Reusable validation workflow. Called by ci.yml and release.yml.
+# Reusable validation workflow. Called by ci.yml, release.yml and
+# desktop-release.yml.
 # Jobs: build-and-lint (client build, lint, tests, JS dependency audit),
-# backend-tests (cross-OS, with the pinned Temporal CLI), cli-tests,
-# test-build-start (cross-OS build + start smoke test).
+# backend-tests (cross-OS, two jobs per OS, with the pinned Temporal CLI),
+# cli-tests, test-build-start (cross-OS build + start smoke test).
 
 name: Predeploy
 
@@ -58,9 +59,12 @@ jobs:
 
   # The whole server suite runs on every OS the desktop app ships for, with
   # the Temporal CLI the app pins, so the real-server tests (TEMPORAL_TEST_CLI)
-  # run instead of skipping.
+  # run instead of skipping. A run lasts as long as its slowest job, so each
+  # OS runs the suite as two jobs side by side: tests/temporal, and everything
+  # else. The second is the suite with the first left out, so a new test
+  # folder is always in one of them.
   backend-tests:
-    name: Backend tests (${{ matrix.os }})
+    name: Backend tests (${{ matrix.os }}, ${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
     env:
       TEMPORAL_REQUIRE_NATIVE_REPLAY: "1"
@@ -69,6 +73,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        shard: [temporal, rest]
+        include:
+          - shard: temporal
+            tests: tests/temporal
+          - shard: rest
+            tests: tests --ignore=tests/temporal
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,14 +86,16 @@ jobs:
           # Replay tests run workflow code from older commits (git show).
           fetch-depth: 0
       - uses: ./.github/actions/setup
+      # The lock check and the audit read no test, so one of the six jobs
+      # runs them.
       - name: Lockfile is current
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.shard == 'rest'
         working-directory: server
         # server/uv.lock is what the desktop build installs with --frozen;
         # a stale lock would ship a different dependency tree than CI tested.
         run: uv lock --check
       - name: Audit Python dependencies
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.shard == 'rest'
         working-directory: server
         run: |
           uv export --locked --all-extras --no-hashes --no-emit-project --output-file "${RUNNER_TEMP}/opencompany-audit.txt" > /dev/null
@@ -99,21 +111,28 @@ jobs:
           uv sync
           uv run python -c "import asyncio, os; from services.temporal._install import ensure_temporal_binaries; cli = asyncio.run(ensure_temporal_binaries())['temporal']; open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8').write(f'TEMPORAL_TEST_CLI={cli}\n')"
       - name: N-1 Temporal replay and identity gate
+        if: matrix.shard == 'temporal'
         working-directory: server
         shell: bash
         run: |
           uv run python -c "import os; from pathlib import Path; from services.temporal._install import cli_pin, binary_versions; cli = Path(os.environ['TEMPORAL_TEST_CLI']); assert cli.is_file(); assert binary_versions(cli)['cli_version'] == cli_pin()['version']"
           uv run pytest tests/temporal/test_replay_corpus.py tests/temporal/test_workflow_identity_golden.py tests/temporal/test_run_graph_replay.py -v -p no:cacheprovider
+      # Only tests/temporal starts the Pi host.
+      - name: Pi host bundle
+        if: matrix.shard == 'temporal'
+        working-directory: server
+        shell: bash
+        run: |
+          bun --cwd=pi install --frozen-lockfile
+          bun --cwd=pi run build
       - name: pytest
         working-directory: server
         shell: bash
         # --durations ends the log with the slowest test phases, so a slow run
         # says where its time went (setup counts: a fixture can be the cost).
         run: |
-          bun --cwd=pi install --frozen-lockfile
-          bun --cwd=pi run build
           uv sync
-          uv run pytest tests/ -v --durations=25
+          uv run pytest ${{ matrix.tests }} -v --durations=25
 
   cli-tests:
     name: CLI tests
