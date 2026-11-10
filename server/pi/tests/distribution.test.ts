@@ -1,48 +1,29 @@
-import {afterAll,beforeAll,describe,expect,test} from "bun:test";
-import {createHash} from "node:crypto";
-import {readFile,mkdtemp,realpath,rm} from "node:fs/promises";
+import {afterAll,beforeAll,describe,test} from "bun:test";
+import {copyFile,mkdtemp,realpath,rm} from "node:fs/promises";
 import {dirname,join,resolve,sep} from "node:path";
 import {tmpdir} from "node:os";
 import {fileURLToPath} from "node:url";
-import {captureProcess,smokeHost,within} from "./process-helpers.ts";
-import {tarBinary} from "../scripts/tar.ts";
+import {smokeHost} from "./process-helpers.ts";
 
-const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
-const manifestPath=join(root,"dist","runtime-manifest.json");
-describe.skipIf(!await Bun.file(manifestPath).exists())("production archive",()=>{
-  let manifest:{archive:string;sha256:string;sdk_version:string;universal:boolean;entrypoint:string;sdk_package_dir:string};
-  let buildRoot:string;let isolated:string|undefined;
-  // Cold Windows extraction and removal can dominate this large dependency
-  // tree. Keep fixture work separate from the bounded host startup contract.
-  // Each budget only catches a hang. Unpacking ran past 25 s on the Windows
-  // runner (2026-11-09), and the fresh tree's first start ran past 10 s on a
-  // loaded Windows machine: thousands of new files, each read cold and
-  // scanned by Defender on first open.
+const dist=resolve(dirname(fileURLToPath(import.meta.url)),"..","dist");
+describe.skipIf(!await Bun.file(join(dist,"package.json")).exists())("production bundle",()=>{
+  let scratch:string;let isolated:string|undefined;
   beforeAll(async()=>{
-    manifest=JSON.parse(await readFile(manifestPath,"utf8"));
-    const archive=join(root,"dist",manifest.archive);
-    const bytes=await readFile(archive);
-    expect(createHash("sha256").update(bytes).digest("hex")).toBe(manifest.sha256);
-    expect(manifest.sdk_version).toBe("1.1.0");
-    expect(manifest.universal).toBe(true);
-    // Outside the repository so missing runtime packages cannot resolve from
+    // Outside the repository, so a missing package cannot resolve from
     // server/pi/node_modules, root node_modules or any development workspace.
-    buildRoot=await realpath(tmpdir());
-    isolated=await realpath(await mkdtemp(join(buildRoot,"opencompany-pi-offline-")));
-    const unpack=await captureProcess([tarBinary(),"-xzf",archive,"-C",isolated],"Offline runtime archive extraction",120000);
-    expect(unpack.exitCode,`Archive extraction failed: ${unpack.stderr}`).toBe(0);
-    for (const platform of ["darwin-arm64","darwin-x64","linux-x64","win32-x64"]) {
-      const binary=join(isolated,"node_modules","@esbuild",platform,platform.startsWith("win32-") ? "esbuild.exe" : "bin/esbuild");
-      expect(await Bun.file(binary).exists()).toBe(true);
-    }
-  },130000);
+    scratch=await realpath(tmpdir());
+    isolated=await realpath(await mkdtemp(join(scratch,"opencompany-pi-offline-")));
+    for (const file of ["index.js","package.json"]) await copyFile(join(dist,file),join(isolated,file));
+  });
   afterAll(async()=>{
     if(!isolated)return;
-    if (!resolve(isolated).startsWith(resolve(buildRoot)+sep)) throw new Error("Invalid offline test scratch path");
-    await within(rm(isolated,{recursive:true,force:true,maxRetries:3,retryDelay:100}),120000,"Offline runtime scratch cleanup");
-  },130000);
-  test("runs offline without source or root dependency resolution",async()=>{
-    if(!isolated)throw new Error("Offline runtime extraction did not create a fixture");
-    await smokeHost(join(isolated,manifest.entrypoint),{NODE_PATH:"",PI_PACKAGE_DIR:join(isolated,manifest.sdk_package_dir),PI_OFFLINE:"1"},60000);
+    if (!resolve(isolated).startsWith(resolve(scratch)+sep)) throw new Error("Invalid offline test scratch path");
+    await rm(isolated,{recursive:true,force:true,maxRetries:3,retryDelay:100});
+  });
+  // The budget only catches a hang. A cold start on a loaded Windows runner has
+  // taken many times the usual second.
+  test("runs offline from one file, with no dependency tree beside it",async()=>{
+    if(!isolated)throw new Error("The bundle was not copied");
+    await smokeHost(join(isolated,"index.js"),{NODE_PATH:"",PI_PACKAGE_DIR:isolated,PI_OFFLINE:"1"},60000);
   },70000);
 });

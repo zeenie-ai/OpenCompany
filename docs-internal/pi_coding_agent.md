@@ -140,11 +140,15 @@ the ordinary canonical/configuration/binding rebuild path.
 
 ## Distribution and validation
 
-The private Pi package has a frozen lockfile. Build the external-SDK host plus
-a complete production dependency archive and SHA-256 manifest under
-`server/pi/dist`. CLI, desktop and Docker ship that distribution. The backend
-verifies and safely unpacks it into its private data cache offline. No runtime
-package installation or dependency on the root workspace is permitted.
+The private Pi package has a frozen lockfile. Its build writes one bundle,
+`server/pi/dist/index.js`, with the SDK and every package it imports inlined,
+plus the SDK's own `package.json` and the inlined packages' licenses. CLI,
+desktop and Docker ship those three files, and the backend runs the bundle
+where it is: nothing is verified, unpacked or cached first. No runtime package
+installation or dependency on the root workspace is permitted. The bundle
+leaves out the SDK's lazily loaded features (codemode, image resizing,
+extensions loaded from source), which the host never calls;
+[server/pi/README.md](../server/pi/README.md) lists them.
 
 SDK contract tests exercise reconstruction, declaration refresh, raw arguments,
 provider state, media, incompatible snapshots, bootstrap lease cleanup, bounded

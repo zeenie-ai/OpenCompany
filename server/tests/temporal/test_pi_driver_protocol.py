@@ -7,6 +7,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -209,20 +210,19 @@ async def test_host_error_codes_are_classified_without_exposing_diagnostics(monk
 @pytest.mark.asyncio
 async def test_packaged_bun_round_preserves_large_native_wires_across_python_boundary(monkeypatch):
     from core.js_runtime import bun_binary
-    from core import paths
     from services import pi_runtime
 
     bun = bun_binary()
-    manifest = Path(pi_runtime.__file__).resolve().parent.parent / "pi" / "dist" / "runtime-manifest.json"
-    if not bun or not manifest.is_file():
-        pytest.skip("Build server/pi's private runtime and provide Bun for the packaged boundary gate")
+    distribution = Path(pi_runtime.__file__).resolve().parent.parent / "pi" / "dist"
+    if not bun or not (distribution / "package.json").is_file():
+        pytest.skip("Build server/pi's bundle and provide Bun for the packaged boundary gate")
     # Outside the repository: imports cannot fall back to development node_modules.
     with tempfile.TemporaryDirectory(prefix="opencompany-pi-python-boundary-") as private_dir:
         private = Path(private_dir).resolve()
         assert private.is_relative_to(Path(tempfile.gettempdir()).resolve())
-        monkeypatch.setattr(paths, "data_path", lambda _: private / "runtime-cache")
-        host = await asyncio.to_thread(pi_runtime.resolve_pi_host)
-        assert host.is_relative_to(private) and host.name == "index.js"
+        for name in ("index.js", "package.json"):
+            shutil.copyfile(distribution / name, private / name)
+        host = private / "index.js"
         blob_dir = private / "transport"
         blob_dir.mkdir()
         run = _run(blob_dir)
@@ -298,7 +298,7 @@ async def test_packaged_bun_round_preserves_large_native_wires_across_python_bou
         handle = SimpleNamespace(execute_update=AsyncMock(side_effect=update), query=AsyncMock(side_effect=query))
         transport = ObservedTransport(blob_dir, run["scope"], run["epoch"])
         env = {**os.environ, "NODE_PATH": "", "PI_OFFLINE": "1",
-            "PI_PACKAGE_DIR": str(host.parent / "node_modules" / "@earendil-works" / "pi-coding-agent")}
+            "PI_PACKAGE_DIR": str(pi_runtime.pi_package_dir(host))}
         result = await asyncio.wait_for(pi_activities.PiDriverActivities(MagicMock())._run_host(
             bun, host, env, run, transport, handle, get_blob, put_blob), timeout=30)
         assert result["status"] == "completed" and result["epoch"] == run["epoch"]

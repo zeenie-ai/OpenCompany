@@ -41,7 +41,7 @@ const DROP_PREFIXES = [
   "server/tests/",
   "server/scripts/",
   "server/nodejs/", // built below with the sidecar's own bun build
-  "server/pi/", // frozen SDK distribution built and copied below
+  "server/pi/", // host bundle built and copied below
   "server/experiments/",
   "server/.venv/",
 ];
@@ -105,16 +105,18 @@ function bundleSidecar(): void {
   log(`sidecar bundled -> ${posix.relative(REPO_ROOT.replace(/\\/g, "/"), outfile.replace(/\\/g, "/"))}`);
 }
 
+/** Everything the Pi package's own build writes to server/pi/dist. */
+const PI_DIST = ["index.js", "package.json", "THIRD-PARTY-LICENSES.txt"];
+
 function bundlePi(): number {
   const piDir = join(REPO_ROOT, "server", "pi");
+  // One definition of the build, as for the sidecar: the Pi package's own
+  // script, which inlines the SDK from that package's frozen lockfile.
   run(BUN, ["install", "--frozen-lockfile"], { cwd: piDir });
   run(BUN, ["run", "build"], { cwd: piDir });
-  run(BUN, ["run", "scripts/stage.ts", "--out", join(APP_ROOT, "server", "pi")], { cwd: piDir });
-  for (const rel of ["dist/index.js", "dist/runtime.tgz", "dist/runtime-manifest.json"]) {
-    if (!existsSync(join(APP_ROOT, "server", "pi", rel))) fail(`Pi runtime did not stage ${rel}`);
-  }
-  log("Pi Coding Agent host and private SDK archive staged");
-  return 3;
+  for (const name of PI_DIST) copyInto(posix.join("server", "pi", "dist", name));
+  log("Pi Coding Agent host bundle staged");
+  return PI_DIST.length;
 }
 
 function stageAppRoot(): { files: number } {

@@ -117,8 +117,6 @@ async def driver_worker() -> None:
 
 
 async def recovery_gate(directory: Path) -> None:
-    from services.pi_runtime import resolve_pi_host
-    await asyncio.to_thread(resolve_pi_host)
     install_shared_blobs(directory / "blobs")
     fixture.COUNTS.clear()
     workers = []

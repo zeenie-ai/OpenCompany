@@ -39,7 +39,7 @@ jobs:
       # GitHub's dependency graph cannot read bun.lock, so no Dependabot alert
       # covers the JS trees. Each lockfile is audited: the root, desktop/
       # (with its own Bun security patch) and server/pi, whose production
-      # tree ships as the Pi runtime archive. The one ignored advisory is in
+      # tree is inlined into the Pi host bundle. The one ignored advisory is in
       # docs-internal/ci_cd.md. Test the desktop patch after a frozen install
       # because the audit cannot inspect its behavior.
       - name: Audit JS dependencies

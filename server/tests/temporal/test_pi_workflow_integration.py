@@ -454,8 +454,6 @@ async def _main():
         with environment.auto_time_skipping_disabled():
             focused = os.environ.get("PI_TEST_ACTUAL_SCENARIO")
             if focused:
-                from services.pi_runtime import resolve_pi_host
-                await asyncio.wait_for(asyncio.to_thread(resolve_pi_host), 120)
                 from services.temporal import agent_workflow
                 previous = agent_workflow._AGENT_HISTORY_SOFT_CAP
                 if focused == "large-overflow":
@@ -479,9 +477,7 @@ async def _main():
             if os.environ.get("PI_TEST_PROTOCOL_ONLY") == "1":
                 return
             from services.pi_runtime import resolve_pi_host
-            print("Verifying and unpacking the fresh offline Pi distribution", flush=True)
-            await asyncio.wait_for(asyncio.to_thread(resolve_pi_host), 120)
-            print("Offline Pi distribution ready", flush=True)
+            print(f"Real Pi host: {resolve_pi_host()}", flush=True)
             await _scenario(environment, "stop", actual=True)
             await _scenario(environment, "delegate", actual=True)
             await _scenario(environment, "model-stop", actual=True)

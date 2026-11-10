@@ -45,10 +45,10 @@ _SANCTIONED = {
 # Literal path joins that encode the sibling layout; only approot may spell them.
 _LAYOUT_LITERALS = {("client", "dist"), (".env.template",), ("package.json",)}
 
-# Pi verifies the pinned SDK's own manifest in its private dependency tree,
-# both in server/pi/ and in the extracted DATA_DIR cache. These are not the
-# application-version manifest owned by core.approot. Allow only this exact
-# literal suffix in this reader; all other joins and root climbs stay checked.
+# Pi checks the pinned SDK's own manifest in server/pi's dependency tree
+# before running the host from source. That is not the application-version
+# manifest owned by core.approot. Allow only this exact literal suffix in
+# this reader; all other joins and root climbs stay checked.
 _PRIVATE_PACKAGE_MANIFEST_JOINS = {
     "services/pi_runtime.py": ("node_modules", "@earendil-works", "pi-coding-agent", "package.json"),
 }

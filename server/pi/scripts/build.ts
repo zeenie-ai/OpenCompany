@@ -1,40 +1,38 @@
-import {createHash} from "node:crypto";
-import {mkdir,mkdtemp,copyFile,readFile,writeFile,rm,rename,readdir} from "node:fs/promises";
+import {copyFile,readdir,readFile,rm,writeFile} from "node:fs/promises";
 import {dirname,join,resolve,sep} from "node:path";
 import {fileURLToPath} from "node:url";
-import {tarBinary} from "./tar.ts";
+import {SDK_VERSION} from "../src/types.ts";
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const dist=join(root,"dist");
-await mkdir(dist,{recursive:true});
-const result=await Bun.build({entrypoints:[join(root,"src","index.ts")],outdir:dist,target:"bun",packages:"external",minify:false});
+const sdkManifest=join(root,"node_modules","@earendil-works","pi-coding-agent","package.json");
+if (JSON.parse(await readFile(sdkManifest,"utf8")).version!==SDK_VERSION) throw new Error("Pi distribution SDK version differs from its pin");
+
+// One file. The SDK and every package it imports are inlined, so the host needs
+// no node_modules and nothing is installed or unpacked where it runs. dist is
+// rebuilt whole: files left by an earlier build must never ship.
+await rm(dist,{recursive:true,force:true});
+const result=await Bun.build({entrypoints:[join(root,"src","index.ts")],outdir:dist,target:"bun",minify:false,metafile:true});
 if (!result.success) throw new Error(`Pi host build failed: ${result.logs.join("\n")}`);
-const buildRoot=join(root,".runtime-build");await mkdir(buildRoot,{recursive:true});
-const runtime=await mkdtemp(join(buildRoot,"runtime-"));
-try {
-  await copyFile(join(root,"package.json"),join(runtime,"package.json"));
-  await copyFile(join(root,"bun.lock"),join(runtime,"bun.lock"));
-  const install=Bun.spawn([process.execPath,"install","--production","--frozen-lockfile","--linker","hoisted","--os","*","--cpu","*"],{cwd:runtime,stdin:"ignore",stdout:"inherit",stderr:"inherit"});
-  if (await install.exited!==0) throw new Error("Frozen Pi production dependency installation failed");
-  await copyFile(join(dist,"index.js"),join(runtime,"index.js"));
-  const sdk=JSON.parse(await readFile(join(runtime,"node_modules","@earendil-works","pi-coding-agent","package.json"),"utf8"));
-  if (sdk.version!=="1.1.0") throw new Error("Pi distribution SDK version differs from its pin");
-  const archive=join(runtime,"runtime.tgz");
-  let tar:ReturnType<typeof Bun.spawn>;
-  try {tar=Bun.spawn([tarBinary(),"-czf",archive,"-C",runtime,"index.js","package.json","node_modules"],{stdout:"inherit",stderr:"inherit"});}
-  catch {throw new Error("Building the Pi runtime requires tar (Windows bsdtar or Unix tar)");}
-  if (await tar.exited!==0) throw new Error("Pi runtime archive creation failed");
-  const bytes=await readFile(archive);
-  const executables=(await readdir(join(runtime,"node_modules","@esbuild"))).filter(name=>!name.startsWith("win32-")).map(name=>`node_modules/@esbuild/${name}/bin/esbuild`);
-  await writeFile(join(runtime,"runtime-manifest.json"),JSON.stringify({protocol:1,sdk_version:"1.1.0",archive:"runtime.tgz",
-    sha256:createHash("sha256").update(bytes).digest("hex"),bytes:bytes.length,entrypoint:"index.js",
-    sdk_package_dir:"node_modules/@earendil-works/pi-coding-agent",universal:true,executables},null,2)+"\n");
-  // Publish finished assets only. A failed install/archive leaves the last distribution intact.
-  await rename(archive,join(dist,"runtime.tgz"));
-  await rename(join(runtime,"runtime-manifest.json"),join(dist,"runtime-manifest.json"));
-  console.log(`Built pinned Pi runtime (${Math.ceil(bytes.length/1024/1024)} MiB)`);
-} finally {
-  // Remove only this exact temporary child of the private build directory.
-  if (!resolve(runtime).startsWith(resolve(buildRoot)+sep)) throw new Error("Invalid Pi build scratch path");
-  await rm(runtime,{recursive:true,force:true});
+// The SDK reads its own name and version from the package.json in PI_PACKAGE_DIR.
+await copyFile(sdkManifest,join(dist,"package.json"));
+
+// The inlined packages' licenses travel with the bundle that now contains them.
+const marker=`${sep}node_modules${sep}`;
+const packages=new Map<string,{name?:string;version?:string;license?:unknown}>();
+for (const input of Object.keys(result.metafile!.inputs)) {
+  const path=resolve(input);
+  const at=path.lastIndexOf(marker);
+  if (at<0) continue;
+  const [scope,name]=path.slice(at+marker.length).split(sep);
+  const directory=join(path.slice(0,at+marker.length),scope!.startsWith("@") ? join(scope!,name!) : scope!);
+  if (!packages.has(directory)) packages.set(directory,JSON.parse(await readFile(join(directory,"package.json"),"utf8")));
 }
+const notices:string[]=[];
+for (const [directory,manifest] of [...packages].sort(([,a],[,b])=>String(a.name).localeCompare(String(b.name)))) {
+  const files=(await readdir(directory,{withFileTypes:true})).filter(entry=>entry.isFile() && /^(licen[sc]e|copying|notice)/i.test(entry.name)).map(entry=>entry.name).sort();
+  const texts=await Promise.all(files.map(file=>readFile(join(directory,file),"utf8")));
+  notices.push([`${manifest.name} ${manifest.version}`,typeof manifest.license==="string" ? `License: ${manifest.license}` : "",...texts.map(text=>text.trim())].filter(Boolean).join("\n\n"));
+}
+await writeFile(join(dist,"THIRD-PARTY-LICENSES.txt"),notices.join(`\n\n${"-".repeat(72)}\n\n`)+"\n");
+console.log(`Built the Pi host bundle (${Math.ceil(result.outputs[0]!.size/1024/1024)} MiB, ${packages.size} packages inlined)`);

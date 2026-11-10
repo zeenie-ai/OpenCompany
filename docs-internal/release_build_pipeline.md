@@ -17,12 +17,16 @@ User scope (confirmed before this work): stay on the registry-tarball distributi
 
 Coding Agent adds a private `server/pi` package, pinned to the full Pi SDK
 1.1.0 with its own frozen lockfile. `company build` installs and builds it
-after the JavaScript sidecar. Its host keeps SDK imports external and ships
-`server/pi/dist/runtime.tgz` plus an integrity manifest, preserving the full
-production dependency tree and package assets. Desktop staging rebuilds and
-copies the same three distribution files; Docker builds them before removing
-Pi source and build dependencies. Runtime extraction is offline and uses a
-content-addressed data cache. See [Pi Coding Agent](pi_coding_agent.md).
+after the JavaScript sidecar, the same way: `Bun.build --target=bun` inlines
+the SDK and its dependencies into one `server/pi/dist/index.js` (about 12 MiB,
+2 MiB gzipped) that needs no `node_modules`. The build also writes the SDK's
+`package.json` and the inlined packages' licenses beside it. Desktop staging
+rebuilds and copies those three files; Docker builds them before removing Pi
+source and build dependencies. Until 2026-11-10 the host shipped as a 112 MB
+archive of the whole production tree (20 platforms' esbuild binaries among
+its 15,000 files), which made up 94% of the published package and was
+unpacked into the data folder on first use. See
+[Pi Coding Agent](pi_coding_agent.md).
 
 The dev workspace runs on **bun** (migrated from pnpm@9.15.0, 2026-08; pinned
 via `"packageManager": "bun@1.4.0"` — CI's `oven-sh/setup-bun` reads that pin).

@@ -5,5 +5,5 @@ build/
 tests/
 !dist/
 !dist/index.js
-!dist/runtime.tgz
-!dist/runtime-manifest.json
+!dist/package.json
+!dist/THIRD-PARTY-LICENSES.txt

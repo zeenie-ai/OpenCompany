@@ -363,7 +363,7 @@ version. `bun run audit:deps` is the check: `predeploy.yml` runs it at the
 root, in `desktop/` and in `server/pi/` (`bun audit` reads the lockfile).
 `server/pi/` is not a root workspace, so the root audit never read its
 lockfile until it got its own step on 2026-11-09; its production tree ships
-as the Pi runtime archive. Every audit fails on any advisory but one,
+inlined in the Pi host bundle. Every audit fails on any advisory but one,
 ignored since 2026-11-02: GHSA-g3hv-75wg-m249,
 minimatch's glob-pattern denial of service. It is fixed only in minimatch 11,
 which no consumer accepts yet (eslint, `@eslint/config-array` and

@@ -7,20 +7,35 @@ process. The host disables ambient resources, provider networking, SDK retries,
 compaction and cache warming.
 
 Run `bun install --frozen-lockfile`, `bun test`, and `bun run typecheck` here.
-`bun run build` creates `dist/index.js`, `dist/runtime.tgz`, and
-`dist/runtime-manifest.json`. The archive contains the external SDK and complete
-private production dependency tree, including package assets and lazy imports.
-It needs Bun and tar at build time. No package installation happens at runtime.
-The frozen build includes optional dependency binaries for every OS and CPU.
-On Unix, extraction restores executable modes for the manifest's relative
-`executables` paths; this also supports archives produced on Windows.
-Run `bun run test:distribution` after building to exercise the archived host.
+`bun run build` writes three files to `dist/`:
 
-`bun run scripts/stage.ts --out <server/pi>` copies the verified distribution
-assets into a desktop or server staging directory. The Python driver verifies
-the archive SHA-256, extracts it to an immutable runtime directory, and sets
-`PI_PACKAGE_DIR` to its `node_modules/@earendil-works/pi-coding-agent` directory.
-This archive avoids npm's exclusion of nested `node_modules` directories.
+- `index.js`: the host with the SDK and every package it imports inlined, one
+  file of about 12 MiB. It runs on Bun with no `node_modules`. Nothing is
+  installed, unpacked or cached where it runs.
+- `package.json`: the SDK's own manifest. The SDK reads its name and version
+  from `PI_PACKAGE_DIR`, and the Python driver points that at this folder.
+- `THIRD-PARTY-LICENSES.txt`: the licenses of the inlined packages.
+
+The build fails when the installed SDK differs from the pin in `src/types.ts`.
+It rebuilds `dist/` whole, so a file left by an earlier build never ships.
+`bun run test:distribution` runs the built bundle from a folder outside the
+repository. CLI, desktop and Docker ship these three files.
+
+The bundle holds what the host imports statically. The SDK's lazily loaded
+features are not in it, and they fail if called:
+
+- codemode (QuickJS WebAssembly and its worker);
+- image resizing (photon WebAssembly). Its loader returns nothing, and the
+  bundle carries the build machine's path to that package;
+- extensions loaded from source, and provider modules the SDK imports by a
+  computed name.
+
+The host calls none of them: it passes empty resources, no built-in tools, its
+own provider and text input. A change that needs one of them has to ship that
+feature's files beside the bundle.
+
+Without a build, a source checkout runs `src/index.ts` against this folder's
+`node_modules` (`server/services/pi_runtime.py`).
 
 The JSONL protocol is defined in `src/types.ts`. Frames are UTF-8 JSON separated
 only by LF, bounded to 256 KiB. Larger values use canonical JSON transport files

@@ -55,7 +55,7 @@ RUN CI=true bun install --frozen-lockfile \
     && bun run build \
     && cd server \
     && uv sync --frozen --no-dev --extra docs \
-    && rm -rf tests nodejs/src nodejs/node_modules pi/src pi/tests pi/node_modules pi/.runtime-build
+    && rm -rf tests nodejs/src nodejs/node_modules pi/src pi/tests pi/node_modules
 
 # Only the browser extra ships uv. Staged here because COPY has no condition;
 # the runtime stage copies this directory whether or not it is empty.
@@ -106,8 +106,8 @@ RUN set -eu; \
 # What the backend reads at run time (core/approot.py): the server tree with
 # its venv, the built UI, the env template, the version, the seed workflows.
 # The sidecar bundle is server/nodejs/dist and needs no node_modules.
-# Pi's host and frozen production dependencies ship in server/pi/dist. The
-# backend verifies and unpacks that archive offline into its private cache.
+# Pi's host is one bundle in server/pi/dist, with its SDK inlined, and needs
+# none either.
 WORKDIR /app
 COPY --from=build /app/.env.template /app/package.json ./
 COPY --from=build /app/.opencompany/workflows .opencompany/workflows

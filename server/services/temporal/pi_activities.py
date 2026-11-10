@@ -178,6 +178,7 @@ class PiDriverActivities:
     async def _drive_turn(self, payload: dict[str, Any]) -> dict:
         from core.js_runtime import require_bun
         from services.pi_blobs import get_blob, put_blob
+        from services.pi_runtime import pi_package_dir
 
         handle = self.client.get_workflow_handle(activity.info().workflow_id,
             run_id=activity.info().workflow_run_id)
@@ -195,11 +196,7 @@ class PiDriverActivities:
             run["snapshot"] = await get_blob(scope, snapshot)
         env = pi_host_environment(dict(os.environ))
         host = await asyncio.to_thread(pi_host_path)
-        package_dir = host.parent / "node_modules" / "@earendil-works" / "pi-coding-agent"
-        if not package_dir.is_dir():
-            package_dir = host.parent.parent / "node_modules" / "@earendil-works" / "pi-coding-agent"
-        if package_dir.is_dir():
-            env["PI_PACKAGE_DIR"] = str(package_dir)
+        env["PI_PACKAGE_DIR"] = str(pi_package_dir(host))
         try:
             bun = require_bun("Coding Agent's Pi harness")
         except RuntimeError as exc:
