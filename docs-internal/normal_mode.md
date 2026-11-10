@@ -62,7 +62,9 @@ Approval waiting is implemented; activation for ordinary new generations remains
   current screen out and swaps. Requests during a switch coalesce. The toggle
   lives in the editor toolbar and the Home header; Ctrl/Cmd+Shift+D toggles too.
 - **Screens are lazy chunks** ([app/ShellModeSwitch.tsx](../client/src/app/ShellModeSwitch.tsx)),
-  so ReactFlow stays out of a Normal-mode session and Home out of a Dev one.
+  so ReactFlow stays out of a Normal-mode session and Home's screen out of
+  a Dev one (the editor's Workspace dock uses the dock's shared body and
+  the employee data it reads, from `features/home`).
 - **App-level concerns** live in [app/AppShell.tsx](../client/src/app/AppShell.tsx)
   rather than in `Dashboard`: the `.app-frame`, boot effects (current workflow,
   sound sync, page activity, UI defaults, the shortcut), and the Settings and
@@ -258,7 +260,12 @@ A dock on the right of Home ([workspace/WorkspaceDock.tsx](../client/src/feature
 that shows what one employee is working on, drawn after the ChatGPT agent
 panel (the Nov 5 handoff, `design_handoff_opencompany_home/chat/V2.md`,
 sections 4b and 4c): one row as tall as Home's header, the page under it,
-and a status pill floating at its foot.
+and a status pill floating at its foot. The dock is the editor's too: both
+screens mount one shell ([components/workspace/WorkspaceDockShell.tsx](../client/src/components/workspace/WorkspaceDockShell.tsx))
+around one body ([workspace/WorkspaceView.tsx](../client/src/features/home/workspace/WorkspaceView.tsx)),
+and `WorkspaceDock.tsx` is what Home adds: whose Workspace it is, their
+main action in the row, their Canvas board and the pill toast (the editor's
+side is under **In Dev mode** below).
 The header's Workspace button ([workspace/WorkspaceButton.tsx](../client/src/features/home/workspace/WorkspaceButton.tsx))
 opens and closes it. It is borderless like New conversation, with the
 PanelRight icon, and filled while the dock is open; while the dock is
@@ -268,7 +275,7 @@ last opened (their page, or their Help in browser), else the first on the
 team (`dockEmployee` in `homeStore`, which the button reads too). Who they
 are is on their page's header, not in the dock.
 
-- **The row** (`WorkspaceTabs` with `chrome="home"`): pill tabs (Browser,
+- **The row** (`WorkspaceTabs`): pill tabs (Browser,
   Canvas, Mobile; the selected one raised on the elevated surface, the
   list scrolling sideways when the dock is narrow), then at its end:
   - the employee's status as a dot, named in its tooltip (`workspaceStatus`
@@ -304,8 +311,8 @@ are is on their page's header, not in the dock.
   Under the item: Library (the count), the six newest items as chips, and
   Latest while an older one is shown; the Library lists the board's
   Artifacts (notes) and Files (screenshots, uploads, pages).
-- **Browser**: the shared `components/browser/BrowserWorkspace`, in Home's
-  look, attaches to the employee's saved Browser nodes, supplied by
+- **Browser**: the shared `components/browser/BrowserWorkspace` attaches
+  to the employee's saved Browser nodes, supplied by
   `browser_nodes` in its summary. Multiple nodes get a selector. Running
   sessions appear automatically; Start browser opens an idle session. One
   row of page controls sits over the page: back, forward and reload, which
@@ -319,10 +326,10 @@ are is on their page's header, not in the dock.
   hover, field typed into or list chosen from (`agent_action`). Frames use
   `/ws/browser`, not a URL iframe. Help in browser, above the message box
   on the employee's page while the agent waits for the owner, opens the
-  Workspace on this tab. The editor's Take control, browser controls, Full
-  view and browser tasks are Dev mode's only. See [Browser workspace](./browser_workspace.md).
+  Workspace on this tab. The address box, Full view and browser tasks are
+  Dev mode's extras. See [Browser workspace](./browser_workspace.md).
 - **Mobile**: the managed local Android phone, streamed live through the
-  shared `MobileWorkspace` in Home's look (see [Mobile Workspace](../docs/mobile-workspace.md))
+  shared `MobileWorkspace` (see [Mobile Workspace](../docs/mobile-workspace.md))
   in a phone frame shaped by its screen, under the server's line for which
   phone it is. The device bar has Back, Home, Recent apps and Rotate (while
   the owner uses the phone), Screenshot to Canvas, which saves the screen
@@ -330,15 +337,10 @@ are is on their page's header, not in the dock.
   Take over. Around the phone: setup, Start phone on the screen area while
   the phone is set up and off ("Starting phone…" beside it while it boots),
   Type on phone while the owner uses the phone, and a Help & diagnostics
-  disclosure. The editor's toolbar (Use phone, Let AI continue, Finish
-  using phone, Stop phone), its controls (refresh, APK install, setup
-  history), the AI activity list and Ask AI are Dev mode's only.
-  Dev mode uses the same three workspace tabs, browser viewer and phone in
-  the editor's look: `WorkspaceTabs`, `FullView`, `BrowserWorkspace` and
-  `MobileWorkspace` each take `chrome?: 'dev' | 'home'`, `'dev'` by
-  default, and only Home's dock passes `'home'`.
-- **Tabs**: an inactive tab whose surface is busy shows a pulsing red dot
-  (the editor's is pink): Browser while one of the employee's Browser nodes
+  disclosure. Full view, the AI activity list, Ask AI and Phone controls
+  (Stop phone, refresh, APK install, setup history) are Dev mode's extras.
+- **Tabs**: an inactive tab whose surface is busy shows a pulsing red
+  dot: Browser while one of the employee's Browser nodes
   runs or they wait for the owner there (`browser_request`), Mobile while a
   phone node runs. A switch brings the new body in with a short rise. Each
   body keeps 60px free at its foot for the status pill. Switching tabs,
@@ -403,8 +405,9 @@ are is on their page's header, not in the dock.
   resumes at the paused revision, never a stale one.
   `homeStore.takeovers` keeps each employee's takeover (the tab whose
   screen was taken, the way to give it back, and Take over's Stop), so it
-  holds across a closed dock, a changed tab or another employee's Take
-  over. Taking a screen or handing it back is busy per employee
+  holds across a closed dock, a changed tab, another employee's Take
+  over, or going from Home to the editor and back. Taking a screen or
+  handing it back is busy per employee
   (`homeStore.takeoverBusy`), so a Hand back that waits for one employee's
   drain never holds another's. A browser that is not running answers Take over's request `idle`,
   which the claim takes as no. Toasts: "You have control — {Name} will
@@ -419,8 +422,28 @@ are is on their page's header, not in the dock.
   under `home_workspace_v1`; Expand and the employee last only for the
   session. While the dock is open, the Get started card and its folded pill
   sit at its left edge and move with it, at once while the edge is dragged
-  (`dockWidth` in `homeStore` gives both one width, and `workspaceResizing`
-  says when the edge is dragged; see [onboarding.md](./onboarding.md#get-started-checklist)).
+  (`dockWidth` in `components/workspace/dockSize.ts` gives both one width,
+  and `workspaceResizing` says when the edge is dragged; see
+  [onboarding.md](./onboarding.md#get-started-checklist)).
+- **In Dev mode**: the editor shows the same dock for the open workflow
+  ([components/ui/CanvasDock.tsx](../client/src/components/ui/CanvasDock.tsx)):
+  the same shell, row, tabs, views, status dot, status pill, Take over and
+  Hand back. Every workflow is an employee, so while its dock is open the
+  editor reads the open workflow's summary (`get_employee`, kept current
+  by `useEmployeeLifecycle`). Until that read answers (while it loads, or
+  fails) the row has no status, there is no pill and no Take over shows,
+  so the owner never takes a screen the dock is about to run Take over
+  for. A workflow not saved yet has no employee: no status and no pill
+  either, and each screen would show its own Take over, which takes that
+  screen and stops no one. What the editor adds:
+  its nodes come from the canvas as it is now, so a node shows before a
+  save; a picker when the workflow has several Canvas nodes; a workspace
+  file's preview in the Canvas tab; opening when content is pushed or an
+  agent asks for help in its browser; Dev mode's extras in the Browser
+  and phone views (`dev`); the slow-model note at its foot; and toasts in
+  the editor's own stack. Its row has no main action, because the toolbar
+  has the workflow's Start, Stop and Resume. Its open state, width and tab
+  are its own (`canvas_dock_prefs_v1`), within the same limits.
 
 ## Hiring
 
@@ -1311,7 +1334,7 @@ every frame but `workflow_ops_apply` carries the whole envelope:
 | `approval_lifecycle` | `com.opencompany.approval.{requested,decided,expired,cancelled}` | Identity only, never the message or the recipient |
 | `workflow_lifecycle` | gains `created` and `deleted` stages | So open editors refresh their workflow lists. `deleted` also makes every tab forget the workflow and its employee (`forgetWorkflow`, see [Deleting an employee](#deleting-an-employee)) |
 | `chat.updated` | `com.opencompany.chat.updated` | Sent after every chat insert and clear (`services/chat_thread.py`), and when a chat run ends. Data `{workflow_id, session_id, role}`, identity only: `role` is null for a clear or a run's end, `workflow_id` null for session `"default"`. Home's thread and the editor's chat pane refetch |
-| `workspace_step` | `com.opencompany.workspace.step` | A step was recorded (`services/workspace_steps.py`). Subject is the workflow id; data `{workflow_id, surface, step_id}`, identity only. Home's Workspace reads that workflow's steps again, for its status pill |
+| `workspace_step` | `com.opencompany.workspace.step` | A step was recorded (`services/workspace_steps.py`). Subject is the workflow id; data `{workflow_id, surface, step_id}`, identity only. The Workspace dock reads that workflow's steps again, for its status pill |
 | `attention_lifecycle` | `com.opencompany.attention.{opened,resolved}` | An attention item opened or was resolved (`services/attention.py`). Subject is the item's kind; data `{kind}`, identity only. Home's attention line under the header (`header/AttentionLine.tsx`) refetches; it also refetches once a minute, because an item drops off an hour after it was last seen without an event, and a standalone worker's broadcast stays in its process |
 | `workflow_ops_apply` | `com.opencompany.workflow.ops.applied` | The frame is the event's flat data, `{workflow_id, caller_node_id, operations, persisted?}`, not the envelope. `persisted: true` marks a batch the server already saved (`apply_graph_additions`: Turn on Talk, the Agent Builder), whose ops carry the server's ids; editors adopt it without saving. See [Workflow Operations Protocol](./workflow_ops_protocol.md#persisted-batches) |
 

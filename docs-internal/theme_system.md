@@ -176,10 +176,10 @@ tokens are used directly, as `w-(--w-home-sidebar)` or `duration-(--dur-slow)`):
   keeps the paused dot at the design's mid grey. `--shadow-pip`
   (`shadow-pip`) is a dot's glow in its own colour: give the dot a
   `text-status-*-dot` colour and `bg-current`. Live, the Workspace's
-  status while an employee works, has no status token of its own: on Home
-  it is red, `--destructive`, for its blinking dot (the dock's status dot
-  and the header Workspace button's dot) and for the dock's tab activity
-  dots. The editor's tab dots keep `--node-trigger` (pink).
+  status while an employee works, has no status token of its own: it is
+  red, `--destructive`, for its blinking dot (the dock's status dot and
+  the header Workspace button's dot) and for the dock's tab activity
+  dots, on Home and in the editor, which show the same dock.
 - **The employee's face**: `--accent-edge`, the rim (`--accent` mixed toward
   `--fg-default` at `--tint-accent-edge`, 70%), and `--shadow-avatar`, a soft
   highlight along the top edge, bridged in `index.css` as `border-accent-edge`
@@ -214,8 +214,9 @@ to a short colour fade, and is instant under reduced motion.
 
 ### Colour marks state or role
 
-On Home and in the shared chat (`features/chat`, so Dev's console chat pane
-too), colour marks a state (a status dot or pill, a trend) or a role (an
+On Home, in the shared chat (`features/chat`, so Dev's console chat pane
+too) and in the Workspace dock, which is the same in Dev mode, colour marks
+a state (a status dot or pill, a trend) or a role (an
 avatar or node-role tint), and a control never borrows an action intent's
 colour for an action it does not mean. This is the owner's rule, from the chat
 colour pass of 4 Nov (`design_handoff_opencompany_home/chat/V2.md`, section 3)
@@ -248,7 +249,7 @@ and the onboarding v3 handoff:
   frame, header and pill, and the Workspace's takeover frame and banner
   (config); the Web chip and the source and citation numbers (save); an
   approval card's Sending and Sent pill and its dot (run) and a failure's
-  frame, header and footer (stop); live dots (red on Home) and the
+  frame, header and footer (stop); live dots (red) and the
   streaming caret; a done step's tick and the copied tick; the hire view's
   pip, green only while someone is working; a stat's delta and a chart's
   bars.

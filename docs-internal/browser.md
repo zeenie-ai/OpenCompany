@@ -103,7 +103,7 @@ special deployments; normally leave it empty. If no compatible browser
 is available, startup fails with setup guidance: there is no automatic Chrome
 for Testing download or fallback. System mode preserves the browser's native
 user agent. An installed browser is not a guarantee that a website will accept
-automation or permit a login; Take control remains available for human steps.
+automation or permit a login; Take over remains available for human steps.
 
 `BROWSER_RUNTIME=testing` explicitly selects pinned Chrome for Testing. Its
 version, platform checksums and the browser-use CLI pin live in
@@ -182,7 +182,7 @@ lists the caller's profiles with their sites as domains and cookie counts,
 adds and deletes shared profiles, and imports logins from a session file:
 Playwright storage state, Cookie-Editor JSON or `cookies.txt`, uploaded to
 `POST /api/browser/profiles/{id}/session-file` and applied with
-`browser_import_commit`. To sign in by hand, use Take control in the
+`browser_import_commit`. To sign in by hand, use Take over in the
 workspace.
 
 The profile version guard checks the browser executable actually selected, not
@@ -205,7 +205,7 @@ model reasoning, browser calls and human assistance. Competing tasks receive
 admitted work and confirms daemon suspension before releasing the claim; a late
 cancellation cannot release a newer task. The human-control lease remains
 separate. Assigned tasks and protected-login gates prevent idle reaping.
-**Take control** waits for or interrupts an agent step before granting user
+**Take over** waits for or interrupts an agent step before granting user
 ownership. Human commands carry viewer and page generations and are checked
 again immediately before CDP dispatch. **Hand back**, hiding, blur and
 disconnect stop admission, discard stale queued work, settle dispatched work

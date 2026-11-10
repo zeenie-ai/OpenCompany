@@ -11,7 +11,7 @@
 
 Give an existing AI agent a natural-language tool for the shared local Android phone. Setup and startup happen explicitly in Workspace → Mobile. This is separate from the legacy Android relay services.
 
-The paired `android-phone-skill` is registered in `nodes/visuals.json` for the auto-add-skill policy. Internal phone steps publish `iteration`, `max_iterations`, `phase`, execution ID and run ID through `update_node_status`, scoped to the Android node and workflow. The square tool node and Workspace display those steps while the parent AI agent remains in its current tool-call turn. Manual takeover changes the phase to “Waiting for you”; resumed tasks retain their consumed step budget.
+The paired `android-phone-skill` is registered in `nodes/visuals.json` for the auto-add-skill policy. Internal phone steps publish `iteration`, `max_iterations`, `phase`, execution ID and run ID through `update_node_status`, scoped to the Android node and workflow. The square tool node and Dev mode's Workspace display those steps while the parent AI agent remains in its current tool-call turn. Manual takeover changes the phase to “Waiting for you”; resumed tasks retain their consumed step budget.
 
 ## Inputs (handles)
 
@@ -63,13 +63,13 @@ Windows x64 managed Android only; one shared phone and one video viewer. No iOS,
 
 ### Live Android activity
 
-Workspace shows the active phone task's model/provider, step budget, total elapsed time,
+Dev mode's Workspace shows the active phone task's model/provider, step budget, total elapsed time,
 current phase duration, and time since the last reported activity. The expandable activity
 panel retains the latest 40 events: model requests/responses and actual device operations
 (screen plus accessibility-tree reads, taps, scrolling, typing, navigation, and app actions).
 Completed operations include duration. The last task remains visible after completion,
 failure, or cancellation until another task runs; history is in memory and clears on restart.
 A 30-second quiet period shows a notice, not a claim that the engine is stuck. Use the last
-phase to distinguish a model wait from device I/O; take manual control using Use phone if needed.
+phase to distinguish a model wait from device I/O; take manual control using Take over if needed.
 The panel is outside the phone canvas and hidden in full-screen mode. Activity contains
 operational summaries, never private model reasoning, typed text, URLs, or prompt content.

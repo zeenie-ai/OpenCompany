@@ -291,8 +291,8 @@ Artifacts name the documents (Canvas notes) the run wrote or revised, one entry 
 the run left it: the canvas tool calls `show_artifact` (`artifact:<item_id>`, so a later version replaces the
 earlier one) and publishes an `activity.snapshot` with `activity_type: "artifact"` and `message_id:
 "artifact_<item_id>"`. The card (`features/chat/turns/ArtifactCard.tsx`) shows the title, Document or Code, the
-version, and Open, which asks the host to show the item at that version (Home: the Workspace's Canvas tab; the
-editor: the Canvas dock; see [canvas_node.md](./canvas_node.md)). The client shows each saved document at the newer
+version, and Open, which asks the host to show the item at that version (the Workspace's Canvas tab, on Home and in
+the editor; see [canvas_node.md](./canvas_node.md)). The client shows each saved document at the newer
 of its saved and live versions.
 
 A run's tools record parts on the run as they go (`chat_run_parts`, keyed so a retried activity writes the same

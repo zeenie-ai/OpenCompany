@@ -245,7 +245,7 @@ while the history projection provides bounded display and durable deduplication.
 | Browser owner is not registered | Start the configured backend before submitting a new profile/task |
 | Browser unavailable — waiting for its owner | Restore the original owner and machine identity; keep the same queue/profile |
 | `BrowserBusy` | Finish or cancel the active task and confirm its cleanup before starting another |
-| Observations paused during protected login | Wait for private confirmation, or use Close browser for manual login, reopen and take control |
+| Observations paused during protected login | Wait for private confirmation, or use Close browser for manual login, reopen and use Take over |
 | Cancel/Reset remains in progress | Restore the owner so cleanup can settle admitted work and confirm daemon/browser shutdown |
 | Uncertain action after recovery | Observe current state and confirm the earlier effect; request human help when it cannot be established |
 | Unsupported distributed credential connection | Enroll an audited static 1Password adapter or retain that connection in local mode |

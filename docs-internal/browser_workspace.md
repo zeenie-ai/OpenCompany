@@ -10,27 +10,32 @@ requires `BROWSER_RUNTIME=testing`. `BROWSER_FAMILY=chrome` (the default) discov
 installed Chrome dynamically and keeps it selected even when another browser
 has a newer version; no machine-specific executable path is needed.
 
-Normal mode and Dev mode share `components/workspace/WorkspaceTabs.tsx`
-(Browser, Canvas, Mobile) and `components/browser/BrowserWorkspace.tsx`.
-Both take `chrome?: 'dev' | 'home'`, as do `FullView` and `MobileWorkspace`:
-the default `'dev'` is the editor's look, and Home's dock passes `'home'`
-(see [Home's look](#homes-look)).
-The Dev toolbar's Workspace button opens the existing resizable dock;
+Normal mode and Dev mode show the same Workspace dock. Its shell is
+`components/workspace/WorkspaceDockShell.tsx` (the panel whose left edge
+drags, sized by `components/workspace/dockSize.ts`), and what it shows is
+`features/home/workspace/WorkspaceView.tsx`: the row of
+`components/workspace/WorkspaceTabs.tsx` tabs (Browser, Canvas, Mobile) with
+the employee's status, the floating status pill and Take over, around
+`components/browser/BrowserWorkspace.tsx`. The views have one look; a `dev`
+prop on `BrowserWorkspace` and `MobileWorkspace` adds Dev mode's extras
+(see [Dev mode's extras](#dev-modes-extras)).
+The Dev toolbar's Workspace button opens the dock for the open workflow
+(`components/ui/CanvasDock.tsx`);
 Canvas boards, push notifications and temporary file previews still use
 `canvasDockStore`. Its selected tab is persisted. A Canvas push does not
 switch an already-open Browser tab; explicitly opening a file preview does
 switch to Canvas. Mobile renders the local Android phone through
 `MobileWorkspace`; see [Mobile Workspace](../docs/mobile-workspace.md).
 The Browser node's parameter panel (`MiddleSection`, `isBrowserPanel`) shows
-the same viewer above the node's settings.
+the same viewer above the node's settings, with Dev mode's extras and the
+viewer's own Take over.
 
-An inactive tab whose surface is busy shows a pulsing dot, pink in the
-editor and red on Home (`activity`, from
-`components/workspace/activity.ts` `useSurfaceRunning`: one of the surface's
-nodes executing in the workflow's node statuses; Home also dots Browser while
-the employee's `browser_request` waits for the owner). The body arriving on a
-tab switch fades and rises out of a blur (`--dur-slow`, spring). The
-editor's Browser controls and Home's row of page controls offer **Open in
+An inactive tab whose surface is busy shows a pulsing red dot (`activity`,
+from `components/workspace/activity.ts` `useSurfaceRunning`: one of the
+surface's nodes executing in the workflow's node statuses; the dock also
+dots Browser while the employee's `browser_request` waits for the owner).
+The body arriving on a tab switch fades and rises out of a blur
+(`--dur-slow`, spring). The row of page controls offers **Open in
 new tab** for the page the browser shows, as the server last reported it
 (`page`), when it is an http(s) page; the link opens in the owner's own
 browser with `noopener noreferrer`.
@@ -48,10 +53,11 @@ Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architect
 
 <!-- architecture-suite:end -->
 
-## Home's look
+## The Browser tab
 
-Home's Workspace dock ([Normal Mode](normal_mode.md#the-workspace)) draws
-the Browser tab as one row of page controls over the page:
+The Workspace dock ([Normal Mode](normal_mode.md#the-workspace)) draws
+the Browser tab as one row of page controls over the page, the same on
+Home and in the editor:
 
 - back, forward and reload, which work only while the owner has control
   (the server takes navigation as the owner's input);
@@ -64,17 +70,16 @@ the Browser tab as one row of page controls over the page:
   every claim).
 
 The page-tab picker shows on a line of its own while the browser has
-several tabs, and the browser picker stays for an employee with several
-Browser nodes. The employee's request, errors, the page and its dialog are
-the editor's, but a dialog says "Take over to respond" until the owner has
+several tabs, and the browser picker stays for a workflow with several
+Browser nodes. Under the row come the employee's request, errors, the page
+and its dialog; a dialog says "Take over to respond" until the owner has
 control, and the page's own buttons (Start browser, Reconnect, Close
 browser for manual login, a dialog's OK and Cancel) are neutral quiet
 buttons. There is no status line: the dock's status dot and pill say what
-is going on, and Starting… or Installing… shows on Start browser. The
-editor's Take control, Browser controls, Full view and browser tasks are
-left out.
+is going on, and Starting… or Installing… shows on Start browser.
 
-**Take over** is the dock's (`features/home/workspace/takeover.ts`): it
+**Take over** is the dock's (`features/home/workspace/takeover.ts`), on
+Home and in the editor alike: it
 asks for control through the view's `claim()` (a `control_request` with
 `force`, so it also takes control from another viewer), waits for the
 server's answer, then stops a running employee, also one waiting in
@@ -86,6 +91,15 @@ hiding the view releases control, the input barrier described below; the
 row then offers Take over again, which takes it back without stopping the
 employee twice.
 
+The dock passes its button to the view as `action`, or null to show none:
+while the owner holds another screen, and in the editor until the open
+workflow's summary is read (while the read is loading, or failing). A host
+that passes no `action` gets the view's own button in the same place: Take
+over, then Hand back while the owner has control. That one takes control
+only and leaves the workflow running. The Browser node's parameter panel is
+such a host, and so is the editor's dock for a workflow not saved yet,
+which has no employee.
+
 Each site action the agent takes through the Browser node (open, click,
 hover, type, press, select, scroll, history, tabs, page tools, scripts) and
 each screenshot adds one line to the employee's Workspace step log
@@ -96,26 +110,34 @@ works. A line never holds what was typed, selected or shown. Nothing is
 recorded while a protected login is in progress, or for an action that
 failed, and a step that cannot be saved never fails the action.
 
+### Dev mode's extras
+
+`BrowserWorkspace dev` (the editor's dock and the Browser node's panel)
+adds three things:
+
+- while the owner has control, the address pill is a box: type a website
+  and press Enter to go there;
+- **Full view**, in the row (see [Full view](#full-view));
+- the Browser AI tasks panel under the page (see
+  [Direct Browser tasks](#direct-browser-tasks)).
+
 ## Full view
 
-Full view and the controls toggles are the editor's; Home's dock has
-neither (it has Expand). In the editor, the normal Browser and Mobile views
-fill the remaining Workspace height and width, without an outer gutter or a
-dedicated Full view button row. The compact toolbar keeps status and
-takeover visible. Its **Browser controls** toggle expands navigation,
-address and tab selection without reconnecting the stream.
-Mobile has a **Phone controls** toggle and a collapsible AI task panel; the phone
-image keeps its original proportions, so a wide panel can still have side bars.
+Full view is one of Dev mode's extras; the dock's Expand is in both modes.
+The Browser and Mobile views fill the remaining Workspace height and width,
+without an outer gutter. The phone image keeps its original proportions, so
+a wide panel can still have side bars.
 
-Click **Full view** in the toolbar to fill the screen. Navigation, address,
-control and exit buttons remain outside the page image. **Exit full view** or
-**Esc** returns to the previous layout. The same mounted canvas and stream stay
-active, so entering or leaving does not reopen the session. The shared
-`components/workspace/FullView.tsx` boundary handles native fullscreen changes
-and restores focus to its button on exit. Mobile uses the same boundary, hiding
-its task form while enlarged; secondary controls stay available through the
-toolbar toggle. Full view does not grant
-manual control; use the existing control button separately. If fullscreen is
+With `dev`, the Browser's row of page controls and the phone's buttons hold
+a **Full view** button (`FullViewButton`). It fills the screen with
+the view as it is: the page controls, the page or phone and Take over stay
+where they were. **Exit full view** or **Esc** returns to the previous
+layout. The same mounted canvas and stream stay active, so entering or
+leaving does not reopen the session. The shared
+`components/workspace/FullView.tsx` box handles native fullscreen changes
+and restores focus to its button on exit. Mobile uses the same box, hiding
+its task form, AI activity and Phone controls while enlarged. Full view does
+not grant manual control; use Take over separately. If fullscreen is
 unavailable, the UI explains how to use the Workspace expand button instead.
 
 ## Discovery and identity
@@ -140,9 +162,10 @@ before the server can authorize it.
 
 ## Direct Browser tasks
 
-Dev mode only: Home's Browser tab has no task panel, since giving the
-browser a task is workflow building. In the editor's dock and the Browser
-node's panel, the task panel beside the selected Browser tool discovers
+Dev mode only (`BrowserWorkspace dev`): Home's Browser tab has no task
+panel, since giving the browser a task is workflow building. In the editor's
+dock and the Browser node's panel, the task panel under the selected Browser
+tool's page discovers
 connected `browser_agent` nodes from the saved server graph. A standalone
 Browser tool offers **Add Browser AI Agent**, which uses the same atomic
 creation recipe as canvas and Agent Builder and adopts the returned saved
@@ -176,8 +199,8 @@ client image decodes and clears cached picture, address, tabs and dialogs.
 The same gate applies to newly attached viewers and recovered owners.
 
 If private submission cannot be confirmed, the gate remains in place. Use
-**Close browser for manual login**, then **Start browser** and Take control
-(Take over on Home) to finish login. Closing must be confirmed by the
+**Close browser for manual login**, then **Start browser** and **Take
+over** to finish login. Closing must be confirmed by the
 owner before the sensitive latch clears. The normal handoff covers MFA,
 passkeys and multi-step login.
 See [configured login](browser.md#configured-1password-login).
@@ -199,8 +222,8 @@ and employee summaries reach every connected socket:
   Hand back, which hands control back, ending the wait, and resumes them.
 - **Dev:** a `browser_updated` broadcast for the open workflow in
   `awaiting_user` opens the dock on its Browser tab
-  (`canvasDockStore.showBrowser`). The owner answers with Take control and
-  Hand back in the browser's toolbar, which leave the workflow running.
+  (`canvasDockStore.showBrowser`). The owner answers with the same Take
+  over and Hand back, which stop and resume a running workflow as on Home.
 
 The request waits for the owner until they take control or it times out. A
 viewer that never took control cannot answer it: switching tabs, closing the
@@ -209,14 +232,14 @@ dock, blurring the window or hiding the page sends a release, and
 so the request keeps waiting (it used to resolve as `control_lost`). The
 viewer in control is different: its release (a blur, a hidden view) answers
 the request with `control_lost`, by design, so the agent hears what happened
-and may ask again, also after Home's Hand back (the owner chose this on
+and may ask again, also after Hand back (the owner chose this on
 2026-11-09).
 
 Every `control_request` gets a `control` answer, granted or not: a hidden or
 closed viewer, a protected login (`reason: "protected_login"`), a full queue,
 or a request the page outran before it ran (`viewer_unavailable`) is refused
 out loud (`LiveControlQueue._refuse_claim`), so a viewer never waits on
-"Taking control…". Home's Take over (`normal_mode.md`) relies on it: the
+"Taking over…". The dock's Take over (`normal_mode.md`) relies on it: the
 viewer's `claim()` resolves on that answer. While the browser is not
 running there is no queue, and the socket answers every message, a
 `control_request` included, with `idle`, which the claim takes as no.
@@ -242,14 +265,14 @@ Frames fit the available surface without cropping. Input coordinates exclude
 letterboxing and map through the frame metadata to CDP page coordinates.
 ResizeObserver reports panel resizing; document visibility and dock visibility
 pause delivery. Switching tabs/nodes or modes releases the socket and input
-control. A hidden Home dock also releases control and stops visible streaming.
+control. A hidden dock also releases control and stops visible streaming.
 
 Navigation, page-tab selection, mouse, wheel, keyboard, pasted text and page
-dialogs require control (Take control in the editor, Take over on Home); the
-server remains the authority on the control lease. Hand back returns control
-to the agent. In the editor, another controlling viewer is identified
-explicitly before a forced takeover is offered; Home's Take over always
-forces.
+dialogs require control (Take over); the server remains the authority on the
+control lease. Hand back returns control to the agent. The dock's Take over
+always forces, so it also takes control from another viewer; the view's own
+Take over (the Browser node's panel) forces only when another viewer has
+control.
 
 ## The agent's cursor
 
@@ -269,7 +292,7 @@ while the login runs and purged by its barrier. Finding a position never
 fails the action.
 
 The viewer (`AgentCursor.tsx`) draws an arrow there, with the employee's
-name on Home (`agentName`), gliding from the last action
+name in the dock (`agentName`), gliding from the last action
 (`--dur-cursor-glide`, the reveal curve), then a ripple for a click
 (`--dur-cursor-ripple`) or a ring round the field; the page's own caret
 and text show in the picture. Positions map back onto the picture with
@@ -422,14 +445,20 @@ benchmark script:   283e28a5afa86c16370e39b989b8d800462b940d1e81f6755f29bded129a
 - `client/src/components/browser/__tests__`: stream envelope, geometry, attach,
   rendering/ACK, cleanup, visibility and control gating, the agent's
   cursor (`framePosition`, `parseAgentAction`, where it shows and when it
-  hides), and Home's look (the row of page controls, Take over's claim).
+  hides), the row of page controls, the view's own Take over, the dock's
+  `action` and Take over's claim, and Dev mode's extras.
+- `client/src/components/workspace/__tests__`: the pill tabs and their row
+  (`WorkspaceTabs.test.tsx`), the Full view box and its button
+  (`FullView.test.tsx`), and the dock's size limits (`dockSize.test.ts`).
 - `client/src/features/home/__tests__/workspace.test.tsx`: which employee the
   dock shows, browser discovery integration, tab changes, Take over in the
   Browser and phone rows, Hand back in the banner, and hidden dock state.
 - `client/src/features/home/workspace/__tests__/takeover.test.tsx`: Take over
-  and Hand back, including a Hand back while the Stop still drains.
-- `client/src/components/ui/__tests__/WorkspaceDock.test.tsx`: Dev tabs, schema
-  hydration and viewer unmount on close.
+  and Hand back, including a Hand back while the Stop still drains, and no
+  one to take over from.
+- `client/src/components/ui/__tests__/WorkspaceDock.test.tsx`: the editor's
+  dock: the same row and tabs, schema hydration, and the viewer hidden, not
+  unmounted, on close.
 - `client/src/components/mobile/__tests__/MobileWorkspace.test.tsx`: the Mobile
   tab's phone view.
 - `client/src/features/home/__tests__/presentation.test.ts`: Needs you while the

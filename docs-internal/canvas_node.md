@@ -1,15 +1,16 @@
-# Canvas Node — pushed-content display board (panel + docked sidebar)
+# Canvas Node — pushed-content display board (panel + Workspace dock)
 
 The `canvas` node is the platform's viewing surface — the Claude/ChatGPT-Canvas
 analog. Agents and workflow runs push content onto a per-node **board**
 (workspace file references, external URLs, small markdown notes), and the
 board renders in three hosts that share one renderer: the node's full-height
-parameter panel, a **docked, resizable right-side sidebar** that stays
-open while working on the graph, auto-opens when content is pushed, and
-doubles as the click-to-preview surface for workspace files, and the Canvas
-tab of Home's Workspace dock.
+parameter panel, and the Canvas tab of the Workspace dock on each screen.
+In the editor the dock stays open while working on the graph, auto-opens
+when content is pushed, and doubles as the click-to-preview surface for
+workspace files; on Home it shows one employee's board.
 
-The Dev dock now shares Home's Browser / Canvas / Android workspace tabs.
+The Workspace dock is the same on Home and in the editor (Browser / Canvas /
+Mobile tabs, one shell and one body); each screen adds what it needs.
 Canvas retains its board and file-preview behavior; live Chrome sessions use
 the separate [Browser workspace](./browser_workspace.md) surface. URL items
 on a Canvas still render as sandboxed iframe previews, not browser sessions.
@@ -49,7 +50,7 @@ file-content fetch).
                      v
    WebSocketContext case  ->  invalidate ['canvasBoard']  +  dock notifyPushed
                      v                                   v
-        CanvasPanel (parameter panel)          CanvasDock (right sidebar)
+        CanvasPanel (parameter panel)          Workspace dock (Canvas tab)
                      \_______________  ________________/
                                      \/
                     CanvasContent (one shared renderer)
@@ -120,7 +121,7 @@ An empty call raises `NodeUserError("Nothing to display — pass paths, url,
 or content …")` so the LLM gets a one-line correctable error.
 
 Each display also adds a line to the employee's Workspace step log,
-whose newest shows on Home's Workspace status pill
+whose newest shows on the Workspace's status pill
 (`services/workspace_steps.py`, best effort, see
 [Normal Mode](./normal_mode.md#the-workspace)): "Showed {title} on the
 Canvas", "Showed {n} items on the Canvas", or "Updated {title} on the
@@ -290,32 +291,40 @@ prefix `['canvasBoard']` for broadcast-driven invalidation.
   references — removing one never deletes the underlying file, which is why
   Clear is a plain ghost button and not an `AlertDialog`.
 - **[`CanvasDock.tsx`](../client/src/components/ui/CanvasDock.tsx)** — the
-  new docked surface, mounted as the last flex child of Dashboard's
-  main-content row (rightmost edge). Left-edge drag handle via the shared
-  `usePanelResize` (dragging left widens; floor 280 px, ceiling nearly the
-  full window — `innerWidth - 160` so the handle stays reachable, with a
-  4000 px sanity bound on persisted values), `transition-[width]` disabled
-  while dragging. Header: node
+  editor's Workspace dock, mounted as the last flex child of Dashboard's
+  main-content row (rightmost edge). It is the dock Home shows: the shell
+  ([`WorkspaceDockShell.tsx`](../client/src/components/workspace/WorkspaceDockShell.tsx):
+  the left-edge drag handle via the shared `usePanelResize`, the width
+  transition disabled while dragging) and the body
+  ([`WorkspaceView.tsx`](../client/src/features/home/workspace/WorkspaceView.tsx)),
+  for the open workflow, sized by
+  [`dockSize.ts`](../client/src/components/workspace/dockSize.ts) as on Home
+  (460 px by default, dragging from 360 px to the window less 420 px, with a
+  4000 px bound on persisted values). In the Canvas tab the editor adds,
+  above the board: a node
   selector (a Select when the workflow has more than one Canvas node —
   ConsolePanel's node-selector precedent; nodes are found by
   `resolveNodeDescription(type)?.uiHints?.isCanvasPanel`, never by the type
-  string), ephemeral "Preview" badge + Back, close. TopToolbar carries the
-  toggle button (Monitor icon, `aria-pressed`, action-tools tokens),
-  reading the dock store directly — the state is not Dashboard's to thread.
+  string), and the ephemeral "Preview" badge + Back. TopToolbar carries the
+  toggle button (Monitor icon, `aria-pressed`, filled with `bg-bg-active`
+  while the dock shows), reading the dock store directly — the state is not
+  Dashboard's to thread.
 - **[`WorkspaceCanvas.tsx`](../client/src/features/home/workspace/WorkspaceCanvas.tsx)**
   — the Canvas tab of Normal mode's Workspace dock
   ([normal_mode.md](./normal_mode.md#the-workspace)). It shows one
   employee's board, named by the employee summary's `canvas_node_id`,
   loads lazily so the renderer's viewers stay out of Home's chunk, and
   passes an owner-facing empty hint. Hires get a Canvas node from the
-  Hire builder. It turns on `CanvasContent`'s `library`
-  ([`CanvasLibrary.tsx`](../client/src/components/parameterPanel/canvas/CanvasLibrary.tsx)):
-  the footer is the Library button (the count), the six newest items as
-  chips (each with its kind's tile: the file's extension, MD, WEB, PDF...)
-  and Latest while an older item is shown, in place of prev/next (the
-  ←/→/Home/End keys stay). The Library lists *Artifacts* (notes, with their
-  version) and *Files* (everything else, images as thumbnails); picking one
-  shows it.
+  Hire builder.
+
+In every host the board's footer is the Library
+([`CanvasLibrary.tsx`](../client/src/components/parameterPanel/canvas/CanvasLibrary.tsx)):
+the Library button (the count), the six newest items as
+chips (each with its kind's tile: the file's extension, MD, WEB, PDF...)
+and Latest while an older item is shown (the
+←/→/Home/End keys move between items). The Library lists *Artifacts* (notes, with their
+version) and *Files* (everything else, images as thumbnails); picking one
+shows it.
 
 A document card in a chat reply opens its item through the host:
 `homeStore.openCanvasItem` (Home: opens the Workspace on that employee's
@@ -329,7 +338,7 @@ renderer; a new nonce asks again for the same item.
 A small Zustand store (slice-selector reads; `getState()` writes from the WS
 handler and click-to-preview call sites) — deliberately not on `useAppStore`
 or `WebSocketContext.value`, both context-fan-out traps. Prefs
-(`open`, `widthPx`, `autoOpen`, `followMode`) persist to localStorage under
+(`open`, `widthPx`, `autoOpen`, `followMode`, `tab`) persist to localStorage under
 `canvas_dock_prefs_v1` via a zod-validated envelope (ConsolePanel idiom);
 node selection and ephemeral items are session-only because node ids are
 workflow-scoped.
@@ -350,7 +359,7 @@ type — never `addEventListener('canvas_updated')` anywhere.**
 ### The shared renderer — [`parameterPanel/canvas/CanvasContent.tsx`](../client/src/components/parameterPanel/canvas/CanvasContent.tsx)
 
 The item list **is** the carousel: one active item (only the active item
-mounts — no N live videos/iframes), prev/next in the footer,
+mounts — no N live videos/iframes), the Library strip in the footer,
 `pinnedId: null` meaning "follow newest" (the chat stick-to-bottom rule: a
 pushed item surfaces automatically unless the user deliberately navigated
 back; navigating onto the last item resumes following). Arrow/Home/End keys
