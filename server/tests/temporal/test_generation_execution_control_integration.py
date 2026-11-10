@@ -42,6 +42,13 @@ _contexts: dict[str, dict]
 _deliveries: list[dict]
 
 
+# How long one step of a gate may take. A step is a second or less; the
+# budget is for a slow runner, where the dev server leaves a controller query
+# or update waiting on its own timers (5 s, then 10 s at a time): run
+# 42844579418 on macOS had queries held 5 s and 20 s, and Stop passed 15 s.
+_STEP_SECONDS = 60
+
+
 async def _test_environment():
     # The time-skipping test server is unavailable on Windows. An explicitly
     # supplied cached CLI gives this same SDK/replay gate a local dev server.
@@ -177,7 +184,7 @@ async def _run_gate():
             }, id=controller_id, task_queue=queue)
             root_id = "root-" + uuid4().hex
             root = await client.start_workflow("MachinaWorkflow", _input(controller_id), id=root_id, task_queue=queue)
-            await asyncio.wait_for(asyncio.gather(*(event.wait() for event in _started.values())), timeout=15)
+            await asyncio.wait_for(asyncio.gather(*(event.wait() for event in _started.values())), timeout=_STEP_SECONDS)
             child = client.get_workflow_handle(root_id + "-agent-agent")
             parent_description = await root.describe()
             pending = parent_description.raw_description.pending_children[0]
@@ -199,7 +206,7 @@ async def _run_gate():
             await asyncio.sleep(0.03)
             assert not stop.done()
             _release["D"].set()
-            stopped = await asyncio.wait_for(stop, timeout=15)
+            stopped = await asyncio.wait_for(stop, timeout=_STEP_SECONDS)
             assert stopped["controlled_executions"] == 4
             assert sorted(_calls) == ["A", "C", "D"]
             child_status = await child.query("execution_control_status")
@@ -208,7 +215,7 @@ async def _run_gate():
             assert (await root.query("execution_control_status"))["active_actions"] == 0
             assert (await late.query("execution_control_status"))["state"] == "paused"
             scope.revision = 2
-            resumed = await asyncio.wait_for(transition_generation(client, scope, paused=False), timeout=15)
+            resumed = await asyncio.wait_for(transition_generation(client, scope, paused=False), timeout=_STEP_SECONDS)
             assert resumed["controller_status"]["state"] == "running"
             # Concurrent SDK result interceptors both unlock test-server time.
             # These activities are ready immediately, so use wall-clock waits.
@@ -276,7 +283,7 @@ async def _run_cron_job_gate():
                     firing = await cron.result()
                 graph_id = firing["spawned_child_id"]
                 graph = client.get_workflow_handle(graph_id)
-                await asyncio.wait_for(_started["cron-A"].wait(), timeout=15)
+                await asyncio.wait_for(_started["cron-A"].wait(), timeout=_STEP_SECONDS)
                 enrolled = await _wait_status(controller, lambda status: graph_id in status["live_roots"] and cron_id not in status["live_roots"])
                 graph_chain = enrolled["live_roots"][graph_id]["first_execution_run_id"]
                 assert enrolled["live_roots"][graph_id]["workflow_id"] == graph_id
@@ -294,7 +301,7 @@ async def _run_cron_job_gate():
                 assert "job-tool" not in _calls
                 assert _deliveries == []
                 _release["cron-A"].set()
-                await asyncio.wait_for(stop, timeout=15)
+                await asyncio.wait_for(stop, timeout=_STEP_SECONDS)
                 assert _calls == ["cron-A"]
                 # Pressure the stable stopped phase after enrollment and
                 # drain, keeping the detached graph and late job in the carry.
@@ -311,7 +318,7 @@ async def _run_cron_job_gate():
                 assert carried["live_roots"][graph_id]["first_execution_run_id"] == graph_chain
                 assert job_id in carried["live_roots"]
                 scope.revision = 3
-                await asyncio.wait_for(transition_generation(client, scope, paused=False), timeout=15)
+                await asyncio.wait_for(transition_generation(client, scope, paused=False), timeout=_STEP_SECONDS)
                 with environment.auto_time_skipping_disabled():
                     graph_result, delivered = await asyncio.gather(graph.result(), job.result())
                 assert graph_result["success"] is True
@@ -335,7 +342,7 @@ async def _run_cron_job_gate():
 def test_generation_stop_drains_tree_late_roots_and_resume_replays():
     completed = subprocess.run([sys.executable, "-m", "tests.temporal.test_generation_execution_control_integration"],
         cwd=Path(__file__).parents[2], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, timeout=120, check=False)
+        stderr=subprocess.STDOUT, timeout=300, check=False)
     assert completed.returncode == 0, completed.stdout.decode(errors="replace")[-10000:]
 
 
