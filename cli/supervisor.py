@@ -31,7 +31,7 @@ from typing import Iterable, Optional
 import anyio
 
 from cli.colors import emit, next_color
-from cli.run import which_argv
+from cli.run import child_env, which_argv
 from cli.tcp import wait_for_tcp_port
 from cli.tree import add_to_job, kill_tree, new_session_kwargs, send_ctrl_break
 
@@ -61,17 +61,11 @@ class ServiceSpec:
 def _full_env(spec_env: dict[str, str]) -> dict[str, str]:
     """Inherit parent env + force-color so child output stays readable.
 
-    ``VIRTUAL_ENV`` is stripped: ``uv run`` resolves the project venv
-    via the workspace ``pyproject.toml`` and warns when an inherited
-    ``VIRTUAL_ENV`` points elsewhere (which it does whenever the user
-    has the root ``.venv`` activated in their shell and the spec runs
-    with ``cwd=server/``). The warning has no operational effect --
-    uv ignores ``VIRTUAL_ENV`` unless ``--active`` is passed -- so we
-    drop it at the source rather than teach every reader to ignore it.
+    The parent env comes through :func:`cli.run.child_env`, which leaves
+    ``VIRTUAL_ENV`` out so ``uv run`` does not warn about it.
     """
-    inherited = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
     return {
-        **inherited,
+        **child_env(),
         "FORCE_COLOR": "1",
         "PYTHONUNBUFFERED": "1",
         **spec_env,

@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import sys
+import time
 
 import typer
 
@@ -220,8 +221,15 @@ def build_command() -> None:
     template_path = root / ".env.template"
 
     # Step markers go through ``console.log`` so each [N/6] line is
-    # timestamped — diff between consecutive timestamps is the wall-clock
-    # cost of that step, no manual instrumentation needed.
+    # timestamped. ``stage`` also keeps each start time, and the closing
+    # line lists what every stage cost, so a build log says where its time
+    # went without subtracting timestamps.
+    stages: list[tuple[str, float]] = []
+
+    def stage(marker: str, name: str) -> None:
+        stages.append((name, time.perf_counter()))
+        console.log(marker)
+
     if not env_path.exists() and template_path.exists():
         content, generated = _scaffold_env_secrets(
             template_path.read_text(encoding="utf-8")
@@ -235,7 +243,7 @@ def build_command() -> None:
             console.log("[0/6] Created .env from template")
 
     if not is_postinstall:
-        console.log("[1/6] Installing dependencies...")
+        stage("[1/6] Installing dependencies...", "dependencies")
         # Hardlink from the cache instead of copying (bun's documented
         # default on Linux/Windows, but observed to fall back to copies on
         # Windows). Copies re-write ~600 MB per install, which Defender
@@ -247,28 +255,30 @@ def build_command() -> None:
     else:
         console.log("[1/6] Dependencies already installed by package manager")
 
-    console.log("[2/6] Building client...")
+    stage("[2/6] Building client...", "client")
     # bun requires --filter AFTER the ``run`` subcommand (before it, bun
-    # treats the next word as a script name).
-    run(["bun", "run", "--filter", "react-flow-client", "build"], cwd=root)
+    # treats the next word as a script name). In a terminal bun shows only
+    # the last ten lines of a filtered script; --elide-lines=0 prints all of
+    # them, so warnings keep their file names and every chunk size shows.
+    run(["bun", "run", "--filter", "react-flow-client", "--elide-lines=0", "build"], cwd=root)
 
     # Bundle the JS executor sidecar (server/nodejs) with `bun build
     # --target=bun` into one self-contained dist/index.js (express
     # inlined) that nodes/code/_runtime.py runs on bun. Saves the
     # TypeScript transpile on every launch and needs no node_modules at
     # runtime, which is what lets the desktop bundle copy a single file.
-    console.log("[3/6] Building JS executor sidecar...")
-    run(["bun", "run", "--filter", "opencompany-nodejs-executor", "build"], cwd=root)
+    stage("[3/6] Building JS executor sidecar...", "sidecar")
+    run(["bun", "run", "--filter", "opencompany-nodejs-executor", "--elide-lines=0", "build"], cwd=root)
 
     # The Pi host is bundled with its SDK into one file, like the sidecar
     # above, so nothing is installed or unpacked when an agent starts. The
     # SDK comes from server/pi's own frozen lockfile, not the root workspace.
-    console.log("[3/6] Building Pi Coding Agent runtime...")
+    stage("[3/6] Building Pi Coding Agent runtime...", "Pi host")
     pi_cwd = server_cwd / "pi"
     run(["bun", "install", "--frozen-lockfile"], cwd=pi_cwd)
     run(["bun", "run", "build"], cwd=pi_cwd)
 
-    console.log("[4/6] Installing Python dependencies...")
+    stage("[4/6] Installing Python dependencies...", "Python dependencies")
     # ``server/`` is its own standalone uv project; ``uv sync`` at that
     # directory resolves ``server/pyproject.toml`` and materialises
     # ``server/.venv``. The CLI lives in a separate venv (or system
@@ -291,7 +301,7 @@ def build_command() -> None:
     # Compiling `.venv/` here would be duplicate work and fails on
     # cookiecutter template files inside packages like crawlee that
     # aren't real Python.
-    console.log("[5/6] Compiling Python bytecode...")
+    stage("[5/6] Compiling Python bytecode...", "bytecode")
     run(
         uv_run(
             "python", "-m", "compileall", "-q", "-j", "0", *COMPILEALL_SOURCE_DIRS
@@ -307,10 +317,15 @@ def build_command() -> None:
     # then asserts every extracted path exists; non-zero exit aborts
     # the build via ``run(check=True)``. Idempotent on re-build (pooch
     # cache hit) so this step is sub-second once the tarball is on disk.
-    console.log("[6/6] Installing Temporal binaries...")
+    stage("[6/6] Installing Temporal binaries...", "Temporal")
     run(
         uv_run("python", "-m", "services.temporal._install"),
         cwd=server_cwd,
     )
 
-    console.log("[green]Build complete.[/]")
+    ended = time.perf_counter()
+    starts = [start for _, start in stages] + [ended]
+    costs = ", ".join(
+        f"{name} {after - start:.1f} s" for (name, start), after in zip(stages, starts[1:])
+    )
+    console.log(f"[green]Build complete in {ended - starts[0]:.1f} s.[/] {costs}")

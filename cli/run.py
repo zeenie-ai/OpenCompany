@@ -17,6 +17,7 @@ swallowed stderr, etc.).
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -38,6 +39,19 @@ def which_argv(argv: list[str]) -> list[str]:
     if not argv:
         return argv
     return [shutil.which(argv[0]) or argv[0], *argv[1:]]
+
+
+def child_env() -> dict[str, str]:
+    """This process's environment for a child, without ``VIRTUAL_ENV``.
+
+    uv uses a project's own ``.venv`` and warns on every call when an
+    inherited ``VIRTUAL_ENV`` points elsewhere: the CLI's ``.cli-venv``, or
+    whatever venv the user's shell or editor terminal has active. uv ignores
+    the variable unless ``--active`` is passed, so the warning has no
+    effect. It is dropped here, at the source, for :func:`run` and the
+    supervisor alike.
+    """
+    return {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
 
 
 def uv_run(*args: str) -> list[str]:
@@ -76,7 +90,7 @@ def run(
     """Inherit-stdio run; raises :class:`typer.Exit` on non-zero when ``check``."""
     resolved = which_argv(argv)
     try:
-        proc = subprocess.run(resolved, cwd=str(cwd) if cwd else None)
+        proc = subprocess.run(resolved, cwd=str(cwd) if cwd else None, env=child_env())
     except FileNotFoundError:
         console.print(f"[red]Command not found:[/] {argv[0] if argv else ''}")
         if check:

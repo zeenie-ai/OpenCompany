@@ -40,6 +40,20 @@ def test_run_returns_code_when_check_disabled():
         assert run_module.run(["x"], check=False) == 42
 
 
+def test_run_keeps_virtual_env_out_of_the_child(monkeypatch):
+    """uv warns on every call when an inherited VIRTUAL_ENV names another
+    venv (an editor terminal's, or the CLI's own); the child gets the rest
+    of the environment unchanged."""
+    monkeypatch.setenv("VIRTUAL_ENV", "/some/other/venv")
+    monkeypatch.setenv("OPENCOMPANY_BUILDING", "true")
+    fake = MagicMock(returncode=0)
+    with patch.object(run_module.subprocess, "run", return_value=fake) as spawned:
+        run_module.run(["uv", "sync"])
+    env = spawned.call_args.kwargs["env"]
+    assert "VIRTUAL_ENV" not in env
+    assert env["OPENCOMPANY_BUILDING"] == "true"
+
+
 # --- build-specific helpers -------------------------------------------------
 
 

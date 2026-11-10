@@ -21,6 +21,7 @@ Refer to ``docs-internal/release_build_pipeline.md`` for context.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Callable
 from unittest.mock import patch
@@ -158,6 +159,28 @@ def test_build_invokes_sidecar_bun_filter(tmp_path: Path):
     assert argv.index("--filter") > argv.index("run"), (
         f"--filter must come after the `run` subcommand for bun, got {argv}"
     )
+
+
+def test_filtered_builds_print_all_of_their_output(tmp_path: Path):
+    """In a terminal bun shows the last ten lines of a filtered script,
+    which hid the client build's warnings and most of its chunk sizes."""
+    captured = _run_build_capture_invocations(tmp_path)
+    filtered = [call["argv"] for call in captured if "--filter" in call["argv"]]
+    assert len(filtered) == 2
+    for argv in filtered:
+        assert "--elide-lines=0" in argv
+        assert argv.index("--elide-lines=0") < argv.index("build")
+
+
+def test_build_ends_with_what_each_stage_cost(tmp_path: Path):
+    """The closing line names every stage in order with its seconds, so a
+    saved log says where the time went."""
+    with build.console.capture() as output:
+        _run_build_capture_invocations(tmp_path)
+    closing = " ".join(output.get().split("Build complete in ")[1].split())
+    names = ["dependencies", "client", "sidecar", "Pi host", "Python dependencies", "bytecode", "Temporal"]
+    seconds = r"\d+\.\d s"
+    assert re.fullmatch(rf"{seconds}\. " + ", ".join(f"{name} {seconds}" for name in names), closing), closing
 
 
 def test_sidecar_build_runs_after_client_build(tmp_path: Path):
