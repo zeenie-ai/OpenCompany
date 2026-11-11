@@ -459,6 +459,25 @@ describe('CanvasContent library', () => {
     expect(screen.getByRole('button', { name: 'Latest' })).toBeInTheDocument();
   });
 
+  // Colour marks state or role (docs-internal/theme_system.md): a kind's
+  // tile is neutral, as a reply's document card's is, and the item on show
+  // is marked by a foreground border.
+  it('draws every kind’s tile neutral, and marks the item on show in the foreground colour', () => {
+    const items = [titled(note('n1', 'the plan'), 'Weekly plan'), image('i1', 'booking.png'), urlItem('u1', 'https://example.com/menu')];
+    const { container } = render(<CanvasContent items={items} workflowId="wf-1" />);
+
+    expect(container.innerHTML).not.toMatch(/action-(tools|run|stop|save|config)/);
+    expect(screen.getByRole('button', { name: /example\.com\/menu/ })).toHaveClass('aria-current:border-fg-default', 'aria-current:bg-bg-active');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Library, 3 items' }));
+    const library = screen.getByRole('region', { name: 'Library' });
+    expect(library.innerHTML).not.toMatch(/action-(tools|run|stop|save|config)/);
+    for (const tile of library.querySelectorAll('span[aria-hidden]')) {
+      expect(tile).toHaveClass('border-border-default', 'bg-bg-active', 'text-fg-muted');
+    }
+    expect(within(library).getByRole('button', { name: /Weekly plan/ })).toHaveClass('aria-current:border-fg-default');
+  });
+
   it('goes back from the Library to the item that was on show', () => {
     const items = [titled(note('n1', 'the plan'), 'Weekly plan'), titled(note('n2', 'the menu'), 'Menu')];
     render(<CanvasContent items={items} workflowId="wf-1" />);

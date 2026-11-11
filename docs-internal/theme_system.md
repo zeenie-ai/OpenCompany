@@ -287,7 +287,8 @@ and the onboarding v3 handoff:
   something: a `{{node.field}}` variable (in the Input section and in the
   field it is dropped on), an error and a todo's status. The Canvas
   board's kind tiles (`canvas/CanvasLibrary.tsx`, shared with the
-  Workspace dock) still take a tint.
+  Workspace dock) are neutral like a reply's document card, and the item
+  on show has a foreground border.
 - **A state in the node panels is a dot beside neutral words**
   (`components/parameterPanel/StatePill.tsx`, on the status tokens), and
   only work under way pulses. A team task (`taskManager/TaskStatus.tsx`,

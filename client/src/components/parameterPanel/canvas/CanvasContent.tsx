@@ -342,7 +342,7 @@ const CanvasContent: React.FC<Props> = ({
         />
         {onRemove && (
           <Button
-            variant="ghost"
+            variant="quiet"
             size="icon-sm"
             onClick={() => onRemove(active.id)}
             aria-label="Remove item"

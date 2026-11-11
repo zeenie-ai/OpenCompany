@@ -5,6 +5,12 @@
  * PDFs, pages), as a grid with image thumbnails. `LibraryStrip` is the
  * board's footer that opens it: the Library button with the count, the six
  * newest items as chips, and Latest while an older item is shown.
+ *
+ * An item's tile is neutral, as a reply's document card's is
+ * (features/chat/turns/ArtifactCard): its mark tells the kind, since colour
+ * marks only a state or a role (theme_system.md, "Colour marks state or
+ * role"). The item on show is marked by its border, in the foreground
+ * colour.
  */
 
 import { LayoutGrid } from 'lucide-react';
@@ -15,27 +21,23 @@ import type { CanvasItem } from '../../../lib/canvasBoard';
 import { formatBytes } from '../gallery/fileIcons';
 import { itemLabel, resolveRenderKind, type RenderVerdict } from './canvasKinds';
 
-const TOOLS = 'border-action-tools-border bg-action-tools-soft text-action-tools-ink';
-const RUN = 'border-action-run-border bg-action-run-soft text-action-run-ink';
-const STOP = 'border-action-stop-border bg-action-stop-soft text-action-stop-ink';
-const SAVE = 'border-action-save-border bg-action-save-soft text-action-save-ink';
-const CONFIG = 'border-action-config-border bg-action-config-soft text-action-config-ink';
-const NEUTRAL = 'border-border-default bg-bg-app text-fg-muted';
+/** Every kind's tile, as a document card's in a reply. */
+const TILE = 'border-border-default bg-bg-active text-fg-muted';
 
-/** Each kind's tile: a short mark and a tint. A file shows its extension. */
-const KIND: Record<RenderVerdict, { mark: string; tone: string; label: string }> = {
-  note: { mark: 'MD', tone: TOOLS, label: 'Note' },
-  markdown: { mark: 'MD', tone: TOOLS, label: 'Document' },
-  'web-external': { mark: 'WEB', tone: STOP, label: 'Web page' },
-  'web-srcdoc': { mark: '</>', tone: STOP, label: 'Web page' },
-  json: { mark: '{ }', tone: CONFIG, label: 'JSON' },
-  code: { mark: '</>', tone: CONFIG, label: 'Code' },
-  text: { mark: 'TXT', tone: RUN, label: 'Text' },
-  'media-image': { mark: 'IMG', tone: SAVE, label: 'Image' },
-  'media-video': { mark: 'VID', tone: SAVE, label: 'Video' },
-  'media-audio': { mark: 'AUD', tone: SAVE, label: 'Audio' },
-  pdf: { mark: 'PDF', tone: STOP, label: 'PDF' },
-  binary: { mark: 'FILE', tone: NEUTRAL, label: 'File' },
+/** Each kind's tile mark and name. A file's tile shows its extension. */
+const KIND: Record<RenderVerdict, { mark: string; label: string }> = {
+  note: { mark: 'MD', label: 'Note' },
+  markdown: { mark: 'MD', label: 'Document' },
+  'web-external': { mark: 'WEB', label: 'Web page' },
+  'web-srcdoc': { mark: '</>', label: 'Web page' },
+  json: { mark: '{ }', label: 'JSON' },
+  code: { mark: '</>', label: 'Code' },
+  text: { mark: 'TXT', label: 'Text' },
+  'media-image': { mark: 'IMG', label: 'Image' },
+  'media-video': { mark: 'VID', label: 'Video' },
+  'media-audio': { mark: 'AUD', label: 'Audio' },
+  pdf: { mark: 'PDF', label: 'PDF' },
+  binary: { mark: 'FILE', label: 'File' },
 };
 
 function kindOf(item: CanvasItem) {
@@ -49,7 +51,7 @@ function kindOf(item: CanvasItem) {
 function Tile({ item, className }: { item: CanvasItem; className?: string }) {
   const kind = kindOf(item);
   return (
-    <span aria-hidden className={cn('grid shrink-0 place-items-center border font-mono font-semibold', kind.tone, className)}>
+    <span aria-hidden className={cn('grid shrink-0 place-items-center border font-mono font-semibold', TILE, className)}>
       {kind.mark}
     </span>
   );
@@ -97,7 +99,7 @@ export function LibraryView({
               type="button"
               onClick={() => onOpen(item)}
               aria-current={item.id === activeId ? 'true' : undefined}
-              className="flex items-center gap-3 rounded-xl border border-border-default bg-bg-panel px-3 py-2.5 text-left text-fg-default transition-[border-color,transform] duration-(--dur-default) hover:-translate-y-px hover:border-border-strong aria-current:border-action-tools-border motion-reduce:hover:translate-y-0"
+              className="flex items-center gap-3 rounded-xl border border-border-default bg-bg-panel px-3 py-2.5 text-left text-fg-default transition-[border-color,transform] duration-(--dur-default) hover:-translate-y-px hover:border-border-strong aria-current:border-fg-default motion-reduce:hover:translate-y-0"
             >
               <Tile item={item} className="size-9 rounded-lg text-2xs" />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -120,7 +122,7 @@ export function LibraryView({
                   type="button"
                   onClick={() => onOpen(item)}
                   aria-current={item.id === activeId ? 'true' : undefined}
-                  className="flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-panel text-left text-fg-default transition-[border-color,transform] duration-(--dur-default) hover:-translate-y-px hover:border-border-strong aria-current:border-action-tools-border motion-reduce:hover:translate-y-0"
+                  className="flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-panel text-left text-fg-default transition-[border-color,transform] duration-(--dur-default) hover:-translate-y-px hover:border-border-strong aria-current:border-fg-default motion-reduce:hover:translate-y-0"
                 >
                   {image ? (
                     <img src={image} alt="" loading="lazy" className="h-18 w-full border-b border-border-default object-cover" />
@@ -178,7 +180,7 @@ export function LibraryStrip({
             title={itemLabel(item)}
             onClick={() => onOpen(item)}
             aria-current={item.id === activeId ? 'true' : undefined}
-            className="flex h-7.5 max-w-37.5 shrink-0 items-center gap-1.5 rounded-lg border border-border-default bg-bg-panel pr-2.25 pl-1.25 text-xs font-medium text-fg-default transition-colors duration-(--dur-default) hover:border-border-strong aria-current:border-action-tools-border aria-current:bg-action-tools-soft"
+            className="flex h-7.5 max-w-37.5 shrink-0 items-center gap-1.5 rounded-lg border border-border-default bg-bg-panel pr-2.25 pl-1.25 text-xs font-medium text-fg-default transition-colors duration-(--dur-default) hover:border-border-strong aria-current:border-fg-default aria-current:bg-bg-active"
           >
             <Tile item={item} className="size-5 rounded-md text-micro" />
             <span className="truncate">{itemLabel(item)}</span>

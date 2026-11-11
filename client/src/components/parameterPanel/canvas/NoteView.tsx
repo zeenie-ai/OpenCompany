@@ -126,7 +126,7 @@ export default function NoteView({
         {canStep && (
           <span role="group" aria-label="Versions" className="flex items-center font-mono text-xs text-fg-muted">
             <Button
-              variant="ghost"
+              variant="quiet"
               size="icon-sm"
               onClick={() => setShown((value) => Math.max(1, value - 1))}
               disabled={shown <= 1}
@@ -138,7 +138,7 @@ export default function NoteView({
               v{shown}/{latest}
             </span>
             <Button
-              variant="ghost"
+              variant="quiet"
               size="icon-sm"
               onClick={() => setShown((value) => Math.min(latest, value + 1))}
               disabled={shown >= latest}
@@ -163,7 +163,7 @@ export default function NoteView({
           <ToggleGroupItem value="source">Markdown</ToggleGroupItem>
         </ToggleGroup>
         <Button
-          variant="ghost"
+          variant="quiet"
           size="icon-sm"
           onClick={copy}
           disabled={!ready}
@@ -172,7 +172,7 @@ export default function NoteView({
         >
           {copied ? <Check className="size-3.5 text-action-run-ink" /> : <Copy className="size-3.5" />}
         </Button>
-        <Button variant="ghost" size="icon-sm" onClick={download} disabled={!ready} aria-label="Download" title={`Download as a .${code ? 'txt' : 'md'} file`}>
+        <Button variant="quiet" size="icon-sm" onClick={download} disabled={!ready} aria-label="Download" title={`Download as a .${code ? 'txt' : 'md'} file`}>
           <Download className="size-3.5" />
         </Button>
       </div>

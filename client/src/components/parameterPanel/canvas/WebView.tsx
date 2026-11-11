@@ -26,6 +26,9 @@ import { buildApiUrl } from '../../../config/api';
 import { useWorkspaceTextQuery } from '../../../hooks/useWorkspaceText';
 import type { WorkspaceFileRef } from '../../../types/workspaceFiles';
 
+/** A neutral outline (theme_system.md, "Colour marks state or role"). */
+const NEUTRAL = 'border-border-default text-fg-default';
+
 const SurfaceHeader: React.FC<{
   label: string;
   href: string;
@@ -36,7 +39,7 @@ const SurfaceHeader: React.FC<{
       {label}
     </span>
     {hint && <span className="hidden shrink-0 text-[10px] text-fg-faint sm:inline">{hint}</span>}
-    <Button asChild variant="outline" size="sm">
+    <Button asChild variant="quiet" size="sm" className={NEUTRAL}>
       <a href={href} target="_blank" rel="noopener noreferrer">
         <ExternalLink className="h-3.5 w-3.5" /> Open in new tab
       </a>
@@ -97,7 +100,7 @@ export const WorkspaceHtmlView: React.FC<{ refFile: WorkspaceFileRef }> = ({ ref
         <p className="text-xs text-fg-muted">
           This page is larger than the 512 KB render cap — download it instead.
         </p>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="quiet" size="sm" className={NEUTRAL}>
           <a href={href} download={refFile.filename} target="_blank" rel="noreferrer">
             <Download className="h-4 w-4" /> Download
           </a>

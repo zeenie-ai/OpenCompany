@@ -9,7 +9,7 @@
 
 import React, { useMemo } from 'react';
 import JsonView from '@uiw/react-json-view';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-typescript';
@@ -30,10 +30,12 @@ interface Props {
   language: string | null;
 }
 
+/** A notice: the warning's mark beside neutral words, as the Gallery's. */
 const TruncationBanner: React.FC<{ sizeBytes?: number }> = ({ sizeBytes }) => (
-  <p className="mb-2 shrink-0 rounded border border-warning bg-bg-panel px-2 py-1 text-xs text-warning">
-    Showing the first 512 KB{sizeBytes ? ` of ${Math.round(sizeBytes / 1024)} KB` : ''} — use
-    Download for the full file.
+  <p className="mb-2 flex shrink-0 items-center gap-1.5 rounded-md border border-border-default bg-bg-panel px-2 py-1 text-xs text-fg-muted">
+    <AlertTriangle aria-hidden className="size-3.5 shrink-0 text-warning" />
+    Showing the first 512 KB{sizeBytes ? ` of ${Math.round(sizeBytes / 1024)} KB` : ''}. Use Download for the
+    full file.
   </p>
 );
 
