@@ -59,6 +59,9 @@ class TemporalClientWrapper:
         self._health_check_timeout_seconds = _s.temporal_health_check_timeout_seconds
         self._sweep_attempts = _s.temporal_sweep_attempts
         self._sweep_backoff_seconds = _s.temporal_sweep_backoff_seconds
+        # Set while ``_client`` is set, so startup work can wait for the
+        # connection instead of racing it (see wait_connected).
+        self._connected = asyncio.Event()
 
     @property
     def client(self) -> Optional[Client]:
@@ -69,6 +72,20 @@ class TemporalClientWrapper:
     def is_connected(self) -> bool:
         """Check if client is connected."""
         return self._client is not None
+
+    async def wait_connected(self, timeout: float) -> bool:
+        """Wait until the client is connected, for at most ``timeout`` seconds.
+
+        True once connected (at once if it already is), False on timeout.
+        Event dispatch drops events while the client is not connected, so
+        startup work that makes events (a reconnected bot delivering its
+        held messages) waits here first.
+        """
+        try:
+            await asyncio.wait_for(self._connected.wait(), timeout)
+        except TimeoutError:
+            return False
+        return True
 
     async def connect(self, retries: int = 3, delay: float = 2.0) -> Optional[Client]:
         """Connect to the Temporal server with retries.
@@ -127,6 +144,7 @@ class TemporalClientWrapper:
                         f"{self._health_check_attempts} health checks",
                     )
                 self._client = client
+                self._connected.set()
                 logger.info(f"Connected to Temporal server at {self.server_address}")
                 # Wave 12 A4: idempotently register the event-framework
                 # Search Attributes. A failure here is logged, not raised,
@@ -154,6 +172,7 @@ class TemporalClientWrapper:
         """Disconnect from the Temporal server."""
         if self._client is not None:
             self._client = None
+            self._connected.clear()
             logger.info("Disconnected from Temporal server")
 
     async def check_health(self) -> bool:

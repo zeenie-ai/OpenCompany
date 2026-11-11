@@ -18,6 +18,7 @@ rather than read from env.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -115,3 +116,41 @@ def test_is_transient_visibility_error_substrings():
     assert _is_transient_visibility_error(Exception("frontend temporarily unavailable")) is True
     assert _is_transient_visibility_error(Exception("context canceled")) is True
     assert _is_transient_visibility_error(Exception("genuine bug: KeyError 'x'")) is False
+
+
+async def test_wait_connected_returns_once_connect_succeeds(monkeypatch):
+    """Startup's service refresh waits here so Telegram's held messages are
+    not dropped by event dispatch before the client exists."""
+    fc = _fake_client(True)
+    _patch_connect(monkeypatch, fc)
+    w = _make_wrapper()
+
+    waiter = asyncio.create_task(w.wait_connected(5))
+    await asyncio.sleep(0)
+    assert not waiter.done()
+
+    await w.connect(retries=1, delay=0)
+    assert await waiter is True
+    assert await w.wait_connected(0.01) is True  # at once once connected
+
+
+async def test_wait_connected_times_out_while_disconnected():
+    assert await _make_wrapper().wait_connected(0.01) is False
+
+
+async def test_disconnect_clears_the_connected_state(monkeypatch):
+    _patch_connect(monkeypatch, _fake_client(True))
+    w = _make_wrapper()
+    await w.connect(retries=1, delay=0)
+
+    await w.disconnect()
+
+    assert await w.wait_connected(0.01) is False
+
+
+async def test_a_connect_that_never_serves_does_not_count_as_connected(monkeypatch):
+    _patch_connect(monkeypatch, _fake_client(False))
+    w = _make_wrapper(attempts=1)
+
+    assert await w.connect(retries=1, delay=0) is None
+    assert await w.wait_connected(0.01) is False

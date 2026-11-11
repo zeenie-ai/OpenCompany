@@ -430,7 +430,21 @@ async def lifespan(app: FastAPI):
     #
     # Spawned as a background task so a slow upstream (Telegram getMe,
     # Twitter token validation) doesn't block lifespan startup.
-    asyncio.create_task(get_status_broadcaster()._refresh_all_services())
+    #
+    # It waits for the Temporal client first, with a bound: reconnecting
+    # Telegram delivers the messages it held while the backend was down,
+    # and event dispatch drops events until the client connects.
+    async def _refresh_services() -> None:
+        if settings.temporal_enabled and not await container.temporal_client().wait_connected(
+            settings.temporal_startup_refresh_wait_seconds
+        ):
+            logger.warning(
+                "Temporal not connected in time; refreshing services anyway",
+                wait_seconds=settings.temporal_startup_refresh_wait_seconds,
+            )
+        await get_status_broadcaster()._refresh_all_services()
+
+    asyncio.create_task(_refresh_services())
 
     _startup_log("All services initialized")
     from services.employees.activation import recovery_loop

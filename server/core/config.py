@@ -271,6 +271,13 @@ class Settings(BaseSettings):
         env="TEMPORAL_HEALTH_CHECK_TIMEOUT_SECONDS",
         gt=0,
     )
+    # How long the startup service refresh (which reconnects Telegram, whose
+    # held messages then arrive at once) waits for the Temporal client.
+    temporal_startup_refresh_wait_seconds: float = Field(
+        default=60.0,
+        env="TEMPORAL_STARTUP_REFRESH_WAIT_SECONDS",
+        gt=0,
+    )
     # Boot-time terminate-running sweep: retry the Visibility query that
     # races shard acquisition ("shard status unknown") before giving up.
     temporal_sweep_attempts: int = Field(
