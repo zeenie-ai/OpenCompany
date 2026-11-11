@@ -1,14 +1,16 @@
 /**
- * The workspace files a Canvas document's markdown names. An agent writes a
- * report's images and links by their workspace path
- * (`![Revenue](charts/revenue.png)`), and a browser would read such a path
- * against the app's own address, where no file is. So a relative path is
- * read from the document's folder (the workspace's root for a note), a path
- * starting with `/` from the workspace's root, and either becomes the
- * workspace file route, which checks it stays inside the workflow's
- * workspace. Anything else (a URL with a scheme or a host, an app route, a
- * fragment) is left as written.
+ * The workspace files an employee's markdown names: a Canvas note or .md
+ * file, and a chat reply. An agent writes a report's images and links by
+ * their workspace path (`![Revenue](charts/revenue.png)`), and a browser
+ * would read such a path against the app's own address, where no file is.
+ * So a relative path is read from the document's folder (the workspace's
+ * root for a note or a reply), a path starting with `/` from the
+ * workspace's root, and either becomes the workspace file route, which
+ * checks it stays inside the workflow's workspace. Anything else (a URL
+ * with a scheme or a host, an app route, a fragment) is left as written.
  */
+
+import { defaultUrlTransform } from 'react-markdown';
 
 import { buildApiUrl } from '@/config/api';
 
@@ -60,4 +62,14 @@ export function resolveWorkspaceReference(
   const path = workspacePathOf(cut < 0 ? reference : reference.slice(0, cut), baseDir);
   if (path === null) return reference;
   return workspaceFileUrl(workflowId, path) + (cut < 0 ? '' : reference.slice(cut));
+}
+
+/** A react-markdown `urlTransform` for a workflow's markdown: the default
+ *  first, which drops unsafe schemes (javascript:, data:), then a workspace
+ *  path as above. */
+export function workspaceUrlTransform(
+  workflowId: string | null | undefined,
+  baseDir = '',
+): (url: string) => string {
+  return (url) => resolveWorkspaceReference(defaultUrlTransform(url), workflowId, baseDir);
 }

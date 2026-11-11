@@ -5,7 +5,9 @@
  * `.chat-code` and `.chat-table` in index.css). Its own chunk: the thread
  * loads it lazily, so the markdown stack stays out of the first load. Links
  * open in a new tab, and images from outside the workspace wait for the owner
- * (CHAT_MARKDOWN_COMPONENTS).
+ * (CHAT_MARKDOWN_COMPONENTS). An image or a link the employee names by its
+ * workspace path (`charts/revenue.png`) is read against the chat's workflow's
+ * workspace (lib/workspaceLinks.ts), so it loads from there.
  *
  * While the answer streams (`streaming`), it is rendered block by block
  * (markdown/blocks.ts): a finished block renders once, only the growing last
@@ -27,6 +29,7 @@ import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { workspaceUrlTransform } from '@/lib/workspaceLinks';
 import { useCopied } from '../turns/useCopied';
 import { markdownBlocks } from './blocks';
 import { CitationContext } from './citationContext';
@@ -137,15 +140,27 @@ const Table: Components['table'] = ({ node: _node, ...props }) => (
 
 const COMPONENTS: Components = { ...CHAT_MARKDOWN_COMPONENTS, code: CodeBlock, pre: CodeFrame, table: Table };
 
-const Block = memo(function Block({ text }: { text: string }) {
+const Block = memo(function Block({ text, workflowId }: { text: string; workflowId: string | null }) {
   return (
-    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS} urlTransform={workspaceUrlTransform(workflowId)}>
       {text}
     </ReactMarkdown>
   );
 });
 
-export default function ReplyMarkdown({ text, streaming = false, className }: { text: string; streaming?: boolean; className?: string }) {
+export default function ReplyMarkdown({
+  text,
+  streaming = false,
+  className,
+  workflowId = null,
+}: {
+  text: string;
+  streaming?: boolean;
+  className?: string;
+  /** The chat's workflow, whose workspace a path in the reply names; none
+   *  (the chat with no workflow open) leaves paths as written. */
+  workflowId?: string | null;
+}) {
   // Each [n] of a source the reply has becomes a citation chip.
   const { sources } = useContext(CitationContext);
   const linked = useMemo(() => linkCitations(text, new Set(sources.keys())), [text, sources]);
@@ -153,7 +168,7 @@ export default function ReplyMarkdown({ text, streaming = false, className }: { 
   return (
     <div className={cn('chat-markdown min-w-0', className)} data-streaming={streaming || undefined}>
       {blocks.map((block, index) => (
-        <Block key={index} text={block} />
+        <Block key={index} text={block} workflowId={workflowId} />
       ))}
     </div>
   );

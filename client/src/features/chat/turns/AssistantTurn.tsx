@@ -147,6 +147,9 @@ export function AssistantTurn({
   // A run that ended without saving an answer can be tried again from its
   // note (an answer it saved has Try again in its bar).
   const actions = useTurnActions();
+  // The chat's workflow (its session; `default` is the chat with none open),
+  // whose workspace the paths in a reply name.
+  const workflowId = actions && actions.sessionId !== 'default' ? actions.sessionId : null;
   const question = run?.userMessageId ?? null;
   const retry =
     !message && latest && actions && question && (run?.state === 'stopped' || run?.state === 'error') ? (
@@ -218,7 +221,7 @@ export function AssistantTurn({
           >
             <Suspense fallback={<p className="m-0 whitespace-pre-wrap">{text}</p>}>
               <CitationContext.Provider value={citations}>
-                <ReplyMarkdown text={text} streaming={streaming} />
+                <ReplyMarkdown text={text} streaming={streaming} workflowId={workflowId} />
               </CitationContext.Provider>
             </Suspense>
           </div>

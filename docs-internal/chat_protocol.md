@@ -546,6 +546,11 @@ are the two hosts.
   turn, each call it waits on following its card (`withApprovalSteps`), stays mounted so the owner's open or closed
   choice carries to the next run, and gives way to the turn's "Worked for …" when the run ends; if its button had
   focus then, focus moves to the message box (`onLeave`, from `ChatPane`).
+- **Reply images and links**: an image or a link a reply names by its workspace path (`![Revenue](charts/revenue.png)`)
+  is read against the chat's workflow's workspace and served by the workspace file route
+  (`client/src/lib/workspaceLinks.ts`, shared with the Canvas board; the workflow is the chat's session, so in the
+  chat with no workflow open a path stays as written). Images then go through `SafeImage`: a workspace image loads,
+  one from another site waits behind "Show image from …".
 - **Reply markdown** (`markdown/ReplyMarkdown.tsx`, in its own chunk): a code block sits in a frame
   (`.chat-code` in `index.css`), with its fence's language ("text" without one) and Copy above it, a line number
   beside each line and the theme's `--code-*` colours, a long line scrolling sideways; a table sits in a frame

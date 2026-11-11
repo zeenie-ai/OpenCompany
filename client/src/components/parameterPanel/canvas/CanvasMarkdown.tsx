@@ -2,20 +2,20 @@
  * Markdown on the Canvas board: a note, or a .md file in the workspace.
  *
  * Its images and links name workspace files by path, read against the
- * workspace (workspaceLinks.ts). Every image then goes through the chat's
- * SafeImage: an image from the workspace loads, and one from anywhere else
- * waits for the owner behind a button naming its host, since a note is
- * model output just as a reply is, and an image URL can carry data away the
- * moment it loads. A link opens in a new tab, so following one never leaves
- * the app.
+ * workspace (lib/workspaceLinks.ts), as a chat reply's are. Every image then
+ * goes through the chat's SafeImage: an image from the workspace loads, and
+ * one from anywhere else waits for the owner behind a button naming its
+ * host, since a note is model output just as a reply is, and an image URL
+ * can carry data away the moment it loads. A link opens in a new tab, so
+ * following one never leaves the app.
  */
 
-import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 
 import { SafeImage } from '@/features/chat';
-import { resolveWorkspaceReference } from './workspaceLinks';
+import { workspaceUrlTransform } from '@/lib/workspaceLinks';
 
 const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
 
@@ -43,8 +43,7 @@ export default function CanvasMarkdown({ children, workflowId, baseDir = '' }: P
     <ReactMarkdown
       remarkPlugins={REMARK_PLUGINS}
       components={COMPONENTS}
-      // The default first: it drops unsafe schemes (javascript:, data:).
-      urlTransform={(url) => resolveWorkspaceReference(defaultUrlTransform(url), workflowId, baseDir)}
+      urlTransform={workspaceUrlTransform(workflowId, baseDir)}
     >
       {children}
     </ReactMarkdown>

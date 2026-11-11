@@ -56,6 +56,13 @@ describe('chat markdown', () => {
     expect(img).toHaveAttribute('referrerpolicy', 'no-referrer');
   });
 
+  it('loads an image named by its workspace path from the chat’s workflow', () => {
+    render(<ReplyMarkdown text={'![chart](charts/revenue.png) and [the data](data/q2.csv)'} workflowId="wf-1" />);
+
+    expect(screen.getByRole('img', { name: 'chart' })).toHaveAttribute('src', '/api/workspace/wf-1/files/charts/revenue.png');
+    expect(screen.getByRole('link', { name: 'the data' })).toHaveAttribute('href', '/api/workspace/wf-1/files/data/q2.csv');
+  });
+
   it('opens links in a new tab without an opener', () => {
     renderReply('[docs](https://example.com/docs)');
     const link = screen.getByRole('link', { name: 'docs' });
