@@ -296,8 +296,13 @@ and the onboarding v3 handoff:
   ready, submitted is waiting (the lead must review it), failed is
   attention, accepted is a tick in ink, and blocked or cancelled is
   paused. A teammate: working, idle is ready, connected is paused. A
-  process: running is working, error is attention, stopped is paused.
-  Counts are ink; the Task Manager's are the neutral `chips`.
+  process: running is working, error is attention, stopped is paused. A
+  skill in an agent's run (`SkillState.tsx`, in the Master Skill editor and
+  an agent's Connected Skills): loading is working, loaded is ready, used
+  is a tick in ink, failed is attention. Counts are ink; the Task Manager's
+  are the neutral `chips`. A hint is neutral too (the Context panel's
+  "Context is workflow-scoped", the skill editor's Enable hint): only a
+  failure or a warning is a coloured notice.
 - **The Gallery takes no colour** (since 2026-11-11,
   `components/parameterPanel/gallery/`): a file's kind is its glyph's
   shape, in `text-fg-muted` (`fileIcons.tsx`); the grid or list switch is

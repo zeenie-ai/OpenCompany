@@ -195,7 +195,8 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
   if (!workflowId) {
     return (
       <div className="p-6">
-        <Alert variant="info">
+        {/* A hint, not a state, so neutral. */}
+        <Alert className="border-border-default bg-bg-panel text-fg-default">
           <ShieldCheck />
           <AlertTitle>Context is workflow-scoped</AlertTitle>
           <AlertDescription>Save the workflow before inspecting its Context.</AlertDescription>

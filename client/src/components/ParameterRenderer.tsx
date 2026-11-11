@@ -336,7 +336,7 @@ const GroupIdSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isGroupSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isGroupSelected ? 'bg-muted text-fg-default font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
         <Button
           type="button"
@@ -520,7 +520,7 @@ const SenderNumberSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isMemberSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isMemberSelected ? 'bg-muted text-fg-default font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
         <Button
           type="button"
@@ -691,7 +691,7 @@ const ChannelJidSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isSelected ? 'bg-muted text-fg-default font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
         <Button
           type="button"
@@ -1776,7 +1776,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 readOnly={isUploadedFile || isFileRef}
-                className={`flex-1 font-mono ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isUploadedFile || isFileRef ? 'bg-muted text-success' : (isFileTemplate ? 'text-info' : '')}`}
+                className={`flex-1 font-mono ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isUploadedFile || isFileRef ? 'bg-muted text-fg-default' : (isFileTemplate ? 'text-info' : '')}`}
               />
               <input
                 key={`file-input-${allParameters?.message_type || 'default'}`}

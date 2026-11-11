@@ -12,10 +12,11 @@ import type { AvailableSkill } from '../../../hooks/useFolderSkills';
 
 const sendRequest = vi.hoisted(() => vi.fn());
 const folder = vi.hoisted(() => ({ skills: [] as AvailableSkill[] }));
+const nodeStatus = vi.hoisted(() => ({ value: undefined as unknown }));
 
 vi.mock('../../../contexts/WebSocketContext', () => ({
   useWebSocket: () => ({ sendRequest }),
-  useNodeStatus: () => undefined,
+  useNodeStatus: () => nodeStatus.value,
 }));
 vi.mock('../../../hooks/useFolderSkills', () => ({
   useFolderSkills: () => ({ data: folder.skills, isLoading: false }),
@@ -38,6 +39,7 @@ import { skillContentQueryKey } from '../../../lib/skillContentQueryKey';
 beforeEach(() => {
   sendRequest.mockReset();
   folder.skills = [];
+  nodeStatus.value = undefined;
   sendRequest.mockImplementation(async (type: string) => (
     type === 'list_skill_folders'
       ? { success: true, folders: [{ name: 'coding', skill_count: 0 }] }
@@ -67,6 +69,32 @@ describe('MasterSkillEditor', () => {
     expect(queryClient.getQueryData(skillContentQueryKey('browser', 'master-a', 1))).toBe('defaults:master-a');
     expect(sendRequest.mock.calls.filter(([type]) => type === 'get_skill_content').every(([, payload]) => payload.master_skill_node_id)).toBe(true);
   });
+  // Colour marks state or role (docs-internal/theme_system.md): a skill's
+  // state in the run is a dot beside a neutral word, and its tags are neutral.
+  it('marks a skill’s state in the run with a dot, and draws its tags neutral', async () => {
+    folder.skills = [
+      { type: 'browser', skillName: 'browser', displayName: 'Browser', description: 'Browse pages', icon: '', color: '' },
+      { type: 'search', skillName: 'search', displayName: 'Search', description: 'Find things', icon: '', color: '' },
+    ];
+    nodeStatus.value = { data: { active_skills: [{ name: 'browser', state: 'loading' }, { name: 'search', state: 'failed' }] } };
+    const { container } = renderWithProviders(
+      <MasterSkillEditor
+        nodeId="7:masterSkill:1"
+        skillFolder="coding"
+        skillsConfig={{ triage: { enabled: true, instructions: 'Sort it', isCustomized: false } }}
+        onConfigChange={vi.fn()}
+      />,
+    );
+
+    const loading = await screen.findByText('Loading');
+    expect(loading).toHaveClass('text-fg-muted');
+    expect(loading.querySelector('.home-pip')).toHaveClass('bg-status-working-dot');
+    expect(loading.querySelector('.home-pip')).toHaveAttribute('data-pip', 'on');
+    expect(screen.getByText('Failed').querySelector('.home-pip')).toHaveClass('bg-status-attention-dot');
+    expect(screen.getByText('Custom')).toHaveClass('border-border-default', 'text-fg-muted');
+    expect(container.innerHTML).not.toMatch(/bg-(info|success|destructive|warning|agent)\/20|text-(info|success|agent)\b/);
+  });
+
   it('keeps the folder in the row it saves after deleting a user skill', async () => {
     renderWithProviders(
       <MasterSkillEditor

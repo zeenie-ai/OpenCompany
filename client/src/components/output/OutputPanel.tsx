@@ -213,7 +213,7 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
               <button
                 type="button"
                 onClick={() => copyToClipboard(raw, 'Copied!')}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-xs text-fg-muted transition-colors hover:text-fg-default"
               >
                 <Copy className="h-3 w-3" />
                 Copy

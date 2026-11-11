@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 
 import { Alert as DSAlert, AlertDescription } from '@/components/ui/alert';
+import { SkillState } from './SkillState';
 import {
   Tooltip,
   TooltipContent,
@@ -59,6 +60,10 @@ import { Button } from '@/components/ui/button';
 // are neutral outlines, and a panel's one strong action is `invert`.
 const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
 const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
+/** A neutral tag on a skill's row: Required, Custom. */
+const ROW_TAG = 'h-4 border-border-default bg-transparent px-1 text-[10px] text-fg-muted';
+/** Customized: the amber dot the skill's row shows, as a state is marked. */
+const CUSTOMIZED_DOT = 'size-1.5 shrink-0 rounded-full bg-warning';
 
 // Skill configuration stored in node parameters
 // Key is skillName (folder name like 'whatsapp-skill'). Entries can carry
@@ -763,33 +768,20 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="h-2 w-2 shrink-0 rounded-full bg-warning" />
+                              <div className={CUSTOMIZED_DOT} />
                             </TooltipTrigger>
                             <TooltipContent>Customized</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       )}
-                      {runtimeState && (
-                        <DSBadge
-                          className={cn(
-                            'h-4 px-1 text-[10px]',
-                            runtimeState === 'failed'
-                              ? 'bg-destructive/20 text-destructive'
-                              : runtimeState === 'loading'
-                                ? 'bg-info/20 text-info'
-                                : 'bg-success/20 text-success',
-                          )}
-                        >
-                          {runtimeState === 'loading' ? 'Loading' : runtimeState === 'failed' ? 'Failed' : runtimeState === 'used' ? 'Used' : 'Loaded'}
-                        </DSBadge>
-                      )}
+                      <SkillState state={runtimeState} className="text-[10px]" />
                       {isRequired && (
-                        <DSBadge className="h-4 bg-agent/20 px-1 text-[10px] text-agent">
+                        <DSBadge variant="outline" className={ROW_TAG}>
                           Required
                         </DSBadge>
                       )}
                       {skill.isUserSkill && (
-                        <DSBadge className="h-4 bg-info/20 px-1 text-[10px] text-info">
+                        <DSBadge variant="outline" className={ROW_TAG}>
                           Custom
                         </DSBadge>
                       )}
@@ -822,7 +814,7 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                   : <Plus className="h-5 w-5" />}
               </div>
               <div className="flex-1">
-                <div className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-sm font-semibold text-success">
+                <div className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-sm font-semibold text-fg-default">
                   Create New Skill
                 </div>
                 <div className="mt-0.5 text-xs text-fg-muted">
@@ -933,7 +925,8 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                   <div className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] flex items-center gap-2 text-sm font-semibold text-fg-default">
                     {selectedSkillInfo.displayName}
                     {selectedSkillConfig?.isCustomized && (
-                      <DSBadge className="h-4 bg-warning/20 text-xs text-warning">
+                      <DSBadge variant="outline" className="h-4 border-border-default bg-transparent px-1.5 text-xs text-fg-muted normal-case tracking-normal">
+                        <span aria-hidden className={CUSTOMIZED_DOT} />
                         Customized
                       </DSBadge>
                     )}
@@ -1042,9 +1035,9 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                 />
               )}
 
-              {/* Enable hint */}
+              {/* Enable hint: a hint, not a state, so neutral. */}
               {!selectedSkillConfig?.enabled && (
-                <DSAlert variant="info" className="mt-3">
+                <DSAlert className="mt-3 border-border-default bg-bg-panel text-fg-muted">
                   <Info className="h-4 w-4" />
                   <AlertDescription>
                     Enable this skill to include it when running the AI Agent.

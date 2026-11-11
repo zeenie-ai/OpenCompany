@@ -610,7 +610,8 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
       <div className="flex shrink-0 items-center gap-2 border-b border-border-default bg-bg-panel px-4 py-3">
         <Database className="h-4 w-4 text-muted-foreground" />
         <span className="font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">Input Data &amp; Variables</span>
-        <Badge variant="info">{connectedNodes.length}</Badge>
+        {/* A count, so neutral. */}
+        <Badge variant="outline" className="border-border-default text-fg-muted">{connectedNodes.length}</Badge>
       </div>
 
       {/* Content */}

@@ -27,6 +27,7 @@ import { Zap, Pencil, Sparkles, TerminalSquare, Trash2, RotateCcw } from 'lucide
 import { Badge } from '@/components/ui/badge';
 import ParameterRenderer from '../ParameterRenderer';
 import MasterSkillEditor from './MasterSkillEditor';
+import { SkillState } from './SkillState';
 import TodoEditor from './TodoEditor';
 import TaskManagerPanel from './TaskManagerPanel';
 import TeamMonitorPanel from './TeamMonitorPanel';
@@ -891,10 +892,8 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                   <span className="font-display tracking-[var(--type-tracking-display)] [text-transform:var(--type-uppercase)] text-fg-default flex flex-1 items-center gap-2">
                     <Sparkles className="h-4 w-4" />
                     Connected Skills
-                    <Badge
-                      variant={expandedConnectedSkills.length > 0 ? 'default' : 'outline'}
-                      className="ml-auto normal-case tracking-normal"
-                    >
+                    {/* A count, so neutral whatever it counts. */}
+                    <Badge variant="outline" className="ml-auto border-border-default text-fg-muted normal-case tracking-normal">
                       {expandedConnectedSkills.length}
                     </Badge>
                   </span>
@@ -949,9 +948,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                               </details>
                             )}
                           </div>
-                          <Badge variant="success" className="shrink-0">
-                            {runtimeState === 'loading' ? 'Loading' : runtimeState === 'failed' ? 'Failed' : runtimeState === 'used' ? 'Used' : runtimeState === 'loaded' ? 'Loaded' : 'Active'}
-                          </Badge>
+                          <SkillState state={runtimeState} idle="Active" className="text-xs" />
                         </div>
                         );
                       })}
@@ -972,7 +969,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                     <TerminalSquare className="h-4 w-4" />
                     Console
                     {consoleOutput && (
-                      <Badge variant="success" className="ml-auto normal-case tracking-normal">Output</Badge>
+                      <Badge variant="outline" className="ml-auto border-border-default text-fg-muted normal-case tracking-normal">Output</Badge>
                     )}
                   </span>
                 </AccordionTrigger>
@@ -982,7 +979,8 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                       <pre
                         className={cn(
                           'm-0 whitespace-pre-wrap break-words',
-                          consoleOutput.startsWith('Error') ? 'text-destructive' : 'text-success',
+                          // Output in the text colour; an error is a state, in red.
+                          consoleOutput.startsWith('Error') ? 'text-destructive' : 'text-fg-default',
                         )}
                       >
                         {consoleOutput}
