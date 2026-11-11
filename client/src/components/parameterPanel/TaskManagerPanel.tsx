@@ -29,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { NodePanel } from './NodePanel';
 import { TASK_STATUSES, actionLabel, elapsed, formatTimestamp, taskUsage, type TeamTaskView } from './taskManager/model';
 import { TaskDetailModal, type LoadTrace } from './taskManager/TaskDetailModal';
 import { TaskStatus, TaskStatusDot } from './taskManager/TaskStatus';
@@ -234,39 +235,33 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-bg-panel">
-      <header className="shrink-0 border-b border-border-default px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="font-display text-base font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]">
-              Team tasks
-            </h2>
-            <p className="truncate text-xs text-fg-muted">
-              {connectedLead.data?.label || 'Team lead'} · {status?.status || 'No active team'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {(status?.archived_executions?.length || 0) > 0 && (
-              <Select value={executionId} onValueChange={setExecutionId}>
-                <SelectTrigger className="w-48" aria-label="Execution"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Latest execution</SelectItem>
-                  {status!.archived_executions!.map((run) => (
-                    <SelectItem key={run.execution_id} value={run.execution_id}>{run.label || run.execution_id.slice(0, 12)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Button variant="quiet" className={NEUTRAL} onClick={() => void fetchStatus()} disabled={loading}>
-              <RefreshCw className={cn(loading && 'animate-spin')} /> Refresh
-            </Button>
-            {/* The panel's one strong action. */}
-            <Button variant="invert" className="px-3.5 font-semibold" disabled={!status?.team_id} onClick={() => openAction('finish')}>
-              Finish team
-            </Button>
-          </div>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <NodePanel
+      title="Team Tasks"
+      description={`${connectedLead.data?.label || 'Team lead'} · ${status?.status || 'No active team'}`}
+      actions={(
+        <>
+          {(status?.archived_executions?.length || 0) > 0 && (
+            <Select value={executionId} onValueChange={setExecutionId}>
+              <SelectTrigger className="w-48" aria-label="Execution"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Latest execution</SelectItem>
+                {status!.archived_executions!.map((run) => (
+                  <SelectItem key={run.execution_id} value={run.execution_id}>{run.label || run.execution_id.slice(0, 12)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button variant="quiet" className={NEUTRAL} onClick={() => void fetchStatus()} disabled={loading}>
+            <RefreshCw className={cn(loading && 'animate-spin')} /> Refresh
+          </Button>
+          {/* The panel's one strong action. */}
+          <Button variant="invert" className="px-3.5 font-semibold" disabled={!status?.team_id} onClick={() => openAction('finish')}>
+            Finish team
+          </Button>
+        </>
+      )}
+      summary={(
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <ToggleGroup
             type="single"
             variant="chips"
@@ -287,8 +282,8 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
             Concurrency <span className="font-medium text-fg-default tabular-nums">{active} / {limit}</span>
           </span>
         </div>
-      </header>
-
+      )}
+    >
       <div className="flex min-h-0 flex-1 flex-col p-4">
         <div className="relative mb-3">
           <Search aria-hidden className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted" />
@@ -402,7 +397,7 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </NodePanel>
   );
 };
 
