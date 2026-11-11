@@ -11,15 +11,13 @@
 
 import { Check, ChevronLeft, ChevronRight, Copy, Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useWebSocketActions } from '../../../contexts/WebSocketContext';
 import type { CanvasFocus, CanvasItem, CanvasVersionResponse } from '../../../lib/canvasBoard';
+import CanvasMarkdown from './CanvasMarkdown';
 
 const COPIED_MS = 1600;
 /** Languages a note is a document in; any other makes it code. */
@@ -188,7 +186,8 @@ export default function NoteView({
         </pre>
       ) : (
         <div className="prose prose-sm min-h-0 max-w-none flex-1 overflow-auto dark:prose-invert">
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{code ? fenced(content, code) : content}</ReactMarkdown>
+          {/* A note names workspace files from the workspace's root. */}
+          <CanvasMarkdown workflowId={workflowId}>{code ? fenced(content, code) : content}</CanvasMarkdown>
         </div>
       )}
     </div>

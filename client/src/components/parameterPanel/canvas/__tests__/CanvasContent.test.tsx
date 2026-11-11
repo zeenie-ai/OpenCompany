@@ -234,6 +234,40 @@ describe('CanvasContent notes as documents', () => {
     });
   });
 
+  it('loads a note’s images from its workflow’s workspace', () => {
+    render(<CanvasContent items={[doc('a', '![Exhibit 1](charts/it_headcount.png)')]} workflowId="wf-1" />);
+
+    expect(screen.getByRole('img', { name: 'Exhibit 1' })).toHaveAttribute(
+      'src',
+      '/api/workspace/wf-1/files/charts/it_headcount.png',
+    );
+  });
+
+  it('loads a markdown file’s images from the file’s own folder', () => {
+    textHookMock.mockReturnValue({
+      data: { text: '![Revenue](../charts/revenue.png)', truncated: false },
+      isLoading: false,
+      isError: false,
+    });
+    const markdownFile: CanvasItem = {
+      ...htmlItem('m'),
+      ref: {
+        kind: 'file',
+        path: 'reports/summary.md',
+        filename: 'summary.md',
+        mime_type: 'text/markdown',
+        workflow_id: 'wf-1',
+        url: '/api/workspace/wf-1/files/reports/summary.md',
+      },
+    };
+    render(<CanvasContent items={[markdownFile]} workflowId="wf-1" />);
+
+    expect(screen.getByRole('img', { name: 'Revenue' })).toHaveAttribute(
+      'src',
+      '/api/workspace/wf-1/files/charts/revenue.png',
+    );
+  });
+
   it('shows only the latest without a node to read versions from', () => {
     render(<CanvasContent items={[doc('a', 'final', { version: 3 })]} workflowId="wf-1" />);
     expect(screen.queryByRole('button', { name: 'Previous version' })).not.toBeInTheDocument();

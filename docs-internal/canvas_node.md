@@ -385,6 +385,20 @@ after the title and version). A newer version arriving shows itself unless
 the user stepped back to an earlier one; a focus request opens it at its
 version.
 
+**Markdown names workspace files by path**
+([`CanvasMarkdown.tsx`](../client/src/components/parameterPanel/canvas/CanvasMarkdown.tsx),
+[`workspaceLinks.ts`](../client/src/components/parameterPanel/canvas/workspaceLinks.ts)):
+a note and a `.md` file render through one component. An agent writes a
+report's charts as `![Revenue](charts/revenue.png)`, which a browser would
+read against the app's own address, where no file is. So a relative path is
+read from the document's folder (the workspace's root for a note, the file's
+own folder for a `.md` file), a path starting with `/` from the workspace's
+root, and either is served by the workspace file route, which keeps it
+inside the workflow's workspace; a path that climbs out of it is left as
+written. Images then go through the chat's `SafeImage`: a workspace image
+loads, and one from another site waits behind a "Show image from …" button,
+since a note is model output just as a reply is. Links open in a new tab.
+
 **Follow-latest** (workspace image polling): when the active item
 is a workspace image, a Switch enables a visibility-gated 5 s poll of the
 existing `list_workspace_files` handler on the image's folder, rendering the
@@ -400,12 +414,12 @@ text tiers:
 
 | Verdict | Condition | Renders |
 |---|---|---|
-| `note` | `kind === 'note'` | `NoteView`: ReactMarkdown prose or the source, versions, Copy, Download (no fetch for the latest) |
+| `note` | `kind === 'note'` | `NoteView`: `CanvasMarkdown` prose or the source, versions, Copy, Download (no fetch for the latest) |
 | `web-external` | `kind === 'url'` | sandboxed iframe (below) |
 | `media-image/video/audio` | mime prefix or ref.kind | native element, FilePreviewDialog's honest-fallback idiom |
 | `pdf` | `application/pdf` / `.pdf` | plain same-origin iframe (browser viewer) |
 | `web-srcdoc` | `text/html` / `.html` | capped fetch → `srcDoc` sandbox iframe; over-cap → refusal + Download (a half-rendered page misleads) |
-| `markdown` / `json` / `code` / `text` | ext/mime tiers (code set reuses gallery's `fileIcons` family) | [`TextFileView.tsx`](../client/src/components/parameterPanel/canvas/TextFileView.tsx): prose / JsonView / Prism on the `--code-*` tokens (Prism skipped > 100 KB) |
+| `markdown` / `json` / `code` / `text` | ext/mime tiers (code set reuses gallery's `fileIcons` family) | [`TextFileView.tsx`](../client/src/components/parameterPanel/canvas/TextFileView.tsx): `CanvasMarkdown` prose / JsonView / Prism on the `--code-*` tokens (Prism skipped > 100 KB) |
 | `binary` | everything else | glyph + meta + Download |
 
 ### First client-side file-content fetch — [`hooks/useWorkspaceText.ts`](../client/src/hooks/useWorkspaceText.ts)
@@ -498,6 +512,7 @@ write_todos/simple_memory/gallery before it, are out of its scope).
 | Event + schema | same | identity-only envelope (`subject`, type, exact data keys), `as_tool_schema()["name"] == "canvas"`, structurally no `$defs`/`$ref`, locked hints/annotations |
 | Screenshots | [`test_browser_screenshots.py`](../server/tests/nodes/test_browser_screenshots.py) | base64/path/unrecognized shapes, size bounds, missing-workspace tolerance, harness containment |
 | FE dispatch | `canvas/__tests__/canvasKinds.test.ts` | full verdict matrix, mime-over-extension, language override |
+| FE markdown paths | `canvas/__tests__/workspaceLinks.test.ts`, `canvas/__tests__/CanvasMarkdown.test.tsx` | a path from the root or a file's folder, a climb out of the workspace refused, encoding as the server's, query and fragment kept; a remote image held, links in a new tab, unsafe schemes dropped; through a note and a `.md` file in `CanvasContent.test.tsx` |
 | FE carousel + sandbox | `canvas/__tests__/CanvasContent.test.tsx` | follow-newest vs pinned semantics, keyboard, remove; **sandbox regression**: external iframe exactly `allow-scripts allow-forms`, srcDoc lacks `allow-same-origin` and has no `src`; notes: preview/source, version stepper (needs a node), following a newer version unless stepped back, an unreadable version, focus (waits for the item, holds, lets go on navigation), Copy and Download |
 | FE dock store | `stores/__tests__/canvasDockStore.test.ts` | notifyPushed truth table, width clamp, prefs round-trip + corrupt-JSON fallback, session-only fields never persisted, `focusItem` |
 | FE document cards | `features/chat/__tests__/artifacts.test.tsx`, `features/home/__tests__/workspace.test.tsx` | reading and merging a reply's documents, the card, a card streaming in and opening through the host; Home's `openCanvasItem` |

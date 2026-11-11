@@ -17,13 +17,11 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-bash';
 import 'prismjs/components/prism-markdown';
-import ReactMarkdown from 'react-markdown';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 
 import type { WorkspaceFileRef } from '../../../types/workspaceFiles';
 import { useWorkspaceTextQuery } from '../../../hooks/useWorkspaceText';
-import { HIGHLIGHT_MAX_CHARS } from './canvasKinds';
+import CanvasMarkdown from './CanvasMarkdown';
+import { HIGHLIGHT_MAX_CHARS, parentDirOf } from './canvasKinds';
 
 interface Props {
   refFile: WorkspaceFileRef;
@@ -99,7 +97,10 @@ const TextFileView: React.FC<Props> = ({ refFile, verdict, language }) => {
       <div className="flex min-h-0 flex-1 flex-col">
         {truncated && <TruncationBanner sizeBytes={refFile.size_bytes} />}
         <div className="prose prose-sm min-h-0 max-w-none flex-1 overflow-auto dark:prose-invert">
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{text}</ReactMarkdown>
+          {/* A .md file names other files from its own folder. */}
+          <CanvasMarkdown workflowId={refFile.workflow_id} baseDir={parentDirOf(refFile.path)}>
+            {text}
+          </CanvasMarkdown>
         </div>
       </div>
     );
