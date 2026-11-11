@@ -481,6 +481,37 @@ async def test_a_retired_poll_trigger_carried_through_a_rollover_polls_nothing(m
 
 
 @pytest.mark.asyncio
+async def test_a_poll_that_fails_after_apply_retired_its_trigger_ends_the_loop(monkeypatch):
+    """Apply cancels a poll in flight. The SDK turns that cancel into an
+    activity error, which the per-poll arm swallows. The loop must then end at
+    its head instead of polling the removed trigger again."""
+    from services.temporal import workflow_control_workflow as control_module
+
+    temporal_workflow = control_module.workflow
+    monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "wait_condition", _predicate_wait)
+    monkeypatch.setattr(temporal_workflow, "sleep", AsyncMock())
+
+    controller = WorkflowControlWorkflow()
+    controller._can_enabled = False
+    spec = _poll_spec()
+    controller._triggers[spec["listener_id"]] = spec
+    polls = []
+
+    async def poll_activity(*args, **_kwargs):
+        polls.append(args)
+        if len(polls) > 1:
+            controller._closed = True  # without the fix: stop after the second poll
+        spec["retired"] = True  # what replace_graph does when Apply removes the trigger
+        raise RuntimeError("activity cancelled")
+
+    monkeypatch.setattr(temporal_workflow, "execute_activity", poll_activity)
+    await controller._poll_trigger(spec["listener_id"], spec)
+
+    assert len(polls) == 1
+
+
+@pytest.mark.asyncio
 async def test_controller_push_spawn_failure_does_not_kill_the_run_loop(monkeypatch):
     from services.temporal import workflow_control_workflow as control_module
 
