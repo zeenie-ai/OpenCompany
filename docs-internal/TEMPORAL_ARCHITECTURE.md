@@ -712,6 +712,19 @@ carried transcript) remains.
 Tool calls scheduled by the workflow carry the model's unmerged `tool_args`
 in the per-type activity payload so ToolNodes validate against their
 `ToolInput` via `execute_as_tool` (see `tests/nodes/test_tool_call_dispatch.py`).
+This includes each concurrent Task Manager assignment preflight, for native
+and Pi agents alike. Saved node parameters remain separate: they cannot fill
+missing assignment arguments or turn an invalid call into a durable task.
+Validation failures return through the existing tool-result correction loop;
+they contain no delegation request and start no task runner.
+
+After updated workers are deployed, newly prepared runs receive the locked
+Task Manager schema. Existing runs retain their recorded tool definitions;
+deployment does not rewrite their history or force a schema refresh. The
+validation change adds only activity input data, preserving activity names,
+versions, queues and scheduling commands. It needs no database migration or
+new replay marker; the previous-release replay and identity gates cover this
+compatibility boundary.
 
 The F4.B compaction threshold is prepared from the model context length and
 the ratio configuration, and is absent when the global `COMPACTION_ENABLED`

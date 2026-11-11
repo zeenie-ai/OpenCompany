@@ -47,8 +47,10 @@ Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architect
 2. Task Manager is intrinsically and non-removably bound to every team lead.
    It is not a palette node or an Agent Builder-addable tool.
 3. The lead delegates only by calling `task_manager` with
-   `operation="assign_task"`, a bounded mission, context, acceptance criteria,
-   and an exact connected `assignee_node_id`.
+   `operation="assign_task"`, a title, a bounded mission, context, acceptance criteria,
+   and an exact connected `assignee_node_id`. Its locked Pydantic ToolInput
+   rejects missing required arguments and unknown fields before persistence;
+   see the [Task Manager contract](./node-logic-flows/ai_tools/taskManager.md#operations).
 4. Delegate tool identities remain internal to the workflow. They resolve the
    selected teammate after persistence but are hidden from the lead's LLM.
 5. Temporal and legacy execution share the durable task lifecycle and use the
@@ -213,14 +215,13 @@ execution tasks. Its Done count includes accepted tasks, not submitted work.
 
 ## Known limitations
 
-- **Off Temporal, Task Manager does not start teammates.** `assign_task`,
-  `retry_task` and `reassign_task` persist the task as `queued` and return a
-  `delegation_request`, which only `AgentWorkflow` consumes. The in-process
-  branch in `_execute_task_manager` needs `ai_service` and `database` in its
-  config, and the plugin tool path in `services/handlers/tools.py` does not
-  pass them. So when the lead runs in-process (`AIService.execute_agent` /
-  `execute_chat_agent`) rather than as an `AgentWorkflow`, the task stays
-  queued and no teammate runs it.
+- **Off-Temporal retry and reassignment need a runner consumer.** `assign_task`
+  can start a teammate through the native bridge when `ai_service` and
+  `database` are present; the in-process plugin adapter supplies both.
+  `retry_task` and `reassign_task` return a `delegation_request` for the next
+  attempt without starting it themselves. `AgentWorkflow` consumes that
+  envelope. An in-process caller must also arrange execution or the task
+  remains queued.
 
 ## Key files
 

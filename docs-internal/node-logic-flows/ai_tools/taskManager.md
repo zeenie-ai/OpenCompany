@@ -32,9 +32,23 @@ team lead's `input-tools`. `ui_hints` = `isTaskManagerPanel`,
 
 ## Parameters
 
-`TaskManagerParams` (`extra="allow"`, so `revision` survives as an alias for
-`expected_revision`). No field carries `displayOptions.show`; which fields
-matter is decided per `operation` inside `_execute_task_manager`.
+`TaskManagerParams` remains permissive for saved node settings, including
+legacy labels and nullable fields. Model calls use the separate, locked
+`TaskManagerToolInput`: `operation` is required and unknown fields are rejected
+before task persistence or delegation. Saved settings cannot supply arguments
+missing from a model call, and a persisted custom tool schema cannot replace
+this input contract.
+
+Pydantic validates the operation-specific requirements below. Required strings
+must contain non-whitespace text; `modify_task` must supply at least one
+non-null `title`, `mission`, `context`, or `acceptance_criteria` (an empty object
+is a supplied value). Trace search requires a nonblank `query`. Other nullable
+fields may remain null. Authorization, connected-teammate resolution,
+task state and revision checks remain in the trusted runtime. Correctable
+input errors return through the existing tool-error loop without creating a task.
+
+The table lists saved parameter defaults; model calls must always provide
+`operation`. No field carries `displayOptions.show`.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
@@ -48,6 +62,7 @@ matter is decided per `operation` inside `_execute_task_manager`.
 | `assignee_node_id` | string | `None` | no | - | Connected teammate node id (`assign_task` / `reassign_task`); with `delegate_name`, must resolve to exactly one connected teammate |
 | `delegate_name` | string | `None` | no | - | Teammate `delegate_tool_name`, alternative to `assignee_node_id` |
 | `expected_revision` | int (ge 0) | `None` | no | - | Optimistic-concurrency revision for mutations; read from the task when omitted |
+| `revision` | int (ge 0) | `None` | no | - | Explicit tool-input compatibility spelling; a non-null `expected_revision` takes precedence |
 | `reason` | string (max 2000) | `None` | no | - | Cancellation reason (`cancel_task`) |
 | `status_filter` | string | `None` | no | - | `list_tasks` status filter |
 | `include_history` | boolean | `false` | no | - | `list_tasks`: include prior executions' durable history |
@@ -103,19 +118,53 @@ the persisted execution membership snapshot.
 | `list_tasks` | optional `status_filter`, `include_history` | any |
 | `get_task` | `task_id` | any |
 | `inspect_task_trace` | `task_id`; optional attempt, detail, cursor, limit; grep-style query/filter/context fields | any registered attempt |
-| `modify_task` | `task_id`, `expected_revision`, changed fields | blocked/queued |
-| `cancel_task` | `task_id`, `expected_revision`, optional `reason` | blocked/queued/running |
-| `retry_task` | `task_id`, `expected_revision` | failed/submitted/cancelled |
-| `reassign_task` | task/revision and connected assignee | failed/submitted/cancelled |
-| `accept_task` | task/revision, normally | submitted |
+| `modify_task` | `task_id`, at least one changed field; optional `expected_revision` | blocked/queued |
+| `cancel_task` | `task_id`; optional `expected_revision`, `reason` | blocked/queued/running |
+| `retry_task` | `task_id`; optional `expected_revision` | failed/submitted/cancelled |
+| `reassign_task` | `task_id`, connected assignee; optional `expected_revision` | failed/submitted/cancelled |
+| `accept_task` | `task_id` unless one submission is unambiguous; optional `expected_revision` | submitted |
 | `finish_team` | none | every task accepted/cancelled |
 
-`revision` is accepted as a compatibility alias for `expected_revision`. When
+`revision` is accepted as a compatibility spelling of `expected_revision`.
+When both non-null fields are supplied, `expected_revision` wins. An omitted
+revision is read from the current task. When
 exactly one submitted task exists in the scoped execution, `accept_task` may
 omit both fields and safely resolves that task. Zero or multiple submissions
 produce an error instructing the lead to list/review tasks first.
 
 `mark_done` is a deprecated alias for `accept_task`; it does not remove records.
+
+Example (replace the assignee with an ID from the connected teammate list):
+
+```json
+{"operation":"assign_task","title":"Research","mission":"Find cited evidence for the report","assignee_node_id":"web-agent","context":{"topic":"queues"},"acceptance_criteria":{"sources":"Cite primary sources"}}
+```
+
+Both assignee identifiers may be supplied if they resolve to the same connected
+teammate. The tool does not repair corrupted field names, infer missions from
+`task`, or accept runtime scope such as `workflow_id` from model arguments.
+
+## Invalid calls and recovery
+
+A tool call can be valid JSON and still have invalid arguments. For example,
+curly quotes or prose inside a property name do not supply the canonical
+`title`, `mission`, or `assignee_node_id` field. JSON parsing may therefore
+succeed while `TaskManagerToolInput` rejects the call.
+
+Native and Pi assignment preflight pass the unmerged model arguments through
+`execute_as_tool`. A validation failure returns a `ValidationError` tool result
+before persistence or delegation; the next model turn can correct the call.
+The original assistant call is retained in the transcript. A subsequent valid
+assignment follows the normal durable task and runner path.
+
+Newly prepared runs receive the locked schema after updated workers are
+deployed. Already prepared Temporal runs keep their recorded definitions;
+the change does not rewrite history or require a database migration.
+
+If the next model turn takes time, inspect its LLM activity separately from the
+completed tool call. Activity heartbeats show worker liveness, not provider
+progress. Native LLM-step deadlines and retry status are documented in
+[Native LLM SDK](../../native_llm_sdk.md#local-llm-providers-ollama-lm-studio).
 
 ## Employee job admission and delivery
 

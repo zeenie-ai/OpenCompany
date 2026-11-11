@@ -157,6 +157,19 @@ their client that read timeout (the SDK's own is 10 minutes), and
 `start_to_close_timeout`. Every other provider, and a history recorded
 without the key, keeps 10 minutes.
 
+Native LLM steps also bound the provider wait with `asyncio.timeout` inside
+the existing heartbeat helper, using the activity's attempt limit minus
+30 seconds (minimum one second): normally 570 seconds for cloud providers
+and 1770 seconds for local endpoints. Its expiry cancels and drains the
+request, becomes a retryable `LLMError` with category `timeout`, withdraws
+unfinished streamed text, and publishes the existing `retry_wait` status.
+The deadline starts when the provider wait starts; Temporal remains the hard
+outer attempt limit. SDK-originated timeouts and owner cancellation retain
+their existing behavior. Response persistence happens after this deadline
+ends, so a slow write cannot cause completed inference to be repeated.
+Compaction does not opt in: its awaited service includes post-inference
+persistence. Durable retries and the provider streaming flags are unchanged.
+
 **OpenCompany Gateway** — a `chat` call that arrives with no key (the install
 has none for that provider) goes to the hosted gateway when it is connected and
 the provider's `llm_defaults.json` block has a `"gateway"` entry: the gateway's

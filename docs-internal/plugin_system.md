@@ -100,7 +100,8 @@ class SpecializedAgentBase(ActionNode, abstract=True):
 | `ui_hints` | Dict of panel flags (`hasCodeEditor`, `isMemoryPanel`, `isMasterSkillEditor`, `isDataPanel`, `hasSkills`, `isConfigNode`, `outputMode: "terminal"` for CLI-wrapper nodes whose textual output must render preformatted, …). See "Auto-derived uiHints" below — `isConfigNode` is set automatically for `('memory', 'tool')` group plugins. Live flag list = the `known` set in `test_node_spec.py`. |
 | `annotations` | Pipedream-style: `destructive` / `readonly` / `open_world`. |
 | `credentials` | Sequence of `Credential` subclasses the node uses. More than one is supported — see [Multi-credential nodes](#multi-credential-nodes). |
-| `Params` | Pydantic `BaseModel` — user-facing parameters. Used for both UI rendering and AI tool schemas. |
+| `Params` | Pydantic `BaseModel` — saved user-facing configuration and UI rendering. Also supplies the tool schema unless `ToolInput` is declared separately. |
+| `ToolInput` / `tool_schema_locked` | A separate Pydantic model validates model-authored arguments independently of saved configuration. Locking the schema prevents a saved custom tool schema from replacing this contract. Data, Simple Memory and Task Manager use this pattern. |
 | `Output` | Pydantic `BaseModel` — runtime output shape. |
 | `usable_as_tool` | `ActionNode` flag — mints a ToolNode adapter for AI invocation. Combined with `component_kind != "model"`, makes the plugin visible to `agentBuilder.add_tool` (catalogue + rebind paths). **Side effect:** setting it auto-sets `hide_input_handle` / `hide_output_handle` to `True` unless the class declares them (`BaseNode.__init_subclass__` in [base.py](../server/services/plugin/base.py), which does the same for `component_kind == "tool"`), and `_metadata_dict` adds an `output-tool` handle. The frontend (`SquareNode`) reads the hide flags only when a spec declares no handles; a spec with handles renders exactly what it declares. So a dual-purpose node that must stay wirable on the canvas declares `input-main` / `output-main` in `handles`; setting the flags `False` alone does not add them. |
 | `needs_canvas` | `ClassVar[bool]` — when `True`, the F4.B `AgentWorkflow` tool-dispatch forwards the parent workflow's `nodes`/`edges` into the per-tool activity payload. Today only `AgentBuilderNode` opts in: `add_tool` compares the run's canvas with the saved graph, so a tool saved earlier but missing from the running snapshot is handed back to be bound. Its calling agent comes from `invoking_agent_node_id` / `parent_node_id`, not from edges. |
@@ -157,6 +158,17 @@ A transient failure is logged as one WARN line, without a traceback. Its envelop
 - the wait the response asked for, if any, fits the policy's `maximum_interval` and what is left of the schedule-to-close budget. That wait becomes the `next_retry_delay`; without one, the policy's backoff applies.
 
 A planned retry ends no chat step, records nothing (`checked.record`) and shows no error status, as for an interrupted wait; the SDK logs a BENIGN failure at DEBUG and counts no failure metric. The step stays open for the next attempt. A call of a run the owner is already stopping gets no planned retry, so the run ends on its next model step instead of waiting through the backoff; if the owner stops the run during the backoff, the next attempt does not run the call and ends the step as `skipped`. A later attempt of a call that is not safe to repeat never answers that it did not run, stopped run or not: its earlier attempt broke off and may have run it, so the redo guard answers that it may already have happened. In every other case the result stands and answers exactly as before: on the last attempt, when the wait does not fit, for a call that is not safe to repeat or is a send, in process, and on the legacy `execute_node_activity` path. A plugin that classifies its own failures keeps that behaviour: it raises `NodeUserError`, or its own exceptions without an HTTP status, as speech, translate, TikHub, Discord, WhatsApp Business and the LLM nodes through `ChatUnifier` do. Locked by `tests/services/test_node_transient_retry.py`.
+
+Pydantic input failures use the shared `format_validation_error` helper in
+`services/plugin/params.py` at the node, tool and native-agent boundaries.
+The feedback contains the first validation message and its field path when
+available, including nested paths, without Pydantic's input values, context
+or documentation URLs. Operation-level validators name missing fields in the
+message. A separate `ToolInput` validates only the supplied model arguments;
+saved `Params` cannot fill its missing required fields. Multi-operation tools
+use field descriptions and Pydantic operation validators, as Data, Simple
+Memory and Task Manager do. The existing model correction loop receives the
+error before the operation runs.
 
 ### Auto-derived uiHints
 

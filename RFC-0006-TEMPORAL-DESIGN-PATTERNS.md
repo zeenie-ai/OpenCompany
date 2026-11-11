@@ -200,7 +200,7 @@ One row per entry in §6 to §19. Priority P1 means Phase 1b (the ids are listed
 |---|---|---|---|---|
 | 16.1 | Durable AI and the cookbook | Adopted with deviations | P2 | Priority and fairness keys (Phase 5); summaries without user text (Phase 8) |
 | 16.2 | Agentic loop with tool calls | Adopted with deviations | P1 | Non-retryable failures (1b.26); compaction's policy (1b.27) |
-| 16.3 | LLM call timeouts | Adopted with deviations | P1 | 30-minute attempts for local endpoints and a classified request timeout (1b.25; no in-attempt deadline, no Gemini timeout); the step budget in Phase 5 (T18) |
+| 16.3 | LLM call timeouts | Adopted with deviations | P1 | 30-minute local attempts and a classified in-attempt deadline for native LLM steps; compaction and Gemini-client deadlines remain pending; the step budget stays in Phase 5 (T18) |
 | 16.4 | Hello world (OpenAI Responses) | Adopted with deviations | P3 | Settle node-level SDK retries with RFC-0004 Q9 |
 | 16.5 | Retry policy from HTTP responses | Adopted with deviations | P2 | Honour `x-should-retry`, retry 409, cap Retry-After (Phase 5) |
 | 16.6 | Deep research | Adopted with deviations | P3 | Summaries (Phase 8) |
@@ -2183,14 +2183,14 @@ def redo_refusal(context, node_cls, node_data) -> dict | None:
 - No production activity sets `schedule_to_close_timeout`; the only occurrence is a test that asserts its absence (`server/tests/temporal/test_browser_task_dispatch.py:40`). No unlimited policy has an outer bound.
 - The owner decided "A total budget per step" for LLM steps on 2026-10-16 (RFC-0004 Q6). No value was chosen and nothing is built.
 - **Stop waits for unlimited retries.** The LLM step is an admitted action, work that execution control's Stop checkpoint waits for (`agent_workflow.py:1251-1259`), and Stop's checkpoint waits until no admitted action runs (`server/services/temporal/execution_control.py:114-118`). The workflow-control doc says it: "Unlimited LLM retries can keep it there during an outage" (`docs-internal/temporal-workflow-control.md`; `server/nodes/README.md:145`).
-- **Attempts hang up to the attempt timeout.** A Gemini call has no request timeout and keeps heartbeating every 20 s, so each attempt ends only at the 10-minute timeout. OpenAI and Anthropic steps stream, and their SDKs' 600 s timeout bounds only the silence between chunks, so a slow call that keeps streaming is also ended only by the attempt timeout (§16.3).
+- **Native provider waits have an inner deadline.** The heartbeat helper opts native LLM steps into an `asyncio.timeout` deadline of the attempt limit minus 30 seconds (§16.3), measured from the start of the provider wait. Expiry produces a classified retryable timeout; Temporal remains the hard outer attempt boundary. Compaction retains the outer activity timeout; the Gemini client still has no explicit request timeout for graph-node calls.
 - **The chat watchdog has a budget of its own** (`max_running_s` 86,400, `server/config/chat_defaults.json:4`). The running clock restarts after a Resume. On expiry it fails the chat run as `timed_out` but does not cancel the workflow (`server/services/chat/ledger.py:739-768`; only a stopping run is cancelled, `:714-730`), so the agent keeps retrying after the owner was told it timed out.
 - Temporal's clocks keep running while a run is paused or the app is closed (`workflow.py:148-155`). That is why workflow and run timeouts were removed, and RFC-0005 §27 keeps them unset. A `schedule_to_close_timeout` is the same kind of clock at activity level.
 
 **Verdict:** Missing and beneficial. The owner chose a per-step budget (RFC-0004 Q6), and T11 now says what happens when it runs out: the turn parks; it does not fail. T18 ships the budget together with parking, in RFC-0005 Phase 5, for new generations only.
 
 **Recommendation:**
-1. **Now: bound each attempt.** §16.3 owns the fix (1b.25): a deadline inside each attempt, the Gemini client timeout, and 30-minute attempts for local and OpenAI-compatible endpoints. It adds no total budget. As built (663cb651), only the 30-minute attempts shipped, for every generation, with the request's own `TimeoutError` classified as a retryable `timeout`; there is no in-attempt deadline and no Gemini client timeout.
+1. **Now: bound each attempt.** §16.3 owns the fix (1b.25): a deadline inside each attempt, the Gemini client timeout, and 30-minute attempts for local and OpenAI-compatible endpoints. It adds no total budget. Local attempt limits and native LLM-step deadlines are implemented for every generation. The request's own `TimeoutError` remains distinct from the helper's classified deadline expiry. Compaction's in-attempt deadline and the explicit Gemini client timeout remain pending.
 2. **The step budget, for new generations.** With RFC-0005 Phase 5, under `scheduler_version=1` (a generation flag in `resource_manifest`, frozen at Start), `_execute_model_step` (`agent_workflow.py:3183-3188`) and the compaction call pass `start_to_close_timeout=<attempt timeout>` and `schedule_to_close_timeout=<step budget>`. `LLM_STEP_RETRY` stays as it is inside the budget. The values come from `server/config/llm_defaults.json`: `agent.attempt_timeout_seconds` and `agent.step_budget_seconds`, with overrides in the `ollama`, `lmstudio` and `openai_compatible` provider blocks. `prepare_agent_payload` puts the values for the run's provider into the payload, so workflow code never reads `Settings`; only `scheduler_version=1` decides whether a run uses them.
 3. **Expiry parks the turn.** On `TimeoutType.SCHEDULE_TO_CLOSE`, from the LLM step or from compaction, the turn parks with reason `provider_outage` (§11.8) and says "The model provider did not answer within the step budget; retrying every 15 minutes." Without parking, that case would fall into "failed unexpectedly" (`agent_workflow.py:1296-1300`).
 4. **Do not wait past the budget.** In the activity, a retryable error whose provider hint (the raw Retry-After, before §16.5's 5-minute cap) exceeds the remaining budget raises a non-retryable error carrying that hint, and the park uses it as its first probe (§11.5).
@@ -4007,15 +4007,15 @@ Two terms recur. An *attempt timeout* (`start_to_close_timeout`) ends one try of
 **SDK:** `schedule_to_close_timeout`, `ApplicationError(next_retry_delay=...)` and `activity.info().start_to_close_timeout` are in 1.30.0, unchanged in 1.34.0. `asyncio.timeout` needs Python 3.11; the server requires 3.11 or later (`server/pyproject.toml:5`).
 
 **OpenCompany today:**
-- The attempt timeout is 10 minutes for every provider, local models included (`LLM_STEP_TIMEOUT`, `agent_workflow.py:91`). No production activity sets a `schedule_to_close_timeout` (§11.3), although the owner chose a total budget per step (RFC-0004 §17 Q6).
-- No provider client gets a request timeout (`server/services/llm/providers/openai.py:87-112`, `anthropic.py:31-43`, `gemini.py:37-66`). The OpenAI and Anthropic SDK default, `httpx.Timeout(600, connect=5)`, limits each read, not the whole call. Agent steps on OpenAI and Anthropic stream (only they set `streaming: true` in `server/config/llm_defaults.json`), so the 600 s bounds only silence between chunks, and a slow stream ends only at the 10-minute attempt timeout. OpenAI-compatible providers do not stream; their read timeout races the attempt timeout, which started first and wins. Either way no classified `TIMEOUT` reaches the UI.
-- google-genai has no default timeout (`google/genai/_api_client.py:1068-1069`). A hung Gemini call keeps heartbeating every 20 s, so the heartbeat timeout never fires; each attempt ends at 10 minutes and is retried without limit. The same provider code serves graph-node calls (the chat-model and translate nodes), which run under MachinaWorkflow's 24-hour node attempt (`server/services/temporal/workflow.py:167`) with a periodic heartbeat, so a hung Gemini call there can hold its slot for a day.
-- A local model that needs more than 10 minutes for one answer is cut and retried from the start without end: the "retry loop that never completes" the deep-research page warns about (§16.6).
+- Cloud attempts keep 10 minutes; local and named OpenAI-compatible endpoints declare 30 minutes through `attempt_timeout_seconds`. There is no total LLM-step budget yet (§11.3; T18).
+- Native LLM steps opt into an `asyncio.timeout` deadline inside `_await_with_llm_heartbeats`: `max(1, attempt_limit_seconds - 30)`, normally 570 or 1770 seconds. Both buffered and streamed requests are bounded; the helper cancels and drains an expired request and raises a retryable `LLMErrorCategory.TIMEOUT`. The existing step handler discards partial output and publishes `retry_wait`. SDK-originated `TimeoutError`, owner Stop, and external cancellation keep their existing meanings.
+- The deadline ends before response serialization, conversation persistence, and usage processing. Compaction deliberately does not opt in because its awaited service includes billed-usage persistence after inference. Applying a deadline around that whole service could repeat a completed request.
+- The Gemini client still has no explicit request timeout for graph-node calls. The native-step deadline does not change that separate client configuration or the global streaming flags; OpenRouter remains buffered.
 
-**Verdict:** Adopted with deviations. Client retries are off and errors are classified, as the recipe asks; the ladder is missing at every rung.
+**Verdict:** Adopted with deviations. Native LLM steps now have a classified deadline inside each attempt. The compaction and Gemini-client boundaries and the total step budget remain separate work.
 
 **Recommendation:**
-1. A deadline inside each attempt. Not built: 1b.25 (663cb651) shipped only rec 3, plus a heartbeat wait that returns the request's own `TimeoutError` and a unifier that classifies it as a retryable `timeout`; Temporal's attempt timeout ends a hung attempt. The design follows. In `_execute_native_llm_step`, wrap the provider call in `asyncio.timeout(...)` set to the attempt timeout minus 30 s (read from `activity.info().start_to_close_timeout`), and turn its `TimeoutError` into `LLMError(category=TIMEOUT, retryable=True)`. The attempt then ends as a classified, retryable timeout, which the UI shows as a retry wait. This bounds streamed and buffered calls alike, which no httpx setting does. Versioning: none (activity body). When: Phase 1b, as 1b.25. Effort S. Risk: a stream still flowing at the deadline is cut, as the attempt timeout cuts it today.
+1. A deadline inside each native LLM-step attempt is implemented in the existing heartbeat helper. `_execute_native_llm_step` passes its provider reference to opt in; omitting it preserves the helper's previous behavior for compaction. The timeout comes from `activity.info().start_to_close_timeout` with the historical 10-minute fallback, minus 30 seconds and a one-second floor. Only expiry of that timeout context becomes `LLMError(category=TIMEOUT, retryable=True)`; the existing error handler publishes retry status. The margin is measured from the start of the provider wait, so Temporal remains the hard outer attempt boundary. Versioning: none (activity body). A stream still flowing at the deadline is cut, as the outer attempt limit already does.
 2. Give the Gemini client an explicit request timeout (not built in 1b.25): `http_options["timeout"] = 600_000` (milliseconds; `HttpOptions.timeout`, `google/genai/types.py:2490`) in `GeminiProvider.__init__`, matching the other SDKs. This also bounds graph-node Gemini calls. Versioning: none. When: Phase 1b, with item 1 (1b.25). Effort S.
 3. Longer attempts for local endpoints (built in 1b.25, for every generation: `attempt_timeout_seconds` in `llm_defaults.json`, recorded by `agent.prepare_payload` as `llm_attempt_timeout_seconds`): 30 minutes for `ollama`, `lmstudio` and `openai_compatible:*`, 10 minutes for cloud providers (§11.3's defaults), chosen from the provider in `AgentWorkflow._execute_model_step` (`agent_workflow.py:3183-3188`). Versioning: none (timeouts are not compared on replay). When: Phase 1b, with item 1 (1b.25). Effort S. Risk: a hung local server holds its slot longer; item 1's deadline still ends each attempt.
 4. The step budget (RFC-0004 Q6) ships with parking in RFC-0005 Phase 5, for new generations only (T18). Set `schedule_to_close_timeout` (15 minutes for cloud providers, 45 minutes for local and OpenAI-compatible endpoints; §11.3 owns the values) only for AgentWorkflow runs of generations with `scheduler_version=1`, where its expiry parks the turn (T11, §11.8, §16.16). Adding the budget alone would turn a stall that recovers by itself into a failed turn whose input is never offered again (`agent_workflow.py:1331-1340`), which T4 rules out. Existing generations keep today's unlimited LLM-step retries, covered by the retry alert (1b.30, §11.7), and today's fail-and-pause. Versioning: `scheduler_version=1`, frozen at Start. When: RFC-0005 Phase 5. Effort: part of §16.16.
@@ -4025,31 +4025,19 @@ Two terms recur. An *attempt timeout* (`start_to_close_timeout`) ends one try of
 - The per-class turn deadlines of RFC-0005 §13.1 become "slow turn" alerts that do not count parked time (T19), and a turn is cancelled only after 24 hours with no completed step, not counting time parked, paused or waiting for the owner (a default, §24.1, §6.4). No turn deadline therefore cuts a step that is still retrying inside its budget.
 - Credentials follow the sample's rule: keys resolve inside the activity (`agent_activities.py:176-243`).
 
-**Sketch** (item 1; activity body only):
+**Implemented call boundary** (item 1; activity body only):
 
 ```python
-# server/services/temporal/agent_activities.py  (Phase 1b, 1b.25)
-_DEADLINE_MARGIN = timedelta(seconds=30)
-
-def _call_deadline_seconds() -> float:
-    """End the provider call before the attempt times out, so it fails classified."""
-    limit = activity.info().start_to_close_timeout or timedelta(minutes=10)
-    return max(1.0, (limit - _DEADLINE_MARGIN).total_seconds())
-
+# server/services/temporal/agent_activities.py
 async def _execute_native_llm_step(payload):
     ...
     try:
-        async with asyncio.timeout(_call_deadline_seconds()):
-            response = await _await_with_llm_heartbeats(_until_chat_run_stops(call, run_id), detail=detail)
-    except TimeoutError:
-        if emitter is not None:
-            emitter.discard()                       # the client erases this attempt's text
-        error = LLMError(message="provider call passed its deadline", provider=payload["provider"],
-                         category=LLMErrorCategory.TIMEOUT, retryable=True)
-        raise _as_temporal_llm_error(error, attempt=_llm_activity_attempt()) from None
+        response = await _await_with_llm_heartbeats(
+            _until_chat_run_stops(call, run_id), detail=detail, provider=payload["provider"]
+        )
     except LLMError as error:
-        ...                                         # unchanged
-    ...                                             # failures after the answer: 1b.26 (§11.4)
+        ...  # existing partial-output discard, retry_wait, and Temporal error conversion
+    ...      # persistence/serialization outside the deadline; 1b.26 (§11.4)
 ```
 
 ### 16.4 Hello world with the OpenAI Responses API
@@ -6212,7 +6200,7 @@ Phase 1b is new to RFC-0005's rollout (§20).
 
 | Id | Fix | § |
 |---|---|---|
-| 1b.25 | LLM step: the heartbeat helper stops busy-looping, the unifier classifies `TimeoutError`, and local and OpenAI-compatible endpoints get 30-minute attempts, recorded in the payload. No in-attempt deadline and no Gemini client timeout. The step's total budget waits for Phase 5 (T18) | 16.3 |
+| 1b.25 | LLM step: the heartbeat helper preserves SDK `TimeoutError` and adds an opt-in classified native-step deadline; local and OpenAI-compatible endpoints get 30-minute attempts. Compaction's in-attempt deadline and the Gemini client timeout remain pending. The total step budget waits for Phase 5 (T18) | 16.3 |
 | 1b.26 | `PayloadsTooLarge` is in both non-retryable lists (`NON_RETRYABLE_ERROR_TYPES` and the plugin `RetryPolicy` default); the LLM step raises `LLMStepFailed` and `LLMStepInternalError` non-retryable | 11.4 |
 | 1b.27 | Compaction runs on the LLM step's retry policy, with a heartbeat and the step's attempt timeout; an empty summary fails and records nothing | 11.4 |
 | 1b.28 | Retryable LLM errors carry the BENIGN category | 18.5 |

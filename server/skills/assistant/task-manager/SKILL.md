@@ -58,6 +58,16 @@ following assignment and review workflow applies to the lead.
 
 ## Operations
 
+Always provide `operation`. Task Manager rejects unknown argument names and
+missing or blank required fields; correct the call using the returned error.
+Do not send workflow, team, generation, or harness scope as tool arguments.
+
+For example, using an actual ID from the connected teammate list:
+
+```json
+{"operation":"assign_task","title":"Research","mission":"Find cited evidence for the report","assignee_node_id":"web-agent","context":{"topic":"queues"},"acceptance_criteria":{"sources":"Cite primary sources"}}
+```
+
 | Operation | Purpose | Important arguments |
 |---|---|---|
 | `submit_job` | Talk admits substantive work for its configured employee team | `mission` with the expected result; lead and recipient are server-controlled |
@@ -65,17 +75,22 @@ following assignment and review workflow applies to the lead.
 | `list_tasks` | Inspect current or historical tasks | optional `status_filter`, `include_history` |
 | `get_task` | Review one task and all attempts | `task_id` |
 | `inspect_task_trace` | Inspect or grep the task attempt's sanitized Temporal events | `task_id`; optional `attempt`, `detail`, `cursor`, `limit`; search supports `query`, `search_mode`, `categories`, `context_lines`, `scan_limit` |
-| `modify_task` | Change queued/blocked work | `task_id`, `expected_revision`, changed task fields |
-| `cancel_task` | Cancel queued or running work | `task_id`, `expected_revision`, `reason` |
-| `retry_task` | Queue a new attempt | `task_id`, `expected_revision`, optional revision context |
-| `reassign_task` | Queue a new attempt for another teammate | `task_id`, `expected_revision`, new connected assignee |
-| `accept_task` | Record lead approval of submitted work | `task_id`, `expected_revision` |
-| `finish_team` | Finalize after the review barrier clears | optional summary |
+| `modify_task` | Change queued/blocked work | `task_id`, at least one changed task field; optional `expected_revision` |
+| `cancel_task` | Cancel queued or running work | `task_id`; optional `expected_revision`, `reason` |
+| `retry_task` | Queue a new attempt | `task_id`; optional `expected_revision` |
+| `reassign_task` | Queue a new attempt for another teammate | `task_id`, new connected assignee; optional `expected_revision` |
+| `accept_task` | Record lead approval of submitted work | `task_id` unless unambiguous; optional `expected_revision` |
+| `finish_team` | Finalize after the review barrier clears | no additional arguments |
+
+Prefer the reviewed task's `expected_revision` for mutations. When omitted,
+the runtime reads the current revision. `revision` is a compatibility spelling;
+a supplied non-null `expected_revision` takes precedence.
 
 If exactly one task is `submitted` in the current execution, `accept_task` may
 omit `task_id` and `expected_revision`; the runtime safely resolves that single
 task and its current revision. If zero or multiple submissions await review,
-you must call `list_tasks` or `get_task` and pass both fields. Never guess.
+you must call `list_tasks` or `get_task` and pass `task_id`; include its reviewed
+revision when available. Never guess.
 
 `mark_done` is a deprecated compatibility alias for `accept_task`. Never use it
 to discard history.
