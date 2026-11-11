@@ -10,6 +10,7 @@ interface MessageMetadata {
   tool_call_id: string | null;
   name: string | null;
   had_blocks: boolean;
+  ts?: string;
 }
 interface ContentMetadata {
   type: string;
@@ -74,6 +75,7 @@ export function wireToPi(wire: MessageWire, model: ModelWire, options: {
   const flattened = blocks.filter(block => block._ocBlock?.type === "text" || block._ocBlock?.type === "tool_result").map(block => String(block.text ?? "")).join("");
   const _oc: MessageMetadata = { version: 1, provider_state: structuredClone(wire.provider_state),
     ...(wire.content === flattened ? {} : {content: wire.content}), call_order: wire.tool_calls.map(call => call.id),
+    ...(Object.hasOwn(wire, "ts") ? {ts: wire.ts} : {}),
     tool_call_id: wire.tool_call_id, name: wire.name, had_blocks: wire.blocks.length > 0 };
   if (wire.role === "assistant") {
     const reason = options.finish_reason;
@@ -109,7 +111,8 @@ export function piToWire(message: Message): MessageWire {
       const call = calls.get(id);
       if (!call) throw new ProtocolError("projection_mismatch", "Pi transcript lost a canonical tool call");
       return call;
-    }), tool_call_id: pi._oc.tool_call_id, name: pi._oc.name, provider_state: structuredClone(pi._oc.provider_state) };
+    }), tool_call_id: pi._oc.tool_call_id, name: pi._oc.name, provider_state: structuredClone(pi._oc.provider_state),
+    ...(Object.hasOwn(pi._oc, "ts") ? {ts: pi._oc.ts} : {}) };
 }
 
 /** Tool declaration-only system entries are derived by AgentSession, never policy. */

@@ -105,6 +105,12 @@ receipts; protocol conflicts and incompatible snapshots fail explicitly. EOF
 and a lease watchdog dispose orphan hosts. Physical cleanup is best-effort
 under a worker partition; fencing prevents an orphan from admitting effects.
 
+Recognized host error codes, including `projection_mismatch`, accompany the
+fixed activity error message and details. Unknown codes, raw host messages and
+stderr remain private. A projection mismatch before the first model operation
+means transcript reconstruction failed; no provider request or tool effect has
+been admitted for that round.
+
 Continue-As-New runs only between accepted rounds, after the driver and all
 handlers finish, with no live children or pending operations. The complete
 serialized continuation retains the 1,900,000-byte guard.
@@ -120,6 +126,15 @@ tools. Hydrated images and duplicate message bodies are not durable metadata.
 Credential redaction applies to saved configuration. It preserves complete tool
 schemas and canonical wires, including arbitrary tool-argument and opaque
 provider-state field names that happen to resemble credential fields.
+
+Stored conversation messages also carry the view-only `ts` added by the
+conversation store. The Pi codec preserves this optional field in its existing
+`_oc` reconstruction metadata so the projected transcript matches the admitted
+digest exactly. It does not become the SDK's `timestamp` or provider input;
+the native provider codec still ignores it. Messages and snapshots without
+`ts` stay unchanged, and nested `ts` keys in arguments or provider state remain
+opaque data. This keeps recorded driver inputs and snapshot digests compatible
+without changing workflow commands or weakening integrity checks.
 
 Immutable scoped blobs hold complete Pi headers/entries/leaf IDs and large
 receipts, with SHA-256 integrity and a 256 KiB inline threshold. Protocol frames

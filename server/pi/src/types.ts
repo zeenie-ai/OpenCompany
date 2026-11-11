@@ -30,6 +30,8 @@ export interface MessageWire {
   tool_call_id: string | null;
   name: string | null;
   provider_state: Record<string, unknown>;
+  /** Conversation-view timestamp; preserved for projection, never SDK timing. */
+  ts?: string;
 }
 export interface ToolWire {
   name: string;

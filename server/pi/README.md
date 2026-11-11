@@ -43,6 +43,9 @@ in Python's private attempt directory, bounded to 16 MiB. References verify
 scope, epoch, content hash, byte count, canonical encoding and regular-file paths.
 Stdout contains protocol frames; errors expose
 fixed messages without provider exceptions. Each host accepts one `run_turn`.
+The Python bridge includes recognized fixed error codes, such as
+`projection_mismatch`, in activity failures while keeping raw diagnostic text
+and unknown codes private.
 `keepalive` renews its 120-second input lease; the Python driver sends it every
 30 seconds while a durable operation is pending. `abort`, `park`, input EOF and
 lease expiry abort the SDK and reap the host. Parking completes maintenance
@@ -63,6 +66,12 @@ Pi loadout metadata. A completed snapshot contains the full header, entries,
 leaf pointer, scope, epoch, turn, version and canonical projection digest.
 Scope mismatch and corruption fail explicitly. Context/configuration/tool
 changes rebuild the derived session from canonical wires.
+
+The conversation store's optional display timestamp, `ts`, is retained in
+`_oc` conversion metadata and restored when projecting a stored message. It
+does not set Pi's SDK timestamp or reach a provider. Omitting it remains valid;
+preserving it prevents restored conversations from failing the pre-model
+projection check while leaving existing snapshot and operation digests intact.
 
 The protocol preserves integer tokens beyond JavaScript's safe-number range as
 BigInt in memory and emits them as exact numeric JSON tokens. Unicode key sorting

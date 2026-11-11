@@ -297,10 +297,23 @@ class PiDriverActivities:
                     return {"status": "parked"}
                 elif kind == "error":
                     code = event.get("code")
-                    transient = code in {"transport_failure", "transport_write_failed"}
-                    error_type = {"sdk_failure": "PiSDKFailure", "snapshot_incompatible": "PiSnapshotIncompatible"}.get(
-                        code, "PiTransportFailure" if transient else "PiProtocolConflict")
-                    raise ApplicationError("Pi SDK host could not complete the coding turn", type=error_type, non_retryable=not transient)
+                    error_types = {
+                        "transport_failure": "PiTransportFailure",
+                        "transport_write_failed": "PiTransportFailure",
+                        "sdk_failure": "PiSDKFailure",
+                        "snapshot_incompatible": "PiSnapshotIncompatible",
+                        "projection_mismatch": "PiProtocolConflict",
+                    }
+                    known = isinstance(code, str) and code in error_types
+                    error_type = error_types[code] if known else "PiProtocolConflict"
+                    # Expose only fixed protocol codes, never host diagnostics
+                    # or an unrecognized value that could carry private data.
+                    message = "Pi SDK host could not complete the coding turn"
+                    details = ({"host_code": code},) if known else ()
+                    raise ApplicationError(
+                        f"{message} ({code})" if known else message, *details,
+                        type=error_type, non_retryable=error_type != "PiTransportFailure",
+                    )
                 else:
                     raise conflict("Pi SDK host emitted an unknown frame")
         finally:

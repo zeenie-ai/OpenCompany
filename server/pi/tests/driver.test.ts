@@ -68,6 +68,58 @@ test("media refs and provider metadata round trip without hydrated bytes",()=>{
   expect(()=>wireToPi(wire,{id:"m",provider:"p"})).toThrow("Hydrated media");
 });
 
+test("stored view timestamps preserve exact historical calls and opaque metadata",()=>{
+  const historical=call("historical","file_read",{id:9007199254740993n,ts:{opaque:"argument timestamp"}});
+  historical.raw_arguments='{"id":9007199254740993,"ts":';historical.parse_error="Invalid JSON";
+  const assistant=message("assistant","",[historical]);
+  assistant.provider_state={provider:{ts:{signature:"opaque+/="},id:9007199254740993n}};
+  assistant.blocks[0]!.metadata={ts:{opaque:"block timestamp"}};
+  const wires=[message("system","Policy"),message("user","Earlier request"),assistant,toolResult("historical","file_read","Invalid JSON")];
+  for(const wire of wires) {
+    wire.ts="2026-11-11T09:12:00+00:00";
+    const converted=wireToPi(wire,{id:"m",provider:"p"});
+    expect(converted.timestamp).toBe(0);
+    expect(converted).not.toHaveProperty("ts");
+    expect(piToWire(converted)).toEqual(wire);
+  }
+  const unstamped=message("user","New request");
+  expect(piToWire(wireToPi(unstamped,{id:"m",provider:"p"}))).toEqual(unstamped);
+  expect(piToWire(wireToPi(unstamped,{id:"m",provider:"p"}))).not.toHaveProperty("ts");
+});
+
+test("a restored stamped conversation completes a round and reuses its exact snapshot",async()=>{
+  const historical=call("historical");historical.raw_arguments="{";historical.parse_error="Invalid JSON";historical.args={};
+  const stored=[message("user","Earlier request"),message("assistant","",[historical]),
+    toolResult("historical","file_read","Invalid JSON"),message("assistant","Previous response")];
+  for(const [index,wire] of stored.entries()) wire.ts=`2026-11-11T09:12:0${index}+00:00`;
+  const input=run([message("system","Current policy"),...stored,message("user","Read the current file")]);
+  const assistant=message("assistant","Reading",[call("current")]);const result=toolResult("current");
+  const operations:Operation[]=[];
+  const first=await new TurnDriver(input,async(op)=>{
+    operations.push(op);
+    return op.kind==="model" ? {assistant_message:assistant} : {message:result};
+  }).execute();
+  expect(operations.map(op=>op.id)).toEqual(["turn:0:model","turn:0:tool:0:current"]);
+  const completed=[...input.messages,assistant,result];
+  expect(first.projection_digest).toBe(canonicalDigest(completed));
+  const restored=losslessParse(encodeFrame(first.snapshot)) as typeof first.snapshot;
+  const next=run(completed);next.turn=1;next.snapshot=restored;
+  const second=await new TurnDriver(next,async(op)=>{
+    operations.push(op);return {assistant_message:message("assistant","Done")};
+  }).execute();
+  expect(operations.map(op=>op.id)).toEqual(["turn:0:model","turn:0:tool:0:current","turn:1:model"]);
+  expect(projectCanonical(second.snapshot.entries.filter(entry=>entry.type==="message").map(entry=>entry.message) as never))
+    .toEqual([...completed,second.assistant_message]);
+
+  const corrupted=structuredClone(next);
+  const stamped=corrupted.snapshot!.entries.find(entry=>entry.type==="message" && entry.message.role==="user");
+  (stamped as unknown as {message:{_oc:{ts:string}}}).message._oc.ts="changed";
+  let requests=0;
+  await expect(new TurnDriver(corrupted,async()=>{requests++;return {assistant_message:message("assistant","unexpected")};}).execute())
+    .rejects.toMatchObject({code:"projection_mismatch"});
+  expect(requests).toBe(0);
+});
+
 test("parking disposes a waiting SDK session without an aborted checkpoint",async()=>{
   let requested!:()=>void;const started=new Promise<void>(resolve=>{requested=resolve;});
   const driver=new TurnDriver(run(),async(_op,signal)=>new Promise<ModelResult>((_resolve,reject)=>{requested();signal!.addEventListener("abort",()=>reject(new DriverInterrupted(true)),{once:true});}));

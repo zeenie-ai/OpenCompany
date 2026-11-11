@@ -50,6 +50,9 @@ large operation receipts as execution caches. These are outside the conversation
 store and have no mutable conversation head. A snapshot is usable only when
 its canonical projection/configuration matches the authoritative MessageWire;
 branching, compaction and Reset rebuild the derived session as needed.
+The Pi codec retains stored messages' optional display `ts` in reconstruction
+metadata so its projection matches the admitted transcript exactly. The native
+provider codec continues to ignore that view-only field.
 
 ## The store (`services/agent_context/`)
 

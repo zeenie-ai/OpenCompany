@@ -191,24 +191,34 @@ async def test_host_eof_is_a_retryable_transport_interruption(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("code,retryable,error_type", [
-    ("transport_failure", True, "PiTransportFailure"),
-    ("transport_write_failed", True, "PiTransportFailure"),
-    ("sdk_failure", False, "PiSDKFailure"),
-    ("snapshot_incompatible", False, "PiSnapshotIncompatible"),
-    ("invalid_blob", False, "PiProtocolConflict"),
+@pytest.mark.parametrize("code,retryable,error_type,diagnostic", [
+    ("transport_failure", True, "PiTransportFailure", True),
+    ("transport_write_failed", True, "PiTransportFailure", True),
+    ("sdk_failure", False, "PiSDKFailure", True),
+    ("snapshot_incompatible", False, "PiSnapshotIncompatible", True),
+    ("projection_mismatch", False, "PiProtocolConflict", True),
+    ("invalid_blob", False, "PiProtocolConflict", False),
+    ("private-code", False, "PiProtocolConflict", False),
+    ({"private": "continuation"}, False, "PiProtocolConflict", False),
+    (["private-code"], False, "PiProtocolConflict", False),
+    (None, False, "PiProtocolConflict", False),
 ])
-async def test_host_error_codes_are_classified_without_exposing_diagnostics(monkeypatch, tmp_path, code, retryable, error_type):
+async def test_host_error_codes_are_classified_without_exposing_diagnostics(monkeypatch, tmp_path, code, retryable, error_type, diagnostic):
     line = json.dumps({"type": "error", "code": code, "message": "private provider continuation"}).encode() + b"\n"
     with pytest.raises(ApplicationError) as caught:
         await _fake_host(monkeypatch, tmp_path, line)
     assert caught.value.type == error_type
     assert caught.value.non_retryable is not retryable
     assert "private" not in str(caught.value)
+    assert "private" not in repr(caught.value.details)
+    message = "Pi SDK host could not complete the coding turn"
+    assert caught.value.message == (f"{message} ({code})" if diagnostic else message)
+    assert caught.value.details == (({"host_code": code},) if diagnostic else ())
 
 
 @pytest.mark.asyncio
-async def test_packaged_bun_round_preserves_large_native_wires_across_python_boundary(monkeypatch):
+@pytest.mark.parametrize("restored_conversation", [False, True], ids=["fresh", "restored-with-timestamps"])
+async def test_packaged_bun_round_preserves_large_native_wires_across_python_boundary(monkeypatch, restored_conversation):
     from core.js_runtime import bun_binary
     from services import pi_runtime
 
@@ -228,8 +238,22 @@ async def test_packaged_bun_round_preserves_large_native_wires_across_python_bou
         run = _run(blob_dir)
         large = "continuation-é-" * (INLINE_LIMIT // 10)
         native_id = 9007199254740993
-        run["messages"][1]["provider_state"] = {"continuation": large, "id": native_id, "😀": 2, "\uE000": 1}
+        run["messages"][1]["provider_state"] = {"continuation": large, "id": native_id, "😀": 2, "\uE000": 1,
+            "opaque": {"ts": "provider-owned timestamp"}}
+        if restored_conversation:
+            from services.agent_context.conversation import _stamp_messages
+
+            historical_call = {"id": "historical-call", "name": "record_id",
+                "args": {"record_id": native_id, "ts": "argument-owned timestamp"},
+                "raw_arguments": '{"record_id":9007199254740993,"ts":"argument-owned timestamp"}', "parse_error": None}
+            historical_tool = _wire("tool", "Previously recorded result")
+            historical_tool.update(tool_call_id=historical_call["id"], name=historical_call["name"])
+            stored = _stamp_messages([
+                run["messages"][1], _wire("assistant", "Previous request", [historical_call]), historical_tool,
+            ], [], "2026-11-11T09:00:00+00:00")
+            run["messages"] = [run["messages"][0], *stored, _wire("user", "Continue from the saved conversation.")]
         run["context_digest"] = canonical_digest(run["messages"])
+        admitted_messages = copy.deepcopy(run["messages"])
         call = {"id": "native-call", "name": "record_id", "args": {"record_id": native_id},
             "raw_arguments": '{"record_id":9007199254740993}', "parse_error": None}
         assistant = _wire("assistant", "Read identifier", [call])
@@ -241,6 +265,7 @@ async def test_packaged_bun_round_preserves_large_native_wires_across_python_bou
         tool = _wire("tool", str(native_id))
         tool.update(tool_call_id=call["id"], name=call["name"], provider_state={"id": native_id})
         receipt = {"assistant_message": assistant, "finish_reason": "tool_calls", "usage": {"total_tokens": 3}}
+        expected_calls = [{"call_index": 0, "call_id": call["id"], "receipt_only": False}]
         update_order = []
         operations = {}
         snapshots = []
@@ -263,7 +288,7 @@ async def test_packaged_bun_round_preserves_large_native_wires_across_python_bou
             update_order.append(name)
             assert id.startswith("pi-")
             if name == "assistant_ready":
-                assert value["calls"] == [{"call_index": 0, "call_id": call["id"], "receipt_only": False}]
+                assert value["calls"] == expected_calls
                 return {"status": "accepted"}
             assert name == "submit_operation"
             payload = value["payload"]
@@ -302,6 +327,8 @@ async def test_packaged_bun_round_preserves_large_native_wires_across_python_bou
         result = await asyncio.wait_for(pi_activities.PiDriverActivities(MagicMock())._run_host(
             bun, host, env, run, transport, handle, get_blob, put_blob), timeout=30)
         assert result["status"] == "completed" and result["epoch"] == run["epoch"]
+        assert run["messages"] == admitted_messages
+        assert run["context_digest"] == canonical_digest(admitted_messages)
         assert result["projection_digest"] == canonical_digest([*run["messages"], assistant, tool])
         assert result["consumed_operations"] == ["turn:0:model", "turn:0:tool:0:native-call"]
         assert update_order == ["submit_operation", "assistant_ready", "submit_operation"]
@@ -312,10 +339,30 @@ async def test_packaged_bun_round_preserves_large_native_wires_across_python_bou
         snapshot = snapshots[0]
         assert len(canonical_json(snapshot).encode()) > INLINE_LIMIT
         messages = [entry["message"] for entry in snapshot["entries"] if entry["type"] == "message"]
-        assert sum(message["role"] == "user" for message in messages) == 1
-        saved = next(message for message in messages if message["role"] == "assistant")
+        assert sum(message["role"] == "user" for message in messages) == (2 if restored_conversation else 1)
+        saved = next(message for message in reversed(messages) if message["role"] == "assistant")
         assert saved["_oc"]["provider_state"] == assistant["provider_state"]
         saved_call = next(part for part in saved["content"] if part["type"] == "toolCall")
         assert saved_call["arguments"]["record_id"] == native_id
         assert saved_call["_ocBlock"]["call"]["raw_arguments"] == call["raw_arguments"]
         assert next(part for part in saved["content"] if part["type"] == "thinking")["thinkingSignature"] == "native-reasoning-signature"
+
+        # Reuse the accepted snapshot without changing its admitted transcript
+        # or digest; reconstruction must retain stored-view timestamps too.
+        continued_messages = [*admitted_messages, assistant, tool]
+        run.update(turn=1, epoch=3, messages=continued_messages,
+            context_digest=result["projection_digest"], snapshot=snapshot)
+        final_assistant = _wire("assistant", "Continued from the accepted snapshot.")
+        receipt = {"assistant_message": final_assistant, "finish_reason": "stop", "usage": {"total_tokens": 1}}
+        expected_calls = []
+        update_order.clear()
+        operations.clear()
+        transport = ObservedTransport(blob_dir, run["scope"], run["epoch"])
+        continued = await asyncio.wait_for(pi_activities.PiDriverActivities(MagicMock())._run_host(
+            bun, host, env, run, transport, handle, get_blob, put_blob), timeout=30)
+        assert continued["status"] == "completed"
+        assert continued["consumed_operations"] == ["turn:1:model"]
+        assert update_order == ["submit_operation", "assistant_ready"]
+        assert run["messages"] == continued_messages
+        assert continued["projection_digest"] == canonical_digest([*continued_messages, final_assistant])
+        assert len(snapshots) == 2
