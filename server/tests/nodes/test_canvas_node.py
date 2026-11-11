@@ -413,6 +413,65 @@ async def test_display_note_truncates_and_reports(
     assert "truncated" in result["message"]
 
 
+async def _stored_note(database) -> str:
+    items = (
+        await CanvasStore(database).list(
+            CanvasScope(owner_id="owner", workflow_id="wf-op", node_id="canvas-node")
+        )
+    )["items"]
+    return items[-1]["content"]
+
+
+async def test_a_note_names_a_workspace_file_by_its_workspace_path(
+    tmp_path, op_database, captured_events
+):
+    charts = tmp_path / "charts"
+    charts.mkdir()
+    costs = charts / "costs.png"
+    costs.write_bytes(b"\x89PNG fake")
+    spaced = charts / "it headcount.png"
+    spaced.write_bytes(b"\x89PNG fake")
+
+    # An agent often knows a chart by the disk path its code printed.
+    await _node().display(
+        _ctx(tmp_path),
+        CanvasParams(
+            content=(
+                f"![Costs]({costs})\n"
+                f"![Headcount](<{spaced}>)\n"
+                f"[the file]({costs.as_uri()})\n"
+            )
+        ),
+    )
+
+    assert await _stored_note(op_database) == (
+        "![Costs](charts/costs.png)\n"
+        "![Headcount](<charts/it headcount.png>)\n"
+        "[the file](charts/costs.png)\n"
+    )
+
+
+async def test_a_note_keeps_what_is_not_a_disk_path_in_its_workspace(
+    tmp_path, op_database, captured_events
+):
+    (tmp_path / "charts").mkdir()
+    outside = tmp_path.parent / "outside.png"
+    content = (
+        "![Relative](charts/costs.png)\n"
+        "![Remote](https://example.com/a.png)\n"
+        f"![Outside]({outside})\n"
+        "[Totals](#totals)\n"
+    )
+
+    await _node().display(_ctx(tmp_path), CanvasParams(content=content))
+    assert await _stored_note(op_database) == content
+
+    # Code is shown as written.
+    code = f"print('![Costs]({tmp_path / 'charts' / 'costs.png'})')"
+    await _node().display(_ctx(tmp_path), CanvasParams(content=code, language="python"))
+    assert await _stored_note(op_database) == code
+
+
 async def test_display_empty_call_is_user_correctable(
     tmp_path, op_database, captured_events
 ):

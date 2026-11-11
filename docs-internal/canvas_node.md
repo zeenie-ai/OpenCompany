@@ -395,7 +395,13 @@ read from the document's folder (the workspace's root for a note, the file's
 own folder for a `.md` file), a path starting with `/` from the workspace's
 root, and either is served by the workspace file route, which keeps it
 inside the workflow's workspace; a path that climbs out of it is left as
-written. Images then go through the chat's `SafeImage`: a workspace image
+written. A disk path (a Windows path with its drive, a POSIX absolute path,
+a `file:` URL) is what an agent's code often printed, and no browser loads
+one, so the `canvas` tool rewrites one that names a file inside the
+workspace to its workspace path when it saves a note
+(`_workspace_relative_links`, the same containment as `paths`; a code note
+is left as written). It works on the raw text because a markdown parser
+would read a Windows path's backslashes as escapes. Images then go through the chat's `SafeImage`: a workspace image
 loads, and one from another site waits behind a "Show image from …" button,
 since a note is model output just as a reply is. Links open in a new tab.
 

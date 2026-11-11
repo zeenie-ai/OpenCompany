@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, get_args
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from pydantic import (
     BaseModel,
@@ -51,6 +52,12 @@ logger = get_logger(__name__)
 
 #: Languages a note is a document in, not code.
 _DOCUMENT_LANGUAGES = frozenset({"markdown", "md"})
+
+#: A markdown image's or link's destination, after its ``](``: bare, or in
+#: ``<...>`` when it holds spaces.
+_MARKDOWN_DESTINATION = re.compile(r"(\]\(\s*)(<[^>\n]*>|[^\s)]+)")
+#: A Windows path with its drive.
+_DRIVE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 
 # Depth cap for the structural FileRef scan of connected outputs. Node
 # results are already payload-disciplined; anything nested deeper than this
@@ -243,7 +250,10 @@ class CanvasNode(ToolNode):
             items.append({"kind": "url", "url": params.url, "source": source})
 
         if params.content:
-            note, truncated = truncate_note(params.content)
+            content = params.content
+            if not _is_code(params.language):
+                content = _workspace_relative_links(content, ctx)
+            note, truncated = truncate_note(content)
             if truncated:
                 notices.append("note content was truncated at 64KB")
             items.append(
@@ -370,6 +380,60 @@ async def _record_step(ctx: NodeContext, text: str) -> None:
     from services.workspace_steps import record_step
 
     await record_step(get_database(), workflow_id=ctx.workflow_id, surface="canvas", text=text, node_id=ctx.node_id)
+
+
+def _is_code(language: Optional[str]) -> bool:
+    """A note in a language other than Markdown is code, not a document."""
+    name = (language or "").strip().lower()
+    return bool(name) and name not in _DOCUMENT_LANGUAGES
+
+
+def _workspace_relative_links(content: str, ctx: NodeContext) -> str:
+    """A note's markdown, each image or link that names a file in the
+    workspace by its disk path pointed at it by its workspace path instead.
+
+    An agent often knows a chart it saved by the absolute path its code
+    printed, and a browser loads no disk path: the board reads a workspace
+    path against the workspace (``client/src/lib/workspaceLinks.ts``). It is
+    rewritten here, on the raw text, because a markdown parser would read the
+    backslashes of a Windows path as escapes. Containment is the same as for
+    ``paths`` (``resolve_media``): a path outside the workspace, and anything
+    that is not a disk path, stays as written.
+    """
+    from services.media.workspace import resolve_media, workspace_root
+
+    try:
+        root = workspace_root(ctx).resolve(strict=False)
+    except NodeUserError:
+        return content
+
+    def relative(match: "re.Match[str]") -> str:
+        destination = match.group(2)
+        bracketed = destination.startswith("<")
+        path = _disk_path(destination[1:-1] if bracketed else destination)
+        if path is None:
+            return match.group(0)
+        try:
+            rel = resolve_media(path, ctx=ctx).relative_to(root).as_posix()
+        except (NodeUserError, ValueError):
+            return match.group(0)
+        return match.group(1) + (f"<{rel}>" if bracketed or " " in rel else rel)
+
+    return _MARKDOWN_DESTINATION.sub(relative, content)
+
+
+def _disk_path(destination: str) -> Optional[str]:
+    """The absolute disk path a markdown destination names, if it names one:
+    a ``file:`` URL, a Windows path with its drive, or a POSIX absolute path
+    (``//host`` is a URL, not a path)."""
+    if destination.lower().startswith("file:"):
+        from urllib.request import url2pathname
+
+        return url2pathname(urlsplit(destination).path) or None
+    path = unquote(destination)
+    if _DRIVE_PATH.match(path) or (path.startswith("/") and not path.startswith("//")):
+        return path
+    return None
 
 
 def _note_title(content: str) -> str:
