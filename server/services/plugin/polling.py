@@ -65,6 +65,45 @@ logger = get_logger(__name__)
 #: single event over the payload limit still fails its cycle (RFC-0006 12.3).
 POLL_RESULT_MAX_BYTES = 512_000
 
+#: Most one polled item may encode to. A run's first node input carries the
+#: item four times: the trigger output and the envelope beside it
+#: (services/temporal/trigger_listener_workflow.py), once in the node's inputs
+#: and once in the trigger node of the graph (services/temporal/workflow.py).
+#: Four copies of this bound, 1,536,000 bytes, leave room for the graph under
+#: Temporal's 2 MiB payload limit. A bigger item would fail that input's
+#: workflow task on every retry, and the employee would start nothing more.
+POLL_ITEM_MAX_BYTES = 384_000
+
+_SHORTENED_NOTE = "\n\n[Shortened to fit the workflow engine: the first {shown:,} of {total:,} characters.]"
+
+
+def _encoded_bytes(value: Any) -> int:
+    """Bytes of ``value`` as Temporal's JSON payload converter writes it
+    (escaped JSON, so a non-ASCII character costs 6 bytes). ``default=str``
+    measures a value plain JSON cannot encode (a datetime) instead of failing
+    every cycle on it."""
+    return len(json.dumps(value, separators=(",", ":"), default=str))
+
+
+def _fit_item(detail: Dict[str, Any]) -> Dict[str, Any]:
+    """Shorten an item's longest text until it encodes under the item bound.
+
+    Halves the longest top-level string, always cutting from the original
+    text, until the item fits or no text is left. ``id`` is never cut: it
+    de-duplicates the item. Returns ``detail`` itself when it already fits.
+    """
+    if _encoded_bytes(detail) <= POLL_ITEM_MAX_BYTES:
+        return detail
+    kept = {key: len(value) for key, value in detail.items() if isinstance(value, str) and key != "id"}
+    fitted = dict(detail)
+    while kept and _encoded_bytes(fitted) > POLL_ITEM_MAX_BYTES:
+        key = max(kept, key=kept.get)
+        if not kept[key]:
+            break
+        kept[key] //= 2
+        fitted[key] = detail[key][: kept[key]] + _SHORTENED_NOTE.format(shown=kept[key], total=len(detail[key]))
+    return fitted
+
 
 def _oldest_first(msg_id: Any) -> tuple:
     """Order ids numeric-as-number (IMAP uids), the rest as text after them."""
@@ -314,10 +353,19 @@ class PollingTriggerNode(TriggerNode, abstract=True):
                 # doesn't supply one.
                 if "id" not in detail:
                     detail["id"] = msg_id
-                # The Temporal payload encoding; the first event always fits.
-                # default=str measures a value plain JSON cannot encode (a
-                # datetime) instead of failing every cycle on it.
-                item_bytes = len(json.dumps(detail, separators=(",", ":"), default=str))
+                fitted = _fit_item(detail)
+                if fitted is not detail:
+                    logger.info(
+                        "Polling activity shortened an oversized item",
+                        node_id=node_id,
+                        node_type=cls.type,
+                        msg_id=msg_id,
+                        bytes_before=_encoded_bytes(detail),
+                        bytes_after=_encoded_bytes(fitted),
+                    )
+                    detail = fitted
+                # The first event always fits the cycle.
+                item_bytes = _encoded_bytes(detail)
                 if events and size + item_bytes > POLL_RESULT_MAX_BYTES:
                     break  # this id and the ones after it stay new for the next cycle
                 emitted.add(msg_id)

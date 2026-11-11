@@ -339,8 +339,10 @@ class TestPollResultByteCap:
 
     @pytest.mark.asyncio
     async def test_the_first_item_is_always_admitted(self):
+        # The bulk sits in a list, which the per-item cut leaves alone, so the
+        # item stays over the cycle cap.
         def payload(msg_id):
-            return {"id": msg_id, "body": "x" * (600_000 if msg_id == "1" else 10)}
+            return {"id": msg_id, "parts": ["x" * (600_000 if msg_id == "1" else 10)]}
 
         cls = _make_fake_polling_class("test.first", current_ids={"1", "2"}, detail_payload_fn=payload)
         first = await self._cycle(cls, [])
@@ -348,6 +350,34 @@ class TestPollResultByteCap:
         assert set(first["seen_ids"]) == {"1"}
         second = await self._cycle(cls, first["seen_ids"])
         assert [event["id"] for event in second["events"]] == ["2"]
+
+    @pytest.mark.asyncio
+    async def test_an_oversized_mail_is_shortened_and_keeps_its_id_and_headers(self):
+        # One large mail used to reach a run's input four times over Temporal's
+        # 2 MiB limit and stop the employee. Non-Latin text escapes to 6 bytes
+        # a character in the payload, so this one is about 3 MB there.
+        import json
+
+        from services.plugin.polling import POLL_ITEM_MAX_BYTES
+
+        body = "<p>" + "नमस्ते दुनिया " * 20_000 + "</p>"
+
+        def payload(msg_id):
+            return {"id": msg_id, "subject": "Report", "from": "a@example.com", "body": body, "body_text": body}
+
+        cls = _make_fake_polling_class("test.fit", current_ids={"m1"}, detail_payload_fn=payload)
+        [event] = (await self._cycle(cls, []))["events"]
+        assert len(json.dumps(event, separators=(",", ":"))) <= POLL_ITEM_MAX_BYTES
+        assert (event["id"], event["subject"], event["from"]) == ("m1", "Report", "a@example.com")
+        assert event["body"].startswith("<p>नमस्ते") and "Shortened to fit the workflow engine" in event["body"]
+
+    @pytest.mark.asyncio
+    async def test_a_normal_mail_is_untouched(self):
+        def payload(msg_id):
+            return {"id": msg_id, "subject": "Hi", "body": "नमस्ते " * 1_000}
+
+        cls = _make_fake_polling_class("test.small", current_ids={"m1"}, detail_payload_fn=payload)
+        assert (await self._cycle(cls, []))["events"] == [payload("m1")]
 
     @pytest.mark.asyncio
     async def test_numeric_ids_are_walked_as_numbers_oldest_first(self):
