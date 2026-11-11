@@ -702,7 +702,7 @@ Built from shadcn primitives (no antd):
         {isEditingThreshold ? (
           <>
             <Input type="number" value={editThresholdValue} min={10000} max={2000000} step={10000} />
-            <ActionButton intent="save" onClick={() => configureCompactionMutation.mutate({ sessionId, threshold })} />
+            <Button variant="quiet" className={NEUTRAL_ACTION} onClick={() => configureCompactionMutation.mutate({ sessionId, threshold })} />
           </>
         ) : (
           <Stat title="Threshold" value={compactionStats.threshold} />   {/* click to edit */}
