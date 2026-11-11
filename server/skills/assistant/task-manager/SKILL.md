@@ -52,6 +52,10 @@ following assignment and review workflow applies to the lead.
    - `retry_task` when the mission is still valid;
    - `reassign_task` to another connected teammate with revision context;
    - `cancel_task` when the work is no longer needed.
+   Check the task's current `status` and `allowed_actions`: modification is
+   limited to blocked/queued work; cancellation to blocked/queued/running;
+   retry or reassignment to failed/submitted/cancelled; acceptance to submitted.
+   A running task cannot be modified.
 7. Call `finish_team` only after every required task is accepted or intentionally
    cancelled. Synthesize accepted results in the final report and disclose any
    unresolved failure.
@@ -85,6 +89,13 @@ For example, using an actual ID from the connected teammate list:
 Prefer the reviewed task's `expected_revision` for mutations. When omitted,
 the runtime reads the current revision. `revision` is a compatibility spelling;
 a supplied non-null `expected_revision` takes precedence.
+
+If a mutation reports a state or revision conflict, call `get_task` with its
+`task_id`, review the latest `status`, `revision`, and `allowed_actions`, and
+choose an allowed operation. Do not repeat the same write blindly: refreshing
+the revision does not make an invalid state transition valid. Do not cancel
+running work merely to bypass a modification refusal. `allowed_actions` uses
+short names such as `modify`; invoke the corresponding `modify_task` operation.
 
 If exactly one task is `submitted` in the current execution, `accept_task` may
 omit `task_id` and `expected_revision`; the runtime safely resolves that single

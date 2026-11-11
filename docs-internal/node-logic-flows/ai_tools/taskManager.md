@@ -157,6 +157,24 @@ before persistence or delegation; the next model turn can correct the call.
 The original assistant call is retained in the transcript. A subsequent valid
 assignment follows the normal durable task and runner path.
 
+Mutation failures are distinct from input validation. A well-formed
+`modify_task` is still refused once a task is running: it only edits blocked
+or queued work. `get_task` and `list_tasks` include `allowed_actions` for the
+observed status; use those together with `status` and `revision` before choosing
+a mutation. These are short action names such as `modify` and `cancel`; use
+the corresponding `modify_task` or `cancel_task` tool operation. The database
+still checks state and revision atomically, so a task
+may change after it is read.
+
+If that check rejects a mutation, the service reports a `TaskMutationConflict`
+with the latest observed scoped task state and revision. Task Manager returns
+it as a `NodeUserError` with a hint to call `get_task` and review
+`allowed_actions`. It does not automatically retry the write, change its
+operation, or cancel running work. Refreshing a revision cannot make an
+operation valid in the wrong state. Expected conflicts produce a warning
+without a traceback; unexpected database failures retain their error type and
+normal exception logging. Both are failure results, not successful mutations.
+
 Newly prepared runs receive the locked schema after updated workers are
 deployed. Already prepared Temporal runs keep their recorded definitions;
 the change does not rewrite history or require a database migration.

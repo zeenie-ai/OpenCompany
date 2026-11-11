@@ -55,8 +55,9 @@ Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architect
    selected teammate after persistence but are hidden from the lead's LLM.
 5. Temporal and legacy execution share the durable task lifecycle and use the
    same precreated task ID; neither path creates a second tracking record.
-   The legacy path does not currently start the teammate; see
-   "Known limitations" below.
+   Native assignment can start the teammate through its injected service
+   bridge. Off-Temporal retries and reassignments still need a runner consumer;
+   see "Known limitations" below.
 
 ## Topology
 
@@ -104,6 +105,15 @@ task's current revision first, so the check then only covers the moment
 between that read and the write. When exactly one task is submitted,
 `accept_task` may safely infer its ID and current revision. It never guesses
 among multiple submissions.
+
+Task reads include `allowed_actions` for their observed status. A task can move
+from queued to running between review and mutation, so the database's atomic
+state/revision check remains authoritative. A rejected mutation reports a
+`TaskMutationConflict` with the latest observed state and revision. The Task
+Manager tool returns an ordinary `NodeUserError` directing the lead to read
+`get_task` and choose an allowed action; it does not retry the mutation or
+cancel work automatically. In particular, `modify_task` cannot edit running
+work even with its current revision.
 
 ## Parallel scheduling
 
