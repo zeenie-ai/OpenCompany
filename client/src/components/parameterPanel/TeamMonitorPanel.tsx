@@ -1,19 +1,38 @@
+/**
+ * The Team Monitor's panel: a read-only view of a team lead's teammates and
+ * of the tasks in one execution. Connect the lead's output to the node.
+ *
+ * The head names the lead, switches between executions and counts the tasks
+ * by status; the body lists the teammates beside the tasks.
+ *
+ * Colour marks state only (theme_system.md, "Colour marks state or role"):
+ * a status is a dot beside neutral words, here as in the Task Manager.
+ */
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Users } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import type { Edge, Node } from 'reactflow';
 
 import { useWebSocket } from '@/contexts/WebSocketContext';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { StatusTone } from '@/features/home/data/presentation';
 import { cn } from '@/lib/utils';
+import { NodePanel } from './NodePanel';
+import { StatePill } from './StatePill';
+import { TASK_STATUSES } from './taskManager/model';
+import { TaskStatus, TaskStatusDot } from './taskManager/TaskStatus';
 
 const LEAD_TYPES = new Set(['orchestrator_agent', 'ai_employee']);
-const STATUS_STYLE: Record<string, string> = {
-  blocked: 'text-fg-muted', queued: 'text-warning', running: 'text-info',
-  submitted: 'text-node-agent-ink', accepted: 'text-success', failed: 'text-destructive',
-  cancelled: 'text-fg-muted', working: 'text-info', idle: 'text-success', connected: 'text-success',
-};
+
+const NEUTRAL = 'border-border-default text-fg-default';
+const CARD = 'rounded-lg border border-border-default bg-bg-elevated';
+const CARD_HEAD = 'flex items-center gap-2 border-b border-border-default px-4 py-2.5 text-sm font-medium text-fg-default';
+const COUNT = 'rounded-md border border-border-default bg-bg-panel px-1.75 py-0.5 font-mono text-2xs font-medium text-fg-muted';
+const MONO_NOTE = 'truncate font-mono text-2xs text-fg-muted';
+
+/** A teammate's state: working is under way, idle is free for the next task. */
+const MEMBER_TONE: Partial<Record<string, StatusTone>> = { working: 'working', idle: 'ready' };
 
 interface Props { nodeId: string; workflowId?: string; nodes: Node[]; edges: Edge[] }
 interface Member { agent_node_id: string; agent_type?: string; label?: string; status?: string }
@@ -81,36 +100,119 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
     return () => removers.forEach((remove) => remove());
   }, [addEventListener, refresh]);
 
-  if (!lead) return <div className="flex h-full items-center justify-center p-8 text-center text-fg-muted">Connect an Orchestrator Agent or AI Employee to Team Monitor.</div>;
+  if (!lead) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-center text-sm text-fg-muted">
+        Connect an Orchestrator Agent or AI Employee to Team Monitor.
+      </div>
+    );
+  }
 
-  const counts = ['blocked', 'queued', 'running', 'submitted', 'accepted', 'failed', 'cancelled']
-    .map((name) => ({ name, value: tasks.filter((task) => task.status === name).length }));
+  /** The ids an execution is known by, shortened to fit one line. */
+  const references: Array<[string, string]> = [
+    ['Generation', String(status?.control_generation ?? status?.generation ?? '—')],
+    ['Root execution', status?.root_execution_id ? String(status.root_execution_id).slice(0, 16) : '—'],
+    ['Controller', status?.controller_workflow_id ? String(status.controller_workflow_id).slice(0, 20) : '—'],
+    ['Temporal state', String(status?.control_state || status?.temporal_status || 'unavailable')],
+  ];
 
-  return <div className="flex h-full min-h-0 flex-col bg-bg-panel">
-    <div className="shrink-0 border-b border-border-default px-6 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <div><h2 className="text-lg font-semibold text-fg-default">Team Monitor</h2><p className="text-sm text-fg-muted">{String((lead.data as any)?.label || lead.type)} · {status?.status || 'Not running'}</p></div>
-        <div className="flex items-center gap-2">
-          {(status?.archived_executions?.length || 0) > 0 && <Select value={executionId} onValueChange={setExecutionId}><SelectTrigger className="w-48" aria-label="Execution history"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Latest execution</SelectItem>{status!.archived_executions.map((run: any) => <SelectItem key={run.execution_id || run.team_id} value={run.execution_id}>{run.label || String(run.execution_id).slice(0, 12)}</SelectItem>)}</SelectContent></Select>}
-          <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /> Refresh</Button>
+  return (
+    <NodePanel
+      title="Team Monitor"
+      description={`${String((lead.data as any)?.label || lead.type)} · ${status?.status || 'Not running'}`}
+      actions={(
+        <>
+          {(status?.archived_executions?.length || 0) > 0 && (
+            <Select value={executionId} onValueChange={setExecutionId}>
+              <SelectTrigger className="w-48" aria-label="Execution history"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Latest execution</SelectItem>
+                {status!.archived_executions.map((run: any) => (
+                  <SelectItem key={run.execution_id || run.team_id} value={run.execution_id}>
+                    {run.label || String(run.execution_id).slice(0, 12)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button type="button" variant="quiet" className={NEUTRAL} onClick={() => void refresh()} disabled={loading}>
+            <RefreshCw className={cn(loading && 'animate-spin')} /> Refresh
+          </Button>
+        </>
+      )}
+      summary={(
+        <div className="flex flex-col gap-2.5">
+          <ul aria-label="Tasks by status" className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-fg-muted">
+            {TASK_STATUSES.map((name) => (
+              <li key={name} className="flex items-center gap-1.5 capitalize">
+                <TaskStatusDot status={name} />
+                {name}
+                <span className="font-medium text-fg-default tabular-nums">
+                  {tasks.filter((task) => task.status === name).length}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-fg-muted">
+            {references.map(([label, value]) => (
+              <div key={label} className="flex items-baseline gap-1.5">
+                <dt>{label}</dt>
+                <dd className="font-mono text-fg-default">{value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
+      )}
+    >
+      <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-4 overflow-auto p-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)]">
+        <section className={CARD}>
+          <h3 className={CARD_HEAD}>Connected agents <span className={COUNT}>{members.length}</span></h3>
+          <ul className="divide-y divide-border-default">
+            {members.map((member) => {
+              const state = member.status || 'connected';
+              return (
+                <li key={member.agent_node_id} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-fg-default">{member.label || member.agent_type}</div>
+                    <div className={MONO_NOTE}>{member.agent_type}</div>
+                  </div>
+                  <StatePill tone={MEMBER_TONE[state] ?? 'paused'} pulse={state === 'working'}>{state}</StatePill>
+                </li>
+              );
+            })}
+            {members.length === 0 && <li className="p-6 text-center text-sm text-fg-muted">No teammates connected.</li>}
+          </ul>
+        </section>
+
+        <section className={cn(CARD, 'min-w-0')}>
+          <h3 className={CARD_HEAD}>Current execution tasks <span className={COUNT}>{tasks.length}</span></h3>
+          <ul className="divide-y divide-border-default">
+            {tasks.map((task) => (
+              <li key={task.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-fg-default">{task.title}</div>
+                  <div className={MONO_NOTE}>
+                    {task.child_workflow_id
+                      ? `Temporal ${task.child_workflow_id}${task.child_run_id ? ` · ${task.child_run_id.slice(0, 8)}` : ''}`
+                      : 'Temporal execution not registered'}
+                  </div>
+                </div>
+                <span className="text-xs text-fg-muted">{task.assignee_label || task.assigned_to || 'Unassigned'}</span>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5">
+                    {task.queue_position ? <span className="font-mono text-2xs text-fg-muted">#{task.queue_position}</span> : null}
+                    <TaskStatus status={task.status} />
+                  </div>
+                  {task.temporal_status && <span className="text-2xs text-fg-muted capitalize">{task.temporal_status}</span>}
+                </div>
+              </li>
+            ))}
+            {tasks.length === 0 && <li className="p-8 text-center text-sm text-fg-muted">No tasks in this execution.</li>}
+          </ul>
+        </section>
       </div>
-      <div className="mt-4 grid grid-cols-4 gap-2 lg:grid-cols-7">
-        {counts.map(({ name, value }) => <div key={name} className="rounded-md border border-border-default bg-bg-elevated p-2"><div className="text-xs capitalize text-fg-muted">{name}</div><div className={cn('text-lg font-semibold tabular-nums', STATUS_STYLE[name])}>{value}</div></div>)}
-      </div>
-      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-fg-muted"><span>Generation <strong className="text-fg-default">{status?.control_generation ?? status?.generation ?? '—'}</strong></span><span>Root execution <strong className="text-fg-default">{status?.root_execution_id ? String(status.root_execution_id).slice(0, 16) : '—'}</strong></span><span>Controller <strong className="text-fg-default">{status?.controller_workflow_id ? String(status.controller_workflow_id).slice(0, 20) : '—'}</strong></span><span>Temporal state <Badge variant="outline" className="ml-1 capitalize">{status?.control_state || status?.temporal_status || 'unavailable'}</Badge></span></div>
-    </div>
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)]">
-      <section className="rounded-md border border-border-default bg-bg-elevated">
-        <div className="flex items-center gap-2 border-b border-border-default px-4 py-3 font-medium"><Users className="h-4 w-4" /> Connected agents <Badge variant="outline">{members.length}</Badge></div>
-        <div className="divide-y divide-border-default/70">{members.map((member) => <div key={member.agent_node_id} className="flex items-center gap-3 px-4 py-3"><span className={cn('h-2 w-2 rounded-full bg-current', STATUS_STYLE[member.status || 'connected'])} /><div className="min-w-0 flex-1"><div className="truncate font-medium text-fg-default">{member.label || member.agent_type}</div><div className="truncate text-xs text-fg-muted">{member.agent_type}</div></div><span className="text-xs capitalize text-fg-muted">{member.status || 'connected'}</span></div>)}{members.length === 0 && <div className="p-6 text-center text-sm text-fg-muted">No teammates connected.</div>}</div>
-      </section>
-      <section className="min-w-0 rounded-md border border-border-default bg-bg-elevated">
-        <div className="border-b border-border-default px-4 py-3 font-medium">Current execution tasks</div>
-        <div className="divide-y divide-border-default/70">{tasks.map((task) => <div key={task.id} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 px-4 py-3"><div className="min-w-0"><div className="truncate font-medium text-fg-default">{task.title}</div><div className="truncate text-[11px] text-fg-muted">{task.child_workflow_id ? `Temporal ${task.child_workflow_id}${task.child_run_id ? ` · ${task.child_run_id.slice(0, 8)}` : ''}` : 'Temporal execution not registered'}</div></div><span className="text-xs text-fg-muted">{task.assignee_label || task.assigned_to || 'Unassigned'}</span><div className="text-right"><Badge variant="outline" className={cn('capitalize', STATUS_STYLE[task.status])}>{task.status}{task.queue_position ? ` #${task.queue_position}` : ''}</Badge>{task.temporal_status && <div className="mt-1 text-[11px] capitalize text-fg-muted">{task.temporal_status}</div>}</div></div>)}{tasks.length === 0 && <div className="p-8 text-center text-sm text-fg-muted">No tasks in this execution.</div>}</div>
-      </section>
-    </div>
-  </div>;
+    </NodePanel>
+  );
 };
 
 export default TeamMonitorPanel;

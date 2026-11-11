@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders as render } from '../../../test/providers';
@@ -40,6 +40,30 @@ describe('TeamMonitorPanel', () => {
     render(<TeamMonitorPanel nodeId="monitor" workflowId="workflow-1" nodes={nodes} edges={edges} />);
     expect(await screen.findByText('Coder')).toBeInTheDocument();
     expect(screen.getByText('connected')).toBeInTheDocument();
+  });
+
+  // Colour marks state or role (docs-internal/theme_system.md): the same
+  // marks as the Task Manager.
+  it('marks a teammate and a task with a dot beside neutral words', async () => {
+    const { container } = render(<TeamMonitorPanel nodeId="monitor" workflowId="workflow-1" nodes={nodes} edges={edges} />);
+    await screen.findByText('Build API');
+
+    expect(screen.getByRole('heading', { name: 'Team Monitor' })).toHaveClass('font-display', 'text-md');
+
+    const working = screen.getByText('working');
+    expect(working).toHaveClass('text-fg-default');
+    expect(working.querySelector('.home-pip')).toHaveClass('bg-status-working-dot');
+    expect(working.querySelector('.home-pip')).toHaveAttribute('data-pip', 'on');
+
+    // The counts by status are a legend, with the number in ink.
+    const legend = screen.getByRole('list', { name: 'Tasks by status' });
+    const running = within(legend).getByText('running');
+    expect(running.querySelector('.home-pip')).toHaveClass('bg-status-working-dot');
+    expect(within(running).getByText('1')).toHaveClass('text-fg-default');
+    expect(within(within(legend).getByText('failed')).getByText('0')).toHaveClass('text-fg-default');
+
+    expect(container.querySelector('[class*="text-success"], [class*="text-info"], [class*="text-warning"], [class*="text-node-"]')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toHaveAttribute('data-variant', 'quiet');
   });
 
   it('requires a team-lead connection', async () => {

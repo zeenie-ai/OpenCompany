@@ -1,12 +1,28 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, RefreshCw, RotateCw, Search, Square } from 'lucide-react';
+/**
+ * The Process Manager's panel: the processes this workflow started, with
+ * their ports, output and controls.
+ *
+ * The head counts them by state. Under it a search narrows the table, and a
+ * row's eye opens the process (its command and its recent output) in one of
+ * the editor's modals.
+ *
+ * Colour marks state only (theme_system.md, "Colour marks state or role"):
+ * a state is a dot beside neutral words, numbers are ink, and every button
+ * is neutral.
+ */
+
+import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Eye, RefreshCw, RotateCw, Search, Square, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useWebSocket } from '@/contexts/WebSocketContext';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import Modal from '@/components/ui/Modal';
+import type { StatusTone } from '@/features/home/data/presentation';
+import { cn } from '@/lib/utils';
+import { NodePanel } from './NodePanel';
+import { StateMark, StatePill } from './StatePill';
 
 interface Props { workflowId?: string }
 
@@ -24,6 +40,18 @@ interface ManagedProcess {
   ports?: number[];
 }
 
+const COLUMNS = ['Name', 'Status', 'PID', 'Ports', 'Started', 'Elapsed', 'Output', 'Command'];
+
+const NEUTRAL = 'border-border-default text-fg-default';
+const CARD = 'rounded-lg border border-border-default bg-bg-elevated';
+const HEAD_CELL = 'border-b border-border-default px-3 py-2 font-medium whitespace-nowrap';
+const MONO_CELL = 'px-3 py-2.5 font-mono text-xs whitespace-nowrap text-fg-muted tabular-nums';
+const HEADING = 'font-display text-sm font-semibold tracking-[var(--type-tracking-display)] text-fg-default [text-transform:var(--type-uppercase)]';
+const CODE = 'overflow-auto rounded-md border border-[var(--code-border)] bg-[var(--code-bg)] p-3 font-mono text-xs break-words whitespace-pre-wrap text-[var(--code-text)]';
+
+/** A process's state: running is work under way, an error wants someone. */
+const TONE: Partial<Record<string, StatusTone>> = { running: 'working', error: 'attention' };
+
 const duration = (startedAt?: string, end = Date.now()) => {
   if (!startedAt) return '—';
   const ms = Math.max(0, end - new Date(startedAt).getTime());
@@ -37,6 +65,30 @@ const duration = (startedAt?: string, end = Date.now()) => {
 const timestamp = (value?: string) => value
   ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value))
   : '—';
+
+function ProcessState({ status }: { status: string }) {
+  return <StatePill tone={TONE[status] ?? 'paused'} pulse={status === 'running'}>{status}</StatePill>;
+}
+
+/** One count in the head: a state's mark and name over its number. */
+function Count({ tone, label, children }: { tone: StatusTone; label: string; children: ReactNode }) {
+  return (
+    <div className={cn(CARD, 'px-3 py-2')}>
+      <dt className="flex items-center gap-1.5 text-xs text-fg-muted"><StateMark tone={tone} />{label}</dt>
+      <dd className="mt-0.5 text-lg font-semibold text-fg-default tabular-nums">{children}</dd>
+    </div>
+  );
+}
+
+/** One labelled fact in the opened process, in the mono face. */
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-fg-muted">{label}</dt>
+      <dd className="mt-0.5 font-mono text-xs break-words text-fg-default tabular-nums">{children}</dd>
+    </div>
+  );
+}
 
 const ProcessManagerPanel: React.FC<Props> = ({ workflowId }) => {
   const { sendRequest } = useWebSocket();
@@ -72,6 +124,8 @@ const ProcessManagerPanel: React.FC<Props> = ({ workflowId }) => {
   const loadOutput = useCallback(async (process: ManagedProcess) => {
     if (!workflowId) return;
     setSelected(process);
+    // Never show the previously opened process's output under this one's name.
+    setOutput('');
     const response = await sendRequest<{ lines?: string[] }>('process_get_output', {
       workflow_id: workflowId, name: process.name, stream: 'stdout', tail: 300,
     });
@@ -113,29 +167,127 @@ const ProcessManagerPanel: React.FC<Props> = ({ workflowId }) => {
   const running = processes.filter((process) => process.status === 'running').length;
   const failed = processes.filter((process) => process.status === 'error').length;
 
-  return <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-    <header className="mb-4 flex shrink-0 items-start justify-between gap-3">
-      <div><h2 className="text-lg font-semibold text-fg-default">Managed Processes</h2><p className="text-sm text-fg-muted">Live workflow processes, listener ports, output, and lifecycle controls.</p></div>
-      <Button variant="outline" size="sm" disabled={loading} onClick={() => void refresh()}><RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Refresh</Button>
-    </header>
-    <section className="mb-4 grid shrink-0 grid-cols-3 gap-3">
-      <div className="rounded border border-border-default bg-bg-elevated p-3"><div className="text-xs text-fg-muted">Running</div><div className="text-xl font-semibold text-success">{running} / {maxProcesses}</div></div>
-      <div className="rounded border border-border-default bg-bg-elevated p-3"><div className="text-xs text-fg-muted">Stopped</div><div className="text-xl font-semibold">{processes.length - running - failed}</div></div>
-      <div className="rounded border border-border-default bg-bg-elevated p-3"><div className="text-xs text-fg-muted">Errors</div><div className="text-xl font-semibold text-destructive">{failed}</div></div>
-    </section>
-    <div className="relative mb-3 shrink-0"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, command, directory, or port" /></div>
-    <div className="min-h-0 flex-1 overflow-auto rounded border border-border-default bg-bg-elevated">
-      <table className="w-full min-w-[1000px] border-collapse text-sm"><thead className="sticky top-0 z-10 bg-bg-panel text-left text-xs text-fg-muted"><tr>{['Name','Status','PID','Ports','Started','Elapsed','Output','Command',''].map((label) => <th key={label} className="border-b border-border-default px-3 py-2 font-medium">{label}</th>)}</tr></thead>
-        <tbody>{visible.map((process) => <tr key={process.name} className="border-b border-border-default/70 hover:bg-bg-panel">
-          <td className="px-3 py-3 font-medium">{process.name}</td><td className="px-3 py-3"><Badge variant="outline" className={process.status === 'running' ? 'text-success' : process.status === 'error' ? 'text-destructive' : 'text-fg-muted'}>{process.status}</Badge></td>
-          <td className="px-3 py-3 tabular-nums">{process.pid}</td><td className="px-3 py-3 tabular-nums">{process.ports?.join(', ') || '—'}</td><td className="whitespace-nowrap px-3 py-3 text-xs">{timestamp(process.started_at)}</td><td className="px-3 py-3 tabular-nums">{duration(process.started_at, process.status === 'running' ? now : process.stopped_at ? new Date(process.stopped_at).getTime() : now)}</td>
-          <td className="px-3 py-3 text-xs tabular-nums">{process.stdout_lines ?? 0} out · {process.stderr_lines ?? 0} err</td><td className="max-w-[320px] truncate px-3 py-3 font-mono text-xs" title={process.command}>{process.command}</td>
-          <td className="whitespace-nowrap px-3 py-3"><Button variant="ghost" size="sm" aria-label={`Inspect ${process.name}`} onClick={() => void loadOutput(process)}><Eye className="h-4 w-4" /></Button>{process.status === 'running' && <Button variant="ghost" size="sm" disabled={busy === process.name} aria-label={`Stop ${process.name}`} onClick={() => void mutate('process_stop', process)}><Square className="h-4 w-4" /></Button>}<Button variant="ghost" size="sm" disabled={busy === process.name} aria-label={`Restart ${process.name}`} onClick={() => void mutate('process_restart', process)}><RotateCw className="h-4 w-4" /></Button></td>
-        </tr>)}{!loading && visible.length === 0 && <tr><td colSpan={9} className="p-12 text-center text-fg-muted">No managed processes in this workflow.</td></tr>}</tbody>
-      </table>
-    </div>
-    <Dialog open={!!selected} onOpenChange={(open) => { if (!open) setSelected(null); }}><DialogContent className="sm:max-w-4xl"><DialogHeader><DialogTitle>{selected?.name}</DialogTitle></DialogHeader>{selected && <div className="space-y-3 text-sm"><div className="grid gap-2 sm:grid-cols-3"><span>PID<br/><strong>{selected.pid}</strong></span><span>Ports<br/><strong>{selected.ports?.join(', ') || '—'}</strong></span><span>Started<br/><strong>{timestamp(selected.started_at)}</strong></span></div><div><div className="mb-1 text-xs text-fg-muted">Command</div><code className="block rounded bg-bg-panel p-2 text-xs">{selected.command}</code></div><div><div className="mb-1 text-xs text-fg-muted">Recent stdout</div><pre className="max-h-[45vh] overflow-auto whitespace-pre-wrap rounded bg-bg-panel p-3 text-xs">{output || 'No stdout captured.'}</pre></div></div>}</DialogContent></Dialog>
-  </div>;
+  /** How long a process has run: to now while it runs, to its stop after. */
+  const elapsedOf = (process: ManagedProcess) => duration(
+    process.started_at,
+    process.status === 'running' || !process.stopped_at ? now : new Date(process.stopped_at).getTime(),
+  );
+
+  return (
+    <NodePanel
+      title="Managed Processes"
+      description="The processes this workflow started, with their ports, output and controls."
+      actions={(
+        <Button type="button" variant="quiet" className={NEUTRAL} disabled={loading} onClick={() => void refresh()}>
+          <RefreshCw className={cn(loading && 'animate-spin')} /> Refresh
+        </Button>
+      )}
+      summary={(
+        <dl className="grid grid-cols-3 gap-2.5">
+          <Count tone="working" label="Running">
+            {running} <span className="font-normal text-fg-faint">/ {maxProcesses}</span>
+          </Count>
+          <Count tone="paused" label="Stopped">{processes.length - running - failed}</Count>
+          <Count tone="attention" label="Errors">{failed}</Count>
+        </dl>
+      )}
+    >
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <div className="relative mb-3 shrink-0">
+          <Search aria-hidden className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted" />
+          <Input
+            className="pl-9"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search name, command, directory, or port"
+            aria-label="Search processes"
+          />
+        </div>
+        {/* The table is as tall as its rows, and scrolls once they outgrow the panel. */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className={cn(CARD, 'min-h-0 overflow-auto')}>
+            <table className="w-full min-w-[960px] border-collapse text-sm">
+              <thead className="sticky top-0 z-10 bg-bg-panel text-left text-xs text-fg-muted">
+                <tr>
+                  {COLUMNS.map((label) => <th key={label} scope="col" className={HEAD_CELL}>{label}</th>)}
+                  <th scope="col" className={HEAD_CELL}><span className="sr-only">Controls</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((process) => (
+                  <tr key={process.name} className="border-b border-border-default last:border-b-0 hover:bg-bg-hover">
+                    <td className="px-3 py-2.5 font-medium text-fg-default">{process.name}</td>
+                    <td className="px-3 py-2.5"><ProcessState status={process.status} /></td>
+                    <td className={MONO_CELL}>{process.pid}</td>
+                    <td className={MONO_CELL}>{process.ports?.join(', ') || '—'}</td>
+                    <td className={MONO_CELL}>{timestamp(process.started_at)}</td>
+                    <td className={MONO_CELL}>{elapsedOf(process)}</td>
+                    <td className={MONO_CELL}>{process.stdout_lines ?? 0} out · {process.stderr_lines ?? 0} err</td>
+                    <td className="max-w-[320px] truncate px-3 py-2.5 font-mono text-xs text-fg-default" title={process.command}>
+                      {process.command}
+                    </td>
+                    <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                      <Button type="button" variant="quiet" size="icon-sm" aria-label={`Inspect ${process.name}`} title="Inspect" onClick={() => void loadOutput(process)}>
+                        <Eye />
+                      </Button>
+                      {process.status === 'running' && (
+                        <Button type="button" variant="quiet" size="icon-sm" disabled={busy === process.name} aria-label={`Stop ${process.name}`} title="Stop" onClick={() => void mutate('process_stop', process)}>
+                          <Square />
+                        </Button>
+                      )}
+                      <Button type="button" variant="quiet" size="icon-sm" disabled={busy === process.name} aria-label={`Restart ${process.name}`} title="Restart" onClick={() => void mutate('process_restart', process)}>
+                        <RotateCw />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {!loading && visible.length === 0 && (
+                  <tr>
+                    <td colSpan={COLUMNS.length + 1} className="p-12 text-center text-fg-muted">
+                      {processes.length === 0 ? 'No managed processes in this workflow.' : 'No processes match this search.'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <Modal
+        isOpen={selected !== null}
+        onClose={() => setSelected(null)}
+        title="Process"
+        titleIcon={<Terminal className="h-4 w-4 text-fg-muted" />}
+        maxWidth="min(760px, calc(100vw - 2rem))"
+        maxHeight="min(85vh, 720px)"
+        autoHeight
+      >
+        {selected && (
+          <div className="flex flex-col gap-5 px-5 py-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h3 className={cn(HEADING, 'min-w-0 text-base break-words')}>{selected.name}</h3>
+              <ProcessState status={selected.status} />
+            </div>
+            <dl className={cn(CARD, 'grid grid-cols-2 gap-x-4 gap-y-3 p-3.5 sm:grid-cols-4')}>
+              <Fact label="PID">{selected.pid}</Fact>
+              <Fact label="Ports">{selected.ports?.join(', ') || '—'}</Fact>
+              <Fact label="Started">{timestamp(selected.started_at)}</Fact>
+              <Fact label="Elapsed">{elapsedOf(selected)}</Fact>
+            </dl>
+            <section className="flex flex-col gap-1.5">
+              <h4 className={HEADING}>Command</h4>
+              <pre className={CODE}>{selected.command}</pre>
+            </section>
+            <section className="flex flex-col gap-1.5">
+              <h4 className={HEADING}>Recent stdout</h4>
+              <pre className={cn(CODE, 'max-h-[45vh]')}>{output || 'No stdout captured.'}</pre>
+            </section>
+          </div>
+        )}
+      </Modal>
+    </NodePanel>
+  );
 };
 
 export default ProcessManagerPanel;
