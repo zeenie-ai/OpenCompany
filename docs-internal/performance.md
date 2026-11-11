@@ -40,6 +40,74 @@ or input payloads are logged by these diagnostics.
 
 ## Headline numbers (current baseline)
 
+Measured 2026-11-11 on Windows 11 at commit `ac88bd98` (v0.3.1). Method: a
+clean worktree, a fresh `company build`, then real `company start` and
+`company dev` launches on their own ports against an empty `DATA_DIR` (no
+connected accounts, no saved workflows; only the package cache that
+`company clean` keeps was seeded). Times are seconds after the CLI's
+"Freeing ports..." line. A headless Chrome opened the app the moment its
+port answered, so "first WebSocket client" does not include a person
+reaching for the browser. Warm figures are the median of ten launches with
+the fastest and slowest in brackets; the first launch ran once. Each launch
+was ended by killing its process tree, not with Ctrl-C.
+
+| Metric | Warm `company start` | First launch after the build |
+|---|---|---|
+| Application startup complete | **4.5 s** (3.9 to 7.2) | **9.8 s** |
+| HTTP `ready on port $PYTHON_BACKEND_PORT` | **4.7 s** (4.1 to 7.3) | 9.9 s |
+| First WebSocket client connected | **5.6 s** (4.8 to 8.3) | 11.0 s |
+| Temporal worker pool started (execution engine ready) | **9.6 s** (7.9 to 13.9) | 15.9 s |
+| Routers + plugin walker segment (196 modules) | 1.7 s (1.4 to 3.5) | 5.4 s |
+| Lifespan startup | 0.4 s (0.35 to 0.7) | 1.5 s |
+| AIService import | 0.11 s | 0.15 s |
+| Status refresh (`broadcaster.refresh_all_services`, no accounts connected) | 0.15 s | not measured |
+
+`company dev`, same day and worktree (three launches, the browser opened at
+backend startup complete):
+
+| Metric | Warm (launches 2 and 3) | First dev launch (empty Vite dep cache) |
+|---|---|---|
+| Vite `ready in` | 0.4 and 0.6 s | 1.3 s |
+| Backend Application startup complete | 4.3 and 5.3 s | 9.8 s |
+| First WebSocket client connected | 10.1 and 12.0 s | 30.9 s |
+
+| Build and bundle | Value |
+|---|---|
+| `company build`, fresh worktree, bun and uv caches warm | **98 s** |
+| Vite production build inside it | **32 s** |
+| Entry bundle `client/dist/assets/index-*.js` | **128 KB gz** (401 KB raw), one of 47 JS chunks |
+
+**The spread is the machine, not the code.** The three slowest warm launches
+(5.5, 6.7 and 7.2 s) lost their time in one segment, routers + plugin walker
+(2.4 to 3.5 s against 1.4 to 1.8 s in the other seven). That segment is
+thousands of small file opens, and other work was running on the machine
+during the session. Read 4 to 4.5 s as the warm figure for this machine and
+the higher values as what a busy machine adds.
+
+**Against September** (~3.6 s startup complete, 4.56 s port ready, single
+launches): the fastest launches (3.9 s, port ready 4.1 s) are within 0.3 s
+of it and the median is about 0.9 s slower. The walker loads 196 modules
+now against 185.
+
+**The first launch is 9.8 s where July measured 21.5 s**, but the two are not
+the same experiment: this build linked its packages from warm bun and uv
+caches instead of downloading them, and the cache state of the July run was
+not recorded. The 5.3 s a first launch costs over a warm one is 3.7 s in the
+plugin walk (the plugin dependencies are read from disk for the first time),
+0.5 s mounting the CLI-agent MCP server and 1.1 s of lifespan (new databases
+0.6 s, new salt and encryption 0.5 s). Everything before "Importing routers"
+takes the same 2.1 s either way.
+
+**`company dev` reaches the first socket later than `company start`** although
+its backend is ready just as fast: Vite serves the app as separate source
+modules and transforms each on request after every dev-server start (5.8 to
+6.7 s here), and on the first dev launch it also pre-bundles the dependencies
+(21 s in all). That launch's backend also took 9.8 s to start, 7.1 s of it
+in the plugin walk, although its imports were already warm; most likely the
+pre-bundle was competing for the disk at the same moment.
+
+### Earlier baseline (May and July 2026)
+
 Measured on Windows, dev mode (`bun run dev` → `company dev`),
 warm OS file cache, with bytecode pre-compile applied:
 
@@ -88,13 +156,14 @@ plugin modules against the **137** it walked in May. Lifespan cost is
 unchanged.
 
 **Counting rule for every plugin figure in this document.** The numbers
-(137 in May, 152 in July, 185 in September 2026) are the walker's
+(137 in May, 152 in July, 185 in September and 196 in November 2026) are the walker's
 *module* count — the `node plugins loaded: N modules` log line from
 `server/nodes/__init__.py`, i.e. `len(nodes._DISCOVERED)`, which
 counts every non-private module and subpackage (`_*.py` helpers and
 `_*/` subpackages are skipped by `_discover()`). They are **not**
 node-type counts: `len(services.node_registry.NODE_METADATA)` was 148
-at the September measurement, spread across 37 group folders under `server/nodes/`. Both are
+at the September measurement, spread across 37 group folders under `server/nodes/`, and 157
+across 41 folders on 2026-11-11. Both are
 computed from the tree; neither is hand-maintained here. The dev-mode rows were never benchmarked before (Vite and
 uvicorn compete for I/O during a dev boot, so they are not comparable
 to the prod numbers), and the first dev boot after a reinstall also
@@ -114,6 +183,24 @@ even from a same-drive cache unless `--backend=hardlink`). With the
 cache on the checkout's drive and the hardlink backend, purge → install
 → first build measures **15 s + 41 s**. Details and the per-machine
 fix in [errors.md §11](errors.md#11-bun-install-copies-every-package--2-minute-first-vite-build-windows).
+
+**Re-measured 2026-11-11** (`ac88bd98`, fresh worktree, bun and uv caches
+warm): `company build` took **98 s** end to end.
+
+| Stage | Time | Detail from the log |
+|---|---|---|
+| Install dependencies | 6.4 s | `1036 packages installed [6.38s]` |
+| Build client | 32.7 s | Vite `built in 31.93s` |
+| Build JS executor sidecar | 3.1 s | |
+| Build Pi Coding Agent runtime | 22.3 s | `124 packages installed [10.59s]` |
+| Install Python dependencies | 16.5 s | `Installed 164 packages in 2.46s`, `Bytecode compiled 10107 files in 8.88s` |
+| Compile project bytecode | 15.6 s | |
+| Install Temporal binaries | 1.7 s | already in the package cache |
+
+The entry bundle is 128 KB gz against 288 KB in September; Home, the editor
+and the Workspace now load as their own lazy chunks (`HomeShell` 61 KB gz,
+`Dashboard` 97 KB gz, `WorkspaceView` 88 KB gz). The largest chunk is
+`vendor-icons` at 612 KB raw (160 KB gz).
 
 ## Optimisation history
 
@@ -143,7 +230,45 @@ cd client
 ./node_modules/.bin/tsc --noEmit                     # TS 5.9.3 (second opinion)
 ```
 
-## Where launch time is spent today (post `e77215c`, warm cache)
+## Where launch time is spent today (2026-11-11, warm `company start`)
+
+Each line is the median of that marker over the ten warm launches, so
+neighbouring lines do not subtract exactly.
+
+```
+T+0.00 — "Freeing ports..." (the CLI has already spent 0.7-1.0 s on its own
+         start, the build check and the SQLAlchemy preflight)
+T+0.03 — server process spawned
+T+0.27 — Importing FastAPI               (interpreter start 0.24 s)
+T+0.51 — Importing settings + logging    (FastAPI 0.24 s)
+T+0.73 — Importing DI container          (settings, logging, tracing 0.22 s)
+       ├── core imports done (1.35)                       0.62 s
+       ├── AIService imported (1.46)                      0.11 s
+       ├── all service imports done, LLM registry (1.66)  0.20 s
+       └── Temporal client import + container definition  0.46 s
+T+2.12 — Importing routers
+       └── 196 plugin modules loaded (3.75)               1.6 s
+T+3.77 — All imports complete
+T+4.06 — CLI-agent MCP server mounted    (app, CORS, routers 0.29 s)
+T+4.08 — Lifespan startup begin
+       ├── Database + cache (4.22)                        0.14 s
+       ├── Credentials + encryption (4.35)                0.13 s
+       └── model registry, teams, proxy, MCP session (4.47)  0.12 s
+T+4.47 — Application startup complete ◀ HTTP-ready point
+T+4.66 — `ready on port $PYTHON_BACKEND_PORT` (uvicorn accepting; browser opened here)
+T+5.64 — First WebSocket client connected ◀ UI-interactive point
+T+5.93 — Temporal dev server spawned and connected (background)
+T+8.56 — Temporal activities registered  (build-id hash 2.6 s, off the loop)
+T+9.56 — Temporal worker pool started, 9 queues ◀ execution engine ready
+T+9.81 — "The event loop is blocked" logged once (1.0 to 1.6 s, see the inventory)
+```
+
+With no accounts connected the status refresh
+(`broadcaster.refresh_all_services`) finishes 0.15 s after it is scheduled,
+at about the moment the port is ready; in May, with WhatsApp and Telegram
+connected, it was the last thing to settle at 12.27 s.
+
+### May 2026 timeline (post `e77215c`, dev mode, warm cache)
 
 ```
 T+0.00 — port-free begin
@@ -172,6 +297,32 @@ T+8.29 — First WebSocket client connected ◀ UI-interactive point
 T+12.27 — Status broadcasters settled ◀ "everything green"
 ```
 
+## First launch after a fresh build (2026-11-11)
+
+One `company start`, 17 s after `company build` finished in a new worktree:
+fresh `.venv`, empty `DATA_DIR` (new databases and salt), packages linked
+from warm bun and uv caches.
+
+```
+T+0.00 — "Freeing ports..."
+T+0.25 — Importing FastAPI
+T+1.29 — container: core imports done
+T+1.44 — AIService imported
+T+2.05 — Importing routers               (same as a warm launch up to here)
+T+7.41 — 196 plugin modules loaded       (5.4 s; 1.6 s warm)
+T+8.25 — CLI-agent MCP server mounted    (0.8 s; 0.3 s warm)
+T+8.27 — Lifespan startup begin
+T+8.90 — Database + cache started        (0.63 s: new databases)
+T+9.36 — Credentials + encryption        (0.46 s: new salt, PBKDF2)
+T+9.79 — Application startup complete    (lifespan 1.5 s; 0.4 s warm)
+T+9.87 — ready on port $PYTHON_BACKEND_PORT
+T+11.00 — First WebSocket client connected (browser opened at 9.89)
+T+11.85 — Temporal dev server spawned and connected
+T+14.82 — Temporal activities registered
+T+15.88 — Temporal worker pool started, 9 queues
+T+16.27 — "The event loop is blocked" logged once (1.46 s)
+```
+
 ## Cold post-clean boot (2026-07-14, `cold.txt` 18:44, post-fix)
 
 First launch after `company clean` → `company build` (fresh `.venv`,
@@ -197,17 +348,25 @@ T+44    — browser connects once, full init burst answered in <0.6 s
 T+51    — example workflows imported (still inline — see follow-ups)
 ```
 
-## The remaining +5 s gap (HTTP-ready → first WS connect)
+## HTTP-ready to first WebSocket client
 
-`ready on port $PYTHON_BACKEND_PORT` at +3.17 s, first WS connect at +8.29 s. Backend
-is idle in this window; the cost lives on the frontend. Likely
-contributors:
+**2026-11-11:** with a browser opened the moment the port answers, the first
+WebSocket client connects **0.9 s** later on the production build (median of
+ten launches, 0.7 to 1.2 s). That covers Chrome's own start, the page load,
+the auth check and the socket handshake. Under `company dev` the same step
+takes 5.8 to 6.7 s with a warm Vite dep cache and 21 s on the first dev
+launch (see the headline section). Each of the fifteen launches shows one
+connect and no disconnect in the 15 s after it, so the +12 s
+disconnect-reconnect cycle of early May has not come back.
 
-1. **The sign-in gate's visible retry schedule** ([client/src/components/auth/ProtectedRoute.tsx](../client/src/components/auth/ProtectedRoute.tsx) + [client/src/lib/connectionConfig.ts](../client/src/lib/connectionConfig.ts)). The auth check no longer retries on its own: when the backend is not up at the first check, the Connecting screen checks again after 2, 3, 5 and then every 8 s (`CONNECT_RETRY`) and holds "Connected" 1.5 s before sign-in or the app. A backend that becomes ready just after a check waits for the next one. (The measurement above predates this; it used a 50 ms full-jitter backoff.) The desktop shell loads the SPA only after `/health/ready`, so it never shows Connecting at launch.
+The May figure (`ready on port $PYTHON_BACKEND_PORT` at +3.17 s, first WS
+connect at +8.29 s, "the remaining +5 s gap") was taken in dev mode with a
+person opening the browser, so it measured Vite and the person; the backend
+is idle in this window. What can still add seconds for a real user:
+
+1. **The sign-in gate's visible retry schedule** ([client/src/components/auth/ProtectedRoute.tsx](../client/src/components/auth/ProtectedRoute.tsx) + [client/src/lib/connectionConfig.ts](../client/src/lib/connectionConfig.ts)). The auth check no longer retries on its own: when the backend is not up at the first check, the Connecting screen checks again after 2, 3, 5 and then every 8 s (`CONNECT_RETRY`) and holds "Connected" 1.5 s before sign-in or the app. A backend that becomes ready just after a check waits for the next one. (The May measurement predates this; it used a 50 ms full-jitter backoff. The November launches opened the browser after the port answered, so they never showed Connecting.) The desktop shell loads the SPA only after `/health/ready`, so it never shows Connecting at launch.
 2. **React Strict Mode dual-mount** in dev. The 100 ms `connectTimeout` guard in `WebSocketProvider`'s auth-gated connect effect ([WebSocketContext.tsx](../client/src/contexts/WebSocketContext.tsx)) absorbs the bulk; remaining cost is React reconciliation + babel-plugin-react-compiler overhead on first render.
 3. **PartySocket upgrade handshake**. Sub-100 ms in normal cases; would only matter on slow networks.
-
-To attribute definitively: add `console.time('auth.queryFn')` / `console.timeLog('auth.queryFn')` markers and a corresponding pair around `connect()`. Not blocking — the contract this layer was meant to fix (the +12 s disconnect-reconnect cycle) is resolved.
 
 ## Frontend retry / reconnect envelope
 
@@ -235,18 +394,25 @@ The wrapper reconnects after remote close code 1000; only explicit disposal
 on logout/unmount stops retries. Already-sent requests reject on close because
 their outcome is unknown, while unsent queued requests retain their deadline.
 
-## Bottleneck inventory (cold-start, warm cache)
+## Bottleneck inventory (2026-11-11)
 
-Ranked by absolute cost. None are individually large after the
-optimisations above; sum is what hurts.
+Ranked by absolute cost, from the warm `company start` launches unless a row
+says otherwise. Rows 3, 4, 8 and 9 are on the path to HTTP-ready; with the
+0.3 s that builds the app and mounts the CLI-agent MCP server they add up to
+the 4.5 s. The rest happen before it, after it or only in dev.
 
 | # | Bottleneck | Cost | Class | Notes |
 |---|---|---|---|---|
-| 1 | Plugin walker at import time (152 modules under `server/nodes/` at the July measurement, 185 today — see the counting rule above; ~2 s warm / ~4.7 s cold, dominated by `nodes/google`'s eager `googleapiclient` import) | ~2 s | Backend | `_HANDLER_REGISTRY` populates via `BaseNode.__init_subclass__` at import. Lazy `googleapiclient` is the cheap win (see follow-ups); full lazy-loading of the walker is the big-blast-radius option. |
-| 2 | TanStack Query auth bootstrap retry window | ~3-5 s | Frontend | See "remaining +5 s gap" above. |
-| 3 | AIService/native orchestration import graph | ~0.7 s | Backend | Historical May baseline; new agent execution uses native `Message` / `AgentToolSpec` values and provider registration remains lazy. Re-measure before attributing this cost further. |
-| 4 | Status-broadcaster refresh (`refresh_all_services`, 2.6 s) | ~2.6 s | Backend | Runs after `Application startup complete`, doesn't block server-ready. WhatsApp + Telegram are the long tails. |
-| 5 | Process spawn + Python interpreter init | ~0.4 s | Platform | Unavoidable without compiling Python to a binary (Nuitka / PyOxidizer — explicitly out of scope). |
+| 1 | Vite transforming source modules on request (`company dev` only) | 5.8 to 6.7 s from page request to first socket, after every dev-server start; 21 s on the first dev launch | Frontend, dev | `company start` serves the built bundle and takes 0.9 s for the same step. |
+| 2 | Temporal engine start, after HTTP-ready | about 5 s (port ready at 4.7 s, worker pool at 9.6 s) | Backend, background | Dev server spawn + connect 1.3 s, build-id hash 2.6 s in a thread, worker construction about 1 s. Not on the path to HTTP-ready. `temporal.worker_start` span: 1.9 s. |
+| 3 | Imports before the routers | 1.85 s | Backend | FastAPI 0.24 s, settings + logging + tracing 0.22 s, DI container and services 1.39 s. Warm import profile of `main` (3.3 s in all): `core.container` 1.13 s (`core.database` 0.46 s, `services.temporal` 0.35 s, `services.workflow` 0.15 s, `services.ai` 0.09 s), `fastapi` 0.26 s, `mcp.server.fastmcp` 0.22 s. AIService alone is 0.11 s, down from 0.7 s in May. |
+| 4 | Routers + plugin walker (196 modules, see the counting rule above) | 1.7 s warm (1.4 to 3.5), 5.4 s on a first launch | Backend | `_HANDLER_REGISTRY` populates via `BaseNode.__init_subclass__` at import. In the warm profile `nodes` is 1.31 s: 0.41 s in `nodes/__init__.py` itself, outside any plugin import, then `nodes.google._oauth` 0.24 s (`googleapiclient.discovery` 0.10 s) and `nodes.telegram._service` 0.13 s as the largest single plugins. It is also the segment that swings with disk load. |
+| 5 | Event loop blocked while the Temporal workers are constructed | 1.0 to 1.8 s, once per boot | Backend | The main worker and the nine queue workers are built back to back on the loop, four to five seconds after HTTP-ready, so requests and broadcasts stall for that long while the UI is loading. `services/loop_watchdog.py` logged "The event loop is blocked" once in every one of the fifteen launches. See follow-ups. |
+| 6 | HTTP-ready → first WebSocket client | 0.9 s (0.7 to 1.2) | Frontend | Chrome start, page load, auth check, socket handshake. See the section above. |
+| 7 | CLI before "Freeing ports" | 0.7 to 1.0 s for `company start`, 0.2 to 0.3 s for `company dev` | CLI | Before T+0 in every timeline here. `start` also checks the build and runs the SQLAlchemy preflight. Measured from `python -m cli`; the `company` shim's own start is not included. |
+| 8 | Lifespan startup | 0.4 s warm, 1.5 s on a first launch | Backend | Database + cache 0.14 s, credentials + encryption 0.13 s, the rest 0.12 s. A first launch creates the databases (0.6 s) and the salt (0.5 s). |
+| 9 | Process spawn + Python interpreter init | 0.27 s | Platform | Unavoidable without compiling Python to a binary (Nuitka / PyOxidizer — explicitly out of scope). |
+| 10 | Status-broadcaster refresh (`refresh_all_services`) | 0.15 s with no accounts connected; 2.6 s in May with WhatsApp and Telegram connected | Backend | Runs as a background task scheduled at the end of lifespan startup, so it never blocks server-ready. Connected accounts add their own network round trips. |
 
 ## Pre-compile Python bytecode
 
@@ -288,16 +454,46 @@ lock the contract (including the `compile-bytecode = true` setting).
 ### Cold-start timeline
 
 ```bash
-# Warm path (typical dev iteration):
-company start > start.log 2>&1
-# In another shell, wait for "Status broadcasters settled" then Ctrl-C the first.
+# TRACING_CONSOLE_SPANS=true prints the span lines (status refresh, worker start);
+# without it (or LOG_LEVEL=DEBUG) they are not in the log.
+TRACING_CONSOLE_SPANS=true company start > start.log 2>&1
+# Open the app the moment "ready on port" prints, or script a headless browser to
+# do it, or the first-WebSocket figure measures you. Wait for "Worker pool
+# started", then Ctrl-C.
 ```
 
-Then extract phase markers:
+Then extract phase markers. Every line carries the supervisor's
+`[HH:MM:SS.ffffff]` stamp; subtract the "Freeing ports" one:
 
 ```bash
-grep -E "Freeing ports|Importing FastAPI|AIService imported|All imports complete|Lifespan startup begin|Application startup complete|ready on port ${PYTHON_BACKEND_PORT}|StatusBroadcaster\] Client connected|broadcaster.refresh_all_services" start.log
+grep -E "Freeing .*ports|Importing FastAPI|core imports done|AIService imported|Importing routers|node plugins loaded|All imports complete|Lifespan startup begin|Application startup complete|ready on port|StatusBroadcaster\] Client connected|broadcaster.refresh_all_services|Worker pool started|event loop is blocked" start.log
 ```
+
+Launch several times and report the median with the range: on 2026-11-11 ten
+warm launches of the same build ran from 3.9 to 7.2 s. The first launch after
+a build is its own figure (packages and databases are read or created for the
+first time), and so is the first `company dev` launch after an install (Vite
+pre-bundles the dependencies).
+
+To measure without touching a running install, use a separate worktree and
+give the launch its own data folder and ports through the process
+environment, which wins over `.env`: `DATA_DIR`, `VITE_CLIENT_PORT`,
+`PYTHON_BACKEND_PORT`, `PORT`, `TEMPORAL_SERVER_ADDRESS`,
+`TEMPORAL_FRONTEND_GRPC_PORT`, `TEMPORAL_UI_PORT`, `TEMPORAL_HTTP_PORT`,
+`TEMPORAL_METRICS_PORT`, `NODEJS_EXECUTOR_PORT`, `WHATSAPP_RPC_PORT` and
+`CORS_ORIGINS`. The CLI frees its configured ports before it starts anything,
+so a second instance on the default ports would stop the first.
+
+### Import profile
+
+```bash
+cd server
+DATA_DIR=/some/scratch/folder uv run python -X importtime -c "import main" 2> importtime.txt
+sort -t'|' -k2 -n importtime.txt | tail -40   # costliest imports, cumulative microseconds
+```
+
+Cumulative times nest: a package's figure includes everything it imported
+first.
 
 ### Bundle size + chunk shape
 
@@ -344,12 +540,13 @@ Tracked but explicitly **not** in any active plan.
 
 | Item | Estimated saving | Notes |
 |---|---|---|
-| Lazy `googleapiclient` import in `nodes/google` (`_option_loaders.py` / `_oauth.py` / `_base.py` import `googleapiclient.discovery` at module top) | ~2-4 s of the cold plugin walk | googleapiclient is 98 MB / 612 files on disk; now the single biggest import cost left on the cold boot path. Move `from googleapiclient.discovery import build` into function bodies (same idiom as `services/plugin/credential.py`). `nodes/telegram/_service.py`'s top-level `telegram` imports are the smaller sibling. |
+| Build the Temporal workers off the event loop | a 1.0 to 1.8 s stall of every request and broadcast, once per boot | Measured 2026-11-11 in all fifteen launches: the main worker and the nine queue workers are constructed back to back on the loop four to five seconds after HTTP-ready, right while a freshly opened UI is loading. The build-id hash already runs in a thread; the constructors do not. |
+| Lazy `googleapiclient` import in `nodes/google` (`_option_loaders.py` / `_oauth.py` / `_base.py` import `googleapiclient.discovery` at module top) | 0.1 s warm (2026-11-11 profile: `googleapiclient.discovery` 0.10 s inside a 0.24 s `nodes.google._oauth` import); its share of the 5.4 s first-launch walk was not profiled. The July estimate was ~2-4 s of the cold walk | googleapiclient is 98 MB / 612 files on disk. Move `from googleapiclient.discovery import build` into function bodies (same idiom as `services/plugin/credential.py`). `nodes/telegram/_service.py`'s top-level `telegram` imports are the smaller sibling (0.13 s warm). |
 | Defer first-launch example import off the workflows REST request | ~8-10 s of first-launch first paint | `routers/database.py:get_all_workflows` awaits `import_examples_for_user` inline, holding the HTTP response. Move to a lifespan background task (pattern: `_refresh_registry` / `_refresh_all_services` / Temporal init in `main.py`) + emit `workflow_lifecycle("imported")` per example so the sidebar refreshes. Secondary: negative cache in `AuthService.has_valid_key` (validation does one credentials-DB read per declared credential per node). |
-| Cold-boot lifespan I/O (9.6 s measured 2026-07-14 vs 1.5 s pre-fix cold boot) | unclear — needs a re-run | Fresh-DB creation 4.4 s + salt/PBKDF2 + encryption ~3 s under Defender/disk contention now that the whole boot compresses into ~20 s. May be noise; measure before optimising. |
-| Plugin walker lazy-loading | ~0.5-0.8 s on server-ready | Would need to defer registration until first NodeSpec request rather than at module-import time. Touches every `BaseNode` subclass — biggest blast radius of the candidates. |
+| Cold-boot lifespan I/O (9.6 s measured 2026-07-14 vs 1.5 s pre-fix cold boot) | none — re-run 2026-11-11 | The first launch's lifespan took 1.5 s (new databases 0.6 s, salt + encryption 0.5 s). The 9.6 s did not reproduce; nothing to optimise. |
+| Plugin walker lazy-loading | up to 1.3 s warm and about 5 s on a first launch (2026-11-11) | Would need to defer registration until first NodeSpec request rather than at module-import time. Touches every `BaseNode` subclass — biggest blast radius of the candidates. |
 | Retire legacy Temporal history adapters after the rollback / retention window | negligible startup impact | New executions already use native messages and the compatibility imports are lazy. This is dependency and maintenance cleanup, not a measured cold-start win. |
-| `+5 s` HTTP-ready → first-WS-connect gap | up to 5 s | Diagnostics needed (see "remaining +5 s gap"). May reveal nothing actionable. |
+| `+5 s` HTTP-ready → first-WS-connect gap | none — measured 2026-11-11 | 0.9 s on the production build when the browser opens as the port answers (see "HTTP-ready to first WebSocket client"). The seconds seen in dev are Vite's on-request transforms. Closed. |
 | Supervisor backend `ready_timeout` (default 30 s, shortest of the three services) | cosmetic | The probe is inert (one-shot, no restart/gating) but a >30 s boot prints an alarming "timed out waiting for port $PYTHON_BACKEND_PORT" and skips the ready line. Post-fix boots fit the window; revisit only if cold boots regress past 30 s. |
 | Standalone Nuitka / PyOxidizer release binary | full Python interpreter init (~0.4 s) + `.pyc` regeneration on cold disk | User explicitly declined when scoping the build pipeline; revisit if "ship a single binary" becomes a product requirement. |
 

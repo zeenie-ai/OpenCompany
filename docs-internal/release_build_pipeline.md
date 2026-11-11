@@ -206,7 +206,7 @@ Idempotent on re-runs (compileall only rewrites stale pyc; `bun build` is determ
 2. `ANALYZE=1 bun run --filter react-flow-client build` → open `client/dist/stats.html`. Expect: no chunk trips the 850 KB `chunkSizeWarningLimit` (`vendor-icons`, at about 630 KB, is the largest), main < 200 KB gz, `vendor-flow` split.
 3. `cd server/nodejs && bun run build && NODEJS_EXECUTOR_PORT=<port> bun dist/index.js` → starts on `NODEJS_EXECUTOR_PORT` (required env; no fallback literal) in <100ms; `GET /health` reports `runtime: "bun"`.
 4. `cd server && uv run python -m compileall -q -j 0 services` → plain `__pycache__/*.pyc` present (no `.opt-1.pyc` — nothing loads those).
-5. Cold-start: clean install + `company start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s).
+5. Cold-start: clean install + `company start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s). Measured 9.8 s on 2026-11-11 for the first launch after a fresh build, 4.5 s warm ([performance.md](performance.md)).
 6. `bun pm pack --dry-run` → `server/nodejs/dist/index.js` should be included (0.2.x omits it: errors.md #26); no `__pycache__/`; tarball size ≤ v0.0.76.
 7. Smoke: `company start` → load the app URL (`http://localhost:${PYTHON_BACKEND_PORT}`) → run "AI Assistant" example → agent responds.
 
@@ -217,7 +217,7 @@ The Electron shell has its own pipeline (`.github/workflows/desktop-release.yml`
 ## Out of scope (future work)
 
 - Nuitka / PyOxidizer standalone binaries — rejected for the desktop app (see above); a separate release channel for the CLI would face the same constraints.
-- Plugin walker lazy-loading (~11s).
-- Service-status refresh parallelisation (~20s post-startup-complete).
+- Plugin walker lazy-loading (~11s when this plan was written; 1.7 s warm and 5.4 s on a first launch as of 2026-11-11).
+- Service-status refresh parallelisation (~20s post-startup-complete when this plan was written; the refresh now runs its services as parallel background tasks and took 0.15 s with no accounts connected on 2026-11-11).
 - mypyc / Cython for hot paths (low ROI — pydantic V2 already Rust, httpx/aiohttp already C).
 - swc / stc TypeScript checker (not production-grade in 2026).
