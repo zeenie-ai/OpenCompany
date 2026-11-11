@@ -196,9 +196,22 @@ invocation with its own Temporal history.
 
 Selecting a team lead opens its full-height operational middle panel. It shows
 durable tasks across workflow restarts by default. Archived executions remain
-individually selectable. Rows show local created/started/completed timestamps,
-live or frozen elapsed duration, input/output/total tokens, attempts, results,
-errors, and authorized accept/retry/reassign/modify/cancel/finish controls.
+individually selectable. A chip per status carries its count and filters the
+table. Rows show the assignee, the status, local started/completed timestamps,
+live or frozen elapsed duration, the attempt and input/output/total tokens.
+
+A row opens the task in one of the editor's modals
+(`parameterPanel/taskManager/TaskDetailModal.tsx`): its name and status at the
+head, a Details tab (times, tokens, mission, acceptance criteria, context,
+result or error, attempts, the Temporal ids; a field with nothing in it is left
+out) and a Temporal trace tab, and at the foot the authorized controls: Accept,
+Retry, Reassign, Edit mission and Cancel task. Finish team is in the panel's
+head. The opened task is read from the list, so it follows each refresh, and
+the revision an action sends is the latest one.
+
+A status is a dot beside neutral words, and Finish team, Accept and Confirm are
+the only strong buttons
+([Theme System](./theme_system.md#colour-marks-state-or-role)).
 
 ### Team Monitor
 
@@ -242,7 +255,9 @@ execution tasks. Its Done count includes accepted tasks, not submitted work.
   durable service and persistence.
 - `server/services/temporal/agent_workflow.py` — concurrent child orchestration.
 - `server/services/handlers/tools.py` — legacy execution bridge.
-- `client/src/components/parameterPanel/TaskManagerPanel.tsx` — operational UI.
+- `client/src/components/parameterPanel/TaskManagerPanel.tsx` — operational UI
+  (the opened task, the status mark and the task model are in
+  `parameterPanel/taskManager/`).
 - `client/src/components/parameterPanel/TeamMonitorPanel.tsx` — read-only UI.
 
 See [agent_delegation.md](agent_delegation.md) for low-level compatibility

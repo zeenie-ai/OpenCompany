@@ -114,7 +114,7 @@ Standard shadcn keys (`background`, `foreground`, `card`, `popover`, `primary`, 
 
 ### 3. Action role tokens
 
-Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home, in the shared chat and in the editor's top toolbar they mark a state and colour no button ([Colour marks state or role](#colour-marks-state-or-role)).
+Six semantic intents: `run | stop | save | config | secret | tools`. Each exposes `base / -soft / -hover / -border / -ink` — the colour-hex bases live in light.css/dark.css and the `-soft/-hover/-border` tints are `color-mix` over the base referencing the shared `var(--tint-action-*)` scale. `-ink` is the readable label colour (light: darkened accent; dark: raw accent). Read via `<ActionButton intent="run">` or directly: `bg-action-run-soft text-action-run-ink border-action-run-border`. Themes redefine these (or just override the `--tint-action-*` scalars) in their own block. On Home, in the shared chat, in the editor's top toolbar and in the node parameter panel they mark a state and colour no button ([Colour marks state or role](#colour-marks-state-or-role)).
 
 ### 4. Node-type role tokens
 
@@ -273,8 +273,27 @@ and the onboarding v3 handoff:
   (the File menu and its items, Apply All, Settings, Credentials, the theme
   button, Logout, Stop, Reset, Save, the labels) is a neutral outline, and
   the sidebar, Components and Workspace toggles fill with `bg-bg-active`
-  while their panel shows. The editor's panels keep
-  `<ActionButton intent="...">`.
+  while their panel shows.
+- **So does the node parameter panel** (since 2026-11-11: `ParameterPanel.tsx`,
+  `LocationParameterPanel.tsx` and the views under
+  `components/parameterPanel/`). In its header Run and Cancel are neutral
+  outlines in the toolbar's shape and Save is the one `invert` primary,
+  greyed until there is something to save. Inside, Load, Upload, Add,
+  Reset, Clear and Delete are neutral, and each view has at most one
+  `invert` button (Save in the skill editor and the Memory form, Add mount,
+  Use this file, Finish team and Accept in the Task Manager). Hovers are
+  `bg-bg-hover` and a picked row is `bg-bg-active`, never the violet
+  `--accent` or the blue `--primary`. What still carries a colour marks
+  something: a `{{node.field}}` variable (in the Input section and in the
+  field it is dropped on), an error, a todo's status, a file's kind.
+- **A team task's status is a dot beside neutral words**
+  (`components/parameterPanel/taskManager/TaskStatus.tsx`, on the status
+  tokens): running is working and the one dot that pulses, queued is
+  ready, submitted is waiting (the lead must review it), failed is
+  attention, accepted is a tick in ink, and blocked or cancelled is
+  paused. The Task Manager's status counts are the neutral `chips`.
+- **`<ActionButton intent="...">` is left only in the credentials panels
+  and the console's chat pane.**
 
 ## Migration recipe
 
@@ -299,7 +318,7 @@ Concrete swaps when migrating an existing component:
 | Hover row | `hover:bg-bg-hover` | Lists, menu items |
 | Selected row | `bg-bg-active` | Selected workflow cards, active tabs |
 | Modal scrim | `bg-bg-overlay` | Dialog overlays |
-| `<ActionButton intent="...">` | unchanged | Panel action buttons in the editor (Home, the shared chat and the editor's top toolbar: [Colour marks state or role](#colour-marks-state-or-role)) |
+| `<ActionButton intent="...">` | `Button variant="quiet"` with a neutral border, or `invert` for the one primary | Everywhere but the credentials panels and the console's chat pane, which still use it ([Colour marks state or role](#colour-marks-state-or-role)) |
 
 ### Display-typography helper
 
@@ -370,7 +389,7 @@ Result by theme (display font / tracking / case):
 tiles themselves are deliberately left to Google's own styling; `useAppTheme` here covers only
 the surrounding chrome. Every other surface uses Tailwind + tokens. Call sites read the colour pack through `useAppTheme`, never by importing `lightColors` / `darkColors` directly.
 6. **Hand-rolled modal backdrops.** Use `<Modal>` from `client/src/components/ui/Modal.tsx`.
-7. **Hand-rolled colored buttons.** Use `<ActionButton intent="...">` in the editor's panels. On Home, in the shared chat and in the editor's top toolbar, follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary (Start and Resume included), neutral `quiet` buttons (with a border where they are drawn as an outline), and no button in an intent's colour.
+7. **Hand-rolled colored buttons.** `<ActionButton intent="...">` is left only in the credentials panels and the console's chat pane. Everywhere else (Home, the shared chat, the editor's top toolbar, the node parameter panel), follow [Colour marks state or role](#colour-marks-state-or-role): an `invert` primary (Start and Resume included), neutral `quiet` buttons (with a border where they are drawn as an outline), and no button in an intent's colour.
 8. **Static fallback theme palettes in TS.** Themes live in CSS (`client/src/themes/<name>.css`), not TS exports. `client/src/styles/theme.ts` ships only the two `lightColors` / `darkColors` base packs that `useAppTheme` returns — it is not a place to add a third / fourth / Nth palette.
 
 ## What's done vs deferred
