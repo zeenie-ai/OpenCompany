@@ -567,15 +567,15 @@ bun add -g @zeenie-ai/opencompany
 
 **Workaround** (0.2.0 and 0.2.1): run `company build` once from the installed package (it runs `bun install` there, which creates the directory), then `company start`. **Fix**: `validate_build` requires `node_modules` only for `dev`; `start` and `serve` check the server venv and the built client. Locked by `cli/tests/test_buildenv.py`.
 
-## 26. OPEN: JS / TS executor nodes fail on a registry install because the sidecar bundle is not in the tarball
+## 26. JS / TS executor nodes fail on a registry install because the sidecar bundle is not in the tarball
 
-**Status**: open in 0.2.0 and 0.2.1. `tar -tzf` of the published tarball lists `client/dist/` but no `server/nodejs/dist/`; the npm-era 0.1.1 tarball had it.
+**Status**: fixed after 0.3.1. Open in 0.2.0 through 0.3.1: `tar -tzf` of the published tarball lists `client/dist/` but no `server/nodejs/dist/`; the npm-era 0.1.1 tarball had it.
 
 **Symptom**: `javascriptExecutor` / `typescriptExecutor` return the "JavaScript executor is unavailable" envelope on a `bun add -g` install; the backend log shows the sidecar spawn refusing because `server/nodejs/dist/index.js` does not exist.
 
 **Root cause**: `bun pm pack` honours a nested `.gitignore` even for paths under an explicit root `files` entry. `server/nodejs/.gitignore` lists `dist/`, so the bundle `company build` had just produced is dropped at pack time (npm's packer kept it). Verified with `bun pm pack --dry-run`: adding `server/nodejs/dist/` to `files` alone changes nothing; removing the nested rule includes the file (the root `.gitignore`'s `dist` rule still keeps it untracked).
 
-**Workaround**: `company build` from the installed package rebuilds the bundle. **Fix, when shipped**: drop `dist/` from `server/nodejs/.gitignore`, add `server/nodejs/dist/` to the root `files` list, and change `test_sidecar_dist_is_gitignored` to assert the root rule instead.
+**Workaround** (0.3.1 and earlier): `company build` from the installed package rebuilds the bundle. **Fix**: `server/nodejs/.gitignore` no longer lists `dist/`. A `bun pm pack --dry-run` then lists `server/nodejs/dist/index.js` and no other new file; the root `files` list needed no change, since `server/` already covers it, and the root `.gitignore`'s `dist` rule still keeps the bundle out of git. `test_sidecar_dist_is_untracked_but_packed` in `cli/tests/test_release_pipeline_config.py` locks both halves.
 
 ## 27. OPEN: `install.sh` on a bare box fails at `error: unzip is required to install bun`
 

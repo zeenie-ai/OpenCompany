@@ -230,7 +230,10 @@ try {
   if (!existsSync(venvPath)) {
     run('uv venv', serverDir);  // 5 min default
   }
-  run('uv sync', serverDir, 600000);  // 10 min timeout
+  // The `docs` extra carries pypdf: the Data tool, on the hire allowlist,
+  // reads PDFs with it (the desktop shell syncs it too). Dev dependencies
+  // stay, because a source checkout's `bun install` runs this script.
+  run('uv sync --extra docs', serverDir, 600000);  // 10 min timeout
 
   // Pre-compile our Python sources to plain .pyc. No `-O`: every runtime
   // launches python without -O, and per PEP 488 a non-optimized

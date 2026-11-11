@@ -170,16 +170,20 @@ def test_sidecar_has_no_node_toolchain_dependencies(sidecar_pkg: dict):
     assert "tsx" not in deps
 
 
-def test_sidecar_dist_is_gitignored(sidecar_dir: Path):
-    """``dist/`` is build output and must not be tracked. Tracking it
-    triggers noisy diffs every time the bundle is regenerated.
+def test_sidecar_dist_is_untracked_but_packed(root: Path, sidecar_dir: Path):
+    """``dist/`` is build output and must not be tracked: the root
+    ``.gitignore``'s ``dist`` rule keeps it out of git. The sidecar's own
+    ``.gitignore`` must not list it, because ``bun pm pack`` honours nested
+    ignore files, and without ``dist/index.js`` in the npm tarball the
+    JavaScript and TypeScript code nodes cannot start (errors.md #26).
     """
-    gitignore = (sidecar_dir / ".gitignore").read_text(encoding="utf-8")
-    lines = {line.strip() for line in gitignore.splitlines()}
-    assert {
-        "dist/",
-        "dist",
-    } & lines, f"sidecar .gitignore must list dist/, got:\n{gitignore}"
+    def rules(path: Path) -> set:
+        return {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
+
+    assert {"dist/", "dist"} & rules(root / ".gitignore"), "the root .gitignore must keep dist out of git"
+    assert not {"dist/", "dist"} & rules(sidecar_dir / ".gitignore"), (
+        "server/nodejs/.gitignore must not list dist: bun pm pack would drop the sidecar bundle"
+    )
 
 
 # ---------------------------------------------------------------------------
