@@ -912,7 +912,11 @@ class WorkflowControlWorkflow:
         baseline = not seen_ids
         runner = PollingTriggerWorkflow()
 
-        while not self._closed and listener_id in self._triggers:
+        # A trigger that Apply removed keeps its spec, marked retired, for the
+        # events it already accepted. Its loop must end: a rollover restarts a
+        # loop for every carried polling spec, and a cancel swallowed by the
+        # arms below returns here.
+        while not self._closed and listener_id in self._triggers and not spec.get("retired"):
             if self._state != "running":
                 await workflow.wait_condition(lambda: self._closed or self._state == "running")
             if self._closed:

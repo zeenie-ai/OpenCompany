@@ -452,6 +452,35 @@ async def test_controller_poll_loop_writes_seen_ids_back_into_the_spec(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_a_retired_poll_trigger_carried_through_a_rollover_polls_nothing(monkeypatch):
+    """Apply retires a removed mail trigger but keeps its spec for the events
+    it already accepted. A rollover restarts a loop for every carried polling
+    spec, so the loop itself must stop for a retired one, or the removed
+    trigger polls again and starts runs of the old graph."""
+    from services.temporal import workflow_control_workflow as control_module
+
+    temporal_workflow = control_module.workflow
+    monkeypatch.setattr(temporal_workflow, "logger", MagicMock())
+    monkeypatch.setattr(temporal_workflow, "wait_condition", _predicate_wait)
+    monkeypatch.setattr(temporal_workflow, "sleep", AsyncMock())
+
+    controller = WorkflowControlWorkflow()
+    controller._can_enabled = False
+    polled = []
+
+    async def poll_activity(*args, **_kwargs):
+        polled.append(args)
+        controller._closed = True  # without the fix: one poll, then exit
+        return {"seen_ids": [], "events": []}
+
+    monkeypatch.setattr(temporal_workflow, "execute_activity", poll_activity)
+    controller._seed_carried_state({"revision": 4, "triggers": {"l-poll": {**_poll_spec(), "retired": True}}})
+    await asyncio.gather(*controller._poll_tasks.values())
+
+    assert polled == []
+
+
+@pytest.mark.asyncio
 async def test_controller_push_spawn_failure_does_not_kill_the_run_loop(monkeypatch):
     from services.temporal import workflow_control_workflow as control_module
 
