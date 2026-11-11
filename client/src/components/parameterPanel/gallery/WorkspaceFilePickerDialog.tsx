@@ -90,7 +90,8 @@ const WorkspaceFilePickerDialog: React.FC<Props> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[70vh] max-w-4xl flex-col">
+      {/* `sm:`: the primitive's own `sm:max-w-sm` beats an unprefixed width. */}
+      <DialogContent className="flex h-[70vh] flex-col sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Choose a workspace file</DialogTitle>
         </DialogHeader>

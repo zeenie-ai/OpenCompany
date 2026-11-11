@@ -31,7 +31,8 @@ const FilePreviewDialog: React.FC<Props> = ({ entry, onOpenChange }) => {
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      {/* `sm:`: the primitive's own `sm:max-w-sm` beats an unprefixed width. */}
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="truncate font-mono text-sm">{entry.name}</DialogTitle>
         </DialogHeader>
