@@ -35,6 +35,7 @@ from services.plugin.connection import Connection
 from services.plugin.context import NodeContext
 from services.plugin.credential import Credential
 from services.plugin.operation import OperationSpec, collect_operations
+from services.plugin.params import format_validation_error
 from services.plugin.routing import execute_routing
 from services.plugin.scaling import (
     ACTION_START_TO_CLOSE,
@@ -372,8 +373,8 @@ class BaseNode:
 
     component_kind: ClassVar[str] = "generic"
     usable_as_tool: ClassVar[bool] = False
-    # Opt-in public error metadata for AI-tool callers. The default retains
-    # the historical error-only response. Plugins select a small explicit
+    # Opt-in public error metadata for AI-tool callers, beyond the shared
+    # success/error/error_type fields. Plugins select a small explicit
     # set from their validated output rather than forwarding the envelope
     # (which may carry internal execution details or unrelated payloads).
     tool_error_fields: ClassVar[frozenset[str]] = frozenset()
@@ -772,7 +773,7 @@ class BaseNode:
             except ValidationError as e:
                 return self._wrap_error(
                     start_time=start_time,
-                    error=f"Invalid parameters: {e.errors()[0].get('msg', str(e))}",
+                    error=f"Invalid parameters: {format_validation_error(e)}",
                     error_type="ValidationError",
                 )
 
@@ -906,8 +907,9 @@ class BaseNode:
 
         Unwraps the :meth:`_wrap_success` envelope to a flat dict —
         tool-call responses fed back into an LLM shouldn't include
-        execution_time / timestamp chrome. Errors surface as
-        ``{"error": "..."}`` the LLM can reason about. Plugins may opt into
+        execution_time / timestamp chrome. Errors retain ``success: False``
+        and their classification so callers can distinguish them from a
+        successful flat payload. Plugins may opt into
         additional non-null output fields with ``tool_error_fields``.
 
         ToolNode overrides :meth:`_wrap_success` to return flat, so this
@@ -969,9 +971,9 @@ class BaseNode:
                 invocation_payload = input_payload
                 split_schema = True
         except ValidationError as e:
-            first = e.errors()[0] if e.errors() else {}
             return {
-                "error": f"Invalid tool input/configuration: {first.get('msg', str(e))}",
+                "success": False,
+                "error": f"Invalid tool input/configuration: {format_validation_error(e)}",
                 "error_type": "ValidationError",
             }
 
@@ -1005,9 +1007,9 @@ class BaseNode:
         return envelope
 
     def _tool_error_payload(self, envelope: Dict[str, Any]) -> Dict[str, Any]:
-        """Copy only explicitly declared public metadata from a tool error."""
-        result = {"error": envelope.get("error", "tool execution failed")}
-        for name in self.tool_error_fields | {"hint", "requires_user_action", "retryable"}:
+        """Preserve failure semantics and only declared public metadata."""
+        result = {"success": False, "error": envelope.get("error", "tool execution failed")}
+        for name in self.tool_error_fields | {"error_type", "hint", "requires_user_action", "retryable"}:
             if name != "error" and name in envelope and envelope[name] is not None:
                 result[name] = envelope[name]
         return result
@@ -1476,8 +1478,8 @@ class BaseNode:
                     await chat_steps.number_sources(context, cls, result)
                 # A call whose body reported a transient failure runs again
                 # under the activity's retry policy (RFC-0004 Q9). The report,
-                # not the result, says it failed: a ToolNode's tool error is
-                # a flat payload. Like an interrupted wait below, the attempt
+                # not the public result, supplies its transient classification
+                # and requested wait. Like an interrupted wait below, the attempt
                 # ends no step, records nothing and shows no error.
                 transient = transient_failures.get(node_id)
                 retry = (

@@ -294,8 +294,9 @@ class TestTaskManager:
     async def test_get_task_without_id_errors(self, durable_service):
 
         from nodes.tool.task_manager import _execute_task_manager
+        from services.plugin import NodeUserError
 
-        with pytest.raises(ValueError, match="get_task requires task_id"):
+        with pytest.raises(NodeUserError, match="get_task requires task_id"):
             await _execute_task_manager({"operation": "get_task"}, self._config())
 
     async def test_mark_done_is_non_destructive_accept_alias(self, durable_service):
@@ -318,8 +319,9 @@ class TestTaskManager:
     async def test_unknown_operation_is_rejected(self, durable_service):
 
         from nodes.tool.task_manager import _execute_task_manager
+        from services.plugin import NodeUserError
 
-        with pytest.raises(ValueError, match="Unknown Task Manager operation"):
+        with pytest.raises(NodeUserError, match="Unknown Task Manager operation"):
             await _execute_task_manager({"operation": "self_destruct"}, self._config())
 
     async def test_inspect_trace_uses_trusted_lead_scope(self, durable_service):

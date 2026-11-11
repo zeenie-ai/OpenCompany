@@ -581,9 +581,11 @@ class TestLlmStepActivity:
         heartbeat.assert_called_with("waiting")
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("provider", [None, "openrouter"])
     async def test_a_request_timeout_comes_back_instead_of_a_beat(
         self,
         monkeypatch,
+        provider,
     ):
         # 1b.25: the old wait read the request's own TimeoutError as its
         # interval tick and looped on the finished request without end.
@@ -592,15 +594,77 @@ class TestLlmStepActivity:
         heartbeat = MagicMock(side_effect=AssertionError("a finished request was read as the interval"))
         monkeypatch.setattr(activity_module.activity, "heartbeat", heartbeat)
 
-        async def timed_out():
-            raise TimeoutError("the SDK's own deadline")
+        sdk_error = TimeoutError("the SDK's own deadline")
 
-        with pytest.raises(TimeoutError):
+        async def timed_out():
+            raise sdk_error
+
+        with pytest.raises(TimeoutError) as raised:
             await activity_module._await_with_llm_heartbeats(
                 timed_out(),
                 detail="waiting",
                 interval_seconds=5,
+                provider=provider,
             )
+        assert raised.value is sdk_error
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("provider", "attempt_timeout", "expected"), [
+        (None, timedelta(seconds=600), None),
+        ("openrouter", None, 570.0),
+        ("openrouter", timedelta(seconds=600), 570.0),
+        ("openai_compatible:local", timedelta(seconds=1800), 1770.0),
+        ("openrouter", timedelta(seconds=20), 1.0),
+    ])
+    async def test_request_deadline_uses_the_activity_attempt(self, monkeypatch, provider, attempt_timeout, expected):
+        import services.temporal.agent_activities as activity_module
+
+        monkeypatch.setattr(activity_module.activity, "info", lambda: SimpleNamespace(start_to_close_timeout=attempt_timeout))
+        timeout = MagicMock(wraps=asyncio.timeout)
+        monkeypatch.setattr(activity_module.asyncio, "timeout", timeout)
+
+        async def answer():
+            return "done"
+
+        assert await activity_module._await_with_llm_heartbeats(answer(), detail="waiting", provider=provider) == "done"
+        timeout.assert_called_once_with(expected)
+
+    @pytest.mark.asyncio
+    async def test_request_deadline_falls_back_outside_an_activity(self, monkeypatch):
+        import services.temporal.agent_activities as activity_module
+
+        timeout = MagicMock(wraps=asyncio.timeout)
+        monkeypatch.setattr(activity_module.asyncio, "timeout", timeout)
+
+        async def answer():
+            return "done"
+
+        assert await activity_module._await_with_llm_heartbeats(answer(), detail="waiting", provider="openrouter") == "done"
+        timeout.assert_called_once_with(570.0)
+
+    @pytest.mark.asyncio
+    async def test_request_deadline_classifies_timeout_and_drains_cancellation(self, monkeypatch):
+        import services.temporal.agent_activities as activity_module
+        from services.llm.protocol import LLMError, LLMErrorCategory
+
+        deadline = asyncio.timeout(None)
+        monkeypatch.setattr(activity_module.asyncio, "timeout", lambda _seconds: deadline)
+        drained = asyncio.Event()
+
+        async def request():
+            try:
+                deadline.reschedule(asyncio.get_running_loop().time())
+                await asyncio.Event().wait()
+            finally:
+                await asyncio.sleep(0)
+                drained.set()
+
+        with pytest.raises(LLMError) as raised:
+            await activity_module._await_with_llm_heartbeats(request(), detail="waiting", provider="openrouter")
+        assert raised.value.category is LLMErrorCategory.TIMEOUT
+        assert raised.value.retryable is True
+        assert raised.value.provider == "openrouter"
+        assert drained.is_set()
 
     @pytest.mark.asyncio
     async def test_step_disables_sdk_retries_and_keeps_result_keys(

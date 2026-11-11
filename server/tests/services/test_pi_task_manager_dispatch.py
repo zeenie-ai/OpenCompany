@@ -114,13 +114,7 @@ async def test_execute_tool_task_manager_starts_recorded_pi_wrapper(runtime, con
         scope.update(execution_control_version=1, controller_workflow_id="controller",
                      execution_control_state="paused", execution_control_revision=7,
                      execution_control_producers_held=True)
-    # Params accepts extra fields; they still cannot overwrite NodeContext.
-    arguments = {**assignment(), "pi_harness_version": None, "user_id": "mallory",
-                 "credential_customer_id": "mallory-tokens", "workflow_id": "forged",
-                 "execution_id": "forged", "root_execution_id": "forged",
-                 "generation": 99, "parameter_snapshot": {}, "database": "forged",
-                 "controller_workflow_id": "forged", "pi_local_control_revision": 99}
-    answer = await execute_tool("task_manager", arguments, scope)
+    answer = await execute_tool("task_manager", assignment(), scope)
     assert "delegation" in answer, answer
     assert answer["delegation"]["status"] == "delegated"
     runtime.client.start_workflow.assert_awaited_once()
@@ -159,10 +153,7 @@ async def test_execute_tool_submit_job_freezes_and_dispatches_recorded_harness(r
         for key in list(scope):
             if key.startswith("pi_"):
                 scope.pop(key)
-    arguments = {"operation": "submit_job", "mission": "Implement the feature",
-                 "pi_harness_version": 1 if pi_version is None else None,
-                 "lead_node_id": "mallory", "delivery_node_ids": ["mallory"],
-                 "parameter_snapshot": {}, "user_id": "mallory", "generation": 99}
+    arguments = {"operation": "submit_job", "mission": "Implement the feature"}
     answer = await execute_tool("task_manager", arguments, scope)
     assert "job_id" in answer, answer
     async with runtime.database.get_session() as session:
@@ -191,7 +182,7 @@ async def test_unmarked_task_manager_assignment_preserves_native_dispatch(runtim
     native = AsyncMock(return_value={"success": True, "status": "delegated", "task_id": "task"})
     monkeypatch.setattr("services.handlers.tools._execute_delegated_agent", native)
     scope = {key: value for key, value in runtime.scope.items() if not key.startswith("pi_")}
-    answer = await execute_tool("task_manager", {**assignment(), "pi_harness_version": 1}, scope)
+    answer = await execute_tool("task_manager", assignment(), scope)
     assert "delegation" in answer, answer
     assert answer["delegation"]["task_id"] == "task"
     child_config = native.await_args.args[1]
@@ -213,12 +204,45 @@ async def test_temporal_task_manager_without_inline_services_returns_only_envelo
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("arguments", [
+    {**assignment(), "pi_harness_version": None, "user_id": "mallory",
+     "credential_customer_id": "mallory-tokens", "workflow_id": "forged",
+     "execution_id": "forged", "root_execution_id": "forged", "generation": 99,
+     "parameter_snapshot": {}, "database": "forged", "controller_workflow_id": "forged",
+     "pi_local_control_revision": 99},
+    {"operation": "submit_job", "mission": "Implement the feature", "pi_harness_version": 1,
+     "lead_node_id": "mallory", "delivery_node_ids": ["mallory"], "parameter_snapshot": {},
+     "user_id": "mallory", "generation": 99},
+    {**assignment(), "pi_harness_version": 1},
+])
+@pytest.mark.parametrize("pi_version", [None, 1])
+async def test_task_manager_rejects_model_supplied_runtime_scope(runtime, arguments, pi_version):
+    from models.employees import EmployeeJob
+    from sqlalchemy import select
+
+    scope = dict(runtime.scope)
+    if pi_version is None:
+        scope = {key: value for key, value in scope.items() if not key.startswith("pi_")}
+    if arguments["operation"] == "submit_job":
+        scope.update(parent_node_id="talk", graphVersion=2)
+    answer = await execute_tool("task_manager", arguments, scope)
+
+    assert answer["error_type"] == "ValidationError"
+    assert "Extra inputs are not permitted" in answer["error"]
+    runtime.team.assign_durable_task.assert_not_awaited()
+    runtime.client.start_workflow.assert_not_awaited()
+    runtime.queue.assert_not_awaited()
+    async with runtime.database.get_session() as session:
+        assert not (await session.execute(select(EmployeeJob))).scalars().all()
+
+
+@pytest.mark.asyncio
 async def test_rlm_source_task_manager_call_reaches_real_pi_admission(runtime):
-    from nodes.tool.task_manager import TaskManagerParams
+    from nodes.tool.task_manager import TaskManagerToolInput
     from services.rlm.adapters import ToolBridgeAdapter
     scope = {key: value for key, value in runtime.scope.items() if key not in {"tool_call_id", "operation_id"}}
     tool = {"node_id": "manager", "node_type": "taskManager", "parameters": {},
-            "_agent_tool_name": "task_manager", "_agent_tool_input_model": TaskManagerParams}
+            "_agent_tool_name": "task_manager", "_agent_tool_input_model": TaskManagerToolInput}
     tools = ToolBridgeAdapter.bridge([tool], context=scope, loop=asyncio.get_running_loop(),
         parent_node_id="parent", workflow_id="wf")
 
@@ -268,7 +292,7 @@ async def test_native_ai_service_task_manager_uses_shared_recorded_call_identity
 
 @pytest.mark.asyncio
 async def test_claude_mcp_task_manager_reaches_real_pi_admission(runtime, monkeypatch):
-    from nodes.tool.task_manager import TaskManagerParams
+    from nodes.tool.task_manager import TaskManagerToolInput
     from services.cli_agent import mcp_server, workflow_tools
     from services.temporal.pi_protocol import canonical_digest
     scope = {key: value for key, value in runtime.scope.items() if key not in {"tool_call_id", "operation_id"}}
@@ -279,11 +303,11 @@ async def test_claude_mcp_task_manager_reaches_real_pi_admission(runtime, monkey
         workspace_dir=Path("workspace"), user_id="owner",
         broadcaster=SimpleNamespace(update_node_status=AsyncMock(), broadcast_agent_capability=AsyncMock()),
         connected_tools=[{"node_id": "manager", "node_type": "taskManager", "parameters": {},
-            "_agent_tool_name": "task_manager", "_agent_tool_input_model": TaskManagerParams,
+            "_agent_tool_name": "task_manager", "_agent_tool_input_model": TaskManagerToolInput,
             "pi_harness_version": 1, "_pi_inline_scope": scope}])
     token = mcp_server._current_batch.set(ctx)
     try:
-        answer = await workflow_tools._build_handler("task_manager", "taskManager", TaskManagerParams)(**assignment())
+        answer = await workflow_tools._build_handler("task_manager", "taskManager", TaskManagerToolInput)(**assignment())
     finally:
         mcp_server._current_batch.reset(token)
     assert answer["delegation"]["status"] == "delegated"

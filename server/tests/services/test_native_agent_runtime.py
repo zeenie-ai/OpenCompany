@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -469,6 +470,62 @@ async def test_native_loop_returns_invalid_arguments_to_model_without_execution(
     assert not executed
     assert '"error": "Invalid tool arguments"' in result["messages"][2].content
     assert result["messages"][-1].content == "recovered"
+
+
+@pytest.mark.asyncio
+async def test_native_loop_corrects_schema_invalid_task_without_executing_it(monkeypatch):
+    from nodes.tool import task_manager
+    from services.plugin import NodeContext
+
+    # Syntactically valid JSON from the incident, with corrupted property
+    # names. A JSON parser alone cannot reject this call.
+    raw = json.dumps({
+        "operation": "assign_task",
+        'assignee_node_id” :”worker” }NB:IneedproperJSON.Letmere-writethetoolcallscorrectly.{': "private-value",
+        'title” :”Research” }NB:brokenagain.IwillnowemitvalidJSONforthetwotoolcalls.{': "private-value",
+    })
+    invalid = ToolCall.from_raw(id="invalid", name="task_manager", arguments=raw)
+    assert invalid.parse_error is None
+    valid = ToolCall(id="corrected", name="task_manager", args={
+        "operation": "assign_task", "title": "Research", "mission": "Find verified sources",
+        "assignee_node_id": "worker",
+    })
+    unifier = _FakeUnifier([
+        LLMResponse(tool_calls=[invalid]),
+        LLMResponse(tool_calls=[valid]),
+        LLMResponse(content="Task delegated"),
+    ])
+    execute_task = AsyncMock(return_value={"success": True, "task": {"id": "task-1"}})
+    monkeypatch.setattr(task_manager, "_execute_task_manager", execute_task)
+    node = task_manager.TaskManagerNode()
+    context = NodeContext(node_id="task-manager", node_type="taskManager")
+    executed_arguments = []
+
+    async def execute(_name, args):
+        executed_arguments.append(args)
+        return await node.execute_as_tool(args, {"label": "Task Manager"}, context)
+
+    result = await run_native_agent_loop(
+        unifier, provider="openrouter", api_key="test", model="test-model",
+        temperature=0, max_tokens=100, initial_messages=[Message(role="user", content="Research")],
+        tools=[AgentToolSpec(
+            definition=ToolDef(**node.as_tool_schema()),
+            args_schema=task_manager.TaskManagerToolInput,
+        )],
+        tool_executor=execute,
+    )
+
+    execute_task.assert_awaited_once()
+    assert executed_arguments == [valid.args]
+    assert {key: execute_task.await_args.args[0][key] for key in valid.args} == valid.args
+    assert "label" not in execute_task.await_args.args[0]
+    feedback = unifier.calls[1]["messages"][2]
+    assert feedback.tool_call_id == "invalid"
+    assert "Extra inputs are not permitted" in feedback.content
+    assert "private-value" not in json.loads(feedback.content)["details"]
+    assert json.loads(feedback.content)["raw_arguments"] == raw
+    assert result["messages"][1].tool_calls[0].raw_arguments == raw
+    assert result["messages"][-1].content == "Task delegated"
 
 
 @pytest.mark.asyncio

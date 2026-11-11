@@ -197,7 +197,9 @@ def _validated_tool_args(
         # metadata, not model-authored arguments.
         return value.model_dump(mode="json", exclude_unset=True), None
     except ValidationError as exc:
-        return None, str(exc)
+        from services.plugin.params import format_validation_error
+
+        return None, format_validation_error(exc)
 
 
 async def run_native_agent_loop(

@@ -384,18 +384,44 @@ async def _await_with_llm_heartbeats(
     *,
     detail: str,
     interval_seconds: float = 20.0,
+    provider: Optional[str] = None,
 ) -> Any:
-    """Await one buffered SDK request while heartbeating the activity. The
-    request's own errors, a ``TimeoutError`` among them, come back as they
-    are (``task.result()``), never mistaken for the heartbeat interval."""
+    """Heartbeat a request, optionally ending it before the activity deadline.
+
+    Native steps opt in with their provider reference. Compaction also uses
+    this helper, but includes post-inference persistence and must not retry
+    completed inference because a later write was slow. The request's own
+    errors remain distinct from both our deadline and the heartbeat interval.
+    """
+
+    timeout_seconds = None
+    if provider is not None:
+        try:
+            attempt_timeout = activity.info().start_to_close_timeout
+        except RuntimeError:  # direct unit invocation, outside a Temporal activity
+            attempt_timeout = None
+        timeout_seconds = max(1.0, (attempt_timeout or timedelta(minutes=10)).total_seconds() - 30.0)
 
     task = asyncio.ensure_future(awaitable)
+    deadline = asyncio.timeout(timeout_seconds)
     try:
-        while True:
-            done, _pending = await asyncio.wait({task}, timeout=interval_seconds)
-            if done:
-                return task.result()
-            activity.heartbeat(detail)
+        async with deadline:
+            while True:
+                done, _pending = await asyncio.wait({task}, timeout=interval_seconds)
+                if done:
+                    return task.result()
+                activity.heartbeat(detail)
+    except TimeoutError:
+        if not deadline.expired():
+            raise
+        from services.llm.protocol import LLMError, LLMErrorCategory
+
+        raise LLMError(
+            message="The provider call exceeded its attempt deadline.",
+            provider=provider,
+            category=LLMErrorCategory.TIMEOUT,
+            retryable=True,
+        ) from None
     finally:
         if not task.done():
             task.cancel()
@@ -566,6 +592,7 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
                 chat_run_id if isinstance(chat_run_id, str) else None,
             ),
             detail=f"LLM step waiting: {payload.get('model')}",
+            provider=payload["provider"],
         )
     except LLMError as error:
         if emitter is not None:

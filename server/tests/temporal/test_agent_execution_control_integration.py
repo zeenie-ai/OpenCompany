@@ -35,7 +35,10 @@ def _event(name: str, events: dict[str, asyncio.Event]) -> asyncio.Event:
 def _tool(name: str, node_type: str = "control_test_tool") -> dict:
     return {
         "name": name, "node_type": node_type, "version": 1,
-        "tool_node_id": name, "parameters": {}, "tool_info": {},
+        "tool_node_id": name,
+        "parameters": ({"label": "Saved Task Manager", "operation": "list_tasks",
+                        "title": "Saved title", "mission": "Saved mission"} if node_type == "taskManager" else {}),
+        "tool_info": {},
         "definition": {"name": name, "description": name, "parameters": {"type": "object", "properties": {}}},
         "activity_policy": {
             "start_to_close_seconds": 60, "heartbeat_seconds": 10,
@@ -44,6 +47,11 @@ def _tool(name: str, node_type: str = "control_test_tool") -> dict:
                 "backoff_coefficient": 2, "maximum_attempts": 1, "non_retryable_error_types": []},
         },
     }
+
+
+def _assignment_args(name: str) -> dict:
+    return {"operation": "assign_task", "title": f"Research {name}",
+            "mission": f"Find verified sources for {name}", "assignee_node_id": f"worker-{name}"}
 
 
 @activity.defn(name="agent.prepare_payload")
@@ -78,7 +86,7 @@ async def _llm(payload: dict) -> dict:
                 "usage": {"total_tokens": 3}}
     names = (["A"] if iteration == 0 else ["B"]) if mode == "rollover" else ["A", "B"]
     calls = [{"id": f"{iteration}-{name}", "name": name,
-              "args": {"operation": "assign_task"} if mode == "parallel" else {}} for name in names]
+              "args": _assignment_args(name) if mode == "parallel" else {}} for name in names]
     return {"kind": "tool_calls", "calls": calls, "thinking": f"thought-{iteration}",
             "assistant_message": message_to_wire(Message(role="assistant", tool_calls=[ToolCall(**call) for call in calls])),
             "usage": {"total_tokens": 3}}
@@ -98,6 +106,11 @@ async def _tool_activity(payload: dict) -> dict:
 @activity.defn(name="node.taskManager.v1")
 async def _preflight(payload: dict) -> dict:
     name = payload["node_id"]
+    # Both concurrent native assignments must use the same input boundary
+    # as ordinary tools, without passing saved configuration as model input.
+    assert payload["tool_args"] == _assignment_args(name)
+    assert payload["node_data"]["label"] == "Saved Task Manager"
+    assert "pi_harness_version" not in payload
     COUNTS[name] += 1
     _event(name, STARTED).set()
     await _event(name, RELEASE).wait()

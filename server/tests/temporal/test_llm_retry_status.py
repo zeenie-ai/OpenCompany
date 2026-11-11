@@ -216,6 +216,74 @@ async def test_activity_cancellation_withdraws_partial_and_cancels_provider(step
 
 
 @pytest.mark.asyncio
+async def test_request_deadline_withdraws_partial_and_announces_retry(step, monkeypatch):
+    env, run, broadcaster, payload = step
+    events = _stream_events(monkeypatch, payload)
+    deadline = asyncio.timeout(None)
+    monkeypatch.setattr(asyncio, "timeout", lambda _seconds: deadline)
+    drained = asyncio.Event()
+
+    async def wait(_unifier, **kwargs):
+        try:
+            await kwargs["on_event"](StreamEvent("text", "Unfinished partial"))
+            deadline.reschedule(asyncio.get_running_loop().time())
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            drained.set()
+
+    run.side_effect = wait
+    with pytest.raises(ApplicationError) as raised:
+        await env.run(execute_llm_step, payload)
+    failure = raised.value
+    assert failure.type == "LLMError.timeout"
+    assert not failure.non_retryable
+    assert failure.category == ApplicationErrorCategory.BENIGN
+    assert failure.next_retry_delay == timedelta(seconds=5)
+    assert drained.is_set()
+    assert events[-1]["fields"] == {"name": "opencompany.segment_discarded", "value": {"message_id": "run-1.7.1"}}
+    status = broadcaster._status["nodes"]["agent-1"]["data"]
+    assert status["phase"] == "retry_wait"
+    assert status["retry_after"] == 5
+    assert status["retry_attempt"] == 2
+    run.assert_awaited_once()
+    assert run.await_args.kwargs["sdk_max_retries"] == 0
+    assert run.await_args.kwargs["explicit_max_retries"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("save_fails", [False, True])
+async def test_request_deadline_ends_before_response_persistence(step, monkeypatch, save_fails):
+    import services.temporal.agent_activities as activity_module
+
+    env, run, broadcaster, payload = step
+    real_timeout = asyncio.timeout
+    deadline = real_timeout(60)
+    monkeypatch.setattr(asyncio, "timeout", lambda _seconds: deadline)
+    run.return_value = LLMResponse(content="done")
+
+    async def save(*_args, **_kwargs):
+        # A completed timeout cannot be rescheduled. If persistence were
+        # still inside it, this would succeed and arrange cancellation.
+        with pytest.raises(RuntimeError, match="finished"):
+            deadline.reschedule(asyncio.get_running_loop().time())
+        if save_fails:
+            raise ValueError("persistence failed after the provider answered")
+
+    monkeypatch.setattr(activity_module, "_save_conversation", save)
+    if save_fails:
+        with pytest.raises(ApplicationError) as raised:
+            await env.run(execute_llm_step, payload)
+        assert raised.value.type == "LLMStepInternalError"
+        assert raised.value.non_retryable
+    else:
+        response = await env.run(execute_llm_step, payload)
+        assert response["content"] == "done"
+    assert broadcaster._status["nodes"]["agent-1"]["data"]["phase"] == "llm_step"
+    run.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("attempt", "warned"), [(1, True), (2, False), (7, True), (8, False), (9, True)])
 async def test_a_scheduled_retry_warns_by_the_quiet_rule(step, caplog, attempt, warned):
     # 1b.30: judged on the attempt it schedules, like the interceptor's line

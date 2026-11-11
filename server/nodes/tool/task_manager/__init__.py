@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from services.plugin import NodeContext, Operation, TaskQueue, ToolNode
+from services.plugin import NodeContext, NodeUserError, Operation, TaskQueue, ToolNode
 
 TaskOperation = Literal[
     "submit_job",
@@ -43,6 +43,77 @@ class TaskManagerParams(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class TaskManagerToolInput(TaskManagerParams):
+    """Model arguments, validated separately from persisted node settings."""
+
+    operation: TaskOperation = Field(description=(
+        "Task operation; always supply it explicitly. Use get_task to review status, revision and allowed_actions before mutations. "
+        "modify_task: blocked/queued only; cancel_task: blocked/queued/running; "
+        "retry_task/reassign_task: failed/submitted/cancelled; accept_task/mark_done: submitted only. "
+        "A running task cannot be modified."
+    ))
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Required for get, inspect, modify, cancel, retry and reassign. Accept may infer one submitted task.",
+    )
+    title: Optional[str] = Field(
+        default=None, max_length=500,
+        description="assign_task: required nonblank task title. modify_task: replacement title.",
+    )
+    mission: Optional[str] = Field(
+        default=None, max_length=10000,
+        description="submit_job/assign_task: required nonblank mission and expected result. modify_task: replacement mission.",
+    )
+    assignee_node_id: Optional[str] = Field(
+        default=None,
+        description="assign_task/reassign_task: connected teammate node ID; supply this or delegate_name.",
+    )
+    delegate_name: Optional[str] = Field(
+        default=None,
+        description="assign_task/reassign_task: exact connected delegate name, alternative to assignee_node_id.",
+    )
+    expected_revision: Optional[int] = Field(
+        default=None, ge=0,
+        description="Task revision for optimistic concurrency; the runtime reads the current revision when omitted.",
+    )
+    revision: Optional[int] = Field(
+        default=None, ge=0,
+        description="Deprecated spelling of expected_revision; a non-null expected_revision takes precedence.",
+    )
+    query: Optional[str] = Field(
+        default=None, max_length=200,
+        description="Required nonblank search text for inspect_task_trace with detail='search'.",
+    )
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_operation_fields(self) -> "TaskManagerToolInput":
+        required = {
+            "submit_job": ("mission",),
+            "assign_task": ("title", "mission"),
+            "get_task": ("task_id",),
+            "inspect_task_trace": ("task_id",),
+            "modify_task": ("task_id",),
+            "cancel_task": ("task_id",),
+            "retry_task": ("task_id",),
+            "reassign_task": ("task_id",),
+        }
+        missing = [name for name in required.get(self.operation, ()) if not (getattr(self, name) or "").strip()]
+        if missing:
+            raise ValueError(f"{self.operation} requires nonblank {', '.join(missing)}")
+        if self.operation in {"assign_task", "reassign_task"} and not any(
+            (value or "").strip() for value in (self.assignee_node_id, self.delegate_name)
+        ):
+            raise ValueError(f"{self.operation} requires assignee_node_id or delegate_name")
+        if self.operation == "modify_task" and all(
+            getattr(self, name) is None for name in ("title", "mission", "context", "acceptance_criteria")
+        ):
+            raise ValueError("modify_task requires at least one of title, mission, context, acceptance_criteria")
+        if self.operation == "inspect_task_trace" and self.detail == "search" and not (self.query or "").strip():
+            raise ValueError("inspect_task_trace with detail='search' requires nonblank query")
+        return self
+
+
 class TaskManagerOutput(BaseModel):
     success: bool = True
     operation: Optional[str] = None
@@ -63,6 +134,9 @@ class TaskManagerNode(ToolNode):
     tool_description = (
         "Manage the current lead execution's durable team tasks. Assign only connected "
         "teammates, inspect submitted work, then accept, retry, reassign, or cancel it. "
+        "assign_task requires title, mission, and assignee_node_id or delegate_name. "
+        'Example: {"operation":"assign_task","title":"Research","mission":"Find cited evidence",'
+        '"assignee_node_id":"<connected teammate node ID>"}. '
         "Use list_tasks with include_history=true to consult prior executions. "
         "An employee's conversational contact uses submit_job with mission to admit substantive work "
         "for its configured team and receive a prompt acknowledgement; reviewed delivery follows separately."
@@ -81,6 +155,8 @@ class TaskManagerNode(ToolNode):
     task_queue = TaskQueue.DEFAULT
     needs_canvas = True
     Params = TaskManagerParams
+    ToolInput = TaskManagerToolInput
+    tool_schema_locked = True
     Output = TaskManagerOutput
 
     @Operation("manage")
@@ -114,12 +190,12 @@ def _resolve_teammate(config: Dict[str, Any], args: Dict[str, Any]) -> Dict[str,
     matches = [d for d in descriptors if (node_id and d["node_id"] == node_id) or (delegate_name and d["delegate_tool_name"] == delegate_name)]
     if len(matches) != 1:
         available = [{"node_id": d["node_id"], "delegate_name": d["delegate_tool_name"], "label": d["label"]} for d in descriptors]
-        raise ValueError(f"Assignee must resolve to exactly one connected teammate; available={available}")
+        raise NodeUserError(f"Assignee must resolve to exactly one connected teammate; available={available}")
     return matches[0]
 
 
 async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
-    from services.agent_team import get_agent_team_service
+    from services.agent_team import TaskMutationConflict, get_agent_team_service
 
     service = get_agent_team_service()
     operation = str(args.get("operation") or "list_tasks")
@@ -130,7 +206,7 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         "inspect_task_trace",
     }
     if operation not in allowed_operations:
-        raise ValueError(f"Unknown Task Manager operation: {operation}")
+        raise NodeUserError(f"Unknown Task Manager operation: {operation}")
     if operation == "submit_job":
         from services.plugin.deps import get_database
         from services.employees.team_runtime import employee_runtime_plan
@@ -139,10 +215,10 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         talk_id = str(config.get("parent_node_id") or "")
         plan = await employee_runtime_plan(database, {**config, "node_id": talk_id})
         if not plan or plan.get("talk_node_id") != talk_id:
-            raise ValueError("submit_job is available only to this employee's conversational contact")
+            raise NodeUserError("submit_job is available only to this employee's conversational contact")
         mission = str(args.get("mission") or "").strip()
         if not mission:
-            raise ValueError("submit_job requires the substantive mission and expected result")
+            raise NodeUserError("submit_job requires the substantive mission and expected result")
         job = await create_job(database, NodeContext.from_legacy(talk_id, "chatAgent", config), mission=mission,
             lead_node_id=plan["lead_node_id"], delivery_node_ids=plan["talk_delivery_node_ids"], dispatch=True)
         await dispatch_job(database, job.id)
@@ -163,13 +239,13 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
     if operation == "get_task":
         task_id = str(args.get("task_id") or "")
         if not task_id:
-            raise ValueError("get_task requires task_id")
+            raise NodeUserError("get_task requires task_id")
         task = await service.get_durable_task(**scope, task_id=task_id)
         return {"success": True, "operation": operation, "task": task}
     if operation == "inspect_task_trace":
         task_id = str(args.get("task_id") or "")
         if not task_id:
-            raise ValueError("inspect_task_trace requires task_id")
+            raise NodeUserError("inspect_task_trace requires task_id")
         from services.team_task_trace import get_team_task_trace_service
 
         trace = await get_team_task_trace_service().get_trace(
@@ -186,7 +262,7 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         from services.employees.team_runtime import validate_managed_assignment
         validate_managed_assignment(args, config)
         if not args.get("title") or not args.get("mission"):
-            raise ValueError("assign_task requires title and mission")
+            raise NodeUserError("assign_task requires title and mission")
         teammate = _resolve_teammate(config, args)
         task = await service.assign_durable_task(
             **scope, assignee_node_id=teammate["node_id"], title=args["title"],
@@ -242,18 +318,18 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
             task_id = submitted[0]["id"]
             revision = submitted[0]["revision"]
         else:
-            raise ValueError(
+            raise NodeUserError(
                 "accept_task requires task_id when there is not exactly one submitted task; "
                 "call list_tasks or get_task first"
             )
     if not task_id:
-        raise ValueError(f"{operation} requires task_id")
+        raise NodeUserError(f"{operation} requires task_id")
     current: Optional[Dict[str, Any]] = None
     if revision is None:
         current = await service.get_durable_task(**scope, task_id=task_id)
         revision = current.get("revision")
     if revision is None:
-        raise ValueError(f"{operation} requires expected_revision")
+        raise NodeUserError(f"{operation} requires expected_revision")
     mapped = "accept" if operation in {"accept_task", "mark_done"} else operation.removesuffix("_task")
     payload = {k: args[k] for k in ("title", "mission", "context", "acceptance_criteria", "reason") if k in args}
     # Resolve the runner BEFORE mutating so a disconnected assignee fails
@@ -268,9 +344,15 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         delegate = _resolve_teammate(
             config, {"assignee_node_id": current.get("assigned_to")}
         )
-    task = await service.mutate_durable_task(
-        **scope, task_id=task_id, revision=int(revision), operation=mapped, **payload,
-    )
+    try:
+        task = await service.mutate_durable_task(
+            **scope, task_id=task_id, revision=int(revision), operation=mapped, **payload,
+        )
+    except TaskMutationConflict as exc:
+        raise NodeUserError(
+            str(exc),
+            hint="Call get_task with this task_id, review status, revision and allowed_actions, then choose an allowed operation.",
+        ) from None
     result: Dict[str, Any] = {"success": True, "operation": operation, "task": task}
     if delegate is not None:
         # retry/reassign move the row to "queued", and nothing sweeps queued

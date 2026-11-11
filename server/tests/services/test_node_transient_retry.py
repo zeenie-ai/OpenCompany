@@ -263,7 +263,7 @@ async def test_a_tool_call_reports_a_rate_limit_and_the_model_reads_the_same_err
         NodeContext(node_id="tool-1", node_type=_RateLimitedLookup.type, raw={TRANSIENT_FAILURES_KEY: reports}),
     )
 
-    assert payload == {"error": str(_rate_limited())}
+    assert payload == {"success": False, "error": str(_rate_limited()), "error_type": "HTTPStatusError"}
     assert reports == {"tool-1": {"error_type": "HTTPStatusError", "retry_after": 4.0}}
     logger.warning.assert_called_once()
     logger.exception.assert_not_called()
@@ -486,8 +486,8 @@ async def test_a_failure_without_a_report_completes_the_attempt(monkeypatch):
 
 
 async def test_a_tool_error_payload_with_a_report_runs_again(monkeypatch):
-    """A ToolNode's tool error is a flat ``{"error": ...}`` payload, which
-    ``interpret_result`` reads as success: the report decides, not the result."""
+    """A legacy flat tool error still retries from its transient report;
+    retry eligibility does not depend on the public failure marker."""
     from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 
     fakes = _install_activity_fakes(monkeypatch, {"error": RATE_LIMITED})

@@ -1,4 +1,4 @@
-"""Parameter coercion helpers shared by plugins.
+"""Parameter validation and coercion helpers shared by plugins.
 
 The parameter panel stores ``""`` for any field the user has cleared or never
 filled, **whatever the declared type**. Against a ``str`` field that is
@@ -17,6 +17,19 @@ from __future__ import annotations
 
 import json
 from typing import Any, Dict, Sequence, Union, get_args, get_origin
+
+from pydantic import ValidationError
+
+
+def format_validation_error(error: ValidationError) -> str:
+    """Describe the first invalid field without echoing inputs or context."""
+    errors = error.errors(include_url=False, include_context=False, include_input=False)
+    if not errors:
+        return "Invalid input"
+    first = errors[0]
+    location = ".".join(str(part) for part in first.get("loc", ()))
+    message = first.get("msg", "Invalid input")
+    return f"{location}: {message}" if location else message
 
 
 def _accepts_str(annotation: Any) -> bool:
@@ -102,4 +115,4 @@ def coerce_json_object(key: str, value: Any) -> Dict[str, Any]:
     raise ValueError(f"{key} must be a JSON object, not a {type(value).__name__}.")
 
 
-__all__ = ["coerce_blank_params", "coerce_json_object"]
+__all__ = ["coerce_blank_params", "coerce_json_object", "format_validation_error"]

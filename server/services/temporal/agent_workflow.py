@@ -2082,6 +2082,7 @@ class AgentWorkflow:
                             **(preflight_tool.get("parameters") or {}),
                             **preflight_args,
                         },
+                        "tool_args": preflight_args,
                         "inputs": {},
                         "workflow_id": payload.get("workflow_id"),
                         "session_id": payload.get("session_id", "default"),
@@ -2092,7 +2093,7 @@ class AgentWorkflow:
                         "nodes": context.get("nodes") or [],
                         "edges": context.get("edges") or [],
                         **preflight_metadata,
-                        **({"tool_args": preflight_args, "pi_harness_version": 1,
+                        **({"pi_harness_version": 1,
                             "user_id": str(context.get("user_id") or "owner")} if pi_runtime else {}),
                     }
                     if workflow.patched("employee-task-manager-tool-scope-v2"):

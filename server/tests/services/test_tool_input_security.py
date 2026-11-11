@@ -36,6 +36,23 @@ class _DefaultedToolInput(BaseModel):
     configured_limit: int = 25
 
 
+class _ValidationItem(BaseModel):
+    count: int
+
+
+class _ValidationParams(BaseModel):
+    items: list[_ValidationItem]
+
+
+class _ValidationToolNode(ToolNode, abstract=True):
+    type = "_testValidationFeedback"
+    Params = _ValidationParams
+
+    @Operation("run")
+    async def run(self, ctx: NodeContext, params: _ValidationParams):
+        raise AssertionError("Invalid input must never execute")
+
+
 class _ConfiguredToolNode(ToolNode, abstract=True):
     type = "_testConfiguredToolInput"
     display_name = "Configured ToolInput Test"
@@ -88,10 +105,11 @@ def test_tool_input_defaults_to_params():
 
 
 @pytest.mark.asyncio
-async def test_node_error_recovery_metadata_reaches_agent_tools():
+@pytest.mark.parametrize("node_cls", [_ConfiguredToolNode, _DualPurposeActionNode])
+async def test_node_error_recovery_metadata_reaches_agent_tools(node_cls):
     from services.plugin import NodeUserError
 
-    class BlockedTool(_ConfiguredToolNode, abstract=True):
+    class BlockedTool(node_cls, abstract=True):
         @Operation("run")
         async def run(self, ctx, params):
             raise NodeUserError("Spending cap reached", hint="Review billing", requires_user_action=True)
@@ -100,7 +118,10 @@ async def test_node_error_recovery_metadata_reaches_agent_tools():
         {"endpoint": "test"}, {"endpoint": "test"},
         NodeContext(node_id="tool-1", node_type=BlockedTool.type, raw={}),
     )
-    assert result == {"error": "Spending cap reached", "hint": "Review billing", "requires_user_action": True, "retryable": False}
+    assert result == {
+        "success": False, "error_type": "NodeUserError", "error": "Spending cap reached",
+        "hint": "Review billing", "requires_user_action": True, "retryable": False,
+    }
 
 
 def test_native_validation_does_not_materialize_omitted_defaults():
@@ -118,6 +139,44 @@ def test_native_validation_does_not_materialize_omitted_defaults():
     )
     assert error is None
     assert args == {"query": "hello"}
+
+
+@pytest.mark.parametrize("item", [{"count": "private-value"}, {"credential": "private-value"}])
+@pytest.mark.parametrize("boundary", ["native", "tool", "node"])
+async def test_validation_feedback_identifies_nested_field_without_input_values(item, boundary):
+    arguments = {"items": [item]}
+    if boundary == "native":
+        spec = AgentToolSpec(
+            definition=ToolDef(name="validate", description="test", parameters=_ValidationParams.model_json_schema()),
+            args_schema=_ValidationParams,
+        )
+        value, error = _validated_tool_args(
+            ToolCall(id="invalid", name="validate", args=arguments), {"validate": spec},
+        )
+        assert value is None
+    else:
+        node = _ValidationToolNode()
+        context = NodeContext(node_id="validate", node_type=node.type)
+        if boundary == "tool":
+            result = await node.execute_as_tool(arguments, {}, context)
+        else:
+            result = await node.execute(context.node_id, arguments, context)
+        assert result["success"] is False
+        assert result["error_type"] == "ValidationError"
+        error = result["error"]
+    assert "items.0.count:" in error
+    assert "private-value" not in error
+    assert "credential" not in error
+    assert "input_value" not in error
+    assert "errors.pydantic.dev" not in error
+
+
+def test_task_manager_stored_schema_cannot_replace_locked_input():
+    from nodes.tool.task_manager import TaskManagerNode, TaskManagerToolInput
+
+    malicious = {"db_schema_config": {"fields": {"workflow_id": {"type": "string", "required": True}}}}
+    assert AIService._get_tool_schema(object(), "taskManager", malicious) is TaskManagerToolInput
+    assert TaskManagerNode.as_tool_schema()["parameters"]["additionalProperties"] is False
 
 
 def test_simple_memory_has_split_locked_schema_and_canonical_name():
@@ -224,13 +283,28 @@ async def test_action_node_tools_keep_their_existing_merge_contract():
 
 
 @pytest.mark.parametrize("node_cls", [_ConfiguredToolNode, _DualPurposeActionNode])
-async def test_tool_errors_keep_the_default_error_only_contract(node_cls, monkeypatch):
+async def test_tool_errors_preserve_failure_and_classification(node_cls, monkeypatch):
     node = node_cls()
     envelope = {"success": False, "error": "Wait before continuing.", "error_type": "rate_limited", "retry_after": 3}
     monkeypatch.setattr(node, "execute", AsyncMock(return_value=envelope))
     result = await node.execute_as_tool({"endpoint": "https://configured.example"}, {"endpoint": "https://configured.example"}, NodeContext(node_id="test", node_type=node_cls.type))
-    assert result == {"error": "Wait before continuing."}
+    assert result == {"success": False, "error": "Wait before continuing.", "error_type": "rate_limited"}
     assert envelope["success"] is False and envelope["retry_after"] == 3
+
+
+@pytest.mark.parametrize("node_cls", [_ConfiguredToolNode, _DualPurposeActionNode])
+@pytest.mark.parametrize("failure", [RuntimeError("Unexpected operation failure"), ValueError("Invalid state")])
+async def test_unexpected_tool_failures_retain_their_type(node_cls, failure):
+    class FailingTool(node_cls, abstract=True):
+        @Operation("run")
+        async def run(self, ctx, params):
+            raise failure
+
+    result = await FailingTool().execute_as_tool(
+        {"endpoint": "test"}, {"endpoint": "test"}, NodeContext(node_id="test", node_type=node_cls.type),
+    )
+
+    assert result == {"success": False, "error": str(failure), "error_type": type(failure).__name__}
 
 
 @pytest.mark.parametrize("node_cls", [_ConfiguredToolNode, _DualPurposeActionNode])
@@ -255,7 +329,7 @@ async def test_tool_errors_copy_only_declared_non_null_fields(node_cls, monkeypa
 async def test_opted_in_error_metadata_does_not_change_success_results(node_cls, monkeypatch):
     monkeypatch.setattr(node_cls, "tool_error_fields", frozenset({"success", "error_type"}))
     node = node_cls()
-    payload = {"endpoint": "https://configured.example", "query": "hello"}
+    payload = {"endpoint": "https://configured.example", "query": "hello", "error": "a field in the successful result"}
     envelope = payload if issubclass(node_cls, ToolNode) else {"success": True, "result": payload}
     monkeypatch.setattr(node, "execute", AsyncMock(return_value=envelope))
     assert await node.execute_as_tool({"endpoint": "https://configured.example"}, {"endpoint": "https://configured.example"}, NodeContext(node_id="test", node_type=node_cls.type)) == payload

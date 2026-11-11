@@ -297,6 +297,12 @@ class TestInterpretResultContract:
         assert payload is None
         assert error == "tool crashed"
 
+    def test_toolnode_error_field_alone_is_a_successful_payload(self):
+        from services.plugin.tool import ToolNode
+
+        result = {"error": "a field in a successful lookup", "count": 1}
+        assert ToolNode.interpret_result(result) == (True, result, None)
+
     def test_every_toolnode_subclass_inherits_override(self):
         """Every ToolNode subclass must resolve ``interpret_result`` to
         the ToolNode override (or further override it). If a subclass

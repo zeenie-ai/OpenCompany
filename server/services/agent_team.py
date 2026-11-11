@@ -14,6 +14,10 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+class TaskMutationConflict(ValueError):
+    """A task mutation was rejected by its revision or state guard."""
+
+
 class AgentTeamService:
     """Service for managing agent teams.
 
@@ -258,8 +262,18 @@ class AgentTeamService:
         if operation == "modify" and not values:
             raise ValueError("No mutable task fields supplied")
         changed = await self.database.transition_team_task(team_id, task_id, revision, allowed, values, create_attempt=create_attempt)
-        if not changed:
-            raise ValueError("Task changed or is not in a valid state; refresh and retry")
+        if changed is None:
+            latest = await self.database.get_durable_team_task(team_id, task_id)
+            if latest is None:
+                raise TaskMutationConflict(
+                    f"Cannot {operation} task '{task_id}': task not found in this lead execution."
+                )
+            raise TaskMutationConflict(
+                f"Cannot {operation} task '{task_id}': revision or state does not permit this operation. "
+                f"Latest observed state: status={latest['status']}, revision={latest['revision']}; "
+                f"supplied revision={revision}; allowed_actions={latest['allowed_actions']}. "
+                "Use get_task to review the current task before choosing a permitted operation."
+            )
         if self.broadcaster:
             await self.broadcaster.broadcast_team_event(team_id, f"team.task.{changed['status']}", changed)
         return changed

@@ -498,11 +498,11 @@ class TestTheNode:
             result = await node.execute_as_tool({"order": "A1"}, LOOKUP, NodeContext(node_id="n1", node_type="mcpConnector", raw={}))
             assert result["text"] == "Order A1: 2 books"
             refused = await node.execute_as_tool({"order": 5}, LOOKUP, NodeContext(node_id="n1", node_type="mcpConnector", raw={}))
-            assert refused == {"error": "The arguments don't fit the tool: 5 is not of type 'string'"}
+            assert refused == {"success": False, "error_type": "NodeUserError", "error": "The arguments don't fit the tool: 5 is not of type 'string'"}
             # A tool the owner turned off since the agent got it is not called.
             await _handlers.handle_mcp_connector_set_tool({"ref": "mcp:orders", "tool": "lookup_order", "enabled": False}, SOCKET)
             off = await node.execute_as_tool({"order": "A1"}, LOOKUP, NodeContext(node_id="n1", node_type="mcpConnector", raw={}))
-            assert off == {"error": "The owner turned Look up an order off."}
+            assert off == {"success": False, "error_type": "NodeUserError", "error": "The owner turned Look up an order off."}
 
     def test_a_tool_set_to_ask_first_waits_while_the_employee_asks_first(self):
         spec = McpConnectorNode.approval
@@ -683,7 +683,7 @@ class TestOAuth:
             # A refresh the server refuses leaves only signing in again.
             gate.refresh.clear()
             auth.oauth["mcp:orders"]["token_expiry"] = datetime.now(timezone.utc) - timedelta(minutes=1)
-            assert await call() == {"error": "Orders needs you to sign in again: open it on the Connectors page and press Sign in again."}
+            assert await call() == {"success": False, "error_type": "NodeUserError", "error": "Orders needs you to sign in again: open it on the Connectors page and press Sign in again."}
             again = await _handlers.handle_mcp_connector_sign_in({"ref": "mcp:orders"}, SOCKET)
             assert "Orders is signed in again." in (await comes_back(again["sign_in_url"])).text
             assert (await call())["text"] == "Order A1: 2 books"
@@ -712,7 +712,7 @@ class TestOAuth:
             # When renewing is refused too, only signing in again is left.
             gate.access.clear()
             gate.refresh.clear()
-            assert await call() == {"error": "Orders needs you to sign in again: open it on the Connectors page and press Sign in again."}
+            assert await call() == {"success": False, "error_type": "NodeUserError", "error": "Orders needs you to sign in again: open it on the Connectors page and press Sign in again."}
 
     async def test_signing_in_again_keeps_no_refresh_token_from_before(self, auth, monkeypatch):
         async with behind_sign_in(monkeypatch, orders_server()) as gate:

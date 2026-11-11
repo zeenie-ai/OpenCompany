@@ -22,7 +22,7 @@ import sys
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -120,6 +120,80 @@ async def test_plain_execution_without_tool_args_is_unchanged():
         )
     execute.assert_awaited_once()
     as_tool.assert_not_awaited()
+
+
+@pytest.mark.parametrize("arguments,error_type,feedback", [
+    ({"operation": "assign_task"}, "ValidationError", "title"),
+    ({"operation": "assign_task", "title": "Research", "mission": "Find evidence", "assignee_node_id": "missing"},
+     "NodeUserError", "connected teammate"),
+    ({"operation": "modify_task", "task_id": "task-1", "title": "Updated title"},
+     "NodeUserError", "status=running"),
+])
+@pytest.mark.asyncio
+async def test_task_manager_activity_preserves_validation_and_runtime_failure(monkeypatch, arguments, error_type, feedback):
+    """A real tool failure must end the per-type activity's step as failed."""
+    from core.container import container
+    from nodes.tool.task_manager import TaskManagerNode
+    from services.agent_team import AgentTeamService
+    from services.chat import steps
+    from temporalio import activity
+    from temporalio.testing import ActivityEnvironment
+
+    database = AsyncMock()
+    database.find_team.return_value = {"id": "team-1"}
+    database.get_durable_team_task.return_value = {
+        "id": "task-1", "status": "running", "revision": 0,
+        "current_attempt": 0, "retry_count": 0, "allowed_actions": ["cancel"],
+    }
+    database.transition_team_task.return_value = None
+    task_events = SimpleNamespace(broadcast_team_event=AsyncMock())
+    task_service = AgentTeamService(database, task_events)
+    monkeypatch.setattr("services.agent_team.get_agent_team_service", lambda: task_service)
+    handler = TaskManagerNode._make_legacy_handler()
+
+    async def execute_node(**kwargs):
+        return await handler(
+            kwargs["node_id"], kwargs["node_type"], kwargs["parameters"],
+            {**_context(), **kwargs["extras"], "nodes": kwargs["nodes"], "edges": kwargs["edges"]},
+        )
+
+    workflow_service = SimpleNamespace(execute_node=AsyncMock(side_effect=execute_node))
+    monkeypatch.setattr(container, "workflow_service", lambda: workflow_service)
+    broadcaster = SimpleNamespace(update_node_status=AsyncMock(), update_node_output=AsyncMock())
+    monkeypatch.setattr("services.status_broadcaster.get_status_broadcaster", lambda: broadcaster)
+    logger = MagicMock()
+    monkeypatch.setattr(activity, "logger", logger)
+    step = object()
+    monkeypatch.setattr(steps, "begin", lambda *_: step)
+    end_step = AsyncMock()
+    monkeypatch.setattr(steps, "end", end_step)
+
+    result = await ActivityEnvironment().run(TaskManagerNode.as_activity(), {
+        **_context(), "node_id": "task-manager", "parent_node_id": "lead",
+        "node_data": {"label": "Manager", **arguments}, "tool_args": arguments,
+        "nodes": [], "edges": [],
+    })
+
+    assert result["success"] is False
+    assert result["error_type"] == error_type
+    assert feedback in result["error"]
+    assert "delegation_request" not in result
+    database.create_durable_team_task.assert_not_awaited()
+    task_events.broadcast_team_event.assert_not_awaited()
+    if arguments["operation"] == "modify_task":
+        database.transition_team_task.assert_awaited_once_with(
+            "team-1", "task-1", 0, ["blocked", "queued"], {"title": "Updated title"}, create_attempt=False,
+        )
+        assert "revision=0" in result["error"] and "allowed_actions=['cancel']" in result["error"]
+        assert "get_task" in result["hint"]
+        assert database.get_durable_team_task.return_value["status"] == "running"
+    else:
+        assert database.mock_calls == []
+    assert [call.args[1] for call in broadcaster.update_node_status.await_args_list] == ["executing", "error"]
+    broadcaster.update_node_output.assert_not_awaited()
+    end_step.assert_awaited_once_with(step, state="failed", detail=None)
+    logger.warning.assert_called_once()
+    assert not any("succeeded" in str(call) for call in logger.info.call_args_list)
 
 
 @pytest.mark.asyncio

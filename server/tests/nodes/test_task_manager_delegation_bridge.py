@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from nodes.tool.task_manager import _execute_task_manager
+from services.plugin import NodeUserError
 
 
 def _config():
@@ -106,7 +107,7 @@ async def test_accept_never_guesses_when_multiple_tasks_are_submitted():
         {"id": "one", "revision": 1}, {"id": "two", "revision": 2},
     ]))
     with patch("services.agent_team.get_agent_team_service", return_value=service):
-        with pytest.raises(ValueError, match="call list_tasks or get_task first"):
+        with pytest.raises(NodeUserError, match="call list_tasks or get_task first"):
             await _execute_task_manager({"operation": "accept_task"}, _config())
 
 
