@@ -19,6 +19,7 @@ backoffs.
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -168,6 +169,32 @@ async def test_pool_queue_worker_restarts_with_fresh_instance():
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+async def test_pool_builds_its_workers_off_the_event_loop():
+    """Building a worker reads the settings files several times; nine in a
+    row on the loop stalled every request for over a second at each boot."""
+    pool = TemporalWorkerPool(client=MagicMock(), queues=["code-exec", "rest-api"])
+    built_on: list[int] = []
+
+    async def healthy():
+        await asyncio.Event().wait()
+
+    def fake_build(queue):
+        built_on.append(threading.get_ident())
+        return _SingleUseWorker(healthy)
+
+    pool._build_queue_worker = fake_build  # type: ignore[method-assign]
+
+    with _patch_backoff():
+        await pool.start()
+        try:
+            await asyncio.sleep(0.01)
+            assert len(built_on) == 2
+            assert threading.get_ident() not in built_on
+            assert pool.is_running
+        finally:
+            await pool.stop()
 
 
 async def test_pool_queue_worker_stops_when_queue_has_no_activities():

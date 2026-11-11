@@ -605,7 +605,11 @@ class TemporalWorkerPool:
 
     async def start(self) -> None:
         for queue in self.queues:
-            worker = self._build_queue_worker(queue)
+            # In a thread: building one worker reads the settings files
+            # several times (about 80 ms), and nine in a row on the event
+            # loop stalled every request and broadcast for over a second
+            # at each boot.
+            worker = await asyncio.to_thread(self._build_queue_worker, queue)
             if worker is None:
                 logger.info(f"[Pool] Skipping empty queue {queue!r}")
                 continue
