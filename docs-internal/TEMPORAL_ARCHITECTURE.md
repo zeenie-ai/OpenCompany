@@ -5,6 +5,8 @@
 > This document describes execution, Activity dispatch, worker routing, and
 > continuation. The [original execution-engine RFC](ARCHIVE/temporal-execution-engine-rfc.md)
 > is historical design context; use the current docs and implementation for behavior.
+> [Temporal production practices](temporal_production_practices.md) compares this
+> implementation with Pydantic AI's Temporal guide and lists the queued fixes.
 
 <!-- architecture-suite:start -->
 ## Architecture diagrams
