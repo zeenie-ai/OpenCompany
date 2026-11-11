@@ -3,7 +3,13 @@ import Modal from './ui/Modal';
 import LocationPanelLayout from './parameterPanel/LocationPanelLayout';
 import { useParameterPanel } from '../hooks/useParameterPanel';
 import { ExecutionService } from '../services/executionService';
-import { ActionButton } from './ui/action-button';
+import { Button } from '@/components/ui/button';
+
+// Colour marks state or role (docs-internal/theme_system.md): the header's
+// buttons are neutral outlines, and Save, the panel's one strong action, is
+// `invert`, as on the node panel (ParameterPanel.tsx).
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
+const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
 
 const LocationParameterPanel: React.FC = () => {
   const {
@@ -69,21 +75,23 @@ const LocationParameterPanel: React.FC = () => {
       </div>
       <div className="flex items-center gap-2">
         {canExecute && (
-          <ActionButton
-            intent="run"
+          <Button
+            type="button"
+            variant="quiet"
+            className={NEUTRAL_ACTION}
             onClick={handleRun}
             disabled={isExecuting}
             title={isExecuting ? 'Execution in progress...' : 'Execute this node'}
           >
             {isExecuting ? 'Running...' : 'Run'}
-          </ActionButton>
+          </Button>
         )}
-        <ActionButton intent="tools" onClick={handleSave} disabled={!hasUnsavedChanges}>
+        <Button type="button" variant="invert" className={ACTION_SHAPE} onClick={handleSave} disabled={!hasUnsavedChanges}>
           Save
-        </ActionButton>
-        <ActionButton intent="stop" onClick={handleCancel}>
+        </Button>
+        <Button type="button" variant="quiet" className={NEUTRAL_ACTION} onClick={handleCancel}>
           Cancel
-        </ActionButton>
+        </Button>
       </div>
     </div>
   );

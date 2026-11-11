@@ -262,7 +262,7 @@ const DataPanel: React.FC<DataPanelProps> = ({
                 onClick={() => setRemoveTarget(mount.name)}
                 aria-label={`Remove mount ${mount.name}`}
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           ))
@@ -295,6 +295,7 @@ const DataPanel: React.FC<DataPanelProps> = ({
               writable
             </label>
             <Button
+              variant="invert"
               size="sm"
               onClick={() => addMount.mutate()}
               disabled={
@@ -375,7 +376,7 @@ const DataPanel: React.FC<DataPanelProps> = ({
                 <li key={entry.path ?? entry.location ?? entry.name}>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent"
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-bg-hover"
                     onClick={() => navigateTo(entry)}
                     disabled={!entry.is_dir}
                   >
@@ -422,6 +423,7 @@ const DataPanel: React.FC<DataPanelProps> = ({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="invert"
               onClick={() => {
                 if (removeTarget) removeMount.mutate(removeTarget);
                 setRemoveTarget(null);

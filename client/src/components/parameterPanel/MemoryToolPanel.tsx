@@ -274,8 +274,9 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
             />
           </div>
           <Button
-            variant="outline"
+            variant="quiet"
             size="icon"
+            className="border-border-default text-fg-default"
             aria-label="Search Memory"
             onClick={() => {
               setQuery(searchInput.trim());
@@ -286,7 +287,9 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
             <Search />
           </Button>
           <Button
+            variant="quiet"
             size="icon"
+            className="border-border-default text-fg-default"
             aria-label="New Memory"
             onClick={() => {
               setSelectedId(null);
@@ -312,7 +315,7 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
                   type="button"
                   className={`row rounded-md border p-3 text-left ${
                     selectedId === memoryItemId(item)
-                      ? 'border-primary bg-primary/5'
+                      ? 'border-border-strong bg-bg-active'
                       : 'border-border bg-card'
                   }`}
                   onClick={() => setSelectedId(memoryItemId(item))}
@@ -342,8 +345,9 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
 
         <div className="flex items-center justify-between">
           <Button
-            variant="outline"
+            variant="quiet"
             size="icon-sm"
+            className="border-border-default text-fg-default"
             aria-label="Previous Memory page"
             disabled={cursorHistory.length === 0}
             onClick={() => {
@@ -358,8 +362,9 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
           </Button>
           <span className="text-xs text-muted-foreground">{PAGE_SIZE} per page</span>
           <Button
-            variant="outline"
+            variant="quiet"
             size="icon-sm"
+            className="border-border-default text-fg-default"
             aria-label="Next Memory page"
             disabled={!listQuery.data?.next_cursor}
             onClick={() => {
@@ -398,8 +403,9 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
           </label>
           <div className="flex items-end justify-end">
             <Button
-              variant="destructive"
+              variant="quiet"
               size="sm"
+              className="border-border-default text-fg-default"
               onClick={() => setShowClearDialog(true)}
             >
               <Trash2 />
@@ -458,7 +464,8 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
             <div className="flex justify-end gap-2">
               {selected && (
                 <Button
-                  variant="destructive"
+                  variant="quiet"
+                  className="border-border-default text-fg-default"
                   onClick={() => forgetMutation.mutate()}
                   disabled={forgetMutation.isPending}
                 >
@@ -467,6 +474,7 @@ const MemoryToolPanel: React.FC<MemoryToolPanelProps> = ({
                 </Button>
               )}
               <Button
+                variant="invert"
                 onClick={() =>
                   selected ? updateMutation.mutate() : rememberMutation.mutate()
                 }

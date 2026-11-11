@@ -3,12 +3,15 @@ import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { uploadToWorkspace } from '@/lib/workspaceUpload';
 import type { WorkspaceEntry } from '@/types/workspaceFiles';
 
 import WorkspaceBrowser from './WorkspaceBrowser';
+
+// Colour marks state or role (docs-internal/theme_system.md): these buttons
+// are neutral outlines, and a panel's one strong action is `invert`.
+const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
 
 /**
  * Pick a workspace file for a parameter, using only discrete clicks.
@@ -126,9 +129,9 @@ const WorkspaceFilePickerDialog: React.FC<Props> = ({
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <ActionButton intent="save" disabled={!selected} onClick={confirm}>
+            <Button type="button" variant="invert" className={ACTION_SHAPE} disabled={!selected} onClick={confirm}>
               Use this file
-            </ActionButton>
+            </Button>
           </div>
         </div>
       </DialogContent>

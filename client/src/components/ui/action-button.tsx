@@ -1,8 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- shadcn primitive: cva variants + component export co-located by convention. */
 /**
- * ActionButton -- colored "soft" button shared by the editor's panels (the
- * parameter panel, the location panel, the credentials panels). The top
- * toolbar and the Settings panel no longer use it: their controls are
+ * ActionButton -- colored "soft" button, left only in the credentials
+ * panels and the console's chat pane. The top toolbar, the Settings panel
+ * and the node parameter panel no longer use it: their controls are
  * neutral (theme_system.md, "Colour marks state or role").
  *
  * The `intent` prop is a semantic role (run / stop / save / ...), not a

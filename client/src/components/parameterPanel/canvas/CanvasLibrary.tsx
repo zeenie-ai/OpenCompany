@@ -189,7 +189,7 @@ export function LibraryStrip({
         <Button
           variant="quiet"
           onClick={onLatest}
-          className="h-6 shrink-0 rounded-pill border-action-tools-border bg-action-tools-soft px-2 text-xs text-action-tools-ink hover:bg-action-tools-hover hover:text-action-tools-ink"
+          className="h-6 shrink-0 rounded-pill border-border-default px-2 text-xs text-fg-default"
         >
           Latest
         </Button>

@@ -197,7 +197,7 @@ const DraggableVar: React.FC<DraggableVarProps> = ({
     onDragStart={(e) => onDragStart(e, sourceNodeId, templatePath, value)}
     className={cn(
       'mb-2 cursor-grab rounded-md border border-border bg-card p-2 transition-colors',
-      'hover:border-info hover:bg-info/10',
+      'hover:border-border-strong hover:bg-bg-hover',
       className
     )}
   >
@@ -212,7 +212,7 @@ const DraggableVar: React.FC<DraggableVarProps> = ({
           </div>
         )}
       </div>
-      <ArrowDown className="h-3.5 w-3.5 shrink-0 text-info" />
+      <ArrowDown className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
     </div>
   </div>
 );
@@ -457,7 +457,7 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
         <div key={currentPath} className={cn('mb-2', indentClass)}>
           <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             {key}
-            <Badge variant="secondary" className="bg-node-agent-soft px-1.5 text-[10px] text-node-agent-ink">
+            <Badge variant="secondary" className="px-1.5 text-[10px]">
               [{value.length} items]
             </Badge>
           </div>
@@ -472,7 +472,7 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
                     key={`${currentPath}[${index}]`}
                     className="mb-2 ml-2 rounded-sm border border-dashed border-border bg-muted p-1"
                   >
-                    <div className="mb-1 text-xs font-medium text-info">[{index}]</div>
+                    <div className="mb-1 text-xs font-medium text-fg-muted">[{index}]</div>
                     {Object.entries(item).map(([itemKey, itemValue]) => {
                       const itemPath = `${fullIndexedPath}.${itemKey}`;
                       if (typeof itemValue === 'object' && itemValue !== null && !Array.isArray(itemValue)) {
@@ -582,7 +582,7 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
   if (loading) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center bg-card p-12">
-        <Loader2 className="mb-4 h-8 w-8 animate-spin text-info" />
+        <Loader2 className="mb-4 h-8 w-8 animate-spin text-fg-muted" />
         <div className="text-sm text-muted-foreground">Loading input data...</div>
       </div>
     );
@@ -656,7 +656,7 @@ const InputSection: React.FC<InputSectionProps> = ({ nodeId, visible = true }) =
               {isExpanded && (
                 <div className="border-t border-border p-3">
                   {!node.hasExecutionData && (
-                    <div className="mb-3 flex items-center gap-2 rounded-sm border border-info bg-info/10 px-2 py-1 text-xs text-info">
+                    <div className="mb-3 flex items-center gap-2 rounded-sm border border-border-default bg-bg-elevated px-2 py-1 text-xs text-fg-muted">
                       <Info className="h-3 w-3" />
                       Schema view - Execute this node to see actual input data
                     </div>

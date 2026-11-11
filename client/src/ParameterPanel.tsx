@@ -5,11 +5,18 @@ import { useParameterPanel } from './hooks/useParameterPanel';
 import { useAppStore } from './store/useAppStore';
 import { useWebSocket } from './contexts/WebSocketContext';
 import { ExecutionService, ExecutionResult } from './services/executionService';
-import { ActionButton } from './components/ui/action-button';
 import { NodeIcon } from './assets/icons';
 import { theme } from './styles/theme';
 import { nodeExecutionReducer } from './utils/parameterPanelExecutionState';
 import { deriveCanvasLock } from './lib/canvasLock';
+import { Play, Save, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+// Colour marks state or role (docs-internal/theme_system.md): the header's
+// buttons are neutral outlines, and Save, the panel's one strong action, is
+// `invert`. The shape is the editor toolbar's.
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
+const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
 
 const ParameterPanel: React.FC = () => {
   const {
@@ -169,33 +176,34 @@ const ParameterPanel: React.FC = () => {
       </div>
       <div className="flex items-center gap-2">
         {canExecute && !hideRunButton && (
-          <ActionButton
-            intent="run"
+          <Button
+            type="button"
+            variant="quiet"
+            className={NEUTRAL_ACTION}
             onClick={handleRun}
             disabled={selectedExecution.running}
             title={selectedExecution.running ? 'Execution in progress...' : 'Execute this node'}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+            <Play className="size-3 fill-current" />
             {selectedExecution.running ? 'Running...' : 'Run'}
-          </ActionButton>
+          </Button>
         )}
-        <ActionButton
-          intent="tools"
+        {/* Save is the panel's one strong action; it fills once there is something to save. */}
+        <Button
+          type="button"
+          variant="invert"
+          className={ACTION_SHAPE}
           onClick={handleSave}
           disabled={!hasUnsavedChanges || canvasLock.locked}
           title={canvasLock.locked ? (canvasLock.reason ?? undefined) : undefined}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
+          <Save className="size-3" />
           Save
-        </ActionButton>
-        <ActionButton
-          intent="stop"
+        </Button>
+        <Button
+          type="button"
+          variant="quiet"
+          className={NEUTRAL_ACTION}
           onClick={async () => {
             if (isWaiting && selectedNode) {
               const result = await cancelEventWait(selectedNode.id, nodeStatus?.data?.waiter_id);
@@ -205,12 +213,9 @@ const ParameterPanel: React.FC = () => {
             handleCancel();
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <X className="size-3" />
           {isWaiting ? 'Stop' : 'Cancel'}
-        </ActionButton>
+        </Button>
       </div>
     </div>
   );
@@ -222,7 +227,7 @@ const ParameterPanel: React.FC = () => {
       title="Node Configuration"
       // Structural hook so themes can scope decorations to THIS modal
       // (e.g. keep an accent-filled modal header off the parameter panel
-      // so the tinted Run / Save / Cancel header actions stay legible).
+      // so the Run / Save / Cancel header actions stay legible).
       className="param-panel-modal"
       maxWidth="95vw"
       maxHeight="95vh"

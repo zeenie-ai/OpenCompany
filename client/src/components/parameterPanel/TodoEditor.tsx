@@ -17,11 +17,15 @@ import { CheckCircle2, Circle, CircleDot, Plus, Trash2 } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ActionButton } from '@/components/ui/action-button';
 import { cn } from '@/lib/utils';
 import { todoQueryKey } from '@/lib/todoQuery';
 import { useWebSocket } from '../../contexts/WebSocketContext';
 import { useAppStore } from '../../store/useAppStore';
+import { Button } from '@/components/ui/button';
+
+// Colour marks state or role (docs-internal/theme_system.md): these buttons
+// are neutral outlines, and a panel's one strong action is `invert`.
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
 
 type TodoStatus = 'pending' | 'in_progress' | 'completed';
 
@@ -169,10 +173,10 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
         <Badge variant="secondary" className="min-w-0 truncate normal-case tracking-normal">
           {counts.completed} done · {counts.in_progress} active · {counts.pending} pending
         </Badge>
-        <ActionButton intent="save" onClick={addTodo} className="ml-auto h-8 shrink-0">
+        <Button type="button" variant="quiet" className={`${NEUTRAL_ACTION} ml-auto`} onClick={addTodo}>
           <Plus className="h-3.5 w-3.5" />
           Add
-        </ActionButton>
+        </Button>
       </div>
 
       <p className="mb-3 text-xs text-muted-foreground">
@@ -184,10 +188,10 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center">
             <CircleDot className="h-6 w-6 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">No todos yet. Add one to start planning.</p>
-            <ActionButton intent="save" onClick={addTodo} className="h-8">
+            <Button type="button" variant="quiet" className={NEUTRAL_ACTION} onClick={addTodo}>
               <Plus className="h-3.5 w-3.5" />
               Add todo
-            </ActionButton>
+            </Button>
           </div>
         ) : (
           rows.map((row) => {
@@ -199,7 +203,7 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
                   type="button"
                   onClick={() => cycleStatus(row.id)}
                   title={`${meta.label} — click to cycle`}
-                  className={cn('inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md hover:bg-accent', meta.cls)}
+                  className={cn('inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md hover:bg-bg-hover', meta.cls)}
                 >
                   <Icon className="h-4 w-4" />
                 </button>
@@ -213,9 +217,9 @@ const TodoEditor: React.FC<Props> = ({ nodeId }) => {
                   onBlur={() => commitContent(row.id)}
                   className={cn('h-8 min-w-0 flex-1', row.status === 'completed' && 'line-through text-muted-foreground')}
                 />
-                <ActionButton intent="stop" onClick={() => deleteTodo(row.id)} className="h-8 w-8 shrink-0 justify-center p-0" aria-label="Delete todo">
+                <Button type="button" variant="quiet" className={`${NEUTRAL_ACTION} w-8 justify-center p-0`} onClick={() => deleteTodo(row.id)} aria-label="Delete todo">
                   <Trash2 className="h-3.5 w-3.5" />
-                </ActionButton>
+                </Button>
               </div>
             );
           })

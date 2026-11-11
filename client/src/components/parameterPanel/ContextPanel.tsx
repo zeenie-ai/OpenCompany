@@ -226,8 +226,9 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
             </TabsList>
           </Tabs>
           <Button
-            variant="outline"
+            variant="quiet"
             size="sm"
+            className="border-border-default text-fg-default"
             onClick={() => void contextQuery.refetch()}
             disabled={contextQuery.isFetching}
           >
@@ -235,8 +236,9 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
             Refresh
           </Button>
           <Button
-            variant="destructive"
+            variant="quiet"
             size="sm"
+            className="border-border-default text-fg-default"
             onClick={() => clearMutation.mutate()}
             disabled={clearMutation.isPending || messages.length === 0}
           >

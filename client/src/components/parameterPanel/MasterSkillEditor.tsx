@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import { ActionButton } from '@/components/ui/action-button';
 import { Alert as DSAlert, AlertDescription } from '@/components/ui/alert';
 import {
   Tooltip,
@@ -54,6 +53,12 @@ import { useFolderSkills } from '../../hooks/useFolderSkills';
 import { USER_SKILLS_QUERY_KEY, useUserSkillsQuery, type UserSkill } from '../../hooks/useUserSkills';
 import { useNodeAllowlist } from '../../hooks/useNodeAllowlist';
 import { skillContentQueryKey } from '../../lib/skillContentQueryKey';
+import { Button } from '@/components/ui/button';
+
+// Colour marks state or role (docs-internal/theme_system.md): these buttons
+// are neutral outlines, and a panel's one strong action is `invert`.
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
+const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
 
 // Skill configuration stored in node parameters
 // Key is skillName (folder name like 'whatsapp-skill'). Entries can carry
@@ -619,21 +624,22 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
             Skills
           </span>
           <div className="flex items-center gap-1">
-            <DSBadge className="h-5 min-w-5 justify-center rounded-full bg-action-tools px-1.5 text-white">
+            <DSBadge className="h-5 min-w-5 justify-center rounded-full border-border-default bg-bg-elevated px-1.5 text-fg-default">
               {enabledCount}
             </DSBadge>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <ActionButton
-                    intent="tools"
+                  <Button
+                    type="button"
+                    variant="quiet"
+                    className={`${NEUTRAL_ACTION} h-7 px-2`}
                     onClick={handleCreateSkill}
                     disabled={isCreatingNew}
-                    className="h-7 px-2"
                     aria-label="Create new skill"
                   >
                     <Plus className="h-3.5 w-3.5" />
-                  </ActionButton>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>Create new skill</TooltipContent>
               </Tooltip>
@@ -823,19 +829,20 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                   Fill in the details below and save
                 </div>
               </div>
-              <ActionButton intent="stop" onClick={handleCancelCreate} className="h-8">
+              <Button type="button" variant="quiet" className={NEUTRAL_ACTION} onClick={handleCancelCreate}>
                 <X className="h-3.5 w-3.5" />
                 Cancel
-              </ActionButton>
-              <ActionButton
-                intent="save"
+              </Button>
+              <Button
+                type="button"
+                variant="invert"
+                className={ACTION_SHAPE}
                 onClick={handleSaveSkill}
                 disabled={savingSkill}
-                className="h-8"
               >
                 {savingSkill ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 Save
-              </ActionButton>
+              </Button>
             </div>
 
             {/* New Skill Form */}
@@ -950,22 +957,23 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
               {isEditingUserSkill && (
                 <>
                   {hasUnsavedChanges && (
-                    <ActionButton
-                      intent="save"
+                    <Button
+                      type="button"
+                      variant="invert"
+                      className={ACTION_SHAPE}
                       onClick={handleSaveSkill}
                       disabled={savingSkill}
-                      className="h-8"
                     >
                       {savingSkill ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                       Save
-                    </ActionButton>
+                    </Button>
                   )}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <ActionButton intent="stop" className="h-8">
+                      <Button type="button" variant="quiet" className={NEUTRAL_ACTION}>
                         <Trash2 className="h-3.5 w-3.5" />
                         Delete
-                      </ActionButton>
+                      </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -978,8 +986,8 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
+                          variant="destructive"
                           onClick={() => handleDeleteSkill(selectedSkillName!)}
-                          className="bg-destructive text-white hover:bg-destructive/90"
                         >
                           Delete
                         </AlertDialogAction>
@@ -991,15 +999,16 @@ const MasterSkillEditor: React.FC<MasterSkillEditorProps> = ({
 
               {/* Reset Button for built-in skills */}
               {!isEditingUserSkill && selectedSkillConfig?.isCustomized && (
-                <ActionButton
-                  intent="config"
+                <Button
+                  type="button"
+                  variant="quiet"
+                  className={NEUTRAL_ACTION}
                   onClick={() => handleResetToDefault(selectedSkillName!)}
                   disabled={isLoading}
-                  className="h-8"
                 >
                   {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                   Reset
-                </ActionButton>
+                </Button>
               )}
             </div>
 

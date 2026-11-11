@@ -70,7 +70,7 @@ function Section({ label, defaultOpen = false, action, children }: SectionProps)
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border last:border-0">
       <div className="flex items-center gap-2">
-        <CollapsibleTrigger className="flex flex-1 items-center gap-2 py-2 text-sm font-medium text-foreground hover:text-primary">
+        <CollapsibleTrigger className="flex flex-1 items-center gap-2 py-2 text-sm font-medium text-fg-default hover:text-fg-muted">
           <ChevronDown
             className={cn('h-4 w-4 transition-transform', open && 'rotate-0', !open && '-rotate-90')}
           />
@@ -140,7 +140,7 @@ export default function OutputPanel({ results, onClear, selectedNode }: Props) {
           ))}
         </div>
         {onClear && (
-          <Button variant="ghost" size="xs" onClick={onClear} className="shrink-0 text-destructive">
+          <Button variant="ghost" size="xs" onClick={onClear} className="shrink-0 text-fg-muted">
             <X /> Clear
           </Button>
         )}

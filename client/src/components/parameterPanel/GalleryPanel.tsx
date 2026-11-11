@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Pin, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { ActionButton } from '@/components/ui/action-button';
 import { Button } from '@/components/ui/button';
 import { uploadToWorkspace } from '@/lib/workspaceUpload';
 import { useDragWorkspaceFile } from '@/hooks/useDragWorkspaceFile';
@@ -10,6 +9,10 @@ import type { WorkspaceEntry } from '@/types/workspaceFiles';
 
 import FilePreviewDialog from './gallery/FilePreviewDialog';
 import WorkspaceBrowser from './gallery/WorkspaceBrowser';
+
+// Colour marks state or role (docs-internal/theme_system.md): these buttons
+// are neutral outlines, and a panel's one strong action is `invert`.
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
 
 interface Props {
   workflowId?: string;
@@ -102,15 +105,17 @@ const GalleryPanel: React.FC<Props> = ({ workflowId, parameters, onParameterChan
             className="hidden"
             onChange={(event) => void handleUpload(event.target.files)}
           />
-          <ActionButton
-            intent="save"
+          <Button
+            type="button"
+            variant="quiet"
+            className={NEUTRAL_ACTION}
             disabled={!workflowId || uploading}
             onClick={() => fileInputRef.current?.click()}
             title={workflowId ? 'Upload files into this workspace' : 'Save the workflow first'}
           >
             <Upload className="h-4 w-4" />
             {uploading ? 'Uploading…' : 'Upload'}
-          </ActionButton>
+          </Button>
         </div>
       </header>
 

@@ -25,7 +25,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Zap, Pencil, Sparkles, TerminalSquare, Trash2, RotateCcw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { ActionButton } from '@/components/ui/action-button';
 import ParameterRenderer from '../ParameterRenderer';
 import MasterSkillEditor from './MasterSkillEditor';
 import TodoEditor from './TodoEditor';
@@ -53,6 +52,11 @@ import { shouldShowParameter } from '../../utils/parameterVisibility';
 import { latestResultForNode } from '../../utils/executionResults';
 
 import { resolveNodeDescription, getCachedNodeSpec } from '../../lib/nodeSpec';
+import { Button } from '@/components/ui/button';
+
+// Colour marks state or role (docs-internal/theme_system.md): these buttons
+// are neutral outlines, and a panel's one strong action is `invert`.
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
 
 const isMasterSkillNodeType = (nodeType: string | undefined): boolean => {
   if (!nodeType) return false;
@@ -669,28 +673,30 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
             {/* Clear Memory Button - Only for memory nodes */}
             {isMemoryNode && (
               <div className="mt-3 flex justify-end border-t border-border-default pt-3">
-                <ActionButton
-                  intent="stop"
+                <Button
+                  type="button"
+                  variant="quiet"
+                  className={NEUTRAL_ACTION}
                   onClick={() => setShowClearMemoryDialog(true)}
-                  className="h-8"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Clear Memory
-                </ActionButton>
+                </Button>
               </div>
             )}
 
             {/* Reset Skill Button - Only for built-in skill nodes */}
             {isSkillNode && (
               <div className="mt-3 flex justify-end border-t border-border-default pt-3">
-                <ActionButton
-                  intent="config"
+                <Button
+                  type="button"
+                  variant="quiet"
+                  className={NEUTRAL_ACTION}
                   onClick={() => setShowResetSkillDialog(true)}
-                  className="h-8"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Reset to Default
-                </ActionButton>
+                </Button>
               </div>
             )}
           </div>
@@ -749,6 +755,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
                 <AlertDialogAction
+                  variant="invert"
                   disabled={isProcessing}
                   onClick={handleResetSkill}
                 >
@@ -819,9 +826,10 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                                   step={10000}
                                   className="h-7 w-28 text-xs"
                                 />
-                                <ActionButton
-                                  intent="save"
-                                  className="h-7 w-7 px-0"
+                                <Button
+                                  type="button"
+                                  variant="quiet"
+                                  className={`${NEUTRAL_ACTION} h-7 w-7 px-0`}
                                   disabled={savingThreshold || !connectedMemorySessionId}
                                   onClick={() => {
                                     if (!connectedMemorySessionId) return;
@@ -832,7 +840,7 @@ const MiddleSection: React.FC<MiddleSectionProps> = ({
                                   }}
                                 >
                                   {savingThreshold ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                </ActionButton>
+                                </Button>
                               </div>
                             </div>
                           ) : (

@@ -17,7 +17,6 @@ import { Textarea } from './ui/textarea';
 import { Checkbox } from './ui/checkbox';
 import { Slider } from './ui/slider';
 import { Alert } from './ui/alert';
-import { ActionButton } from './ui/action-button';
 import {
   Select,
   SelectContent,
@@ -38,6 +37,12 @@ import { uploadToWorkspace } from '../lib/workspaceUpload';
 import { WORKSPACE_FILE_DRAG_TYPE, isWorkspaceFileRef } from '../types/workspaceFiles';
 import { assignWorkspaceFile, buildWorkspaceFilePayload } from '../lib/workspaceFileAssign';
 import WorkspaceFilePickerDialog from './parameterPanel/gallery/WorkspaceFilePickerDialog';
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+// Colour marks state or role (docs-internal/theme_system.md): these buttons
+// are neutral outlines, and a panel's one strong action is `invert`.
+const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
 
 /**
  * Radix reserves the empty string to clear a Select, so raw node option
@@ -173,7 +178,7 @@ const CollectionRenderer: React.FC<{
         <div className="relative">
           <button
             onClick={() => setShowAddOption(!showAddOption)}
-            className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-muted-foreground cursor-pointer transition-colors hover:bg-accent"
+            className="flex w-full items-center justify-between rounded-md border border-border bg-muted px-3 py-2.5 text-sm text-muted-foreground cursor-pointer transition-colors hover:bg-bg-hover"
           >
             {parameter.placeholder || 'Add Option'}
             <span
@@ -331,16 +336,18 @@ const GroupIdSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isGroupSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isGroupSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
-        <ActionButton
-          intent="config"
+        <Button
+          type="button"
+          variant="quiet"
+          className={NEUTRAL_ACTION}
           onClick={handleLoadGroups}
           disabled={isLoading}
           title="Load WhatsApp groups"
         >
           {isLoading ? 'Loading...' : 'Load'}
-        </ActionButton>
+        </Button>
       </div>
       {/* Show JID below when group name is displayed */}
       {isGroupSelected && (
@@ -513,16 +520,18 @@ const SenderNumberSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isMemberSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isMemberSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
-        <ActionButton
-          intent="config"
+        <Button
+          type="button"
+          variant="quiet"
+          className={NEUTRAL_ACTION}
           onClick={handleLoadMembers}
           disabled={isLoading || !groupId}
           title={groupId ? "Load group members" : "Select a group first"}
         >
           {isLoading ? 'Loading...' : 'Load'}
-        </ActionButton>
+        </Button>
       </div>
       {/* Show phone below when member name is displayed */}
       {isMemberSelected && (
@@ -682,16 +691,18 @@ const ChannelJidSelector: React.FC<{
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
+          className={`flex-1 ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isSelected ? 'bg-muted text-success font-medium' : (isTemplate ? 'text-info font-mono' : '')}`}
         />
-        <ActionButton
-          intent="config"
+        <Button
+          type="button"
+          variant="quiet"
+          className={NEUTRAL_ACTION}
           onClick={handleLoadChannels}
           disabled={isLoading}
           title="Load WhatsApp channels"
         >
           {isLoading ? 'Loading...' : 'Load'}
-        </ActionButton>
+        </Button>
       </div>
       {isSelected && (
         <div className="mt-1 font-mono text-xs text-muted-foreground">
@@ -1345,7 +1356,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`min-h-[80px] resize-y leading-relaxed ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isTextareaTemplate ? 'text-info font-mono' : ''}`}
+              className={`min-h-[80px] resize-y leading-relaxed ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isTextareaTemplate ? 'text-info font-mono' : ''}`}
             />
           );
         }
@@ -1545,7 +1556,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isSessionTemplate ? 'text-info font-mono' : ''}`}
+              className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isSessionTemplate ? 'text-info font-mono' : ''}`}
             />
           );
         }
@@ -1560,7 +1571,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isStringTemplate ? 'text-info font-mono' : ''}`}
+            className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isStringTemplate ? 'text-info font-mono' : ''}`}
           />
         );
 
@@ -1577,7 +1588,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''}
+            className={isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''}
           />
         );
 
@@ -1665,7 +1676,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isTextTemplate ? 'text-info font-mono' : ''}`}
+            className={`${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isTextTemplate ? 'text-info font-mono' : ''}`}
           />
         );
 
@@ -1765,7 +1776,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 readOnly={isUploadedFile || isFileRef}
-                className={`flex-1 font-mono ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''} ${isUploadedFile || isFileRef ? 'bg-muted text-success' : (isFileTemplate ? 'text-info' : '')}`}
+                className={`flex-1 font-mono ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''} ${isUploadedFile || isFileRef ? 'bg-muted text-success' : (isFileTemplate ? 'text-info' : '')}`}
               />
               <input
                 key={`file-input-${allParameters?.message_type || 'default'}`}
@@ -1776,34 +1787,42 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
                 accept={getFileAcceptType()}
               />
               {workflowId && (
-                <ActionButton
-                  intent="config"
+                <Button
+                  type="button"
+                  variant="quiet"
+                  className={NEUTRAL_ACTION}
                   onClick={() => setPickerOpen(true)}
                   title="Pick a file already in this workflow's workspace"
                 >
                   Choose from workspace
-                </ActionButton>
+                </Button>
               )}
-              <ActionButton
-                intent="config"
+              <Button
+                type="button"
+                variant="quiet"
+                className={NEUTRAL_ACTION}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
                 title="Upload file"
               >
                 {isUploading ? 'Uploading…' : 'Upload'}
-              </ActionButton>
+              </Button>
               {(isUploadedFile || isFileRef) && (
-                <ActionButton
-                  intent="stop"
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="icon"
+                  className="rounded-md border-border-default text-fg-default"
                   onClick={() => {
                     onChange('');
                     setUploadError(null);
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }}
                   title="Clear uploaded file"
+                  aria-label="Clear uploaded file"
                 >
-                  X
-                </ActionButton>
+                  <X />
+                </Button>
               )}
             </div>
             <div
@@ -1892,7 +1911,7 @@ const ParameterRenderer: React.FC<ParameterRendererProps> = ({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`min-h-[100px] resize-y font-mono leading-relaxed ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-accent/10' : ''}`}
+            className={`min-h-[100px] resize-y font-mono leading-relaxed ${isDragOver ? 'border-ring ring-3 ring-ring/50 bg-bg-active' : ''}`}
           />
         );
 
