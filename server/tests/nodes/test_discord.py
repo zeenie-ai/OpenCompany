@@ -984,3 +984,39 @@ class TestInteractionTriggerIsDeployable:
         base = {"account_id": "default"}
         base.update(event)
         assert build_interaction_filter(params)(base) is expected
+
+
+class TestPrepareDeployment:
+    """Only the owner's Connect command started the gateway, so the deploy
+    (and boot re-arm) hook must, without holding up Start."""
+
+    def _drain(self, gateway, parameters):
+        from nodes.discord import discord_receive
+
+        async def run():
+            with patch("nodes.discord._gateway.get_gateway", new=AsyncMock(return_value=gateway)) as get:
+                await DiscordReceiveNode.prepare_deployment(
+                    node_id="n1", workflow_id="wf1", parameters=parameters
+                )
+                pending = list(discord_receive._background_tasks)
+                assert pending, "prepare_deployment scheduled nothing"
+                await asyncio.gather(*pending)
+                return get
+
+        return _run(run())
+
+    def test_starts_the_default_bot_in_the_background(self):
+        gateway = SimpleNamespace(start=AsyncMock())
+        get = self._drain(gateway, {})
+        get.assert_awaited_once_with(DEFAULT_ACCOUNT)
+        gateway.start.assert_awaited_once()
+
+    def test_starts_the_bot_the_trigger_names(self):
+        gateway = SimpleNamespace(start=AsyncMock())
+        get = self._drain(gateway, {"account_id": "second-bot"})
+        get.assert_awaited_once_with("second-bot")
+        gateway.start.assert_awaited_once()
+
+    def test_a_failed_start_is_logged_not_raised(self):
+        self._drain(SimpleNamespace(start=AsyncMock(side_effect=NodeUserError("Discord rejected the bot token."))), {})
+        self._drain(SimpleNamespace(start=AsyncMock(side_effect=RuntimeError("gateway crashed"))), {})

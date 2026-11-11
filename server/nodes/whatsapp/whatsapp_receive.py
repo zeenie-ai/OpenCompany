@@ -7,11 +7,43 @@ to preserve the full sender/group/forwarded/keyword filter matrix.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Literal, Optional
+import asyncio
+from typing import Any, Callable, Dict, Literal, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.logging import get_logger
 from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
+
+logger = get_logger(__name__)
+
+# Strong references, so a scheduled bridge start is not garbage-collected
+# before it finishes.
+_background_tasks: Set[asyncio.Task] = set()
+
+
+async def _start_bridge_for_deployment(node_id: str, workflow_id: str) -> None:
+    from ._service import handle_whatsapp_start
+
+    try:
+        result = await handle_whatsapp_start()
+    except Exception:
+        logger.warning(
+            "[WhatsApp] could not start the bridge for a deployed whatsappReceive",
+            node_id=node_id,
+            workflow_id=workflow_id,
+            exc_info=True,
+        )
+        return
+    if not result.get("success"):
+        # Armed anyway: pressing Start in Connectors starts the bridge, and
+        # messages flow from then on.
+        logger.warning(
+            "[WhatsApp] deployed whatsappReceive is waiting: %s",
+            result.get("error"),
+            node_id=node_id,
+            workflow_id=workflow_id,
+        )
 
 
 class WhatsAppReceiveParams(BaseModel):
@@ -137,6 +169,25 @@ class WhatsAppReceiveNode(TriggerNode):
 
     Params = WhatsAppReceiveParams
     Output = WhatsAppReceiveOutput
+
+    @classmethod
+    async def prepare_deployment(
+        cls,
+        *,
+        node_id: str,
+        workflow_id: str,
+        parameters: Dict[str, Any],
+    ) -> None:
+        """Start the WhatsApp bridge for a deployed trigger.
+
+        The status refresh at boot only probes the bridge and never starts it,
+        so without this a deployed trigger would receive nothing after a
+        backend restart until the owner pressed Start. Run in the background:
+        starting the bridge must not hold up Start or the boot re-arm.
+        """
+        task = asyncio.create_task(_start_bridge_for_deployment(node_id, workflow_id))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     def build_filter(self, params: WhatsAppReceiveParams) -> Callable[[Dict[str, Any]], bool]:
         from services.event_waiter import build_whatsapp_filter

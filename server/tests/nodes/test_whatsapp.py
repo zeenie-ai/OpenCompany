@@ -429,3 +429,30 @@ class TestWhatsappReceive:
 
         harness.assert_envelope(result, success=False)
         assert "redis stream down" in result["error"].lower()
+
+
+class TestPrepareDeployment:
+    """The status refresh at boot only probes the bridge, so the deploy (and
+    boot re-arm) hook must start it, without holding up Start."""
+
+    async def _drain(self, start):
+        import asyncio
+
+        from nodes.whatsapp import whatsapp_receive
+
+        with patch("nodes.whatsapp._service.handle_whatsapp_start", new=start):
+            await whatsapp_receive.WhatsAppReceiveNode.prepare_deployment(
+                node_id="n1", workflow_id="wf1", parameters={}
+            )
+            pending = list(whatsapp_receive._background_tasks)
+            assert pending, "prepare_deployment scheduled nothing"
+            await asyncio.gather(*pending)
+
+    async def test_starts_the_bridge_in_the_background(self):
+        start = AsyncMock(return_value={"success": True})
+        await self._drain(start)
+        start.assert_awaited_once()
+
+    async def test_a_failed_start_is_logged_not_raised(self):
+        await self._drain(AsyncMock(return_value={"success": False, "error": "bridge not installed"}))
+        await self._drain(AsyncMock(side_effect=RuntimeError("bridge crashed")))

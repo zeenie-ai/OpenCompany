@@ -9,14 +9,49 @@ verbatim. Wire discordAction[download_attachments] downstream to fetch them.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Literal, Optional
+import asyncio
+from typing import Any, Callable, Dict, List, Literal, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from services.plugin import NodeContext, Operation, TaskQueue, TriggerNode
+from core.logging import get_logger
+from services.plugin import NodeContext, NodeUserError, Operation, TaskQueue, TriggerNode
 
+from ._accounts import DEFAULT_ACCOUNT
 from ._credentials import DiscordBotCredential
 from ._events import MESSAGE_RECEIVED_TYPE
+
+logger = get_logger(__name__)
+
+# Strong references, so a scheduled gateway start is not garbage-collected
+# before it finishes.
+_background_tasks: Set[asyncio.Task] = set()
+
+
+async def _start_gateway_for_deployment(account_id: str, node_id: str, workflow_id: str) -> None:
+    from ._gateway import get_gateway
+
+    try:
+        gateway = await get_gateway(account_id)
+        await gateway.start()
+    except NodeUserError as exc:
+        # Armed anyway: connecting the bot in Connectors starts the gateway,
+        # and messages flow from then on.
+        logger.warning(
+            "[Discord] deployed discordReceive is waiting: %s",
+            exc,
+            account_id=account_id,
+            node_id=node_id,
+            workflow_id=workflow_id,
+        )
+    except Exception:
+        logger.warning(
+            "[Discord] could not start the gateway for a deployed discordReceive",
+            account_id=account_id,
+            node_id=node_id,
+            workflow_id=workflow_id,
+            exc_info=True,
+        )
 
 
 class DiscordAttachment(BaseModel):
@@ -121,6 +156,26 @@ class DiscordReceiveNode(TriggerNode):
 
     Params = DiscordReceiveParams
     Output = DiscordReceiveOutput
+
+    @classmethod
+    async def prepare_deployment(
+        cls,
+        *,
+        node_id: str,
+        workflow_id: str,
+        parameters: Dict[str, Any],
+    ) -> None:
+        """Start the Discord gateway of the trigger's bot for a deployment.
+
+        Only the owner's Connect command started the gateway, so without this
+        a deployed trigger would receive nothing after a backend restart.
+        Run in the background: connecting must not hold up Start or the boot
+        re-arm.
+        """
+        account_id = str((parameters or {}).get("account_id") or DEFAULT_ACCOUNT)
+        task = asyncio.create_task(_start_gateway_for_deployment(account_id, node_id, workflow_id))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
 
     def build_filter(self, params: BaseModel) -> Callable[[Dict[str, Any]], bool]:
         """Normally unreachable: the plugin pre-registers the builder with
