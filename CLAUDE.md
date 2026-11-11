@@ -285,7 +285,7 @@ server/nodejs/
 ├── package.json              # Dependencies: express + express-rate-limit (both inlined into the bundle; the limiter guards the /packages routes). Scripts: build = `bun build src/index.ts --target=bun --outfile=dist/index.js`,
 │                             #   start = `bun dist/index.js`, dev = `bun --watch src/index.ts`; engines = { bun >= 1.4.0 }. No esbuild, no tsx.
 ├── tsconfig.json             # TypeScript config (ES2024)
-├── dist/index.js             # Self-contained bundle (gitignored; built by `company build` / the desktop stage script; missing from the 0.2.x registry tarball, see errors.md #26)
+├── dist/index.js             # Self-contained bundle (gitignored by the root rule; built by `company build` / the desktop stage script; in the registry tarball after 0.3.1, which 0.2.0 to 0.3.1 lacked, see errors.md #26)
 └── src/
     └── index.ts              # Express server with /execute, /health, /packages/*
 

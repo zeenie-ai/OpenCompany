@@ -177,13 +177,13 @@ The tarball still excludes `__pycache__/` per `package.json` `files` (cross-Pyth
 
 - `scripts/install.js` → after `uv sync`:
   1. `uv run python -m compileall -q -j 0 <COMPILEALL_SOURCE_DIRS>` — same shape as build.py (no `-O`; locked in sync by `cli/tests/test_release_pipeline_config.py`)
-- The sidecar is **not** rebuilt at install time: `company build` step `[3/6]` runs `bun run --filter opencompany-nodejs-executor build` before `bun pm pack` / `bun publish`, and `server/nodejs/dist/index.js` was meant to ride inside the tarball under the `server/` entry in the root `files` list. It does not: `bun pm pack` honours the nested `server/nodejs/.gitignore`, which lists `dist/`, so 0.2.0 and 0.2.1 ship without the bundle ([errors.md #26](./errors.md)); `company build` in the installed package rebuilds it. Likewise the client is only built by install.js when `client/dist/index.html` is missing.
+- The sidecar is **not** rebuilt at install time: `company build` step `[3/6]` runs `bun run --filter opencompany-nodejs-executor build` before `bun pm pack` / `bun publish`, and `server/nodejs/dist/index.js` was meant to ride inside the tarball under the `server/` entry in the root `files` list. Up to 0.3.1 it did not: `bun pm pack` honours nested ignore files, and `server/nodejs/.gitignore` listed `dist/`, so those releases ship without the bundle ([errors.md #26](./errors.md)); `company build` in the installed package rebuilds it. The nested rule is gone, and the root `.gitignore`'s `dist` rule keeps the bundle out of git. Likewise the client is only built by install.js when `client/dist/index.html` is missing.
 
 Idempotent on re-runs (compileall only rewrites stale pyc; `bun build` is deterministic).
 
 ### 6. Tarball verification
 
-- `bun pm pack --dry-run` after the change. Confirm `server/nodejs/dist/index.js` is included; today it is not (errors.md #26). Confirm no `__pycache__/` leakage.
+- `bun pm pack --dry-run` after the change. Confirm `server/nodejs/dist/index.js` is included (0.3.1 and earlier lacked it: errors.md #26). Confirm no `__pycache__/` leakage.
 - `server/uv.lock` is committed (since the desktop app) and ships in the tarball; `.npmignore` only hides `package-lock.json` (a legacy artefact — the tree is `bun.lock`-only). The desktop stage script also reads the `bun pm pack --dry-run` file list as its layout source of truth, so a change to the root `files` allowlist reaches the desktop bundle automatically.
 
 ## Critical files
@@ -194,9 +194,9 @@ Idempotent on re-runs (compileall only rewrites stale pyc; `bun build` is determ
 | `client/package.json` | `typecheck` delegates to the root gate; keeps `typescript@^5.x` for typescript-eslint |
 | `client/vite.config.js` | + manualChunks, target, lower warning |
 | `server/nodejs/package.json` | `bun build --target=bun` build script, `bun dist/index.js` start, `bun --watch` dev, `engines.bun` (no esbuild / tsx deps) |
-| `server/nodejs/.gitignore` | new — ignore `dist/` (this nested rule is what drops the bundle from `bun pm pack`: errors.md #26) |
+| `server/nodejs/.gitignore` | ignores only `package-lock.json`. Until 0.3.1 it also listed `dist/`, which dropped the bundle from `bun pm pack` (errors.md #26) |
 | `cli/commands/build.py` | + compileall step (`[5/6]`, plain `.pyc` — no `-O`), `COMPILEALL_SOURCE_DIRS` constant |
-| `scripts/install.js` | + compileall call (expects the sidecar bundle pre-built in the tarball, which 0.2.x lacks: errors.md #26) |
+| `scripts/install.js` | + compileall call (expects the sidecar bundle pre-built in the tarball, which 0.3.1 and earlier lack: errors.md #26) |
 | `server/pyproject.toml` | `[tool.uv] compile-bytecode = true` — `uv sync` compiles `.venv/` site-packages |
 | `.github/workflows/predeploy.yml` | + typecheck gate in `build-and-lint`; + `tsc --version` in the cross-OS matrix |
 
@@ -207,7 +207,7 @@ Idempotent on re-runs (compileall only rewrites stale pyc; `bun build` is determ
 3. `cd server/nodejs && bun run build && NODEJS_EXECUTOR_PORT=<port> bun dist/index.js` → starts on `NODEJS_EXECUTOR_PORT` (required env; no fallback literal) in <100ms; `GET /health` reports `runtime: "bun"`.
 4. `cd server && uv run python -m compileall -q -j 0 services` → plain `__pycache__/*.pyc` present (no `.opt-1.pyc` — nothing loads those).
 5. Cold-start: clean install + `company start > start.log 2>&1` → `Application startup complete` at ≤+50s (was +66.9s). Measured 9.8 s on 2026-11-11 for the first launch after a fresh build, 4.5 s warm ([performance.md](performance.md)).
-6. `bun pm pack --dry-run` → `server/nodejs/dist/index.js` should be included (0.2.x omits it: errors.md #26); no `__pycache__/`; tarball size ≤ v0.0.76.
+6. `bun pm pack --dry-run` → `server/nodejs/dist/index.js` should be included (0.3.1 and earlier omit it: errors.md #26); no `__pycache__/`; tarball size ≤ v0.0.76.
 7. Smoke: `company start` → load the app URL (`http://localhost:${PYTHON_BACKEND_PORT}`) → run "AI Assistant" example → agent responds.
 
 ## Desktop installers

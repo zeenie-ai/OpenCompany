@@ -1273,7 +1273,8 @@ class MyReceiveNode(WebhookTriggerNode):
 - The `@Operation("wait")` stub.
 
 A trigger whose events need something running (Stripe's `stripe listen`
-daemon) starts it from the `TriggerNode.prepare_deployment` classmethod,
+daemon, the WhatsApp bridge, a Discord bot's gateway) starts it from the
+`TriggerNode.prepare_deployment` classmethod,
 which the deployment manager calls for every trigger it arms, at Start
 and at the boot re-arm. Return quickly and schedule slow work; a raise is
 logged and the trigger is armed anyway.
@@ -1520,7 +1521,7 @@ project that publishes pre-built binaries via GitHub releases.
 | Event dispatch into workflows | `event_waiter.dispatch(event)` from `WebhookSource.handle` (canvas Run, and a deploy that runs without Temporal) | provider-specific `shape()` returning `WorkflowEvent` |
 | Deployed delivery (Temporal) | `services.events.dispatch.emit` discovers consumers through Visibility and sends `on_event` Signals; controlled deployments queue/filter in `WorkflowControlWorkflow`, separate listeners are compatibility paths | `register_canary_trigger_type(node_type, <the envelope type>)` + an `emit` of each envelope (Stripe: `_events.emit_stripe_event`, called from `handle`) |
 | Trigger waiting + filtering | `WebhookTriggerNode.build_filter` (CloudEvents glob); both callers pass the envelope's `data` | override `build_filter` to read the payload (the base rebuilds an envelope from it and raises); `_extra_filter(params)` only on top of the base |
-| Deploy-time setup | `DeploymentManager._prepare_trigger_deployment` calls the trigger class's `prepare_deployment` at Start and at the boot re-arm; a raise is logged and the trigger armed anyway | optional `prepare_deployment(node_id=, workflow_id=, parameters=)` classmethod (Stripe starts `stripe listen` in a background task) |
+| Deploy-time setup | `DeploymentManager._prepare_trigger_deployment` calls the trigger class's `prepare_deployment` at Start and at the boot re-arm; a raise is logged and the trigger armed anyway | optional `prepare_deployment(node_id=, workflow_id=, parameters=)` classmethod (in a background task: Stripe starts `stripe listen`, WhatsApp its bridge, Discord the trigger's bot gateway) |
 | Daemon lifecycle | `DaemonEventSource.start/stop/restart` via `ProcessService` | `build_command(secrets)` + `parse_line(stream, line)` (subscribed via `ProcessService.start(line_handler=...)` — no log-file tailing) |
 | Daemon credential gate | `DaemonEventSource.start` consults `await self.has_credential()` before spawning | optional override when auth is non-api-key (Stripe → `is_logged_in()`); default tests `secrets["api_key"]` |
 | Lifecycle WebSocket commands | `make_lifecycle_handlers(prefix, source, extra=…)` | provider-specific extra handlers |
