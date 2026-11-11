@@ -64,8 +64,12 @@
 >    `invert` primary (the foreground as the fill), and the Normal/Dev
 >    switch is a neutral segmented control; Home and the shared chat follow
 >    the same rule, and so does the node parameter panel (Save is its
->    primary). The six intents stay as tokens, for the credentials panels'
->    buttons (`<ActionButton>`) and for state marks. The rule of record is
+>    primary). In the panel's full-height views a state is a dot beside
+>    neutral words and a file's glyph takes no tint, so the matrix's
+>    tinted status pills (Team Monitor), coloured counts (Process Manager)
+>    and `fileIcons.tsx` tones (Gallery) no longer apply. The six intents
+>    stay as tokens, for the credentials panels' buttons (`<ActionButton>`)
+>    and for state marks. The rule of record is
 >    [theme_system.md](../theme_system.md#colour-marks-state-or-role).
 
 ## Overview

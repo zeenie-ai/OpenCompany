@@ -217,8 +217,10 @@ the only strong buttons
 
 Team Monitor is read-only and uses only the middle parameter-panel section.
 Connect the lead's output to it. It shows graph-connected teammates immediately,
-then merges persisted `working`/`idle` state, lifecycle counts, and current
-execution tasks. Its Done count includes accepted tasks, not submitted work.
+then merges their persisted `working`/`idle` state and lists the execution's
+tasks, with a count per status (accepted work apart from submitted). A
+teammate's state and a task's status are marked as in the Task Manager: a dot
+beside neutral words.
 
 ## Public Task Manager operations
 

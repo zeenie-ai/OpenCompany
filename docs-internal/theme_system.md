@@ -285,13 +285,23 @@ and the onboarding v3 handoff:
   `bg-bg-hover` and a picked row is `bg-bg-active`, never the violet
   `--accent` or the blue `--primary`. What still carries a colour marks
   something: a `{{node.field}}` variable (in the Input section and in the
-  field it is dropped on), an error, a todo's status, a file's kind.
-- **A team task's status is a dot beside neutral words**
-  (`components/parameterPanel/taskManager/TaskStatus.tsx`, on the status
-  tokens): running is working and the one dot that pulses, queued is
+  field it is dropped on), an error and a todo's status. The Canvas
+  board's kind tiles (`canvas/CanvasLibrary.tsx`, shared with the
+  Workspace dock) still take a tint.
+- **A state in the node panels is a dot beside neutral words**
+  (`components/parameterPanel/StatePill.tsx`, on the status tokens), and
+  only work under way pulses. A team task (`taskManager/TaskStatus.tsx`,
+  in the Task Manager and the Team Monitor): running is working, queued is
   ready, submitted is waiting (the lead must review it), failed is
   attention, accepted is a tick in ink, and blocked or cancelled is
-  paused. The Task Manager's status counts are the neutral `chips`.
+  paused. A teammate: working, idle is ready, connected is paused. A
+  process: running is working, error is attention, stopped is paused.
+  Counts are ink; the Task Manager's are the neutral `chips`.
+- **The Gallery takes no colour** (since 2026-11-11,
+  `components/parameterPanel/gallery/`): a file's kind is its glyph's
+  shape, in `text-fg-muted` (`fileIcons.tsx`); the grid or list switch is
+  the `segmented` ToggleGroup; a pin is a `Toggle`, filled while pinned;
+  and the file picked in Choose from workspace has a foreground border.
 - **`<ActionButton intent="...">` is left only in the credentials panels
   and the console's chat pane.**
 

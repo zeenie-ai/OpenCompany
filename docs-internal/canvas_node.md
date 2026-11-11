@@ -286,10 +286,11 @@ prefix `['canvasBoard']` for broadcast-driven invalidation.
 - **[`CanvasPanel.tsx`](../client/src/components/parameterPanel/CanvasPanel.tsx)**
   — the full-height parameter-panel host, dispatched by
   `uiHints.isCanvasPanel` in `MiddleSection` (gallery pattern: flag read +
-  description-suppression chain + ternary-ladder branch). Header carries the
-  item-count badge and Clear; body is the shared renderer. Items are
-  references — removing one never deletes the underlying file, which is why
-  Clear is a plain ghost button and not an `AlertDialog`.
+  description-suppression chain + ternary-ladder branch). Its head is the
+  node panels' shared `NodePanel`, carrying the item count and Clear; body
+  is the shared renderer. Items are references — removing one never
+  deletes the underlying file, which is why Clear is a plain neutral
+  button and not an `AlertDialog`.
 - **[`CanvasDock.tsx`](../client/src/components/ui/CanvasDock.tsx)** — the
   editor's Workspace dock, mounted as the last flex child of Dashboard's
   main-content row (rightmost edge). It is the dock Home shows: the shell
