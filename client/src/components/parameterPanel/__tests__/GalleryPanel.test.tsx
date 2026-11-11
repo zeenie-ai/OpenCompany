@@ -95,7 +95,9 @@ describe('GalleryPanel', () => {
       <GalleryPanel workflowId="wf-1" parameters={{}} onParameterChange={onParameterChange} />,
     );
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: /Pin greeting\.wav/ }));
+    const pin = await screen.findByRole('button', { name: /Pin greeting\.wav/ });
+    expect(pin).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(pin);
     expect(onParameterChange).toHaveBeenCalledWith('selection', ['greeting.wav']);
 
     rerender(
@@ -105,8 +107,24 @@ describe('GalleryPanel', () => {
         onParameterChange={onParameterChange}
       />,
     );
-    fireEvent.click(await screen.findByRole('checkbox', { name: /Pin greeting\.wav/ }));
+    const pinned = await screen.findByRole('button', { name: /Pin greeting\.wav/ });
+    expect(pinned).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/pinned for this node's output/)).toBeInTheDocument();
+    fireEvent.click(pinned);
     expect(onParameterChange).toHaveBeenLastCalledWith('selection', []);
+  });
+
+  it('pins without opening the file the pin sits on', async () => {
+    const onParameterChange = vi.fn();
+    render(<GalleryPanel workflowId="wf-1" parameters={{}} onParameterChange={onParameterChange} />);
+
+    const pin = await screen.findByRole('button', { name: /Pin greeting\.wav/ });
+    fireEvent.click(pin);
+    fireEvent.keyDown(pin, { key: 'Enter' });
+
+    // Only the pin was written, and no preview opened over the panel.
+    expect(onParameterChange).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('never calls the backend without a workflow, and says why', async () => {
@@ -158,5 +176,52 @@ describe('GalleryPanel', () => {
 
     expect(tileOf('greeting.wav')).toHaveAttribute('draggable', 'true');
     expect(tileOf('audio')).toHaveAttribute('draggable', 'false');
+  });
+
+  // Colour marks state or role (docs-internal/theme_system.md): a file's kind
+  // is told by its glyph's shape, and the panel's buttons are neutral.
+  describe('the look', () => {
+    it('has the node panels’ head, with a neutral Upload', async () => {
+      render(<GalleryPanel workflowId="wf-1" parameters={{}} onParameterChange={noop} />);
+      await screen.findByText('greeting.wav');
+
+      expect(screen.getByRole('heading', { name: 'Workspace Files' })).toHaveClass('font-display', 'text-md');
+      const upload = screen.getByRole('button', { name: 'Upload' });
+      expect(upload).toHaveAttribute('data-variant', 'quiet');
+      expect(upload).toHaveClass('border-border-default', 'text-fg-default');
+    });
+
+    it('draws every glyph in the muted text colour, folders included', async () => {
+      const { container } = render(<GalleryPanel workflowId="wf-1" parameters={{}} onParameterChange={noop} />);
+      await screen.findByText('greeting.wav');
+
+      const tileOf = (label: string) => screen.getByText(label).closest('[role="button"]') as HTMLElement;
+      expect(tileOf('audio').querySelector('svg')).toHaveClass('text-fg-muted');
+      expect(tileOf('greeting.wav').querySelector('svg')).toHaveClass('text-fg-muted');
+      expect(container.querySelector('[class*="text-node-"], [class*="text-action-"], [class*="bg-primary"]')).toBeNull();
+    });
+
+    it('counts what it lists, one file and one folder', async () => {
+      render(<GalleryPanel workflowId="wf-1" parameters={{}} onParameterChange={noop} />);
+
+      expect(await screen.findByText('1 file · 1 folder')).toBeInTheDocument();
+    });
+
+    it('switches to a list, with sizes and dates in the mono face', async () => {
+      render(<GalleryPanel workflowId="wf-1" parameters={{}} onParameterChange={noop} />);
+      await screen.findByText('greeting.wav');
+
+      expect(screen.getByRole('radio', { name: 'Grid view' })).toBeChecked();
+      fireEvent.click(screen.getByRole('radio', { name: 'List view' }));
+
+      expect(screen.getByRole('columnheader', { name: 'Modified' })).toBeInTheDocument();
+      expect(screen.getByText('20 KB')).toHaveClass('font-mono', 'text-fg-muted');
+      // The pin is offered on a file's row and never on a folder's.
+      expect(screen.getAllByRole('button', { name: /^Pin / })).toHaveLength(1);
+
+      // Clicking the picked layout again keeps it: there is always one.
+      fireEvent.click(screen.getByRole('radio', { name: 'List view' }));
+      expect(screen.getByRole('radio', { name: 'List view' })).toBeChecked();
+    });
   });
 });

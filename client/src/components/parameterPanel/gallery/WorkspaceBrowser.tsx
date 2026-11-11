@@ -6,6 +6,7 @@ import {
   Home,
   LayoutGrid,
   List,
+  Pin,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -14,12 +15,14 @@ import { toast } from 'sonner';
 import { useWebSocket } from '@/contexts/WebSocketContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { buildApiUrl } from '@/config/api';
+import { cn } from '@/lib/utils';
 import type { ListWorkspaceFilesResponse, WorkspaceEntry } from '@/types/workspaceFiles';
 
 import FileGlyph from './FileGlyph';
-import { formatBytes, formatModified, glyphToneFor } from './fileIcons';
+import { formatBytes, formatModified } from './fileIcons';
 
 /**
  * The workspace browsing engine — listing, breadcrumbs, search, grid/list.
@@ -31,6 +34,11 @@ import { formatBytes, formatModified, glyphToneFor } from './fileIcons';
  * that reintroduced a drag would defeat its purpose).
  *
  * `path` is controlled by the parent for exactly that reason.
+ *
+ * The look is the Workspace Library's (parameterPanel/canvas/CanvasLibrary):
+ * a file is a card with a preview band over its name and a mono line about
+ * it, and the list is the node panels' table. Nothing here takes a colour but
+ * a notice: a file's kind is told by its glyph's shape.
  */
 interface Props {
   workflowId?: string;
@@ -41,7 +49,7 @@ interface Props {
   /** Rows carry an HTML5 drag payload. Off inside the picker. */
   draggable?: boolean;
   onDragStart?: (event: React.DragEvent, entry: WorkspaceEntry) => void;
-  /** Optional per-row checkbox (the panel's "pin to node output"). */
+  /** Optional per-file pin (the panel's "pin to node output"). */
   selectionSet?: ReadonlySet<string>;
   onTogglePin?: (entry: WorkspaceEntry) => void;
   /** Highlighted row, for the picker's single-select. */
@@ -52,6 +60,16 @@ interface Props {
 
 const POLL_INTERVAL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
+
+const LIST_COLUMNS = ['Name', 'Size', 'Modified', 'Type'];
+
+const NEUTRAL = 'border-border-default text-fg-default';
+const HEAD_CELL = 'border-b border-border-default px-3 py-2 font-medium';
+const META_CELL = 'px-3 py-2 font-mono text-xs whitespace-nowrap text-fg-muted tabular-nums';
+// The picked layout: a raised segment with a hairline (the Normal/Dev switch).
+const SEGMENT = 'h-6 px-2 data-[state=on]:border-border-default data-[state=on]:shadow-card';
+
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 const WorkspaceBrowser: React.FC<Props> = ({
   workflowId,
@@ -145,6 +163,7 @@ const WorkspaceBrowser: React.FC<Props> = ({
   }, [entries, search, searching]);
 
   const fileCount = visible.filter((entry) => !entry.is_dir).length;
+  const folderCount = visible.length - fileCount;
 
   const emptyMessage = !workflowId
     ? 'Save this workflow to give it a workspace.'
@@ -158,10 +177,12 @@ const WorkspaceBrowser: React.FC<Props> = ({
             ? 'Nothing here matches that filter.'
             : 'This folder is empty.';
 
+  const showPin = !!onTogglePin;
+
   const rowProps = (entry: WorkspaceEntry) => ({
     entry,
     pinned: selectionSet?.has(entry.path) ?? false,
-    showPin: !!onTogglePin,
+    showPin,
     active: activePath === entry.path,
     showFullPath: searching,
     draggable: draggable && !entry.is_dir && !!entry.ref,
@@ -171,25 +192,30 @@ const WorkspaceBrowser: React.FC<Props> = ({
   });
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <nav aria-label="Workspace path" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <nav
+          aria-label="Workspace path"
+          className="flex min-w-0 flex-1 basis-40 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]"
+        >
           <Button
-            variant="ghost"
-            size="sm"
-            className="shrink-0 px-2"
+            type="button"
+            variant="quiet"
+            size="icon-sm"
+            className="shrink-0"
             onClick={() => navigate('')}
             aria-label="Workspace root"
           >
-            <Home className="h-4 w-4" />
+            <Home />
           </Button>
           {crumbs.map((crumb, index) => (
             <React.Fragment key={crumb.path}>
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
+              <ChevronRight aria-hidden className="size-3.5 shrink-0 text-fg-faint" />
               <Button
-                variant="ghost"
+                type="button"
+                variant="quiet"
                 size="sm"
-                className={`shrink-0 px-2 ${index === crumbs.length - 1 ? 'text-fg-default' : 'text-fg-muted'}`}
+                className={cn('shrink-0 px-1.5 font-mono text-xs', index === crumbs.length - 1 && 'text-fg-default')}
                 onClick={() => navigate(crumb.path)}
               >
                 {crumb.name}
@@ -198,14 +224,14 @@ const WorkspaceBrowser: React.FC<Props> = ({
           ))}
           {searching && (
             <>
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-fg-faint" />
-              <span className="shrink-0 px-2 text-sm text-fg-default">Search results</span>
+              <ChevronRight aria-hidden className="size-3.5 shrink-0 text-fg-faint" />
+              <span className="shrink-0 px-1.5 text-xs text-fg-default">Search results</span>
             </>
           )}
         </nav>
 
         <div className="relative w-56 shrink-0">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
+          <Search aria-hidden className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-fg-muted" />
           <Input
             className="pl-9"
             value={search}
@@ -215,87 +241,93 @@ const WorkspaceBrowser: React.FC<Props> = ({
           />
         </div>
 
-        <div className="flex shrink-0 items-center rounded border border-border-default">
-          <Button
-            variant={view === 'grid' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="rounded-r-none"
-            onClick={() => setView('grid')}
-            aria-label="Grid view"
-            aria-pressed={view === 'grid'}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={view === 'list' ? 'secondary' : 'ghost'}
-            size="sm"
-            className="rounded-l-none"
-            onClick={() => setView('list')}
-            aria-label="List view"
-            aria-pressed={view === 'list'}
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
+        <ToggleGroup
+          type="single"
+          variant="segmented"
+          size="sm"
+          aria-label="Layout"
+          className="shrink-0"
+          value={view}
+          // Radix reports '' when the picked layout is clicked again.
+          onValueChange={(next) => { if (next === 'grid' || next === 'list') setView(next); }}
+        >
+          <ToggleGroupItem value="grid" aria-label="Grid view" title="Grid" className={SEGMENT}>
+            <LayoutGrid className="size-3.5" />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="list" aria-label="List view" title="List" className={SEGMENT}>
+            <List className="size-3.5" />
+          </ToggleGroupItem>
+        </ToggleGroup>
 
         <Button
-          variant="outline"
-          size="sm"
+          type="button"
+          variant="quiet"
+          size="icon"
+          className={cn('shrink-0', NEUTRAL)}
           disabled={loading || !workflowId}
           onClick={() => void refresh()}
           aria-label="Refresh workspace files"
+          title="Refresh"
         >
-          <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+          <RefreshCw className={cn(loading && 'animate-spin')} />
         </Button>
       </div>
 
       {error && (
-        <div className="mb-3 flex shrink-0 items-center gap-2 rounded border border-destructive bg-bg-elevated px-3 py-2 text-xs text-destructive">
-          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        <div
+          role="alert"
+          className="mb-3 flex shrink-0 items-center gap-2 rounded-lg border border-danger-border bg-danger-soft px-3 py-2 text-xs text-destructive"
+        >
+          <AlertTriangle aria-hidden className="size-4 shrink-0" /> {error}
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto rounded border border-border-default bg-bg-elevated p-3">
-        {visible.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
-            <FolderOpen className="h-10 w-10 text-fg-faint" />
-            <p className="max-w-sm text-sm text-fg-muted">{emptyMessage}</p>
-            {!pathExists && workspaceExists && parent !== null && (
-              <Button variant="outline" size="sm" onClick={() => navigate(parent)}>
-                Go up
-              </Button>
-            )}
-          </div>
-        ) : view === 'grid' ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3">
+      {visible.length === 0 ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2.5 py-10 text-center">
+          <FolderOpen aria-hidden strokeWidth={1.5} className="size-8 text-fg-faint" />
+          <p className="max-w-sm text-sm text-fg-muted">{emptyMessage}</p>
+          {!pathExists && workspaceExists && parent !== null && (
+            <Button type="button" variant="quiet" size="sm" className={NEUTRAL} onClick={() => navigate(parent)}>
+              Go up
+            </Button>
+          )}
+        </div>
+      ) : view === 'grid' ? (
+        // The bleed gives a card's hover lift and focus ring room inside the
+        // scroller, with the cards still on the toolbar's edges.
+        <div className="-m-1 min-h-0 flex-1 overflow-y-auto p-1">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2.5">
             {visible.map((entry) => <GridTile key={entry.path} {...rowProps(entry)} />)}
           </div>
-        ) : (
-          <table className="w-full border-collapse text-sm">
-            <thead className="text-left text-xs text-fg-muted">
-              <tr>
-                {['', 'Name', 'Size', 'Modified', 'Type'].map((label, index) => (
-                  <th key={label || index} className="border-b border-border-default px-3 py-2 font-medium">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((entry) => <ListRow key={entry.path} {...rowProps(entry)} />)}
-            </tbody>
-          </table>
-        )}
-      </div>
+        </div>
+      ) : (
+        // The table is as tall as its rows, and scrolls once they outgrow the
+        // panel.
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 overflow-auto rounded-lg border border-border-default bg-bg-elevated">
+            <table className="w-full border-collapse text-sm">
+              <thead className="sticky top-0 z-10 bg-bg-panel text-left text-xs text-fg-muted">
+                <tr>
+                  {LIST_COLUMNS.map((label) => <th key={label} scope="col" className={HEAD_CELL}>{label}</th>)}
+                  {showPin && <th scope="col" className={HEAD_CELL}><span className="sr-only">Pin</span></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((entry) => <ListRow key={entry.path} {...rowProps(entry)} />)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-      <footer className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted">
+      <footer className="mt-2.5 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 font-mono text-2xs text-fg-muted">
         <span>
-          {fileCount} {fileCount === 1 ? 'file' : 'files'}
-          {visible.length !== fileCount ? ` · ${visible.length - fileCount} folders` : ''}
+          {plural(fileCount, 'file')}
+          {folderCount > 0 ? ` · ${plural(folderCount, 'folder')}` : ''}
         </span>
         {truncated && (
-          <span className="flex items-center gap-1 text-warning">
-            <AlertTriangle className="h-3 w-3" /> Showing the first {visible.length} — narrow with search.
+          <span className="flex items-center gap-1">
+            <AlertTriangle aria-hidden className="size-3 text-warning" /> Showing the first {visible.length}. Narrow it with search.
           </span>
         )}
       </footer>
@@ -323,6 +355,27 @@ const activationKeys = (onOpen: () => void) => (event: React.KeyboardEvent) => {
   }
 };
 
+/** Pins a file to the node's output. It sits inside a row that opens the
+ *  file, so its clicks and keys stop here. */
+const PinToggle: React.FC<{
+  entry: WorkspaceEntry;
+  pinned: boolean;
+  onTogglePin: (entry: WorkspaceEntry) => void;
+  className?: string;
+}> = ({ entry, pinned, onTogglePin, className }) => (
+  <Toggle
+    pressed={pinned}
+    onPressedChange={() => onTogglePin(entry)}
+    onClick={(event) => event.stopPropagation()}
+    onKeyDown={(event) => event.stopPropagation()}
+    aria-label={`Pin ${entry.name} to this node's output`}
+    title={pinned ? 'Pinned to this node’s output' : 'Pin to this node’s output'}
+    className={cn('size-6.5 px-0', className)}
+  >
+    <Pin className={cn('size-3.5', pinned && 'fill-current')} />
+  </Toggle>
+);
+
 const GridTile: React.FC<RowProps> = ({
   entry, pinned, showPin, active, showFullPath, draggable, onOpen, onTogglePin, onDragStart,
 }) => {
@@ -339,11 +392,13 @@ const GridTile: React.FC<RowProps> = ({
       onClick={() => onOpen(entry)}
       onKeyDown={activationKeys(() => onOpen(entry))}
       title={entry.path}
-      className={`group relative flex cursor-pointer flex-col gap-2 rounded border bg-bg-panel p-2 text-left transition-colors hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
-        active ? 'border-border-focus' : 'border-border-default hover:border-border-strong'
-      }`}
+      className={cn(
+        'group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border bg-bg-elevated text-left transition-[border-color,transform] duration-(--dur-default) hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none motion-reduce:hover:translate-y-0',
+        // The picked file: a foreground border, stronger than a hover's.
+        active ? 'border-fg-default' : 'border-border-default hover:border-border-strong',
+      )}
     >
-      <div className="flex aspect-square items-center justify-center overflow-hidden rounded bg-bg-app">
+      <div className="grid h-20 place-items-center overflow-hidden border-b border-border-default bg-bg-panel">
         {showThumb ? (
           <img
             src={buildApiUrl(entry.url as string)}
@@ -351,31 +406,32 @@ const GridTile: React.FC<RowProps> = ({
             loading="lazy"
             draggable={false}
             onError={() => setThumbFailed(true)}
-            className="h-full w-full object-cover"
+            className="size-full object-cover"
           />
         ) : (
-          <FileGlyph entry={entry} className={`h-8 w-8 ${glyphToneFor(entry)}`} />
+          <FileGlyph entry={entry} strokeWidth={1.5} className="size-7 text-fg-muted" />
         )}
       </div>
 
-      <div className="min-w-0">
-        <div className="truncate text-xs font-medium text-fg-default">{entry.name}</div>
-        <div className="truncate text-[11px] text-fg-muted">
+      <div className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
+        <span className="truncate text-meta font-medium text-fg-default">{entry.name}</span>
+        <span className="truncate font-mono text-2xs text-fg-muted">
           {showFullPath ? entry.path : entry.is_dir ? 'Folder' : formatBytes(entry.size_bytes)}
-        </div>
+        </span>
       </div>
 
       {showPin && !entry.is_dir && onTogglePin && (
-        <div
-          className={pinned ? 'absolute right-2 top-2' : 'absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100'}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Checkbox
-            checked={pinned}
-            onCheckedChange={() => onTogglePin(entry)}
-            aria-label={`Pin ${entry.name} to this node's output`}
-          />
-        </div>
+        <PinToggle
+          entry={entry}
+          pinned={pinned}
+          onTogglePin={onTogglePin}
+          className={cn(
+            // Opaque in every state: it sits over the preview band.
+            'absolute top-1.5 right-1.5 border-border-default bg-bg-elevated hover:bg-bg-elevated',
+            // A pinned file keeps its pin on show; the rest offer it on hover.
+            !pinned && 'opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100',
+          )}
+        />
       )}
     </div>
   );
@@ -395,34 +451,27 @@ const ListRow: React.FC<RowProps> = ({
     onClick={() => onOpen(entry)}
     onKeyDown={activationKeys(() => onOpen(entry))}
     title={entry.path}
-    className={`cursor-pointer border-b border-border-default hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus ${
-      active ? 'bg-bg-active' : ''
-    }`}
+    className={cn(
+      'cursor-pointer border-b border-border-default last:border-b-0 hover:bg-bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-border-focus',
+      active && 'bg-bg-active',
+    )}
   >
-    <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
-      {showPin && !entry.is_dir && onTogglePin && (
-        <Checkbox
-          checked={pinned}
-          onCheckedChange={() => onTogglePin(entry)}
-          aria-label={`Pin ${entry.name} to this node's output`}
-        />
-      )}
-    </td>
     <td className="max-w-0 px-3 py-2">
       <div className="flex items-center gap-2">
-        <FileGlyph entry={entry} className={`h-4 w-4 shrink-0 ${glyphToneFor(entry)}`} />
+        <FileGlyph entry={entry} className="size-4 shrink-0 text-fg-muted" />
         <span className="truncate text-fg-default">{showFullPath ? entry.path : entry.name}</span>
       </div>
     </td>
-    <td className="whitespace-nowrap px-3 py-2 tabular-nums text-fg-muted">
-      {formatBytes(entry.size_bytes, entry.is_dir)}
-    </td>
-    <td className="whitespace-nowrap px-3 py-2 text-xs text-fg-muted">
-      {formatModified(entry.modified_at)}
-    </td>
+    <td className={META_CELL}>{formatBytes(entry.size_bytes, entry.is_dir)}</td>
+    <td className={META_CELL}>{formatModified(entry.modified_at)}</td>
     <td className="max-w-[14rem] truncate px-3 py-2 text-xs text-fg-muted">
       {entry.is_dir ? 'Folder' : entry.mime_type || 'unknown'}
     </td>
+    {showPin && (
+      <td className="w-px px-2 py-1 text-right">
+        {!entry.is_dir && onTogglePin && <PinToggle entry={entry} pinned={pinned} onTogglePin={onTogglePin} />}
+      </td>
+    )}
   </tr>
 );
 

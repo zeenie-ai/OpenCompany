@@ -17,11 +17,15 @@ import type { WorkspaceEntry } from '@/types/workspaceFiles';
 /**
  * Presentation only.
  *
- * Which glyph and which tint — nothing here decides what a file *is*. The
- * row already carries `preview` (the server's inline-rendering verdict) and
- * `mime_type`; this module just picks pixels for them. Anything that would
+ * Which glyph, nothing more: nothing here decides what a file *is*. The row
+ * already carries `preview` (the server's inline-rendering verdict) and
+ * `mime_type`; this module just picks a shape for them. Anything that would
  * amount to re-classifying a file belongs in
  * `server/nodes/filesystem/gallery/_service.py`.
+ *
+ * The shape is the whole signal. Every glyph is drawn in the muted text
+ * colour, because colour marks a state or a role and a file's kind is
+ * neither (theme_system.md, "Colour marks state or role").
  */
 
 const extensionOf = (name: string): string => {
@@ -62,21 +66,6 @@ export const glyphFor = (entry: WorkspaceEntry): LucideIcon => {
   if (mime.startsWith('text/')) return FileText;
 
   return EXTENSION_GLYPH[extensionOf(entry.name)] ?? FileGlyphIcon;
-};
-
-/**
- * Tints the glyph by role using node-role tokens, so every theme restyles
- * the explorer without touching this file. No palette names, no opacity
- * arithmetic — see CLAUDE.md "Frontend Design + Theme System (strict)".
- */
-export const glyphToneFor = (entry: WorkspaceEntry): string => {
-  if (entry.is_dir) return 'text-node-workflow';
-  switch (entry.preview) {
-    case 'image': return 'text-node-agent';
-    case 'audio': return 'text-node-model';
-    case 'video': return 'text-node-trigger';
-    default: return 'text-fg-muted';
-  }
 };
 
 /** Human byte size. Directories report nothing rather than a misleading 0 B. */

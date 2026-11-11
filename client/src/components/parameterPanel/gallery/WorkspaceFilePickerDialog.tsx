@@ -10,8 +10,8 @@ import type { WorkspaceEntry } from '@/types/workspaceFiles';
 import WorkspaceBrowser from './WorkspaceBrowser';
 
 // Colour marks state or role (docs-internal/theme_system.md): these buttons
-// are neutral outlines, and a panel's one strong action is `invert`.
-const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
+// are neutral outlines, and the dialog's one strong action is `invert`.
+const NEUTRAL = 'border-border-default text-fg-default';
 
 /**
  * Pick a workspace file for a parameter, using only discrete clicks.
@@ -120,17 +120,18 @@ const WorkspaceFilePickerDialog: React.FC<Props> = ({
               onChange={(event) => void handleUpload(event.target.files)}
             />
             <Button
-              variant="outline"
-              size="sm"
+              type="button"
+              variant="quiet"
+              className={NEUTRAL}
               disabled={!workflowId || uploading}
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload className="h-4 w-4" /> {uploading ? 'Uploading…' : 'Upload'}
+              <Upload /> {uploading ? 'Uploading…' : 'Upload'}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="quiet" className={NEUTRAL} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="button" variant="invert" className={ACTION_SHAPE} disabled={!selected} onClick={confirm}>
+            <Button type="button" variant="invert" className="px-3.5 font-semibold" disabled={!selected} onClick={confirm}>
               Use this file
             </Button>
           </div>

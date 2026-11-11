@@ -19,9 +19,12 @@ import { glyphFor } from './fileIcons';
 export const FileGlyph = ({
   entry,
   className,
+  strokeWidth,
 }: {
   entry: WorkspaceEntry;
   className?: string;
-}) => createElement(glyphFor(entry), { className });
+  /** A large glyph reads better on a thinner line than lucide's default. */
+  strokeWidth?: number;
+}) => createElement(glyphFor(entry), { className, strokeWidth, 'aria-hidden': true });
 
 export default FileGlyph;

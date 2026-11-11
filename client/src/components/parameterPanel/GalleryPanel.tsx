@@ -9,10 +9,11 @@ import type { WorkspaceEntry } from '@/types/workspaceFiles';
 
 import FilePreviewDialog from './gallery/FilePreviewDialog';
 import WorkspaceBrowser from './gallery/WorkspaceBrowser';
+import { NodePanel } from './NodePanel';
 
-// Colour marks state or role (docs-internal/theme_system.md): these buttons
-// are neutral outlines, and a panel's one strong action is `invert`.
-const NEUTRAL_ACTION = 'rounded-md border-border-default px-3.5 text-[13px] font-semibold text-fg-default';
+// Colour marks state or role (docs-internal/theme_system.md): the panel's
+// buttons are neutral outlines.
+const NEUTRAL = 'border-border-default text-fg-default';
 
 interface Props {
   workflowId?: string;
@@ -83,21 +84,21 @@ const GalleryPanel: React.FC<Props> = ({ workflowId, parameters, onParameterChan
   }, [navigate, path, workflowId]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
-      <header className="mb-3 flex shrink-0 items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-fg-default">Workspace Files</h2>
-          {/* Deliberately does NOT promise drag-to-parameter: this panel and a
-              parameter input are the two branches of one ternary inside a
-              single-node modal, so they are never on screen together. The
-              working path is the picker on the destination field. */}
-          <p className="text-sm text-fg-muted">
-            Everything this workflow has produced. Any node can read these files — open a node and
-            use <strong className="font-medium text-fg-default">Choose from workspace</strong> on a
-            file parameter.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
+    <NodePanel
+      title="Workspace Files"
+      // Deliberately does NOT promise drag-to-parameter: this panel and a
+      // parameter input are the two branches of one ternary inside a
+      // single-node modal, so they are never on screen together. The working
+      // path is the picker on the destination field.
+      description={(
+        <>
+          Everything this workflow has produced. To use a file in another node, open that node and
+          use <strong className="font-medium text-fg-default">Choose from workspace</strong> on a
+          file parameter.
+        </>
+      )}
+      actions={(
+        <>
           <input
             ref={fileInputRef}
             type="file"
@@ -108,45 +109,52 @@ const GalleryPanel: React.FC<Props> = ({ workflowId, parameters, onParameterChan
           <Button
             type="button"
             variant="quiet"
-            className={NEUTRAL_ACTION}
+            className={NEUTRAL}
             disabled={!workflowId || uploading}
             onClick={() => fileInputRef.current?.click()}
             title={workflowId ? 'Upload files into this workspace' : 'Save the workflow first'}
           >
-            <Upload className="h-4 w-4" />
+            <Upload />
             {uploading ? 'Uploading…' : 'Upload'}
           </Button>
-        </div>
-      </header>
-
-      <WorkspaceBrowser
-        workflowId={workflowId}
-        path={path}
-        onPathChange={navigate}
-        onActivate={openEntry}
-        draggable
-        onDragStart={handleFileDragStart}
-        selectionSet={selectionSet}
-        onTogglePin={togglePin}
-        refreshToken={refreshToken}
-      />
-
-      {selection.length > 0 && (
-        <div className="mt-2 flex shrink-0 items-center gap-1 text-xs text-fg-default">
-          <Pin className="h-3 w-3" /> {selection.length} pinned for this node&apos;s output
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-auto px-1 py-0 text-xs"
-            onClick={() => onParameterChange('selection', [])}
-          >
-            clear
-          </Button>
-        </div>
+        </>
       )}
+    >
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        <WorkspaceBrowser
+          workflowId={workflowId}
+          path={path}
+          onPathChange={navigate}
+          onActivate={openEntry}
+          draggable
+          onDragStart={handleFileDragStart}
+          selectionSet={selectionSet}
+          onTogglePin={togglePin}
+          refreshToken={refreshToken}
+        />
+
+        {selection.length > 0 && (
+          <div className="mt-2.5 flex shrink-0 items-center gap-2 text-xs text-fg-muted">
+            <Pin aria-hidden className="size-3.5 fill-current text-fg-default" />
+            <span>
+              <span className="font-medium text-fg-default tabular-nums">{selection.length}</span>
+              {' '}pinned for this node&apos;s output
+            </span>
+            <Button
+              type="button"
+              variant="quiet"
+              size="xs"
+              className={NEUTRAL}
+              onClick={() => onParameterChange('selection', [])}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
+      </div>
 
       <FilePreviewDialog entry={preview} onOpenChange={(open) => { if (!open) setPreview(null); }} />
-    </div>
+    </NodePanel>
   );
 };
 
