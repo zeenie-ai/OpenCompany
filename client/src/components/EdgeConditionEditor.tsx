@@ -130,10 +130,11 @@ const EdgeConditionEditor: React.FC<EdgeConditionEditorProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] w-[420px] overflow-hidden p-0">
+      {/* `sm:`: the primitive's own `sm:max-w-sm` beats an unprefixed width. */}
+      <DialogContent className="max-h-[85vh] w-[420px] overflow-hidden p-0 sm:max-w-[420px]">
         <DialogHeader className="border-b border-border bg-muted px-5 py-4">
           <DialogTitle className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 text-accent" />
+            <GitBranch className="h-4 w-4 text-fg-muted" />
             Edge Condition
           </DialogTitle>
           <DialogDescription className="sr-only">
@@ -243,7 +244,7 @@ const EdgeConditionEditor: React.FC<EdgeConditionEditorProps> = ({
           {field && (
             <Card className="bg-muted p-3">
               <div className="mb-1 text-xs text-muted-foreground">Preview:</div>
-              <div className="font-mono text-sm text-accent">
+              <div className="font-mono text-sm text-fg-default">
                 if output.{field} {OPERATORS[operator].label.toLowerCase()}
                 {operatorMeta.requiresValue && value && ` "${value}"`}
               </div>
@@ -260,11 +261,15 @@ const EdgeConditionEditor: React.FC<EdgeConditionEditorProps> = ({
           ) : (
             <div />
           )}
+          {/* Colour marks state or role (theme_system.md): Cancel is a
+              neutral outline, and Save is the dialog's one strong button. */}
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="quiet" className="border-border-default text-fg-default" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save Condition</Button>
+            <Button variant="invert" className="px-3.5 font-semibold" onClick={handleSave}>
+              Save Condition
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
