@@ -414,6 +414,14 @@
 
 /* ============================================================================
  * Scrollbars
+ *
+ * Chromium and Safari draw the 8px bars below from ::-webkit-scrollbar.
+ * Firefox has none of it and takes the standard properties, which are set
+ * for it alone: Chromium 121+ drops the ::-webkit-scrollbar rules on any
+ * element whose scrollbar-color or scrollbar-width is set, and
+ * scrollbar-color inherits, so setting it on <html> gave every inner
+ * scroller Chromium's own wide bars, arrows and all. In the base layer, so a
+ * utility's `scrollbar-width: none` (no-scrollbar) still hides a bar.
  * ============================================================================ */
 
 ::-webkit-scrollbar {
@@ -439,9 +447,13 @@
   background: var(--scrollbar-track);
 }
 
-html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+@layer base {
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+  }
 }
 
 /* ============================================================================

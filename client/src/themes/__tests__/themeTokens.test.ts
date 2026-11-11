@@ -49,9 +49,22 @@ describe('theme tokens', () => {
   it('draws the dots and the scrollbars from their tokens', () => {
     const index = read('..', '..', 'index.css');
     expect(bodiesFor(index, '.react-flow__background pattern circle').join('\n')).toMatch(/fill:\s*var\(--grid-dot\)/);
+    expect(bodiesFor(index, '::-webkit-scrollbar').join('\n')).toMatch(/width:\s*8px/);
     expect(bodiesFor(index, '::-webkit-scrollbar-track').join('\n')).toMatch(/var\(--scrollbar-track\)/);
     expect(bodiesFor(index, '::-webkit-scrollbar-thumb').join('\n')).toMatch(/var\(--scrollbar-thumb\)/);
-    expect(bodiesFor(index, 'html').join('\n')).toMatch(/scrollbar-color:\s*var\(--scrollbar-thumb\) var\(--scrollbar-track\)/);
+  });
+
+  it('gives the standard scrollbar properties only to a browser without ::-webkit-scrollbar', () => {
+    const index = read('..', '..', 'index.css');
+    // Chromium 121+ drops the ::-webkit-scrollbar rules wherever these are
+    // set, and scrollbar-color inherits: on <html> it gave every inner
+    // scroller Chromium's wide default bars.
+    for (const body of bodiesFor(index, 'html')) {
+      expect(body).not.toMatch(/scrollbar-(color|width)/);
+    }
+    const firefox = /@supports not selector\(::-webkit-scrollbar\)\s*\{\s*\*\s*\{([^{}]*)\}/.exec(index.replace(/\/\*[\s\S]*?\*\//g, ''));
+    expect(firefox?.[1]).toMatch(/scrollbar-width:\s*thin/);
+    expect(firefox?.[1]).toMatch(/scrollbar-color:\s*var\(--scrollbar-thumb\) var\(--scrollbar-track\)/);
   });
 
   it('gives the employee’s accent face its rim and highlight on every theme', () => {
