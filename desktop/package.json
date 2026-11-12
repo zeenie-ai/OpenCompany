@@ -1,6 +1,6 @@
 {
   "name": "opencompany-desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "OpenCompany desktop shell: bundles uv, Python and bun, provisions the backend venv on first run, and hosts the app in a native window.",
   "license": "MIT",
