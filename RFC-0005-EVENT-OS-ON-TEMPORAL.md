@@ -1284,6 +1284,17 @@ Phase 1b's items were done on 2026-11-02, apart from AP.7. Test-only fixes (a34f
 | Poison events back off and are dead-lettered | 64fe733b | RFC-0006 §11.6 rec 2 with §7.4 A1, under `controller-spawn-backoff-v1`: a failed spawn waits behind the queue for 5 s, 30 s, 2 min and 10 min while later events start, and its fifth failure writes it to `<controller id>:dead` rows, which the queue never reads back; Reset deletes them. The marker ships dormant (`DORMANT_PATCHES` in `services/temporal/patches.py`, RFC-0006 §18.9 rec 2), so this release's runs keep the head-of-line retry; the next release removes it from the set. |
 | Home's Retry reset | c5d35ddd | A Reset whose Workspace cleanup passes 240 s (1b.15) stays `resetting`, and Home offered no way to send it again. Retry reset is now the employee's main action while the control is `resetting`; it reads the control status first and sends the Reset only while the generation the summary shows is still resetting. |
 
+**v0.3.2** (2026-11-11 and 2026-11-12). The owner cut the plan to five fixes a user can hit, then the release. One of the five changes workflow code, with no marker, because this release starts every install on an empty Temporal database.
+
+| Item | Commit | Notes |
+|---|---|---|
+| WhatsApp and Discord listen again after a restart | cc990ecb | Both receive nodes start their bridge or gateway from `prepare_deployment`, in a background task, as Stripe's does: at Start and at the boot re-arm. |
+| Telegram keeps what was sent while the backend was down | e953fe76 | The startup refresh waits for the Temporal client (`TEMPORAL_STARTUP_REFRESH_WAIT_SECONDS`, 60 s) before it reconnects Telegram, because `dispatch.emit` drops an event while the client is not connected. The boot timing was read from the code, not measured. |
+| One large mail no longer stops a mail employee | a09736ef | The poll activity shortens an item over `POLL_ITEM_MAX_BYTES` (384,000, measured as Temporal's JSON converter writes it), with a note. The item still arrives, and the first node's input, which carries the trigger output four times, stays under the payload limit. |
+| A mail trigger removed with Apply stays removed | 6cc96d6c, e508b862 | The controller's poll loop ends for a spec marked `retired`; a rollover used to carry the spec and poll it again. Only databases from v0.3.1 and earlier are deleted on upgrade, so on a dev database created on `main` since the pin, or on an external server in distributed mode, a controller that rolled over after such an Apply needs Reset and Start. Never backport the change without a marker. |
+| Code nodes and PDF reading on npm installs | de30b216 | The tarball carries the sidecar's `dist/index.js` (`server/nodejs/.gitignore` no longer hides it from `bun pm pack`), and `scripts/install.js` syncs with `--extra docs`. |
+| The release | 90fc876c, 48c34266, tag `v0.3.2` | The first release with the pinned CLI, and the first with recorded histories of its own: `fixtures/0.3.2/` holds 27 scenarios and 67 histories, recorded from the bump commit on temporalio 1.34.0 and CLI 1.9.1. The golden keeps its 0.3.1 baseline, because `ApprovalWorkflow` has no recorded scenario yet. The release steps now say to commit the bump alone, record from it, commit the histories and tag that commit (`docs-internal/ci_cd.md`). The tag's Desktop release run was the first build of the ad-hoc signed Mac app (#154), and its signature check passed. |
+
 ## 25. Defaults chosen and open items
 
 ### 25.1 Defaults (change at review)
