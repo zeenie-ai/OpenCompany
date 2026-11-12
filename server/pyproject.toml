@@ -141,7 +141,8 @@ dependencies = [
     # TikHub social scraping SDK. Auto-generated from TikHub's openapi.json;
     # capped below 3 because the resource/method surface regenerates per
     # release. Pulls typer for its own `tikhub` CLI (not imported by us).
-    "tikhub>=2.1.2,<3",
+    # Floor 2.2.0: 271 of 2.1.2's routes answer 404 on TikHub's live API.
+    "tikhub>=2.2.0,<3",
 
     # AWS SDK for the awsAction node (nodes/aws/), imported lazily there.
     "boto3>=1.34.0",

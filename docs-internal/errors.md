@@ -611,6 +611,7 @@ Seen 2026-09-05 with a `tikhubAction` tool whose results were about 400,000 char
 
   Runs recorded before the key existed replay the original rules unchanged.
 - `ConversationTooLarge` stays a hard failure. Its message now points at the Context panel and the Tool Result Limit, and a save over half the cap logs a WARNING.
+- Since 2026-11-12 the `tikhubAction` node no longer returns such payloads at all: a result over 20,000 characters is saved to the workspace and returned as a file reference with a preview ([tikhub_service.md](./tikhub_service.md#large-results---_resultpy)). The cap above cut each result to its first 100,000 characters, which for one page of 12 Instagram reels (about 310,000 characters) was two or three reels, and four such results still cleared every earlier tool result, the loaded skill included.
 
 Locked by `server/tests/services/test_tool_output.py`, `server/tests/temporal/test_agent_context_pressure.py`, `server/tests/temporal/test_agent_workflow_pressure.py` and `server/tests/temporal/test_prepare_payload_pressure.py`. Design record: [ARCHIVE/AGENT_COMPACTION_FIX_PLAN.md](./ARCHIVE/AGENT_COMPACTION_FIX_PLAN.md).
 

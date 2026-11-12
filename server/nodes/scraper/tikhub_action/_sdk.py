@@ -32,8 +32,10 @@ from .._credentials import TikHubCredential
 
 logger = get_logger(__name__)
 
-# Per-request timeout handed to the SDK's httpx client.
-_TIMEOUT = 30.0
+# Per-request timeout handed to the SDK's httpx client. TikHub's API reference
+# asks for 30 to 60 seconds; the upper end keeps a slow answer from being cut
+# off and requested again.
+_TIMEOUT = 60.0
 # ``RetryPolicy.should_retry`` returns False once ``attempt >= max_retries``,
 # so 3 means one initial attempt plus two retries (connection / 5xx / 429
 # only). Tests monkeypatch this to 0 to skip the anyio backoff sleeps.
@@ -65,6 +67,7 @@ PLATFORMS: Tuple[str, ...] = (
     "reddit",
     "threads",
     "linkedin",
+    "telegram",
     "zhihu",
     "toutiao",
     "xigua",
@@ -356,6 +359,26 @@ def _envelope_message(body: Any, fallback: str) -> str:
     return fallback
 
 
+def _error_detail(body: Any) -> str:
+    """TikHub's own words from the body of a failed request.
+
+    TikHub answers ``{"detail": {"message": "...", "message_zh": "...",
+    "support": "...", "docs": "..."}}``; only the English message is of use
+    to a model. A 422 is FastAPI's ``{"detail": [{"loc": [...], "msg": ...}]}``.
+    The SDK reads neither shape and reports ``HTTP <status>`` for both.
+    """
+    detail = body.get("detail") if isinstance(body, dict) else None
+    if isinstance(detail, dict):
+        return str(detail.get("message") or "")
+    if isinstance(detail, list):
+        return "; ".join(
+            f"{'.'.join(str(part) for part in item.get('loc') or ())}: {item.get('msg', '')}"
+            for item in detail
+            if isinstance(item, dict)
+        )
+    return ""
+
+
 def to_plain(result: Any) -> Dict[str, Any]:
     """Unwrap TikHub's ``{code, router, params, data}`` envelope.
 
@@ -397,15 +420,18 @@ def raise_user_error(exc: BaseException, endpoint: str) -> None:
     )
 
     status = getattr(exc, "status_code", None)
-    detail = exc.args[0] if exc.args else str(exc)
-    body = _preview(getattr(exc, "response_body", None))
+    response_body = getattr(exc, "response_body", None)
+    said = _error_detail(response_body)
+    detail = str(said or (exc.args[0] if exc.args else exc)).strip().rstrip(".")
+    # The raw body is worth showing only when TikHub's words could not be read from it.
+    body = "" if said else _preview(response_body)
 
     if isinstance(exc, TikHubAuthError):
         message = f"TikHub rejected the API key (401) while calling {endpoint}. Update it in Credentials → TikHub."
     elif isinstance(exc, TikHubPermissionError):
         message = (
-            f"TikHub refused {endpoint} (403): {detail}. The key may lack access to this endpoint "
-            "or the account balance may be exhausted — run operation=account to check."
+            f"TikHub refused {endpoint} (403): {detail}. The API key lacks permission for this endpoint, or the "
+            "account is disabled or its email is unverified. Enable the endpoint for the key at user.tikhub.io."
         )
     elif isinstance(exc, TikHubRateLimitError):
         retry_after = getattr(exc, "retry_after", None)
@@ -413,13 +439,32 @@ def raise_user_error(exc: BaseException, endpoint: str) -> None:
         message = f"TikHub rate-limited {endpoint} (429){wait}. Each endpoint allows about 10 requests/s."
     elif isinstance(exc, TikHubNotFoundError):
         message = (
-            f"TikHub returned 404 for {endpoint}: {detail}. The route or the requested resource does not "
-            "exist — check the endpoint id with operation=list_endpoints."
+            f"TikHub returned 404 for {endpoint}: {detail}. Either the requested item does not exist or TikHub "
+            "has retired this route; operation=describe says whether the route is still published."
         )
-    elif isinstance(exc, TikHubBadRequestError):
-        message = f"TikHub rejected the request to {endpoint} ({status}): {detail}."
+    elif isinstance(exc, TikHubBadRequestError) and status == 422:
+        message = (
+            f"TikHub rejected the parameters of {endpoint} (422): {detail}. "
+            "operation=describe documents each parameter."
+        )
         if body:
             message += f" Response: {body}"
+    elif isinstance(exc, TikHubBadRequestError):
+        # TikHub documents 400 as a bad parameter OR a failure of its own, and
+        # sends the same message for both, so the model must not assume its
+        # arguments were wrong.
+        message = (
+            f"TikHub could not complete {endpoint} ({status}): {detail}. TikHub answers 400 for a wrong parameter "
+            "value and also for a failure on its side or the platform's, and bills neither. Check the values with "
+            "operation=describe; if they are right, retry once or use another endpoint for the same data."
+        )
+        if body:
+            message += f" Response: {body}"
+    elif status == 402:
+        message = (
+            f"TikHub refused {endpoint} (402): {detail}. The account balance is too low for this endpoint; "
+            "top up at user.tikhub.io (operation=account shows the balance)."
+        )
     elif isinstance(exc, TikHubValidationError):
         raw = _preview(getattr(exc, "raw", None))
         message = f"TikHub returned an unparseable response for {endpoint}: {detail}."

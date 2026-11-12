@@ -407,7 +407,10 @@ CLASSES_WHEN: Dict[str, Tuple[str, Dict[str, str]]] = {
         "operation",
         {"recall": READ, "list": READ, "get": READ, "remember": WRITE, "update": WRITE, "forget": WRITE},
     ),
-    "tikhubAction": ("operation", {"list_endpoints": READ, "account": READ, "fetch_url": SEND, "call": SEND}),
+    "tikhubAction": (
+        "operation",
+        {"list_endpoints": READ, "describe": READ, "account": READ, "fetch_url": SEND, "call": SEND},
+    ),
     "twitterSend": (
         "action",
         {

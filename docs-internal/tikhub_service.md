@@ -4,7 +4,7 @@ The `tikhubAction` node wraps the **official TikHub Python SDK**
 (`pip install tikhub`) for [api.tikhub.io](https://api.tikhub.io), a
 pay-per-request scraping API covering TikTok, Douyin, Instagram, YouTube,
 Twitter/X, Xiaohongshu, Bilibili, Kuaishou, Weibo, Reddit, Threads,
-LinkedIn, Zhihu and more (~1,100 methods in the pinned SDK). One
+LinkedIn, Zhihu and more (over 1,000 methods in the pinned SDK). One
 self-contained plugin folder at
 [`server/nodes/scraper/tikhub_action/`](../server/nodes/scraper/tikhub_action/).
 
@@ -17,19 +17,20 @@ retry policy and a typed exception hierarchy; it returns the raw JSON
 envelope `{"code": 200, "router": "...", "params": {...}, "data": {...}}`.
 TikHub's own CLI has four commands (`health`, `fetch <url>`, `user info`,
 `user usage`), so the node is the "flattened CLI": one `call` operation
-addressed by the SDK's own `resource.method` id, plus discovery, hybrid
-URL fetch, and account ops. **Nothing is vendored** - the endpoint index
-is introspected from the installed SDK at runtime, so bumping the pin is
-how new endpoints arrive.
+addressed by the SDK's own `resource.method` id, plus discovery,
+per-endpoint documentation, hybrid URL fetch, and account ops. **Nothing
+is vendored** - the endpoint index is introspected from the installed SDK
+at runtime, so bumping the pin is how new endpoints arrive, and an
+endpoint's documentation is read from TikHub's live OpenAPI document.
 
 | | |
 |---|---|
 | Node type | `tikhubAction` (palette group `scraper`, dual-purpose AI tool `tikhub_action`; visible in normal mode) |
-| Operations | `call` / `list_endpoints` / `fetch_url` / `account` |
-| SDK pin | `tikhub>=2.1.2,<3` in `server/pyproject.toml` (resources regenerate between minors; `<3` caps the surface) |
+| Operations | `call` / `list_endpoints` / `describe` / `fetch_url` / `account` |
+| SDK pin | `tikhub>=2.2.0,<3` in `server/pyproject.toml` (resources regenerate between minors; `<3` caps the surface; the floor is 2.2.0 because 271 of 2.1.2's routes answer 404 on the live API) |
 | Auth / probe | `TikHubCredential(ApiKeyCredential)` - bearer key; declarative httpx probe against `GET /api/v1/tikhub/user/get_user_info` (never `/health/check`, which is unauthenticated) |
 | Task queue | `TaskQueue.REST_API` |
-| Output | `_shape(operation, **fields)` - `{operation, endpoint, path, data, code, router, cost_usd}` for calls; `{operation, platform, count, total, endpoints[]}` for listing; `{operation, account, usage}` for account. `None` fields dropped, `{}` / `[]` kept (an empty answer from TikHub is real) |
+| Output | `_shape(operation, **fields)` - `{operation, endpoint, path, data, code, router, cost_usd}` for calls, where a payload over 20,000 characters is saved to the workspace and `data` is replaced by `file` (a `FileRef`), `preview` and `note` (see "Large results"); `{operation, platform, count, total, endpoints[]}` for listing; one listing entry plus `description` for describe; `{operation, account, usage}` for account. `None` fields dropped, `{}` / `[]` kept (an empty answer from TikHub is real) |
 | Cost | Flat `$0.001` per successful request (`pricing.json: api.tikhub`), recorded by `track_tikhub_usage` into `api_usage_metrics`; `list_endpoints` never bills, `account` bills at `0.0` |
 | Tests | [`server/tests/nodes/test_tikhub.py`](../server/tests/nodes/test_tikhub.py) (`pytestmark = node_contract`; `pytest --collect-only -q` for the live count) |
 | Paired skill | [`server/skills/web_agent/tikhub-skill/SKILL.md`](../server/skills/web_agent/tikhub-skill/SKILL.md) |
@@ -43,7 +44,7 @@ server/nodes/scraper/
 ├── tikhub.svg                   # Credential brand icon -> /api/schemas/credentials/tikhub/icon
 └── tikhub_action/
     ├── __init__.py              # TikHubActionParams / TikHubActionOutput / TikHubActionNode
-    │                            # (4 @Operations), _shape, register_option_loader("tikhubEndpoints"),
+    │                            # (5 @Operations), _shape, register_option_loader("tikhubEndpoints"),
     │                            # register_output_schema. Must NOT import `tikhub` at module import.
     ├── _sdk.py                  # Everything that touches `tikhub`, lazily inside functions:
     │                            # make_client, EndpointInfo/ParamInfo, endpoint_index (cached),
@@ -51,6 +52,12 @@ server/nodes/scraper/
     │                            # resolve_endpoint, bind_params, to_plain, raise_user_error,
     │                            # load_tikhub_endpoints, track_tikhub_usage, PLATFORMS,
     │                            # _MAX_RETRIES / _TIMEOUT
+    ├── _docs.py                 # endpoint_docs(): TikHub's OpenAPI document, fetched once per
+    │                            # process, reduced to each route's English description and its
+    │                            # query parameters' description / default / enum. Feeds `describe`.
+    ├── _result.py               # deliver(): a payload over INLINE_LIMIT_CHARS is written to
+    │                            # <workspace>/tikhub/ through write_media and returned as a
+    │                            # FileRef + preview_of(data) + note; smaller ones return as `data`.
     ├── meta.json                # {"color": "#ff79c6"} (scraper group colour, matches apify_actor)
     └── icon.svg                 # Node brand mark
 ```
@@ -112,13 +119,73 @@ never to a boot failure or a missing node.
    models, unwraps `data` / `code` / `router`, and raises `NodeUserError`
    when the in-body `code` is an int >= 400 (the SDK only raises on HTTP
    status; TikHub sometimes answers 200 with `code: 400` in the body).
-6. `track_tikhub_usage(ctx, "call", info.path)` after success only.
-7. `_shape("call", endpoint=..., path=..., data=..., code=..., router=..., cost_usd=...)`.
+6. `track_tikhub_usage(ctx, "call", info.path)` after success only, and
+   before the payload is saved: the request is already billed.
+7. `_shape("call", endpoint=..., path=..., code=..., router=..., cost_usd=...,
+   **deliver(ctx, info.endpoint, data))` - see "Large results".
 
 `fetch_url` is the same path hard-wired to
 `hybrid_parsing.video_data(url=..., minimal=...)`. `account` calls
 `tikhub_user.get_user_info()` + `tikhub_user.get_user_daily_usage()` and
 returns them as `account` / `usage`, tracked at zero cost.
+
+### Large results - `_result.py`
+
+TikHub returns each platform's raw objects. One page of 12 Instagram
+reels measured about 310,000 characters, 28,000 a reel across 137
+top-level keys, of which a question about views and dates needed about
+420 a reel. Returned whole, the agent loop kept the first 100,000
+characters (two or three reels), and four such results pushed every
+earlier tool result, the loaded skill included, out of the conversation
+([errors.md](./errors.md) entry 28). The agent then repeated paid calls
+and went looking for the API key in the shell.
+
+`deliver(ctx, endpoint, data)` measures the compact JSON of the payload:
+
+- Up to `INLINE_LIMIT_CHARS` (20,000): returned as `data`, as before.
+- Longer: written indented to `<workspace>/tikhub/<endpoint-slug>-<node8>-<rand6>.json`
+  through `services.media.write_media` (containment, atomic write and
+  naming come from there), and the output carries `file` (the
+  serialized `FileRef`), `preview` and `note` instead of `data`.
+
+`preview_of` keeps the shape with real values: each list is cut to its
+first element followed by `"... N more"`, `None` / `""` / `[]` / `{}`
+are left out, and strings are clipped at 80 characters. That page of
+reels previews in about 11,000 characters. The file is indented so tools
+that work by line can search and page through it. The rule applies to a
+canvas run too: a downstream node receives the `FileRef`, like any other
+large artifact ([Media Transport](./media_transport.md)).
+
+An agent reads fields from the file with a tool that runs a command in
+the workspace. Verified against the saved shape: one `python -c` command
+through `shell_execute` (works under Nushell and the host shell), and
+Nushell's `open <file> | get <list path> | each {...} | to json -r`.
+`fs_search` (plain substring per line) and `file_read` (line paging) can
+read it but cannot project fields; `python_code` and `javascript_code`
+cannot open files at all. The skill carries the commands.
+
+A context without a workspace makes `write_media` raise `NodeUserError`
+("No workspace is available ..."); usage is already recorded by then.
+
+### `describe` - `_docs.py`
+
+The SDK keeps only each route's one-line summary. What a parameter
+means and accepts, what the endpoint returns and what it costs are in
+the descriptions of TikHub's OpenAPI document
+(`https://api.tikhub.io/openapi.json`, public, about 3 MB). `describe`
+resolves the endpoint, then merges `endpoint_docs()[path]` into the
+SDK's own record: `description` is the text after the `# [English]`
+heading (the whole text when the heading is absent), and each parameter
+gains the document's `description`, `default` and `enum`. No key, no
+billing, no usage row.
+
+The document is fetched once per process and reduced before it is kept.
+A failed fetch is not cached: `describe` still answers with the SDK's
+names and types plus a `note`, and the next call fetches again. A route
+the document does not list gets a `note` saying TikHub has probably
+retired it, which is how SDK staleness shows up at run time. Request
+bodies of POST endpoints are not resolved; their fields are documented
+in the description text.
 
 ### Batch POST endpoints
 
@@ -131,7 +198,7 @@ special-cases HTTP method.
 
 Module-level `_INDEX` cache behind an `asyncio.Lock`, built once per
 process on first use (`list_endpoints`, the dropdown loader, or the first
-`call`). Cost is ~100-300 ms for ~1,100 methods.
+`call`). Cost is ~100-300 ms for the 1,000-odd methods.
 
 - **Resources**: a throwaway `async with AsyncTikHub(api_key="introspection")`
   (no network); iterate `vars(client)` and keep non-underscore attributes
@@ -146,7 +213,7 @@ process on first use (`list_endpoints`, the dropdown loader, or the first
 - **HTTP method + path**: regex over `inspect.getdoc(fn)`:
   ``r"``(GET|POST|PUT|PATCH|DELETE)\s+(/\S+?)``"`` - the generated
   docstrings carry the route literal as their last line
-  (verified on 2.1.2: every one of the 1,100+ methods matched).
+  (verified on 2.1.2 and 2.2.0: every method matched).
   Fallback: the same regex over `inspect.getsource(fn)` guarded by
   `try/except (OSError, TypeError)`; else `path=None` (display only -
   such an endpoint can still be called by id, just not by path).
@@ -160,7 +227,7 @@ process on first use (`list_endpoints`, the dropdown loader, or the first
 
 `PLATFORMS` is a static tuple - `("all", "tiktok", "douyin", "instagram",
 "youtube", "twitter", "xiaohongshu", "bilibili", "kuaishou", "weibo",
-"reddit", "threads", "linkedin", "zhihu", "toutiao", "xigua", "wechat",
+"reddit", "threads", "linkedin", "telegram", "zhihu", "toutiao", "xigua", "wechat",
 "lemon8", "pipixia", "hybrid", "tikhub")` - because it feeds a Pydantic
 `Literal` that must exist at class-definition time, before any SDK import.
 Filter rule is `info.platform == platform`, i.e. the first underscore
@@ -226,17 +293,30 @@ envelope). `request_id` is appended when the SDK exposes it.
 | SDK exception | HTTP | User message (shape) | Why this shape |
 |---|---|---|---|
 | `TikHubAuthError` | 401 | `TikHub rejected the API key (401) while calling {endpoint}. Update it in Credentials -> TikHub.` | Not retryable; points at the fix |
-| `TikHubPermissionError` | 403 | `TikHub refused {endpoint} (403): {detail}. The key may lack access ... or the account balance may be exhausted - run operation=account to check.` | 403 means EITHER the key's plan excludes the endpoint OR balance is exhausted; the node cannot tell which, `account` can |
+| `TikHubPermissionError` | 403 | `TikHub refused {endpoint} (403): {detail}. The API key lacks permission for this endpoint, or the account is disabled or its email is unverified. ...` | TikHub documents 403 as a permission or account-state failure; an empty balance is 402 |
+| `TikHubHTTPError` with status 402 | 402 | `TikHub refused {endpoint} (402): {detail}. The account balance is too low for this endpoint; top up at user.tikhub.io (operation=account shows the balance).` | The SDK has no class for 402, so the branch keys on the status |
 | `TikHubRateLimitError` | 429 | `TikHub rate-limited {endpoint} (429); retry after {retry_after}s. Each endpoint allows about 10 requests/s.` | 10 req/s per endpoint path; SDK already retried with backoff |
-| `TikHubBadRequestError` / `TikHubValidationError` | 400 / 422 | `TikHub rejected the request to {endpoint} ({status}): {detail}. Response: {body}` (body truncated to ~500 chars; `TikHubValidationError` reads `unparseable response`) | The detail is what the LLM needs to fix the args |
-| `TikHubNotFoundError` | 404 | `TikHub returned 404 for {endpoint}: {detail}. The route or the requested resource does not exist ...` | Route retired or resource id gone; points at `list_endpoints` |
+| `TikHubBadRequestError` | 400 | `TikHub could not complete {endpoint} (400): {detail}. TikHub answers 400 for a wrong parameter value and also for a failure on its side or the platform's, and bills neither. Check the values with operation=describe; if they are right, retry once or use another endpoint ...` | TikHub documents 400 as either cause and sends one message for both; an agent told its request was "rejected" kept changing correct parameters |
+| `TikHubBadRequestError` | 422 | `TikHub rejected the parameters of {endpoint} (422): {detail}. operation=describe documents each parameter.` | `{detail}` is `loc: msg` per failed parameter |
+| `TikHubValidationError` | - | `TikHub returned an unparseable response for {endpoint}: {detail}. Raw: {raw}` | The body was not what the SDK expected |
+| `TikHubNotFoundError` | 404 | `TikHub returned 404 for {endpoint}: {detail}. Either the requested item does not exist or TikHub has retired this route; operation=describe says whether the route is still published.` | Route retired or item gone; `describe` tells the two apart |
 | `TikHubUpstreamError` / `TikHubServerError` / `TikHubConnectionError` | 5xx / network | `TikHub upstream error while calling {endpoint} (HTTP {status}): {detail}. Retries were exhausted - try again later.` | SDK already retried; a WARN envelope beats a traceback plus Temporal re-runs on a non-idempotent paid call |
 | `TikHubFeatureRemovedError` / `TikHubConfigError` | - | `str(e)` | SDK-side messages are already user-facing |
 | anything else | - | propagates | Genuine bugs keep the full traceback through `BaseNode.execute` |
 
+`{detail}` is TikHub's own English message. TikHub answers
+`{"detail": {"message": ..., "message_zh": ..., "support": ..., "docs": ...}}`
+and FastAPI's `{"detail": [{"loc": [...], "msg": ...}]}` for a 422; the
+SDK reads neither and reports `HTTP <status>`, so `_error_detail` reads
+them. The raw body (first ~500 characters) is appended only when no
+message could be read from it.
+
 In-body errors (HTTP 200, `code >= 400` in the JSON) are raised by
 `to_plain` with the body's message. Pre-flight failures (`Unknown TikHub
 endpoint ...`, `... rejected params ...`) are raised before any HTTP call.
+
+`_TIMEOUT` is 60 seconds: TikHub's API reference asks clients for 30 to
+60, and a slow answer cut off at 30 was requested again.
 
 ## Cost tracking
 
@@ -287,17 +367,20 @@ Keep `TikHubActionNode.description` and the skill's frontmatter
 
 ## SDK version-bump recipe
 
-1. Edit the pin in `server/pyproject.toml` (`"tikhub>=2.1.2,<3"` - keep
+1. Edit the pin in `server/pyproject.toml` (`"tikhub>=2.2.0,<3"` - keep
    the `<3` cap unless you have re-verified the introspection contract
-   against the new major), then `cd server && uv sync`.
+   against the new major), then `cd server && uv sync`. A bump is due
+   when `describe` starts answering "not in TikHub's published API
+   document" for routes the SDK lists: the SDK lags the live API (2.1.2
+   was four months and 271 retired routes behind).
 2. Smoke the two things the node relies on:
    ```
    uv run python -c "import sys, tikhub; print(tikhub.__version__, 'typer' in sys.modules)"   # version, False
    uv run python -c "import sys; import nodes.scraper.tikhub_action; print('tikhub' in sys.modules)"  # False
    uv run python -c "import asyncio; from nodes.scraper.tikhub_action._sdk import endpoint_index; ix=asyncio.run(endpoint_index()); print(len(ix), ix[0])"
    ```
-   Eyeball the count against the previous release (2.1.2 indexes ~1,100
-   methods across 53 resources). A large drop means a resource stopped
+   Eyeball the count against the previous release (2.2.0 indexes about
+   1,050 methods across 51 resources). A large drop means a resource stopped
    being an `AsyncResource` instance attribute or the docstring route
    convention changed - fix the introspection fallbacks before shipping.
 3. Run the two drift guards from the contract suite:
@@ -308,7 +391,9 @@ Keep `TikHubActionNode.description` and the skill's frontmatter
    the full file: `uv run pytest tests/nodes/test_tikhub.py -v`.
 4. If test 18 fails, update the skill's cheat sheet and the ids in the
    node's `tool_description` - prefer the highest `_vN` variant the new
-   SDK exposes. If test 12 fails, adjust `PLATFORMS`.
+   SDK exposes. If test 12 fails, adjust `PLATFORMS` (2.2.0 added
+   `telegram`). Check the cited ids against TikHub's live document as
+   well as the SDK: an id can exist in the SDK and answer 404.
 5. `uv run ruff check nodes/scraper tests/nodes/test_tikhub.py` and
    `python -m cli docs nodes --check` from the repo root.
 
@@ -329,7 +414,17 @@ key produces `error_type == "PermissionDeniedError"` with
 is a user error. `fetch_url` forwards `url` + `minimal`; `account` makes
 two GETs. `list_endpoints` filters by platform + search and reports
 `douyin_web.fetch_one_video` as `GET` with its path and a required
-`aweme_id`. Every `PLATFORMS` value except `all` matches a live resource;
+`aweme_id`. A payload over the inline limit is saved under `tikhub/`,
+the file holds exactly the payload, and the output carries `file`,
+`preview` and `note` with no `data`; the limit is exact; each large
+result gets its own file; usage is recorded before the save.
+`preview_of` keeps one element per list with a count, drops empties but
+not `0` / `False`, and clips long strings. A 400 carries TikHub's
+English message with no raw body and does not say the arguments were
+wrong; 402 names the balance and 403 does not. `describe` merges the
+document's English description and parameter docs without a key or a
+usage row, fetches the document once, marks an unpublished route, and
+degrades (uncached) when the document cannot be fetched. Every `PLATFORMS` value except `all` matches a live resource;
 index length > 500. The loader returns options for a platform and `[]`
 when `tikhub` is missing. The plugin imports in a subprocess with
 `sys.modules["tikhub"] = None`, and importing the plugin does not import
@@ -352,14 +447,24 @@ awaited once with `service == "tikhub"` after a 2xx, not for
   a generator rewrite could still shrink the index - hence the "eyeball
   the count" step.
 - **First-use latency.** The first `list_endpoints` / dropdown open
-  reflects ~1,100 methods (~100-300 ms), cached per process; a worker
+  reflects the 1,000-odd methods (~100-300 ms), cached per process; a worker
   restart pays it again.
 - **Probe field names** were inferred from the CLI's output, not from a
   schema; extraction is defensive and should be tightened after a
   real-key run.
-- **403 ambiguity.** TikHub uses 403 for both "not in your plan" and
-  "balance exhausted"; the message points the user at `account` rather
-  than guessing.
+- **400 ambiguity.** TikHub answers 400 for a bad parameter and for an
+  upstream failure with one generic message; the node cannot tell which
+  and says so.
+- **Reading a saved result needs a command tool.** Field projection
+  works through `shell_execute`; `sandboxed_python` with
+  `workspace_read` is documented to read workspace files but was not
+  exercised for this. An agent with only `fs_search` / `file_read` can
+  page and grep but not project, and one with no file tool has only the
+  preview.
+- **Saved results accumulate** under `<workspace>/tikhub/`; nothing
+  removes them.
+- **Documentation depends on the network.** `describe` needs
+  `api.tikhub.io/openapi.json` once per process.
 - **Flat pricing is an approximation.** Some endpoints cost more than
   `$0.001`; the recorded cost is a floor, and the balance reported by
   `account` is the truth.

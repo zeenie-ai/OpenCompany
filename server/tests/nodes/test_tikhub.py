@@ -2,10 +2,12 @@
 
 The node is the "flattened CLI" over the official ``tikhub`` SDK: one
 ``call`` operation addressed by the SDK's own ``resource.method`` id, plus
-``list_endpoints`` (pure introspection, no network), ``fetch_url`` (hybrid
-parser) and ``account``. Everything vendor-specific lives in
+``list_endpoints`` (pure introspection, no network), ``describe`` (TikHub's
+published documentation for one endpoint), ``fetch_url`` (hybrid parser) and
+``account``. Everything that touches the SDK lives in
 ``nodes/scraper/tikhub_action/_sdk.py`` and is imported lazily, so the
-plugin registers without the SDK present.
+plugin registers without the SDK present. A large payload is saved to the
+workspace and returned as a file reference with a preview (``_result.py``).
 
 The SDK speaks httpx against ``https://api.tikhub.io``, so ``respx`` sees
 every request the node makes; nothing here touches the network. The
@@ -34,7 +36,7 @@ pytestmark = pytest.mark.node_contract
 
 import nodes.scraper.tikhub_action as tikhub_mod  # noqa: E402
 from nodes.scraper._credentials import TikHubCredential  # noqa: E402
-from nodes.scraper.tikhub_action import _sdk  # noqa: E402
+from nodes.scraper.tikhub_action import _docs, _result, _sdk  # noqa: E402
 from services.node_registry import get_node_class  # noqa: E402
 from services.plugin.base import NodeUserError  # noqa: E402
 from services.plugin.credential import CREDENTIAL_REGISTRY, ProbeResult  # noqa: E402
@@ -45,6 +47,58 @@ FETCH_ONE_VIDEO = f"{BASE}/api/v1/douyin/web/fetch_one_video"
 HYBRID_VIDEO_DATA = f"{BASE}/api/v1/hybrid/video_data"
 USER_INFO = f"{BASE}/api/v1/tikhub/user/get_user_info"
 USER_DAILY_USAGE = f"{BASE}/api/v1/tikhub/user/get_user_daily_usage"
+SPEC_URL = _docs.SPEC_URL
+
+CALL_ONE_VIDEO = {"operation": "call", "endpoint": "douyin_web.fetch_one_video", "params": {"aweme_id": "1"}}
+
+# The shape of the body TikHub sends with a 400: its English message, a
+# Chinese copy, and links a model has no use for.
+TIKHUB_400 = {
+    "detail": {
+        "code": 400,
+        "request_id": "00000000-0000-4000-8000-000000000000",
+        "message": (
+            "Request failed. Please retry. Check the docs below to verify your parameters, test with the "
+            "default demo parameters, and send the response JSON to support. You won't be charged for this request."
+        ),
+        "message_zh": "请求失败，请重试。",
+        "docs": "https://api.tikhub.io/#/Douyin-Web-API/fetch_one_video_api_v1_douyin_web_fetch_one_video_get",
+        "support": "Discord: https://discord.gg/aMEAS8Xsvz",
+        "router": "/api/v1/douyin/web/fetch_one_video",
+        "params": {"aweme_id": "1"},
+    }
+}
+
+# One route of TikHub's OpenAPI document, shaped as the live one is: the
+# description twice (Chinese, then English), parameter docs under ``schema``.
+ONE_VIDEO_SPEC = {
+    "openapi": "3.1.0",
+    "paths": {
+        "/api/v1/douyin/web/fetch_one_video": {
+            "get": {
+                "summary": "获取单个作品数据/Get single video data",
+                "description": (
+                    "# [中文]\n### 用途:\n- 获取单个作品数据\n\n"
+                    "# [English]\n### Purpose:\n- Get single video data\n### Price:\n- 0.001 USD/request"
+                ),
+                "parameters": [
+                    {
+                        "name": "aweme_id",
+                        "in": "query",
+                        "required": True,
+                        "schema": {"type": "string", "description": "作品id/Video id", "title": "Aweme Id"},
+                    },
+                    {
+                        "name": "need_anchor_info",
+                        "in": "query",
+                        "required": False,
+                        "schema": {"type": "boolean", "description": "Anchor info", "default": False},
+                    },
+                ],
+            }
+        }
+    },
+}
 
 PLUGIN_DIR = Path(tikhub_mod.__file__).parent
 SCRAPER_DIR = PLUGIN_DIR.parent
@@ -59,8 +113,15 @@ def _ok(data, router="/api/v1/douyin/web/fetch_one_video", params=None):
     return {"code": 200, "router": router, "params": params or {}, "data": data}
 
 
+def _big(rows: int = 12) -> dict:
+    """A page of ``rows`` items a little over the inline limit."""
+    caption = "c" * (_result.INLINE_LIMIT_CHARS // 10)
+    return {"items": [{"id": i, "caption": caption, "gone": None} for i in range(rows)], "cursor": "next-1"}
+
+
 def _reset_cache() -> None:
     _sdk._INDEX = None
+    _docs._DOCS = None
     for name in ("_BY_ENDPOINT", "_BY_PATH"):
         cache = getattr(_sdk, name, None)
         if isinstance(cache, dict):
@@ -142,6 +203,7 @@ class TestRegistration:
         assert set(get_args(cls.Params.model_fields["operation"].annotation)) == {
             "call",
             "list_endpoints",
+            "describe",
             "fetch_url",
             "account",
         }
@@ -268,6 +330,127 @@ class TestCall:
 
 
 # ============================================================================
+# 4b. large results: saved to the workspace, returned as a file and a preview
+# ============================================================================
+
+
+class TestLargeResults:
+    @respx.mock
+    async def test_large_result_is_saved_and_previewed(self, harness, tmp_path):
+        data = _big()
+        respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(200, json=_ok(data)))
+
+        result = await _execute(harness, CALL_ONE_VIDEO, context=harness.build_context(workspace_dir=str(tmp_path)))
+
+        harness.assert_envelope(result, success=True)
+        harness.assert_output_shape(
+            result, ["operation", "endpoint", "path", "file", "preview", "note", "code", "router", "cost_usd"]
+        )
+        payload = result["result"]
+        assert "data" not in payload
+
+        ref = payload["file"]
+        assert ref["kind"] == "file"
+        assert ref["path"].startswith(f"{_result.RESULT_SUBDIR}/")
+        assert ref["path"].endswith(".json")
+        assert ref["mime_type"] == "application/json"
+        assert ref["path"] in payload["note"]
+
+        saved = tmp_path / ref["path"]
+        text = saved.read_text(encoding="utf-8")
+        assert json.loads(text) == data
+        assert ref["size_bytes"] == saved.stat().st_size
+        # Indented, so tools that work by line can search and page through it.
+        assert len(text.splitlines()) > len(data["items"])
+
+        clipped = "c" * _result._PREVIEW_STRING_CHARS + "..."
+        assert payload["preview"] == {"items": [{"id": 0, "caption": clipped}, "... 11 more"], "cursor": "next-1"}
+
+    @respx.mock
+    async def test_inline_limit_is_exact(self, harness, tmp_path):
+        # A JSON string is its characters plus two quotes.
+        at_limit = "x" * (_result.INLINE_LIMIT_CHARS - 2)
+        respx.get(FETCH_ONE_VIDEO).mock(
+            side_effect=[
+                httpx.Response(200, json=_ok(at_limit)),
+                httpx.Response(200, json=_ok(at_limit + "x")),
+            ]
+        )
+        context = harness.build_context(workspace_dir=str(tmp_path))
+
+        whole = await _execute(harness, CALL_ONE_VIDEO, context=context)
+        assert whole["result"]["data"] == at_limit
+        assert "file" not in whole["result"]
+        assert not (tmp_path / _result.RESULT_SUBDIR).exists()
+
+        saved = await _execute(harness, CALL_ONE_VIDEO, context=context)
+        assert "data" not in saved["result"]
+        assert (tmp_path / saved["result"]["file"]["path"]).is_file()
+
+    @respx.mock
+    async def test_each_large_result_gets_its_own_file(self, harness, tmp_path):
+        respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(200, json=_ok(_big())))
+        context = harness.build_context(workspace_dir=str(tmp_path))
+
+        first = await _execute(harness, CALL_ONE_VIDEO, context=context)
+        second = await _execute(harness, CALL_ONE_VIDEO, context=context)
+
+        assert first["result"]["file"]["path"] != second["result"]["file"]["path"]
+
+    @respx.mock
+    async def test_fetch_url_saves_a_large_result_too(self, harness, tmp_path):
+        data = _big()
+        respx.get(HYBRID_VIDEO_DATA).mock(
+            return_value=httpx.Response(200, json=_ok(data, router="/api/v1/hybrid/video_data"))
+        )
+
+        result = await _execute(
+            harness,
+            {"operation": "fetch_url", "url": "https://v.douyin.com/abc/"},
+            context=harness.build_context(workspace_dir=str(tmp_path)),
+        )
+
+        harness.assert_envelope(result, success=True)
+        payload = result["result"]
+        assert payload["url"] == "https://v.douyin.com/abc/"
+        assert "data" not in payload
+        assert json.loads((tmp_path / payload["file"]["path"]).read_text(encoding="utf-8")) == data
+
+    @respx.mock
+    async def test_usage_is_recorded_before_the_result_is_saved(self, harness):
+        # No workspace in the context: saving fails, but TikHub has already
+        # billed the request, so the metric must exist.
+        respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(200, json=_ok(_big())))
+
+        result = await _execute(harness, CALL_ONE_VIDEO)
+
+        harness.assert_envelope(result, success=False)
+        assert result["error_type"] == "NodeUserError"
+        assert "workspace" in result["error"].lower()
+        harness.database.save_api_usage_metric.assert_awaited_once()
+
+
+class TestPreview:
+    def test_a_list_keeps_its_first_element_and_a_count_of_the_rest(self):
+        assert _result.preview_of([{"a": 1}, {"a": 2}, {"a": 3}]) == [{"a": 1}, "... 2 more"]
+        assert _result.preview_of([7]) == [7]
+        assert _result.preview_of([]) == []
+
+    def test_empty_values_are_left_out_but_zero_and_false_stay(self):
+        value = {"none": None, "blank": "", "list": [], "dict": {}, "zero": 0, "no": False}
+        assert _result.preview_of(value) == {"zero": 0, "no": False}
+
+    def test_long_strings_are_clipped_at_every_depth(self):
+        long = "u" * (_result._PREVIEW_STRING_CHARS + 1)
+        clipped = "u" * _result._PREVIEW_STRING_CHARS + "..."
+        assert _result.preview_of({"a": {"b": [{"url": long}, {"url": long}]}}) == {
+            "a": {"b": [{"url": clipped}, "... 1 more"]}
+        }
+        exact = "u" * _result._PREVIEW_STRING_CHARS
+        assert _result.preview_of(exact) == exact
+
+
+# ============================================================================
 # 5-9. errors
 # ============================================================================
 
@@ -338,13 +521,14 @@ class TestErrors:
         ("status", "body", "headers", "needles"),
         [
             (401, {"detail": "invalid api key"}, {}, ("401",)),
-            (403, {"detail": "insufficient balance"}, {}, ("403",)),
+            (402, {"detail": "insufficient balance"}, {}, ("402", "balance", "operation=account")),
+            (403, {"detail": "missing route permission"}, {}, ("403", "permission")),
             (429, {"detail": "slow down"}, {"Retry-After": "7"}, ("429", "7")),
             (
                 422,
                 {"detail": [{"loc": ["query", "aweme_id"], "msg": "field required"}]},
                 {},
-                ("422", "aweme_id"),
+                ("422", "query.aweme_id: field required", "operation=describe"),
             ),
             (502, {"detail": "upstream failed"}, {}, ("502",)),
         ],
@@ -376,6 +560,40 @@ class TestErrors:
 
         assert result["success"] is False
         assert "credential" in result["error"].lower()
+
+    @respx.mock
+    async def test_400_carries_tikhubs_words_without_blaming_the_arguments(self, harness):
+        # TikHub documents 400 as a bad parameter OR a failure on its side and
+        # sends this one body for both. The SDK cannot read the nested detail
+        # and reports "HTTP 400".
+        respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(400, json=TIKHUB_400))
+
+        result = await _execute(harness, CALL_ONE_VIDEO)
+
+        harness.assert_envelope(result, success=False)
+        assert result["error_type"] == "NodeUserError"
+        error = result["error"]
+        assert "(400)" in error
+        assert "Request failed. Please retry" in error
+        assert "failure on its side" in error
+        assert "operation=describe" in error
+        # No raw body: neither the Chinese copy nor the support links.
+        assert "请求失败" not in error
+        assert "discord" not in error.lower()
+        assert "{" not in error
+
+    @respx.mock
+    async def test_403_does_not_send_the_user_after_the_balance(self, harness):
+        # TikHub answers 402 for an empty balance; 403 is a permission problem.
+        respx.get(FETCH_ONE_VIDEO).mock(
+            return_value=httpx.Response(403, json={"detail": {"code": 403, "message": "Missing route permission."}})
+        )
+
+        result = await _execute(harness, CALL_ONE_VIDEO)
+
+        assert result["success"] is False
+        assert "Missing route permission" in result["error"]
+        assert "balance" not in result["error"]
 
     @respx.mock
     async def test_in_body_error_code_on_http_200(self, harness):
@@ -522,7 +740,7 @@ class TestListEndpoints:
         payload = result["result"]
         assert payload["count"] == 5
         assert len(payload["endpoints"]) == 5
-        assert payload["total"] > 1000
+        assert payload["total"] > 500
 
     async def test_default_limit_caps_at_100(self, harness):
         with respx.mock:
@@ -566,6 +784,110 @@ class TestListEndpoints:
 
 
 # ============================================================================
+# 11b. describe: TikHub's published documentation for one endpoint
+# ============================================================================
+
+
+class TestDescribe:
+    @respx.mock
+    async def test_merges_tikhubs_documentation_into_the_sdk_signature(self, harness):
+        spec = respx.get(SPEC_URL).mock(return_value=httpx.Response(200, json=ONE_VIDEO_SPEC))
+
+        # No key: the document is public.
+        result = await _execute(
+            harness, {"operation": "describe", "endpoint": "douyin_web.fetch_one_video"}, keys={}
+        )
+
+        harness.assert_envelope(result, success=True)
+        harness.assert_output_shape(
+            result, ["operation", "endpoint", "http_method", "path", "summary", "params", "description"]
+        )
+        payload = result["result"]
+        assert payload["operation"] == "describe"
+        assert payload["endpoint"] == "douyin_web.fetch_one_video"
+        assert payload["http_method"] == "GET"
+        assert payload["path"] == "/api/v1/douyin/web/fetch_one_video"
+        assert "note" not in payload
+
+        # The English half only.
+        assert payload["description"].startswith("### Purpose:")
+        assert "0.001 USD/request" in payload["description"]
+        assert "用途" not in payload["description"]
+
+        params = {p["name"]: p for p in payload["params"]}
+        assert params["aweme_id"]["required"] is True
+        assert params["aweme_id"]["type"]
+        assert params["aweme_id"]["description"] == "作品id/Video id"
+        assert params["need_anchor_info"]["required"] is False
+        assert params["need_anchor_info"]["default"] is False
+
+        assert spec.call_count == 1
+        assert "Authorization" not in respx.calls.last.request.headers
+        harness.database.save_api_usage_metric.assert_not_awaited()
+
+    @respx.mock
+    async def test_the_document_is_fetched_once(self, harness):
+        spec = respx.get(SPEC_URL).mock(return_value=httpx.Response(200, json=ONE_VIDEO_SPEC))
+
+        for _ in range(2):
+            result = await _execute(harness, {"operation": "describe", "endpoint": "douyin_web.fetch_one_video"})
+            harness.assert_envelope(result, success=True)
+
+        assert spec.call_count == 1
+
+    @respx.mock
+    async def test_a_route_tikhub_no_longer_publishes_says_so(self, harness):
+        respx.get(SPEC_URL).mock(return_value=httpx.Response(200, json={"openapi": "3.1.0", "paths": {}}))
+
+        result = await _execute(harness, {"operation": "describe", "endpoint": "douyin_web.fetch_one_video"})
+
+        harness.assert_envelope(result, success=True)
+        payload = result["result"]
+        assert "description" not in payload
+        assert "retired" in payload["note"]
+        assert "list_endpoints" in payload["note"]
+        # What the SDK knows is still returned.
+        assert {p["name"] for p in payload["params"]} == {"aweme_id", "need_anchor_info"}
+
+    @respx.mock
+    async def test_unreachable_documentation_degrades_and_is_not_cached(self, harness):
+        spec = respx.get(SPEC_URL).mock(
+            side_effect=[httpx.Response(503), httpx.Response(200, json=ONE_VIDEO_SPEC)]
+        )
+        request = {"operation": "describe", "endpoint": "douyin_web.fetch_one_video"}
+
+        first = await _execute(harness, request)
+
+        harness.assert_envelope(first, success=True)
+        assert "description" not in first["result"]
+        assert "could not be loaded" in first["result"]["note"]
+        assert {p["name"] for p in first["result"]["params"]} == {"aweme_id", "need_anchor_info"}
+
+        second = await _execute(harness, request)
+
+        assert second["result"]["description"].startswith("### Purpose:")
+        assert spec.call_count == 2
+
+    @respx.mock
+    async def test_unknown_or_missing_endpoint_fails_before_any_http(self, harness):
+        for endpoint in ("nope.nothing", ""):
+            result = await _execute(harness, {"operation": "describe", "endpoint": endpoint})
+            harness.assert_envelope(result, success=False)
+            assert result["error_type"] == "NodeUserError"
+        assert respx.calls.call_count == 0
+
+    @respx.mock
+    async def test_a_description_without_the_english_heading_is_returned_whole(self, harness):
+        spec = json.loads(json.dumps(ONE_VIDEO_SPEC))
+        spec["paths"]["/api/v1/douyin/web/fetch_one_video"]["get"]["description"] = "Get single video data"
+        respx.get(SPEC_URL).mock(return_value=httpx.Response(200, json=spec))
+
+        result = await _execute(harness, {"operation": "describe", "endpoint": "douyin_web.fetch_one_video"})
+
+        assert result["result"]["description"] == "Get single video data"
+
+
+# ============================================================================
 # 12. index / introspection
 # ============================================================================
 
@@ -573,7 +895,10 @@ class TestListEndpoints:
 class TestIndex:
     async def test_index_is_large_and_sorted(self):
         index = await _sdk.endpoint_index()
-        assert len(index) > 1000
+        # A floor well under the real count (about 1,050 in SDK 2.2.0): a
+        # release that retires routes must not fail this, a broken
+        # introspection must.
+        assert len(index) > 500
         ids = [info.endpoint for info in index]
         assert ids == sorted(ids)
         assert len(set(ids)) == len(ids)
@@ -964,7 +1289,7 @@ class TestUsageTracking:
 
     @respx.mock
     async def test_4xx_records_nothing(self, harness):
-        respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(403, json={"detail": "no balance"}))
+        respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(402, json={"detail": "no balance"}))
 
         result = await _execute(
             harness,

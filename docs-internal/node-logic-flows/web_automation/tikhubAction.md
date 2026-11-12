@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | web_automation / scraper / tool (dual-purpose) |
-| **Backend handler** | [`server/nodes/scraper/tikhub_action/__init__.py::TikHubActionNode`](../../../server/nodes/scraper/tikhub_action/__init__.py) - dispatch via `BaseNode.execute()` -> `@Operation("call" / "list_endpoints" / "fetch_url" / "account")`; SDK glue in [`_sdk.py`](../../../server/nodes/scraper/tikhub_action/_sdk.py) |
+| **Backend handler** | [`server/nodes/scraper/tikhub_action/__init__.py::TikHubActionNode`](../../../server/nodes/scraper/tikhub_action/__init__.py) - dispatch via `BaseNode.execute()` -> `@Operation("call" / "list_endpoints" / "describe" / "fetch_url" / "account")`; SDK glue in [`_sdk.py`](../../../server/nodes/scraper/tikhub_action/_sdk.py), TikHub's documentation in [`_docs.py`](../../../server/nodes/scraper/tikhub_action/_docs.py), large-result delivery in [`_result.py`](../../../server/nodes/scraper/tikhub_action/_result.py) |
 | **Tests** | [`server/tests/nodes/test_tikhub.py`](../../../server/tests/nodes/test_tikhub.py) |
 | **Skill (if any)** | [`server/skills/web_agent/tikhub-skill/SKILL.md`](../../../server/skills/web_agent/tikhub-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `tikhub_action` (`usable_as_tool = True`; both canvas handles explicitly kept visible) |
@@ -16,10 +16,13 @@ Reddit, Threads, LinkedIn, Zhihu, ...) through the official `tikhub`
 Python SDK. The node is a "flattened CLI": instead of one operation per
 endpoint it exposes `call`, addressed by the SDK's own `resource.method`
 id (e.g. `douyin_web.fetch_one_video`), plus `list_endpoints` to discover
-ids and their typed parameters without spending a request, `fetch_url`
-for the share-URL hybrid parser, and `account` for balance / daily usage.
-Used both as a workflow node and as an AI-agent tool; the agent runs the
-discover-then-call loop documented in the skill.
+ids and their typed parameters without spending a request, `describe`
+for TikHub's own documentation of one endpoint, `fetch_url` for the
+share-URL hybrid parser, and `account` for balance / daily usage. A
+payload over 20,000 characters is saved to the workspace and returned as
+a file reference with a preview. Used both as a workflow node and as an
+AI-agent tool; the agent runs the find, describe, call loop documented in
+the skill.
 
 ## Inputs (handles)
 
@@ -36,9 +39,9 @@ both become a dict.)
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `operation` | options | `call` | no | - | `call` / `list_endpoints` / `fetch_url` / `account` |
-| `platform` | options (`PLATFORMS` Literal) | `all` | no | `operation` in [`call`, `list_endpoints`] | Drives the endpoint dropdown and the listing filter (`all`, `tiktok`, `douyin`, `instagram`, `youtube`, `twitter`, `xiaohongshu`, `bilibili`, `kuaishou`, `weibo`, `reddit`, `threads`, `linkedin`, `zhihu`, `toutiao`, `xigua`, `wechat`, `lemon8`, `pipixia`, `hybrid`, `tikhub`) |
-| `endpoint` | string (dynamic options: `loadOptionsMethod: "tikhubEndpoints"`, depends on `platform`) | `""` | yes for `call` | `operation` = `call` | `resource.method` id, `resource/method`, or a `/api/v1/...` path. Plain `str` (not a Literal) so the LLM can pass any id |
+| `operation` | options | `call` | no | - | `call` / `list_endpoints` / `describe` / `fetch_url` / `account` |
+| `platform` | options (`PLATFORMS` Literal) | `all` | no | `operation` in [`call`, `describe`, `list_endpoints`] | Drives the endpoint dropdown and the listing filter (`all`, `tiktok`, `douyin`, `instagram`, `youtube`, `twitter`, `xiaohongshu`, `bilibili`, `kuaishou`, `weibo`, `reddit`, `threads`, `linkedin`, `telegram`, `zhihu`, `toutiao`, `xigua`, `wechat`, `lemon8`, `pipixia`, `hybrid`, `tikhub`) |
+| `endpoint` | string (dynamic options: `loadOptionsMethod: "tikhubEndpoints"`, depends on `platform`) | `""` | yes for `call` and `describe` | `operation` in [`call`, `describe`] | `resource.method` id, `resource/method`, or a `/api/v1/...` path. Plain `str` (not a Literal) so the LLM can pass any id |
 | `params` | object (JSON editor) | `{}` | no | `operation` = `call` | SDK keyword arguments for the endpoint; POST batch endpoints take `{"body": [...]}` |
 | `search` | string | `""` | no | `operation` = `list_endpoints` | Substring filter over endpoint id / summary / path |
 | `limit` | int (`ge=1, le=2000`) | `100` | no | `operation` = `list_endpoints` | Max endpoints returned |
@@ -68,10 +71,26 @@ real data):
   endpoint: string;          // resolved resource.method id
   path: string | null;       // REST path from the SDK docstring (null if not introspectable)
   url?: string;              // fetch_url only
-  data: unknown;             // TikHub's `data` field, platform-specific shape
+  // Exactly one of the next two shapes (see _result.deliver):
+  data?: unknown;            // TikHub's `data` field whole, when its JSON is <= 20,000 characters
+  file?: FileRef;            // otherwise: the payload saved as indented JSON under tikhub/ in the workspace
+  preview?: unknown;         // ...its shape with real values: first element of each list + "... N more",
+                             //    empty values dropped, strings clipped at 80 characters
+  note?: string;             // ...where the file is and how to use the preview
   code: number;              // TikHub envelope code (200 on success)
   router: string;            // TikHub envelope router
   cost_usd: number;          // what track_tikhub_usage recorded (0.001 flat)
+}
+
+// operation = "describe"
+{
+  operation: 'describe';
+  endpoint: string; resource: string; method: string; platform: string;
+  http_method: string | null; path: string | null; summary: string;
+  params: Array<{ name: string; type: string; required: boolean;
+                  description?: string; default?: unknown; enum?: unknown[] }>;
+  description?: string;      // English half of TikHub's OpenAPI description for the route
+  note?: string;             // instead of description: route not published, or document unreachable
 }
 
 // operation = "list_endpoints"
@@ -125,7 +144,14 @@ flowchart TD
   C6 -- ok --> C7[to_plain: model_dump if present, unwrap data / code / router]
   C7 -- in-body code >= 400 --> Ebody[NodeUserError with body message]
   C7 -- ok --> C8[track_tikhub_usage ctx, call, path -> api_usage_metrics row, cost_usd]
-  C8 --> C9[_shape call: endpoint, path, data, code, router, cost_usd]
+  C8 --> C9{deliver: JSON of data <= INLINE_LIMIT_CHARS?}
+  C9 -- yes --> C10[_shape call: endpoint, path, data, code, router, cost_usd]
+  C9 -- no --> C11[write_media -> workspace tikhub/*.json<br/>_shape call: file FileRef, preview, note, code, router, cost_usd]
+
+  B -- describe --> D1[resolve_endpoint - same resolution as call]
+  D1 --> D2[endpoint_docs - TikHub's OpenAPI document, fetched once per process]
+  D2 --> D3[merge description + param docs into the SDK record<br/>note when the route is unpublished or the document is unreachable]
+  D3 --> D4[_shape describe]
 
   B -- fetch_url --> F1{url given?}
   F1 -- no --> Eurl[NodeUserError: url required]
@@ -158,12 +184,18 @@ flowchart TD
   parameter panel.
 - **Error paths**: pre-flight (`Unknown TikHub endpoint`, `rejected
   params`), credential (`PermissionDeniedError` envelope), SDK
-  `TikHubError` subclasses mapped to `NodeUserError` messages (401 key
-  rejected -> Credentials; 403 scope-or-balance -> run `account`; 429
-  with `retry_after`; 400/422 with TikHub `detail` and ~500 chars of body;
-  404 route gone; 5xx / connection -> upstream after retries;
+  `TikHubError` subclasses mapped to `NodeUserError` messages carrying
+  TikHub's English message (401 key rejected -> Credentials; 402 balance
+  too low -> `account`; 403 key permission or account state; 429 with
+  `retry_after`; 400 parameter value OR a failure on TikHub's side, said
+  as such; 422 the failed parameters; 404 item gone or route retired ->
+  `describe`; 5xx / connection -> upstream after retries;
   `FeatureRemoved` / `Config` -> `str(e)`), in-body `code >= 400` ->
   `NodeUserError`. Anything else propagates with a traceback.
+- **Result delivery**: the compact JSON of the payload is measured; up
+  to `INLINE_LIMIT_CHARS` (20,000) it returns as `data`, past that it is
+  saved and returned as `file` + `preview` + `note`. Same rule on the
+  canvas and as a tool.
 - **Fallbacks**: `path` is `None` when neither the docstring nor the
   source carries the route literal (endpoint still callable by id).
 
@@ -184,8 +216,12 @@ flowchart TD
   `fetch_url` -> `GET /api/v1/hybrid/video_data`; `account` ->
   `GET /api/v1/tikhub/user/get_user_info` +
   `GET /api/v1/tikhub/user/get_user_daily_usage`. `list_endpoints` makes
-  no call.
-- **File I/O**: none.
+  no call. `describe` makes one unauthenticated
+  `GET https://api.tikhub.io/openapi.json` per process.
+- **File I/O**: a `call` / `fetch_url` payload over 20,000 characters is
+  written to `<workspace>/tikhub/<endpoint-slug>-<node8>-<rand6>.json`
+  through `services.media.write_media` (contained, atomic). Nothing
+  removes these files.
 - **Subprocess**: none.
 
 ## External Dependencies
@@ -195,8 +231,9 @@ flowchart TD
   stored in `EncryptedAPIKey`. Modal probe: `GET /api/v1/tikhub/user/get_user_info`.
 - **Services**: `PricingService` (`api.tikhub` + `operation_map.tikhub`
   in `pricing.json`), `Database.save_api_usage_metric`, option-loader
-  registry (`tikhubEndpoints`).
-- **Python packages**: `tikhub>=2.1.2,<3` (imported lazily inside `_sdk.py`
+  registry (`tikhubEndpoints`), `services.media.write_media` (saved
+  results).
+- **Python packages**: `tikhub>=2.2.0,<3` (imported lazily inside `_sdk.py`
   functions only; brings `httpx`, `pydantic`, `anyio`, `typer`,
   `shellingham`).
 - **Environment variables**: none. `TIKHUB_API_KEY` in the process
@@ -205,20 +242,29 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **First use pays introspection**: `endpoint_index()` reflects ~1,100
-  SDK methods (~100-300 ms) once per process, behind an `asyncio.Lock`.
+- **First use pays introspection**: `endpoint_index()` reflects the
+  SDK's 1,000-odd methods (~100-300 ms) once per process, behind an
+  `asyncio.Lock`.
+- **Large results need a reader**: `preview` shows one element per
+  list. The rest is in the saved file, which an agent reads with a tool
+  that runs a command in the workspace (`shell_execute`); `fs_search`
+  and `file_read` can grep and page it but not project fields.
+- **A large result with no workspace fails** with `write_media`'s
+  `NodeUserError` after the request was billed and recorded.
 - **`platform: all` yields no dropdown options** by design; the LLM path
   is unaffected because `endpoint` is free text.
 - **Flat pricing is a floor**: TikHub prices some endpoints above
   `$0.001`; `cost_usd` records the flat rate, `account` reports the true
   balance.
-- **403 is ambiguous** (plan scope vs exhausted balance) - the message
-  defers to `account`.
+- **400 is ambiguous**: TikHub answers it for a wrong parameter value
+  and for an upstream failure with one generic message; the node says
+  both are possible instead of blaming the arguments.
 - **In-body errors**: TikHub can answer HTTP 200 with `code: 400` in the
   JSON; the SDK does not raise on it, `to_plain` does.
-- **Non-idempotent retries**: the SDK retries 429 / 5xx itself
-  (`_MAX_RETRIES`, default 2); mapped errors are `NodeUserError` so
-  Temporal does not re-run a paid call on top of that.
+- **Non-idempotent retries**: the SDK retries 429 / 5xx / timeouts
+  itself (`_MAX_RETRIES` = 3 attempts, `_TIMEOUT` = 60 s each, the top
+  of the 30 to 60 s TikHub asks for); mapped errors are `NodeUserError`
+  so Temporal does not re-run a paid call on top of that.
 - **Pagination is caller-driven**: cursor names differ per platform
   (`max_cursor`, `cursor`, `pagination_token`, `continuation_token`,
   `after`, `lastCursor`, `pcursor`); the node passes whatever `params`

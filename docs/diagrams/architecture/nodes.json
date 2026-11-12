@@ -3750,6 +3750,7 @@
       "operations": [
         "account",
         "call",
+        "describe",
         "fetch_url",
         "list_endpoints"
       ],

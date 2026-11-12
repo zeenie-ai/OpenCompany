@@ -2104,7 +2104,7 @@ requires-dist = [
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "structlog", specifier = ">=24.1.0" },
     { name = "temporalio", specifier = ">=1.34.0" },
-    { name = "tikhub", specifier = ">=2.1.2,<3" },
+    { name = "tikhub", specifier = ">=2.2.0,<3" },
     { name = "tinytag", specifier = ">=2.3.0" },
     { name = "tzdata", specifier = ">=2024.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
@@ -3393,7 +3393,7 @@ wheels = [
 
 [[package]]
 name = "tikhub"
-version = "2.1.2"
+version = "2.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -3401,9 +3401,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/71/0b/49605fc47a73fa127df1b3c9086885ee908f76f2d506be351a7ee28a5e9c/tikhub-2.1.2.tar.gz", hash = "sha256:7d6be6728a4a4441e3dc3a441777414e12be072024bd73bd408cc23675f7fbbf", size = 123476, upload-time = "2026-06-05T06:43:39.903Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/6e/caf80ce678137ab2c2a2dafca6f34ad12b0379f169069e15982e5d37acb2/tikhub-2.2.0.tar.gz", hash = "sha256:1bb2d4ee9bc11b675915737481e84c7826d36fb52944ac7218d8203c316cbffc", size = 121798, upload-time = "2026-10-03T06:42:23.425Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f1/a4/d24522f6f444ef29fc3d6fd34fea5caa9ce0bb217c03fd1f714dc6afbecb/tikhub-2.1.2-py3-none-any.whl", hash = "sha256:9de5b6828ab2e04a97efed6054af6015ac3546cc42cf8ecaaa1e26d48faee710", size = 157859, upload-time = "2026-06-05T06:43:38.376Z" },
+    { url = "https://files.pythonhosted.org/packages/01/8e/c795d51554d9538e0babdd017e23f5674cda9712cd580c7ad7d5661f3f53/tikhub-2.2.0-py3-none-any.whl", hash = "sha256:5f61293494e0b3713ee4eddcdfa89ad5e19fe2b839cc0d2852925ac8030e4f67", size = 152792, upload-time = "2026-10-03T06:42:21.933Z" },
 ]
 
 [[package]]
