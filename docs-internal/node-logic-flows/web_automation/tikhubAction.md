@@ -196,6 +196,12 @@ flowchart TD
   to `INLINE_LIMIT_CHARS` (20,000) it returns as `data`, past that it is
   saved and returned as `file` + `preview` + `note`. Same rule on the
   canvas and as a tool.
+- **Approval class** (`services/approvals/classes.py`, for a generation
+  that waits for the owner): `list_endpoints`, `describe` and `account`
+  are `read` and never ask; `call` and `fetch_url` are `send`. A
+  broken-off `list_endpoints`, `describe`, `fetch_url` or `account` may
+  run again (`repeats.py`); a `call` may not, because its effect depends
+  on the endpoint.
 - **Fallbacks**: `path` is `None` when neither the docstring nor the
   source carries the route literal (endpoint still callable by id).
 
@@ -204,8 +210,8 @@ flowchart TD
 - **Database writes**: one `api_usage_metrics` row per successful `call` /
   `fetch_url` (`service="tikhub"`, `operation` from `operation_map`,
   `endpoint=<REST path>`, `resource_count=1`, `cost=0.001`) and per
-  `account` (`cost=0.0`); none for `list_endpoints`; none after a 4xx /
-  5xx. Written by `track_tikhub_usage` in a `try/except` - a metrics
+  `account` (`cost=0.0`); none for `list_endpoints` or `describe`; none
+  after a 4xx / 5xx. Written by `track_tikhub_usage` in a `try/except` - a metrics
   failure logs a WARN and never fails the call.
 - **Broadcasts**: per-node status via `BaseNode.execute`
   (`update_node_status` executing / success / error); the credential

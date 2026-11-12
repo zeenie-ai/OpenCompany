@@ -228,6 +228,14 @@ grew a saved row past the 1 MB seed cap and every later firing failed).
   recorded before those keys existed replays the original rules (no cap,
   cumulative token gate, whole-transcript summary), because the rules decide
   which activities are scheduled. Any change to them needs a new version.
+- **These bounds are a backstop, not a design for a tool.** The cap keeps
+  the head of a result, which for a page of structured items is the first
+  few, and the clearing replaces whole earlier results, a loaded skill among
+  them (a skill load is exempt from the cap, not from clearing). About four
+  results at the cap are enough to start it. A tool whose answers are
+  routinely that large should save them and return a reference with a
+  preview, as `tikhubAction` does
+  ([tikhub_service.md](./tikhub_service.md#large-results---_resultpy)).
 
 ## Compaction: one system prompt, summary as a user message
 

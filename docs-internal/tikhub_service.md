@@ -31,7 +31,7 @@ endpoint's documentation is read from TikHub's live OpenAPI document.
 | Auth / probe | `TikHubCredential(ApiKeyCredential)` - bearer key; declarative httpx probe against `GET /api/v1/tikhub/user/get_user_info` (never `/health/check`, which is unauthenticated) |
 | Task queue | `TaskQueue.REST_API` |
 | Output | `_shape(operation, **fields)` - `{operation, endpoint, path, data, code, router, cost_usd}` for calls, where a payload over 20,000 characters is saved to the workspace and `data` is replaced by `file` (a `FileRef`), `preview` and `note` (see "Large results"); `{operation, platform, count, total, endpoints[]}` for listing; one listing entry plus `description` for describe; `{operation, account, usage}` for account. `None` fields dropped, `{}` / `[]` kept (an empty answer from TikHub is real) |
-| Cost | Flat `$0.001` per successful request (`pricing.json: api.tikhub`), recorded by `track_tikhub_usage` into `api_usage_metrics`; `list_endpoints` never bills, `account` bills at `0.0` |
+| Cost | OpenCompany records a flat `$0.001` per successful request (`pricing.json: api.tikhub`) through `track_tikhub_usage` into `api_usage_metrics`. It is a floor, not TikHub's figure: TikHub prices each endpoint (`instagram_v2` $0.002, `instagram_v3` $0.008). `list_endpoints` and `describe` record nothing, `account` records `0.0` |
 | Tests | [`server/tests/nodes/test_tikhub.py`](../server/tests/nodes/test_tikhub.py) (`pytestmark = node_contract`; `pytest --collect-only -q` for the live count) |
 | Paired skill | [`server/skills/web_agent/tikhub-skill/SKILL.md`](../server/skills/web_agent/tikhub-skill/SKILL.md) |
 | Node card | [`docs-internal/node-logic-flows/web_automation/tikhubAction.md`](./node-logic-flows/web_automation/tikhubAction.md) |
@@ -69,8 +69,24 @@ Config touched outside the folder: `server/config/credential_providers.json`
 `server/nodes/visuals.json` (`"tikhubAction": {"skill": "tikhub-skill"}`),
 `server/tests/fixtures/tool_names_snapshot.json`
 (`"tikhubAction": "tikhub_action"`). `server/nodes/__init__.py` is not
-touched - pkgutil discovery picks up the folder, and `_sdk.py` is skipped
-by the underscore rule.
+touched - pkgutil discovery picks up the folder, and the `_`-prefixed
+modules are skipped by the underscore rule.
+
+Three more places name the node's operations and must follow when one is
+added:
+
+- `server/services/approvals/classes.py`: `list_endpoints`, `describe` and
+  `account` are `read` and never ask; `fetch_url` and `call` are `send`.
+  An unlisted value counts as `send`, and
+  `tests/services/approvals/test_classes.py` fails until the new one is
+  listed.
+- `server/services/approvals/repeats.py`: every operation but `call` may
+  run again after a broken-off attempt. `call` may not, because its
+  effect depends on the endpoint.
+- `docs/diagrams/architecture/nodes.json`: the `operations` list of the
+  node's row (`tests/test_architecture_node_coverage.py`). Edit the row
+  by hand; `export-nodes` rewrites `source_commit`, which the diagram
+  catalogue pins.
 
 ## Why the SDK, and why import it lazily
 
@@ -343,7 +359,7 @@ on `track_twitter_usage` (`server/nodes/twitter/_base.py`):
 service: "tikhub", operation, endpoint: <REST path>, resource_count: 1,
 cost})`, wrapped in `try/except -> logger.warning` (a metrics failure
 never fails a paid call that already succeeded). Called **only after a
-successful call**, never for `list_endpoints`, never after a 4xx/5xx
+successful call**, never for `list_endpoints` or `describe`, never after a 4xx/5xx
 (TikHub does not bill those either). Returns `total_cost` for the
 `cost_usd` output key. The `cost=` metadata on each `@Operation` is
 dormant - the manual tracker does the work, because the framework's
@@ -466,7 +482,8 @@ awaited once with `service == "tikhub"` after a 2xx, not for
 - **Documentation depends on the network.** `describe` needs
   `api.tikhub.io/openapi.json` once per process.
 - **Flat pricing is an approximation.** Some endpoints cost more than
-  `$0.001`; the recorded cost is a floor, and the balance reported by
+  `$0.001` (the live document states $0.002 for `instagram_v2` and $0.008
+  for `instagram_v3`); the recorded cost is a floor, and the balance reported by
   `account` is the truth.
 - **New transitive deps.** `typer` and `shellingham` arrive for the SDK's
   own CLI; nothing in OpenCompany imports them and no version conflicts

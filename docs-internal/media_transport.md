@@ -153,6 +153,7 @@ with the sending node's context.
 | Function | Use |
 |---|---|
 | `write_audio(payload, *, ctx, stem, ext, …) -> AudioRef` | Atomic write into `<workspace>/audio/`. Filename is `<slug>-<node8>-<rand6>.<ext>`, so retries and repeated runs never collide or overwrite. `<node8>` is the node id's first eight characters through `core.paths.safe_path_component`, because canvas ids carry colons (`7:mobile:1`) and Windows refuses a colon in a file name. Probes the file and populates the metadata. |
+| `write_media(payload, *, ctx, stem, ext, kind="file", mime_type=None, subdir="media") -> FileRef` | The kind-agnostic sibling of `write_audio`: same naming, containment and atomic write, into `<workspace>/<subdir>/`. Refuses `kind="audio"`, which would claim a probe that did not run. |
 | `resolve_media(ref_or_path, *, ctx \| workspace_dir) -> Path` | Contained absolute path. Absolute inputs are tolerated for back-compat but still contained. |
 | `read_media_bytes(...) -> (filename, bytes)` | `resolve_media` + non-empty and size checks. |
 | `coerce_file_param(value, *, ctx) -> (filename, bytes)` | **The one nodes should call.** Accepts all three shapes the UI can produce. |
@@ -331,6 +332,28 @@ So the rule for the next kind:
 - The transport layer underneath — containment, atomic write, the workspace
   routes, the limits, `preview.py` — is already kind-agnostic, so `write_image`
   would differ from `write_audio` only in subdirectory and probe.
+
+### Large data results are files too
+
+The arithmetic in section 1 does not care whether the bytes are media. A
+node that returns a third-party API's raw answer can produce hundreds of
+kilobytes of JSON, and that result takes every path a media payload does.
+When the node is an agent's tool there is a second cost: the loop keeps
+only the first `TOOL_RESULT_MAX_CHARS` characters, so the model sees a
+fraction of what the call returned, and a few such results clear the
+rest of the conversation
+([agent_context_flow.md](./agent_context_flow.md#transcript-size-capped-results-cleared-old-results)).
+
+`tikhubAction` is the reference. One page of 12 Instagram reels is about
+310,000 characters, so a payload over 20,000 characters is written with
+`write_media(..., ext="json", mime_type="application/json", subdir="tikhub")`
+and the node returns the `FileRef` under `file`, with a `preview` of the
+payload's shape (the first element of each list, long strings clipped)
+in place of the payload
+([tikhub_service.md](./tikhub_service.md#large-results---_resultpy)). The
+file is indented so tools that work by line can search and page through
+it. Use the same shape for any node whose answers are routinely larger
+than a model can use.
 
 ---
 

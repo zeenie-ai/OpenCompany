@@ -610,6 +610,26 @@ Full reference: [docs-internal/plugin_system.md → "Self-contained plugin folde
   `usable_as_tool` — serialized into an LLM message. See
   [`services/media/limits.py`](./../services/media/limits.py) for the
   measured Temporal thresholds this exists to stay under.
+- **Don't return a large raw payload either.** An API that answers with
+  hundreds of kilobytes of JSON takes the same paths, and as an agent's
+  tool it is cut to the first `TOOL_RESULT_MAX_CHARS` characters: the
+  model sees the first few items of a page, and a few such results clear
+  every earlier one, the loaded skill included. Save the payload with
+  `services.media.write_media` and return the `FileRef` with a preview of
+  its shape. [`scraper/tikhub_action/_result.py`](./scraper/tikhub_action/_result.py)
+  (`deliver` / `preview_of`) is the reference.
+- **A new operation on an existing node has homes outside its folder.**
+  When the node is listed with per-value classes in
+  [`services/approvals/classes.py`](./../services/approvals/classes.py),
+  give the new value a class: an unlisted value counts as `send`, and
+  `tests/services/approvals/test_classes.py` fails until it is listed.
+  Add it to [`repeats.py`](./../services/approvals/repeats.py) when a
+  broken-off attempt may run again. Add it to the node's `operations` in
+  [`docs/diagrams/architecture/nodes.json`](../../docs/diagrams/architecture/nodes.json)
+  (`tests/test_architecture_node_coverage.py`), to the node card and to
+  the paired skill. Then run the whole suite
+  (`pytest tests --ignore=tests/temporal`), not only the node's own test
+  file: these tables are tested elsewhere.
 - **Return plain data, never raw backend or third-party objects.** Backend /
   SDK result objects (native filesystem `ReadResult`, httpx
   responses, …) must be unwrapped to plain fields before returning —

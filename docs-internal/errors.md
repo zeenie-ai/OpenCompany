@@ -611,7 +611,7 @@ Seen 2026-09-05 with a `tikhubAction` tool whose results were about 400,000 char
 
   Runs recorded before the key existed replay the original rules unchanged.
 - `ConversationTooLarge` stays a hard failure. Its message now points at the Context panel and the Tool Result Limit, and a save over half the cap logs a WARNING.
-- Since 2026-11-12 the `tikhubAction` node no longer returns such payloads at all: a result over 20,000 characters is saved to the workspace and returned as a file reference with a preview ([tikhub_service.md](./tikhub_service.md#large-results---_resultpy)). The cap above cut each result to its first 100,000 characters, which for one page of 12 Instagram reels (about 310,000 characters) was two or three reels, and four such results still cleared every earlier tool result, the loaded skill included.
+- Since 2026-11-12 the `tikhubAction` node no longer returns such payloads at all: a result over 20,000 characters is saved to the workspace and returned as a file reference with a preview ([tikhub_service.md](./tikhub_service.md#large-results---_resultpy)). The cap above cut each result to its first 100,000 characters, which for one page of 12 Instagram reels (about 310,000 characters) was two or three reels, and four such results still cleared every earlier tool result, the loaded skill included (entry 36).
 
 Locked by `server/tests/services/test_tool_output.py`, `server/tests/temporal/test_agent_context_pressure.py`, `server/tests/temporal/test_agent_workflow_pressure.py` and `server/tests/temporal/test_prepare_payload_pressure.py`. Design record: [ARCHIVE/AGENT_COMPACTION_FIX_PLAN.md](./ARCHIVE/AGENT_COMPACTION_FIX_PLAN.md).
 
@@ -784,3 +784,58 @@ retry. Continue the existing attempts; clearing task history or deleting
 concurrency counters is unnecessary. Inspect `agent.acquire_subagent_permit`
 heartbeats, task-attempt runner identities, and completion events to distinguish
 waiting for capacity from reusing a released lease.
+
+## 36. An agent using TikHub answers from two or three items, repeats paid calls, or looks for the API key
+
+**Symptom**: an AI Agent with a `tikhubAction` tool is asked for recent
+posts on a topic above some view count. It makes many TikHub calls, repeats
+searches it already made, and answers with a few items, one of them "from an
+earlier search that I didn't re-verify". The log of such a run (12 November
+2026) shows, in this order:
+
+```
+call op NodeUserError: TikHub rejected the request to instagram_v2.fetch_hashtag_posts (400): HTTP 400. Response: {"detail": {"code": 400, ...
+AgentWorkflow cleared 8 earlier tool result(s) at iteration 5: 570281 -> 512125 bytes (budget 393216)
+AgentWorkflow cut 2 tool result(s) of this turn at iteration 5: 512125 -> 393213 bytes (budget 393216)
+[Shell] Executing: env | grep -i -E "tikhub" | sed 's/=.*/=<set>/'; ls
+Blob data size exceeds the warning limit. ... wf-size=786402 blob-size-violation-operation=ContinueAsNewWorkflowExecution
+```
+
+**Root cause**: four gaps in the node and its skill, none in the agent loop.
+
+- **Result size.** One page of 12 Instagram reels is about 310,000
+  characters, 28,000 a reel, of which the question needed about 420 a reel.
+  The cap of entry 28 kept the first 100,000 characters, which is two or
+  three reels, and the note it appends asks for "narrower parameters" that
+  the endpoint does not have. Four such results passed the transcript's byte
+  budget, so every earlier result became a placeholder, the loaded skill
+  among them. The agent then repeated a search to see its result again, and
+  looked for the key to call the API itself.
+- **A stale SDK.** 271 of the 1,106 routes in `tikhub` 2.1.2 answer 404 on
+  TikHub's live API, and 232 live routes were missing from it. The skill
+  recommended nine of the dead ones.
+- **No documentation to choose by.** The SDK keeps a one-line summary per
+  route. The agent guessed `feed_type` and paid for
+  `instagram_v3.general_search`, which returns users, hashtags and places.
+- **A misleading 400.** TikHub documents 400 as a wrong parameter or a
+  failure on its side and sends one generic body for both. The SDK cannot
+  read that body's nested `detail` and reports `HTTP 400`. The node called
+  the request "rejected" and the skill said to fix the values, so the agent
+  changed parameters that were already correct.
+
+**Fix**: a `call` or `fetch_url` payload over 20,000 characters is saved to
+`<workspace>/tikhub/` and returned as a file reference with a preview of its
+shape. A `describe` operation returns TikHub's own documentation for an
+endpoint. Errors carry TikHub's English message, and a 400 says both causes
+are possible (402 is the balance, 403 a permission). The SDK pin is 2.2.0,
+which matches the live API, and the skill was rewritten against it. See
+[tikhub_service.md](./tikhub_service.md).
+
+**Recovery**: run `uv sync` in `server/` (or `company build`) so the
+environment has `tikhub` 2.2.0, and restart the backend. A conversation that
+already holds cleared and cut results keeps them: clear it from the Context
+panel, or Reset the deployment, before judging the fix. Reading fields from
+a saved result needs a tool that runs a command in the workspace
+(`shell_execute`); without one the agent has only the preview.
+
+Locked by `server/tests/nodes/test_tikhub.py`.
