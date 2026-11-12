@@ -379,11 +379,18 @@ from.
 ([`NoteView.tsx`](../client/src/components/parameterPanel/canvas/NoteView.tsx)):
 a note shows with a header: the version stepper ‹ v2/3 › (when it has more
 than one version and the host gave a `nodeId`; an earlier version is read
-once through `canvas_version` and cached, read-only), Preview or Markdown
-(the source in a `pre`), Copy, and Download as a `.md` file (a blob named
-after the title and version). A newer version arriving shows itself unless
-the user stepped back to an earlier one; a focus request opens it at its
-version.
+once through `canvas_version` and cached, read-only), Preview or source,
+Copy, and Download (a blob named after the selected title and version).
+Markdown downloads as `.md`, other code as `.txt`, and HTML as `.html`.
+Explicit `html`, `htm`, or `text/html` notes preview in an iframe with
+`sandbox="allow-scripts"`, just like workspace HTML files. A Markdown note
+can also supply one explicitly HTML-fenced artifact: a complete HTML
+document can be accompanied by prose, retained in an expandable Notes
+section. Ordinary Markdown examples and raw tags do not become executable.
+Source and Copy retain the original note; an HTML download contains the
+extracted document. The selected version determines the format. A newer
+version arriving shows itself unless the user stepped back to an earlier
+one; a focus request opens it at its version.
 
 **Markdown names workspace files by path**
 ([`CanvasMarkdown.tsx`](../client/src/components/parameterPanel/canvas/CanvasMarkdown.tsx),
@@ -420,7 +427,7 @@ text tiers:
 
 | Verdict | Condition | Renders |
 |---|---|---|
-| `note` | `kind === 'note'` | `NoteView`: `CanvasMarkdown` prose or the source, versions, Copy, Download (no fetch for the latest) |
+| `note` | `kind === 'note'` | `NoteView`: Markdown, code, or sandboxed HTML; source, versions, Copy, Download (no fetch for the latest) |
 | `web-external` | `kind === 'url'` | sandboxed iframe (below) |
 | `media-image/video/audio` | mime prefix or ref.kind | native element, FilePreviewDialog's honest-fallback idiom |
 | `pdf` | `application/pdf` / `.pdf` | plain same-origin iframe (browser viewer) |
@@ -434,10 +441,13 @@ Text bodies (markdown/code/JSON/HTML) come over the existing workspace route
 with **no backend change**: `Content-Disposition: attachment` blocks
 navigation/embedding but not `fetch()` reading the body. Bounded by
 construction — a streamed reader cancelled at `TEXT_FETCH_CAP_BYTES`
-(512 KB) so a 100 MB log never lands in memory; `truncated` renders a
-banner. Non-ok throws with the status (a 401 must surface as an error state,
-never a blank pane). The query key includes `size_bytes` + `modified_at`,
-so a re-pushed file self-busts with no invalidation plumbing.
+(512 KiB) for ordinary text, or `HTML_FETCH_CAP_BYTES` (8 MiB) for HTML
+that can embed images and 3D models. A 100 MB log never lands in memory;
+`truncated` renders a banner for text, or a refusal with Download for HTML.
+Non-ok throws with the status (a 401 must surface as an error state,
+never a blank pane). The query key includes `size_bytes` + `modified_at`
+and the fetch cap, so a re-pushed file self-busts and an HTML preview never
+reuses a text preview's truncated body.
 
 ### Click-to-preview
 

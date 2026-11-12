@@ -16,8 +16,9 @@ vi.mock('../../../../contexts/WebSocketContext', () => ({
 const { textHookMock } = vi.hoisted(() => ({ textHookMock: vi.fn() }));
 vi.mock('../../../../hooks/useWorkspaceText', () => ({
   TEXT_FETCH_CAP_BYTES: 512 * 1024,
+  HTML_FETCH_CAP_BYTES: 8 * 1024 * 1024,
   fetchWorkspaceText: vi.fn(),
-  useWorkspaceTextQuery: (ref: unknown) => textHookMock(ref),
+  useWorkspaceTextQuery: (ref: unknown, capBytes?: number) => textHookMock(ref, capBytes),
 }));
 
 import CanvasContent from '../CanvasContent';
@@ -171,10 +172,29 @@ describe('CanvasContent sandbox regression (security invariants)', () => {
     const iframe = container.querySelector('iframe') as HTMLIFrameElement;
     expect(iframe).toBeTruthy();
     expect(iframe.getAttribute('srcdoc')).toContain('<h1>report</h1>');
+    expect(textHookMock).toHaveBeenCalledWith(htmlItem('h').ref, 8 * 1024 * 1024);
     expect(iframe.getAttribute('sandbox')).toBe('allow-scripts');
     expect(iframe.getAttribute('sandbox')).not.toContain('allow-same-origin');
     // Never a src pointing at the app origin for HTML.
     expect(iframe.getAttribute('src')).toBeNull();
+  });
+});
+
+describe('CanvasContent HTML size limit', () => {
+  it('offers a download instead of rendering an incomplete document above 8 MiB', () => {
+    textHookMock.mockReturnValue({
+      data: { text: '<h1>incomplete', truncated: true },
+      isLoading: false,
+      isError: false,
+    });
+    const { container } = render(
+      <CanvasContent items={[htmlItem('large')]} workflowId="wf-1" />,
+    );
+    expect(screen.getByText(/8 MiB render cap/)).toBeInTheDocument();
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Download' })).toHaveAttribute(
+      'href', '/api/workspace/wf-1/files/reports/page.html',
+    );
   });
 });
 
@@ -211,10 +231,154 @@ describe('CanvasContent notes as documents', () => {
       <CanvasContent items={[doc('a', 'print("```")', { title: 'script', language: 'Python' })]} workflowId="wf-1" />,
     );
     expect(container.querySelector('pre code')?.textContent).toBe('print("```")\n');
+    expect(screen.getByRole('radio', { name: 'Source' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Download' }));
     expect(click).toHaveBeenCalledTimes(1);
     expect((createObjectURL.mock.calls[0] as unknown as [Blob])[0].type).toBe('text/plain;charset=utf-8');
     click.mockRestore();
+  });
+
+  it.each(['html', ' HTM ', ' Text/HTML '])('previews an explicit %s note in isolation and preserves its source', (language) => {
+    const content = '<!doctype html><html><body><h1 id="note-heading">Page</h1><script>document.body.dataset.ready = "yes";</script></body></html>';
+    const { container } = render(
+      <CanvasContent items={[doc('html', content, { title: 'Page', language })]} workflowId="wf-1" />,
+    );
+
+    const iframe = screen.getByTitle('Page preview');
+    expect(iframe).toHaveAttribute('srcdoc', content);
+    expect(iframe).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(iframe).not.toHaveAttribute('src');
+    expect(container.querySelector('#note-heading')).toBeNull();
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('pre')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Source' }));
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('pre')?.textContent).toBe(content);
+    fireEvent.click(screen.getByRole('radio', { name: 'Preview' }));
+    expect(screen.getByTitle('Page preview')).toHaveAttribute('srcdoc', content);
+  });
+
+  it.each([null, 'markdown', 'python'])('keeps markup in a %s note out of the executable preview', (language) => {
+    const { container } = render(
+      <CanvasContent items={[doc('example', '<!doctype html><html><body><h1>Example</h1></body></html>', { language })]} workflowId="wf-1" />,
+    );
+    expect(container.querySelector('iframe')).toBeNull();
+  });
+
+  it.each([
+    { opening: '```html', closing: '```', language: null, prefix: '' },
+    { opening: '~~~~ HTM', closing: '~~~~~', language: 'markdown', prefix: 'Here is the page.\r\n\r\n' },
+    { opening: '~~~Text/HTML', closing: '~~~', language: ' md ', prefix: '' },
+  ])('previews a full $opening document and keeps surrounding commentary in Notes', ({ opening, closing, language, prefix }) => {
+    const html = '<!DOCTYPE html>\r\n<html lang="en"><head><title>Artifact</title></head><body><h1>Artifact</h1></body></html>';
+    const commentary = 'The page is ready to edit.\r\n\r\n- Uses inline CSS.';
+    const content = `${prefix}${opening}\r\n${html}\r\n${closing}\r\n\r\n${commentary}`;
+    const { container } = render(
+      <CanvasContent items={[doc('artifact', content, { title: 'Artifact', language })]} workflowId="wf-1" />,
+    );
+    expect(screen.getByTitle('Artifact preview')).toHaveAttribute('srcdoc', html);
+    expect(screen.getByTitle('Artifact preview')).toHaveAttribute('sandbox', 'allow-scripts');
+    const notes = container.querySelector('details') as HTMLDetailsElement;
+    expect(notes).not.toHaveAttribute('open');
+    expect(within(notes).getByText('Notes')).toBeInTheDocument();
+    expect(within(notes).getByText('The page is ready to edit.')).toBeInTheDocument();
+    expect(within(notes).getByText('Uses inline CSS.')).toBeInTheDocument();
+    if (prefix) expect(within(notes).getByText('Here is the page.')).toBeInTheDocument();
+    expect(container.querySelector('pre')).toBeNull();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Source' }));
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('pre')?.textContent).toBe(content);
+  });
+
+  it.each([
+    ['small HTML example', 'Use a heading:\n\n```html\n<h1>Example</h1>\n```\n\nThis is an example.'],
+    ['multiple HTML documents', '```html\n<html><body>One</body></html>\n```\n\n```html\n<html><body>Two</body></html>\n```'],
+    ['HTML inside another code fence', '````markdown\n```html\n<html><body>Nested example</body></html>\n```\n````'],
+    ['unclosed HTML fence', '```html\n<!doctype html><html><body>Incomplete fence</body></html>'],
+    ['unlabeled code fence', '```\n<html><body>Example</body></html>\n```'],
+  ])('keeps %s in the Markdown view', (_description, content) => {
+    const { container } = render(<CanvasContent items={[doc('example', content)]} workflowId="wf-1" />);
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Markdown' })).toBeInTheDocument();
+  });
+
+  it('follows HTML revisions, holds an earlier HTML revision, and uses each selected revision', async () => {
+    const firstHtml = '<html><body><h1>First</h1></body></html>';
+    const first = doc('a', ['```html', firstHtml, '```', '', 'First commentary.'].join('\n'), { title: 'Page', version: 1 });
+    const second = doc('a', '<h1>Second</h1>', { title: 'Page', language: 'html', version: 2 });
+    wsMock.sendRequest.mockImplementation(async (_type: string, params: { version: number }) => ({
+      success: true,
+      item: { ...(params.version === 1 ? first : second), latest: 3 },
+    }));
+    const { rerender } = render(
+      <CanvasContent items={[first]} workflowId="wf-1" nodeId="canvas-1" />,
+    );
+    expect(screen.getByTitle('Page preview')).toHaveAttribute('srcdoc', firstHtml);
+
+    rerender(<CanvasContent items={[second]} workflowId="wf-1" nodeId="canvas-1" />);
+    expect(screen.getByTitle('Page preview')).toHaveAttribute('srcdoc', second.content);
+    fireEvent.click(screen.getByRole('button', { name: 'Previous version' }));
+    expect(await screen.findByTitle('Page preview')).toHaveAttribute('srcdoc', firstHtml);
+
+    const third = doc('a', '# Third', { title: 'Page', language: 'markdown', version: 3 });
+    rerender(<CanvasContent items={[third]} workflowId="wf-1" nodeId="canvas-1" />);
+    expect(screen.getByText('v1/3')).toBeInTheDocument();
+    expect(screen.getByTitle('Page preview')).toHaveAttribute('srcdoc', firstHtml);
+    expect(screen.getByText('First commentary.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next version' }));
+    expect(await screen.findByTitle('Page preview')).toHaveAttribute('srcdoc', second.content);
+    fireEvent.click(screen.getByRole('button', { name: 'Next version' }));
+    expect(screen.queryByTitle('Page preview')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Third' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Markdown' })).toBeInTheDocument();
+  });
+
+  it('copies and downloads the selected HTML version with its content, title, and MIME type', async () => {
+    const html = '<!doctype html><html><body><h1>Earlier page</h1></body></html>';
+    const content = ['```html', html, '```', '', 'This commentary belongs to the earlier version.'].join('\n');
+    wsMock.sendRequest.mockResolvedValue({
+      success: true,
+      item: { ...doc('a', content, { title: 'Earlier page', version: 2 }), latest: 3 },
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const createObjectURL = vi.fn(() => 'blob:html');
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toBe('Earlier-page-v2.html');
+      expect(this.href).toBe('blob:html');
+    });
+
+    try {
+      render(
+        <CanvasContent
+          items={[doc('a', '# Latest document', { title: 'Latest document', language: 'markdown', version: 3 })]}
+          workflowId="wf-1"
+          nodeId="canvas-1"
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Previous version' }));
+      expect(await screen.findByTitle('Earlier page preview')).toHaveAttribute('srcdoc', html);
+      fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+      expect(writeText).toHaveBeenCalledWith(content);
+      expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Download' }));
+      expect(click).toHaveBeenCalledTimes(1);
+      const blob = (createObjectURL.mock.calls[0] as unknown as [Blob])[0];
+      expect(blob.type).toBe('text/html;charset=utf-8');
+      const downloaded = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(blob);
+      });
+      expect(downloaded).toBe(html);
+    } finally {
+      click.mockRestore();
+    }
   });
 
   it('steps back to an earlier version read from its node', async () => {

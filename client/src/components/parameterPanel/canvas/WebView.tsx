@@ -23,7 +23,7 @@ import { AlertCircle, Download, ExternalLink, RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { buildApiUrl } from '../../../config/api';
-import { useWorkspaceTextQuery } from '../../../hooks/useWorkspaceText';
+import { HTML_FETCH_CAP_BYTES, useWorkspaceTextQuery } from '../../../hooks/useWorkspaceText';
 import type { WorkspaceFileRef } from '../../../types/workspaceFiles';
 
 /** A neutral outline (theme_system.md, "Colour marks state or role"). */
@@ -68,7 +68,7 @@ export const ExternalSiteView: React.FC<{ url: string; title?: string | null }> 
 );
 
 export const WorkspaceHtmlView: React.FC<{ refFile: WorkspaceFileRef }> = ({ refFile }) => {
-  const query = useWorkspaceTextQuery(refFile);
+  const query = useWorkspaceTextQuery(refFile, HTML_FETCH_CAP_BYTES);
   const href = refFile.url ? buildApiUrl(refFile.url) : null;
 
   if (!href) {
@@ -98,7 +98,7 @@ export const WorkspaceHtmlView: React.FC<{ refFile: WorkspaceFileRef }> = ({ ref
     return (
       <div className="flex flex-col items-center gap-3 py-10 text-center">
         <p className="text-xs text-fg-muted">
-          This page is larger than the 512 KB render cap — download it instead.
+          This page is larger than the {HTML_FETCH_CAP_BYTES / (1024 * 1024)} MiB render cap — download it instead.
         </p>
         <Button asChild variant="quiet" size="sm" className={NEUTRAL}>
           <a href={href} download={refFile.filename} target="_blank" rel="noreferrer">

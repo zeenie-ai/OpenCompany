@@ -18,6 +18,8 @@ import { STALE_TIME } from '../lib/queryConfig';
 import type { WorkspaceFileRef } from '../types/workspaceFiles';
 
 export const TEXT_FETCH_CAP_BYTES = 512 * 1024;
+/** Standalone HTML can embed images and 3D models; keep a separate bounded budget. */
+export const HTML_FETCH_CAP_BYTES = 8 * 1024 * 1024;
 
 export interface FetchedText {
   text: string;
@@ -69,16 +71,22 @@ export async function fetchWorkspaceText(
 /**
  * Query wrapper. The key includes `size_bytes` + `modified_at`, so a
  * re-pushed file arrives under a fresh key with no invalidation plumbing.
+ * The cap is also part of the key: a text preview must not supply a truncated
+ * cached body to an HTML preview that needs the complete document.
  */
-export function useWorkspaceTextQuery(ref: WorkspaceFileRef | null | undefined) {
+export function useWorkspaceTextQuery(
+  ref: WorkspaceFileRef | null | undefined,
+  capBytes: number = TEXT_FETCH_CAP_BYTES,
+) {
   return useQuery<FetchedText, Error>({
     queryKey: [
       'workspaceText',
       ref?.url ?? '',
       ref?.size_bytes ?? 0,
       ref?.modified_at ?? '',
+      capBytes,
     ],
-    queryFn: () => fetchWorkspaceText(ref!.url!),
+    queryFn: () => fetchWorkspaceText(ref!.url!, capBytes),
     enabled: !!ref?.url,
     staleTime: STALE_TIME.SHORT,
     retry: 1,

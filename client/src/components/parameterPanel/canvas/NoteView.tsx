@@ -1,16 +1,17 @@
 /**
  * A Canvas note as a document (design handoff chat, "artifact panel"): its
- * versions (‹ v2/3 ›), Preview or the Markdown source, Copy, and Download
- * as a .md file (.txt for code). The board's item is the latest version; an
+ * versions (‹ v2/3 ›), Preview or source, Copy, and Download as .md, .html,
+ * or .txt for other code. The board's item is the latest version; an
  * earlier one is read through `canvas_version` when the owner steps back to
  * it. A newer version arriving shows itself, unless the owner stepped back.
- * `focus` opens it at a version (a chat reply's artifact card names one). A
- * note with a language other than Markdown is code, previewed as a code
- * block (the server names it the same way on a reply's card).
+ * `focus` opens it at a version (a chat reply's artifact card names one).
+ * Explicit HTML notes and a single fenced HTML document preview in the
+ * same isolated sandbox as HTML files. Surrounding prose remains in Notes;
+ * ordinary Markdown and code examples remain documents and code blocks.
  */
 
 import { Check, ChevronLeft, ChevronRight, Copy, Download } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
@@ -20,12 +21,63 @@ import type { CanvasFocus, CanvasItem, CanvasVersionResponse } from '../../../li
 import CanvasMarkdown from './CanvasMarkdown';
 
 const COPIED_MS = 1600;
-/** Languages a note is a document in; any other makes it code. */
+/** Only explicitly declared HTML or one fenced full HTML document previews. */
 const DOCUMENT_LANGUAGES = new Set(['markdown', 'md']);
+const HTML_LANGUAGES = new Set(['html', 'htm', 'text/html']);
 
 function codeLanguage(language: string | null | undefined): string | null {
   const name = (language ?? '').trim().toLowerCase();
   return name && !DOCUMENT_LANGUAGES.has(name) ? name : null;
+}
+
+interface HtmlPreview {
+  html: string;
+  notes: string;
+}
+
+/** A complete HTML artifact inside Markdown, not an inline example. Track
+ * every fence so HTML-looking text inside another code block stays code.
+ * Only top-level fences (up to three spaces) participate; source offsets
+ * keep the document and surrounding notes intact, including CRLF input. */
+function htmlPreviewFor(content: string, language: string | null): HtmlPreview | null {
+  if (language && HTML_LANGUAGES.has(language)) return { html: content, notes: '' };
+  if (language) return null;
+
+  let fence: { marker: string; length: number; html: boolean; start: number; body: number } | null = null;
+  let candidate: HtmlPreview | null = null;
+  let htmlFences = 0;
+  let offset = 0;
+  const lines = content.split('\n');
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.replace(/\r$/, '');
+    const nextOffset = offset + rawLine.length + (index < lines.length - 1 ? 1 : 0);
+    if (fence) {
+      const closing = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (closing && closing[1][0] === fence.marker && closing[1].length >= fence.length) {
+        if (fence.html) {
+          const html = content.slice(fence.body, offset).replace(/\r?\n$/, '');
+          const startsDocument = /^\s*(?:<!doctype\s+html(?:\s[^>]*)?>|<html(?:\s[^>]*)?>)/i.test(html);
+          if (startsDocument && /<\/html>\s*$/i.test(html)) {
+            candidate = {
+              html,
+              notes: (content.slice(0, fence.start) + content.slice(nextOffset)).trim(),
+            };
+          }
+        }
+        fence = null;
+      }
+    } else {
+      const opening = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
+        const html = HTML_LANGUAGES.has(opening[2].trim().toLowerCase());
+        if (html) htmlFences += 1;
+        fence = { marker: opening[1][0], length: opening[1].length, html, start: offset, body: nextOffset };
+      }
+    }
+    offset = nextOffset;
+  }
+  return htmlFences === 1 && !fence?.html ? candidate : null;
 }
 
 /** Code, fenced so it previews as a code block whatever backticks it holds. */
@@ -94,8 +146,13 @@ export default function NoteView({
       }),
   });
   const failed = earlier && (versionQuery.isError || versionQuery.data?.success === false);
-  const content = earlier ? (versionQuery.data?.item?.content ?? '') : (item.content ?? '');
-  const code = codeLanguage(earlier ? versionQuery.data?.item?.language : item.language);
+  const shownItem = earlier ? versionQuery.data?.item : item;
+  const content = shownItem?.content ?? '';
+  const code = codeLanguage(shownItem?.language);
+  const htmlPreview = useMemo(() => htmlPreviewFor(content, code), [content, code]);
+  const isHtml = htmlPreview !== null;
+  const extension = isHtml ? 'html' : code ? 'txt' : 'md';
+  const mimeType = isHtml ? 'text/html' : code ? 'text/plain' : 'text/markdown';
   const number = earlier ? shown : latest;
 
   useEffect(() => {
@@ -111,10 +168,10 @@ export default function NoteView({
     );
   };
   const download = () => {
-    const url = URL.createObjectURL(new Blob([content], { type: `${code ? 'text/plain' : 'text/markdown'};charset=utf-8` }));
+    const url = URL.createObjectURL(new Blob([htmlPreview?.html ?? content], { type: `${mimeType};charset=utf-8` }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = noteFileName(item.title, number, code ? 'txt' : 'md');
+    link.download = noteFileName(shownItem?.title ?? null, number, extension);
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   };
@@ -160,7 +217,7 @@ export default function NoteView({
           className="ml-auto"
         >
           <ToggleGroupItem value="preview">Preview</ToggleGroupItem>
-          <ToggleGroupItem value="source">Markdown</ToggleGroupItem>
+          <ToggleGroupItem value="source">{code || isHtml ? 'Source' : 'Markdown'}</ToggleGroupItem>
         </ToggleGroup>
         <Button
           variant="quiet"
@@ -172,7 +229,7 @@ export default function NoteView({
         >
           {copied ? <Check className="size-3.5 text-action-run-ink" /> : <Copy className="size-3.5" />}
         </Button>
-        <Button variant="quiet" size="icon-sm" onClick={download} disabled={!ready} aria-label="Download" title={`Download as a .${code ? 'txt' : 'md'} file`}>
+        <Button variant="quiet" size="icon-sm" onClick={download} disabled={!ready} aria-label="Download" title={`Download as a .${extension} file`}>
           <Download className="size-3.5" />
         </Button>
       </div>
@@ -184,6 +241,24 @@ export default function NoteView({
         <pre className="m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded bg-bg-elevated p-3 font-mono text-xs text-fg-default">
           {content}
         </pre>
+      ) : htmlPreview ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <iframe
+            key={`${item.id}:${number}`}
+            srcDoc={htmlPreview.html}
+            title={`${shownItem?.title || 'HTML document'} preview`}
+            sandbox="allow-scripts"
+            className="min-h-0 w-full flex-1 rounded border border-border-default bg-bg-panel"
+          />
+          {htmlPreview.notes && (
+            <details className="shrink-0 rounded border border-border-default px-3 py-2 text-xs text-fg-muted">
+              <summary className="cursor-pointer">Notes</summary>
+              <div className="prose prose-sm mt-2 max-h-40 max-w-none overflow-auto dark:prose-invert">
+                <CanvasMarkdown workflowId={workflowId}>{htmlPreview.notes}</CanvasMarkdown>
+              </div>
+            </details>
+          )}
+        </div>
       ) : (
         <div className="prose prose-sm min-h-0 max-w-none flex-1 overflow-auto dark:prose-invert">
           {/* A note names workspace files from the workspace's root. */}
