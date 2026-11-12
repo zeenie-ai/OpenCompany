@@ -170,30 +170,42 @@ had lapsed or one registry failed.
 2. **Bump.** `python -m cli version sync vX.Y.Z` writes the version into the
    root, client and desktop `package.json`, `pyproject.toml` and
    `cli/__init__.py` (never `server/pyproject.toml`, which `server/uv.lock`
-   records). Commit as `chore(release): vX.Y.Z`. This commit is load-bearing:
-   the desktop workflow ships the committed desktop version and refuses to
-   build when it differs from the tag, while the registry jobs re-run
-   `version sync` from the tag themselves. `cli/tests/test_version.py`
+   records). Commit those files alone as `chore(release): vX.Y.Z`. This commit
+   is load-bearing: the desktop workflow ships the committed desktop version
+   and refuses to build when it differs from the tag, while the registry jobs
+   re-run `version sync` from the tag themselves. `cli/tests/test_version.py`
    fails when the checked-in files disagree.
 
-   The same commit carries the release's replay histories (RFC-0005 Phase 1),
-   which the next release's replay gate replays. After `version sync`, from
+   The next commit carries the release's replay histories (RFC-0005 Phase 1),
+   which the next release's replay gate replays. They are recorded from the
+   bump commit, so the bump is committed first: the recorder loads the app
+   from a git archive of `--source-commit`, and the set's manifest takes its
+   `release` from that commit's `package.json`. With the bump committed, from
    `server/`, with the pinned CLI (installed by `ensure_temporal_binaries`
    into a throwaway `DATA_DIR`, never an installed one):
    `TEMPORAL_TEST_CLI=<pinned temporal binary> uv run python -m tests.temporal.record_fixtures --source-commit HEAD`.
-   It records the code at the commit the bump sits on into
-   `server/tests/temporal/fixtures/X.Y.Z/` and refuses to overwrite an
-   existing set. `test_the_current_version_has_its_replay_histories` in
-   `cli/tests/test_release_pipeline_config.py` fails a version without one.
-   Then the same command with `--golden-only` rewrites
+   It writes `server/tests/temporal/fixtures/X.Y.Z/` and refuses to overwrite
+   an existing set. Commit that folder as the next commit, and never amend or
+   rebase the bump commit afterwards: the manifest names it as
+   `origin_commit`, and the replay gate reads that commit's workflow sources.
+   `test_the_current_version_has_its_replay_histories` in
+   `cli/tests/test_release_pipeline_config.py` fails a version without a set,
+   so the bump commit fails CI on its own: push the two commits together.
+
+   The same command with `--golden-only` rewrites
    `fixtures/workflow_identities.json` from that commit, so the next cycle's
-   identity checks compare against this release. Scenarios added between
-   releases go into a supplementary folder. It is recorded from the previous
-   release's commit, on that release's SDK
+   identity checks compare against this release. Run it only when the
+   recorded sets hold a history of every production workflow type: the
+   rewrite drops the reviewed entries, and the replay gate then fails a type
+   that an entry named under `new_types` and no scenario records. v0.3.2 kept
+   the 0.3.1 baseline for that reason (`ApprovalWorkflow` has no scenario
+   yet). Scenarios added between releases go into a supplementary folder. It
+   is recorded from the previous release's commit, on that release's SDK
    ([TEMPORAL_ARCHITECTURE.md -> The replay safety net](./TEMPORAL_ARCHITECTURE.md#the-replay-safety-net-rfc-0005-phase-1)).
    The release cut records every scenario, so its own folder holds them too.
-3. **Tag.** `git tag -a vX.Y.Z -F notes.md` on that commit, the notes in the
-   shape of the previous tags (`git tag -l --format='%(contents)' v0.1.0`).
+3. **Tag.** `git tag -a vX.Y.Z -F notes.md` on the commit that holds the
+   histories, or a later one, once CI has passed it. The notes take the shape
+   of the previous tags (`git tag -l --format='%(contents)' v0.1.0`).
 4. **Push** the branch, then the tag. The tag starts `release.yml` (predeploy
    gate, then npmjs + GitHub Packages) and `desktop-release.yml` (draft with
    the notes, three installer legs and the predeploy checks, undraft once all

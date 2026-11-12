@@ -465,8 +465,8 @@ def test_the_current_version_has_its_replay_histories(root: Path, root_pkg: dict
     """RFC-0005 Phase 1: every release records the Temporal histories that the
     next release's replay gate replays (RFC-0004 AG6). The recorder
     (``server/tests/temporal/record_fixtures.py``) runs when a release is cut,
-    and its set goes into the ``chore(release)`` commit
-    (``docs-internal/ci_cd.md`` -> Cutting a release). A version without
+    from the ``chore(release)`` commit, and its set goes into the commit after
+    it (``docs-internal/ci_cd.md`` -> Cutting a release). A version without
     ``fixtures/<version>/`` fails here, and so does a set recorded on another
     CLI than the one pinned when it was recorded: installs run the pinned
     server, so its histories are the ones open runs have.
@@ -476,7 +476,7 @@ def test_the_current_version_has_its_replay_histories(root: Path, root_pkg: dict
     manifest = fixtures / "manifest.json"
     assert manifest.is_file(), (
         f"No replay histories for {version}: run tests.temporal.record_fixtures (see ci_cd.md, Cutting a release) "
-        f"and commit {fixtures.relative_to(root).as_posix()}/ with the version bump"
+        f"from the version bump commit and commit {fixtures.relative_to(root).as_posix()}/ after it"
     )
     recorded = json.loads(manifest.read_text(encoding="utf-8"))
     assert recorded["release"] == version

@@ -875,7 +875,9 @@ keep that release's command identities:
 
   New handlers and node types are fine.
   `record_fixtures --golden-only --source-commit <commit>` refreshes the file
-  at each release; it starts no server, so it needs no `TEMPORAL_TEST_CLI`.
+  at a release whose recorded sets hold a history of every production
+  workflow type (v0.3.2 kept the 0.3.1 baseline: `ApprovalWorkflow` has no
+  scenario yet); it starts no server, so it needs no `TEMPORAL_TEST_CLI`.
 - **Dormant patches** (RFC-0006 §18.9 recommendation 2). A new
   `workflow.patched` id ships dormant for one release: it is listed in
   `DORMANT_PATCHES` in `server/services/temporal/patches.py`, and every worker
