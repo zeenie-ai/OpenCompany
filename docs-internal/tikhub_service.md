@@ -451,6 +451,30 @@ entry, `visuals.json` skill, `node_allowlist.json`, `SKILL.md`,
 awaited once with `service == "tikhub"` after a 2xx, not for
 `list_endpoints`, not after a 4xx. Every skill endpoint id resolves.
 
+## Live check (2026-11-13)
+
+The node was run against TikHub with a real key through the contract
+tests' harness (real SDK 2.2.0 and HTTP; stubbed container, database and
+paths): 35 requests to Instagram endpoints, plus `account` and `describe`.
+
+- `describe` returned the live document's English description, parameter
+  docs and price.
+- Results from 25 KB to 812 KB were saved under `tikhub/` and read back by
+  a script. An empty page (61 characters) came back whole.
+- The account balance fell by $0.056 for the 32 answered requests, which
+  is exactly the documented per-endpoint prices ($0.002 for `instagram_v2`,
+  $0.001 for `instagram_v1`). The flat `cost_usd` would have recorded
+  $0.032. An empty page is billed; a 400 is not.
+- `instagram_v2.search_reels` answered 200 with no items for every query,
+  its documented example included, and `instagram_v2.fetch_hashtag_posts`
+  and `instagram_v3.get_hashtag_posts` answered 400 with documented
+  parameters. The 400 carried TikHub's words and the note that both
+  causes are possible. The routes that did answer are in the skill's
+  Instagram section.
+- `instagram_v2.fetch_post_info` returned no view or like counts.
+- The hashtag feed's `video_view_count` and the other feeds' `play_count`
+  agreed for the same posts to within a few views.
+
 ## Risks
 
 - **SDK churn.** Resources regenerate between minors; `PLATFORMS`, the

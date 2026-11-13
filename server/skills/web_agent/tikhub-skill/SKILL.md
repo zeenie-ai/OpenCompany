@@ -227,15 +227,42 @@ it covers search, users, posts, reels, hashtags, locations and music.
 | `instagram_v2.fetch_user_info` | `username` or `user_id` | Profile |
 | `instagram_v2.fetch_user_reels` | `username` or `user_id` | Paginate with `pagination_token` |
 | `instagram_v2.fetch_user_posts` | `username` or `user_id` | Paginate with `pagination_token` |
-| `instagram_v2.fetch_post_info` | `code_or_url` | One post or reel from its shortcode or URL |
+| `instagram_v2.fetch_post_info` | `code_or_url` | One post or reel from its shortcode or URL: caption, user, location. No view or like counts |
+| `instagram_v2.fetch_user_tagged_posts` | `username` or `user_id` | Other accounts' posts that tag this account, newest first, with counts; `pagination_token` |
+| `instagram_v1.fetch_hashtag_posts` | `hashtag` (without `#`) | Recent posts under a hashtag, 15 a page; paginate with `end_cursor` |
 | `instagram_v2.fetch_post_comments` | `code_or_url` | `sort_by`; `pagination_token` |
 | `instagram_v2.general_search` | `keyword` | Blended results: users, posts, reels |
 | `instagram_v3.general_search` | `query` | Users, hashtags and places, not posts; `next_max_id` + `rank_token` |
 
 A reel or post item carries `code` (the shortcode: the link is
 `https://www.instagram.com/reel/<code>/`), `taken_at`, `play_count`,
-`like_count`, `comment_count`, `user.username`, `user.is_verified` and
-`caption.text`.
+`like_count`, `comment_count`, `share_count`, `save_count`,
+`user.username`, `user.is_verified` and `caption.text`. A reel has
+`product_type` `clips`.
+
+Which route answers what:
+
+- **Recent reels on a topic**: `instagram_v2.search_reels`. It can return
+  an empty page for every query for a while. After two different queries
+  come back empty, stop and use the routes below.
+- **What is going viral about a place or brand**:
+  `instagram_v2.fetch_user_tagged_posts` on the venue's own account.
+  Creators tag the venue, so its tagged feed is the week's coverage of
+  it, with views, likes, shares and saves.
+- **A hashtag's recent posts**: `instagram_v1.fetch_hashtag_posts`. Its
+  items sit at `data.hashtag.edge_hashtag_to_media.edges[].node` with
+  `shortcode`, `taken_at_timestamp`, `product_type` and
+  `video_view_count`, but only the owner's id: no username and no
+  caption. Name the ones that matter with `instagram_v2.fetch_post_info`.
+  `instagram_v2.fetch_hashtag_posts` is the fuller feed; when it answers
+  400 with correct parameters, use the v1 one.
+- **The best-known posts on a topic, of any age**:
+  `instagram_v2.general_search`, 8 a page. It does not favour recent
+  posts, so it is the wrong route for "this week".
+
+`video_view_count` in the hashtag feed and `play_count` elsewhere agree for
+the same post. Check a post's age yourself: none of these routes filters
+by date.
 
 ### TikTok
 
@@ -387,8 +414,10 @@ A 200 whose body says `code: 4xx` is raised as an error with TikHub's
 message: the platform returned nothing useful for that id.
 
 An empty result (an empty list, or a count of 0) is an answer, not an
-error. For a search, try a shorter or differently worded query rather than
-the same one again.
+error, and it is billed like any other page. For a search, try one
+shorter or differently worded query. If that is empty too, the endpoint
+is not answering for now: take another route to the same data instead of
+rewording again.
 
 ## Authentication
 
