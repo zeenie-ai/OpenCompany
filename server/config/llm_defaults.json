@@ -1,7 +1,7 @@
 {
   "version": "2026.10.23",
   "last_updated": "2026-10-23",
-  "_description": "LLM provider defaults. popular_models drives the ordered global selector and offline fallback independently of token constraints. POLICY (2026-07-23): popular_models lists only models with >= 1M-token context windows — providers whose models are all below 1M carry an empty list and contribute nothing to the global selector (their models stay reachable via the live per-provider fetch_models dropdown). SOURCE (2026-09-26): model_registry.json, the OpenRouter snapshot, is the ground truth for the curated ids, context, max output and prices of every provider whose models it lists; an id it does not list is not curated (Mistral's -latest aliases excepted, see its note). It carries nothing for the hosts (groq, cerebras, sarvam), which keep their own documented values. base_url directly configures the nine OpenAI-compatible native providers; dedicated OpenAI, Anthropic, and Gemini providers use SDK defaults, while OpenRouter has its own gateway default. Runtime proxy credentials can override supported endpoints. Model specs are enriched by model_registry.json at runtime; kimi and mistral are the exception, because the registry files their models under moonshotai/ and mistralai/, so their maps here are what requests use. streaming: true marks a provider whose answers stream to the chat as they are written (ChatUnifier passes it the stream sink); declare it only once the provider's stream is shown to report what its finished response does, usage included (tests/llm/test_streaming.py).",
+  "_description": "LLM provider defaults. popular_models drives the ordered global selector (the editor's Set Global Model and the model picker in Home's employee chat, both read through services/llm/connected.py: a provider offers popular_models, else its max_output_tokens keys, and with neither, such as a local server, the models stored with its key) and offline fallback independently of token constraints. A model takes the chat picker's Quick/Thorough effort only when its provider block lists it in effort_models. POLICY (2026-07-23): popular_models lists only models with >= 1M-token context windows — providers whose models are all below 1M carry an empty list and contribute nothing to the global selector (their models stay reachable via the live per-provider fetch_models dropdown). SOURCE (2026-09-26): model_registry.json, the OpenRouter snapshot, is the ground truth for the curated ids, context, max output and prices of every provider whose models it lists; an id it does not list is not curated (Mistral's -latest aliases excepted, see its note). It carries nothing for the hosts (groq, cerebras, sarvam), which keep their own documented values. base_url directly configures the nine OpenAI-compatible native providers; dedicated OpenAI, Anthropic, and Gemini providers use SDK defaults, while OpenRouter has its own gateway default. Runtime proxy credentials can override supported endpoints. Model specs are enriched by model_registry.json at runtime; kimi and mistral are the exception, because the registry files their models under moonshotai/ and mistralai/, so their maps here are what requests use. streaming: true marks a provider whose answers stream to the chat as they are written (ChatUnifier passes it the stream sink); declare it only once the provider's stream is shown to report what its finished response does, usage included (tests/llm/test_streaming.py).",
 
   "agent": {
     "_description": "Agent execution defaults. recursion_limit and compaction.ratio are sourced from the environment (AGENT_RECURSION_LIMIT, COMPACTION_RATIO via core.config.Settings) — these JSON values are last-resort fallbacks when the env vars aren't loaded (e.g. one-off CLI scripts that bypass Settings). default_temperature stays JSON-resident since it has no env override yet.",
@@ -10,17 +10,6 @@
     "compaction": {
       "ratio": 0.8
     }
-  },
-
-  "chat_models": {
-    "_description": "The model picker in Home's employee chat (services/chat/choice.py). Auto comes first; these follow, each a provider::model id that must also be in that provider's popular_models, so >= 1M-token context (tests/llm/test_global_model_catalogue.py). name is the row's, short the picker button's, description what the model is good for. A model takes the picker's Quick/Thorough effort only when its provider block lists it in effort_models.",
-    "models": [
-      {"id": "anthropic::claude-sonnet-5-5", "name": "Claude Sonnet 5.5", "short": "Sonnet 5.5", "description": "Great for everyday work"},
-      {"id": "anthropic::claude-opus-5-5", "name": "Claude Opus 5.5", "short": "Opus 5.5", "description": "Best for tricky, multi-step jobs"},
-      {"id": "openai::gpt-6-sol", "name": "GPT-6 Sol", "short": "GPT-6 Sol", "description": "Good at research and digging deep"},
-      {"id": "gemini::gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro", "short": "Gemini Pro", "description": "Handles long files, photos and video"},
-      {"id": "gemini::gemini-3.8-flash", "name": "Gemini 3.8 Flash", "short": "Gemini Flash", "description": "Quickest answers"}
-    ]
   },
 
   "gateway": {

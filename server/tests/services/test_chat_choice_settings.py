@@ -62,11 +62,18 @@ async def test_an_older_database_gains_the_columns_with_their_defaults(settings_
 
 
 async def test_a_save_keeps_to_what_the_picker_offers(settings_database, monkeypatch):
+    from services.chat import choice
     from services.settings.handlers import handle_save_user_settings
 
-    monkeypatch.setattr("core.container.container", SimpleNamespace(database=lambda: settings_database))
-    refused = await handle_save_user_settings({"settings": {"chat_model": "openai::gpt-4.1"}}, None)
+    async def anthropic_only(database, auth, principal):
+        return [{"provider": "anthropic", "display_name": "Anthropic", "models": [], "popular_models": ["claude-sonnet-5-5"], "default_model": ""}]
+
+    monkeypatch.setattr(choice, "_providers", anthropic_only)
+    monkeypatch.setattr("core.container.container", SimpleNamespace(database=lambda: settings_database, auth_service=lambda: None))
+    refused = await handle_save_user_settings({"settings": {"chat_model": "anthropic::claude-haiku-4-5"}}, None)
     assert refused == {"success": False, "error": "chat_choice_refused", "detail": "That model isn’t offered any more. Pick another one."}
+    refused = await handle_save_user_settings({"settings": {"chat_model": "openai::gpt-4.1"}}, None)
+    assert refused["success"] is False and "OpenAI isn’t connected" in refused["detail"]
     refused = await handle_save_user_settings({"settings": {"chat_effort": "max"}}, None)
     assert refused["success"] is False and refused["detail"] == "Pick Quick, Balanced or Thorough."
     assert await settings_database.get_user_settings("default") is None

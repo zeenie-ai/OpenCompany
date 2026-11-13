@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
+import { Search } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -22,11 +23,12 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
 
 function CommandInput({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    <div data-slot="command-input-wrapper" className="flex h-9 items-center gap-2 border-b border-border-default px-3">
+    <div data-slot="command-input-wrapper" className="flex h-9 flex-none items-center gap-2 border-b border-border-default px-2.5">
+      <Search aria-hidden className="size-3.75 shrink-0 text-fg-faint" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-fg-faint disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-9 w-full min-w-0 bg-transparent text-sm text-fg-default outline-hidden placeholder:text-fg-faint disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         {...props}
@@ -49,12 +51,14 @@ function CommandEmpty({ ...props }: React.ComponentProps<typeof CommandPrimitive
   return <CommandPrimitive.Empty data-slot="command-empty" className="py-6 text-center text-sm text-fg-muted" {...props} />
 }
 
+// A group's heading is the menu label a chat menu's list carries (the slash
+// menu's "Commands"): mono, small, upper case, muted.
 function CommandGroup({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.Group>) {
   return (
     <CommandPrimitive.Group
       data-slot="command-group"
       className={cn(
-        "overflow-hidden p-1 text-fg-default [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-muted",
+        "text-fg-default [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-label [&_[cmdk-group-heading]]:text-fg-muted [&_[cmdk-group-heading]]:uppercase",
         className
       )}
       {...props}

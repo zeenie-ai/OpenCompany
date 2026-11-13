@@ -1,35 +1,34 @@
 """The model and thinking the owner picks for the employee answering them.
 
-Home's employee chat has a model picker (design handoff Chat v2): Auto, or one
-of ``chat_models`` in llm_defaults.json, and how hard the model thinks:
-Balanced (the employee's own setting), Quick (effort ``low``) or Thorough
-(``high``). The choice is saved with the owner's settings
-(``UserSettings.chat_model`` / ``chat_effort``) and sent with every message,
-edit and retry as ``options.model`` / ``options.effort``. Admission resolves it
-here and keeps the result on the run (``ChatRun.options``), and
-``prepare_agent_payload`` applies it to the agent that answers the run only.
+Home's employee chat has a model picker: Auto, or a model of a provider the
+owner can run on now, and how hard the model thinks: Balanced (the employee's
+own setting), Quick (effort ``low``) or Thorough (``high``). The picker offers
+what the editor's Set Global Model offers (services/llm/connected.py), by
+provider: a provider's curated list (``popular_models`` in llm_defaults.json)
+when it has one, else the models stored with its key, so a provider such as
+OpenRouter, a local server or a named endpoint lists its models too. The
+choice is saved with the owner's settings (``UserSettings.chat_model`` /
+``chat_effort``) and sent with every message, edit and retry as
+``options.model`` / ``options.effort``. Admission resolves it here and keeps
+the result on the run (``ChatRun.options``), and ``prepare_agent_payload``
+applies it to the agent that answers the run only.
 
 - Auto is the owner's default model (Set Global Model), else the OpenCompany
   Gateway's default while the gateway serves it (``gateway_default``). With
   neither it changes nothing: the employee answers on its own model.
-- A model whose provider has no key is refused, never swapped for another,
+- A model whose provider can't run is refused, never swapped for another,
   and so is a model the picker no longer offers.
 
-Every word the picker shows comes from ``chat_defaults.json`` (``choice``).
+The picker's words come from ``chat_defaults.json`` (``choice``); a model is
+named by its id, under its provider's name.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from services.chat.config import choice_setting
-from services.llm.config import (
-    agent_model,
-    chat_models,
-    provider_display_name,
-    split_chat_model,
-    supports_effort,
-)
+from services.llm.config import agent_model, provider_display_name, split_chat_model, supports_effort
 
 #: The efforts a message may carry; Balanced sends none.
 EFFORTS = ("low", "high")
@@ -46,20 +45,17 @@ class ChoiceRefused(Exception):
         self.detail = detail
 
 
-def _offered() -> Dict[str, Dict[str, Any]]:
-    return {str(entry.get("id")): entry for entry in chat_models()}
+async def _providers(database: Any, auth: Any, principal: Optional[str]) -> List[Dict[str, Any]]:
+    """The providers the owner can run on now, with their models."""
+    from services.llm.connected import connected_providers
+
+    return await connected_providers(auth, database, principal=principal)
 
 
-def _model_name(provider: str, model: str) -> str:
-    """A model's name: the picker's when it offers the model, its id otherwise."""
-    entry = _offered().get(f"{provider}::{model}")
-    return str(entry["name"]) if entry else model
-
-
-async def _connected(auth: Any, principal: Optional[str]) -> Set[str]:
-    from services.employees.connections import Connections
-
-    return set(await Connections(auth, principal=principal).ai_providers())
+def offered_models(provider: Mapping[str, Any]) -> List[str]:
+    """The models the picker offers for one connected provider: its curated
+    list when it has one, else the models stored with its key."""
+    return list(dict.fromkeys(provider.get("popular_models") or provider.get("models") or []))
 
 
 async def _settings(database: Any) -> Mapping[str, Any]:
@@ -80,8 +76,22 @@ async def _default(settings: Mapping[str, Any]) -> Optional[Tuple[str, str]]:
     return _default_of(settings) or await gateway_default()
 
 
-def _unavailable(key: str, provider: str, model_name: str) -> str:
-    return str(choice_setting(key)).format(model=model_name, provider=provider_display_name(provider))
+def _unavailable(key: str, provider: str, model: str) -> str:
+    return str(choice_setting(key)).format(model=model, provider=provider_display_name(provider))
+
+
+def _refusal(model_id: str, providers: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """Why ``model_id`` (``provider::model``) can't be picked now, or ``None``:
+    its provider can't run, or the picker doesn't offer it."""
+    provider, model = split_chat_model(model_id)
+    if not provider or not model:
+        return str(choice_setting("not_offered"))
+    entry = next((entry for entry in providers if entry["provider"] == provider), None)
+    if entry is None:
+        return _unavailable("unavailable", provider, model)
+    if model not in offered_models(entry):
+        return str(choice_setting("not_offered"))
+    return None
 
 
 async def run_options(database: Any, auth: Any, raw: Any, *, principal: Optional[str]) -> Dict[str, Any]:
@@ -105,31 +115,35 @@ async def run_options(database: Any, auth: Any, raw: Any, *, principal: Optional
         return options
     if not isinstance(model, str):
         raise ValueError("model must be text")
-    connected = await _connected(auth, principal)
+    providers = await _providers(database, auth, principal)
     if model == AUTO:
         default = await _default(await _settings(database))
         if default is None:
             return options
         provider, name = default
-        if provider not in connected:
-            raise ChoiceRefused(_unavailable("default_unavailable", provider, _model_name(provider, name)))
+        if not any(entry["provider"] == provider for entry in providers):
+            raise ChoiceRefused(_unavailable("default_unavailable", provider, name))
         options["model"] = f"{provider}::{name}"
         return options
-    entry = _offered().get(model)
-    if entry is None:
-        raise ChoiceRefused(str(choice_setting("not_offered")))
-    provider, _ = split_chat_model(model)
-    if provider not in connected:
-        raise ChoiceRefused(_unavailable("unavailable", provider, str(entry["name"])))
+    refusal = _refusal(model, providers)
+    if refusal is not None:
+        raise ChoiceRefused(refusal)
     options["model"] = model
     return options
 
 
-def check_settings(patch: Mapping[str, Any]) -> None:
-    """A settings save that sets the picker's choice keeps to what it offers.
-    Raises :class:`ChoiceRefused`."""
-    if "chat_model" in patch and patch["chat_model"] != AUTO and patch["chat_model"] not in _offered():
-        raise ChoiceRefused(str(choice_setting("not_offered")))
+async def check_settings(database: Any, auth: Any, patch: Mapping[str, Any], *, principal: Optional[str]) -> None:
+    """A settings save that sets the picker's choice keeps to what it offers
+    now. Raises :class:`ChoiceRefused`."""
+    if "chat_model" in patch and patch["chat_model"] != AUTO:
+        chosen = patch["chat_model"]
+        refusal = (
+            _refusal(chosen, await _providers(database, auth, principal))
+            if isinstance(chosen, str)
+            else str(choice_setting("not_offered"))
+        )
+        if refusal is not None:
+            raise ChoiceRefused(refusal)
     if "chat_effort" in patch and patch["chat_effort"] not in ("", *EFFORTS):
         raise ChoiceRefused(str(choice_setting("bad_effort")))
 
@@ -156,22 +170,43 @@ async def _answering_model(database: Any, graph: Mapping[str, Any]) -> Optional[
     return await agent_model(parameters, database)
 
 
-def _effort_note(effort: bool, short: str) -> Optional[str]:
+def _effort_note(effort: bool, model: str) -> Optional[str]:
     """Said in place of the levels when a model takes no effort choice."""
-    return None if effort else str(choice_setting("effort_off")).format(model=short)
+    return None if effort else str(choice_setting("effort_off")).format(model=model)
 
 
-def _row(entry: Mapping[str, Any], *, available: bool, reason: Optional[str]) -> Dict[str, Any]:
-    provider, model = split_chat_model(str(entry["id"]))
+def _row(provider: str, provider_name: str, model: str, *, available: bool, reason: Optional[str]) -> Dict[str, Any]:
+    """One model's row, named by its id under its provider's name. The
+    button shows the id's last part (``anthropic/claude-sonnet-5.5`` on
+    OpenRouter shows ``claude-sonnet-5.5``)."""
+    short = model.rsplit("/", 1)[-1] or model
     effort = supports_effort(provider, model)
     return {
-        "id": str(entry["id"]),
-        "name": str(entry["name"]),
-        "short": str(entry["short"]),
-        "description": str(entry["description"]),
+        "id": f"{provider}::{model}",
+        "name": model,
+        "short": short,
+        "description": "",
+        "provider": provider,
+        "provider_name": provider_name,
         "effort": effort,
-        "effort_note": _effort_note(effort, str(entry["short"])),
+        "effort_note": _effort_note(effort, short),
         "available": available,
+        "reason": reason,
+    }
+
+
+def _auto_row(description: str, *, effort: bool, effort_note: Optional[str], reason: Optional[str]) -> Dict[str, Any]:
+    words = choice_setting("auto")
+    return {
+        "id": AUTO,
+        "name": str(words["name"]),
+        "short": str(words["short"]),
+        "description": description,
+        "provider": None,
+        "provider_name": None,
+        "effort": effort,
+        "effort_note": effort_note,
+        "available": reason is None,
         "reason": reason,
     }
 
@@ -184,67 +219,46 @@ async def list_models(
     graph: Mapping[str, Any],
     name: str,
 ) -> Dict[str, Any]:
-    """The picker for one employee's chat: Auto's row (what it uses now), the
-    offered models of connected providers, the saved choice's row even when
-    it can't answer, and the thinking levels. The choice itself is read with
-    the owner's settings (``chat_model`` / ``chat_effort``)."""
-    connected = await _connected(auth, principal)
+    """The picker for one employee's chat: Auto's row (what it uses now),
+    each connected provider's offered models (each row names its provider),
+    the saved choice's row even when it can't answer, and the thinking
+    levels. The choice itself is read with the owner's settings
+    (``chat_model`` / ``chat_effort``)."""
+    providers = await _providers(database, auth, principal)
     settings = await _settings(database)
-    auto_words = choice_setting("auto")
     default = await _default(settings)
     if default is not None:
         provider, model = default
-        model_name = _model_name(provider, model)
-        available = provider in connected
         effort = supports_effort(provider, model)
-        auto = {
-            "id": AUTO,
-            "name": str(auto_words["name"]),
-            "short": str(auto_words["short"]),
-            "description": str(choice_setting("default_model")).format(model=model_name),
-            "effort": effort,
-            "effort_note": _effort_note(effort, model_name),
-            "available": available,
-            "reason": None if available else _unavailable("default_unavailable", provider, model_name),
-        }
+        connected = any(entry["provider"] == provider for entry in providers)
+        auto = _auto_row(
+            str(choice_setting("default_model")).format(model=model),
+            effort=effort,
+            effort_note=_effort_note(effort, model),
+            reason=None if connected else _unavailable("default_unavailable", provider, model),
+        )
     else:
         own = await _answering_model(database, graph)
         effort = supports_effort(*own) if own is not None else False
-        auto = {
-            "id": AUTO,
-            "name": str(auto_words["name"]),
-            "short": str(auto_words["short"]),
-            "description": (
-                str(choice_setting("own_model")).format(model=_model_name(*own), name=name)
-                if own is not None
-                else str(choice_setting("own")).format(name=name)
-            ),
-            "effort": effort,
-            "effort_note": _effort_note(effort, _model_name(*own) if own is not None else name),
-            "available": True,
-            "reason": None,
-        }
-    chosen = str(settings.get("chat_model") or AUTO)
-    rows: List[Dict[str, Any]] = []
-    for entry in chat_models():
-        provider, _ = split_chat_model(str(entry["id"]))
-        available = provider in connected
-        if available or entry["id"] == chosen:
-            rows.append(_row(entry, available=available, reason=None if available else _unavailable("unavailable", provider, str(entry["name"]))))
-    if chosen != AUTO and chosen not in _offered():
-        # Saved before the picker stopped offering it: shown, not usable.
-        rows.append(
-            {
-                "id": chosen,
-                "name": chosen,
-                "short": chosen,
-                "description": "",
-                "effort": False,
-                "effort_note": None,
-                "available": False,
-                "reason": str(choice_setting("not_offered")),
-            }
+        auto = _auto_row(
+            str(choice_setting("own_model")).format(model=own[1], name=name) if own is not None else str(choice_setting("own")).format(name=name),
+            effort=effort,
+            effort_note=_effort_note(effort, own[1] if own is not None else name),
+            reason=None,
         )
+    rows = [
+        _row(str(entry["provider"]), str(entry["display_name"]), model, available=True, reason=None)
+        for entry in providers
+        for model in offered_models(entry)
+    ]
+    chosen = str(settings.get("chat_model") or AUTO)
+    if chosen != AUTO and all(row["id"] != chosen for row in rows):
+        # Saved while its provider could run and the picker offered it:
+        # shown, under its provider, and not usable.
+        provider, model = split_chat_model(chosen)
+        named = next((str(entry["display_name"]) for entry in providers if entry["provider"] == provider), None)
+        saved = _row(provider, named or provider_display_name(provider), model or chosen, available=False, reason=_refusal(chosen, providers))
+        rows.append({**saved, "id": chosen})
     return {
         "auto": auto,
         "models": rows,
@@ -260,5 +274,6 @@ __all__ = [
     "effort_of",
     "list_models",
     "model_of",
+    "offered_models",
     "run_options",
 ]

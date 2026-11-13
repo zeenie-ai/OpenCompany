@@ -857,14 +857,17 @@ sending and drafts belong to the chat (wire and client rules in
 - **The model picker** ([chat/composer/ModelPicker.tsx](../client/src/features/chat/composer/ModelPicker.tsx),
   design handoff chat v2) sits in the message box before Dictate, when the
   employee's talk agent runs as an AgentWorkflow (`get_chat_context`
-  `model_choice`). Its button names the model ("Auto", "Sonnet 5.5") and the
-  thinking level unless it is Balanced ("· Thorough"); its panel lists Auto
-  (what it uses now: the owner's default model, else the employee's own),
-  then the models in `llm_defaults.json` `chat_models` whose provider is
-  connected, and a slider for Quick, Balanced and Thorough (or "{model} sets
-  its own pace"). The choice is the owner's, kept in their settings, and
-  every message, edit and retry carries it; a model that can't answer is
-  refused in the server's words and the message comes back into the box.
+  `model_choice`). Its button names the model ("Auto", "claude-sonnet-5-5")
+  and the thinking level unless it is Balanced ("· Thorough"); its panel has
+  a search box, Auto (what it uses now: the owner's default model, else the
+  employee's own), then the models of every connected provider under the
+  provider's name, the same providers and models as the editor's Set Global
+  Model (`services/llm/connected.py`; OpenRouter, a local server and a named
+  endpoint list theirs too), and a slider for Quick, Balanced and Thorough
+  (or "{model} sets its own pace"). The choice is the owner's, kept in
+  their settings, and every message, edit and retry carries it; a model
+  that can't answer is refused in the server's words and the message comes
+  back into the box.
   The Dev editor's chat has none: each node keeps its model. See
   [Chat Protocol → Model and thinking](./chat_protocol.md#model-and-thinking).
 - **The thread** is `get_chat_messages` with `all_generations: true` (the
@@ -1333,7 +1336,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?, options?: {web?, model?, effort?}}` (`model_unavailable` with `detail` when the model chosen can't answer) | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live, unless its turn waits on the owner's answer to a call: then a plain message declines that call and answers `{message_id: null, run_id: null, declined: {run_id, approval_ids}, delivery}` ([chat_protocol.md](./chat_protocol.md#approvals)). `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{protocol_version: 2, messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Controlled active run snapshots also include their owning `workflow_control`. Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
 | `stop_chat_run` | `{run_id, expected_revision, idempotency_key}` for controlled runs; `{run_id}` for legacy | Controlled: generation Stop payload with `run_id` and `resumable: true`; the owning root is checked. Legacy: terminal chat `stopping` / `stopped`. Full acknowledgement and error contract: [chat_protocol.md](./chat_protocol.md#controlled-stop-acknowledgement) |
-| `get_chat_models` | `{session_id: <workflow_id>}` | `{auto, models, efforts}`: the model picker's rows, each `{id, name, short, description, effort, effort_note, available, reason}`; the owner's choice is `chat_model` / `chat_effort` in `get_user_settings`, saved with `save_user_settings` (refused with `chat_choice_refused` and `detail`) |
+| `get_chat_models` | `{session_id: <workflow_id>}` | `{auto, models, efforts}`: the model picker's rows, each `{id, name, short, description, provider, provider_name, effort, effort_note, available, reason}`; the owner's choice is `chat_model` / `chat_effort` in `get_user_settings`, saved with `save_user_settings` (refused with `chat_choice_refused` and `detail`) |
 | `workspace_steps_list` | `{workflow_id}` | `{workflow_id, steps}`, oldest first, each `{id, surface: "browser" \| "canvas" \| "mobile", text, node_id, at}` (`at` an ISO time). Only the workflow's owner reads them (`access_denied` otherwise, and always for the internal worker socket) |
 | `list_attention_items` | `{}` | `{items}`, newest first, each `{id, kind, severity, ref, count, first_seen, last_seen}`: the open attention items seen in the last hour (`services/attention.py`; `stuck_retry` is an activity still retrying past its limit, `stuck_runs` runs whose workflow tasks keep failing). The owner's sockets only, never the internal worker socket |
 | `list_approvals` | `{workflow_id?, status?, limit <= 100}` | `{approvals, counts, server_time}` |

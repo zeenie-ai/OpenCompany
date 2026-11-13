@@ -144,7 +144,7 @@ All are WebSocket request/response handlers with snake_case payloads. Failures a
 | `switch_chat_branch` | `{session_id, message_id, expected_revision?}` (a message beside one on the path) | `{success, leaf_id}` |
 | `set_chat_feedback` | `{session_id, message_id, value: "up" \| "down" \| null}` | `{success, message_id, value, reaches: ["next_turn"]}` (`[]` when taken back) |
 | `get_chat_context` | `{session_id}` | `{success, session_id, commands: [{command, description, fill, suggest}], capabilities: {attachments, web, model_choice}, limits: {max_attachments, max_upload_bytes}}` |
-| `get_chat_models` | `{session_id}` (a workflow's chat; `invalid_request` for `default`) | `{success, session_id, auto: Model, models: [Model], efforts: [{id, label, hint}]}`; `Model` is `{id, name, short, description, effort, effort_note, available, reason}` (see [Model and thinking](#model-and-thinking)) |
+| `get_chat_models` | `{session_id}` (a workflow's chat; `invalid_request` for `default`) | `{success, session_id, auto: Model, models: [Model], efforts: [{id, label, hint}]}`; `Model` is `{id, name, short, description, provider, provider_name, effort, effort_note, available, reason}` (`provider` / `provider_name` null for Auto; see [Model and thinking](#model-and-thinking)) |
 | `clear_chat_messages` | `{session_id}` | `{success}`; also clears runs, parts, snapshots, notes and feedback, and makes the employee forget the conversation |
 
 `send_chat_message` with the same `client_message_id` (1 to 100 letters, digits or `_.:-`) returns the message
@@ -579,9 +579,11 @@ are the two hosts.
   `aria-activedescendant`). The Web chip keeps the employee off
   web search for the next messages (`composerStore.web`). On Home, where `capabilities.model_choice` says the
   employee takes it, the model picker sits before the microphone (`composer/ModelPicker.tsx`; the host's
-  `modelPicker`): a Popover anchored to the whole box (`PopoverAnchor virtualRef`), a cmdk list of Auto and the
-  models from `get_chat_models` (`data/models.ts`), and a `LevelSlider` (`components/ui/slider.tsx`) for the level,
-  or the model's `effort_note`. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
+  `modelPicker`): a Popover anchored to the whole box (`PopoverAnchor virtualRef`), a search box (`CommandInput`,
+  which has the cursor) over a cmdk list of Auto and the models from `get_chat_models` (`data/models.ts`), each
+  under its provider's name (`CommandGroup`); typing keeps the rows holding every word typed, punctuation read as
+  spaces, and ArrowLeft / ArrowRight change the level only while the box is empty. Under the list a `LevelSlider`
+  (`components/ui/slider.tsx`) sets the level, or the model's `effort_note` shows. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
   once and put back when `save_user_settings` refuses it (`SettingsSaveError`, its `detail` shown); a message waits
   until it is known. Every send, edit and retry carries the same `options` (`sendOptions` in `data/send.ts`), and a
   `model_unavailable` refusal shows the server's `detail`. In an empty chat on Home, commands marked `suggest` show
@@ -761,11 +763,16 @@ recording is deleted. **Commands** come from `chat_defaults.json` `commands.gene
 
 ## Model and thinking
 
-`services/chat/choice.py`. Home's employee chat has a model picker: **Auto**, then the models in
-`llm_defaults.json` `chat_models` (each a `provider::model` id from that provider's `popular_models`), and how hard
-the model thinks: Quick (`effort: "low"`), Balanced (no effort sent: the agent's own settings) or Thorough
-(`"high"`). Every word the picker shows comes from `chat_defaults.json` `choice`. The Dev editor's chat has no
-picker: each node keeps its model.
+`services/chat/choice.py`. Home's employee chat has a model picker: **Auto**, then the models of every provider the
+owner can run on now, the list the editor's Set Global Model reads (`services/llm/connected.py`
+`connected_providers`, also behind `get_validated_ai_providers`): a provider with a key stored (a saved local server
+counts), one the OpenCompany Gateway serves, and each saved OpenAI-compatible endpoint. A provider offers its curated
+list (`popular_models` in `llm_defaults.json`, else its `max_output_tokens` keys) and, with none, such as a local
+server or an endpoint, the models stored with its key. Each row is a `provider::model` id, named by the model id
+under the provider's name (the button shows the id's last part: `anthropic/claude-sonnet-5.5` on OpenRouter shows
+`claude-sonnet-5.5`). Then how hard the model thinks: Quick (`effort: "low"`), Balanced (no effort sent: the agent's
+own settings) or Thorough (`"high"`). The picker's other words come from `chat_defaults.json` `choice`. The Dev
+editor's chat has no picker: each node keeps its model.
 
 - **Auto** is the owner's default model (Set Global Model, `UserSettings.default_llm_provider` /
   `default_llm_model`). With none set it is the OpenCompany Gateway's default while the gateway serves it
@@ -790,8 +797,9 @@ picker: each node keeps its model.
   Gemini 3 as `thinking_level`. It never turns thinking on or off; any other model answers as without it, and the
   picker shows `effort_note` ("{model} sets its own pace") in place of the levels.
 - **`get_chat_models`** lists the picker for one employee: Auto's row says what Auto uses now (the default model, or
-  the answering agent's own), then the offered models whose provider is connected, plus the saved choice's row even
-  when it can't answer (`available: false` with its `reason`).
+  the answering agent's own), then each connected provider's offered models in `connected_providers` order (each row
+  with `provider` and `provider_name`), plus the saved choice's row, under its provider, even when it can't answer
+  (`available: false` with its `reason`: the provider isn't connected, or no longer lists the model).
 - **`capabilities.model_choice`** (`get_chat_context`) is whether the employee applies a choice: its answering agent
   runs as an AgentWorkflow (`AGENT_WORKFLOW_TYPES`, with `TEMPORAL_AGENT_WORKFLOW_ENABLED` on). A Claude Code or
   RLM agent never does, so the client shows no picker for it. The saved graph decides it, so the client refetches
@@ -902,7 +910,7 @@ and server tests alike:
 | `engine_unavailable` | send, edit, regenerate | A workflow's chat while Temporal is not connected: nothing could deliver the message, so nothing was saved. |
 | `invalid_request` | send, save, edit, regenerate, get_chat_models | A malformed field (`detail` says which): an empty message, a role other than the owner's, a bad `client_message_id`, or an effort other than `low` / `high`; `get_chat_models` for the `default` session. |
 | `model_unavailable` | send, edit, regenerate | The model chosen can't answer: its provider isn't connected, or the picker no longer offers it. `detail` says so in the owner's words; nothing was saved. |
-| `chat_choice_refused` | save_user_settings | A saved `chat_model` the picker doesn't offer, or a `chat_effort` other than `""`, `low` or `high`. |
+| `chat_choice_refused` | save_user_settings | A saved `chat_model` the picker doesn't offer now (its provider isn't connected, or the provider doesn't list it), or a `chat_effort` other than `""`, `low` or `high`. |
 | `read_failed` | get_chat_messages, chat_subscribe | The thread could not be read. Never answered as an empty thread. |
 | `not_found` | get_chat_run, stop_chat_run | No such run. |
 | `attachment_rejected` | send | A file outside `uploads/`, gone, or more than six; `detail` says which. |

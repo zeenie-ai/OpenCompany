@@ -60,10 +60,11 @@ async def handle_save_user_settings(data: Dict[str, Any], websocket: WebSocket) 
     raw = data.get("settings")
     settings_data = normalize_profile_patch(raw if isinstance(raw, dict) else {})
     # The chat's model picker keeps to what it offers (services/chat/choice.py).
+    from services.authz.ws_surface import execution_principal
     from services.chat.choice import ChoiceRefused, check_settings
 
     try:
-        check_settings(settings_data)
+        await check_settings(database, container.auth_service(), settings_data, principal=execution_principal({}, websocket))
     except ChoiceRefused as exc:
         return {"success": False, "error": "chat_choice_refused", "detail": exc.detail}
 
@@ -132,86 +133,21 @@ async def handle_get_validated_ai_providers(
     data: Dict[str, Any],
     websocket: WebSocket,
 ) -> Dict[str, Any]:
-    """Get all AI providers with stored API keys and their popular models.
-
-    Returns providers that have validated keys, their stored models,
-    and the current global default provider/model from UserSettings.
+    """The AI providers the owner can run on now and their models
+    (services/llm/connected.py, the list Home's chat picker reads too), and
+    the global default provider/model from UserSettings.
     """
-    import json
-    from pathlib import Path
-
     from core.container import container
-
-    auth_service = container.auth_service()
-    database = container.database()
     from services.authz.ws_surface import execution_principal
-    principal = execution_principal({}, websocket)
+    from services.llm.connected import connected_providers
 
-    from services.llm.config import PROVIDER_CONFIGS
-
-    AI_PROVIDERS = list(PROVIDER_CONFIGS.keys())
-
-    defaults_path = Path(__file__).parent.parent.parent / "config" / "llm_defaults.json"
-    try:
-        with open(defaults_path) as f:
-            llm_defaults = json.load(f)
-    except Exception:
-        llm_defaults = {"providers": {}}
-
-    from services.gateway.routing import gateway_covers
-    from services.llm.config import curated_models
-
-    providers = []
-    for provider in AI_PROVIDERS:
-        if await auth_service.has_valid_key(provider, data.get("session_id", "default"), principal=principal):
-            stored_models = await auth_service.get_stored_models(provider, data.get("session_id", "default"), principal=principal)
-        elif await gateway_covers(provider):
-            # No key of the install's own; the OpenCompany Gateway serves it.
-            stored_models = curated_models(provider)
-        else:
-            continue
-
-        provider_config = llm_defaults.get("providers", {}).get(provider, {})
-        default_model = provider_config.get("default_model", "")
-        popular_models = provider_config.get("popular_models") or [
-            m for m in provider_config.get("max_output_tokens", {}).keys() if m != "_default"
-        ]
-
-        provider_defaults = await database.get_provider_defaults(provider)
-        if provider_defaults and provider_defaults.get("default_model"):
-            default_model = provider_defaults["default_model"]
-
-        providers.append(
-            {
-                "provider": provider,
-                # Serialized so the client never needs its own id -> label table.
-                # This list is built from PROVIDER_CONFIGS, so it can legitimately
-                # contain a provider (xai) that has no chat-model node and no
-                # credential-catalogue entry; without a name from here the UI fell
-                # back to rendering the raw id.
-                "display_name": provider_config.get("display_name") or provider,
-                "models": stored_models or [],
-                "popular_models": popular_models,
-                "default_model": default_model,
-            }
-        )
-
-    # Each named endpoint is its own provider, so one can be the global
-    # default (RFC-0003 D13). The bare ``openai_compatible`` id holds no
-    # key, so the loop above already skipped it.
-    from services.llm.endpoints import list_endpoints
-
-    for endpoint in await list_endpoints(auth_service, principal=principal):
-        endpoint_defaults = await database.get_provider_defaults(endpoint.ref)
-        providers.append(
-            {
-                "provider": endpoint.ref,
-                "display_name": f"{endpoint.label} (OpenAI-compatible)",
-                "models": endpoint.models,
-                "popular_models": [],
-                "default_model": (endpoint_defaults or {}).get("default_model", ""),
-            }
-        )
+    database = container.database()
+    providers = await connected_providers(
+        container.auth_service(),
+        database,
+        principal=execution_principal({}, websocket),
+        session_id=data.get("session_id", "default"),
+    )
 
     user_id = data.get("user_id", "default")
     settings = await database.get_user_settings(user_id)

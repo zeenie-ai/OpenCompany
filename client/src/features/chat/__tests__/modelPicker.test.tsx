@@ -2,9 +2,10 @@
  * The model picker in Home's employee chat (composer/ModelPicker.tsx,
  * data/models.ts): the button names the model and a level other than
  * Balanced; the panel opens above the message box, level with its right
- * edge, and lists Auto and the offered models, a row the owner can't pick
- * saying why; picking or changing the level saves the owner's
- * choice at once and puts it back when the server refuses it; every message
+ * edge, with a search box, Auto and each connected provider's models under
+ * the provider's name, a row the owner can't pick saying why; typing
+ * narrows the list; picking or changing the level saves the owner's choice
+ * at once and puts it back when the server refuses it; every message
  * carries the choice; a model that can't answer is refused in the server's
  * words; and a chat whose employee takes no choice shows no picker.
  */
@@ -40,22 +41,49 @@ type Wire = Record<string, unknown>;
 const SONNET = 'anthropic::claude-sonnet-5-5';
 const GPT = 'openai::gpt-6-sol';
 const HAIKU = 'anthropic::claude-haiku-4-5';
+const OPUS = 'openrouter::anthropic/claude-opus-5.5';
+const GROK = 'openrouter::x-ai/grok-4.20';
 
-function model(id: string, name: string, short: string, patch: Wire = {}): Wire {
-  return { id, name, short, description: `${name} is good`, effort: true, effort_note: null, available: true, reason: null, ...patch };
+/** A model's row as get_chat_models sends it: named by its id, under its
+ *  provider. */
+function model(id: string, providerName: string, patch: Wire = {}): Wire {
+  const [provider, name] = id.split('::');
+  return {
+    id,
+    name,
+    short: name.split('/').pop(),
+    description: '',
+    provider,
+    provider_name: providerName,
+    effort: true,
+    effort_note: null,
+    available: true,
+    reason: null,
+    ...patch,
+  };
 }
 
 const PICKER = {
   success: true,
   session_id: 'w1',
-  auto: model('auto', 'Auto', 'Auto', { description: 'Uses Sonnet 5.5, your default model' }),
+  auto: {
+    id: 'auto',
+    name: 'Auto',
+    short: 'Auto',
+    description: 'Uses claude-sonnet-5-5, your default model',
+    provider: null,
+    provider_name: null,
+    effort: true,
+    effort_note: null,
+    available: true,
+    reason: null,
+  },
   models: [
-    model(SONNET, 'Claude Sonnet 5.5', 'Sonnet 5.5'),
-    model(HAIKU, 'Claude Haiku 4.5', 'Haiku 4.5', { effort: false, effort_note: 'Haiku 4.5 sets its own pace' }),
-    model(GPT, 'GPT-6 Sol', 'GPT-6 Sol', {
-      available: false,
-      reason: 'GPT-6 Sol can’t answer right now: OpenAI isn’t connected.',
-    }),
+    model(SONNET, 'Anthropic'),
+    model(HAIKU, 'Anthropic', { effort: false, effort_note: 'claude-haiku-4-5 sets its own pace' }),
+    model(OPUS, 'OpenRouter', { effort: false, effort_note: 'claude-opus-5.5 sets its own pace' }),
+    model(GROK, 'OpenRouter', { effort: false, effort_note: 'grok-4.20 sets its own pace' }),
+    model(GPT, 'OpenAI', { available: false, reason: 'gpt-6-sol can’t answer right now: OpenAI isn’t connected.' }),
   ],
   efforts: [
     { id: 'low', label: 'Quick', hint: 'Answers right away' },
@@ -91,8 +119,10 @@ function renderChat({ strict = false }: { strict?: boolean } = {}) {
 }
 
 async function picker() {
-  return screen.findByRole('button', { name: /Sonnet 5\.5|Auto|Haiku 4\.5/ });
+  return screen.findByRole('button', { name: /claude-sonnet-5-5|Auto|claude-haiku-4-5/ });
 }
+
+const texts = (rows: HTMLElement[]) => rows.map((row) => row.textContent);
 
 async function write(text: string) {
   fireEvent.change(await screen.findByRole('textbox', { name: 'Message Maya' }), { target: { value: text } });
@@ -145,14 +175,59 @@ describe('the picker', () => {
     const panel = await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
     expect(sendRequest).toHaveBeenCalledWith('get_chat_models', { session_id: 'w1' });
     const rows = within(panel).getAllByRole('option');
-    expect(rows.map((row) => row.textContent)).toEqual([
-      'AutoUses Sonnet 5.5, your default model',
-      'Claude Sonnet 5.5Claude Sonnet 5.5 is good',
-      'Claude Haiku 4.5Claude Haiku 4.5 is good',
-      'GPT-6 SolGPT-6 Sol can’t answer right now: OpenAI isn’t connected.',
+    expect(texts(rows)).toEqual([
+      'AutoUses claude-sonnet-5-5, your default model',
+      'claude-sonnet-5-5',
+      'claude-haiku-4-5',
+      'anthropic/claude-opus-5.5',
+      'x-ai/grok-4.20',
+      'gpt-6-solgpt-6-sol can’t answer right now: OpenAI isn’t connected.',
     ]);
-    expect(rows[3]).toHaveAttribute('aria-disabled', 'true');
+    expect(rows[5]).toHaveAttribute('aria-disabled', 'true');
+    // Under their providers' names, the way the editor's Set Global Model
+    // lists them.
+    expect(texts(within(within(panel).getByRole('group', { name: 'Anthropic' })).getAllByRole('option'))).toEqual([
+      'claude-sonnet-5-5',
+      'claude-haiku-4-5',
+    ]);
+    expect(texts(within(within(panel).getByRole('group', { name: 'OpenRouter' })).getAllByRole('option'))).toEqual([
+      'anthropic/claude-opus-5.5',
+      'x-ai/grok-4.20',
+    ]);
+    expect(within(panel).getByRole('group', { name: 'OpenAI' })).toBeInTheDocument();
+    // The search box has the cursor.
+    expect(within(panel).getByRole('combobox', { name: 'Search models' })).toHaveFocus();
     expect(within(panel).getByRole('slider', { name: 'How hard Maya thinks' })).toHaveAttribute('aria-valuetext', 'Balanced');
+  });
+
+  it('narrows the list as the owner types, and Enter picks the first row left', async () => {
+    const user = userEvent.setup();
+    renderChat();
+    await user.click(await screen.findByRole('button', { name: 'Auto' }));
+    const panel = await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
+    const search = within(panel).getByRole('combobox', { name: 'Search models' });
+
+    // By provider: every model it offers.
+    await user.type(search, 'openrouter');
+    expect(texts(within(panel).getAllByRole('option'))).toEqual(['anthropic/claude-opus-5.5', 'x-ai/grok-4.20']);
+    // By words of the model's id, its punctuation read as spaces.
+    await user.clear(search);
+    await user.type(search, 'opus 5.5');
+    expect(texts(within(panel).getAllByRole('option'))).toEqual(['anthropic/claude-opus-5.5']);
+    // With words in the box, ArrowLeft and ArrowRight move its cursor, not the level.
+    await user.keyboard('{ArrowRight}');
+    expect(sendRequest).not.toHaveBeenCalledWith('save_user_settings', expect.anything());
+    await user.clear(search);
+    await user.type(search, 'llama');
+    expect(within(panel).queryAllByRole('option')).toEqual([]);
+    expect(within(panel).getByText('No model matches “llama”')).toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, 'grok');
+    await user.keyboard('{Enter}');
+    expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { chat_model: GROK } });
+    // The button shows the id's last part.
+    expect(await screen.findByRole('button', { name: 'grok-4.20' })).toBeInTheDocument();
   });
 
   it('opens its panel above the message box, level with its right edge', async () => {
@@ -187,9 +262,9 @@ describe('the picker', () => {
     renderChat();
     await user.click(await screen.findByRole('button', { name: 'Auto' }));
     const panel = await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
-    await user.click(within(panel).getByRole('option', { name: /Claude Sonnet 5\.5/ }));
+    await user.click(within(panel).getByRole('option', { name: 'claude-sonnet-5-5' }));
     expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { chat_model: SONNET } });
-    expect(await screen.findByRole('button', { name: 'Sonnet 5.5' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'claude-sonnet-5-5' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     await write('Book Saturday');
@@ -202,14 +277,14 @@ describe('the picker', () => {
     const user = userEvent.setup();
     server.settings = { chat_model: SONNET, chat_effort: '' };
     renderChat();
-    await user.click(await screen.findByRole('button', { name: 'Sonnet 5.5' }));
+    await user.click(await screen.findByRole('button', { name: 'claude-sonnet-5-5' }));
     await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
-    // The list has the focus: ArrowRight goes one level up.
+    // The search box has the cursor and is empty: ArrowRight goes one level up.
     await user.keyboard('{ArrowRight}');
     expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { chat_effort: 'high' } });
     expect(await screen.findByRole('slider', { name: 'How hard Maya thinks' })).toHaveAttribute('aria-valuetext', 'Thorough');
     await user.keyboard('{Escape}');
-    expect(await screen.findByRole('button', { name: 'Sonnet 5.5 · Thorough' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'claude-sonnet-5-5 · Thorough' })).toBeInTheDocument();
     // Closing puts the cursor back in the message box.
     expect(screen.getByRole('textbox', { name: 'Message Maya' })).toHaveFocus();
 
@@ -224,9 +299,9 @@ describe('the picker', () => {
     server.settings = { chat_model: HAIKU, chat_effort: 'high' };
     renderChat();
     // No level on the button: Haiku takes none.
-    await user.click(await screen.findByRole('button', { name: 'Haiku 4.5' }));
+    await user.click(await screen.findByRole('button', { name: 'claude-haiku-4-5' }));
     const panel = await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
-    expect(within(panel).getByText('Haiku 4.5 sets its own pace')).toBeInTheDocument();
+    expect(within(panel).getByText('claude-haiku-4-5 sets its own pace')).toBeInTheDocument();
     expect(within(panel).queryByRole('slider')).not.toBeInTheDocument();
   });
 
@@ -236,7 +311,7 @@ describe('the picker', () => {
     renderChat();
     await user.click(await screen.findByRole('button', { name: 'Auto' }));
     const panel = await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
-    await user.click(within(panel).getByRole('option', { name: /Claude Sonnet 5\.5/ }));
+    await user.click(within(panel).getByRole('option', { name: 'claude-sonnet-5-5' }));
     await waitFor(() =>
       expect(pillToast).toHaveBeenCalledWith('That model isn’t offered any more. Pick another one.', { tone: 'error' }),
     );

@@ -1,10 +1,11 @@
 /**
  * The model picker in Home's employee chat (docs-internal/chat_protocol.md,
  * "Model and thinking"): what one employee's chat offers (`get_chat_models`:
- * Auto, the offered models, the thinking levels) and the owner's choice,
- * saved with their settings (`chat_model` / `chat_effort`). Every word comes
- * from the server: Auto's row says what it uses now, and a row the owner
- * can't pick says why.
+ * Auto, the models of each connected provider, the thinking levels) and the
+ * owner's choice, saved with their settings (`chat_model` / `chat_effort`).
+ * Every row's words come from the server: Auto's row says what it uses now,
+ * a model's row names it and its provider, and a row the owner can't pick
+ * says why.
  *
  * A message, an edit or a retry carries the choice as `options.model` /
  * `options.effort` (send.ts `sendOptions`); the server resolves Auto and
@@ -31,6 +32,10 @@ export interface ChatModel {
   /** On the picker's button. */
   short: string;
   description: string;
+  /** The provider a model runs on, and its name (the row's group); null
+   *  for Auto. */
+  provider: string | null;
+  providerName: string | null;
   /** It takes the thinking levels; otherwise `effortNote` says so. */
   effort: boolean;
   effortNote: string | null;
@@ -66,6 +71,8 @@ const modelSchema = z
     name: z.string(),
     short: z.string(),
     description: z.string().catch(''),
+    provider: z.string().nullable().catch(null),
+    provider_name: z.string().nullable().catch(null),
     effort: z.boolean().catch(false),
     effort_note: z.string().nullable().catch(null),
     available: z.boolean().catch(false),
@@ -77,6 +84,8 @@ const modelSchema = z
       name: raw.name,
       short: raw.short,
       description: raw.description,
+      provider: raw.provider,
+      providerName: raw.provider_name,
       effort: raw.effort,
       effortNote: raw.effort_note,
       available: raw.available,

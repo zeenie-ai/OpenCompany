@@ -7,7 +7,7 @@ Pure config and resolution logic.
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Mapping, Optional, Tuple
+from typing import Dict, Any, Mapping, Optional, Tuple
 
 from core.logging import get_logger
 
@@ -222,14 +222,6 @@ async def agent_model(parameters: Mapping[str, Any], database) -> Tuple[str, str
 # ---------------------------------------------------------------------------
 # The chat's model picker (Home's employee chat)
 # ---------------------------------------------------------------------------
-
-
-def chat_models() -> List[Dict[str, Any]]:
-    """The models the chat's picker offers after Auto (``chat_models`` in
-    llm_defaults.json), in order: ``{id: "provider::model", name, short,
-    description}``."""
-    block = LLM_DEFAULTS.get("chat_models") or {}
-    return [dict(entry) for entry in block.get("models") or []]
 
 
 def split_chat_model(model_id: str) -> Tuple[str, str]:
