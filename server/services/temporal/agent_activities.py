@@ -1795,6 +1795,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         CONTEXT_PRESSURE_VERSION,
         transcript_budget_bytes,
     )
+    from services.temporal.agent_tool_errors import TOOL_ERROR_VERSION
     if chat_stream:
         # The agent answering the owner's chat reads the chat's guide after
         # its own system prompt (the same bytes every turn), and what the
@@ -1877,6 +1878,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "tool_result_max_chars": tool_result_max_chars,
         "transcript_budget_bytes": transcript_budget_bytes(),
         "context_pressure_version": CONTEXT_PRESSURE_VERSION,
+        # What the model reads when a tool fails, pinned the same way.
+        "tool_error_version": TOOL_ERROR_VERSION,
         "auto_rebind_tools": auto_rebind_tools,
         "max_concurrent_subagents": max_concurrent_subagents,
         "max_delegation_depth": max_delegation_depth,

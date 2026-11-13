@@ -29,7 +29,9 @@ User decisions baked in (plan §15):
 - Memory appends per turn (not on completion).
 - Tool activity failure (after retries) returns an error to the LLM as
   a ``ToolMessage`` and the agent continues — matches the in-process
-  ``run_native_agent_loop`` behaviour.
+  ``run_native_agent_loop`` behaviour. From ``tool_error_version`` 1 the
+  error names the failure the tool raised (``agent_tool_errors``); runs
+  recorded before it name only the SDK wrapper, "Activity task failed".
 
 Determinism:
 - ``sandboxed=False`` so we can import frozen registry dicts
@@ -83,6 +85,7 @@ from .agent_context_pressure import (
     summarizer_view,
     turn_tool_chars,
 )
+from .agent_tool_errors import tool_failure_text
 from .workflow import AGENT_WORKFLOW_TYPES
 from .execution_control import ExecutionControl
 
@@ -1067,6 +1070,9 @@ class AgentWorkflow:
                 "tool_result_max_chars": int,     # 0 keeps results whole
                 "transcript_budget_bytes": int,
                 "context_pressure_version": int,
+                # What the model reads when a tool fails; absent on older
+                # histories, which keep the old text.
+                "tool_error_version": int,
             }
 
         Returns the final agent response, mirroring the shape
@@ -1250,6 +1256,9 @@ class AgentWorkflow:
         tool_output_limit = int(payload.get("tool_result_max_chars") or 0)
         pressure_version = int(payload.get("context_pressure_version") or 0)
         transcript_budget = int(payload.get("transcript_budget_bytes") or 0)
+        # Also recorded by prepare-payload (agent_tool_errors): a history
+        # recorded before the key reads 0 and keeps the old failure text.
+        tool_error_version = int(payload.get("tool_error_version") or 0)
 
         def _result_is_capped(tool_name: Optional[str]) -> bool:
             """Whether the tool message named ``tool_name`` holds external output."""
@@ -2133,7 +2142,8 @@ class AgentWorkflow:
                         task_manager_preflight_results[preflight_index] = preflight_result
                         if self._execution_control.enabled and not pi_runtime:
                             content = (_serialise_tool_result(preflight_result) if not isinstance(preflight_result, BaseException)
-                                       else _serialise_tool_result({"error": str(preflight_result)}))
+                                       else _serialise_tool_result({"error": tool_failure_text(preflight_result)
+                                                                    if tool_error_version >= 1 else str(preflight_result)}))
                             _append_tool_result_message(messages, content=content,
                                 tool_call_id=calls[preflight_index].get("id", ""), name=calls[preflight_index].get("name", ""))
                             recorded_tool_results.add(preflight_index)
@@ -2795,7 +2805,8 @@ class AgentWorkflow:
                                         "root_execution_id": root_execution_id,
                                         "trace_id": str(call.get("id", "") or ""),
                                         "success": False,
-                                        "error": f"{type(e).__name__}: {e}",
+                                        "error": (tool_failure_text(e) if tool_error_version >= 1
+                                                  else f"{type(e).__name__}: {e}"),
                                         "terminal_event_id": f"{task_id}:terminal",
                                     }],
                                     activity_id=(
@@ -2812,7 +2823,11 @@ class AgentWorkflow:
                             except asyncio.CancelledError:
                                 await _cleanup_cancelled_delegations()
                                 raise
-                        tool_content = f'{{"error": "{type(e).__name__}: {e}"}}'
+                        tool_content = (
+                            _serialise_tool_result({"error": tool_failure_text(e)})
+                            if tool_error_version >= 1
+                            else f'{{"error": "{type(e).__name__}: {e}"}}'
+                        )
                         try:
                             await self._emit_phase(
                                 agent_node_id,

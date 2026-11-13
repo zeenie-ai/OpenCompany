@@ -228,6 +228,9 @@ grew a saved row past the 1 MB seed cap and every later firing failed).
   recorded before those keys existed replays the original rules (no cap,
   cumulative token gate, whole-transcript summary), because the rules decide
   which activities are scheduled. Any change to them needs a new version.
+  The text a failed tool call leaves in the transcript is pinned the same way,
+  by `tool_error_version` (`services/temporal/agent_tool_errors.py`), because
+  its length feeds those rules.
 - **These bounds are a backstop, not a design for a tool.** The cap keeps
   the head of a result, which for a page of structured items is the first
   few, and the clearing replaces whole earlier results, a loaded skill among

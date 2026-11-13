@@ -145,6 +145,52 @@ class TestWorkflowLoopContract:
             assert checkpoints[0]["tool_results"][0]["tool_call_id"] == "call-1"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("version,expected", [
+        # Recorded before tool_error_version: the SDK wrapper's text, as before.
+        (None, '{"error": "ActivityError: Activity task failed"}'),
+        (1, '{"error": "ValueError: Todo list rejected: missing items"}'),
+    ])
+    async def test_a_failed_tool_reaches_the_model_with_its_cause_from_version_1(
+        self, monkeypatch, patched_workflow, version, expected,
+    ):
+        from temporalio.exceptions import ActivityError, ApplicationError, RetryState
+
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        prepared = _payload()
+        if version is not None:
+            prepared["tool_error_version"] = version
+        llm_messages = []
+
+        async def execute(name, *, args, **_kwargs):
+            if name == "agent.prepare_payload":
+                return prepared
+            if name == "agent.execute_llm_step":
+                llm_messages.append(args[0]["messages"])
+                if len(llm_messages) == 1:
+                    return {"kind": "tool_calls", "calls": [{"id": "call-1", "name": "write_todos", "args": {}}],
+                            "usage": {"input_tokens": 10, "output_tokens": 2}}
+                return {"kind": "final", "content": "done", "thinking": None,
+                        "usage": {"input_tokens": 3, "output_tokens": 1}}
+            if name == "node.writeTodos.v1":
+                failure = ActivityError(
+                    "Activity task failed", scheduled_event_id=1, started_event_id=2, identity="worker",
+                    activity_type=name, activity_id="tool-1", retry_state=RetryState.MAXIMUM_ATTEMPTS_REACHED,
+                )
+                failure.__cause__ = ApplicationError("Todo list rejected: missing items", type="ValueError")
+                raise failure
+            if name in {"agent.broadcast_progress", "agent.store_output", "agent.skill.clear"}:
+                return {}
+            raise AssertionError(f"Unexpected activity: {name}")
+
+        monkeypatch.setattr(patched_workflow, "execute_activity", execute)
+        result = await AgentWorkflow().run({"node_id": "agent-1", "execution_id": "root-run-1"})
+
+        assert result["success"] is True
+        [tool_message] = [message for message in llm_messages[1] if message["role"] == "tool"]
+        assert tool_message["content"] == expected
+
+    @pytest.mark.asyncio
     async def test_llm_step_payload_shape_and_heartbeat(
         self,
         monkeypatch,
