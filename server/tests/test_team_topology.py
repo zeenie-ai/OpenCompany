@@ -156,6 +156,43 @@ async def test_teammate_capabilities_surface_tools_and_skills():
     assert "skills: tikhub-skill" in line
 
 
+@pytest.mark.asyncio
+async def test_the_roster_reads_skill_descriptions_without_rescanning(monkeypatch):
+    """A rescan per teammate re-read every SKILL.md on the event loop, five
+    times for a lead with five teammates; the loader's last scan already
+    holds the descriptions."""
+    from types import SimpleNamespace
+
+    import services.skill_loader as loader_module
+
+    def rescan():
+        raise AssertionError("the roster must not rescan the skills folder")
+
+    loader = SimpleNamespace(
+        scan_skills=rescan,
+        get_available_skills=lambda: [{"name": "tikhub-skill", "description": "Scrape social platforms"}],
+    )
+    monkeypatch.setattr(loader_module, "get_skill_loader", lambda: loader)
+    nodes = [
+        node("lead", "orchestrator_agent"),
+        node("web", "aiAgent", "Web Agent"),
+        node("social", "aiAgent", "Social Agent"),
+        node("web-skills", "masterSkill", "Master Skill"),
+        node("social-skills", "masterSkill", "Master Skill"),
+    ]
+    edges = [
+        edge("web", "lead"), edge("social", "lead"),
+        edge("web-skills", "web", "input-skill"), edge("social-skills", "social", "input-skill"),
+    ]
+    params = {name: {"skills_config": {"tikhub-skill": {"enabled": True}}} for name in ("web-skills", "social-skills")}
+    database = AsyncMock()
+    database.get_node_parameters.side_effect = lambda node_id: params.get(node_id, {})
+
+    teammates = await collect_teammate_connections("lead", {"nodes": nodes, "edges": edges}, database)
+
+    assert [teammate["child_skills"][0]["description"] for teammate in teammates] == ["Scrape social platforms"] * 2
+
+
 def test_roster_line_omits_empty_capabilities():
     from services.plugin.edge_walker import format_teammate_roster_line
 

@@ -649,13 +649,19 @@ async def _teammate_child_skills(
                 if registry is None:
                     from services.skill_loader import get_skill_loader
 
+                    # The descriptions from the loader's last scan: it scans
+                    # when created and on every Master Skill expansion. A
+                    # rescan here re-read every SKILL.md on the event loop
+                    # once per teammate.
                     try:
-                        registry = get_skill_loader().scan_skills()
+                        registry = {
+                            skill["name"]: skill["description"]
+                            for skill in get_skill_loader().get_available_skills()
+                        }
                     except Exception as exc:  # noqa: BLE001 - a roster must never fail a run
                         logger.warning("[Teams] skill registry unavailable for roster: %s", exc)
                         registry = {}
-                meta = registry.get(skill_key)
-                description = skill_cfg.get("description") or (meta.description if meta else "")
+                description = skill_cfg.get("description") or registry.get(skill_key, "")
                 skills.append({"node_id": child.get("id"), "skill_name": skill_key, "description": _clip(description)})
         else:
             skill_name = params.get("skill_name") or (child.get("data") or {}).get("label") or child.get("type")
