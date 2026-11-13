@@ -2,10 +2,10 @@
 
 ## Overview
 
-The pricing service provides centralized cost tracking for both LLM tokens and external API services (Twitter/X, Google Maps, TikHub). It supports:
+The pricing service provides centralized cost tracking for both LLM tokens and external API services (Twitter/X, Google Maps, TikHub, treg). It supports:
 
 - **LLM Token Costs**: Per-model pricing with input/output/cache/reasoning token breakdown
-- **API Service Costs**: Per-request/resource pricing for third-party APIs (Twitter/X, Google Maps, TikHub, Search APIs)
+- **API Service Costs**: Per-request/resource pricing for third-party APIs (Twitter/X, Google Maps, TikHub, Search APIs), and the provider's own reported charge where it gives one (treg)
 - **Automatic Tracking**: HTTPX event hooks for transparent API call tracking
 - **Manual Tracking**: Helper functions for services that don't use HTTPX
 
@@ -293,6 +293,10 @@ async def track_google_usage(service, node_id, action, resource_count, context):
 ### Example: TikHub Plugin (flat per-request)
 
 TikHub prices each endpoint (most cost $0.001 a successful request, the `instagram_v2` family $0.002 and `instagram_v3` $0.008) and does not charge non-2xx responses. OpenCompany records a flat $0.001 for each billed request, a deliberate floor rather than TikHub's own figure: `server/nodes/scraper/tikhub_action/_sdk.py::track_tikhub_usage(ctx, action, endpoint_path)` records one `resource_count=1` metric only after a 2xx and never for the `list_endpoints` and `describe` operations, which spend nothing. It takes the `NodeContext` (not the raw dict), reads `session_id` / `workflow_id` from it, wraps everything in `try/except` + `logger.warning` so a metrics failure never fails a call that already cost money, and returns the USD figure for the node's `cost_usd` output key. `pricing.json` carries `api.tikhub` (`request` 0.001, `meta` 0.0) and `operation_map.tikhub` (`call` / `fetch_url` -> `request`, `account` -> `meta`); the credential entry sets `"usage_service": "tikhub"` so the spend shows in the Credentials modal usage table. See [tikhub_service.md](./tikhub_service.md).
+
+### Example: treg Plugin (the provider's own charge)
+
+treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` writes one `resource_count=1` row with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. Like TikHub's tracker it never raises, and the credential entry sets `"usage_service": "treg"`. See [treg_service.md](./treg_service.md).
 
 ### Example: Search Plugins (declarative cost)
 

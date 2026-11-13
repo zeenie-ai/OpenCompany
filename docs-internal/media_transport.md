@@ -353,7 +353,10 @@ in place of the payload
 ([tikhub_service.md](./tikhub_service.md#large-results---_resultpy)). The
 file is indented so tools that work by line can search and page through
 it. Use the same shape for any node whose answers are routinely larger
-than a model can use.
+than a model can use. `tregAction` keeps its own copy of the helpers and
+saves under `treg/`; it also saves a binary answer as a file with its
+media type's extension
+([treg_service.md](./treg_service.md#results)).
 
 ---
 

@@ -478,7 +478,7 @@ is an app.
 | `nodes/model/_credentials.py` | `OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / Xai / Sarvam / Ollama / LMStudio / OpenAICompatible` | api_key | One credential class per LLM provider, covering every agent-selectable provider and every standalone chat-model node (`ls server/nodes/model/*_chat_model`). Ollama / LM Studio store a local server URL; `OpenAICompatibleCredential` stores any number of named endpoints, each under its own `openai_compatible:<slug>` reference (RFC-0003); xAI is agent-selectable but has no standalone node; `SarvamCredential` also serves the speech / translate plugins. |
 | `nodes/search/<name>/__init__.py` (inline) | `BraveSearch / Serper / Perplexity` | api_key | single-use search nodes |
 
-This table is the Wave 11.E snapshot, not an inventory — later plugins (Stripe, Vercel, GitHub, Cloudflare, gcloud, AWS, WhatsApp, WhatsApp Business, Discord, Microsoft, ElevenLabs, Deepgram, DeepL, ...) each ship their own `_credentials.py`. Read the live set from `len(services.plugin.credential.CREDENTIAL_REGISTRY)`.
+This table is the Wave 11.E snapshot, not an inventory — later plugins (Stripe, Vercel, GitHub, Cloudflare, gcloud, AWS, treg, WhatsApp, WhatsApp Business, Discord, Microsoft, ElevenLabs, Deepgram, DeepL, ...) each ship their own `_credentials.py`. Read the live set from `len(services.plugin.credential.CREDENTIAL_REGISTRY)`.
 
 `GoogleCredential` exposes a `build_credentials()` classmethod that
 returns a `google.oauth2.credentials.Credentials` — hand-off to
@@ -874,7 +874,7 @@ server/
 │   ├── skill/                   # masterSkill (+ _expander.py; skill/simple_memory is an import shim —
 │   │                            # the canonical simpleMemory plugin is nodes/tool/simple_memory/)
 │   └── ...                      # context / speech / translate / vision / discord / microsoft /
-│                                # whatsapp_business / stripe / vercel / github / cloudflare / gcloud / aws —
+│                                # whatsapp_business / stripe / vercel / github / cloudflare / gcloud / aws / treg —
 │                                # `ls server/nodes` is the inventory; each group folder owns its
 │                                # own _credentials.py (Wave 11.E.1), no central credentials package.
 └── services/
@@ -1511,7 +1511,11 @@ The plugin's `DaemonEventSource` subclass overrides `start()` to
 `await ensure_<cli>_cli()` first, sets `binary_name = ""` so the
 framework's pre-flight `shutil.which` check is skipped, and uses
 the resolved path inside `build_command`. The same shape suits any
-project that publishes pre-built binaries via GitHub releases.
+project that publishes pre-built binaries via GitHub releases. A CLI
+published on PyPI is installed with `uv tool install` into a private uv
+tool folder instead, with a stamp file recording the pin
+(`nodes/browser/_install_bu.py`, `nodes/treg/_install.py`); an npm CLI
+goes into the shared bun packages tree (`core.js_runtime.add_package`).
 
 ### Integration points (no core edits per plugin)
 

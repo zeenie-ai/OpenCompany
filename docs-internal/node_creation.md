@@ -219,7 +219,7 @@ appears in the Component Palette under its first `group` entry.
 
 For nodes that wrap a CLI tool **and** receive signed webhooks
 (Stripe; CLI wrappers without webhooks — GitHub, Vercel, Cloudflare,
-gcloud — need only the CLI-managed-auth variants further down), use
+gcloud, treg — need only the CLI-managed-auth variants further down), use
 the [Wave 12 framework](./plugin_system.md#wave-12--generalized-event-framework-servicesevents).
 Stripe is the reference implementation
 ([`server/nodes/stripe/`](../server/nodes/stripe/)). The shape:

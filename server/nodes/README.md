@@ -264,6 +264,8 @@ cloudflare/  — Cloudflare (cf CLI: command search / zones / DNS / GraphQL anal
 gcloud/      — Google Cloud (gcloud CLI: projects / Compute Engine / Cloud Run / Cloud Storage / custom; palette group "deployment")
 aws/         — AWS (boto3 SDK: identity / EC2 / S3 / any API operation via call + list_operations; IAM key pair
                in the encrypted store; palette group "deployment")
+treg/        — treg (its tools-registry CLI, installed with uv at first use: catalog search / describe /
+               a paid call within the owner's ceiling / balance; the CLI owns the sign-in; palette group "api")
 speech/      — Provider-abstracted text_to_speech / speech_to_text (palette group "language").
                One node per direction with a `provider` dropdown, not one node per vendor. Owns
                its own protocol / registries / dispatch / per-vendor modules — see below.

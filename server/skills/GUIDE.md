@@ -44,7 +44,7 @@ server/skills/
 ├── vercel/                   # vercel-skill (Vercel CLI)
 └── web_agent/                # Web automation skills
       browser-skill, http-request-skill, apify-skill,
-      crawlee-scraper-skill, tikhub-skill, proxy-config-skill, duckduckgo-search-skill,
+      crawlee-scraper-skill, tikhub-skill, treg-skill, proxy-config-skill, duckduckgo-search-skill,
       brave-search-skill, serper-search-skill, perplexity-search-skill
 ```
 
