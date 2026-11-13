@@ -85,7 +85,7 @@ Notes for Linux servers:
 
 ### Local Development (from source)
 
-**Prerequisites:** bun 1.4+ (https://bun.sh — the package manager and the only JavaScript runtime anything shipped needs), Python 3.12 (CLI needs >=3.12, server venv pins >=3.11,<3.13), uv. Node.js is optional: when present, bun runs vite / vitest / eslint on it via their node shebangs (CI installs 22 for that reason); `company build` treats it as optional.
+**Prerequisites:** bun 1.4+ (https://bun.sh — the package manager and the only JavaScript runtime anything shipped needs), Python 3.12 (CLI needs >=3.12, server venv pins >=3.11.5,<3.13), uv. Node.js is optional: when present, bun runs vite / vitest / eslint on it via their node shebangs (CI installs 22 for that reason); `company build` treats it as optional.
 
 ```bash
 git clone https://github.com/zeenie-ai/OpenCompany.git OpenCompany

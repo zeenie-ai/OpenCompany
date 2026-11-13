@@ -196,7 +196,7 @@ code or doc should carry the numerals.
 | Dependency | Version | Install |
 |------------|---------|---------|
 | bun | 1.4+ — the only JavaScript runtime and package manager anything shipped needs: it runs the `company` shim, the JS executor sidecar and the plugin CLIs (incl. the Cloudflare `cf` CLI: bun ignores its `engines.node >= 22` and runs its API commands; only cf's project commands, which load a `cloudflare.config.ts`, need Node 22.18+) and installs the package (`bun add -g`) | official installer (https://bun.sh; `install.sh` / `install.ps1` run it); root `packageManager` pin read by `oven-sh/setup-bun` in CI; the desktop app bundles it |
-| Python | 3.12+ (CLI); server venv accepts 3.11–3.12 | https://python.org/ |
+| Python | 3.12+ (CLI); server venv accepts 3.11.5–3.12 | https://python.org/ |
 | uv | latest | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Node.js | optional, dev/CI only — when present, bun runs vite / vitest / eslint on it via their node shebangs (CI installs 22 for that reason); `company build` reports it as optional | https://nodejs.org/ |
 

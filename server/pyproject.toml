@@ -2,7 +2,10 @@
 name = "opencompany-server"
 version = "0.1.0"
 description = "OpenCompany workflow automation backend"
-requires-python = ">=3.11,<3.13"
+# 3.11.5, not 3.11: soupsieve 3.0.2+ (and so its security floor below)
+# requires it, because earlier 3.11 releases have broken possessive
+# quantifiers in `re`.
+requires-python = ">=3.11.5,<3.13"
 dependencies = [
     # Core
     "fastapi>=0.115.0",
@@ -158,8 +161,11 @@ dependencies = [
     # Security floor for beautifulsoup4's selector engine (pulled in by
     # crawlee): <2.9.0 carries two polynomial-time ReDoS advisories,
     # GHSA-j934-xhv5-fg8f (CVE-2026-85999) and GHSA-gjv8-xp57-g29c
-    # (CVE-2026-86000). Do not lower without checking them.
-    "soupsieve>=2.9.0",
+    # (CVE-2026-86000), and <4.0 a polynomial-time descendant-combinator
+    # match, GHSA-mmhr-3c5m-f64f (CVE-2026-126190), reachable through the
+    # scrapers' user-set CSS selectors on fetched pages. Do not lower without
+    # checking them.
+    "soupsieve>=4.0",
     "html2text>=2024.2.26",
 
     # Telegram Bot API
