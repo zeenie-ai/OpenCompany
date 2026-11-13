@@ -463,6 +463,26 @@ class TestRemapNodeIds:
         collisions = {k: v for k, v in all_ids.items() if len(v) > 1}
         assert not collisions, f"Remap should produce disjoint ids across all example " f"workflows; found collisions: {collisions}"
 
+    def test_real_examples_enable_only_skills_that_exist(self):
+        """A Master Skill entry loads the skill named by its key, so a key no
+        SKILL.md declares never reaches the file. The AI Employee example once
+        enabled "subagent-skill" (the file is subagent-orchestration) with a
+        stored copy that taught the retired delegate_to_* calls."""
+        import glob
+        import json
+
+        from core.paths import example_workflows_dir
+        from services.skill_loader import get_skill_loader
+
+        known = {skill["name"] for skill in get_skill_loader().get_available_skills()}
+        unknown = []
+        for path in sorted(glob.glob(str(example_workflows_dir() / "*.json"))):
+            with open(path, encoding="utf-8") as fh:
+                wf = json.load(fh)
+            for node_id, params in (wf.get("nodeParameters") or {}).items():
+                unknown += [(path, node_id, key) for key in ((params or {}).get("skills_config") or {}) if key not in known]
+        assert not unknown, unknown
+
 
 # ---------------------------------------------------------------------------
 # workflow_import orchestrator tests
