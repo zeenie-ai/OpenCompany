@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import ValidationError
 
-from nodes.tool.task_manager import TaskManagerNode, TaskManagerParams, TaskManagerToolInput
+from nodes.tool.task_manager import ASSIGN_TASK_EXAMPLE, TaskManagerNode, TaskManagerParams, TaskManagerToolInput
 from services.plugin import NodeContext
 
 
@@ -75,6 +75,23 @@ async def test_saved_settings_cannot_supply_missing_model_arguments(monkeypatch,
 
     assert result["error_type"] == "ValidationError"
     assert field in result["error"]
+    service.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_an_assignment_with_only_a_title_names_every_missing_field_and_shows_the_call(monkeypatch):
+    """A small model put the whole request into title and sent nothing else."""
+    service = AsyncMock()
+    monkeypatch.setattr("services.agent_team.get_agent_team_service", service)
+
+    result = await TaskManagerNode().execute_as_tool(
+        {"operation": "assign_task", "title": "Research the migration figures from trusted sources and cite them"},
+        {"label": "Task Manager"}, context(),
+    )
+
+    assert result["error_type"] == "ValidationError"
+    assert "requires nonblank mission, assignee_node_id or delegate_name" in result["error"]
+    assert ASSIGN_TASK_EXAMPLE in result["hint"]
     service.assert_not_called()
 
 

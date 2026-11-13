@@ -43,6 +43,14 @@ class TaskManagerParams(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+#: The call assign_task needs, in the tool description and in the hint a
+#: call without it gets back.
+ASSIGN_TASK_EXAMPLE = (
+    '{"operation":"assign_task","title":"Research","mission":"Find cited evidence",'
+    '"assignee_node_id":"<connected teammate node ID>"}'
+)
+
+
 class TaskManagerToolInput(TaskManagerParams):
     """Model arguments, validated separately from persisted node settings."""
 
@@ -58,11 +66,17 @@ class TaskManagerToolInput(TaskManagerParams):
     )
     title: Optional[str] = Field(
         default=None, max_length=500,
-        description="assign_task: required nonblank task title. modify_task: replacement title.",
+        description=(
+            "assign_task: required. A short name for the task, a few words; the instructions go in mission. "
+            "modify_task: replacement title."
+        ),
     )
     mission: Optional[str] = Field(
         default=None, max_length=10000,
-        description="submit_job/assign_task: required nonblank mission and expected result. modify_task: replacement mission.",
+        description=(
+            "submit_job/assign_task: required. The full instructions and the expected result. "
+            "modify_task: replacement mission."
+        ),
     )
     assignee_node_id: Optional[str] = Field(
         default=None,
@@ -99,12 +113,14 @@ class TaskManagerToolInput(TaskManagerParams):
             "reassign_task": ("task_id",),
         }
         missing = [name for name in required.get(self.operation, ()) if not (getattr(self, name) or "").strip()]
-        if missing:
-            raise ValueError(f"{self.operation} requires nonblank {', '.join(missing)}")
         if self.operation in {"assign_task", "reassign_task"} and not any(
             (value or "").strip() for value in (self.assignee_node_id, self.delegate_name)
         ):
-            raise ValueError(f"{self.operation} requires assignee_node_id or delegate_name")
+            missing.append("assignee_node_id or delegate_name")
+        # Every missing field in one message: one per call cost a small model
+        # a turn for each.
+        if missing:
+            raise ValueError(f"{self.operation} requires nonblank {', '.join(missing)}")
         if self.operation == "modify_task" and all(
             getattr(self, name) is None for name in ("title", "mission", "context", "acceptance_criteria")
         ):
@@ -135,11 +151,14 @@ class TaskManagerNode(ToolNode):
         "Manage the current lead execution's durable team tasks. Assign only connected "
         "teammates, inspect submitted work, then accept, retry, reassign, or cancel it. "
         "assign_task requires title, mission, and assignee_node_id or delegate_name. "
-        'Example: {"operation":"assign_task","title":"Research","mission":"Find cited evidence",'
-        '"assignee_node_id":"<connected teammate node ID>"}. '
+        f"Example: {ASSIGN_TASK_EXAMPLE}. "
         "Use list_tasks with include_history=true to consult prior executions. "
         "An employee's conversational contact uses submit_job with mission to admit substantive work "
         "for its configured team and receive a prompt acknowledgement; reviewed delivery follows separately."
+    )
+    tool_input_hint = (
+        "assign_task takes title, mission and assignee_node_id together in one call, for example "
+        f"{ASSIGN_TASK_EXAMPLE}. The title is only a short name; the instructions go in mission."
     )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
