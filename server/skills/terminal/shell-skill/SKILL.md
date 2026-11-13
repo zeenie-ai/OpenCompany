@@ -4,7 +4,7 @@ description: Execute short-lived shell commands inside the per-workflow workspac
 allowed-tools: "shell"
 metadata:
   author: opencompany
-  version: "4.1"
+  version: "4.2"
   category: execution
 
 ---
@@ -26,10 +26,20 @@ for filesystem work; they avoid runner-specific parsing.
 
 ## Runner-dependent syntax
 
-The node rejects space-delimited `&&` and `||` before selecting a runner, so
-those operators are unsupported even when the host shell would normally
-accept them. Prefer separate tool calls. If the environment is known to have
-Nushell, its equivalents include:
+Pipes, redirection, chaining with `;`, `&&` or `||`, quoting and backslash
+escapes all depend on the runner, so send one program with plain arguments per
+call and make separate calls for separate steps. Under Nushell, `&&` and `||`
+are parse errors (Nushell's message names `;` instead); under the host shell
+they behave as that shell defines them.
+
+Inline code such as `python -c "..."` works under every runner only as one
+line with no backslashes or double quotes inside: Nushell turns `\n` in a
+double-quoted string into a newline and rejects unknown escapes such as `\[`,
+and each shell escapes a double quote inside a double-quoted argument
+differently. Put longer code in a file with `file_modify` and run the file
+(`python script.py`).
+
+If the environment is known to have Nushell, its equivalents include:
 
 ```nu
 try { npm install } catch { print 'install failed'; exit 1 }
@@ -47,7 +57,7 @@ available on Windows.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| command | string | Yes | Command interpreted by Nushell when installed, otherwise by the host shell |
+| command | string | Yes | One program with plain arguments, such as `python script.py`; parsed by Nushell when installed, otherwise by the host shell |
 | timeout | int | No | Seconds (default 30, max 600) |
 
 ### Response
@@ -94,8 +104,7 @@ available on Windows.
 
 ### Short-circuit "and-then" when Nushell is active
 
-The node explicitly rejects the usual space-delimited `&&` form. With
-Nushell available, use:
+Nushell rejects `&&` and `||`. With Nushell available, use:
 
 ```nu
 # Short-circuit using try/catch
@@ -141,10 +150,8 @@ if $r.exit_code == 0 { ls -la } else { print $r.stderr }
 
 ## Guidelines
 
-1. **Never use `&&` or `||`.** The node pre-flight rejects their common
-   space-delimited forms before invoking either runner, and their behavior is
-   not portable even without surrounding spaces.
-2. **Prefer one simple command per call.** Chaining, variables, redirection, pipelines, and builtins depend on whether Nushell or the host shell was selected.
+1. **One program per call.** Chaining (`&&`, `||`, `;`), variables, redirection, pipelines, and builtins depend on whether Nushell or the host shell was selected; send separate calls for separate steps.
+2. **Keep inline code to one line.** No backslashes or double quotes inside it; put longer code in a file with `file_modify` and run the file.
 3. **Use dedicated filesystem tools.** `file_read`, `file_modify`, and `fs_search` are workspace-contained and avoid shell parsing differences.
 4. **Treat Nushell syntax as conditional.** The reference above applies only when `nu` is installed.
 5. **Short-lived only.** `shell_execute` *always* awaits completion — a small `timeout` does **not** make it run in the background, it just kills the command after N seconds. If the command runs longer than ~30s, opens a port, watches files, or is described as "dev server / watcher / daemon" (`npm run dev`, `vite`, `tsx watch`, `python -m http.server`, ...), use **`process_manager`** instead. Trying to "fire and forget" with `timeout=2` will kill the process the moment the port comes up.

@@ -47,13 +47,6 @@ async def build_workspace_tools(ai_service: Any, agent_node_id: str, connected: 
             raise RuntimeError(f"Workspace coding plugin {node_type!r} must provide exactly one tool")
         tool, config = built[0]
         wire = definition(tool)
-        if node_type == "shell":
-            wire["description"] += (
-                " Runs from the managed workflow workspace using Nushell when installed. "
-                "Use ';' for sequential commands and Nushell 'try { ... } catch { ... }'; "
-                "spaced && and || are rejected. Commands are limited by timeout; "
-                "this is host shell execution, not an operating-system sandbox."
-            )
         identifier = workspace_binding_id(agent_node_id, node_type)
         result.append({
             "name": tool.name, "definition": wire, "node_type": node_type,

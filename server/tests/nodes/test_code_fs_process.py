@@ -767,6 +767,25 @@ class TestShell:
         harness.assert_envelope(result, success=False)
         assert "backend blew up" in result["error"]
 
+    async def test_the_runner_parses_the_command_as_sent(self, harness):
+        # Whichever shell runs the command decides its syntax: Nushell reports
+        # `&&` itself, and the host shell runs it.
+        backend = MagicMock(name="WorkspaceBackend")
+        backend.execute = MagicMock(return_value=_FakeExecuteResult(output="", exit_code=0, truncated=False))
+
+        with _patch_fs_backend(backend):
+            result = await harness.execute("shell", {"command": "git status && git log -1"})
+
+        harness.assert_envelope(result, success=True)
+        backend.execute.assert_called_once_with("git status && git log -1", timeout=30)
+
+    def test_the_tool_description_names_the_runners_and_the_portable_form(self):
+        from nodes.filesystem.shell import ShellNode
+
+        description = ShellNode.tool_description
+        for fact in ("Nushell", "cmd.exe", "one program with plain arguments", "file_modify", "not in a sandbox"):
+            assert fact in description
+
 
 # ============================================================================
 # fsSearch

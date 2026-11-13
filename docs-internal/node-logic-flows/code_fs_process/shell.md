@@ -5,7 +5,7 @@
 | **Category** | code_fs_process / filesystem |
 | **Backend handler** | [`server/nodes/filesystem/shell/__init__.py::ShellNode.execute_op`](../../../server/nodes/filesystem/shell/__init__.py) (dispatched via `BaseNode.execute()` + `@Operation("execute")`) |
 | **Backend** | `WorkspaceBackend.execute` (with `NushellBackend` retained as a compatibility alias) in [`server/nodes/filesystem/_backend.py`](../../../server/nodes/filesystem/_backend.py) |
-| **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py) |
+| **Tests** | [`server/tests/nodes/test_code_fs_process.py`](../../../server/tests/nodes/test_code_fs_process.py), [`server/tests/nodes/test_coding_workspace_tools.py`](../../../server/tests/nodes/test_coding_workspace_tools.py) (the Coding Agent's automatic copy of the tool) |
 | **Skill (if any)** | [`server/skills/terminal/shell-skill/SKILL.md`](../../../server/skills/terminal/shell-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `shell_execute` |
 
@@ -23,9 +23,33 @@ long-running processes (dev servers, watchers), users are directed to
 `timeout`. Node metadata describes this as short-lived execution from the
 workflow workspace and marks the tool as open-world.
 
-A pre-flight regex (`_BASH_CHAIN_RE`) rejects bash chain operators (` && ` / ` || `)
-up-front with a corrective message before runner selection. They are therefore
-rejected even when the fallback host shell would otherwise support them.
+The tool description (`tool_description`) is the model's whole contract,
+because a model rarely loads the skill before its first command. It says
+which runners exist and gives the forms that work under all of them:
+
+- one program with plain arguments per call (no pipes, redirection or
+  chaining);
+- inline code (`python -c "..."`) only as one line with no backslashes or
+  double quotes inside, and longer code in a file written with `file_modify`;
+- file edits through `file_modify`, not `sed`.
+
+Every agent reads that description as it is: the Coding Agent's automatic
+workspace tool (`services/coding_workspace_tools.py`) adds nothing to it. The
+command reaches the runner unchanged, so its syntax errors are the runner's
+own (Nushell's message for `&&` names `;`).
+
+A 2026-11-13 run showed the cost of the old one-line description ("Execute a
+shell command"). Three of its 24 model steps sent commands written for bash,
+and Nushell rejected all three:
+
+- a multi-line `python -c` whose `\n` Nushell turned into a newline;
+- a multi-line `python -c` piped into `sort -u` (Nushell's `sort` has no
+  `-u`);
+- `sed -i` with `\[` (an invalid escape in Nushell), chained to the next
+  command with `;`.
+
+Each failed step re-sent the whole conversation: about 142,000 input tokens,
+an eighth of the run.
 
 Runs synchronously under `asyncio.to_thread()` so the event loop keeps
 servicing other requests while the command executes.
@@ -40,7 +64,7 @@ servicing other requests while the command executes.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `command` | string | (required, `min_length=1`) | yes | - | Nushell command when `nu` is installed; otherwise a host-shell command |
+| `command` | string | (required, `min_length=1`) | yes | - | One program with plain arguments, such as `python script.py`; parsed by Nushell when `nu` is installed, otherwise by the host shell |
 | `cwd` | string | `""` | no | - | Declared param, but `get_backend` resolves the working dir from `working_directory` (not exposed) / `ctx.workspace_dir`, so `cwd` does NOT change the backend root |
 | `timeout` | number | `30` (ge=1, le=600) | no | - | Max seconds |
 
@@ -70,9 +94,7 @@ The plugin's `ShellOutput` (server/nodes/filesystem/shell/__init__.py) declares 
 
 ```mermaid
 flowchart TD
-  A[execute_op] --> P{_BASH_CHAIN_RE matches<br/> && / || ?}
-  P -- yes --> Pe[raise NodeUserError:<br/>use ; or try{}catch{}]
-  P -- no --> C[get_backend workspace root<br/>WorkspaceBackend, inherited environment]
+  A[execute_op] --> C[get_backend workspace root<br/>WorkspaceBackend, inherited environment]
   C --> D[to_thread backend.execute command, timeout]
   D --> S[strip_ansi result.output]
   S --> I{exit_code?}
@@ -85,9 +107,7 @@ flowchart TD
 ## Decision Logic
 
 - **Validation**: empty `command` is rejected by Pydantic `min_length=1` (no
-  manual check). A ` && ` / ` || ` in the command -> `raise NodeUserError`
-  before runner selection, with a Nushell-oriented hint (`;` or
-  `try { … } catch { … }`).
+  manual check). Nothing else inspects the command: the runner parses it.
 - **Runner selection**: `_find_nu()` caches `shutil.which("nu")`. A match runs
   `[nu, "-n", "--no-history", "-c", command]`; otherwise
   `subprocess.run(command, shell=True, ...)` delegates syntax to the host
@@ -138,11 +158,10 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- **Conditional shell grammar**: space-delimited `&&` / `||` are
-  pre-flight-rejected.
-  Other variables, substitutions, redirection, pipelines, and builtins follow
-  Nushell grammar only when `nu` is installed; otherwise they follow the host
-  shell. See `shell-skill/SKILL.md`.
+- **Conditional shell grammar**: chaining, variables, substitutions,
+  redirection, pipelines, and builtins follow Nushell grammar only when `nu`
+  is installed; otherwise they follow the host shell. The tool description
+  steers the model to forms that work under both. See `shell-skill/SKILL.md`.
 - **Truncation corrupts JSON output**: if a command prints JSON and the
   backend truncates, the `stdout` string becomes invalid JSON because the
   backend appends its human-readable truncation marker; `truncated=true`

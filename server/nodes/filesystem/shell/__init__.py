@@ -1,27 +1,25 @@
-"""Shell — Wave 11.C migration."""
+"""Shell — Wave 11.C migration.
+
+The command runs with Nushell where ``nu`` is on PATH and otherwise with the
+host shell (``_backend.WorkspaceBackend.execute``), so its syntax differs
+between machines. The tool description says so and gives the forms that work
+under every runner: one program with plain arguments per call, inline code
+only as one line without backslashes or double quotes, longer code in a file,
+file edits through ``file_modify``.
+"""
 
 from __future__ import annotations
 
-import re
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.ansi import strip_ansi
-from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue
-
-
-# Bash chain-operators (` && ` / ` || `) are explicitly rejected by the
-# Nushell parser. Detect them up-front so the LLM gets a corrective
-# message ("use `;` or `try { … }`") instead of nu's
-# ``shell_andand`` / ``shell_oror`` parse error two layers down.
-# Surrounding spaces ensure we don't flag valid nu syntax accidentally
-# (closure params `|x|` never carry spaces around the pipe pair).
-_BASH_CHAIN_RE = re.compile(r"\s(\&\&|\|\|)\s")
+from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
 
 class ShellParams(BaseModel):
-    command: str = Field(..., min_length=1)
+    command: str = Field(..., min_length=1, description="One program with plain arguments, such as `python script.py`.")
     cwd: str = Field(default="")
     timeout: int = Field(default=30, ge=1, le=600)
 
@@ -43,7 +41,15 @@ class ShellNode(ActionNode):
     group = ("filesystem", "tool")
     description = "Execute short-lived shell commands from the workflow workspace"
     tool_name = "shell_execute"
-    tool_description = "Execute a shell command. Returns stdout, stderr, and exit code."
+    tool_description = (
+        "Run one program in the workflow workspace and return its output (stdout and stderr together) and exit_code. "
+        "Nushell parses the command where it is installed, otherwise the host shell does (cmd.exe on Windows, sh "
+        "elsewhere), so pipes, redirection, chaining, quoting and backslash escapes differ between machines. Send one "
+        "program with plain arguments per call, such as `python script.py` or `git status`, without pipes, redirection "
+        'or chaining. Inline code such as `python -c "..."` must be one line with no backslashes or double quotes '
+        "inside; put longer code in a file with file_modify and run the file. Change files with file_modify, not sed. "
+        "The program must finish within the timeout. It runs on this machine, not in a sandbox."
+    )
     component_kind = "square"
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
@@ -66,18 +72,6 @@ class ShellNode(ActionNode):
         from .._backend import get_backend
 
         log = get_logger(__name__)
-
-        # Pre-flight: catch the most common bash-style chain mistake before
-        # Nushell's parser does, so the LLM sees an actionable hint instead
-        # of ``nu::parser::shell_andand``. Documented in
-        # ``server/skills/terminal/shell-skill/SKILL.md``.
-        if m := _BASH_CHAIN_RE.search(params.command):
-            op = m.group(1)
-            replacement = "; (sequential)" if op == "&&" else "try { … } catch { … }"
-            raise NodeUserError(
-                f"Nushell does not support `{op}`. Use `{replacement}` instead. "
-                "See shell-skill: https://www.nushell.sh/book/control_flow.html"
-            )
 
         backend = get_backend(params.model_dump(), ctx.raw)
         # "non-blocking" here only meant the asyncio event loop isn't
