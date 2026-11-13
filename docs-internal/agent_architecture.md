@@ -499,6 +499,13 @@ agent path appends a skill listing to the system message; the Skill tool's
 catalogue replaced it. Treat the method as dead code — do not build new
 prompt features on it.
 
+The Skill tool's `skill_name` lists the connected names as its `enum`
+(`AIService._get_tool_schema`), so a model that follows the schema asks only
+for its own skills. Any other name is refused with `SKILL_NOT_CONNECTED`,
+whose message lists the connected skills. On Temporal, `agent.skill.invoke`
+returns a refused call as `{success: false, error, error_type}` instead of
+raising: the model reads the reason once, and the call is not retried.
+
 ### 7. allowed-tools
 
 - **Parsed** from SKILL.md frontmatter as a space-delimited list into `SkillMetadata.allowed_tools`

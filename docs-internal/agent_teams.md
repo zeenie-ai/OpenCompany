@@ -43,7 +43,11 @@ Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architect
    `delegate_to_*` tools that carry the long capability description are
    hidden from the lead's model (point 4), so a teammate labelled "Web
    Agent" holding TikHub would otherwise be indistinguishable from one
-   holding nothing. Locked by `tests/test_team_topology.py`.
+   holding nothing. Above the list, `TEAMMATE_ROSTER_NOTE` (both runtimes)
+   says those tools and skills are the teammate's, not the lead's: a small
+   model asked its own Skill tool for a teammate's skill by name. Skill
+   blurbs come from the skill loader's last scan (`get_available_skills()`),
+   not a rescan per teammate. Locked by `tests/test_team_topology.py`.
 2. Task Manager is intrinsically and non-removably bound to every team lead.
    It is not a palette node or an Agent Builder-addable tool.
 3. The lead delegates only by calling `task_manager` with
