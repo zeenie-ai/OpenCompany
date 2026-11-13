@@ -3923,6 +3923,7 @@
       ],
       "operations": [
         "balance",
+        "call",
         "describe",
         "search"
       ],

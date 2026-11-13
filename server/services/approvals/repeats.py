@@ -10,7 +10,7 @@ node type not listed, may already have happened (RFC-0006 §11.2).
 Not listed, so never repeated: sends, agents (a second run repeats every
 tool call), paid runs (Apify), shell commands and process starts, the CLI
 passthroughs (``custom``), Stripe commands, custom connectors and every
-``call`` passthrough (AWS, Dodo, TikHub), whose effect depends on the
+``call`` passthrough (AWS, Dodo, TikHub, treg), whose effect depends on the
 endpoint.
 
 The list lives here, not on the plugins: a plugin needs no edit for it, and a
