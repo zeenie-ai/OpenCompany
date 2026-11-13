@@ -1739,7 +1739,7 @@ class AIService:
                 task_manager_bound = any(info.get("node_type") == "taskManager" for info in effective_tool_data)
                 durable_delegates = [info for info in effective_tool_data if info.get("delegate_tool_name")]
                 if task_manager_bound and durable_delegates:
-                    from services.plugin.edge_walker import format_teammate_roster_line
+                    from services.plugin.edge_walker import TEAMMATE_ROSTER_NOTE, format_teammate_roster_line
 
                     teammate_lines = "\n".join(format_teammate_roster_line(info) for info in durable_delegates)
                     system_message += (
@@ -1751,6 +1751,7 @@ class AIService:
                         "directly. Review submitted tasks using list_tasks/get_task and accept, retry, "
                         "modify, reassign, or cancel them before the final report. For mutations, copy "
                         "task.id to task_id and task.revision to expected_revision.\n"
+                        f"{TEAMMATE_ROSTER_NOTE}\n"
                         f"Connected teammates:\n{teammate_lines}"
                     )
 
@@ -2676,11 +2677,24 @@ class AIService:
         if node_type == "_builtin_skill":
             from typing import Literal
 
+            # The schema lists the connected names, the only ones the runtime
+            # accepts, so a model that follows the schema cannot ask for a
+            # skill it has not got. Validation stays a plain string: an
+            # unknown name gets the runtime's refusal, which lists them too.
+            connected = [
+                str(item["skill_name"])
+                for item in params.get("skill_descriptors") or []
+                if item.get("skill_name")
+            ]
+
             class SkillInvocationSchema(BaseModel):
                 action: Literal["load", "read_resource", "search_resource"] = Field(
                     default="load", description="Load instructions, read a bounded resource page, or search a resource."
                 )
-                skill_name: str = Field(description="Exact connected skill name from Available Skills.")
+                skill_name: str = Field(
+                    description="Name of one of the connected skills listed in this tool's description.",
+                    json_schema_extra={"enum": connected} if connected else None,
+                )
                 path: Optional[str] = Field(default=None, description="Declared references/<file> or scripts/<file> path.")
                 query: Optional[str] = Field(default=None, description="Case-insensitive search query for search_resource.")
                 cursor: int = Field(default=0, ge=0, description="Pagination cursor.")

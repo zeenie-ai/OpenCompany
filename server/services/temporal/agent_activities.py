@@ -1673,7 +1673,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             raise ApplicationError("Invalid Coding Agent tool mode", type="CodingToolModeInvalid", non_retryable=True)
 
     if any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
-        from services.plugin.edge_walker import format_teammate_roster_line
+        from services.plugin.edge_walker import TEAMMATE_ROSTER_NOTE, format_teammate_roster_line
 
         delegates = "\n".join(
             format_teammate_roster_line({**(tool.get("tool_info") or {}), "node_type": tool["node_type"]})
@@ -1695,6 +1695,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             "For mutations, copy task.id into task_id and task.revision into expected_revision. "
             "After a single child submits work, accept_task may omit them only when that submitted "
             "task is unambiguous.\n"
+            f"{TEAMMATE_ROSTER_NOTE}\n"
             f"Connected teammates (assignee_node_id: label/type):\n{delegates}"
         )
 

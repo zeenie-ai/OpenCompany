@@ -133,6 +133,22 @@ async def test_a_skill_offered_twice_fails_the_run_once_without_retries(prepare_
     assert exc.value.non_retryable is True
 
 
+async def test_the_skill_tool_offers_only_the_leads_own_skills(prepare_lead):
+    payload = await prepare_lead(None, skills=[_skill("todo-skill"), _skill("memory-skill")])
+
+    skill_tool = next(tool for tool in payload["tools"] if tool["node_type"] == "_builtin_skill")
+    skill_name = skill_tool["definition"]["parameters"]["properties"]["skill_name"]
+    assert skill_name["enum"] == ["todo-skill", "memory-skill"]
+
+
+async def test_the_lead_is_told_its_teammates_skills_are_not_its_own(prepare_lead):
+    from services.plugin.edge_walker import TEAMMATE_ROSTER_NOTE
+
+    payload = await prepare_lead(None)
+
+    assert f"{TEAMMATE_ROSTER_NOTE}\nConnected teammates" in payload["system_message"]
+
+
 async def test_with_the_switch_off_the_delegate_lists_no_show_ui(lead_delegate):
     delegate = await lead_delegate(None)
 
