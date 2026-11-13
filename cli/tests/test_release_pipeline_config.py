@@ -433,19 +433,29 @@ def test_backend_tests_run_on_every_os_with_the_pinned_temporal_cli(predeploy_ym
     of them skips. Two replay tests run workflow code from older commits
     with ``git show``, so the checkout carries full history.
 
-    Each OS runs the suite as two jobs side by side: ``tests/temporal`` and
-    the rest. The rest is the suite with that folder left out, so every test
-    is in one of the two jobs. Both install the CLI, so a real-server test
-    added outside ``tests/temporal`` still runs.
+    Linux and Windows run the suite as two jobs side by side:
+    ``tests/temporal`` and the rest. The rest is the suite with that folder
+    left out, so every test is in one of the two jobs. Both install the CLI,
+    so a real-server test added outside ``tests/temporal`` still runs.
+
+    macOS runs the whole suite as one job, because a third macOS job waiting
+    at the same time (with Build + start's) was cancelled when GitHub's
+    macOS arm64 runners were short of capacity. Every job that runs
+    ``tests/temporal`` runs the replay gate and builds the Pi host.
     """
     job = predeploy_yml["jobs"]["backend-tests"]
     assert job["runs-on"] == "${{ matrix.os }}"
     assert job["strategy"]["fail-fast"] is False
     matrix = job["strategy"]["matrix"]
-    assert set(matrix["os"]) == {"ubuntu-latest", "windows-latest", "macos-latest"}
+    assert set(matrix["os"]) == {"ubuntu-latest", "windows-latest"}
     assert set(matrix["shard"]) == {"temporal", "rest"}
-    targets = {leg["shard"]: leg["tests"] for leg in matrix["include"]}
+    targets = {leg["shard"]: leg["tests"] for leg in matrix["include"] if "os" not in leg}
     assert targets == {"temporal": "tests/temporal", "rest": "tests --ignore=tests/temporal"}
+    macos = [leg for leg in matrix["include"] if "os" in leg]
+    assert macos == [{"os": "macos-latest", "shard": "all", "tests": "tests"}]
+    for name in ("N-1 Temporal replay and identity gate", "Pi host bundle"):
+        step = _step_by_name(job, name)
+        assert step is not None and step["if"] == "matrix.shard != 'rest'", name
     checkout = job["steps"][0]
     assert checkout["uses"].startswith("actions/checkout@")
     assert checkout["with"]["fetch-depth"] == 0

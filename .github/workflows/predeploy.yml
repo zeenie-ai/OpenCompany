@@ -1,7 +1,8 @@
 # Reusable validation workflow. Called by ci.yml, release.yml and
 # desktop-release.yml.
 # Jobs: build-and-lint (client build, lint, tests, JS dependency audit),
-# backend-tests (cross-OS, two jobs per OS, with the pinned Temporal CLI),
+# backend-tests (cross-OS, two jobs on Linux and Windows and one on macOS,
+# with the pinned Temporal CLI),
 # cli-tests, test-build-start (cross-OS build + start smoke test).
 
 name: Predeploy
@@ -59,10 +60,17 @@ jobs:
 
   # The whole server suite runs on every OS the desktop app ships for, with
   # the Temporal CLI the app pins, so the real-server tests (TEMPORAL_TEST_CLI)
-  # run instead of skipping. A run lasts as long as its slowest job, so each
-  # OS runs the suite as two jobs side by side: tests/temporal, and everything
-  # else. The second is the suite with the first left out, so a new test
-  # folder is always in one of them.
+  # run instead of skipping. A run lasts as long as its slowest job, so Linux
+  # and Windows run the suite as two jobs side by side: tests/temporal, and
+  # everything else. The second is the suite with the first left out, so a
+  # new test folder is always in one of them.
+  #
+  # macOS runs the whole suite in one job. GitHub's macOS arm64 runners are
+  # at times short of capacity: a job then gets a runner only every five
+  # minutes, and one still waiting after 15 minutes is cancelled ("not
+  # acquired by Runner of type hosted even after multiple attempts"). With
+  # two macOS jobs here and Build + start's, the third was cancelled on
+  # 2026-11-11 and 2026-11-13; two waiting jobs both got runners each time.
   backend-tests:
     name: Backend tests (${{ matrix.os }}, ${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
@@ -72,13 +80,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         shard: [temporal, rest]
         include:
           - shard: temporal
             tests: tests/temporal
           - shard: rest
             tests: tests --ignore=tests/temporal
+          - os: macos-latest
+            shard: all
+            tests: tests
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,7 +97,7 @@ jobs:
           # Replay tests run workflow code from older commits (git show).
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      # The lock check and the audit read no test, so one of the six jobs
+      # The lock check and the audit read no test, so one of the five jobs
       # runs them.
       - name: Lockfile is current
         if: runner.os == 'Linux' && matrix.shard == 'rest'
@@ -110,8 +121,9 @@ jobs:
         run: |
           uv sync
           uv run python -c "import asyncio, os; from services.temporal._install import ensure_temporal_binaries; cli = asyncio.run(ensure_temporal_binaries())['temporal']; open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8').write(f'TEMPORAL_TEST_CLI={cli}\n')"
+      # Every job that runs tests/temporal (temporal, and macOS's all).
       - name: N-1 Temporal replay and identity gate
-        if: matrix.shard == 'temporal'
+        if: matrix.shard != 'rest'
         working-directory: server
         shell: bash
         run: |
@@ -119,7 +131,7 @@ jobs:
           uv run pytest tests/temporal/test_replay_corpus.py tests/temporal/test_workflow_identity_golden.py tests/temporal/test_run_graph_replay.py -v -p no:cacheprovider
       # Only tests/temporal starts the Pi host.
       - name: Pi host bundle
-        if: matrix.shard == 'temporal'
+        if: matrix.shard != 'rest'
         working-directory: server
         shell: bash
         run: |
