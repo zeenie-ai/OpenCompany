@@ -97,7 +97,11 @@ def _resolve(config: Dict[str, Any], name: str) -> Dict[str, Any]:
     validate_connected_skills(descriptors)
     matches = [item for item in descriptors if item.get("skill_name") == name]
     if len(matches) != 1:
-        raise SkillRuntimeError("SKILL_NOT_CONNECTED", f"Skill {name!r} is not enabled and connected to this agent")
+        connected = ", ".join(str(item["skill_name"]) for item in descriptors if item.get("skill_name")) or "none"
+        raise SkillRuntimeError(
+            "SKILL_NOT_CONNECTED",
+            f"Skill {name!r} is not enabled and connected to this agent. Connected skills: {connected}.",
+        )
     return matches[0]
 
 

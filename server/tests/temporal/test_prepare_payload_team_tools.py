@@ -55,8 +55,9 @@ class _Database:
 
 
 @pytest.fixture
-def lead_delegate(monkeypatch):
-    """The lead's delegate entry for Helper, with the switch as ``settings`` has it."""
+def prepare_lead(monkeypatch):
+    """The lead's prepared payload, with the switch as ``settings`` has it and
+    ``skills`` as the lead's own connected skills."""
     from services.ai import AIService
 
     monkeypatch.setattr(
@@ -66,18 +67,17 @@ def lead_delegate(monkeypatch):
     monkeypatch.setattr("services.llm.config.is_model_valid_for_provider", lambda *_a: True)
     monkeypatch.setattr("services.llm.config.resolve_max_tokens", lambda *_a: 1_000)
     monkeypatch.setattr("services.llm.config.resolve_temperature", lambda *_a: 0.2)
-
-    async def lead_connections(*_args, **_kwargs):
-        # The lead holds no tools of its own; its teammate comes from the
-        # real collect_teammate_connections.
-        return None, [], [], {}, None
-
-    monkeypatch.setattr("services.plugin.edge_walker.collect_agent_connections", lead_connections)
     monkeypatch.setattr("services.compaction.get_compaction_service", lambda: None)
     monkeypatch.setattr("services.agent_context.load_conversation", AsyncMock(return_value=[]))
     monkeypatch.setattr("services.employees.permissions.assert_runtime_access", AsyncMock())
 
-    async def run(settings):
+    async def run(settings, skills=()):
+        async def lead_connections(*_args, **_kwargs):
+            # The lead holds no tools of its own; its teammate comes from the
+            # real collect_teammate_connections.
+            return None, list(skills), [], {}, None
+
+        monkeypatch.setattr("services.plugin.edge_walker.collect_agent_connections", lead_connections)
         database = _Database(settings)
         ai = AIService.__new__(AIService)
         ai.database = database
@@ -91,14 +91,46 @@ def lead_delegate(monkeypatch):
                 workflow_service=lambda: SimpleNamespace(_param_resolver=resolver),
             ),
         )
-        payload = await prepare_agent_payload(
+        return await prepare_agent_payload(
             {"node_id": "lead", "node_type": "orchestrator_agent", "workflow_id": "wf", "session_id": "wf", "nodes": NODES, "edges": EDGES}
         )
+
+    return run
+
+
+@pytest.fixture
+def lead_delegate(prepare_lead):
+    """The lead's delegate entry for Helper, with the switch as ``settings`` has it."""
+
+    async def run(settings):
+        payload = await prepare_lead(settings)
         delegates = [tool for tool in payload["tools"] if tool["name"].startswith("delegate_to_")]
         assert len(delegates) == 1, [tool["name"] for tool in payload["tools"]]
         return delegates[0]
 
     return run
+
+
+def _skill(name, master="master-1"):
+    return {
+        "node_id": f"{master}_{name}",
+        "master_skill_node_id": master,
+        "node_type": "masterSkill",
+        "skill_name": name,
+        "description": f"What {name} does",
+        "label": name,
+        "parameters": {"instructions": f"{name} body"},
+    }
+
+
+async def test_a_skill_offered_twice_fails_the_run_once_without_retries(prepare_lead):
+    from temporalio.exceptions import ApplicationError
+
+    with pytest.raises(ApplicationError) as exc:
+        await prepare_lead(None, skills=[_skill("todo-skill"), _skill("todo-skill", master="master-2")])
+
+    assert exc.value.type == "DUPLICATE_CONNECTED_SKILL_NAME"
+    assert exc.value.non_retryable is True
 
 
 async def test_with_the_switch_off_the_delegate_lists_no_show_ui(lead_delegate):

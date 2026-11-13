@@ -273,3 +273,31 @@ async def test_resource_requires_successful_load(monkeypatch):
     with pytest.raises(SkillRuntimeError) as exc:
         await execute_skill_tool({"action": "read_resource", "skill_name": "todo-skill", "path": "references/guide.md"}, config)
     assert exc.value.code == "SKILL_NOT_LOADED"
+
+
+@pytest.mark.asyncio
+async def test_an_unconnected_skill_is_refused_with_the_connected_names():
+    config = {"parameters": {"skill_descriptors": [_descriptor()]}, "workflow_id": "1",
+              "execution_id": "e", "parent_node_id": "agent-1"}
+    with pytest.raises(SkillRuntimeError) as exc:
+        await execute_skill_tool({"skill_name": "duckduckgo-search-skill"}, config)
+    assert exc.value.code == "SKILL_NOT_CONNECTED"
+    assert "Connected skills: todo-skill." in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_the_temporal_skill_activity_returns_a_refusal_instead_of_raising():
+    """A refused call cannot succeed on a retry, so the activity returns the
+    reason for the model to read instead of raising for Temporal to retry."""
+    from temporalio.testing import ActivityEnvironment
+
+    from services.temporal.agent_activities import invoke_agent_skill
+
+    result = await ActivityEnvironment().run(invoke_agent_skill, {
+        "node_data": {"skill_name": "duckduckgo-search-skill", "skill_descriptors": [_descriptor()]},
+        "workflow_id": "1", "execution_id": "e", "parent_node_id": "agent-1", "tool_call_id": "call-1",
+    })
+
+    assert result["success"] is False
+    assert result["error_type"] == "SKILL_NOT_CONNECTED"
+    assert "Connected skills: todo-skill." in result["error"]

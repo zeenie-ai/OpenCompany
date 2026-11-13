@@ -1598,10 +1598,15 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # blew up Gemini's ``convert_to_genai_function_declarations``
     # (``properties.<field> Input should be a valid dictionary or object``).
     tools_payload: List[Dict[str, Any]] = []
-    from services.skill_runtime import skill_tool_info
+    from services.skill_runtime import SkillRuntimeError, skill_tool_info
 
     effective_tool_data = _without_web_tools(chat_options, list(tool_data or []))
-    progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
+    try:
+        progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
+    except SkillRuntimeError as exc:
+        # Two Master Skills offer the same skill name: a wiring error that
+        # no retry can fix, so the run fails once and says why.
+        raise ApplicationError(str(exc), type=exc.code, non_retryable=True) from exc
     if progressive_skill_tool:
         effective_tool_data.append(progressive_skill_tool)
     for tool_info in unique_node_bindings(effective_tool_data):
@@ -2043,8 +2048,15 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 @activity.defn(name="agent.skill.invoke")
 async def invoke_agent_skill(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Retry-safe, history-recorded progressive skill invocation."""
-    from services.skill_runtime import execute_skill_tool
+    """Retry-safe, history-recorded progressive skill invocation.
+
+    A refused call (a skill that is not connected, a resource read before the
+    load, an unknown action) comes back as a failed result carrying the
+    reason, the way a plugin tool's ``NodeUserError`` does: the model reads
+    the reason and corrects its call, and Temporal does not retry a call that
+    cannot succeed.
+    """
+    from services.skill_runtime import SkillRuntimeError, execute_skill_tool
 
     node_data = dict(payload.get("node_data") or {})
     descriptors = node_data.pop("skill_descriptors", [])
@@ -2053,22 +2065,26 @@ async def invoke_agent_skill(payload: Dict[str, Any]) -> Dict[str, Any]:
         for key in ("action", "skill_name", "path", "query", "cursor", "limit")
         if key in node_data
     }
-    return await execute_skill_tool(
-        action_args,
-        {
-            "parameters": {"skill_descriptors": descriptors, "agent_node_id": payload.get("parent_node_id")},
-            "workflow_id": payload.get("workflow_id"),
-            "execution_id": payload.get("execution_id"),
-            "root_execution_id": payload.get("root_execution_id"),
-            "parent_node_id": payload.get("parent_node_id"),
-            # New histories carry the provider call id. The Temporal activity
-            # id is a stable fallback for pre-marker histories and remains
-            # identical across activity retries.
-            "tool_call_id": payload.get("tool_call_id") or activity.info().activity_id,
-            "provider": payload.get("provider"),
-            "skill_invocation_source": "temporal",
-        },
-    )
+    try:
+        return await execute_skill_tool(
+            action_args,
+            {
+                "parameters": {"skill_descriptors": descriptors, "agent_node_id": payload.get("parent_node_id")},
+                "workflow_id": payload.get("workflow_id"),
+                "execution_id": payload.get("execution_id"),
+                "root_execution_id": payload.get("root_execution_id"),
+                "parent_node_id": payload.get("parent_node_id"),
+                # New histories carry the provider call id. The Temporal activity
+                # id is a stable fallback for pre-marker histories and remains
+                # identical across activity retries.
+                "tool_call_id": payload.get("tool_call_id") or activity.info().activity_id,
+                "provider": payload.get("provider"),
+                "skill_invocation_source": "temporal",
+            },
+        )
+    except SkillRuntimeError as exc:
+        logger.warning("Skill call refused (%s): %s", exc.code, exc)
+        return {"success": False, "error": str(exc), "error_type": exc.code}
 
 
 @activity.defn(name="agent.skill.clear")
