@@ -208,4 +208,33 @@ describe('TopToolbar credential responses during a workflow run', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
   });
+
+  it('closes the model menu without a pick, on Escape or a press anywhere, the canvas included', async () => {
+    mocks.sendRequest.mockResolvedValue({
+      providers: [{ provider: 'openai', display_name: 'OpenAI', models: ['gpt-4.1'], offered: ['gpt-4.1'] }],
+      global_provider: 'openai',
+      global_model: 'gpt-4.1',
+    });
+    const user = userEvent.setup();
+    render(<TopToolbar {...toolbarProps()} />);
+    const button = await screen.findByRole('button', { name: 'Set Global Model gpt-4.1' });
+
+    await user.click(button);
+    await screen.findByRole('dialog', { name: 'Choose the global model' });
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    // The canvas stops a press's mousedown (React Flow pans on it), and a
+    // popover the press never reached stays open. The menu is modal: while
+    // it shows, nothing on the page takes a pointer event, so a press on
+    // the canvas, the toolbar or the menu's own button lands on the page
+    // itself and closes it.
+    await user.click(button);
+    await screen.findByRole('dialog', { name: 'Choose the global model' });
+    expect(document.body.style.pointerEvents).toBe('none');
+    await user.click(document.documentElement);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(document.body.style.pointerEvents).toBe('');
+    expect(mocks.sendRequest).not.toHaveBeenCalledWith('save_global_model', expect.anything());
+  });
 });

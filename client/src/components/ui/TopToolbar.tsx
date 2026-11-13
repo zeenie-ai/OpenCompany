@@ -305,7 +305,12 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
           <span id={modelLabelId} className="text-sm font-semibold whitespace-nowrap text-fg-muted">
             Set Global Model
           </span>
-          <Popover open={modelMenuOpen} onOpenChange={setModelMenuOpen}>
+          {/* Modal, like the File menu: Radix closes a popover on a press
+              outside only when the press's mousedown reaches the page, and
+              the canvas stops it (React Flow pans on it), so a click on the
+              canvas left the menu open. Modal, the rest of the page takes no
+              pointer events while the menu shows, and any press closes it. */}
+          <Popover modal open={modelMenuOpen} onOpenChange={setModelMenuOpen}>
             <PopoverTrigger asChild>
               <Button
                 id={modelButtonId}
