@@ -300,6 +300,7 @@ that a retired node remains registered.
 - [Browser Harness (`browserHarness`) — retired](./web_automation/browserHarness.md)
 - [Crawlee Scraper (`crawleeScraper`)](./web_automation/crawleeScraper.md)
 - [TikHub (`tikhubAction`)](./web_automation/tikhubAction.md)
+- [treg (`tregAction`)](./web_automation/tregAction.md)
 
 ### whatsapp
 

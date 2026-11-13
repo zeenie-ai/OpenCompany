@@ -1,6 +1,6 @@
 {
   "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
-  "count": 157,
+  "count": 158,
   "nodes": [
     {
       "type": "agentBuilder",
@@ -3897,6 +3897,37 @@
       ],
       "source": "server/nodes/agent/travel_agent/__init__.py",
       "card": "docs-internal/node-logic-flows/specialized_agents/travel_agent.md"
+    },
+    {
+      "type": "tregAction",
+      "name": "treg",
+      "family": "api",
+      "groups": [
+        "api",
+        "tool"
+      ],
+      "plugin_bases": [
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "rest-api",
+      "credentials": [
+        "treg"
+      ],
+      "operations": [
+        "balance",
+        "describe",
+        "search"
+      ],
+      "source": "server/nodes/treg/treg_action.py",
+      "card": "docs-internal/node-logic-flows/web_automation/tregAction.md"
     },
     {
       "type": "twitterReceive",

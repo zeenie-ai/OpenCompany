@@ -19,7 +19,8 @@ from services.ws_handler_registry import register_ws_handlers
 
 from ._credentials import TregCredential
 from ._handlers import WS_HANDLERS
+from .treg_action import TregActionNode
 
 register_ws_handlers(WS_HANDLERS)
 
-__all__ = ["TregCredential", "WS_HANDLERS"]
+__all__ = ["TregActionNode", "TregCredential", "WS_HANDLERS"]

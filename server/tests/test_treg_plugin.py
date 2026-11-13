@@ -23,6 +23,7 @@ import json
 import shlex
 import subprocess
 import sys
+import typing
 import webbrowser
 from pathlib import Path
 
@@ -31,8 +32,10 @@ import pytest
 import nodes.treg._handlers as treg_handlers
 import nodes.treg._install as treg_install
 import nodes.treg._service as treg_service
+import nodes.treg.treg_action as treg_action_mod
 from nodes.treg import WS_HANDLERS
 from nodes.treg._credentials import TregCredential
+from nodes.treg.treg_action import TregActionNode, TregActionParams
 from services.plugin.base import NodeUserError
 
 PLUGIN_DIR = Path(treg_service.__file__).parent
@@ -572,6 +575,220 @@ def test_ws_handlers_and_shutdown_hook_are_registered():
     assert set(WS_HANDLERS) == {"treg_login", "treg_status", "treg_logout"}
     assert set(WS_HANDLERS) <= set(get_ws_handlers())
     assert "treg_login" in registered_labels()
+
+
+# --- the node: registration ----------------------------------------------------
+
+
+def test_node_class_attributes():
+    from services.node_registry import get_node_class
+
+    cls = get_node_class("tregAction")
+    assert cls is TregActionNode
+    assert cls.tool_name == "treg_action"
+    assert tuple(cls.group) == ("api", "tool")
+    assert cls.usable_as_tool is True
+    assert TregCredential in tuple(cls.credentials)
+    # usable_as_tool hides both main handles unless the class keeps them.
+    assert cls.__dict__["hide_input_handle"] is False
+    assert cls.__dict__["hide_output_handle"] is False
+
+
+def test_operations_match_the_literal_and_default_to_a_free_read():
+    operations = set(typing.get_args(TregActionParams.model_fields["operation"].annotation))
+    assert operations == set(TregActionNode._operations)
+    assert TregActionParams().operation == "search"
+
+
+def test_tool_schema_is_flat():
+    from services.plugin.tool import inline_schema_refs
+
+    dumped = json.dumps(inline_schema_refs(TregActionParams.model_json_schema()))
+    assert "$defs" not in dumped and '"$ref"' not in dumped
+    # ParameterRenderer keys magic on these literal names.
+    assert not {"model", "api_key", "parameters", "action"} & set(TregActionParams.model_fields)
+
+
+def test_panel_blanks_fall_back_to_defaults():
+    assert TregActionParams(limit="").limit == 10
+
+
+# --- the node: operations ------------------------------------------------------
+
+
+SEARCH_ANSWER = {
+    "query": "google results",
+    "count": 2,
+    "total": 14,
+    "engine": "agent",
+    "verdict": "strong",
+    "reason": "Serper returns Google results.",
+    "results": [
+        {
+            "id": "serper.web.search",
+            "provider": "serper",
+            "provider_display": "Serper",
+            "name": "Google web search",
+            "summary": "Google organic results for a query.",
+            "kind": "data",
+            "cost": {"type": "per_call", "usd": 0.001, "source": "serper.dev", "checked": "2026-10-01"},
+            "async": None,
+            "observed": {"samples": 900},
+        },
+        {
+            "id": "treg.google.serp.organic",
+            "provider": "treg",
+            "name": "Google organic results",
+            "kind": "routed",
+            "cost": {"varies": True},
+            "async": None,
+        },
+    ],
+}
+
+GET_ANSWER = {
+    "endpoint": {
+        "id": "serper.web.search",
+        "provider": "serper",
+        "provider_display": "Serper",
+        "name": "Google web search",
+        "summary": "Google organic results for a query.",
+        "method": "POST",
+        "cost": {"type": "per_call", "usd": 0.001},
+        "async": None,
+        "docs_url": "https://serper.dev",
+        "input": {
+            "queryParams": {"gl": {"type": "string", "required": False, "example": "us"}},
+            "body": {"properties": {"q": {"type": "string", "required": True, "example": "coffee"}}},
+            "note": "One query per call.",
+        },
+        "test_request": {"body": {"q": "coffee"}},
+    },
+    "example_response": {"organic": [{"title": "a"}, {"title": "b"}, {"title": "c"}]},
+    "call_template": "treg call serper.web.search --method POST --data '{\"q\":\"coffee\"}'",
+}
+
+
+@pytest.fixture
+def node_cli(monkeypatch, tmp_path):
+    """The node runs a fake installed CLI; returns ``set_replies``."""
+    cli = tmp_path / "treg.exe"
+    monkeypatch.setattr(treg_action_mod, "get_installer", lambda: _Installer(cli))
+    state = {}
+
+    def set_replies(*replies):
+        calls, fake = _recorder(*replies)
+
+        async def run(binary, argv, *, timeout, body=None):
+            return await fake(binary=binary, argv=argv, timeout=timeout, body=body)
+
+        monkeypatch.setattr(treg_action_mod, "run_treg", run)
+        state["calls"] = calls
+        return calls
+
+    return set_replies
+
+
+def _node_ctx(tmp_path):
+    from services.plugin import NodeContext
+
+    return NodeContext(node_id="treg1", node_type="tregAction", workspace_dir=str(tmp_path))
+
+
+async def test_search_runs_the_catalog_search_and_trims_the_rows(node_cli, tmp_path):
+    calls = node_cli(_ok(SEARCH_ANSWER))
+    out = await TregActionNode().search(_node_ctx(tmp_path), TregActionParams(query=" google results ", limit=5))
+
+    assert calls[0]["argv"] == ["catalog", "search", "google results", "--limit=5"]
+    assert out["query"] == "google results" and out["count"] == 2 and out["total"] == 14
+    assert out["verdict"] == "strong"
+    assert out["tools"][0] == {
+        "id": "serper.web.search",
+        "name": "Google web search",
+        "summary": "Google organic results for a query.",
+        "provider": "Serper",
+        "price": {"type": "per_call", "usd": 0.001},
+    }
+    assert out["tools"][1]["routed"] is True and out["tools"][1]["price"] == {"varies": True}
+
+
+@pytest.mark.parametrize("query", ["", "   ", "--org=other-team"])
+async def test_search_refuses_an_empty_or_dashed_query_before_running_the_cli(node_cli, tmp_path, query):
+    calls = node_cli(_ok(SEARCH_ANSWER))
+    with pytest.raises(NodeUserError):
+        await TregActionNode().search(_node_ctx(tmp_path), TregActionParams(query=query))
+    assert calls == []
+
+
+async def test_describe_lists_parameters_with_where_each_goes(node_cli, tmp_path):
+    calls = node_cli(_ok(GET_ANSWER))
+    out = await TregActionNode().describe(_node_ctx(tmp_path), TregActionParams(operation="describe", tool_id="serper.web.search"))
+
+    assert calls[0]["argv"] == ["catalog", "get", "serper.web.search"]
+    assert out["method"] == "POST"
+    assert out["price"] == {"type": "per_call", "usd": 0.001}
+    assert out["parameters"] == [
+        {"name": "gl", "in": "query", "type": "string", "required": False, "example": "us"},
+        {"name": "q", "in": "body", "type": "string", "required": True, "example": "coffee"},
+    ]
+    assert out["parameters_note"] == "One query per call."
+    assert out["example_request"] == {"body": {"q": "coffee"}}
+    # The example answer is previewed: the first element of each list.
+    assert out["example_response"] == {"organic": [{"title": "a"}, "... 2 more"]}
+
+
+async def test_describe_of_a_job_returns_treg_s_providers(node_cli, tmp_path):
+    job = {"job": "google.serp.organic", "does": "Google organic results", "providers": 6}
+    node_cli(_ok(job))
+    out = await TregActionNode().describe(_node_ctx(tmp_path), TregActionParams(operation="describe", tool_id="google.serp.organic"))
+    assert out["job"] == job
+
+
+@pytest.mark.parametrize("tool_id", ["", "../auth/me", "a/b", "x?y=1", "-h", "https://api.example.com/v1"])
+async def test_describe_refuses_what_is_not_a_tool_id(node_cli, tmp_path, tool_id):
+    calls = node_cli(_ok(GET_ANSWER))
+    with pytest.raises(NodeUserError):
+        await TregActionNode().describe(_node_ctx(tmp_path), TregActionParams(operation="describe", tool_id=tool_id))
+    assert calls == []
+
+
+async def test_an_unknown_tool_is_reported_in_treg_s_words(node_cli, tmp_path):
+    body = {"detail": {"error": "unknown endpoint", "hint": "search first", "did_you_mean": ["serper.web.search"]}}
+    node_cli(_failed(stdout=json.dumps(body), stderr=""))
+    with pytest.raises(NodeUserError) as raised:
+        await TregActionNode().describe(_node_ctx(tmp_path), TregActionParams(operation="describe", tool_id="serper.web.serch"))
+    assert "unknown endpoint" in str(raised.value)
+    assert "serper.web.search" in str(raised.value)
+
+
+async def test_balance_reads_micro_usd_and_holds(node_cli, tmp_path):
+    answer = {
+        "org_id": 7,
+        "balance_micro": 933920,
+        "balance_usd": "0.93",
+        "holds": [{"call_id": "c1", "endpoint_id": "piapi.video.generate", "amount_micro": 250000}],
+        "entries": {"items": []},
+    }
+    calls = node_cli(_ok(answer))
+    out = await TregActionNode().balance(_node_ctx(tmp_path), TregActionParams(operation="balance"))
+    assert calls[0]["argv"] == ["balance", "--limit=1"]
+    assert out["balance_usd"] == 0.93392
+    assert out["holds"] == [{"tool_id": "piapi.video.generate", "reserved_usd": 0.25, "call_id": "c1"}]
+
+
+async def test_balance_without_a_sign_in_points_at_credentials(node_cli, tmp_path):
+    node_cli(_failed(stderr="treg: not signed in, or this token is invalid/expired.\n  Sign in:  treg login"))
+    with pytest.raises(NodeUserError) as raised:
+        await TregActionNode().balance(_node_ctx(tmp_path), TregActionParams(operation="balance"))
+    assert "Sign in" in str(raised.value)
+    assert "Credentials" in raised.value.hint
+
+
+async def test_execute_dispatches_and_returns_the_envelope(node_cli, tmp_path):
+    node_cli(_ok(SEARCH_ANSWER))
+    result = await TregActionNode().execute("treg1", {"operation": "search", "query": "google results"}, _node_ctx(tmp_path))
+    assert result["success"] is True
+    assert result["result"]["tools"][0]["id"] == "serper.web.search"
 
 
 # --- credential, catalogue card, icon -----------------------------------------

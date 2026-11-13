@@ -1,6 +1,6 @@
 # Registered-node capability index
 
-Source-backed declaration snapshot: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. **157 registered types**.
+Source-backed declaration snapshot: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. **158 registered types**.
 
 Companion to views 06 and 07. Rows describe declarations, not successful provider/device execution.
 Agent-tool eligibility comes from `iter_tool_node_classes`; direct Workspace tasks require the explicit
@@ -60,11 +60,12 @@ Regenerate with the backend Python environment: `python scripts/architecture_dia
 | [`systemInfo`](../../../docs-internal/node-logic-flows/android/systemInfo.md) · [source](../../../server/nodes/android/system_info/__init__.py) | registered | AndroidServiceBase | eligible | — | renderer-dependent | `android` |
 | [`wifiAutomation`](../../../docs-internal/node-logic-flows/android/wifiAutomation.md) · [source](../../../server/nodes/android/wifi_automation/__init__.py) | registered | AndroidServiceBase | eligible | — | renderer-dependent | `android` |
 
-## api (1)
+## api (2)
 
 | Node / evidence | Status | Plugin base | Agent tool | Workspace task | Canvas hint | Queue |
 |---|---|---|---|---|---|---|
 | [`apifyActor`](../../../docs-internal/node-logic-flows/web_automation/apifyActor.md) · [source](../../../server/nodes/scraper/apify_actor/__init__.py) | registered | ActionNode | eligible | — | renderer-dependent | `rest-api` |
+| [`tregAction`](../../../docs-internal/node-logic-flows/web_automation/tregAction.md) · [source](../../../server/nodes/treg/treg_action.py) | registered | ActionNode | eligible | — | renderer-dependent | `rest-api` |
 
 ## browser (1)
 

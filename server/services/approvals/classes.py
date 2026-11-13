@@ -411,6 +411,7 @@ CLASSES_WHEN: Dict[str, Tuple[str, Dict[str, str]]] = {
         "operation",
         {"list_endpoints": READ, "describe": READ, "account": READ, "fetch_url": SEND, "call": SEND},
     ),
+    "tregAction": ("operation", {"search": READ, "describe": READ, "balance": READ}),
     "twitterSend": (
         "action",
         {

@@ -72,6 +72,7 @@ _MIGRATED_PLUGINS = (
     "microsoft",
     "stripe",
     "telegram",
+    "treg",
     "twitter",
     "whatsapp",
 )
@@ -91,6 +92,7 @@ _PLUGINS_WITH_HANDLERS = (
     "microsoft",
     "stripe",
     "telegram",
+    "treg",
     "twitter",
     "whatsapp",
 )

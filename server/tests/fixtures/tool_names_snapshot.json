@@ -77,6 +77,7 @@
   "typescriptExecutor": "typescript_code",
   "apifyActor": "apify_actor",
   "tikhubAction": "tikhub_action",
+  "tregAction": "treg_action",
   "agentBuilder": "agent_builder",
   "twitterSend": "twitter_send",
   "twitterSearch": "twitter_search",
