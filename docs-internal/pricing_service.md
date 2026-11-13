@@ -71,17 +71,17 @@ these examples are not independently verified current vendor quotes.
 
 ```json
 {
-  "version": "2026.09",
-  "last_updated": "2026-09-26",
+  "version": "2026.11",
+  "last_updated": "2026-11-13",
 
   "llm": {
     "openai": {
-      "gpt-6-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.20},
+      "gpt-6.1-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.20},
       "gpt-6-luna": {"input": 0.10, "output": 0.50, "cache_read": 0.01},
       "_default": {"input": 2.50, "output": 15.00}
     },
     "anthropic": {
-      "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.40},
+      "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20},
       "_default": {"input": 3.00, "output": 15.00, "cache_read": 0.30}
     }
   },

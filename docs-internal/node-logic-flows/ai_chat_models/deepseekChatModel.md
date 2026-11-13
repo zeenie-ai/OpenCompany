@@ -103,7 +103,7 @@ flowchart TD
 
 - **`thinking_enabled=false` does not suppress a trace**: it only means the UI will not highlight one. If the model returns `reasoning_content`, the response still carries it.
 - **`thinking_budget` has no effect**: DeepSeek reasoning is not budget-configurable; the field is silently ignored.
-- **Context and output**: all three curated models have a 1,048,576-token context window. The output ceiling is 943,718 tokens for `deepseek-v4.1-flash`, 384,000 for `deepseek-v4-pro` and 943,717 for `deepseek-v4-flash` (OpenRouter snapshot, 2026-10-19). A node that leaves `max_tokens` unset requests the whole ceiling (`resolve_max_tokens`).
+- **Context and output**: all three curated models have a 1,048,576-token context window. The output ceiling is 943,718 tokens for `deepseek-v4.1-flash` and 393,216 for `deepseek-v4-pro` and `deepseek-v4-flash` (OpenRouter snapshot, 2026-11-13). A node that leaves `max_tokens` unset requests the whole ceiling (`resolve_max_tokens`).
 - **OpenAI-compatible but not OpenAI**: features like `response_format: json_object` have subtly different behavior.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 

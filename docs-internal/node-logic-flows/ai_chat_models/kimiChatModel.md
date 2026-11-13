@@ -12,7 +12,8 @@
 ## Purpose
 
 Kimi models by Moonshot AI. `kimi-k3` is the current default with a
-1,048,576-token context window and a 131,072-token output ceiling;
+1,048,576-token context window and a 131,072-token output ceiling, and
+`kimi-k3.1-pro` has the same window and ceiling;
 `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` remain available
 as 262K tiers (`kimi-k2.5` left Moonshot's pricing page in September 2026). The node uses Moonshot's OpenAI-compatible endpoint through the native
 provider layer and the shared `ChatModelParams`.
@@ -29,9 +30,9 @@ provider layer and the shared `ChatModelParams`.
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `system_prompt` | string | `""` | no | - | System prompt |
-| `model` | string | `""` (injected) | no | - | `kimi-k3` default; `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` also supported |
+| `model` | string | `""` (injected) | no | - | `kimi-k3` default; `kimi-k3.1-pro`, `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` also supported |
 | `temperature` | number\|null | `null` | no | - | Shared schema field; accepted but not sent, because Moonshot fixes every model's temperature |
-| `max_tokens` | number\|null | `null` (model ceiling) | no | - | Up to 131,072 for K3; lower model-specific ceilings for K2 tiers |
+| `max_tokens` | number\|null | `null` (model ceiling) | no | - | Up to 131,072 for K3 and K3.1 Pro; lower model-specific ceilings for K2 tiers |
 | `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
 | `thinking_enabled` | boolean | `false` (Params default) | no | - | When false/unset, the native provider explicitly disables K2.6's default thinking; no effect on K2.7 Code (+ `-highspeed`), which always thinks, or on K3, which always reasons |
 | `api_key` | string\|null | `null` (injected) | no | - | `auth_service.get_api_key('kimi', 'default')` |
@@ -108,7 +109,7 @@ flowchart TD
 
 - **Temperature is non-configurable**: any user-supplied value is accepted and dropped for every Kimi model, K3 included; Moonshot applies its own.
 - **Default application behavior is thinking off** for K2.6 unless the request explicitly enables it. K2.7 Code always thinks and K3 always reasons, whatever the toggle says.
-- **K3 capacity**: 1,048,576-token context and 131,072-token output. K2 tiers use 262,144-token context with model-specific 32K or 96K output ceilings.
+- **K3 and K3.1 Pro capacity**: 1,048,576-token context and 131,072-token output. K2 tiers use 262,144-token context with model-specific 32K or 96K output ceilings.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 
 ## Related

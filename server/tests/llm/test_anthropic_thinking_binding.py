@@ -103,8 +103,8 @@ async def test_changed_delegated_prefix_keeps_signed_history_and_sends_recovery(
 
 
 @pytest.mark.parametrize("model", [
-    "claude-fable-5-1", "claude-mythos-5-1", "claude-opus-5-5",
-    "claude-sonnet-5-5", "claude-haiku-5-5",
+    "claude-fable-5-2", "claude-mythos-5-2", "claude-fable-5-1", "claude-mythos-5-1",
+    "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5",
 ])
 async def test_prefix_binding_is_enabled_for_configured_models(transport_provider, model):
     provider, requests = transport_provider

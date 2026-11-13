@@ -225,7 +225,7 @@ async def test_openrouter_and_a_local_server_offer_their_models(database, connec
     assert rows[0]["short"] == "claude-sonnet-5.5"
     assert rows[0]["effort"] is False and rows[0]["effort_note"] == "claude-sonnet-5.5 sets its own pace"
 
-    picked = "openrouter::openai/gpt-6-sol"
+    picked = "openrouter::openai/gpt-6.1-sol"
     assert await options(database, {"model": picked}) == {"model": picked}
     assert await options(database, {"model": "ollama::qwen3:32b"}) == {"model": "ollama::qwen3:32b"}
     assert await options(database, {"model": "auto"}) == {"model": "openrouter::anthropic/claude-sonnet-5.5"}
@@ -288,7 +288,7 @@ async def test_the_picker_and_whether_the_employee_takes_it(chat, connected, mon
     picker = await chat.handlers.handle_get_chat_models({"session_id": "wf"}, None)
     assert picker["success"] is True and picker["session_id"] == "wf"
     # The agent has no model saved: its provider's default (OpenAI's) answers.
-    assert picker["auto"]["description"] == "Uses gpt-6-sol, Maya’s own model"
+    assert picker["auto"]["description"] == "Uses gpt-6.1-sol, Maya’s own model"
     assert [row["id"] for row in picker["models"]] == ANTHROPIC_ROWS
     default = await chat.handlers.handle_get_chat_models({"session_id": "default"}, None)
     assert default["success"] is False and default["error"] == "invalid_request"
