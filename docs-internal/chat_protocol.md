@@ -579,11 +579,11 @@ are the two hosts.
   `aria-activedescendant`). The Web chip keeps the employee off
   web search for the next messages (`composerStore.web`). On Home, where `capabilities.model_choice` says the
   employee takes it, the model picker sits before the microphone (`composer/ModelPicker.tsx`; the host's
-  `modelPicker`): a Popover anchored to the whole box (`PopoverAnchor virtualRef`), a search box (`CommandInput`,
-  which has the cursor) over a cmdk list of Auto and the models from `get_chat_models` (`data/models.ts`), each
-  under its provider's name (`CommandGroup`); typing keeps the rows holding every word typed, punctuation read as
-  spaces, and ArrowLeft / ArrowRight change the level only while the box is empty. Under the list a `LevelSlider`
-  (`components/ui/slider.tsx`) sets the level, or the model's `effort_note` shows. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
+  `modelPicker`): a Popover anchored to the whole box (`PopoverAnchor virtualRef`) holding the model menu the
+  editor's Set Global Model shows too (`components/ui/ModelMenu.tsx`: a cmdk list, each provider's models under its
+  name, the chosen one ticked, no colour), here with Auto first and the models from `get_chat_models`
+  (`data/models.ts`), and under it a `LevelSlider` (`components/ui/slider.tsx`) for the level, or the model's
+  `effort_note`. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
   once and put back when `save_user_settings` refuses it (`SettingsSaveError`, its `detail` shown); a message waits
   until it is known. Every send, edit and retry carries the same `options` (`sendOptions` in `data/send.ts`), and a
   `model_unavailable` refusal shows the server's `detail`. In an empty chat on Home, commands marked `suggest` show
@@ -764,15 +764,16 @@ recording is deleted. **Commands** come from `chat_defaults.json` `commands.gene
 ## Model and thinking
 
 `services/chat/choice.py`. Home's employee chat has a model picker: **Auto**, then the models of every provider the
-owner can run on now, the list the editor's Set Global Model reads (`services/llm/connected.py`
-`connected_providers`, also behind `get_validated_ai_providers`): a provider with a key stored (a saved local server
-counts), one the OpenCompany Gateway serves, and each saved OpenAI-compatible endpoint. A provider offers its curated
-list (`popular_models` in `llm_defaults.json`, else its `max_output_tokens` keys) and, with none, such as a local
-server or an endpoint, the models stored with its key. Each row is a `provider::model` id, named by the model id
-under the provider's name (the button shows the id's last part: `anthropic/claude-sonnet-5.5` on OpenRouter shows
-`claude-sonnet-5.5`). Then how hard the model thinks: Quick (`effort: "low"`), Balanced (no effort sent: the agent's
-own settings) or Thorough (`"high"`). The picker's other words come from `chat_defaults.json` `choice`. The Dev
-editor's chat has no picker: each node keeps its model.
+owner can run on now, the same list and the same menu (`components/ui/ModelMenu.tsx`) as the editor's Set Global
+Model. `services/llm/connected.py` `connected_providers` (also behind `get_validated_ai_providers`) lists a provider
+with a key stored (a saved local server counts), one the OpenCompany Gateway serves, and each saved
+OpenAI-compatible endpoint, each with its `offered` models: its curated list (`popular_models` in
+`llm_defaults.json`, else its `max_output_tokens` keys) and, with none, such as a local server or an endpoint, the
+models stored with its key. Each row is a `provider::model` id, named by the model id under the provider's name (the
+button shows the id's last part: `anthropic/claude-sonnet-5.5` on OpenRouter shows `claude-sonnet-5.5`). Then how
+hard the model thinks: Quick (`effort: "low"`), Balanced (no effort sent: the agent's own settings) or Thorough
+(`"high"`). The picker's other words come from `chat_defaults.json` `choice`. The Dev editor's chat has no picker:
+each node keeps its model.
 
 - **Auto** is the owner's default model (Set Global Model, `UserSettings.default_llm_provider` /
   `default_llm_model`). With none set it is the OpenCompany Gateway's default while the gateway serves it

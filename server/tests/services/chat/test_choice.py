@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from services.chat import choice, ledger
-from services.llm.config import PROVIDER_CONFIGS, curated_models, provider_display_name
+from services.llm.config import curated_models
 from tests.services.chat._helpers import talking
 
 CLAIM = dict(temporal_workflow_id="tw-1", temporal_run_id="tr-1")
@@ -25,26 +25,35 @@ ANTHROPIC_ROWS = [f"anthropic::{model}" for model in curated_models("anthropic")
 
 @pytest.fixture
 def connected(monkeypatch):
-    """The providers the owner can run on, as services/llm/connected.py lists
-    them: Anthropic, unless a test changes the set. A provider without a
-    curated list (a local server) offers what ``stored`` gives it."""
+    """The providers with a key stored, listed by the real
+    services/llm/connected.py: Anthropic, unless a test changes the set. A
+    provider without curated models (a local server) offers what ``stored``
+    holds for it. No gateway, no named endpoint."""
+    from services.gateway import routing
+    from services.llm import connected as listing, endpoints
+
     providers = {"anthropic"}
     stored: dict = {}
 
-    async def fake(database, auth, principal):
-        return [
-            {
-                "provider": provider,
-                "display_name": provider_display_name(provider),
-                "models": stored.get(provider, []),
-                "popular_models": curated_models(provider),
-                "default_model": "",
-            }
-            for provider in PROVIDER_CONFIGS
-            if provider in providers
-        ]
+    class Auth:
+        async def has_valid_key(self, provider, session_id="default", *, principal=None):
+            return provider in providers
 
-    monkeypatch.setattr(choice, "_providers", fake)
+        async def get_stored_models(self, provider, session_id="default", *, principal=None):
+            return list(stored.get(provider, []))
+
+    async def covers(provider):
+        return False
+
+    async def no_endpoints(auth, *, principal=None):
+        return []
+
+    async def listed(database, auth, principal):
+        return await listing.connected_providers(Auth(), database, principal=principal)
+
+    monkeypatch.setattr(routing, "gateway_covers", covers)
+    monkeypatch.setattr(endpoints, "list_endpoints", no_endpoints)
+    monkeypatch.setattr(choice, "_providers", listed)
     return SimpleNamespace(add=providers.add, discard=providers.discard, stored=stored)
 
 

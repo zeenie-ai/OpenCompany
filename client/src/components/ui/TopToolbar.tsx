@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -27,15 +27,8 @@ import {
   Monitor,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ModelMenu, ModelMenuContent, type ModelMenuGroup } from '@/components/ui/ModelMenu';
+import { Popover, PopoverTrigger } from '@/components/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,7 +56,6 @@ import { useCanvasDockStore } from '../../stores/canvasDockStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApiKeys, GlobalModelState } from '../../hooks/useApiKeys';
 import { useStoredCredentialSignature } from '../../hooks/useCatalogueQuery';
-import { AI_PROVIDER_META } from '../icons/AIProviderIcons';
 
 // New-contract token: --border-default ↔ Tailwind utility `bg-border-default`.
 // Same colour as `bg-border` under light/dark.
@@ -154,9 +146,14 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
   const controlTransitionLabel = transitionState === 'pausing' ? 'Stopping…'
     : transitionState === 'resuming' ? 'Resuming…' : transitionState.replace('_', ' ');
 
-  // Global Model Selector state
+  // Set Global Model: the model menu Home's chat picker shows too
+  // (ModelMenu.tsx), each provider's offered models under its name.
   const { getValidatedAiProviders, saveGlobalModel, isConnected: apiKeysConnected } = useApiKeys();
   const [globalModelState, setGlobalModelState] = useState<GlobalModelState>({ providers: [], global_provider: null, global_model: null });
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelListRef = useRef<HTMLDivElement>(null);
+  const modelLabelId = useId();
+  const modelButtonId = useId();
 
   // Re-fetch validated providers whenever the stored credentials change:
   // a provider added or removed, or a named endpoint added, removed or
@@ -178,7 +175,11 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
   const globalSelectValue = globalModelState.global_provider && globalModelState.global_model
     ? `${globalModelState.global_provider}::${globalModelState.global_model}` : undefined;
-  const selectedProviderMeta = AI_PROVIDER_META[globalModelState.global_provider || ''];
+  const globalModelGroups: ModelMenuGroup[] = globalModelState.providers.map((vp) => ({
+    key: vp.provider,
+    heading: vp.display_name,
+    items: vp.offered.map((model) => ({ value: `${vp.provider}::${model}`, label: model })),
+  }));
 
   const handleNameClick = () => {
     setTempName(workflowName);
@@ -298,50 +299,49 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         )}
       </div>
 
-      {/* ---------- Global Model Selector (pinned) ---------- */}
+      {/* ---------- Set Global Model (pinned) ---------- */}
       {globalModelState.providers.length > 0 && (
         <div className="flex shrink-0 items-center gap-2">
-          <span className="text-sm font-semibold whitespace-nowrap text-fg-muted">
+          <span id={modelLabelId} className="text-sm font-semibold whitespace-nowrap text-fg-muted">
             Set Global Model
           </span>
-          <Select value={globalSelectValue} onValueChange={handleSelectGlobalModel}>
-            <SelectTrigger className="h-8 w-auto min-w-[180px]">
-              <SelectValue placeholder="Select model...">
-                {globalModelState.global_model && (
-                  <span className="flex items-center gap-2">
-                    {selectedProviderMeta && (
-                      <span
-                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: selectedProviderMeta.color }}
-                      />
-                    )}
-                    <span>{globalModelState.global_model}</span>
-                  </span>
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {globalModelState.providers.map((vp) => {
-                const meta = AI_PROVIDER_META[vp.provider];
-                const models = vp.popular_models.length > 0 ? vp.popular_models : vp.models.slice(0, 5);
-                return (
-                  <SelectGroup key={vp.provider}>
-                    <SelectLabel
-                      className="text-xs"
-                      style={{ color: meta?.color }}
-                    >
-                      {vp.display_name || meta?.label || vp.provider}
-                    </SelectLabel>
-                    {models.map((m) => (
-                      <SelectItem key={`${vp.provider}::${m}`} value={`${vp.provider}::${m}`}>
-                        {m}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          <Popover open={modelMenuOpen} onOpenChange={setModelMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                id={modelButtonId}
+                variant="quiet"
+                size="sm"
+                aria-labelledby={`${modelLabelId} ${modelButtonId}`}
+                className={cn(NEUTRAL, 'max-w-64 aria-expanded:bg-bg-active')}
+              >
+                <span className={cn('truncate', !globalModelState.global_model && 'text-fg-muted')}>
+                  {globalModelState.global_model || 'Select a model'}
+                </span>
+                <ChevronDown />
+              </Button>
+            </PopoverTrigger>
+            <ModelMenuContent
+              side="bottom"
+              align="start"
+              sideOffset={6}
+              aria-label="Choose the global model"
+              onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                modelListRef.current?.focus();
+              }}
+            >
+              <ModelMenu
+                label="Global model"
+                groups={globalModelGroups}
+                value={globalSelectValue}
+                onSelect={(value) => {
+                  setModelMenuOpen(false);
+                  if (value !== globalSelectValue) handleSelectGlobalModel(value);
+                }}
+                listRef={modelListRef}
+              />
+            </ModelMenuContent>
+          </Popover>
           {globalSelectValue && (
             <Button
               variant="quiet"

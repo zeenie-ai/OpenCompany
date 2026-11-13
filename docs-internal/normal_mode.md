@@ -858,13 +858,15 @@ sending and drafts belong to the chat (wire and client rules in
   design handoff chat v2) sits in the message box before Dictate, when the
   employee's talk agent runs as an AgentWorkflow (`get_chat_context`
   `model_choice`). Its button names the model ("Auto", "claude-sonnet-5-5")
-  and the thinking level unless it is Balanced ("· Thorough"); its panel has
-  a search box, Auto (what it uses now: the owner's default model, else the
-  employee's own), then the models of every connected provider under the
-  provider's name, the same providers and models as the editor's Set Global
-  Model (`services/llm/connected.py`; OpenRouter, a local server and a named
-  endpoint list theirs too), and a slider for Quick, Balanced and Thorough
-  (or "{model} sets its own pace"). The choice is the owner's, kept in
+  and the thinking level unless it is Balanced ("· Thorough"); its panel is
+  the model menu the editor's Set Global Model shows too
+  ([components/ui/ModelMenu.tsx](../client/src/components/ui/ModelMenu.tsx)):
+  Auto (what it uses now: the owner's default model, else the employee's
+  own), then the models of every connected provider under the provider's
+  name, the same providers and models as Set Global Model
+  (`services/llm/connected.py`; OpenRouter, a local server and a named
+  endpoint list theirs too), and under it a slider for Quick, Balanced and
+  Thorough (or "{model} sets its own pace"). The choice is the owner's, kept in
   their settings, and every message, edit and retry carries it; a model
   that can't answer is refused in the server's words and the message comes
   back into the box.

@@ -1,7 +1,7 @@
-import type { ComponentProps, ReactNode } from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkflowControlStatus } from '../../../contexts/WebSocketContext';
 
 const mocks = vi.hoisted(() => ({
@@ -23,27 +23,6 @@ vi.mock('../../../contexts/AuthContext', () => ({
 }));
 vi.mock('../ThemeButton', () => ({ ThemeButton: () => null }));
 vi.mock('../../shell/ModeToggle', () => ({ ModeToggle: () => null }));
-
-// Use a native control to exercise model selection independently of Radix's
-// pointer-event implementation, which requires browser APIs absent in jsdom.
-vi.mock('../select', () => ({
-  Select: ({ value, onValueChange, children }: {
-    value?: string;
-    onValueChange: (value: string) => void;
-    children: ReactNode;
-  }) => (
-    <select aria-label="Global model" value={value ?? ''} onChange={(event) => onValueChange(event.currentTarget.value)}>
-      <option value="">Select model...</option>
-      {children}
-    </select>
-  ),
-  SelectContent: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectGroup: ({ children }: { children: ReactNode }) => <>{children}</>,
-  SelectItem: ({ value, children }: { value: string; children: ReactNode }) => <option value={value}>{children}</option>,
-  SelectLabel: () => null,
-  SelectTrigger: () => null,
-  SelectValue: () => null,
-}));
 
 import TopToolbar from '../TopToolbar';
 import { useCanvasDockStore } from '../../../stores/canvasDockStore';
@@ -90,6 +69,11 @@ function toolbarProps(): ComponentProps<typeof TopToolbar> {
     onGlobalModelChange: vi.fn(),
   };
 }
+
+// The model menu (cmdk) scrolls its highlighted row into view; jsdom has no scrolling.
+beforeAll(() => {
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => undefined;
+});
 
 beforeEach(() => {
   mocks.sendRequest.mockReset();
@@ -175,35 +159,53 @@ describe('TopToolbar credential responses during a workflow run', () => {
       await pendingResponse;
     });
 
-    expect(screen.queryByRole('combobox', { name: 'Global model' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Set Global Model/ })).not.toBeInTheDocument();
     expect(screen.getByText('Locked')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(props.onPauseWorkflow).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
     expect(useCanvasDockStore.getState().open).toBe(true);
 
-    // A later successful credential refresh can restore the model selector.
-    mocks.sendRequest.mockResolvedValue({ providers: [{ provider: 'openai', models: ['gpt-4.1'] }] });
+    // A later successful credential refresh can restore the model picker.
+    mocks.sendRequest.mockResolvedValue({ providers: [{ provider: 'openai', models: ['gpt-4.1'], offered: ['gpt-4.1'] }] });
     mocks.storedSignature = 'openai-added';
     view.rerender(<TopToolbar {...props} />);
-    expect(await screen.findByRole('combobox', { name: 'Global model' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Set Global Model Select a model' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
   });
 
-  it('uses stored models when a provider response omits popular_models', async () => {
+  it('sets the global model from the model menu Home shows too, in no colour', async () => {
     mocks.sendRequest.mockImplementation(async (type: string) => type === 'save_global_model'
       ? { success: true }
-      : { providers: [{ provider: 'openai', models: ['gpt-4.1', 'gpt-4.1-mini'] }] });
+      : {
+          providers: [
+            { provider: 'openai', display_name: 'OpenAI', models: ['gpt-4.1', 'gpt-4.1-mini'], offered: ['gpt-4.1', 'gpt-4.1-mini'] },
+            { provider: 'openrouter', display_name: 'OpenRouter', models: [], offered: ['x-ai/grok-4.20'] },
+          ],
+          global_provider: 'openai',
+          global_model: 'gpt-4.1',
+        });
     const props = toolbarProps();
     const user = userEvent.setup();
     render(<TopToolbar {...props} />);
 
-    const selector = await screen.findByRole('combobox', { name: 'Global model' });
-    await user.selectOptions(selector, 'openai::gpt-4.1-mini');
+    await user.click(await screen.findByRole('button', { name: 'Set Global Model gpt-4.1' }));
+    const menu = await screen.findByRole('dialog', { name: 'Choose the global model' });
+    // Each provider's offered models under its name; the chosen one ticked.
+    expect(within(within(menu).getByRole('group', { name: 'OpenAI' })).getAllByRole('option').map((row) => row.textContent)).toEqual([
+      'gpt-4.1',
+      'gpt-4.1-mini',
+    ]);
+    expect(within(within(menu).getByRole('group', { name: 'OpenRouter' })).getByRole('option')).toHaveTextContent('x-ai/grok-4.20');
+    expect(within(menu).getByRole('option', { name: 'gpt-4.1' }).querySelector('svg')).not.toBeNull();
+    // No provider carries a brand colour.
+    expect(menu.querySelectorAll('[style*="color"]')).toHaveLength(0);
 
-    expect(selector).toHaveValue('openai::gpt-4.1-mini');
+    await user.click(within(menu).getByRole('option', { name: 'gpt-4.1-mini' }));
     expect(props.onGlobalModelChange).toHaveBeenCalledWith('openai', 'gpt-4.1-mini');
     expect(mocks.sendRequest).toHaveBeenCalledWith('save_global_model', { provider: 'openai', model: 'gpt-4.1-mini' });
+    expect(await screen.findByRole('button', { name: 'Set Global Model gpt-4.1-mini' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled();
   });
 });

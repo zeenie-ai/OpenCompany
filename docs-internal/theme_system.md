@@ -270,10 +270,14 @@ and the onboarding v3 handoff:
   `components/ui/TopToolbar.tsx`), and it has no green: Start and Resume are
   its `invert` primary, and only the save dot carries a colour, for its state
   (the "Saved" / "Modified" label beside it is neutral). Every other control
-  (the File menu and its items, Apply All, Settings, Credentials, the theme
-  button, Logout, Stop, Reset, Save, the labels) is a neutral outline, and
-  the sidebar, Components and Workspace toggles fill with `bg-bg-active`
-  while their panel shows.
+  (the File menu and its items, Set Global Model, Apply All, Settings,
+  Credentials, the theme button, Logout, Stop, Reset, Save, the labels) is a
+  neutral outline, and the sidebar, Components and Workspace toggles fill
+  with `bg-bg-active` while their panel shows. Set Global Model opens the
+  model menu Home's chat picker shows too (`components/ui/ModelMenu.tsx`,
+  since 2026-11-13): each provider's models under its name in the menu
+  label's muted capitals, the chosen one ticked in ink, and no provider in
+  a brand colour.
 - **So does the node parameter panel** (since 2026-11-11: `ParameterPanel.tsx`,
   `LocationParameterPanel.tsx` and the views under
   `components/parameterPanel/`). In its header Run and Cancel are neutral

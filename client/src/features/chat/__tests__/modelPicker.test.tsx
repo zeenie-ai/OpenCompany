@@ -2,10 +2,10 @@
  * The model picker in Home's employee chat (composer/ModelPicker.tsx,
  * data/models.ts): the button names the model and a level other than
  * Balanced; the panel opens above the message box, level with its right
- * edge, with a search box, Auto and each connected provider's models under
- * the provider's name, a row the owner can't pick saying why; typing
- * narrows the list; picking or changing the level saves the owner's choice
- * at once and puts it back when the server refuses it; every message
+ * edge, with the model menu the editor's Set Global Model shows too: Auto
+ * and each connected provider's models under the provider's name, a row
+ * the owner can't pick saying why; picking or changing the level saves the
+ * owner's choice at once and puts it back when the server refuses it; every message
  * carries the choice; a model that can't answer is refused in the server's
  * words; and a chat whose employee takes no choice shows no picker.
  */
@@ -195,38 +195,21 @@ describe('the picker', () => {
       'x-ai/grok-4.20',
     ]);
     expect(within(panel).getByRole('group', { name: 'OpenAI' })).toBeInTheDocument();
-    // The search box has the cursor.
-    expect(within(panel).getByRole('combobox', { name: 'Search models' })).toHaveFocus();
+    // The list has the focus, on the chosen row; nothing is coloured.
+    expect(within(panel).getByRole('listbox', { name: 'Model' })).toHaveFocus();
+    expect(rows[0]).toHaveAttribute('aria-selected', 'true');
+    expect(panel.querySelectorAll('[style*="color"]')).toHaveLength(0);
     expect(within(panel).getByRole('slider', { name: 'How hard Maya thinks' })).toHaveAttribute('aria-valuetext', 'Balanced');
   });
 
-  it('narrows the list as the owner types, and Enter picks the first row left', async () => {
+  it('picks a provider’s model from the keyboard, and the button shows the id’s last part', async () => {
     const user = userEvent.setup();
     renderChat();
     await user.click(await screen.findByRole('button', { name: 'Auto' }));
-    const panel = await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
-    const search = within(panel).getByRole('combobox', { name: 'Search models' });
-
-    // By provider: every model it offers.
-    await user.type(search, 'openrouter');
-    expect(texts(within(panel).getAllByRole('option'))).toEqual(['anthropic/claude-opus-5.5', 'x-ai/grok-4.20']);
-    // By words of the model's id, its punctuation read as spaces.
-    await user.clear(search);
-    await user.type(search, 'opus 5.5');
-    expect(texts(within(panel).getAllByRole('option'))).toEqual(['anthropic/claude-opus-5.5']);
-    // With words in the box, ArrowLeft and ArrowRight move its cursor, not the level.
-    await user.keyboard('{ArrowRight}');
-    expect(sendRequest).not.toHaveBeenCalledWith('save_user_settings', expect.anything());
-    await user.clear(search);
-    await user.type(search, 'llama');
-    expect(within(panel).queryAllByRole('option')).toEqual([]);
-    expect(within(panel).getByText('No model matches “llama”')).toBeInTheDocument();
-
-    await user.clear(search);
-    await user.type(search, 'grok');
-    await user.keyboard('{Enter}');
+    await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
+    // Auto, Sonnet, Haiku, Opus, then Grok.
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
     expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { chat_model: GROK } });
-    // The button shows the id's last part.
     expect(await screen.findByRole('button', { name: 'grok-4.20' })).toBeInTheDocument();
   });
 
@@ -279,7 +262,7 @@ describe('the picker', () => {
     renderChat();
     await user.click(await screen.findByRole('button', { name: 'claude-sonnet-5-5' }));
     await screen.findByRole('dialog', { name: 'Choose how Maya answers' });
-    // The search box has the cursor and is empty: ArrowRight goes one level up.
+    // The list has the focus: ArrowRight goes one level up.
     await user.keyboard('{ArrowRight}');
     expect(sendRequest).toHaveBeenCalledWith('save_user_settings', { settings: { chat_effort: 'high' } });
     expect(await screen.findByRole('slider', { name: 'How hard Maya thinks' })).toHaveAttribute('aria-valuetext', 'Thorough');

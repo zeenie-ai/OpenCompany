@@ -86,6 +86,9 @@ export interface ValidatedProvider {
   display_name: string;
   models: string[];
   popular_models: string[];
+  /** What a model picker lists for it (the server's rule,
+   *  services/llm/connected.py): its curated models, else its stored ones. */
+  offered: string[];
   default_model: string | null;
 }
 
@@ -119,6 +122,7 @@ function normalizeGlobalModelState(response: unknown): GlobalModelState {
           ? provider.display_name : provider.provider,
         models: modelList(provider.models),
         popular_models: modelList(provider.popular_models),
+        offered: modelList(provider.offered),
         default_model: typeof provider.default_model === 'string' ? provider.default_model : null,
       }];
     }),

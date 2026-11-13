@@ -125,7 +125,8 @@ client/src/
 │   │   ├── ApiKeyInput.tsx  # Composite: input + eye toggle + save/delete buttons
 │   │   ├── SettingsPanel.tsx # Shadcn Switch + Slider + Input
 │   │   ├── ConsolePanel.tsx # Chat (ConsoleChat, the shared chat) + console + terminal + output
-│   │   └── TopToolbar.tsx   # File menu + model picker + workflow controls
+│   │   ├── ModelMenu.tsx    # The one model menu: Set Global Model and Home's chat picker
+│   │   └── TopToolbar.tsx   # File menu + Set Global Model (ModelMenu) + workflow controls
 │   │
 │   ├── Modal.tsx (src/components/ui/Modal.tsx)
 │   │                        # Thin wrapper over shadcn Dialog; preserves the pre-migration

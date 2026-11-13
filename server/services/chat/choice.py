@@ -3,10 +3,9 @@
 Home's employee chat has a model picker: Auto, or a model of a provider the
 owner can run on now, and how hard the model thinks: Balanced (the employee's
 own setting), Quick (effort ``low``) or Thorough (``high``). The picker offers
-what the editor's Set Global Model offers (services/llm/connected.py), by
-provider: a provider's curated list (``popular_models`` in llm_defaults.json)
-when it has one, else the models stored with its key, so a provider such as
-OpenRouter, a local server or a named endpoint lists its models too. The
+what the editor's Set Global Model offers, by provider: each connected
+provider's ``offered`` models (services/llm/connected.py), so a provider such
+as OpenRouter, a local server or a named endpoint lists its models too. The
 choice is saved with the owner's settings (``UserSettings.chat_model`` /
 ``chat_effort``) and sent with every message, edit and retry as
 ``options.model`` / ``options.effort``. Admission resolves it here and keeps
@@ -52,12 +51,6 @@ async def _providers(database: Any, auth: Any, principal: Optional[str]) -> List
     return await connected_providers(auth, database, principal=principal)
 
 
-def offered_models(provider: Mapping[str, Any]) -> List[str]:
-    """The models the picker offers for one connected provider: its curated
-    list when it has one, else the models stored with its key."""
-    return list(dict.fromkeys(provider.get("popular_models") or provider.get("models") or []))
-
-
 async def _settings(database: Any) -> Mapping[str, Any]:
     return await database.get_user_settings(SETTINGS_USER_ID) or {}
 
@@ -89,7 +82,7 @@ def _refusal(model_id: str, providers: Sequence[Mapping[str, Any]]) -> Optional[
     entry = next((entry for entry in providers if entry["provider"] == provider), None)
     if entry is None:
         return _unavailable("unavailable", provider, model)
-    if model not in offered_models(entry):
+    if model not in entry["offered"]:
         return str(choice_setting("not_offered"))
     return None
 
@@ -249,7 +242,7 @@ async def list_models(
     rows = [
         _row(str(entry["provider"]), str(entry["display_name"]), model, available=True, reason=None)
         for entry in providers
-        for model in offered_models(entry)
+        for model in entry["offered"]
     ]
     chosen = str(settings.get("chat_model") or AUTO)
     if chosen != AUTO and all(row["id"] != chosen for row in rows):
@@ -274,6 +267,5 @@ __all__ = [
     "effort_of",
     "list_models",
     "model_of",
-    "offered_models",
     "run_options",
 ]

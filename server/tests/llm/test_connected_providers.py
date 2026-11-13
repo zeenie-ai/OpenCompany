@@ -68,18 +68,22 @@ async def test_keys_the_gateway_and_named_endpoints(monkeypatch):
         "display_name": "Gemini",
         "models": curated_models("gemini"),
         "popular_models": curated_models("gemini"),
+        "offered": curated_models("gemini"),
         "default_model": "gemini-3.8-flash",
     }
-    # The owner's provider default wins over the configured one.
+    # The owner's provider default wins over the configured one, and a
+    # picker offers the curated list, not every model stored.
     assert (openrouter["display_name"], openrouter["default_model"]) == ("OpenRouter", "x-ai/grok-4.20")
     assert openrouter["models"] == ["anthropic/claude-sonnet-5.5", "x-ai/grok-4.20"]
+    assert openrouter["offered"] == curated_models("openrouter")
     # A local server has no curated list: what is stored with it is all it offers.
-    assert (ollama["models"], ollama["popular_models"]) == (["llama3.3:70b"], [])
+    assert (ollama["models"], ollama["popular_models"], ollama["offered"]) == (["llama3.3:70b"], [], ["llama3.3:70b"])
     assert endpoint == {
         "provider": "openai_compatible:home-vllm",
         "display_name": "Home vLLM (OpenAI-compatible)",
         "models": ["qwen3-32b"],
         "popular_models": [],
+        "offered": ["qwen3-32b"],
         "default_model": "",
     }
 
@@ -96,7 +100,16 @@ async def test_an_endpoint_listing_failure_leaves_the_rest(monkeypatch):
 async def test_set_global_model_reads_the_same_list(monkeypatch):
     from services.settings import handlers
 
-    listed = [{"provider": "openrouter", "display_name": "OpenRouter", "models": [], "popular_models": ["x-ai/grok-4.20"], "default_model": ""}]
+    listed = [
+        {
+            "provider": "openrouter",
+            "display_name": "OpenRouter",
+            "models": [],
+            "popular_models": ["x-ai/grok-4.20"],
+            "offered": ["x-ai/grok-4.20"],
+            "default_model": "",
+        }
+    ]
 
     async def connected_providers(auth, database, *, principal, session_id="default"):
         return listed

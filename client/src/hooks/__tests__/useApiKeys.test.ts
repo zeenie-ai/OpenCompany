@@ -433,10 +433,13 @@ describe('useApiKeys.getValidatedAiProviders / saveGlobalModel', () => {
         {},
         { provider: '' },
         { provider: 'openai', models: ['gpt-4', null, 42, ''] },
-        { provider: 'anthropic', display_name: 'Anthropic', popular_models: ['claude-sonnet'], models: null },
+        {
+          provider: 'anthropic', display_name: 'Anthropic', popular_models: ['claude-sonnet'], models: null,
+          offered: ['claude-sonnet'],
+        },
         {
           provider: 'openai_compatible:local', display_name: 'Local endpoint',
-          models: ['custom-model'], popular_models: [], default_model: 'custom-model',
+          models: ['custom-model'], popular_models: [], offered: ['custom-model'], default_model: 'custom-model',
         },
       ],
       global_provider: 'openai_compatible:local',
@@ -446,11 +449,14 @@ describe('useApiKeys.getValidatedAiProviders / saveGlobalModel', () => {
     const state = await result.current.getValidatedAiProviders();
     expect(state).toEqual({
       providers: [
-        { provider: 'openai', display_name: 'openai', models: ['gpt-4'], popular_models: [], default_model: null },
-        { provider: 'anthropic', display_name: 'Anthropic', models: [], popular_models: ['claude-sonnet'], default_model: null },
+        { provider: 'openai', display_name: 'openai', models: ['gpt-4'], popular_models: [], offered: [], default_model: null },
+        {
+          provider: 'anthropic', display_name: 'Anthropic', models: [], popular_models: ['claude-sonnet'],
+          offered: ['claude-sonnet'], default_model: null,
+        },
         {
           provider: 'openai_compatible:local', display_name: 'Local endpoint',
-          models: ['custom-model'], popular_models: [], default_model: 'custom-model',
+          models: ['custom-model'], popular_models: [], offered: ['custom-model'], default_model: 'custom-model',
         },
       ],
       global_provider: 'openai_compatible:local',

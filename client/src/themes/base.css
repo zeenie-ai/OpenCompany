@@ -209,7 +209,7 @@
   --dur-chip-pop: 360ms;           /* an attachment chip arriving */
   --dur-pick: 260ms;               /* the model picker's button settling after a pick */
   --dur-level-drag: 120ms;         /* a level slider's knob while dragged (--dur-slow otherwise) */
-  --w-chat-model-menu: 320px;      /* the model picker, and the Ask first menu */
+  --w-chat-model-menu: 320px;      /* the model menu (Home's chat picker, Set Global Model), and the Ask first menu */
   --h-chat-model-menu: 460px;      /* ...at most; less on a short window */
   --shadow-knob: 0 1px 4px rgb(0 0 0 / 0.25);  /* a level slider's knob */
   /* The employee's face beside their turns and on their page's header (chat

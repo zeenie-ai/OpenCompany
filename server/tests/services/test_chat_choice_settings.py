@@ -66,7 +66,16 @@ async def test_a_save_keeps_to_what_the_picker_offers(settings_database, monkeyp
     from services.settings.handlers import handle_save_user_settings
 
     async def anthropic_only(database, auth, principal):
-        return [{"provider": "anthropic", "display_name": "Anthropic", "models": [], "popular_models": ["claude-sonnet-5-5"], "default_model": ""}]
+        return [
+            {
+                "provider": "anthropic",
+                "display_name": "Anthropic",
+                "models": [],
+                "popular_models": ["claude-sonnet-5-5"],
+                "offered": ["claude-sonnet-5-5"],
+                "default_model": "",
+            }
+        ]
 
     monkeypatch.setattr(choice, "_providers", anthropic_only)
     monkeypatch.setattr("core.container.container", SimpleNamespace(database=lambda: settings_database, auth_service=lambda: None))
