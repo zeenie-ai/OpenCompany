@@ -48,10 +48,10 @@ The default image has no browser, git or uv. Add them through the `EXTRAS` build
 
 | Extra | Installs | Needed by |
 |---|---|---|
-| `browser` | Chromium, fonts, Xvfb, uv | The current Browser node needs uv to install its pinned browser-use CLI; Chromium can be selected explicitly as described below |
+| `browser` | Chromium, fonts, Xvfb, uv | The current Browser node needs uv to install its pinned browser-use CLI, and the treg node to install the treg CLI; Chromium can be selected explicitly as described below |
 | `git` | git | The Claude Code and Codex agent nodes, which work in git worktrees |
 
-Without the `browser` extra, the runtime image has no uv for the Browser node's tool installer or system Chromium and its libraries. The default `BROWSER_RUNTIME=system` needs an installed Chrome/Edge/Chromium executable and never falls back to a download. Use `BROWSER_RUNTIME=testing` only when pinned Chrome for Testing is intended. Without the `git` extra, Claude Code and Codex tasks can fail with `working_directory_not_git_repo`.
+Without the `browser` extra, the runtime image has no uv for the Browser node's tool installer or the treg node's CLI, and no system Chromium and its libraries. The default `BROWSER_RUNTIME=system` needs an installed Chrome/Edge/Chromium executable and never falls back to a download. Use `BROWSER_RUNTIME=testing` only when pinned Chrome for Testing is intended. Without the `git` extra, Claude Code and Codex tasks can fail with `working_directory_not_git_repo`.
 
 The current runtime is documented in [browser.md](./browser.md), with live viewing and control in [browser_workspace.md](./browser_workspace.md). `browserHarness` is retired; browser-use is a dependency of the single `browser` node, not a second workflow node.
 
