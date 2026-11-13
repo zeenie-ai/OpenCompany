@@ -229,9 +229,9 @@ it covers search, users, posts, reels, hashtags, locations and music.
 | `instagram_v2.fetch_user_posts` | `username` or `user_id` | Paginate with `pagination_token` |
 | `instagram_v2.fetch_post_info` | `code_or_url` | One post or reel from its shortcode or URL: caption, user, location. No view or like counts |
 | `instagram_v2.fetch_user_tagged_posts` | `username` or `user_id` | Other accounts' posts that tag this account, newest first, with counts; `pagination_token` |
-| `instagram_v1.fetch_hashtag_posts` | `hashtag` (without `#`) | Recent posts under a hashtag, 15 a page; paginate with `end_cursor` |
+| `instagram_v1.fetch_hashtag_posts` | `hashtag` (without `#`) | Posts under a hashtag, popular and recent mixed in no date order, 15 a page; paginate with `end_cursor` |
 | `instagram_v2.fetch_post_comments` | `code_or_url` | `sort_by`; `pagination_token` |
-| `instagram_v2.general_search` | `keyword` | Blended results: users, posts, reels |
+| `instagram_v2.general_search` | `keyword` | Posts and reels for a keyword, old hits and recent ones mixed; 8 on the first page, up to 20 on each later one; `pagination_token` |
 | `instagram_v3.general_search` | `query` | Users, hashtags and places, not posts; `next_max_id` + `rank_token` |
 
 A reel or post item carries `code` (the shortcode: the link is
@@ -244,21 +244,25 @@ Which route answers what:
 
 - **Recent reels on a topic**: `instagram_v2.search_reels`. It can return
   an empty page for every query for a while. After two different queries
-  come back empty, stop and use the routes below.
+  come back empty, stop and use `instagram_v2.general_search`.
+- **Posts and reels on a topic, when the reel search is empty**:
+  `instagram_v2.general_search`. A page mixes old hits with posts from
+  the last few days, so run three or four wordings of the topic (the
+  place, a neighbourhood, a venue's name), read two or three pages of
+  each and keep the items whose `taken_at` is in range. Its items carry
+  no `save_count`.
 - **What is going viral about a place or brand**:
   `instagram_v2.fetch_user_tagged_posts` on the venue's own account.
   Creators tag the venue, so its tagged feed is the week's coverage of
   it, with views, likes, shares and saves.
-- **A hashtag's recent posts**: `instagram_v1.fetch_hashtag_posts`. Its
+- **A hashtag's posts**: `instagram_v1.fetch_hashtag_posts`. A page
+  mixes popular and recent posts in no date order. Its
   items sit at `data.hashtag.edge_hashtag_to_media.edges[].node` with
   `shortcode`, `taken_at_timestamp`, `product_type` and
   `video_view_count`, but only the owner's id: no username and no
   caption. Name the ones that matter with `instagram_v2.fetch_post_info`.
   `instagram_v2.fetch_hashtag_posts` is the fuller feed; when it answers
   400 with correct parameters, use the v1 one.
-- **The best-known posts on a topic, of any age**:
-  `instagram_v2.general_search`, 8 a page. It does not favour recent
-  posts, so it is the wrong route for "this week".
 
 `video_view_count` in the hashtag feed and `play_count` elsewhere agree for
 the same post. Check a post's age yourself: none of these routes filters

@@ -475,6 +475,19 @@ paths): 35 requests to Instagram endpoints, plus `account` and `describe`.
 - The hashtag feed's `video_view_count` and the other feeds' `play_count`
   agreed for the same posts to within a few views.
 
+A second run the same day made 219 requests ($0.41 from the balance)
+while `instagram_v2.search_reels` was still empty:
+
+- `instagram_v2.general_search` worked as the keyword route. Its first
+  page holds 8 items and a later page up to 20, and of the 894 reels it
+  returned across 53 wordings (142 pages), 189 were under a week old.
+  Its items have no `save_count`.
+- The v1 hashtag feed returned popular and recent posts mixed, in no
+  date order: one page of 15 spanned seven years.
+- Results up to 1.76 MB were saved and read back.
+- Ten requests answered 400 and were not billed, among them later pages
+  of a search whose first page had answered.
+
 ## Risks
 
 - **SDK churn.** Resources regenerate between minors; `PLATFORMS`, the
