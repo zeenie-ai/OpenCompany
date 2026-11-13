@@ -31,6 +31,9 @@
   "tikhubAction": {
     "skill": "tikhub-skill"
   },
+  "tregAction": {
+    "skill": "treg-skill"
+  },
   "awsAction": {
     "skill": "aws-skill"
   },

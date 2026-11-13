@@ -67,6 +67,7 @@
     "cronScheduler",
 
     "tikhubAction",
+    "tregAction",
 
     "telegramSend",
     "telegramReceive",

@@ -83,6 +83,7 @@ _INPUT_SKILLS = {
     "web_agent/perplexity-search-skill/SKILL.md": "perplexitySearch",
     "web_agent/duckduckgo-search-skill/SKILL.md": "duckduckgoSearch",
     "web_agent/apify-skill/SKILL.md": "apifyActor",
+    "web_agent/treg-skill/SKILL.md": "tregAction",
 }
 # Output examples are deliberately not interpreted as tool arguments.
 _RESPONSE_KEYS = {"success", "error", "results", "result_count", "status", "output", "console_output", "proxied"}

@@ -1153,3 +1153,37 @@ def test_catalogue_card_is_a_cli_sign_in():
 
 def test_credential_icon_sits_beside_the_credential():
     assert TregCredential.get_icon_path() == (PLUGIN_DIR / "treg.svg").resolve()
+
+
+# --- skill and hiring ----------------------------------------------------------
+
+
+def test_the_skill_binds_the_tool_and_the_node_names_its_skill():
+    skill = SERVER_DIR / "skills" / "web_agent" / "treg-skill" / "SKILL.md"
+    frontmatter = skill.read_text(encoding="utf-8").split("---")[1]
+    assert "name: treg-skill" in frontmatter
+    assert 'allowed-tools: "treg_action"' in frontmatter
+    visuals = json.loads((SERVER_DIR / "nodes" / "visuals.json").read_text(encoding="utf-8"))
+    assert visuals["tregAction"] == {"skill": "treg-skill"}
+
+
+def test_hires_can_use_it_and_a_call_waits_on_the_owner_s_rule():
+    from types import SimpleNamespace
+
+    from services.employees.apps import get_app
+    from services.employees.policy import check_tool
+
+    app = get_app("treg")
+    assert app.provider_id == "treg" and app.side_effects == "money"
+    assert [(tool.type, tool.side_effects, dict(tool.params)) for tool in app.tools] == [
+        ("tregAction", "money", {"operation": "search"})
+    ]
+    allowlist = json.loads((SERVER_DIR / "config" / "node_allowlist.json").read_text(encoding="utf-8"))
+    assert "tregAction" in allowlist["enabled_nodes"]
+    # A money tool stays for an employee who asks first because its calls
+    # are refused per call (the approval spec), not left out of the hire.
+    asking_first = SimpleNamespace(rules={"ask_first": True, "items": []})
+    decision = check_tool("tregAction", employee=asking_first, connected={"treg"}, allowed=lambda _node_type: True)
+    assert decision.allowed and not decision.read_only
+    not_connected = check_tool("tregAction", employee=asking_first, connected=set(), allowed=lambda _node_type: True)
+    assert not_connected.code == "not_connected"

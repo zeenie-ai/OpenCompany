@@ -5,7 +5,7 @@
 | **Category** | web_automation / api / tool (dual-purpose) |
 | **Backend handler** | [`server/nodes/treg/treg_action.py::TregActionNode`](../../../server/nodes/treg/treg_action.py) - dispatch via `BaseNode.execute()` -> `@Operation("search" / "describe" / "call" / "balance")`; the CLI's environment and runs in [`_service.py`](../../../server/nodes/treg/_service.py), its install in [`_install.py`](../../../server/nodes/treg/_install.py), parameter placement in [`_request.py`](../../../server/nodes/treg/_request.py), large answers in [`_result.py`](../../../server/nodes/treg/_result.py) |
 | **Tests** | [`server/tests/test_treg_plugin.py`](../../../server/tests/test_treg_plugin.py) |
-| **Skill (if any)** | none yet |
+| **Skill (if any)** | [`server/skills/web_agent/treg-skill/SKILL.md`](../../../server/skills/web_agent/treg-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `treg_action` (`usable_as_tool = True`; both canvas handles explicitly kept visible) |
 | **Direct Run** | supported; `search` and `describe` work before sign-in, `call` and `balance` need the treg sign-in (Credentials -> treg) |
 | **Controlled execution** | ActionNode defaults on the `rest-api` queue; a broken-off `search`, `describe` or `balance` may run again (`repeats.py`), a `call` never (it may already have been charged) |
@@ -234,5 +234,7 @@ flowchart TD
 
 ## Related
 
+- **Skills using this as a tool**: [`treg-skill/SKILL.md`](../../../server/skills/web_agent/treg-skill/SKILL.md)
+- **Hiring**: the `treg` app in [`employee_apps.json`](../../../server/config/employee_apps.json) (`side_effects: "money"`); `tregAction` is in the Hire allowlist ([`node_allowlist.json`](../../../server/config/node_allowlist.json))
 - **Companion nodes**: [`tikhubAction`](./tikhubAction.md), [`apifyActor`](./apifyActor.md)
 - **Architecture docs**: [Plugin System](../../plugin_system.md), [CLI Services Integration](../../cli_services_integration.md), [Pricing Service](../../pricing_service.md)

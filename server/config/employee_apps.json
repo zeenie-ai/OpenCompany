@@ -574,6 +574,32 @@
         "working": "Looking up payments in Dodo Payments"
       }
     },
+    "treg": {
+      "name": "treg",
+      "provider_id": "treg",
+      "aliases": [
+        "treg",
+        "treg.to"
+      ],
+      "trigger": null,
+      "reply": null,
+      "notify_owner": null,
+      "tools": [
+        {
+          "type": "tregAction",
+          "label": "treg",
+          "params": {
+            "operation": "search"
+          },
+          "side_effects": "money",
+          "_side_effects_note": "every call is billed to the treg balance, and some catalog tools post or change things through accounts connected in treg; under ask first a call is refused (the plugin's approval spec) while search, describe and balance run."
+        }
+      ],
+      "side_effects": "money",
+      "phrases": {
+        "working": "Looking things up through treg"
+      }
+    },
     "web": {
       "name": "Web browser",
       "provider_id": "browser",
