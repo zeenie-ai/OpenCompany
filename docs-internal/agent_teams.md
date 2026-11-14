@@ -44,8 +44,9 @@ Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architect
    hidden from the lead's model (point 4), so a teammate labelled "Web
    Agent" holding TikHub would otherwise be indistinguishable from one
    holding nothing. Above the list, `TEAMMATE_ROSTER_NOTE` (both runtimes)
-   says those tools and skills are the teammate's, not the lead's: a small
-   model asked its own Skill tool for a teammate's skill by name. Skill
+   says those tools and skills are the teammate's: the lead uses only its
+   own and assigns work that needs one of theirs (a small model had asked
+   its own Skill tool for a teammate's skill by name). Skill
    blurbs come from the skill loader's last scan (`get_available_skills()`),
    not a rescan per teammate. Locked by `tests/test_team_topology.py`.
 2. Task Manager is intrinsically and non-removably bound to every team lead.

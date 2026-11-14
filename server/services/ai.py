@@ -2677,10 +2677,11 @@ class AIService:
         if node_type == "_builtin_skill":
             from typing import Literal
 
-            # The schema lists the connected names, the only ones the runtime
-            # accepts, so a model that follows the schema cannot ask for a
-            # skill it has not got. Validation stays a plain string: an
-            # unknown name gets the runtime's refusal, which lists them too.
+            # The field names the connected skills, the only ones the runtime
+            # accepts, where the model fills it in. Not an enum: a provider
+            # that checks arguments against the schema (Groq) answers an
+            # unlisted name with an error that ends the run, while the
+            # runtime's refusal, which lists them too, lets the model retry.
             connected = [
                 str(item["skill_name"])
                 for item in params.get("skill_descriptors") or []
@@ -2692,8 +2693,11 @@ class AIService:
                     default="load", description="Load instructions, read a bounded resource page, or search a resource."
                 )
                 skill_name: str = Field(
-                    description="Name of one of the connected skills listed in this tool's description.",
-                    json_schema_extra={"enum": connected} if connected else None,
+                    description=(
+                        f"Name of one of the connected skills: {', '.join(connected)}."
+                        if connected
+                        else "Name of one of the connected skills listed in this tool's description."
+                    ),
                 )
                 path: Optional[str] = Field(default=None, description="Declared references/<file> or scripts/<file> path.")
                 query: Optional[str] = Field(default=None, description="Case-insensitive search query for search_resource.")

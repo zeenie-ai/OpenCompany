@@ -499,10 +499,11 @@ agent path appends a skill listing to the system message; the Skill tool's
 catalogue replaced it. Treat the method as dead code — do not build new
 prompt features on it.
 
-The Skill tool's `skill_name` lists the connected names as its `enum`
-(`AIService._get_tool_schema`), so a model that follows the schema asks only
-for its own skills. Any other name is refused with `SKILL_NOT_CONNECTED`,
-whose message lists the connected skills. On Temporal, `agent.skill.invoke`
+The Skill tool's `skill_name` names the connected skills in its description
+(`AIService._get_tool_schema`). It is not an `enum` on purpose: a provider
+that checks arguments against the schema (Groq) answers an unlisted name with
+an error that ends the run. Any other name is refused with
+`SKILL_NOT_CONNECTED`, whose message lists the connected skills. On Temporal, `agent.skill.invoke`
 returns a refused call as `{success: false, error, error_type}` instead of
 raising: the model reads the reason once, and the call is not retried.
 

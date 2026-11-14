@@ -714,8 +714,8 @@ def format_teammate_roster_line(info: Dict[str, Any]) -> str:
 #: teammate's tools and skills so the lead can match work to them; without
 #: this, a small model copied a teammate's skill name into its own Skill tool.
 TEAMMATE_ROSTER_NOTE = (
-    "The tools and skills listed for each teammate are theirs, not yours: you cannot "
-    "call or load them, so give that work to the teammate with assign_task."
+    "The tools and skills listed for a teammate are that teammate's: use only your own "
+    "yourself, and give work that needs one of theirs to that teammate with assign_task."
 )
 
 
