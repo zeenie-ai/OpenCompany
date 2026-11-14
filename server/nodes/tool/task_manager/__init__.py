@@ -43,7 +43,7 @@ class TaskManagerParams(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-#: The call assign_task needs, in the tool description and in the hint a
+#: The call assign_task needs, in the tool description and in the error a
 #: call without it gets back.
 ASSIGN_TASK_EXAMPLE = (
     '{"operation":"assign_task","title":"Research","mission":"Find cited evidence",'
@@ -118,9 +118,17 @@ class TaskManagerToolInput(TaskManagerParams):
         ):
             missing.append("assignee_node_id or delegate_name")
         # Every missing field in one message: one per call cost a small model
-        # a turn for each.
+        # a turn for each. Only assign_task gets the call to copy; this text
+        # is what both runtimes hand the model.
         if missing:
-            raise ValueError(f"{self.operation} requires nonblank {', '.join(missing)}")
+            fields = missing[0] if len(missing) == 1 else f"{', '.join(missing[:-1])} and {missing[-1]}"
+            message = f"{self.operation} requires nonblank {fields}"
+            if self.operation == "assign_task":
+                message += (
+                    ". Send them in one call; title is a short name and mission holds the instructions, "
+                    f"for example {ASSIGN_TASK_EXAMPLE}"
+                )
+            raise ValueError(message)
         if self.operation == "modify_task" and all(
             getattr(self, name) is None for name in ("title", "mission", "context", "acceptance_criteria")
         ):
@@ -155,10 +163,6 @@ class TaskManagerNode(ToolNode):
         "Use list_tasks with include_history=true to consult prior executions. "
         "An employee's conversational contact uses submit_job with mission to admit substantive work "
         "for its configured team and receive a prompt acknowledgement; reviewed delivery follows separately."
-    )
-    tool_input_hint = (
-        "assign_task takes title, mission and assignee_node_id together in one call, for example "
-        f"{ASSIGN_TASK_EXAMPLE}. The title is only a short name; the instructions go in mission."
     )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},

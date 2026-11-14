@@ -90,9 +90,42 @@ async def test_an_assignment_with_only_a_title_names_every_missing_field_and_sho
     )
 
     assert result["error_type"] == "ValidationError"
-    assert "requires nonblank mission, assignee_node_id or delegate_name" in result["error"]
-    assert ASSIGN_TASK_EXAMPLE in result["hint"]
+    assert "requires nonblank mission and assignee_node_id or delegate_name. " in result["error"]
+    assert ASSIGN_TASK_EXAMPLE in result["error"]
     service.assert_not_called()
+
+
+@pytest.mark.parametrize("arguments,requirement", [
+    ({**ASSIGNMENT, "title": None}, "requires nonblank title. "),
+    ({**ASSIGNMENT, "mission": " "}, "requires nonblank mission. "),
+    ({"operation": "assign_task", "title": "Research", "mission": "Investigate"},
+     "requires nonblank assignee_node_id or delegate_name. "),
+    ({"operation": "assign_task"}, "requires nonblank title, mission and assignee_node_id or delegate_name. "),
+])
+@pytest.mark.asyncio
+async def test_an_assign_task_error_names_exactly_the_missing_fields(monkeypatch, arguments, requirement):
+    """The example call names every field, so the requirement itself is checked."""
+    monkeypatch.setattr("services.agent_team.get_agent_team_service", AsyncMock())
+
+    result = await TaskManagerNode().execute_as_tool(arguments, {"label": "Task Manager"}, context())
+
+    assert requirement in result["error"]
+
+
+@pytest.mark.parametrize("arguments", [
+    {"operation": "retry_task"},
+    {"operation": "reassign_task", "task_id": "task-1"},
+    {"operation": "submit_job", "mission": " "},
+])
+@pytest.mark.asyncio
+async def test_other_operations_get_no_assign_task_advice(monkeypatch, arguments):
+    """Advice to assign a task would steer a small model into a duplicate task."""
+    monkeypatch.setattr("services.agent_team.get_agent_team_service", AsyncMock())
+
+    result = await TaskManagerNode().execute_as_tool(arguments, {"label": "Task Manager"}, context())
+
+    assert result["error_type"] == "ValidationError"
+    assert ASSIGN_TASK_EXAMPLE not in result["error"]
 
 
 @pytest.mark.asyncio

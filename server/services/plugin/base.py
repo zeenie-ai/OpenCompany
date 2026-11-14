@@ -378,10 +378,6 @@ class BaseNode:
     # set from their validated output rather than forwarding the envelope
     # (which may carry internal execution details or unrelated payloads).
     tool_error_fields: ClassVar[frozenset[str]] = frozenset()
-    # Shown to the model as ``hint`` beside a tool-input validation error.
-    # A tool whose calls have a shape its schema cannot state (fields that
-    # only one operation requires) puts a call to copy here.
-    tool_input_hint: ClassVar[Optional[str]] = None
     # Explicit agent capability used by graph validation/migration. Rendering
     # kind and palette group are intentionally not proxies: several
     # non-agents render with componentKind="agent", while Codex-style agents
@@ -975,14 +971,11 @@ class BaseNode:
                 invocation_payload = input_payload
                 split_schema = True
         except ValidationError as e:
-            failure = {
+            return {
                 "success": False,
                 "error": f"Invalid tool input/configuration: {format_validation_error(e)}",
                 "error_type": "ValidationError",
             }
-            if self.tool_input_hint:
-                failure["hint"] = self.tool_input_hint
-            return failure
 
         # A NodeContext belongs to one invocation, but preserve pre-existing
         # escape-hatch values for tests/adapters that deliberately reuse one.

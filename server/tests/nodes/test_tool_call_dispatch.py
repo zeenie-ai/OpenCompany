@@ -181,7 +181,7 @@ async def test_task_manager_activity_preserves_validation_and_runtime_failure(mo
         # The call to copy reaches the model through the activity too.
         from nodes.tool.task_manager import ASSIGN_TASK_EXAMPLE
 
-        assert ASSIGN_TASK_EXAMPLE in result["hint"]
+        assert ASSIGN_TASK_EXAMPLE in result["error"]
     assert "delegation_request" not in result
     database.create_durable_team_task.assert_not_awaited()
     task_events.broadcast_team_event.assert_not_awaited()
