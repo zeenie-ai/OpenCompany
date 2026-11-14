@@ -571,11 +571,15 @@ AgentWorkflow.run(context):
            A tool activity that fails after its retries becomes an error
            ToolMessage, its text picked by the recorded
            payload["tool_error_version"] (agent_tool_errors.py): version 1
-           names the failure the tool raised (the ActivityError's cause,
-           "SkillRuntimeError: ..."); no version keeps the wrapper's own
-           "ActivityError: Activity task failed". agent.skill.invoke returns
-           a refused skill call as {success: false, error, error_type}
-           instead of raising, so it is never retried.
+           names the failure under Temporal's wrappers (ActivityError, and
+           ChildWorkflowError for a delegated agent), for example
+           "TimeoutError: activity StartToClose timeout", cut like a result
+           to tool_result_max_chars; no version keeps the wrapper's own
+           "ActivityError: Activity task failed". DelegatedTaskWorkflow
+           records a teammate's failure for the lead's review the same way.
+           agent.skill.invoke returns a refused skill call as
+           {success: false, error, error_type} instead of raising, so it is
+           never retried.
     4. for each tool result with an ``operations`` field
        (canvas-mutating tools — today only ``agentBuilder``):
          if payload["auto_rebind_tools"] is True:

@@ -769,10 +769,12 @@ class DelegatedTaskWorkflow:
                 bug = True
                 raise
             if began:
+                # The text the lead's review reads; only this activity's
+                # input, which replay never compares, so no version gate.
                 await workflow.execute_activity(
                     "agent.finish_delegation",
                     args=[{**lifecycle, "success": False,
-                           "error": f"{type(exc).__name__}: {exc}",
+                           "error": tool_failure_text(exc),
                            "terminal_event_id": f"{task_id}:terminal"}],
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                     retry_policy=AGENT_ACTIVITY_RETRY,
@@ -2828,6 +2830,15 @@ class AgentWorkflow:
                             if tool_error_version >= 1
                             else f'{{"error": "{type(e).__name__}: {e}"}}'
                         )
+                        if (
+                            tool_error_version >= 1
+                            and tool_output_limit
+                            and not is_delegation
+                            and tool_output_is_capped(tool_info["node_type"])
+                        ):
+                            # A failure's text can be as long as a result's;
+                            # the model's copy is cut the same way.
+                            tool_content = bound_tool_output(tool_content, tool_output_limit)
                         try:
                             await self._emit_phase(
                                 agent_node_id,
