@@ -380,7 +380,12 @@ while Temporal is waiting to retry. Status delivery is best effort and must
 never cause a successful model request to be repeated.
 
 Across providers, an HTTP 429 remains a throttle even when its message
-mentions an API key. Structured billing codes require user action; incidental
+mentions an API key. Structured billing codes require user action, even on a
+429: `_BILLING_CODES` in `services/llm/protocol.py` lists each provider's
+documented code for credits or a spend limit used up (Anthropic's spend cap is
+a 429 `rate_limit_error` told apart by `details.error_code`; OpenAI's credit,
+spend and usage limits; Kimi, Sarvam and Groq), and `_BILLING_MARKERS` the
+message text where a provider documents no code. Incidental
 message text cannot turn a throttle or server outage into authentication
 failure. Retry pacing accepts seconds, HTTP-date `Retry-After`,
 `retry-after-ms`, and Gemini `RetryInfo`, using the longest valid hint.

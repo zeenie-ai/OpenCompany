@@ -962,6 +962,39 @@ def _google_quota_exhausted(exc: BaseException) -> bool:
     )
 
 
+#: Structured codes (a body's ``code``, ``type`` or ``status``, or Anthropic's
+#: ``details.error_code``) for a refusal only the account owner can lift:
+#: credits or a spend limit used up. Several arrive as 429, where a retry
+#: cannot help, so they are matched before the HTTP status.
+_BILLING_CODES = frozenset({
+    "insufficient_quota", "billing_hard_limit_reached", "insufficient_credits",
+    "credit_balance_too_low", "prepayment_credits_depleted",
+    # Anthropic (429 rate_limit_error, no retry-after): the usage tier's
+    # monthly spend cap. A ramp limit is ``ramp_limit_exceeded`` and waits.
+    "enforced_spend_limit_reached",
+    # OpenAI (429): no prepaid credits, an organization or project spend
+    # limit, or the usage limit OpenAI assigns.
+    "credit_balance_exhausted", "organization_spend_limit_exceeded",
+    "project_spend_limit_exceeded", "organization_usage_limit_exceeded",
+    # Kimi (429, the body's type): balance too low or the account disabled.
+    "exceeded_current_quota_error",
+    # Sarvam (429): a seat's spend budget is used up.
+    "seat_budget_exhausted_error",
+    # Groq (400): the organization's spend limit.
+    "blocked_api_access",
+})
+
+#: Message text for the same refusals, where a provider documents no code.
+_BILLING_MARKERS = (
+    "spend cap breached", "insufficient_quota", "insufficient credits",
+    "credit balance is too low", "billing_hard_limit_reached",
+    "prepayment credits are depleted", "prepay credit balance is depleted",
+    # Anthropic (400 invalid_request_error): a spend limit the owner set,
+    # "...specified API usage limits" or "...specified workspace API usage limits".
+    "you have reached your specified",
+)
+
+
 def _classify_error(
     exc: BaseException, status: Optional[int]
 ) -> LLMErrorCategory:
@@ -969,7 +1002,16 @@ def _classify_error(
     message = str(exc).lower()
     body = _error_body(exc)
     message += " " + str(body.get("message") or "").lower()
-    codes = {str(value).lower() for value in (getattr(exc, "code", None), body.get("code"), body.get("type"), body.get("status")) if value is not None}
+    details = body.get("details")
+    codes = {
+        str(value).lower()
+        for value in (
+            getattr(exc, "code", None), body.get("code"), body.get("type"), body.get("status"),
+            # Anthropic's error body; Gemini's ``details`` is a list.
+            details.get("error_code") if isinstance(details, Mapping) else None,
+        )
+        if value is not None
+    }
     # The LLM gateway (LiteLLM) refuses a spent allowance with this type, as
     # 429 before LiteLLM 1.104 and 402 or 422 after. Whatever the status, only
     # the user can fix it.
@@ -982,12 +1024,7 @@ def _classify_error(
     # A quota/credit exhaustion can arrive as 429, but backoff cannot fix it.
     # Match narrow billing signatures before the generic HTTP classifiers.
     if status in {None, 400, 402, 403, 429} and (
-        status == 402 or codes & {"insufficient_quota", "billing_hard_limit_reached", "insufficient_credits", "credit_balance_too_low", "prepayment_credits_depleted"}
-        or any(marker in message for marker in (
-            "spend cap breached", "insufficient_quota", "insufficient credits",
-            "credit balance is too low", "billing_hard_limit_reached",
-            "prepayment credits are depleted", "prepay credit balance is depleted",
-        ))
+        status == 402 or codes & _BILLING_CODES or any(marker in message for marker in _BILLING_MARKERS)
     ):
         return LLMErrorCategory.BILLING
     if status == 429 and _google_quota_exhausted(exc):

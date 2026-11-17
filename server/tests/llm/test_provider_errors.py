@@ -49,6 +49,49 @@ def test_structured_billing_signature_wins_over_generic_message(provider, status
     assert error.requires_user_action
 
 
+def anthropic_body(error_type, message, **extra):
+    return {"type": "error", "error": {"type": error_type, "message": message, **extra}, "request_id": "req_1"}
+
+
+# Each from the provider's own documentation (rate-limit, error-code and
+# spend-limit pages). Kimi, Sarvam and Groq speak the OpenAI wire format.
+@pytest.mark.parametrize(("provider", "sdk", "status", "body"), [
+    # Anthropic's monthly spend cap: a 429 rate_limit_error, told apart by its details.
+    ("anthropic", "anthropic", 429, anthropic_body(
+        "rate_limit_error", "You have reached your API usage limits.", details={"error_code": "enforced_spend_limit_reached"})),
+    # A spend limit the owner set, for the organization or a workspace.
+    ("anthropic", "anthropic", 400, anthropic_body(
+        "invalid_request_error", "You have reached your specified API usage limits. You will regain access on 2026-12-01.")),
+    ("anthropic", "anthropic", 400, anthropic_body(
+        "invalid_request_error", "You have reached your specified workspace API usage limits.")),
+    ("openai", "openai", 429, {"code": "credit_balance_exhausted", "message": "No credits."}),
+    ("openai", "openai", 429, {"code": "organization_spend_limit_exceeded", "message": "Spend limit."}),
+    ("openai", "openai", 429, {"code": "project_spend_limit_exceeded", "message": "Spend limit."}),
+    ("openai", "openai", 429, {"code": "organization_usage_limit_exceeded", "message": "Usage limit."}),
+    ("kimi", "openai", 429, {"type": "exceeded_current_quota_error", "message": "Insufficient balance."}),
+    ("sarvam", "openai", 429, {"code": "seat_budget_exhausted_error", "message": "Seat budget used up."}),
+    ("groq", "openai", 400, {"code": "blocked_api_access", "message": "Spend limit reached."}),
+])
+def test_documented_out_of_money_refusals_stop_for_the_owner(provider, sdk, status, body):
+    error = LLMError.from_exception(provider, sdk_error(sdk, status, "Request rejected", body=body))
+    assert error.category == LLMErrorCategory.BILLING
+    assert not error.retryable
+    assert error.requires_user_action
+
+
+@pytest.mark.parametrize(("provider", "sdk", "body"), [
+    # Same status and type as the spend cap, but a ramp limit waits.
+    ("anthropic", "anthropic", anthropic_body("rate_limit_error", "Ramp limit.", details={"error_code": "ramp_limit_exceeded"})),
+    ("openai", "openai", {"code": "slow_down", "type": "rate_limit_error", "message": "Slow down."}),
+    ("kimi", "openai", {"type": "rate_limit_reached_error", "message": "TPM rate limit."}),
+    ("sarvam", "openai", {"code": "rate_limit_exceeded_error", "message": "Too many requests."}),
+])
+def test_a_throttle_beside_them_still_waits(provider, sdk, body):
+    error = LLMError.from_exception(provider, sdk_error(sdk, 429, "Too many requests", body=body))
+    assert error.category == LLMErrorCategory.RATE_LIMIT
+    assert error.retryable
+
+
 OPENROUTER_PROSE = "sk-secret prose"
 
 
