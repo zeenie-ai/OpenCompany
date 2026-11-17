@@ -191,3 +191,130 @@ def test_schema_compiler_rejects_external_and_recursive_refs():
     }
     with pytest.raises(ValueError, match="Recursive"):
         compile_tool_schema(recursive, provider="openai")
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai", "openrouter"])
+def test_ui_annotations_never_reach_the_model(provider):
+    """The editor reads UI keys from the NodeSpec; a model only pays for them."""
+    compiled = compile_tool_schema(
+        {
+            "title": "BrowserToolInput",
+            "type": "object",
+            "properties": {
+                "url": {
+                    "title": "Url",
+                    "type": "string",
+                    "description": "Page to open",
+                    "placeholder": "https://example.com",
+                    "displayOptions": {"show": {"operation": ["open"]}},
+                },
+                "steps": {
+                    "title": "Steps",
+                    "type": "array",
+                    "items": {"title": "Step", "type": "string", "widget": "tags"},
+                },
+                "target": {
+                    "title": "Target",
+                    "anyOf": [
+                        {"type": "string", "title": "Selector", "hidden": True},
+                        {"type": "null"},
+                    ],
+                    "loadOptionsMethod": "browserTabs",
+                    "uiHints": {"compact": True},
+                },
+            },
+            "required": ["url"],
+        },
+        provider=provider,
+    )
+
+    assert compiled == {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "Page to open"},
+            "steps": {"type": "array", "items": {"type": "string"}},
+            "target": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        },
+        "required": ["url"],
+    }
+
+
+def test_parameters_named_like_ui_keys_are_kept():
+    """Property names are data: a ``title`` or ``group`` parameter survives."""
+    from pydantic import BaseModel, Field
+
+    class NoteParams(BaseModel):
+        title: str = Field(json_schema_extra={"placeholder": "Note title"})
+        group: str = Field(
+            json_schema_extra={
+                "group": "options",
+                "displayOptions": {"show": {"mode": ["grouped"]}},
+            }
+        )
+        body: str = Field(default="", json_schema_extra={"rows": 6})
+
+    compiled = compile_tool_schema(
+        NoteParams.model_json_schema(), provider="anthropic"
+    )
+
+    assert compiled == {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "group": {"type": "string"},
+            "body": {"default": "", "type": "string"},
+        },
+        "required": ["title", "group"],
+    }
+
+
+def test_values_and_descriptions_are_kept_as_they_are():
+    """Keywords whose value is data are copied whole, UI-like keys inside them too."""
+    compiled = compile_tool_schema(
+        {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["fast", "deep"],
+                    "description": "How hard to look",
+                },
+                "options": {
+                    "type": "object",
+                    "default": {"title": "kept", "group": "kept"},
+                    "examples": [{"title": "kept"}],
+                },
+                "capabilities": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "enum_values": ["title", "network"],
+                },
+                "shape": {
+                    "oneOf": [
+                        {"type": "string", "title": "Name"},
+                        {"type": "integer", "const": 3},
+                    ]
+                },
+            },
+        },
+        provider="openai",
+    )
+
+    assert compiled["properties"] == {
+        "mode": {
+            "type": "string",
+            "enum": ["fast", "deep"],
+            "description": "How hard to look",
+        },
+        "options": {
+            "type": "object",
+            "default": {"title": "kept", "group": "kept"},
+            "examples": [{"title": "kept"}],
+        },
+        "capabilities": {
+            "type": "array",
+            "items": {"type": "string"},
+            "enum_values": ["title", "network"],
+        },
+        "shape": {"oneOf": [{"type": "string"}, {"type": "integer", "const": 3}]},
+    }

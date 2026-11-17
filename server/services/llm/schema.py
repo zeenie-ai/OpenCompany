@@ -14,6 +14,17 @@ from typing import Any, Dict, Mapping
 
 
 _META_KEYWORDS = {"$schema", "$id", "$defs", "definitions"}
+# UI-only annotations (the editor reads them from the NodeSpec, never from a
+# compiled schema) and Pydantic's generated titles. Other providers accept
+# unknown keywords, so for them this list only saves prompt tokens on every
+# call: a UI keyword missing from it still reaches the model harmlessly.
+_UI_KEYWORDS = frozenset({
+    "title", "displayOptions", "placeholder", "rows", "hidden", "editor", "widget",
+    "accept", "component", "uiHints", "loadOptionsMethod", "loadOptionsDependsOn",
+    "dynamicOptions", "dependsOn", "numberStepSize", "password", "group", "groups",
+})
+# Keywords whose value is data, not a schema: copied as they are.
+_VALUE_KEYWORDS = frozenset({"default", "const", "enum", "examples"})
 # Gemini's function-schema surface does not accept OpenCompany UI annotations
 # such as ``displayOptions``, ``rows`` and ``placeholder``. A denylist is
 # therefore unsafe: every new UI annotation could invalidate a request. Keep
@@ -116,11 +127,22 @@ def _clean_provider_schema(value: Any, *, provider: str) -> Any:
         return value
 
     if provider != "gemini":
-        return {
-            key: _clean_provider_schema(item, provider=provider)
-            for key, item in value.items()
-            if key not in _META_KEYWORDS
-        }
+        kept: Dict[str, Any] = {}
+        for key, item in value.items():
+            if key in _META_KEYWORDS or key in _UI_KEYWORDS:
+                continue
+            if key == "properties" and isinstance(item, dict):
+                # Mapping keys are property names, not keywords: a parameter
+                # named ``title`` or ``group`` is kept.
+                kept[key] = {
+                    name: _clean_provider_schema(child, provider=provider)
+                    for name, child in item.items()
+                }
+            elif key in _VALUE_KEYWORDS:
+                kept[key] = item
+            else:
+                kept[key] = _clean_provider_schema(item, provider=provider)
+        return kept
 
     missing = object()
     const_value = value.get("const", missing)
