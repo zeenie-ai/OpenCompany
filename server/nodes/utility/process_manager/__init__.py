@@ -95,7 +95,10 @@ class ProcessManagerNode(ActionNode):
         # so the raw id failed the ProcessService containment guardrail.
         agent_dir = os.path.join(workspace_dir, safe_path_component(ctx.node_id, "node")) if workspace_dir else ""
         v1 = ctx.raw.get("runtime_behavior_version") == 1
-        if v1 and params.operation == "start":
+        if params.operation == "start":
+            # Every agent resolves a relative cwd against the workflow
+            # workspace. The older rule resolved it against the backend's
+            # own folder, which the ProcessService guardrail always refused.
             from services.runtime_tool_context import process_cwd
             try:
                 agent_dir = process_cwd(workspace_dir, ctx.node_id, _clean(params.cwd), version=1)
@@ -136,7 +139,7 @@ class ProcessManagerNode(ActionNode):
                     name=name,
                     command=_clean(params.command),
                     workflow_id=workflow_id,
-                    working_directory=agent_dir if v1 else _clean(params.cwd) or agent_dir,
+                    working_directory=agent_dir,
                     ports=params.ports,
                     extra_env=params.env,
                 )

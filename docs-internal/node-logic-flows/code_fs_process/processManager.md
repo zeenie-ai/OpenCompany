@@ -37,7 +37,7 @@ envelope so the framework returns a clean failure.
 | `operation` | `start`/`stop`/`restart`/`list`/`send_input`/`get_output` (Literal) | `list` | no | - | Operation to run |
 | `name` | string | `""` | yes (all except `list`) | - | Unique process name within the workflow (LLM `"None"` coerced to empty by `_clean`) |
 | `command` | string | `""` | yes (`start` only) | `operation=start` | Command (`ProcessService` parses with `shlex.split`) |
-| `cwd` | string | `""` | no | `operation=start` | Working directory; defaults to `<workspace>/<node_id>` |
+| `cwd` | string | `""` | no | `operation=start` | Working directory; a relative path resolves against the workflow workspace; empty defaults to `<workspace>/<node_id>` |
 | `ports` | int[] | `[]` | no | `operation=start` | Listener ports reserved before spawn; occupied ports fail with `PORT_IN_USE` instead of launching |
 | `env` | object (Dict[str,str]) | `{}` | no | `operation=start` | Extra environment variables, forwarded to `ProcessService.start(extra_env=...)` |
 | `ports` | array of integers | `[]` | no | `operation=start` | Listener ports reserved before spawn; common port flags and PORT environment variables are also recognized |
@@ -112,7 +112,7 @@ Each service call (except `list`) is wrapped in `_unwrap`, which raises
   workspace is also empty, `ProcessService.start` falls back to
   `<workspace_base>/default` and mkdir's it.
 - **Workspace guardrail**: `cwd` must resolve inside `workspace_base_resolved`
-  or the managed daemons state root. Versioned runtime v1 additionally resolves its node `cwd` under the workflow workspace; violations return an error.
+  or the managed daemons state root. Every agent's relative `cwd` resolves under the workflow workspace (`process_cwd` with version 1, whatever the agent's runtime version); violations return an error that says to use a workspace-relative `cwd`.
 - **Destructive-command block**: the service maintains a hard-coded list of
   prefixes/tokens (`rm `, `rmdir`, `del `, `rd `, `remove-item`, `format `,
   `mkfs`, `dd if=`, `shred`, `> /dev/`, `chmod 777`, `chmod -r`) and refuses
@@ -144,7 +144,7 @@ Each service call (except `list`) is wrapped in `_unwrap`, which raises
 
 `start` parses one executable/argument vector with `shlex.split`; it does not evaluate shell operators. Use an explicit shell executable when shell grammar is required. It reserves declared `ports` and recognized port flags/environment before spawning under a start lock. Occupied ports return `PORT_IN_USE` with owner facts; unrelated listeners are never killed and refusal does not truncate logs. Only same-workflow, same-name replacement first stops its managed process.
 
-Missing `cwd` defaults to the sanitized process-node directory. Runtime v1 resolves an explicit `cwd` within the workflow workspace and returns runtime/port-owner facts; legacy working-directory behavior is retained for old agents. `env` is forwarded after secret-environment filtering.
+Missing `cwd` defaults to the sanitized process-node directory, and a relative `cwd` resolves within the workflow workspace for every agent. Runtime v1 additionally returns runtime/port-owner facts. `env` is forwarded after secret-environment filtering.
 
 Successful service responses from `start`/`stop`/`restart`/`send_input` retain their nested `result` field inside the outer node envelope; `list` and `get_output` have their own direct payload shapes. The AI-tool path unwraps the outer ActionNode envelope only.
 

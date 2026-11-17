@@ -2,6 +2,8 @@
 
 Never infer eligibility from a parent, a model argument, or a generation.
 Missing metadata belongs to an existing agent and always means legacy.
+One v1 rule applies to every agent: Process Manager resolves a relative
+``cwd`` against the workflow workspace, since the legacy rule only refused it.
 """
 from __future__ import annotations
 

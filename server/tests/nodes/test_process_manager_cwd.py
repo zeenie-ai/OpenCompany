@@ -13,6 +13,8 @@ import ntpath
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from core.paths import safe_path_component
 from nodes.utility.process_manager import ProcessManagerNode, ProcessManagerParams
 from services.plugin import NodeContext
@@ -86,6 +88,30 @@ async def test_explicit_cwd_passes_through_unchanged(monkeypatch, tmp_path) -> N
     assert svc.calls[0]["working_directory"] == explicit
 
 
+@pytest.mark.parametrize("raw", [{}, {"runtime_behavior_version": 1}], ids=["legacy", "v1"])
+async def test_relative_cwd_resolves_inside_the_workspace_for_every_agent(monkeypatch, tmp_path, raw) -> None:
+    svc = _CaptureService()
+    monkeypatch.setattr("services.process_service.get_process_service", lambda: svc)
+
+    ctx = NodeContext(
+        node_id=COLON_NODE_ID,
+        node_type="processManager",
+        workflow_id="2",
+        workspace_dir=str(tmp_path),
+        raw=raw,
+    )
+    node = ProcessManagerNode()
+    result = await node.dispatch(
+        ctx, ProcessManagerParams(operation="start", name="site", command="python -V", cwd="weather-site")
+    )
+    await node.dispatch(ctx, ProcessManagerParams(operation="start", name="root", command="python -V", cwd="."))
+
+    assert Path(svc.calls[0]["working_directory"]) == (tmp_path / "weather-site").resolve()
+    assert Path(svc.calls[1]["working_directory"]) == tmp_path.resolve()
+    # Runtime facts stay a version-1 feature.
+    assert ("runtime_context" in result) == bool(raw)
+
+
 async def test_guardrail_rejection_names_the_rejected_path(monkeypatch, tmp_path) -> None:
     workspace = tmp_path / "workspaces"
     workspace.mkdir()
@@ -98,4 +124,4 @@ async def test_guardrail_rejection_names_the_rejected_path(monkeypatch, tmp_path
 
     assert result["success"] is False
     assert "elsewhere" in result["error"]
-    assert "Omit cwd" in result["error"]
+    assert "relative to the workflow workspace" in result["error"]

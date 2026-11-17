@@ -28,6 +28,15 @@ ports, start time, elapsed time, output counts, command, and recent stdout.
 Operators can stop or restart a process. Stopped elapsed time freezes at
 `stopped_at`; running elapsed time updates once per second.
 
-Process output is stored under `<workspace>/.processes/<name>/` while the
+## Working directory
+
+`cwd` is optional. Left empty, a process runs in the process node's own folder
+in the workflow workspace. A relative `cwd` resolves against the workflow
+workspace (`.` is its root), so a server can serve a folder the agent wrote,
+such as `weather-site`; this holds for every agent, whatever its runtime
+version. An absolute `cwd` is used as given. Every path must stay inside the
+workspace or the daemons root, and anything else is refused.
+
+Process output is stored under `<cwd>/.processes/<name>/` while the
 process remains inspectable. Completed entries and logs retain the existing
 60-second cleanup policy.

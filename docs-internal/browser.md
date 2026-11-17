@@ -64,7 +64,10 @@ and do not deploy their prompt into saved Context or employee chat. See
 enabled, authorized fresh creation paths stamp `runtime_behavior_version: 1`
 on the new agent. Ordinary edits and imported/existing agents preserve their
 saved identity; missing metadata means legacy behavior. Disabling the release
-switch later does not downgrade already admitted v1 agents.
+switch later does not downgrade already admitted v1 agents. One v1 rule
+applies to every agent regardless of the switch: Process Manager resolves a
+relative `cwd` against the workflow workspace, because the legacy rule only
+ever produced a refusal.
 
 V1 agents receive a private Browser tool/profile reservation. That profile's
 binding cannot be shared with or transferred to another agent, and selecting

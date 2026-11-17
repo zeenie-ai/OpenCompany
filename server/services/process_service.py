@@ -175,7 +175,7 @@ class ProcessService:
                 "error": (
                     f"Working directory must be inside workspace ({workspace_base}) "
                     f"or daemons ({daemon_base}); got '{cwd_resolved}'. "
-                    "Omit cwd to run in this node's workspace folder."
+                    "Use a cwd relative to the workflow workspace ('.' is its root)."
                 ),
             }
 

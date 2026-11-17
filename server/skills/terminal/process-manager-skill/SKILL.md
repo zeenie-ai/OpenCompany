@@ -73,7 +73,7 @@ Write text to a process's stdin (newline appended automatically).
 
 ## Output Log Files
 
-Processes write stdout/stderr logs below their effective working directory. By default that is the sanitized process-node folder in the workflow workspace; an explicitly supplied `cwd` and versioned runtime policy can change that directory:
+Processes write stdout/stderr logs below their effective working directory. By default that is the sanitized process-node folder in the workflow workspace; a `cwd` changes that directory, and a relative `cwd` resolves under the workflow workspace:
 ```
 {effective_cwd}/.processes/{process_name}/
   stdout.log    # Standard output
@@ -99,7 +99,7 @@ Returns `Windows`, `Linux`, or `Darwin` (macOS).
 
 - Always give processes a meaningful **name** so you can stop/check them later
 - For a server, declare all listener `ports`; occupied ports are refused before spawn. Do not kill an unrelated listener to make room.
-- Versioned runtime v1 resolves `cwd` under the workspace and returns runtime/port-owner facts. Legacy `cwd` behavior remains separate; inspect returned paths instead of assuming a shared shell directory.
+- A relative `cwd` resolves under the workflow workspace (`.` is its root), so to serve a folder you wrote, pass that folder, for example `"cwd": "weather-site"`. Versioned runtime v1 also returns runtime/port-owner facts. Inspect returned paths instead of assuming a shared shell directory.
 - Use **get_output** after starting to verify the process launched correctly
 - Use **stop** to clean up processes when done -- don't leave servers running
 - **Do NOT use process_manager for file deletion** -- use shell_execute instead
