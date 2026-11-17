@@ -365,6 +365,69 @@ class TestWorkflowLoopContract:
                    for call in patched_workflow.logger.error.call_args_list)
 
     @pytest.mark.asyncio
+    async def test_a_teammate_without_a_key_fails_its_task_at_once(self, monkeypatch, patched_workflow):
+        # The run stops before its first step (agent.prepare_payload), so the
+        # missing-key error reaches the runner under two wrappers.
+        from temporalio.exceptions import ActivityError, ApplicationError, ApplicationErrorCategory, ChildWorkflowError
+
+        from services.temporal.agent_workflow import DelegatedTaskWorkflow
+
+        class FailingChild:
+            first_execution_run_id = "child-run"
+
+            def __init__(self, child_id):
+                self.id = child_id
+
+            def __await__(self):
+                async def fail():
+                    missing = ApplicationError(
+                        "API key for provider 'anthropic' is not configured",
+                        {"hint": "Connect the provider in Settings > Connectors, then resume.",
+                         "requires_user_action": True, "retryable": False},
+                        type="MissingAgentProviderCredential", non_retryable=True,
+                        category=ApplicationErrorCategory.BENIGN,
+                    )
+                    step = ActivityError(
+                        "Activity task failed", scheduled_event_id=5, started_event_id=6, identity="worker",
+                        activity_type="agent.prepare_payload", activity_id="prepare-payload", retry_state=None,
+                    )
+                    step.__cause__ = missing
+                    child = ChildWorkflowError(
+                        "Child Workflow execution failed", namespace="default", workflow_id=self.id, run_id="child-run",
+                        workflow_type="AgentWorkflow", initiated_event_id=7, started_event_id=8, retry_state=None,
+                    )
+                    child.__cause__ = step
+                    raise child
+
+                return fail().__await__()
+
+        finished = []
+
+        async def execute(name, *, args, **_kwargs):
+            if name == "agent.finish_delegation":
+                finished.append(args[0])
+            return {}
+
+        async def start_child(*_args, **kwargs):
+            return FailingChild(kwargs["id"])
+
+        monkeypatch.setattr(patched_workflow, "execute_activity", execute)
+        monkeypatch.setattr(patched_workflow, "start_child_workflow", start_child)
+        with pytest.raises(ChildWorkflowError):
+            await DelegatedTaskWorkflow().run({
+                "lifecycle": {"team_id": "team-1", "team_task_id": "task-1", "root_execution_id": "root-1",
+                              "parent_agent_node_id": "lead", "child_agent_node_id": "worker"},
+                "child_workflow_id": "child-1",
+                "child_context": {},
+            })
+
+        [payload] = finished
+        assert payload["success"] is False
+        # So finish_agent_delegation fails the task at once and tells the lead.
+        assert payload["requires_user_action"] is True
+        assert "is not configured" in payload["error"]
+
+    @pytest.mark.asyncio
     async def test_an_owner_stop_in_compaction_carries_its_hint(self, monkeypatch, patched_workflow):
         # The summarizer is a model call: out of credits there pauses the
         # employee at once with the hint, as an LLM step's stop does.

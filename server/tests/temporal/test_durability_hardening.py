@@ -1186,8 +1186,29 @@ async def test_resume_rebuilds_a_gone_controller_then_reapplies_running(monkeypa
     assert update_state.await_count == 2
     # Operator intervention resets the circuit-breaker streak.
     clear_streak.assert_awaited_once()
-    # And the message whose failure paused the employee is answered again.
-    answer_again.assert_awaited_once_with("wf")
+    # The row as it was before running again decides whether a paused
+    # message is answered again (its pause_reason).
+    answer_again.assert_awaited_once_with(resuming)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("reason", "answered"), [("failures", True), (None, False), ("recovery", False)])
+async def test_resume_answers_again_only_after_the_circuit_breaker_paused(monkeypatch, reason, answered):
+    from services.chat import handlers as chat_handlers
+    from services.deployment import handlers
+
+    answer = AsyncMock()
+    monkeypatch.setattr(chat_handlers, "answer_again_after_resume", answer)
+    paused = _boot_control("resuming")
+    paused.pause_reason = reason
+
+    await handlers._answer_paused_message(paused)
+
+    if answered:
+        answer.assert_awaited_once_with("wf")
+    else:
+        # A Stop or a crash recovery: an old failed message is not run again.
+        answer.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

@@ -448,14 +448,19 @@ def _trusted_tool_scope(context: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _owner_recovery(error: BaseException) -> Dict[str, Any]:
-    """What a failed model call (an LLM step or the summarizer) tells the
-    owner: its hint, whether only they can fix it, and whether repeating
-    helps. Read from the structured details the activity attached
-    (``_as_temporal_llm_error`` and the missing-credential errors); empty
-    for any other failure."""
+    """What a failed model call (an LLM step, the summarizer, or a
+    delegated agent's run) tells the owner: its hint, whether only they can
+    fix it, and whether repeating helps. Read from the structured details
+    the activity attached (``_as_temporal_llm_error`` and the
+    missing-credential errors), under however many activity and
+    child-workflow wrappers it arrives; empty for any other failure."""
     cause = getattr(error, "cause", None)
-    cause_type = str(getattr(cause, "type", "") or "")
-    if not (cause_type.startswith("LLMError.") or cause_type == "MissingAgentProviderCredential"):
+    while isinstance(cause, BaseException):
+        cause_type = str(getattr(cause, "type", "") or "")
+        if cause_type.startswith("LLMError.") or cause_type == "MissingAgentProviderCredential":
+            break
+        cause = getattr(cause, "cause", None)
+    else:
         return {}
     diagnostics = getattr(cause, "details", ())
     if not (diagnostics and isinstance(diagnostics[0], dict)):
@@ -715,12 +720,11 @@ class DelegatedTaskWorkflow:
             # A stop only the owner can fix fails the task at once instead of
             # queueing another attempt. Only this activity's input, which
             # replay never compares, so no version gate.
-            owner_must_act = isinstance(result, dict) and result.get("requires_user_action") is True
             return await workflow.execute_activity(
                 "agent.finish_delegation",
                 args=[{**lifecycle, "success": succeeded, "result": summary,
                        "error": result.get("error") if isinstance(result, dict) else None,
-                       **({"requires_user_action": True} if owner_must_act else {}),
+                       "requires_user_action": isinstance(result, dict) and result.get("requires_user_action") is True,
                        "terminal_event_id": f"{task_id}:terminal"}],
                 start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                 retry_policy=AGENT_ACTIVITY_RETRY,
@@ -797,12 +801,15 @@ class DelegatedTaskWorkflow:
                 bug = True
                 raise
             if began:
-                # The text the lead's review reads; only this activity's
-                # input, which replay never compares, so no version gate.
+                # The text the lead's review reads, and whether only the owner
+                # can fix it (a run that found no key fails here, before its
+                # first step); only this activity's input, which replay never
+                # compares, so no version gate.
                 await workflow.execute_activity(
                     "agent.finish_delegation",
                     args=[{**lifecycle, "success": False,
                            "error": tool_failure_text(exc),
+                           "requires_user_action": bool(_owner_recovery(exc).get("requires_user_action")),
                            "terminal_event_id": f"{task_id}:terminal"}],
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                     retry_policy=AGENT_ACTIVITY_RETRY,
@@ -2513,6 +2520,10 @@ class AgentWorkflow:
                                         "success": child_succeeded,
                                         "result": child_summary,
                                         "error": child_error,
+                                        "requires_user_action": (
+                                            isinstance(tool_result, dict)
+                                            and tool_result.get("requires_user_action") is True
+                                        ),
                                         "terminal_event_id": f"{task_id}:terminal",
                                     }],
                                     activity_id=(
@@ -2831,6 +2842,7 @@ class AgentWorkflow:
                                         "success": False,
                                         "error": (tool_failure_text(e) if tool_error_version >= 1
                                                   else f"{type(e).__name__}: {e}"),
+                                        "requires_user_action": bool(_owner_recovery(e).get("requires_user_action")),
                                         "terminal_event_id": f"{task_id}:terminal",
                                     }],
                                     activity_id=(

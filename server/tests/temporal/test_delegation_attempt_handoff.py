@@ -69,7 +69,7 @@ async def retry(handoff):
 
 
 @pytest.mark.parametrize("owner_must_act", [True, False])
-async def test_a_stop_only_the_owner_can_fix_fails_the_task_and_tells_the_lead(handoff, monkeypatch, owner_must_act):
+async def test_a_stop_only_the_owner_can_fix_fails_the_task_and_tells_the_lead(handoff, monkeypatch, caplog, owner_must_act):
     told = []
 
     async def tell(**event):
@@ -77,10 +77,11 @@ async def test_a_stop_only_the_owner_can_fix_fails_the_task_and_tells_the_lead(h
 
     monkeypatch.setattr("nodes.agent._events.broadcast_agent_task_failed", tell)
     await start_attempt(handoff, 1)
-    answer = await activities.finish_agent_delegation({
-        **PAYLOAD, "success": False, "error": "Your OpenRouter credits cannot cover this request.",
-        **({"requires_user_action": True} if owner_must_act else {}),
-    })
+    with caplog.at_level("WARNING", logger="services.temporal.agent_activities"):
+        answer = await activities.finish_agent_delegation({
+            **PAYLOAD, "success": False, "error": "Your OpenRouter credits cannot cover this request.",
+            "requires_user_action": owner_must_act,
+        })
     task = await handoff.database.get_durable_team_task("team", "task")
     if owner_must_act:
         # Another attempt would meet the same stop: the lead hears of it now.
@@ -90,6 +91,9 @@ async def test_a_stop_only_the_owner_can_fix_fails_the_task_and_tells_the_lead(h
         # Any other failure is queued for another attempt, and no review starts yet.
         assert answer["status"] == "requeued" and task["status"] == "queued"
         assert told == []
+    # One line says what became of it, also when the SDK logs the failure at DEBUG.
+    [line] = [record.getMessage() for record in caplog.records if record.getMessage().startswith("Delegated task")]
+    assert line == f"Delegated task task {answer['status']}: Your OpenRouter credits cannot cover this request."
 
 
 async def test_retried_legacy_runner_delivers_a_second_deduplicated_review(handoff):

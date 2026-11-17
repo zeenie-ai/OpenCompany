@@ -84,8 +84,9 @@ async def test_resume_releases_continuations_before_producers_and_saves_timeout_
         order.append("running")
         target.status = kwargs["status"]
         return target
-    async def answer_again(workflow_id):
-        order.append(f"answer again {workflow_id}")
+    async def answer_again(paused):
+        # The row from before running again: its pause_reason decides.
+        order.append(f"answer again {paused.workflow_id}")
     monkeypatch.setattr(container, "workflow_service", lambda: SimpleNamespace(pause_deployment=lambda _: None,
         update_trigger_pause_status=AsyncMock(), resume_deployment=local))
     monkeypatch.setattr(container, "temporal_client", lambda: SimpleNamespace(client=object()))

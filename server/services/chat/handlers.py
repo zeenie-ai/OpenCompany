@@ -729,8 +729,10 @@ async def _branch_context(
 async def _workflow_branch_context(
     database: Any, session_id: str, workflow_id: str, revision: Optional[int], *, starts_run: bool
 ) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
-    """:func:`_branch_context` once the owner's authority over the
-    workflow is established (by the socket, or by the Resume they sent)."""
+    """:func:`_branch_context` after its socket ownership check, for Resume:
+    it acts only on the workflow's own session, for whoever resumed it.
+    Resume itself has no owner check under ``AUTH_MODE=multi``, the gap
+    authentication.md documents (Known Limitations)."""
     control = await database.get_latest_workflow_control(session_id)
     live_root = chat_execution_id(control)
     if control is None or live_root is None:
@@ -885,9 +887,10 @@ async def _try_again(
 async def answer_again_after_resume(workflow_id: str) -> Optional[Dict[str, Any]]:
     """Resume answers again the message whose failure paused the employee.
 
-    That is the chat's newest run when it ended on a stop only the owner
-    could fix (``requires_user_action``: out of credits, no key), which
-    pauses the employee at once (the circuit breaker). It goes through Try
+    Called after a Resume from a pause the circuit breaker made
+    (services/deployment). The message is the chat's newest run's when it
+    ended on a stop only the owner could fix (``requires_user_action``: out
+    of credits, no key), which pauses the employee at once. It goes through Try
     again's own path, with the run's own choices, so Try again's rules
     apply: a message sent during the pause (which runs instead) or a newer
     answer leaves it as it is. Returns Try again's answer, or None when no

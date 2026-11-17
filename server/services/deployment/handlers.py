@@ -1425,11 +1425,12 @@ async def _finish_versioned_transition(service: WorkflowControlService, control)
                 values.update(CLEAR_PAUSE_REASON)
                 values["resource_manifest"] = {**(control.resource_manifest or {}),
                     "last_resumed_at": datetime.now(timezone.utc).isoformat()}
+            resumed_from = control
             control = await service.transition(control, expected_revision=intent[2],
                 from_statuses={intent[3]}, status="paused" if paused else "running", values=values or None)
             if not paused:
                 await _clear_failure_streak(service.database, control)
-                await _answer_paused_message(control.workflow_id)
+                await _answer_paused_message(resumed_from)
             payload = await _broadcast_control(control, controller_status=result["controller_status"], extra=details)
             from services.status_broadcaster import get_status_broadcaster
             broadcaster = get_status_broadcaster()
@@ -2524,6 +2525,7 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     )
     queued = await container.workflow_service().resume_deployment(workflow_id)
     resumed_triggers = await container.workflow_service().update_trigger_pause_status(workflow_id, paused=False)
+    resumed_from = control
     control = await service.transition(
         control,
         expected_revision=control.revision,
@@ -2534,7 +2536,7 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     # Operator intervention resets the circuit-breaker streak — the next
     # failure after a resume starts a fresh count, not a near-tripped one.
     await _clear_failure_streak(service.database, control)
-    await _answer_paused_message(control.workflow_id)
+    await _answer_paused_message(resumed_from)
     # Mirror of the pause-side emission: flip the UI-facing execution
     # flags back so the canvas and toolbar re-animate on every client.
     from services.status_broadcaster import get_status_broadcaster
@@ -2830,16 +2832,21 @@ async def _clear_failure_streak(database, control) -> None:
         logger.debug(f"Failed to clear failure streak: {exc}")
 
 
-async def _answer_paused_message(workflow_id: str) -> None:
-    """On Resume, answer again the chat message whose failure paused the
-    employee (services/chat, through Try again's own path and rules). Best
-    effort: the Resume stands, and the message keeps its Try again."""
+async def _answer_paused_message(paused) -> None:
+    """After a Resume from a pause the circuit breaker made (the row's
+    ``pause_reason`` before running again is ``failures``), answer again the
+    chat message whose failure paused the employee (services/chat, through
+    Try again's own path and rules). Any other pause (Stop, crash recovery)
+    answers nothing. Best effort: the Resume stands, and the message keeps
+    its Try again."""
+    if getattr(paused, "pause_reason", None) != PAUSE_REASON_FAILURES:
+        return
     from services.chat.handlers import answer_again_after_resume
 
     try:
-        await answer_again_after_resume(workflow_id)
+        await answer_again_after_resume(paused.workflow_id)
     except Exception:  # noqa: BLE001
-        logger.warning("Resume could not answer the paused message again", workflow_id=workflow_id, exc_info=True)
+        logger.warning("Resume could not answer the paused message again", workflow_id=paused.workflow_id, exc_info=True)
 
 
 async def pause_generation_on_failure(

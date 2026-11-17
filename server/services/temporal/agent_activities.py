@@ -2563,6 +2563,10 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
     target_status = "requeued" if is_requeued else persisted_status
 
     error = str(payload.get("error") or "Delegated agent failed")
+    if not succeeded:
+        # One line for what became of a teammate's failure. A stop only the
+        # owner can fix is BENIGN, so the SDK logs it at DEBUG only.
+        logger.warning("Delegated task %s %s: %s", task_id, target_status, error)
     content = f"Task {task_id} completed" if succeeded else f"Task {task_id} failed: {error}"
     message = await service.send_message(
         team_id, child_id, content, to_agent=parent_id,
