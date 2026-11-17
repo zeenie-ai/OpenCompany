@@ -1446,8 +1446,10 @@ turn. The in-process path calls `CompactionService.track()` after execution to
 persist session metrics and can trigger `compact_context()`, which performs a
 shared client-side summarization call through `ChatUnifier`. The Temporal
 `AgentWorkflow` also aggregates and returns loop usage and can invoke the same
-summarizer, but it does not currently persist that loop aggregate through
-`CompactionService.track()`. Provider-native Anthropic/OpenAI context-management
+summarizer. It does not call `CompactionService.track()`; instead each
+`agent.execute_llm_step` books its own priced row in `token_usage_metrics`
+(`record_llm_usage` in `services/employees/llm.py`: session and `workflow_id` =
+the workflow id, `iteration` = the step number). Provider-native Anthropic/OpenAI context-management
 compaction is not used by the agent runtime. Executions without connected
 memory still aggregate usage inside the loop but do not create session
 compaction records.

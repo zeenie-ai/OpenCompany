@@ -14,7 +14,9 @@ conversation-continuity switch. See [Context continuity](agent_context_flow.md).
 automatic transcript compaction for agent executions with the appropriate
 stored Context or legacy memory-session descriptor. Every provider normalizes reported usage into `services.llm.protocol.Usage`,
 but only execution paths that call `CompactionService.track()` persist that
-usage to the session metric tables. Standalone chat-model calls and arbitrary
+usage to the session metric tables. An agent on Temporal books one
+`TokenUsageMetric` row per LLM step instead (`record_llm_usage`), without
+touching the session counters. Standalone chat-model calls and arbitrary
 third-party API requests are not part of this accounting surface.
 
 All providers use the same client-side summarization path:
@@ -50,6 +52,7 @@ native agent loop
        │         └─ if threshold reached and memory/key available:
        │              compact_context()
        └─ Temporal AgentWorkflow
+            ├─ books one TokenUsageMetric per LLM step (record_llm_usage)
             ├─ returns aggregate usage in the workflow result
             ├─ caps each external tool result; past the transcript's byte
             │  budget, clears results from earlier turns
@@ -133,7 +136,10 @@ See [Temporal workflow control](temporal-workflow-control.md),
 Stores one metric whenever `CompactionService.track()` or the compaction
 summarizer's internal metric writer is invoked. A memory-connected in-process
 agent normally writes its loop aggregate as one row; the summarizer uses
-`iteration=0`. This table is not populated by every LLM request in the system.
+`iteration=0`. An agent on Temporal writes one row per LLM step (`iteration` =
+the step number, `session_id` and `workflow_id` = the workflow id,
+`execution_id` = the generation). This table is not populated by every LLM
+request in the system.
 
 ```python
 class TokenUsageMetric(SQLModel, table=True):

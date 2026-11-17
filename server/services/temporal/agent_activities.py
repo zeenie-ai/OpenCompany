@@ -652,6 +652,26 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         assistant_wire = message_to_wire(assistant)
         usage = asdict(response.usage)
 
+        # Book the call's tokens and cost. It is already billed, so booking
+        # never fails the step; the session is the workflow's chat session,
+        # and the iteration matches the ``llm-step-N`` activity id.
+        try:
+            from services.employees.llm import LLMChoice, record_llm_usage
+
+            workflow_id = payload.get("workflow_id") or None
+            await record_llm_usage(
+                container.database(),
+                LLMChoice(provider=payload["provider"], model=payload["model"], local=False),
+                response,
+                session_id=workflow_id or "default",
+                node_id=str(payload.get("node_id") or ""),
+                iteration=int(payload.get("iteration") or 0) + 1,
+                workflow_id=workflow_id,
+                execution_id=(payload.get("attribution") or {}).get("execution_id"),
+            )
+        except Exception:
+            logger.warning("LLM step usage not recorded", exc_info=True)
+
         # Persist the conversation exactly as it happened: the message list this
         # activity just sent to the provider plus the reply it got back.
         # ``messages`` above IS the argument handed to ``ChatUnifier.chat`` —

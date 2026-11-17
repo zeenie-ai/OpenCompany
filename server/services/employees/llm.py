@@ -172,21 +172,32 @@ async def employees_chat(
     )
 
 
-async def record_llm_usage(database: Any, choice: LLMChoice, response: LLMResponse, *, session_id: str) -> None:
-    """Book a setup call's tokens and cost (Settings > usage reads these).
-    Best effort: a failed write never fails the setup."""
-    from services.pricing import get_pricing_service
-
-    usage = response.billing_usage or response.usage
-    tokens = {
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-        "total_tokens": usage.total_tokens,
-        "cache_creation_tokens": usage.cache_creation_tokens,
-        "cache_read_tokens": usage.cache_read_tokens,
-        "reasoning_tokens": usage.reasoning_tokens,
-    }
+async def record_llm_usage(
+    database: Any,
+    choice: LLMChoice,
+    response: LLMResponse,
+    *,
+    session_id: str,
+    node_id: str = USAGE_NODE_ID,
+    iteration: int = 1,
+    workflow_id: Optional[str] = None,
+    execution_id: Optional[str] = None,
+) -> None:
+    """Book one model call's tokens and cost: a setup call, or an agent's
+    step on Temporal (the usage panel reads these rows).
+    Best effort: a failed price or write never fails the caller."""
     try:
+        from services.pricing import get_pricing_service
+
+        usage = response.billing_usage or response.usage
+        tokens = {
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "total_tokens": usage.total_tokens,
+            "cache_creation_tokens": usage.cache_creation_tokens,
+            "cache_read_tokens": usage.cache_read_tokens,
+            "reasoning_tokens": usage.reasoning_tokens,
+        }
         cost = get_pricing_service().calculate_cost(
             provider=choice.provider,
             model=choice.model,
@@ -199,10 +210,12 @@ async def record_llm_usage(database: Any, choice: LLMChoice, response: LLMRespon
         await database.save_token_metric(
             {
                 "session_id": session_id,
-                "node_id": USAGE_NODE_ID,
+                "node_id": node_id,
+                "workflow_id": workflow_id,
+                "execution_id": execution_id,
                 "provider": choice.provider,
                 "model": choice.model,
-                "iteration": 1,
+                "iteration": iteration,
                 **tokens,
                 "input_cost": cost["input_cost"],
                 "output_cost": cost["output_cost"],
@@ -211,7 +224,7 @@ async def record_llm_usage(database: Any, choice: LLMChoice, response: LLMRespon
             }
         )
     except Exception:
-        logger.warning("Could not record setup usage", provider=choice.provider, model=choice.model, exc_info=True)
+        logger.warning("Could not record LLM usage", provider=choice.provider, model=choice.model, exc_info=True)
 
 
 __all__ = [

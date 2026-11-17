@@ -979,6 +979,84 @@ class TestLlmStepActivity:
 
         assert run_step.await_args.kwargs["max_tokens"] is None
 
+    @staticmethod
+    def _booking_payload():
+        from services.llm.protocol import Message, message_to_wire
+
+        return {
+            "provider": "openrouter",
+            "model": "anthropic/claude-sonnet-5.5",
+            "api_key": "secret",
+            "messages": [message_to_wire(Message(role="user", content="go"))],
+            "tools": [],
+            "temperature": 0,
+            "max_tokens": None,
+            "workflow_id": "2",
+            "node_id": "2:aiAgent:1",
+            "iteration": 4,
+            "attribution": {"execution_id": "2:execution:8"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_step_books_one_usage_row(self, monkeypatch):
+        import core.container as container_module
+        import services.agent_runtime as runtime_module
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        database = SimpleNamespace(save_token_metric=AsyncMock(return_value=True))
+        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
+        monkeypatch.setattr(container_module.container, "database", lambda: database)
+        monkeypatch.setattr(
+            runtime_module,
+            "run_native_llm_step",
+            AsyncMock(return_value=LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7))),
+        )
+
+        result = await _execute_native_llm_step(self._booking_payload())
+
+        assert set(result) == {"kind", "assistant_message", "content", "thinking", "usage"}
+        database.save_token_metric.assert_awaited_once()
+        row = database.save_token_metric.await_args.args[0]
+        assert row["session_id"] == "2"
+        assert row["workflow_id"] == "2"
+        assert row["execution_id"] == "2:execution:8"
+        assert row["node_id"] == "2:aiAgent:1"
+        # The step's activity id is llm-step-5; 0 stays for summarizer rows.
+        assert row["iteration"] == 5
+        assert (row["provider"], row["model"]) == ("openrouter", "anthropic/claude-sonnet-5.5")
+        assert (row["input_tokens"], row["output_tokens"], row["total_tokens"]) == (50, 7, 57)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["save", "price"])
+    async def test_a_failed_booking_never_fails_the_step(self, monkeypatch, failure):
+        import core.container as container_module
+        import services.agent_runtime as runtime_module
+        import services.pricing as pricing_module
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        database = SimpleNamespace(save_token_metric=AsyncMock(side_effect=RuntimeError("database down")))
+        if failure == "price":
+            database = SimpleNamespace(save_token_metric=AsyncMock(return_value=True))
+
+            def broken_pricing():
+                raise RuntimeError("pricing broken")
+
+            monkeypatch.setattr(pricing_module, "get_pricing_service", broken_pricing)
+        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
+        monkeypatch.setattr(container_module.container, "database", lambda: database)
+        monkeypatch.setattr(
+            runtime_module,
+            "run_native_llm_step",
+            AsyncMock(return_value=LLMResponse(content="done", usage=Usage(input_tokens=5, output_tokens=2))),
+        )
+
+        result = await _execute_native_llm_step(self._booking_payload())
+
+        assert result["kind"] == "final"
+        assert result["usage"]["total_tokens"] == 7
+
 
 # 1b.25: an attempt gets the timeout agent.prepare_payload recorded for its
 # provider; a cloud provider (None) and a history recorded before the key

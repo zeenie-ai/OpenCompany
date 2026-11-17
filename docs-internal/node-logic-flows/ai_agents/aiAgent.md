@@ -158,7 +158,8 @@ flowchart TD
 
 - **Database writes**: none directly in `execute_op`. A memory-connected
   in-process `AIService.execute_agent` writes `token_usage_metrics` via
-  `CompactionService.track`; Temporal aggregates usage in its result. With a
+  `CompactionService.track`; on Temporal each LLM step books its own priced
+  row (`record_llm_usage`) and the workflow aggregates usage in its result. With a
   Context node connected, the conversation is saved to `agent_conversations`
   after every turn of a started workflow; a manual node Run saves nothing.
 - **Broadcasts**: `prepare_agent_call` resolves `StatusBroadcaster` and passes
