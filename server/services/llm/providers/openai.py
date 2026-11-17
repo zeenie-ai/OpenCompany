@@ -257,6 +257,12 @@ class OpenAIProvider:
             # The owner's chat choice (Quick / Thorough), over the agent's own
             # reasoning effort. Only the effort_models receive one (ChatUnifier).
             params["reasoning_effort"] = effort
+        if policy["cache_control"]:
+            # Automatic prompt caching (cache_control_models): the server
+            # caches the prompt up to its last block, and the next step of an
+            # agent loop, which sends the same prompt plus one turn, reads it
+            # back at the cache price. The OpenAI SDK has no such parameter.
+            params.setdefault("extra_body", {})["cache_control"] = {"type": "ephemeral"}
 
         # Tools
         if tools:
@@ -653,7 +659,8 @@ class OpenAIProvider:
             input_tokens=getattr(u, "prompt_tokens", 0) if u else 0,
             output_tokens=getattr(u, "completion_tokens", 0) if u else 0,
             total_tokens=getattr(u, "total_tokens", 0) if u else 0,
-            cache_read_tokens=self._cache_read_tokens(u),
+            cache_read_tokens=self._prompt_tokens_detail(u, "cached_tokens"),
+            cache_creation_tokens=self._prompt_tokens_detail(u, "cache_write_tokens"),
             reasoning_tokens=getattr(getattr(u, "completion_tokens_details", None), "reasoning_tokens", 0) if u else 0,
         )
 
@@ -944,6 +951,10 @@ class OpenAIProvider:
             ),
             "thinking_default_on": default_on,
             "thinking_type": thinking_type,
+            "cache_control": any(
+                model.startswith(prefix)
+                for prefix in config.get("cache_control_models", ())
+            ),
         }
 
     def _has_responses_state(self, messages: List[Message]) -> bool:
@@ -955,11 +966,14 @@ class OpenAIProvider:
         )
 
     @staticmethod
-    def _cache_read_tokens(usage: Any) -> int:
+    def _prompt_tokens_detail(usage: Any, field: str) -> int:
+        """A count from ``usage.prompt_tokens_details``: ``cached_tokens``
+        (prompt-cache reads) or ``cache_write_tokens`` (writes, which
+        OpenRouter reports and OpenAI does not); 0 when absent or null."""
         if not usage:
             return 0
         details = getattr(usage, "prompt_tokens_details", None)
-        return getattr(details, "cached_tokens", 0) if details else 0
+        return (getattr(details, field, 0) or 0) if details else 0
 
     async def aclose(self) -> None:
         close = getattr(self._client, "close", None)

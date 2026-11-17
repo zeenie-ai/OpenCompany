@@ -174,6 +174,8 @@
         "claude-sonnet-5",
         "claude-haiku-5"
       ],
+      "_cache_control_models_note": "cache_control_models (prefix-matched): the models whose requests carry a top-level cache_control {type: ephemeral}, automatic prompt caching (AnthropicProvider._model_policy). The API caches the prompt up to its last cacheable block for 5 minutes, counted from the start of the request that wrote or read it, so each step of an agent loop reads the previous step's prompt at the cache price (platform.claude.com/docs/en/build-with-claude/prompt-caching). A prompt shorter than the model's minimum (512 tokens on the 5.x models, up to 4096 on older ones) is not cached, and nothing fails. The gateway forwards the field (LiteLLM declares it on /v1/messages). Usage reports cache_creation_input_tokens and cache_read_input_tokens, priced with pricing.json's cache_write and cache_read.",
+      "cache_control_models": ["claude-"],
       "temperature_range": [0.0, 1.0]
     },
     "gemini": {
@@ -252,6 +254,8 @@
       "open_world_models": true,
       "omit_default_max_tokens": true,
       "_omit_default_max_tokens_note": "A sent max_tokens routes only to endpoints that support that length and is held as credit before the request runs (openrouter.ai/docs/api-reference/limits), so an empty Max Tokens sends none.",
+      "_cache_control_models_note": "cache_control_models (prefix-matched): the models whose requests carry a top-level cache_control {type: ephemeral}, automatic prompt caching (OpenAIProvider._model_policy; the field rides extra_body). The prompt is cached up to its last block for 5 minutes, counted from the start of the request that wrote or read it, so each step of an agent loop reads the previous step's prompt at the cache price. OpenRouter applies it on every upstream that serves Claude (as a trailing breakpoint on Bedrock) and keeps a conversation on the same upstream while it is in use (openrouter.ai/docs/features/prompt-caching). Usage reports the reads as prompt_tokens_details.cached_tokens and the writes as cache_write_tokens, priced from the model registry.",
+      "cache_control_models": ["anthropic/"],
       "base_url": "https://openrouter.ai/api/v1",
       "models_endpoint": "https://openrouter.ai/api/v1/models",
       "api_key_param": "api_key",

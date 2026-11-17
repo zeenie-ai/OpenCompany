@@ -158,8 +158,8 @@ class TokenUsageMetric(SQLModel, table=True):
     total_tokens: int = 0
 
     # Provider-specific token details
-    cache_creation_tokens: int = 0   # Anthropic cache miss
-    cache_read_tokens: int = 0       # Anthropic cache hit
+    cache_creation_tokens: int = 0   # prompt-cache writes (Anthropic, OpenRouter)
+    cache_read_tokens: int = 0       # prompt-cache reads
     reasoning_tokens: int = 0        # OpenAI o-series reasoning
 
     iteration: int = 1               # Agent loop iteration number

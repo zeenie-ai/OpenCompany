@@ -117,6 +117,13 @@ class AnthropicProvider:
             # receive one (ChatUnifier).
             params["output_config"] = {"effort": effort}
 
+        if policy["cache_control"]:
+            # Automatic prompt caching (cache_control_models): the API caches
+            # the prompt up to its last cacheable block, and the next step of
+            # an agent loop, which sends the same prompt plus one turn, reads
+            # it back at the cache price.
+            params["cache_control"] = {"type": "ephemeral"}
+
         # Tools
         if tools:
             params["tools"] = [self._to_api_tool(t) for t in tools]
@@ -236,6 +243,7 @@ class AnthropicProvider:
             "adaptive_thinking": matches("adaptive_thinking_models"),
             "sampling_params": not matches("sampling_params_removed"),
             "thinking_prefix_binding": matches("thinking_prefix_binding_models"),
+            "cache_control": matches("cache_control_models"),
         }
 
     def _split_system(self, messages: List[Message]):

@@ -606,6 +606,60 @@ The `thinking` field is exposed to downstream nodes via the backend output schem
 
 See [memory_compaction.md](memory_compaction.md) for how thinking token counts are tracked separately from output tokens.
 
+## Prompt caching
+
+Claude requests ask for automatic prompt caching: a top-level
+`cache_control: {"type": "ephemeral"}`. The provider caches the prompt up to
+its last block, and the next step of an agent loop, which sends the same prompt
+plus one more turn, reads it back at the cache price instead of the input
+price. Without it every step paid full price for the whole conversation again:
+on the 2026-11-17 three.js run, 93% of the input was content the run had
+already sent.
+
+- **The switch** is `cache_control_models` in a provider's block of
+  `llm_defaults.json`, prefix-matched like `effort_models`: `["claude-"]` for
+  `anthropic` and `["anthropic/"]` for `openrouter`. No other provider gets the
+  field. `AnthropicProvider` sends it as the SDK's typed `cache_control`
+  parameter (on `messages.stream` and `beta.messages.stream` alike), and
+  `OpenAIProvider` in `extra_body`, since the OpenAI SDK has no such
+  parameter; a caller's `extra_body` is merged in beside it.
+- **Lifetime:** 5 minutes, counted from the start of the request that wrote
+  or read the entry, and every read starts it again. A step that runs longer
+  than that leaves the next one to write the prompt again. The 1-hour lifetime
+  (writes at 2x) and a second breakpoint after the system prompt are not used:
+  within a run every step reads the whole previous prompt, which is where
+  nearly all of the saving is.
+- **Price:** a write costs 1.25x the input price and a read 0.025x to 0.1x,
+  depending on the model (0.05x on Sonnet 5.5 and Opus 5.5). `pricing.json`
+  prices native Claude models with each row's `cache_write` and `cache_read`,
+  and OpenRouter models with the model registry's `input_cache_write` and
+  `input_cache_read` ([Pricing Service](pricing_service.md)).
+- **What breaks it:** any change to an earlier byte of the prompt. Tool
+  definitions come first in the cached prefix, so a tool's schema must
+  serialize the same way in every process (the browser tool's once reordered
+  after each restart). Clearing old tool results or swapping in a compaction
+  summary rewrites the conversation from that point, so the next step writes
+  it again, and so does a different thinking or effort setting (the chat's
+  Quick or Thorough). A prompt below the model's minimum (512 tokens on the
+  5.x models, up to 4096 on older ones) is not cached, and nothing fails.
+- **Routing:** OpenRouter applies the field on every upstream that serves
+  Claude (as a trailing breakpoint on Bedrock) and keeps a conversation on the
+  same upstream while it is in use
+  ([OpenRouter prompt caching](https://openrouter.ai/docs/features/prompt-caching)).
+  The LLM gateway forwards it to Anthropic: LiteLLM 1.103.4 declares a
+  top-level `cache_control` on `/v1/messages`.
+- **Usage:** Anthropic reports `cache_creation_input_tokens` and
+  `cache_read_input_tokens` beside an `input_tokens` that excludes both.
+  OpenRouter reports `prompt_tokens_details.cached_tokens`, counted inside
+  `prompt_tokens` as on OpenAI, and `cache_write_tokens`. Both map to
+  `Usage.cache_creation_tokens` and `Usage.cache_read_tokens`. `input_tokens`
+  stays the provider's own field, so on OpenRouter it still includes the
+  cache, and the context-pressure projection, which reads `total_tokens`, is
+  unchanged. Cost is worked out from `total_tokens` minus the cache parts.
+- **Checking it:** from the second step of a run, the step's row in
+  `token_usage_metrics` shows `cache_read_tokens` above 0. The request shape is
+  locked by `tests/llm/test_prompt_caching.py`.
+
 ## Model Max Tokens Resolution
 
 `resolve_max_tokens()` in `services/llm/config.py` implements the clamp/default logic:
