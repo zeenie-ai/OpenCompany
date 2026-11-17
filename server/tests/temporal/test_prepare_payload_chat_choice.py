@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from temporalio.exceptions import ApplicationError
+from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 
 from services.temporal.agent_activities import _resolve_activity_api_key, prepare_agent_payload
 
@@ -119,6 +119,8 @@ async def test_a_picked_model_whose_provider_has_no_key_is_refused(prepare):
 
     assert raised.value.type == "MissingAgentProviderCredential"
     assert "anthropic" in raised.value.message
+    # Only the owner can fix it: an expected outcome, not a crash.
+    assert raised.value.category == ApplicationErrorCategory.BENIGN
 
 
 @pytest.mark.asyncio
@@ -159,3 +161,4 @@ async def test_the_step_sends_a_nodes_own_key_only_to_its_own_provider(monkeypat
     with pytest.raises(ApplicationError) as raised:
         await _resolve_activity_api_key({"provider": "anthropic", "node_id": "agent-1", "user_id": "owner"})
     assert raised.value.type == "MissingAgentProviderCredential"
+    assert raised.value.category == ApplicationErrorCategory.BENIGN

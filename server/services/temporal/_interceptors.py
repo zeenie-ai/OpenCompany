@@ -104,8 +104,9 @@ class ActivityObservabilityInterceptor(ActivityInboundInterceptor):
             async with log_context(**bound):
                 result = await self.next.execute_activity(input)
         except Exception as exc:
-            # A BENIGN error is a planned retry, such as a retryable LLM error:
-            # DEBUG, as the SDK logs it. The retry alert above still counts it.
+            # A BENIGN error is an expected outcome, such as a retryable LLM
+            # error or a stop only the owner can fix: DEBUG, as the SDK logs
+            # it. The retry alert above still counts a retry.
             benign = isinstance(exc, ApplicationError) and exc.category == ApplicationErrorCategory.BENIGN
             log = logger.debug if benign else logger.warning
             log(

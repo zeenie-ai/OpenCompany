@@ -401,8 +401,15 @@ failure metric. The retry itself shows at WARNING at the first retry, at
 attempt 8 and every 10th attempt after it, at DEBUG otherwise (the
 `activity_retry` interceptor and the activity's "LLM retry scheduled" line),
 and a step still retrying past attempt 8 shows on Home as an attention item
-until it gets through. Terminal quota, credential, and unexpected
-programming failures keep their tracebacks.
+until it gets through. A stop only the owner can fix (`requires_user_action`:
+billing, quota, authentication, permission, not found, protocol, and a
+missing credential) is benign as well, though it is not retried: the SDK
+logs it at DEBUG, the provider failure is one WARN line ("LLM provider
+request failed"), the agent and the run each log one WARN line without a
+traceback, and the owner reads the reason and hint in the chat and on the
+paused employee. An invalid request, a context overflow and an unknown
+failure can be our own bug, so they keep the SDK's WARNING with the
+traceback, as do unexpected programming failures.
 
 The legacy `factory.py` (`create_provider` / `is_native_provider` /
 `NATIVE_PROVIDERS`) was **removed** — `ChatUnifier` + `registry.py` is the

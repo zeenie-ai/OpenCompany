@@ -925,7 +925,10 @@ class MachinaWorkflow:
                     **{key: result[key] for key in ("hint", "requires_user_action", "retryable") if key in result},
                 }
                 errors.append(error_info)
-                workflow.logger.error(f"Node failed: {done_id} - {error_info['error']}")
+                # A stop only the owner can fix (out of credits, no key) is an
+                # expected outcome: the run ends with its reason and hint.
+                log = workflow.logger.warning if error_info.get("requires_user_action") else workflow.logger.error
+                log(f"Node failed: {done_id} - {error_info['error']}")
                 if done_id in self._action_contexts:
                     await self._action_contexts.pop(done_id).__aexit__(None, None, None)
 

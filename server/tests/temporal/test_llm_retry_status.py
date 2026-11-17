@@ -90,8 +90,9 @@ async def test_google_retry_info_paces_throttles_but_cannot_override_a_daily_blo
         await env.run(execute_llm_step, payload)
     failure = raised.value
     assert failure.non_retryable is daily
-    # Only a planned retry is benign; the daily block fails for real.
-    assert failure.category == (ApplicationErrorCategory.UNSPECIFIED if daily else ApplicationErrorCategory.BENIGN)
+    # Both are expected outcomes: a planned retry, and a daily block only
+    # the owner can lift (it fails the run with its hint, without a traceback).
+    assert failure.category == ApplicationErrorCategory.BENIGN
     if daily:
         assert failure.next_retry_delay is None
         assert failure.type == "LLMError.quota"

@@ -47,7 +47,7 @@ import re
 from typing import Any, Dict, List, Mapping, Optional
 
 from temporalio import activity
-from temporalio.exceptions import ApplicationError
+from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
 
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,8 @@ def _unsaved_endpoint_error(provider: str) -> Optional[ApplicationError]:
     Saving an endpoint always stores a key (the user's or the declared
     placeholder), so a missing one means the endpoint was removed or never
     chosen. Retrying cannot fix that, and ``MissingAgentProviderCredential``
-    is a type the AgentWorkflow shows to the user as is.
+    is a type the AgentWorkflow shows to the user as is. Only the owner can
+    fix it, so it is an expected outcome (BENIGN), not a crash.
     """
     from services.llm.endpoints import unconfigured_endpoint_message
 
@@ -170,6 +171,7 @@ def _unsaved_endpoint_error(provider: str) -> Optional[ApplicationError]:
         {"hint": "Choose and save a provider credential in Settings > Connectors, then resume.",
          "requires_user_action": True, "retryable": False},
         type="MissingAgentProviderCredential", non_retryable=True,
+        category=ApplicationErrorCategory.BENIGN,
     )
 
 
@@ -239,6 +241,7 @@ async def _resolve_activity_api_key(payload: Dict[str, Any]) -> str:
              "requires_user_action": True, "retryable": False},
             type="MissingAgentProviderCredential",
             non_retryable=True,
+            category=ApplicationErrorCategory.BENIGN,
         )
     return str(api_key)
 
@@ -252,7 +255,6 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
     and therefore in Temporal history for operators.
     """
 
-    from temporalio.exceptions import ApplicationError, ApplicationErrorCategory
     from services.llm.protocol import valid_retry_delay
 
     category_value = getattr(getattr(error, "category", None), "value", None)
@@ -301,9 +303,16 @@ def _as_temporal_llm_error(error: Any, *, attempt: Optional[int] = None):
         type=f"LLMError.{category}",
         non_retryable=not details["retryable"],
         next_retry_delay=next_retry_delay,
-        # A planned retry is no failure: the SDK logs it at DEBUG and counts
-        # no failure metric for it.
-        category=ApplicationErrorCategory.BENIGN if details["retryable"] else ApplicationErrorCategory.UNSPECIFIED,
+        # A planned retry, or a stop only the owner can fix (credits, quota,
+        # key, permission, model, base URL), is an expected outcome: the SDK
+        # logs it at DEBUG and counts no failure metric for it. Anything else
+        # (an invalid request, an unknown failure) can be our own bug and
+        # keeps the SDK's WARNING with its traceback.
+        category=(
+            ApplicationErrorCategory.BENIGN
+            if details["retryable"] or details.get("requires_user_action")
+            else ApplicationErrorCategory.UNSPECIFIED
+        ),
     )
 
 
@@ -1350,6 +1359,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             {"hint": "Connect the provider in Settings > Connectors, then resume.",
              "requires_user_action": True, "retryable": False},
             type="MissingAgentProviderCredential", non_retryable=True,
+            category=ApplicationErrorCategory.BENIGN,
         )
 
     max_tokens = resolve_max_tokens(flattened, model, provider)

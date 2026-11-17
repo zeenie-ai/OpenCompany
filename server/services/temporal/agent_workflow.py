@@ -447,6 +447,29 @@ def _trusted_tool_scope(context: Dict[str, Any]) -> Dict[str, Any]:
     return {**_inherited_scope(context), "outputs": context.get("outputs") or context.get("inputs") or {}}
 
 
+def _owner_recovery(error: BaseException) -> Dict[str, Any]:
+    """What a failed model call (an LLM step or the summarizer) tells the
+    owner: its hint, whether only they can fix it, and whether repeating
+    helps. Read from the structured details the activity attached
+    (``_as_temporal_llm_error`` and the missing-credential errors); empty
+    for any other failure."""
+    cause = getattr(error, "cause", None)
+    cause_type = str(getattr(cause, "type", "") or "")
+    if not (cause_type.startswith("LLMError.") or cause_type == "MissingAgentProviderCredential"):
+        return {}
+    diagnostics = getattr(cause, "details", ())
+    if not (diagnostics and isinstance(diagnostics[0], dict)):
+        return {}
+    recovery = {
+        key: diagnostics[0][key]
+        for key in ("hint", "requires_user_action", "retryable")
+        if diagnostics[0].get(key) is not None
+    }
+    if recovery:
+        recovery["error_type"] = "NodeUserError"
+    return recovery
+
+
 def _held_for_owner(result: Any) -> Optional[str]:
     """The approval a call was held for (services/approvals/tool_calls.py),
     else None."""
@@ -1423,17 +1446,7 @@ class AgentWorkflow:
                     cause_message = str(
                         getattr(cause, "message", "") or ""
                     ).strip()
-                    recovery = {}
-                    if cause_type.startswith("LLMError.") or cause_type == "MissingAgentProviderCredential":
-                        diagnostics = getattr(cause, "details", ())
-                        if diagnostics and isinstance(diagnostics[0], dict):
-                            recovery = {
-                                key: diagnostics[0][key]
-                                for key in ("hint", "requires_user_action", "retryable")
-                                if diagnostics[0].get(key) is not None
-                            }
-                            if recovery:
-                                recovery["error_type"] = "NodeUserError"
+                    recovery = _owner_recovery(e)
                     safe_activity_types = {
                         "MissingAgentProviderCredential",
                         "EmptyAgentPrompt",
@@ -1453,7 +1466,10 @@ class AgentWorkflow:
                             "The language model step failed unexpectedly. "
                             "Retry the run or check server logs."
                         )
-                    workflow.logger.error(
+                    # A stop only the owner can fix is an expected outcome:
+                    # the run ends with its reason and hint, so it warns.
+                    log = workflow.logger.warning if recovery.get("requires_user_action") else workflow.logger.error
+                    log(
                         f"AgentWorkflow LLM step failed terminally "
                         f"(iteration {iteration + 1}): {raw_detail}"
                     )
@@ -1485,7 +1501,8 @@ class AgentWorkflow:
                     )
                     return {
                         "success": False,
-                        "error": f"LLM step failed: {detail}",
+                        # Shown to the owner as is (the chat, the pause alert).
+                        "error": detail,
                         "error_type": "LLMStepError",
                         **recovery,
                         "result": {
@@ -3060,7 +3077,12 @@ class AgentWorkflow:
                         compact_detail = str(
                             getattr(cause, "message", "") or cause or compact_error
                         )
-                        workflow.logger.error(
+                        # The summarizer is a model call: a stop only the owner
+                        # can fix (credits, key) carries its hint and pauses the
+                        # employee at once, as an LLM step's does.
+                        recovery = _owner_recovery(compact_error)
+                        log = workflow.logger.warning if recovery.get("requires_user_action") else workflow.logger.error
+                        log(
                             f"AgentWorkflow compaction failed terminally "
                             f"(iteration {iteration + 1}): {compact_detail}"
                         )
@@ -3086,11 +3108,13 @@ class AgentWorkflow:
                             max_iterations,
                             phase="failed",
                             status="error",
+                            extra={"error": compact_detail, **recovery} if recovery else None,
                         )
                         return {
                             "success": False,
                             "error": f"Compaction failed: {compact_detail}",
                             "error_type": "CompactionError",
+                            **recovery,
                             "result": {
                                 "iterations": iteration + 1,
                                 "usage": usage_total,

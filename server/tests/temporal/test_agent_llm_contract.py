@@ -143,6 +143,13 @@ class TestWorkflowLoopContract:
         if from_tool:
             assert len(checkpoints) == 1
             assert checkpoints[0]["tool_results"][0]["tool_call_id"] == "call-1"
+        else:
+            # The owner reads the provider's reason as is, and the run logs a
+            # warning: an expected stop, not a crash.
+            assert result["error"] == error.user_message
+            logged = "LLM step failed terminally"
+            assert any(logged in str(call.args[0]) for call in patched_workflow.logger.warning.call_args_list)
+            assert not any(logged in str(call.args[0]) for call in patched_workflow.logger.error.call_args_list)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("version,expected", [
@@ -353,6 +360,55 @@ class TestWorkflowLoopContract:
         assert result["success"] is False
         assert result["error_type"] == "CompactionError"
         assert "Compaction failed" in result["error"]
+        assert "requires_user_action" not in result
+        assert any("compaction failed terminally" in str(call.args[0])
+                   for call in patched_workflow.logger.error.call_args_list)
+
+    @pytest.mark.asyncio
+    async def test_an_owner_stop_in_compaction_carries_its_hint(self, monkeypatch, patched_workflow):
+        # The summarizer is a model call: out of credits there pauses the
+        # employee at once with the hint, as an LLM step's stop does.
+        from services.llm.protocol import LLMError, LLMErrorCategory
+        from services.temporal.agent_activities import _as_temporal_llm_error
+        from services.temporal.agent_workflow import AgentWorkflow
+
+        error = LLMError("secret provider body", "openrouter", category=LLMErrorCategory.BILLING)
+        prepared = _payload()
+        prepared["compaction_threshold"] = 5
+        phases = []
+
+        async def execute(name, *, args, **_kwargs):
+            if name == "agent.prepare_payload":
+                return prepared
+            if name == "agent.broadcast_progress":
+                phases.append(args[0])
+                return {}
+            if name == "agent.execute_llm_step":
+                return {"kind": "tool_calls", "calls": [{"id": "missing-1", "name": "not_connected", "args": {}}],
+                        "usage": {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}}
+            if name == "agent.compact_context":
+                failure = RuntimeError("activity failed")
+                failure.cause = _as_temporal_llm_error(error)
+                raise failure
+            if name in {"agent.store_output", "agent.skill.clear"}:
+                return {}
+            raise AssertionError(f"Unexpected activity {name}")
+
+        monkeypatch.setattr(patched_workflow, "execute_activity", execute)
+        result = await AgentWorkflow().run({"node_id": "agent-1", "execution_id": "root-run-1"})
+
+        assert result["success"] is False
+        assert result["error"] == f"Compaction failed: {error.user_message}"
+        assert result["requires_user_action"] is True
+        assert result["hint"] == error.hint
+        assert result["error_type"] == "NodeUserError"
+        failure = next(p for p in phases if p.get("status") == "error")
+        assert failure["hint"] == error.hint
+        assert failure["requires_user_action"] is True
+        assert "secret" not in str(failure)
+        logged = "compaction failed terminally"
+        assert any(logged in str(call.args[0]) for call in patched_workflow.logger.warning.call_args_list)
+        assert not any(logged in str(call.args[0]) for call in patched_workflow.logger.error.call_args_list)
 
     @pytest.mark.asyncio
     async def test_compaction_summarizes_live_messages_without_memory(
@@ -544,6 +600,56 @@ class TestLlmStepActivity:
         assert secret not in str(temporal_error)
         assert secret not in str(temporal_error.details)
 
+    def test_openrouter_out_of_credits_is_an_expected_stop(self):
+        import httpx
+        import openai
+        from temporalio.exceptions import ApplicationErrorCategory
+
+        from services.llm.protocol import LLMError
+        from services.temporal.agent_activities import _as_temporal_llm_error
+
+        secret = "This request requires more credits sk-secret"
+        response = httpx.Response(402, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"))
+        sdk_error = openai.APIStatusError(secret, response=response, body={
+            "code": 402,
+            "message": secret,
+            "metadata": {"limit_source": "openrouter_credits", "remedy_hint": secret},
+        })
+
+        temporal_error = _as_temporal_llm_error(LLMError.from_exception("openrouter", sdk_error))
+
+        assert temporal_error.type == "LLMError.billing"
+        assert temporal_error.non_retryable is True
+        assert temporal_error.next_retry_delay is None
+        # Only the owner can fix it, so the SDK logs it at DEBUG, without the
+        # WARNING and traceback of a failure that may be ours.
+        assert temporal_error.category == ApplicationErrorCategory.BENIGN
+        assert temporal_error.message == "Your OpenRouter credits cannot cover this request."
+        assert temporal_error.details[0]["requires_user_action"] is True
+        assert temporal_error.details[0]["hint"].startswith("Add OpenRouter credits")
+        assert secret not in str(temporal_error)
+        assert secret not in str(temporal_error.details)
+
+    @pytest.mark.parametrize(("category", "benign"), [
+        ("billing", True), ("quota", True), ("authentication", True),
+        ("permission", True), ("not_found", True), ("protocol", True),
+        # These can be our own bug: they keep the SDK's WARNING and traceback.
+        ("invalid_request", False), ("context_length", False), ("unknown", False),
+    ])
+    def test_only_a_stop_the_owner_can_fix_is_benign(self, category, benign):
+        from temporalio.exceptions import ApplicationErrorCategory
+
+        from services.llm.protocol import LLMError, LLMErrorCategory
+        from services.temporal.agent_activities import _as_temporal_llm_error
+
+        temporal_error = _as_temporal_llm_error(LLMError("private", "openai", category=LLMErrorCategory(category)))
+
+        assert temporal_error.non_retryable is True
+        assert bool(temporal_error.details[0].get("requires_user_action")) is benign
+        assert temporal_error.category == (
+            ApplicationErrorCategory.BENIGN if benign else ApplicationErrorCategory.UNSPECIFIED
+        )
+
     def test_structured_llm_error_becomes_safe_temporal_failure(self):
         from services.llm.protocol import LLMError, LLMErrorCategory
         from services.temporal.agent_activities import (
@@ -597,9 +703,13 @@ class TestLlmStepActivity:
         with pytest.raises(Exception) as raised:
             await _resolve_activity_api_key({"provider": "openai_compatible:gone", "node_id": "agent-1"})
 
+        from temporalio.exceptions import ApplicationErrorCategory
+
         error = raised.value
         assert error.type == "MissingAgentProviderCredential"
         assert error.non_retryable is True
+        # Only the owner can fix it: an expected outcome, not a crash.
+        assert error.category == ApplicationErrorCategory.BENIGN
         # AgentWorkflow shows this type's ``message`` to the user as is.
         assert error.message == "The OpenAI-compatible endpoint 'gone' is not configured. Add it under Credentials."
 

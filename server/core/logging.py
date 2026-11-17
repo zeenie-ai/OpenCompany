@@ -259,8 +259,9 @@ class ExpectedLLMRetryFilter(logging.Filter):
     The LLM step raises a benign ApplicationError to schedule the next
     attempt, which the SDK logs at DEBUG ("Completing activity as failed")
     and counts as no failure. Where that record is shown, it reads as a
-    one-line retry notice; terminal rejections and unexpected runtime errors
-    keep their complete tracebacks at WARNING.
+    one-line retry notice. A stop only the owner can fix (out of credits, a
+    bad key) is benign too, so the SDK also logs it at DEBUG, where it keeps
+    its traceback; unexpected runtime errors keep theirs at WARNING.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
