@@ -187,6 +187,16 @@ async def lane_run(database: Any, session_id: str) -> Optional[ChatRun]:
         return result.scalar_one_or_none()
 
 
+async def latest_run(database: Any, session_id: str) -> Optional[ChatRun]:
+    """The session's newest run, live or ended, if any."""
+    async with database.get_session() as session:
+        result = await session.execute(
+            select(ChatRun).where(ChatRun.session_id == session_id)
+            .order_by(ChatRun.created_at.desc(), ChatRun.run_id.desc()).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+
 async def runs_by_id(database: Any, run_ids: List[str]) -> Dict[str, ChatRun]:
     """The named runs that exist, by id (one query)."""
     wanted = sorted({run_id for run_id in run_ids if run_id})

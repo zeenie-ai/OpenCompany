@@ -816,7 +816,9 @@ each node keeps its model.
   the original) and starts a run of kind `edit` answering it (`parent_run_id`: the original's run).
 - **Try again** (`regenerate_chat_reply`) moves the leaf back to the owner's message and starts a run of kind
   `regenerate` for it (`user_message_id`: that message), whose answer goes beside the old one. Only the answer the
-  path ends at, or the owner's last message when its run ended without an answer.
+  path ends at, or the owner's last message when its run ended without an answer. Resume presses it for the owner
+  when the chat's newest run ended on a stop only they could fix (`result.requires_user_action`: out of credits, no
+  key), the failure that paused the employee (`answer_again_after_resume`, with that run's `options`).
 - **Switch** (`switch_chat_branch`) moves the leaf to the newest message in the chosen version's branch.
 
 **Memory follows the path.** `agent.prepare_payload` records, on the chat run an agent with a stored conversation

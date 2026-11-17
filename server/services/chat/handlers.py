@@ -723,13 +723,21 @@ async def _branch_context(
         revision = _expected_revision(data)
     except ValueError as exc:
         return {"success": False, "error": "invalid_request", "detail": str(exc)}, {}
+    return await _workflow_branch_context(database, session_id, scope.workflow_id, revision, starts_run=starts_run)
+
+
+async def _workflow_branch_context(
+    database: Any, session_id: str, workflow_id: str, revision: Optional[int], *, starts_run: bool
+) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    """:func:`_branch_context` once the owner's authority over the
+    workflow is established (by the socket, or by the Resume they sent)."""
     control = await database.get_latest_workflow_control(session_id)
     live_root = chat_execution_id(control)
     if control is None or live_root is None:
         return {"success": False, "error": "not_running"}, {}
     context: Dict[str, Any] = {
         "session_id": session_id,
-        "workflow_id": scope.workflow_id,
+        "workflow_id": workflow_id,
         "generation": int(control.generation),
         "live_root": live_root,
         "expected_revision": revision,
@@ -846,6 +854,13 @@ async def handle_regenerate_chat_reply(data: Dict[str, Any], websocket: WebSocke
         return {"success": False, "error": "model_unavailable", "detail": exc.detail}
     except ValueError as exc:
         return {"success": False, "error": "invalid_request", "detail": str(exc)}
+    return await _try_again(database, context, str(data["message_id"]), options, data.get("timestamp"))
+
+
+async def _try_again(
+    database: Any, context: Dict[str, Any], message_uid: str, options: Dict[str, Any], timestamp: Optional[str],
+) -> Dict[str, Any]:
+    """Try again's move and delivery, for the owner's button and for Resume."""
     try:
         moved = await branches.retry_answer(
             database,
@@ -853,7 +868,7 @@ async def handle_regenerate_chat_reply(data: Dict[str, Any], websocket: WebSocke
             workflow_id=context["workflow_id"],
             generation=context["generation"],
             live_root=context["live_root"],
-            message_uid=str(data["message_id"]),
+            message_uid=message_uid,
             expected_revision=context["expected_revision"],
             state=context["state"],
             options=options,
@@ -863,8 +878,31 @@ async def handle_regenerate_chat_reply(data: Dict[str, Any], websocket: WebSocke
     except Exception:
         logger.warning("Chat answer could not be tried again", session_id=context["session_id"], exc_info=True)
         return {"success": False, "error": "save_failed"}
-    timestamp = data.get("timestamp") or datetime.now(timezone.utc).isoformat()
+    timestamp = timestamp or datetime.now(timezone.utc).isoformat()
     return await _answer_branch(database, moved, context, role=None, timestamp=timestamp)
+
+
+async def answer_again_after_resume(workflow_id: str) -> Optional[Dict[str, Any]]:
+    """Resume answers again the message whose failure paused the employee.
+
+    That is the chat's newest run when it ended on a stop only the owner
+    could fix (``requires_user_action``: out of credits, no key), which
+    pauses the employee at once (the circuit breaker). It goes through Try
+    again's own path, with the run's own choices, so Try again's rules
+    apply: a message sent during the pause (which runs instead) or a newer
+    answer leaves it as it is. Returns Try again's answer, or None when no
+    such message waits."""
+    database = container.database()
+    run = await ledger.latest_run(database, workflow_id)
+    if run is None or run.state != "error" or not (run.result or {}).get("requires_user_action") or not run.user_message_uid:
+        return None
+    refused, context = await _workflow_branch_context(database, workflow_id, workflow_id, None, starts_run=True)
+    answer = refused or await _try_again(database, context, run.user_message_uid, dict(run.options or {}), None)
+    logger.info(
+        "Resume answers the message that paused the employee", workflow_id=workflow_id,
+        failed_run_id=run.run_id, run_id=answer.get("run_id"), error=answer.get("error"),
+    )
+    return answer
 
 
 @ws_handler("message_id")

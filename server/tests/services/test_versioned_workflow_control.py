@@ -84,19 +84,23 @@ async def test_resume_releases_continuations_before_producers_and_saves_timeout_
         order.append("running")
         target.status = kwargs["status"]
         return target
+    async def answer_again(workflow_id):
+        order.append(f"answer again {workflow_id}")
     monkeypatch.setattr(container, "workflow_service", lambda: SimpleNamespace(pause_deployment=lambda _: None,
         update_trigger_pause_status=AsyncMock(), resume_deployment=local))
     monkeypatch.setattr(container, "temporal_client", lambda: SimpleNamespace(client=object()))
     monkeypatch.setattr(execution_control, "transition_generation", release)
     monkeypatch.setattr(handlers, "_set_cron_pause", schedules)
     monkeypatch.setattr(handlers, "_clear_failure_streak", AsyncMock())
+    monkeypatch.setattr(handlers, "_answer_paused_message", answer_again)
     monkeypatch.setattr(handlers, "_broadcast_control", AsyncMock(return_value={}))
     from services import status_broadcaster
     monkeypatch.setattr(status_broadcaster, "get_status_broadcaster", lambda: AsyncMock())
     database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=row))
     result, _ = await handlers._finish_versioned_transition(SimpleNamespace(transition=stable, database=database), row)
     assert result.status == "running"
-    assert order == ["continuations", "schedules", "local", "running"]
+    # The message whose failure paused the employee is answered once it runs.
+    assert order == ["continuations", "schedules", "local", "running", f"answer again {row.workflow_id}"]
 
 
 @pytest.mark.asyncio
@@ -176,6 +180,7 @@ def lifecycle(monkeypatch, state="running"):
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(return_value={"cancelled": 0}))
     monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(handlers, "_clear_failure_streak", AsyncMock())
+    monkeypatch.setattr(handlers, "_answer_paused_message", AsyncMock())
     monkeypatch.setattr(browser_reset, "cleanup_generation_browser_tasks", AsyncMock(return_value=1))
     monkeypatch.setattr(runtime_state, "archive_and_reset_node_state",
                         AsyncMock(return_value={"archived_nodes": [], "reset_nodes": []}))

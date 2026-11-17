@@ -818,7 +818,13 @@ and Resume.
   API error) never pauses a deployment; `1` restores
   pause-on-the-first-failure. The streak lives in the durable cache table
   keyed by the generation (Reset / Start begins fresh), Resume resets it,
-  and tripping clears it. The activity runs once (`BREAKER_COUNT_RETRY`), so
+  and tripping clears it. A failure only the owner can fix
+  (`requires_user_action`: out of credits, no key) pauses at once, and
+  Resume then answers that chat message again
+  (`services/chat/handlers.answer_again_after_resume`, through Try again's
+  own path and rules): only while its run is still the chat's newest, so a
+  message sent during the pause runs instead and the failed one keeps its
+  Try again. The activity runs once (`BREAKER_COUNT_RETRY`), so
   a retry cannot count a run twice. Only
   deployment-spawned runs qualify (they carry a `_pre_executed` firing
   trigger; a failed manual canvas run never pauses a live deployment), and

@@ -1167,6 +1167,8 @@ async def test_resume_rebuilds_a_gone_controller_then_reapplies_running(monkeypa
     )
     clear_streak = AsyncMock()
     monkeypatch.setattr(handlers, "_clear_failure_streak", clear_streak)
+    answer_again = AsyncMock()
+    monkeypatch.setattr(handlers, "_answer_paused_message", answer_again)
     workflow_service = MagicMock()
     workflow_service.resume_deployment = AsyncMock(return_value=0)
     workflow_service.update_trigger_pause_status = AsyncMock(return_value=0)
@@ -1184,6 +1186,8 @@ async def test_resume_rebuilds_a_gone_controller_then_reapplies_running(monkeypa
     assert update_state.await_count == 2
     # Operator intervention resets the circuit-breaker streak.
     clear_streak.assert_awaited_once()
+    # And the message whose failure paused the employee is answered again.
+    answer_again.assert_awaited_once_with("wf")
 
 
 # ---------------------------------------------------------------------------

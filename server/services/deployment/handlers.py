@@ -1429,6 +1429,7 @@ async def _finish_versioned_transition(service: WorkflowControlService, control)
                 from_statuses={intent[3]}, status="paused" if paused else "running", values=values or None)
             if not paused:
                 await _clear_failure_streak(service.database, control)
+                await _answer_paused_message(control.workflow_id)
             payload = await _broadcast_control(control, controller_status=result["controller_status"], extra=details)
             from services.status_broadcaster import get_status_broadcaster
             broadcaster = get_status_broadcaster()
@@ -2533,6 +2534,7 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     # Operator intervention resets the circuit-breaker streak — the next
     # failure after a resume starts a fresh count, not a near-tripped one.
     await _clear_failure_streak(service.database, control)
+    await _answer_paused_message(control.workflow_id)
     # Mirror of the pause-side emission: flip the UI-facing execution
     # flags back so the canvas and toolbar re-animate on every client.
     from services.status_broadcaster import get_status_broadcaster
@@ -2826,6 +2828,18 @@ async def _clear_failure_streak(database, control) -> None:
         await database.delete_cache_entry(_failure_streak_key(control))
     except Exception as exc:  # noqa: BLE001 — the TTL ages it out anyway
         logger.debug(f"Failed to clear failure streak: {exc}")
+
+
+async def _answer_paused_message(workflow_id: str) -> None:
+    """On Resume, answer again the chat message whose failure paused the
+    employee (services/chat, through Try again's own path and rules). Best
+    effort: the Resume stands, and the message keeps its Try again."""
+    from services.chat.handlers import answer_again_after_resume
+
+    try:
+        await answer_again_after_resume(workflow_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("Resume could not answer the paused message again", workflow_id=workflow_id, exc_info=True)
 
 
 async def pause_generation_on_failure(

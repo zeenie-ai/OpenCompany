@@ -224,6 +224,50 @@ async def test_trying_again_a_message_nothing_answered(chat):
     assert await path(chat) == ["Book Saturday"]
 
 
+async def test_resume_answers_again_the_message_a_stop_for_the_owner_ended(chat):
+    await talking(chat.database)
+    sent = await chat.handlers.handle_send_chat_message({"message": "Book Saturday", "session_id": "wf"}, None)
+    run = await ledger.start_run(chat.database, run_id=sent["run_id"], **CLAIM)
+    await branches.record_cursor(chat.database, run_id=run.run_id, agent_node_id=AGENT, generation=1, messages=[])
+    await ledger.finish_run(chat.database, run_id=run.run_id, success=False,
+                            error="Your OpenRouter credits cannot cover this request.",
+                            hint="Add OpenRouter credits, then resume.", requires_user_action=True, **CLAIM)
+
+    answered = await chat.handlers.answer_again_after_resume("wf")
+
+    assert answered["success"] is True and answered["message_id"] == sent["message_id"]
+    retried = await ledger.get_run(chat.database, answered["run_id"])
+    assert (retried.kind, retried.parent_run_id) == ("regenerate", sent["run_id"])
+    assert chat.dispatched[-1]["data"]["message"] == "Book Saturday"
+    # Once: the new run is now the newest.
+    assert await chat.handlers.answer_again_after_resume("wf") is None
+
+
+async def test_resume_leaves_a_failure_that_may_be_ours(chat):
+    await talking(chat.database)
+    sent = await chat.handlers.handle_send_chat_message({"message": "Book Saturday", "session_id": "wf"}, None)
+    await ledger.start_run(chat.database, run_id=sent["run_id"], **CLAIM)
+    await ledger.finish_run(chat.database, run_id=sent["run_id"], success=False, error="boom", **CLAIM)
+    dispatched = len(chat.dispatched)
+
+    assert await chat.handlers.answer_again_after_resume("wf") is None
+    assert len(chat.dispatched) == dispatched
+
+
+async def test_a_message_sent_during_the_pause_runs_instead(chat):
+    await talking(chat.database)
+    sent = await chat.handlers.handle_send_chat_message({"message": "Book Saturday", "session_id": "wf"}, None)
+    await ledger.start_run(chat.database, run_id=sent["run_id"], **CLAIM)
+    await ledger.finish_run(chat.database, run_id=sent["run_id"], success=False, error="No credits.",
+                            requires_user_action=True, **CLAIM)
+    await chat.handlers.handle_send_chat_message({"message": "And Sunday?", "session_id": "wf"}, None)
+    dispatched = len(chat.dispatched)
+
+    assert await chat.handlers.answer_again_after_resume("wf") is None
+    assert len(chat.dispatched) == dispatched
+    assert await path(chat) == ["Book Saturday", "And Sunday?"]
+
+
 # ----- refusals -------------------------------------------------------------------
 
 
