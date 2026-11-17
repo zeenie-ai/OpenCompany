@@ -979,6 +979,7 @@ class AICliService:
                 cache_read_tokens=cu.cache_read,
                 cache_creation_tokens=cu.cache_write,
                 reasoning_tokens=cu.reasoning_tokens,
+                total_tokens=total_tokens,
             )
             total = breakdown.get("total_cost")
             return float(total) if total else None

@@ -206,6 +206,7 @@ async def record_llm_usage(
             cache_read_tokens=usage.cache_read_tokens,
             cache_creation_tokens=usage.cache_creation_tokens,
             reasoning_tokens=usage.reasoning_tokens,
+            total_tokens=usage.total_tokens,
         )
         await database.save_token_metric(
             {

@@ -173,22 +173,35 @@ pricing = get_pricing_service()
 model_pricing = pricing.get_pricing('anthropic', 'claude-sonnet-5')
 # Returns ModelPricing(input_per_mtok=2.00, output_per_mtok=10.00, ...)
 
-# Calculate cost for token usage
+# Calculate cost for token usage (Anthropic-shaped: input excludes the cache)
 cost = pricing.calculate_cost(
     provider='anthropic',
-    model='claude-sonnet-5',
+    model='claude-sonnet-5-5',
     input_tokens=5000,
     output_tokens=1500,
-    cache_read_tokens=200
+    cache_read_tokens=20000,
+    cache_creation_tokens=1000,
+    total_tokens=27500,
 )
 # Returns: {
-#   'input_cost': 0.01,
-#   'output_cost': 0.015,
-#   'cache_cost': 0.00004,
+#   'input_cost': 0.01,       # 5,000 uncached at $2.00
+#   'output_cost': 0.015,     # 1,500 at $10.00
+#   'cache_cost': 0.0045,     # 20,000 read at $0.10 + 1,000 written at $2.50
 #   'reasoning_cost': 0.0,
-#   'total_cost': 0.02504
+#   'total_cost': 0.0295
 # }
 ```
+
+`calculate_cost` prices the uncached input from `total_tokens`, the whole
+prompt (cache reads and writes included) plus the output, which every provider
+fills the same way: uncached input = `total_tokens` minus output, cache reads
+and cache writes, never below 0. `input_tokens` cannot be used for this, since
+it counts cached tokens on OpenAI-shaped usage (OpenRouter included) but not on
+Anthropic's; the same call in either shape costs the same. Cache reads and
+writes take the model's `cache_read` / `cache_write` price, or its input price
+when it lists none. Without `total_tokens`, `input_tokens` is taken as the
+uncached input. Every caller passes it: the agent-step and setup booking
+(`record_llm_usage`), the compaction summarizer and the CLI agents.
 
 ### API Methods
 
@@ -383,7 +396,10 @@ class APIUsageMetric(SQLModel, table=True):
 
 ### TokenUsageMetric
 
-For LLM token usage (see memory_compaction.md for details).
+For LLM token usage (see memory_compaction.md for details). Rows come from the
+in-process agent path (`CompactionService.track`), the compaction summarizer,
+the hire-screen setup call, and one row per LLM step of every agent on
+Temporal (`record_llm_usage`).
 
 ```python
 class TokenUsageMetric(SQLModel, table=True):

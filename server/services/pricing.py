@@ -190,39 +190,49 @@ class PricingService:
         cache_read_tokens: int = 0,
         cache_creation_tokens: int = 0,
         reasoning_tokens: int = 0,
+        total_tokens: int = 0,
     ) -> Dict[str, float]:
         """Calculate cost for LLM token usage.
+
+        ``total_tokens`` is the whole prompt, cache reads and writes included,
+        plus the output: the one count every provider fills the same way
+        (``request_tokens`` in ``services/temporal/agent_context_pressure.py``).
+        ``input_tokens`` counts cached tokens on OpenAI-shaped usage but not on
+        Anthropic's, so the uncached input is the total less the output and
+        the cache counters. Without ``total_tokens``, ``input_tokens`` is taken
+        as the uncached input. Cache reads and writes are priced at the
+        model's ``cache_read`` / ``cache_write`` price, or its input price when
+        it lists none.
 
         Args:
             provider: LLM provider name
             model: Model name/ID
             input_tokens: Number of input tokens
             output_tokens: Number of output tokens
-            cache_read_tokens: Number of cache read tokens (Anthropic)
-            cache_creation_tokens: Number of cache creation tokens (Anthropic)
+            cache_read_tokens: Number of cache read tokens
+            cache_creation_tokens: Number of cache write tokens
             reasoning_tokens: Number of reasoning tokens (OpenAI o-series)
+            total_tokens: The whole prompt plus the output, as reported
 
         Returns:
             Dict with cost breakdown:
-            - input_cost: USD for input tokens
+            - input_cost: USD for uncached input tokens
             - output_cost: USD for output tokens
-            - cache_cost: USD for cache tokens
+            - cache_cost: USD for cache reads and writes
             - reasoning_cost: USD for reasoning tokens
             - total_cost: Total USD cost
         """
         pricing = self.get_pricing(provider, model)
 
-        # Calculate costs (prices are per 1M tokens)
-        input_cost = (input_tokens / 1_000_000) * pricing.input_per_mtok
-        output_cost = (output_tokens / 1_000_000) * pricing.output_per_mtok
+        total = total_tokens or input_tokens + output_tokens + cache_read_tokens + cache_creation_tokens
+        uncached_input = max(0, total - output_tokens - cache_read_tokens - cache_creation_tokens)
+        read_price = pricing.input_per_mtok if pricing.cache_read_per_mtok is None else pricing.cache_read_per_mtok
+        write_price = pricing.input_per_mtok if pricing.cache_write_per_mtok is None else pricing.cache_write_per_mtok
 
-        # Cache costs (Anthropic pattern)
-        cache_cost = 0.0
-        if pricing.cache_read_per_mtok:
-            # Cache reads are discounted (typically 10% of input price)
-            cache_cost += (cache_read_tokens / 1_000_000) * pricing.cache_read_per_mtok
-            # Cache creation is charged at 1.25x output rate
-            cache_cost += (cache_creation_tokens / 1_000_000) * pricing.output_per_mtok * 1.25
+        # Prices are per 1M tokens.
+        input_cost = (uncached_input / 1_000_000) * pricing.input_per_mtok
+        output_cost = (output_tokens / 1_000_000) * pricing.output_per_mtok
+        cache_cost = (cache_read_tokens * read_price + cache_creation_tokens * write_price) / 1_000_000
 
         # Reasoning costs (OpenAI o-series)
         reasoning_cost = 0.0

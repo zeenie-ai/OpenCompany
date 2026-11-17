@@ -211,6 +211,7 @@ class CompactionService:
             cache_read_tokens=usage.get("cache_read_tokens", 0),
             cache_creation_tokens=usage.get("cache_creation_tokens", 0),
             reasoning_tokens=usage.get("reasoning_tokens", 0),
+            total_tokens=usage.get("total_tokens", 0),
         )
 
         # Save token metric with cost fields
