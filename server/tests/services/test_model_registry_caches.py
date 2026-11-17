@@ -111,6 +111,36 @@ class TestLocalModels:
         assert (info.input_price_per_mtok, info.output_price_per_mtok) == (2.5, 10.0)
 
 
+class TestOpenRouterCachePrices:
+    """Prompt-cache prices come from OpenRouter's own catalogue, for pricing."""
+
+    def test_cache_prices_are_read_when_the_catalogue_lists_them(self, registry):
+        info = registry._parse_openrouter_model(
+            {
+                "id": "anthropic/claude-test",
+                "name": "Anthropic: Claude Test",
+                "context_length": 1_000_000,
+                "top_provider": {"max_completion_tokens": 128000},
+                "pricing": {
+                    "prompt": "0.000002",
+                    "completion": "0.00001",
+                    "input_cache_read": "0.0000001",
+                    "input_cache_write": "0.0000025",
+                },
+            }
+        )
+
+        assert (info.cache_read_price_per_mtok, info.cache_write_price_per_mtok) == (0.1, 2.5)
+        # The snapshot keeps them.
+        assert mr.ModelInfo.from_dict(info.to_dict()) == info
+
+    def test_a_price_the_catalogue_does_not_list_stays_unknown(self, registry):
+        info = registry._parse_openrouter_model(OPENROUTER["data"][0])
+
+        assert info.cache_read_price_per_mtok is None
+        assert info.cache_write_price_per_mtok is None
+
+
 class TestLiteLLMTable:
     @respx.mock
     async def test_refresh_keeps_chat_models_and_the_four_fields_read(self, registry, paths):

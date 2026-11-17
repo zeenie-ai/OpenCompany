@@ -31,6 +31,7 @@ class ModelPricing:
     output_per_mtok: float  # USD per 1M output tokens
     cache_read_per_mtok: Optional[float] = None  # USD per 1M cache read tokens (Anthropic)
     reasoning_per_mtok: Optional[float] = None  # USD per 1M reasoning tokens (OpenAI o-series)
+    cache_write_per_mtok: Optional[float] = None  # USD per 1M cache write tokens (Anthropic)
 
 
 class PricingService:
@@ -72,6 +73,7 @@ class PricingService:
                         output_per_mtok=pricing_data.get("output", 5.0),
                         cache_read_per_mtok=pricing_data.get("cache_read"),
                         reasoning_per_mtok=pricing_data.get("reasoning"),
+                        cache_write_per_mtok=pricing_data.get("cache_write"),
                     )
 
     def reload(self) -> None:
@@ -134,7 +136,7 @@ class PricingService:
 
         provider_lower = provider.lower()
         model_lower = model.lower() if model else ""
-        name, endpoint_slug = split_provider_ref(provider_lower)
+        name, _slug = split_provider_ref(provider_lower)
 
         provider_pricing = self._llm_registry.get(name, {})
 
@@ -152,15 +154,23 @@ class PricingService:
             if model_key != "_default" and model_key in model_lower:
                 return pricing
 
-        # A named endpoint's per-model price, recorded when it was saved
-        # (from the LiteLLM table). Scoped to endpoints so every other
-        # provider keeps its curated pricing.json behaviour.
-        if endpoint_slug:
+        # A provider whose prices live in the model registry says so with
+        # "_from_registry" in pricing.json: OpenRouter (the registry is its own
+        # catalogue, cache prices included) and named endpoints (the price
+        # recorded when one was saved, from the LiteLLM table). A curated row
+        # above still wins, a free model (0/0) is a real price, and a router's
+        # negative placeholder falls through to _default.
+        if self._config.get("llm", {}).get(name, {}).get("_from_registry"):
             from services.model_registry import get_model_registry
 
             info = get_model_registry().get_model_info(model or "", provider)
-            if info and (info.input_price_per_mtok or info.output_price_per_mtok):
-                return ModelPricing(info.input_price_per_mtok, info.output_price_per_mtok)
+            if info and min(info.input_price_per_mtok, info.output_price_per_mtok) >= 0:
+                return ModelPricing(
+                    info.input_price_per_mtok,
+                    info.output_price_per_mtok,
+                    cache_read_per_mtok=info.cache_read_price_per_mtok,
+                    cache_write_per_mtok=info.cache_write_price_per_mtok,
+                )
 
         # Fall back to provider default
         default_pricing = provider_pricing.get("_default")

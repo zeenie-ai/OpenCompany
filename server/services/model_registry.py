@@ -126,6 +126,9 @@ class ModelInfo:
     temperature_range: tuple = (0.0, 2.0)
     is_reasoning_model: bool = False
     supported_parameters: list = field(default_factory=list)
+    # Prompt-cache prices, when the catalogue lists them (None otherwise).
+    cache_read_price_per_mtok: Optional[float] = None
+    cache_write_price_per_mtok: Optional[float] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -140,6 +143,15 @@ class ModelInfo:
         if "supported_parameters" not in data:
             data["supported_parameters"] = []
         return cls(**data)
+
+
+def _price_per_mtok(value: Any) -> Optional[float]:
+    """An OpenRouter per-token price string as USD per million tokens,
+    or None when the catalogue does not list that price."""
+    try:
+        return None if value is None else round(float(value) * 1_000_000, 4)
+    except (TypeError, ValueError):
+        return None
 
 
 # =============================================================================
@@ -567,6 +579,8 @@ class ModelRegistryService:
             temperature_range=temp_range,
             is_reasoning_model=is_reasoning,
             supported_parameters=supported_params,
+            cache_read_price_per_mtok=_price_per_mtok(pricing.get("input_cache_read")),
+            cache_write_price_per_mtok=_price_per_mtok(pricing.get("input_cache_write")),
         )
 
     def _infer_thinking_type(self, model: str, provider: str) -> str:

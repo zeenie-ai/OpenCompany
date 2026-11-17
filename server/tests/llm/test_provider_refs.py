@@ -143,6 +143,52 @@ class TestPricing:
         price = pricing.get_pricing("openai", "gpt-6-astra")
         assert (price.input_per_mtok, price.output_per_mtok) == (10.0, 50.0)
 
+    @staticmethod
+    def _registry_with(info):
+        registry = MagicMock()
+        registry.get_model_info.return_value = info
+        return registry
+
+    def test_openrouter_models_use_the_registry_catalogue(self, pricing):
+        info = MagicMock(
+            input_price_per_mtok=2.0,
+            output_price_per_mtok=10.0,
+            cache_read_price_per_mtok=0.1,
+            cache_write_price_per_mtok=2.5,
+        )
+        with patch("services.model_registry.get_model_registry", return_value=self._registry_with(info)):
+            price = pricing.get_pricing("openrouter", "anthropic/claude-sonnet-5.5")
+        assert (price.input_per_mtok, price.output_per_mtok) == (2.0, 10.0)
+        assert (price.cache_read_per_mtok, price.cache_write_per_mtok) == (0.1, 2.5)
+
+    def test_a_free_openrouter_model_stays_free(self, pricing):
+        info = MagicMock(
+            input_price_per_mtok=0.0,
+            output_price_per_mtok=0.0,
+            cache_read_price_per_mtok=None,
+            cache_write_price_per_mtok=None,
+        )
+        with patch("services.model_registry.get_model_registry", return_value=self._registry_with(info)):
+            price = pricing.get_pricing("openrouter", "some/model:free")
+        assert (price.input_per_mtok, price.output_per_mtok) == (0.0, 0.0)
+
+    @pytest.mark.parametrize(
+        "info",
+        [None, MagicMock(input_price_per_mtok=-1_000_000.0, output_price_per_mtok=-1_000_000.0)],
+        ids=["unlisted", "router"],
+    )
+    def test_an_unlisted_model_or_a_router_takes_the_default(self, pricing, info):
+        with patch("services.model_registry.get_model_registry", return_value=self._registry_with(info)):
+            price = pricing.get_pricing("openrouter", "openrouter/auto")
+        assert (price.input_per_mtok, price.output_per_mtok) == (1.0, 5.0)
+
+    def test_local_servers_never_consult_the_registry(self, pricing):
+        registry = self._registry_with(MagicMock(input_price_per_mtok=3.0, output_price_per_mtok=15.0))
+        with patch("services.model_registry.get_model_registry", return_value=registry):
+            price = pricing.get_pricing("ollama", "llama3")
+        assert (price.input_per_mtok, price.output_per_mtok) == (0.0, 0.0)
+        registry.get_model_info.assert_not_called()
+
 
 class TestUnifierGuards:
     async def test_no_request_leaves_without_a_key(self, monkeypatch):

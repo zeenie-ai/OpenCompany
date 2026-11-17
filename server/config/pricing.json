@@ -95,6 +95,8 @@
       "_default": {"input": 0.35, "output": 0.75}
     },
     "openrouter": {
+      "_note": "_from_registry: PricingService.get_pricing prices OpenRouter models from the model registry, which is OpenRouter's own catalogue (prompt, completion, input_cache_read and input_cache_write). _default covers ids the registry does not list.",
+      "_from_registry": true,
       "_default": {"input": 1.00, "output": 5.00}
     },
     "deepseek": {
@@ -136,7 +138,8 @@
       "_default": {"input": 0.00, "output": 0.00}
     },
     "openai_compatible": {
-      "_description": "Named OpenAI-compatible endpoints (openai_compatible:<slug>). Self-hosted servers cost nothing at the API layer. When saving an endpoint found a model id in the LiteLLM table, PricingService.get_pricing uses that per-model price from the model registry before this _default.",
+      "_description": "Named OpenAI-compatible endpoints (openai_compatible:<slug>). Self-hosted servers cost nothing at the API layer. When saving an endpoint found a model id in the LiteLLM table, PricingService.get_pricing uses that per-model price from the model registry (_from_registry) before this _default.",
+      "_from_registry": true,
       "_default": {"input": 0.00, "output": 0.00}
     }
   },
