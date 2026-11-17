@@ -97,6 +97,10 @@ Lead-driven transitions (`AgentTeamService.mutate_durable_task`):
 | `retry_task` / `reassign_task` | `failed`, `submitted`, `cancelled` | `queued`, as a new attempt |
 
 - `submitted` means the worker finished and the lead must review the result.
+- A worker's failure that only the owner can fix (`requires_user_action`: out
+  of credits, no key) fails the task at once, since another attempt would meet
+  it too, and the lead hears of it through `taskTrigger`
+  (`fail_task(..., retryable=False)`).
 - `accepted` is the completed/Done state shown by Team Monitor.
 - `failed` is unresolved until retried or reassigned; a failed task cannot be
   cancelled.

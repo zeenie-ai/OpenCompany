@@ -2543,8 +2543,11 @@ async def finish_agent_delegation(payload: Dict[str, Any]) -> Dict[str, Any]:
         if succeeded:
             ok = await service.complete_task(team_id, task_id, payload.get("result") or {}, expected_attempt=attempt)
         else:
+            # A stop only the owner can fix (no credits, no key) would meet
+            # the next attempt too: the task fails and the lead is told now.
             ok = await service.fail_task(
-                team_id, task_id, str(payload.get("error") or "Delegated agent failed"), expected_attempt=attempt
+                team_id, task_id, str(payload.get("error") or "Delegated agent failed"), expected_attempt=attempt,
+                retryable=not payload.get("requires_user_action"),
             )
         if not ok:
             raise RuntimeError(f"Failed to mark delegated task {target_status}")

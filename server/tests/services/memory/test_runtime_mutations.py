@@ -252,3 +252,21 @@ async def test_team_task_transitions_are_atomic_and_retry_safe(runtime_database)
         task = selected.scalar_one()
         assert task.retry_count == 1
         assert task.status == "queued"
+
+
+async def test_a_failure_another_attempt_would_meet_fails_the_task_at_once(runtime_database):
+    db = runtime_database
+    await db.add_team_task("stop-1", "team-1", "Stop", "lead-1")
+    assert await db.claim_task("stop-1", "agent-1") is not None
+    assert await db.fail_task("stop-1", "No credits.", retryable=False) is True
+    # A transport retry of the same failure changes nothing.
+    assert await db.fail_task("stop-1", "No credits.", retryable=False) is True
+
+    async with db.get_session() as session:
+        from models.database import TeamTask
+        from sqlmodel import select
+
+        task = (await session.execute(select(TeamTask).where(TeamTask.id == "stop-1"))).scalar_one()
+        assert task.retry_count == 1
+        assert task.status == "failed"
+        assert task.completed_at is not None

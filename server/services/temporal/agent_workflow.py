@@ -712,10 +712,15 @@ class DelegatedTaskWorkflow:
             completion_action_active = self._execution_control.enabled
             succeeded = bool(result.get("success", True)) if isinstance(result, dict) else True
             _response, summary = _normalise_delegated_result(result)
+            # A stop only the owner can fix fails the task at once instead of
+            # queueing another attempt. Only this activity's input, which
+            # replay never compares, so no version gate.
+            owner_must_act = isinstance(result, dict) and result.get("requires_user_action") is True
             return await workflow.execute_activity(
                 "agent.finish_delegation",
                 args=[{**lifecycle, "success": succeeded, "result": summary,
                        "error": result.get("error") if isinstance(result, dict) else None,
+                       **({"requires_user_action": True} if owner_must_act else {}),
                        "terminal_event_id": f"{task_id}:terminal"}],
                 start_to_close_timeout=PERSIST_TURN_TIMEOUT,
                 retry_policy=AGENT_ACTIVITY_RETRY,

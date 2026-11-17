@@ -366,12 +366,17 @@ class AgentTeamService:
 
         return success
 
-    async def fail_task(self, team_id: str, task_id: str, error: str, *, expected_attempt: Optional[int] = None) -> bool:
-        """Mark a task as failed."""
+    async def fail_task(
+        self, team_id: str, task_id: str, error: str, *, expected_attempt: Optional[int] = None, retryable: bool = True,
+    ) -> bool:
+        """Mark a task as failed; queued again unless ``retryable`` is False."""
         tasks = await self.database.get_team_tasks(team_id)
         task = next((t for t in tasks if t["id"] == task_id), None)
 
-        success = await self.database.fail_task(task_id, error, **({"expected_attempt": expected_attempt} if expected_attempt is not None else {}))
+        success = await self.database.fail_task(
+            task_id, error, retryable=retryable,
+            **({"expected_attempt": expected_attempt} if expected_attempt is not None else {}),
+        )
 
         if success:
             if task and task.get("assigned_to"):

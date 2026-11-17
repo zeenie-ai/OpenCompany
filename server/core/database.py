@@ -11,7 +11,7 @@ from pydantic_core import to_jsonable_python
 from sqlmodel import SQLModel, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import case, text, func, update, or_
+from sqlalchemy import case, false, text, func, update, or_
 from contextlib import asynccontextmanager
 
 from core.session_teardown import teardown_session as _teardown_session
@@ -3825,12 +3825,18 @@ class Database:
             logger.error(f"Failed to complete task: {e}")
             return False
 
-    async def fail_task(self, task_id: str, error: str, *, expected_attempt: Optional[int] = None) -> bool:
-        """Atomically record one failed attempt and release or fail it."""
+    async def fail_task(
+        self, task_id: str, error: str, *, expected_attempt: Optional[int] = None, retryable: bool = True,
+    ) -> bool:
+        """Atomically record one failed attempt and release or fail it.
+
+        ``retryable=False`` fails the task at once: a failure another attempt
+        would meet again, such as one only the owner can fix (an empty
+        provider balance, a missing key), is never queued again."""
         try:
             async def _fail(session: AsyncSession) -> Dict[str, Any]:
                 next_retry = TeamTask.retry_count + 1
-                retryable = next_retry < TeamTask.max_retries
+                requeue = (next_retry < TeamTask.max_retries) if retryable else false()
                 failed = await session.execute(
                     update(TeamTask)
                     .where(
@@ -3842,15 +3848,15 @@ class Database:
                         error=error,
                         retry_count=next_retry,
                         status=case(
-                            (retryable, "queued"),
+                            (requeue, "queued"),
                             else_="failed",
                         ),
                         assigned_to=case(
-                            (retryable, None),
+                            (requeue, None),
                             else_=TeamTask.assigned_to,
                         ),
                         completed_at=case(
-                            (retryable, TeamTask.completed_at),
+                            (requeue, TeamTask.completed_at),
                             else_=datetime.now(timezone.utc),
                         ),
                     )

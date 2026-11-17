@@ -641,6 +641,34 @@ class TestDelegationWait:
         assert calls["execute"] == 1
         assert tools_mod._active_delegations == {}
 
+    @pytest.mark.parametrize("owner_must_act", [True, False])
+    async def test_a_team_child_stop_only_the_owner_can_fix_is_not_queued_again(self, _reset_registry, owner_must_act):
+        tools_mod = _reset_registry
+        failure = {"success": False, "error": "Your OpenRouter credits cannot cover this request.",
+                   **({"requires_user_action": True} if owner_must_act else {})}
+        plugin_cls, broadcaster, config, calls = self._make_env(child_result=failure)
+        config["delegation_wait_seconds"] = 5
+        config["edges"] = [{"source": "child-1", "target": "parent-1", "targetHandle": "input-teammates"}]
+        team = MagicMock()
+        team.get_or_create_execution_team = AsyncMock(return_value={"team_id": "team-1"})
+        team.add_task = AsyncMock(return_value={"id": "task"})
+        team.acquire_subagent_permit = AsyncMock(return_value=True)
+        team.release_subagent_permit = AsyncMock(return_value=True)
+        team.claim_task = AsyncMock(return_value=True)
+        team.send_message = AsyncMock(return_value={"id": "message"})
+        team.fail_task = AsyncMock(return_value=True)
+        team.database.get_team_tasks = AsyncMock(return_value=[])
+
+        p1, p2, p3, p4 = self._patches(plugin_cls, broadcaster)
+        with p1, p2, p3, p4, patch("services.agent_team.get_agent_team_service", return_value=team), patch(
+            "services.plugin.edge_walker.collect_teammate_connections", AsyncMock(return_value=[])
+        ):
+            await tools_mod._execute_delegated_agent({"task": "research"}, config)
+
+        assert calls["execute"] == 1
+        # Another attempt would meet the same stop, so the task is not queued again.
+        assert team.fail_task.await_args.kwargs["retryable"] is (not owner_must_act)
+
     async def test_wait_timeout_keeps_child_running(self, _reset_registry):
         import asyncio
 

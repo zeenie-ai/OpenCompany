@@ -68,6 +68,30 @@ async def retry(handoff):
     )
 
 
+@pytest.mark.parametrize("owner_must_act", [True, False])
+async def test_a_stop_only_the_owner_can_fix_fails_the_task_and_tells_the_lead(handoff, monkeypatch, owner_must_act):
+    told = []
+
+    async def tell(**event):
+        told.append(event["error"])
+
+    monkeypatch.setattr("nodes.agent._events.broadcast_agent_task_failed", tell)
+    await start_attempt(handoff, 1)
+    answer = await activities.finish_agent_delegation({
+        **PAYLOAD, "success": False, "error": "Your OpenRouter credits cannot cover this request.",
+        **({"requires_user_action": True} if owner_must_act else {}),
+    })
+    task = await handoff.database.get_durable_team_task("team", "task")
+    if owner_must_act:
+        # Another attempt would meet the same stop: the lead hears of it now.
+        assert answer["status"] == task["status"] == "failed"
+        assert told == ["Your OpenRouter credits cannot cover this request."]
+    else:
+        # Any other failure is queued for another attempt, and no review starts yet.
+        assert answer["status"] == "requeued" and task["status"] == "queued"
+        assert told == []
+
+
 async def test_retried_legacy_runner_delivers_a_second_deduplicated_review(handoff):
     await start_attempt(handoff, 0)
     await activities.finish_agent_delegation({**PAYLOAD, "success": True, "result": {"response": "First result"}})

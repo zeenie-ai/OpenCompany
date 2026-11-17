@@ -636,11 +636,13 @@ async def _execute_delegated_agent(
         f"[Delegated Agent] Context: {len(nodes)} nodes, {len(edges)} edges, " f"edge_targets={set(e.get('target') for e in edges)}"
     )
 
-    async def finalize_team_task(*, result_data: Optional[Dict[str, Any]] = None, error: Optional[str] = None) -> str:
+    async def finalize_team_task(
+        *, result_data: Optional[Dict[str, Any]] = None, error: Optional[str] = None, retryable: bool = True,
+    ) -> str:
         if not team_service or not team_id:
             return "completed" if error is None else "failed"
         if error is not None:
-            await team_service.fail_task(team_id, task_id, error)
+            await team_service.fail_task(team_id, task_id, error, retryable=retryable)
             event_type, message_type, content = "failed", "task_failed", error
         else:
             await team_service.complete_task(team_id, task_id, result_data)
@@ -746,7 +748,11 @@ async def _execute_delegated_agent(
                         },
                     )
 
-                persisted_status = await finalize_team_task(error=error_msg)
+                # A stop only the owner can fix (no credits, no key) would
+                # meet the next attempt too: the task fails and the lead is told.
+                persisted_status = await finalize_team_task(
+                    error=error_msg, retryable=not result.get("requires_user_action"),
+                )
                 # A retryable failure is queued again and must not wake a
                 # taskTrigger as though it were terminal.
                 if persisted_status not in {"pending", "queued", "blocked", "requeued"}:
