@@ -8,6 +8,10 @@ fake CLI that records each script call.
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, patch
@@ -432,3 +436,28 @@ async def test_cancelled_site_action_requires_observation(runtime, operation):
     assert runtime.controller.needs_observation
     blocked = await _run({"operation": "click", "x": 4, "y": 4})
     assert blocked["error_type"] == "outcome_unknown"
+
+
+def _browser_schema_under_hash_seed(seed: str) -> str:
+    code = (
+        "import json\n"
+        "from nodes.browser.browser import BrowserToolInput\n"
+        "print('SCHEMA=' + json.dumps(BrowserToolInput.model_json_schema()))\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parents[3],
+        env={**os.environ, "PYTHONHASHSEED": seed},
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, f"schema probe failed (rc={result.returncode}):\n{result.stderr}"
+    # Importing the plugin also logs to stdout; keep only the schema line.
+    return next(line for line in result.stdout.splitlines() if line.startswith("SCHEMA="))
+
+
+def test_the_model_facing_schema_is_identical_in_every_process():
+    """The tool definitions open every prompt, so a byte that changes between
+    backend processes misses every prompt-cache entry after it."""
+    assert _browser_schema_under_hash_seed("0") == _browser_schema_under_hash_seed("1")

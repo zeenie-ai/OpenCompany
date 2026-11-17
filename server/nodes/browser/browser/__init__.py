@@ -97,7 +97,7 @@ NodeOperation = Literal[
 #: navigation can be permitted in read-only mode but cannot be blindly replayed.
 MUTATING = frozenset({"click", "type", "press", "select", "back", "forward", "reload", "webmcp_call", "evaluate", "run_python", "credential_fill"})
 #: Operations with a target element.
-_TARGETED = {"click", "hover", "type", "select", "scroll", "page_text"}
+_TARGETED = ("click", "hover", "type", "select", "scroll", "page_text")  # a tuple: schema order must not change between processes
 #: Only workflow nodes may run these; they are not in the model's schema.
 NODE_ONLY = frozenset({"evaluate", "run_python", "close"})
 
