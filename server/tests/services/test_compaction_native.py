@@ -173,6 +173,30 @@ async def test_a_tracked_call_is_booked_under_its_workflow(monkeypatch, llm_usag
 
 
 @pytest.mark.asyncio
+async def test_a_sessions_cost_adds_up_across_calls(real_database, monkeypatch, llm_usage):
+    # The session state once came back without its cost fields, so every
+    # tracked call overwrote the running cost with its own.
+    llm_usage.return_value = {"input_cost": 0.01, "output_cost": 0.02, "cache_cost": 0.0, "reasoning_cost": 0.0, "total_cost": 0.03}
+    registry = SimpleNamespace(
+        get_agent_defaults=lambda: {"compaction": {"ratio": 0.8}},
+        get_context_length=lambda *_args: 100_000,
+    )
+    monkeypatch.setattr("services.model_registry.get_model_registry", lambda: registry)
+    service = CompactionService(real_database, SimpleNamespace(compaction_enabled=True))
+    call = dict(session_id="session-1", node_id="agent-1", provider="openai", model="gpt-test",
+                usage={"input_tokens": 5, "output_tokens": 2, "total_tokens": 7})
+
+    await service.track(**call)
+    tracked = await service.track(**call)
+
+    state = await real_database.get_or_create_session_token_state("session-1")
+    assert tracked["total_cost"] == 0.06
+    assert state["cumulative_input_cost"] == 0.02
+    assert state["cumulative_output_cost"] == 0.04
+    assert state["cumulative_total_cost"] == 0.06
+
+
+@pytest.mark.asyncio
 async def test_an_llm_error_is_raised_only_when_asked(monkeypatch):
     error = LLMError("private body", "openai", category=LLMErrorCategory.RATE_LIMIT, retryable=True)
     service = _service(monkeypatch, AsyncMock(side_effect=error))
