@@ -321,6 +321,7 @@ class UserSettings(SQLModel, table=True):
     compaction_ratio: float = Field(default=0.8)  # Fraction of context window triggering compaction (0.05-0.99). Mirrors COMPACTION_RATIO env default.
     agent_recursion_limit: int = Field(default=200)  # Hard step cap for the agent loop. Mirrors AGENT_RECURSION_LIMIT env default.
     tool_result_max_chars: int = Field(default=100000)  # Largest external tool result (characters) kept in an agent's conversation. Mirrors TOOL_RESULT_MAX_CHARS env default.
+    chat_run_spend_limit_usd: float = Field(default=0.0)  # Most one chat reply may cost in USD; 0 = no limit. Mirrors CHAT_RUN_SPEND_LIMIT_USD env default.
     max_concurrent_subagents: int = Field(default=3)
     max_delegation_depth: int = Field(default=2)
     examples_loaded: bool = Field(default=False)  # Track if example workflows were imported

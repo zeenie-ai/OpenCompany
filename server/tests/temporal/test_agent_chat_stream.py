@@ -36,9 +36,10 @@ def _payload(**extra: Any) -> Dict[str, Any]:
 
 
 @pytest.fixture
-def env(monkeypatch, llm_usage):
+def env(monkeypatch, llm_usage, spend_limit):
     """The step's surroundings: the hub, the conversation store and the stop
-    flag, all recorded. The step's usage booking is a stand-in (``llm_usage``)."""
+    flag, all recorded. The step's usage booking and its spend-limit check
+    are stand-ins (``llm_usage``, ``spend_limit``)."""
     import core.container as container_module
     import services.chat.config as chat_config
     import services.chat.hub as hub_module
@@ -65,7 +66,7 @@ def env(monkeypatch, llm_usage):
     monkeypatch.setattr(agent_activities, "_chat_run_stopping", stopping)
     monkeypatch.setattr(chat_config, "runs_setting", lambda name: 0.0 if name == "stop_poll_s" else real_runs_setting(name))
     monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
-    return type("Env", (), {"published": published, "saved": saved, "state": state})
+    return type("Env", (), {"published": published, "saved": saved, "state": state, "spend_limit": spend_limit})
 
 
 def _run_step(monkeypatch, step):
@@ -150,6 +151,99 @@ async def test_a_stopped_run_ends_before_paying_for_a_step(env, monkeypatch):
     assert [message["role"] for message in turn["sent"]] == ["system", "user"]
     assert turn["assistant"] is None
     assert env.published == []
+
+
+LIMIT_NOTICE = "I stopped here because this reply reached the spend limit of $2.00 set in Settings."
+
+
+def _model_must_not_be_called(monkeypatch):
+    async def step(unifier, **kwargs):
+        raise AssertionError("the model was called for a run at its spend limit")
+
+    _run_step(monkeypatch, step)
+
+
+async def test_a_run_at_its_spend_limit_ends_before_paying_for_a_step(env, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_must_not_be_called(monkeypatch)
+    env.spend_limit.return_value = LIMIT_NOTICE
+
+    result = await _execute_native_llm_step(_payload())
+
+    env.spend_limit.assert_awaited_once_with("r_1")
+    assert (result["kind"], result["content"], result["finish_reason"]) == ("final", LIMIT_NOTICE, "spend_limit")
+    assert result["usage"]["total_tokens"] == 0
+
+
+async def test_the_limit_notice_streams_as_the_reply(env, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_must_not_be_called(monkeypatch)
+    env.spend_limit.return_value = LIMIT_NOTICE
+
+    await _execute_native_llm_step(_payload())
+
+    assert _texts(env.published) == LIMIT_NOTICE
+    assert env.published[-1]["suffix"] == "text.ended" and env.published[-1]["fields"]["final"] is True
+
+
+async def test_the_limit_notice_is_kept_as_the_agents_turn(env, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_must_not_be_called(monkeypatch)
+    env.spend_limit.return_value = LIMIT_NOTICE
+
+    await _execute_native_llm_step(_payload())
+
+    [turn] = env.saved
+    assert [message["role"] for message in turn["sent"]] == ["system", "user"]
+    assert turn["assistant"]["content"] == LIMIT_NOTICE
+
+
+async def test_a_run_under_its_spend_limit_answers_as_usual(env, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    async def step(unifier, **kwargs):
+        return LLMResponse(content="Booked for 10:00.", finish_reason="stop", usage=Usage(input_tokens=3, output_tokens=4))
+
+    _run_step(monkeypatch, step)
+
+    result = await _execute_native_llm_step(_payload())
+
+    env.spend_limit.assert_awaited_once_with("r_1")
+    assert (result["content"], result["finish_reason"]) == ("Booked for 10:00.", "stop")
+
+
+async def test_a_managed_employee_job_is_never_limited(env, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    async def step(unifier, **kwargs):
+        return LLMResponse(content="Done.", finish_reason="stop", usage=Usage())
+
+    _run_step(monkeypatch, step)
+    env.spend_limit.return_value = LIMIT_NOTICE
+
+    result = await _execute_native_llm_step(_payload(attribution={"employee_job_id": "job-1"}))
+
+    env.spend_limit.assert_not_awaited()
+    assert result["content"] == "Done."
+
+
+async def test_a_step_outside_a_chat_run_is_never_limited(env, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    async def step(unifier, **kwargs):
+        return LLMResponse(content="Done.", usage=Usage())
+
+    _run_step(monkeypatch, step)
+    payload = _payload()
+    payload.pop("chat_stream")
+    payload.pop("chat_run_id")
+
+    await _execute_native_llm_step(payload)
+
+    env.spend_limit.assert_not_awaited()
 
 
 async def test_stopping_midway_keeps_what_was_shown(env, monkeypatch):

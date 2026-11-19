@@ -346,6 +346,10 @@ class Database:
                     await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN tool_result_max_chars INTEGER DEFAULT {default_chars}"))
                     logger.info("Added tool_result_max_chars column to user_settings")
 
+                if "chat_run_spend_limit_usd" not in columns:
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN chat_run_spend_limit_usd REAL DEFAULT 0"))
+                    logger.info("Added chat_run_spend_limit_usd column to user_settings")
+
                 if "max_concurrent_subagents" not in columns:
                     await conn.execute(text("ALTER TABLE user_settings ADD COLUMN max_concurrent_subagents INTEGER DEFAULT 3"))
                 if "max_delegation_depth" not in columns:
@@ -2549,6 +2553,7 @@ class Database:
                     "auto_rebind_tools_after_canvas_change": settings.auto_rebind_tools_after_canvas_change,
                     "agent_recursion_limit": settings.agent_recursion_limit,
                     "tool_result_max_chars": settings.tool_result_max_chars,
+                    "chat_run_spend_limit_usd": settings.chat_run_spend_limit_usd,
                     "max_concurrent_subagents": settings.max_concurrent_subagents,
                     "max_delegation_depth": settings.max_delegation_depth,
                     "profile_full_name": settings.profile_full_name,

@@ -1051,7 +1051,7 @@ class TestLlmStepActivity:
         assert result["usage"]["input_tokens"] == 5
 
     @pytest.mark.asyncio
-    async def test_a_step_of_a_chat_run_books_the_run_on_its_row(self, monkeypatch, llm_usage):
+    async def test_a_step_of_a_chat_run_books_the_run_on_its_row(self, monkeypatch, llm_usage, spend_limit):
         from services.llm.protocol import LLMResponse, Usage
         from services.temporal import agent_activities
         from services.temporal.agent_activities import _execute_native_llm_step

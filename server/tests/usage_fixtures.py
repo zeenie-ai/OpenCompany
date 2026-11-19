@@ -33,3 +33,14 @@ def api_usage(monkeypatch):
     recorder = AsyncMock(return_value=0.0)
     monkeypatch.setattr(services.usage, "record_api_usage", recorder)
     return recorder
+
+
+@pytest.fixture
+def spend_limit(monkeypatch):
+    """``services.usage.spend_limit_notice`` replaced by a mock: no chat run
+    has reached its limit, until a test sets ``return_value`` to a notice."""
+    import services.usage
+
+    notice = AsyncMock(return_value=None)
+    monkeypatch.setattr(services.usage, "spend_limit_notice", notice)
+    return notice

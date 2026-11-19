@@ -8,6 +8,7 @@ It depends on the price service, the models and a database session.
 - ``recording``: one row per call. A recorder never raises: the call it
   records already happened and was paid for.
 - ``summaries``: what was recorded, added up.
+- ``limit``: the spend limit of a chat run.
 - ``handlers``: the WebSocket commands that read it. They register when
   ``main.py`` imports that module; importing this package registers nothing.
 
@@ -16,15 +17,26 @@ Callers import a recorder inside the function that calls it
 the call runs.
 """
 
+from .limit import resolve_spend_limit, spend_limit_notice
 from .recording import record_api_usage, record_llm_usage
-from .summaries import api_usage_summary, chat_run_costs, month_start, provider_usage_summary, workflow_costs
+from .summaries import (
+    api_usage_summary,
+    chat_run_cost,
+    chat_run_costs,
+    month_start,
+    provider_usage_summary,
+    workflow_costs,
+)
 
 __all__ = [
     "api_usage_summary",
+    "chat_run_cost",
     "chat_run_costs",
     "month_start",
     "provider_usage_summary",
     "record_api_usage",
     "record_llm_usage",
+    "resolve_spend_limit",
+    "spend_limit_notice",
     "workflow_costs",
 ]

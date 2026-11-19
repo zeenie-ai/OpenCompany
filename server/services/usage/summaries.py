@@ -29,6 +29,18 @@ def month_start(now: datetime, zone_name: Optional[str]) -> datetime:
     return now.astimezone(zone).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+async def chat_run_cost(database: Any, chat_run_id: str) -> float:
+    """USD one chat run has cost so far. Errors propagate."""
+    async with database.get_session() as session:
+        model_calls = await session.execute(
+            select(func.sum(TokenUsageMetric.total_cost)).where(TokenUsageMetric.chat_run_id == chat_run_id)
+        )
+        tool_calls = await session.execute(
+            select(func.sum(APIUsageMetric.cost)).where(APIUsageMetric.chat_run_id == chat_run_id)
+        )
+        return float(model_calls.scalar() or 0) + float(tool_calls.scalar() or 0)
+
+
 async def chat_run_costs(database: Any, workflow_id: str) -> Dict[str, float]:
     """USD per chat run of one workflow: ``{run_id: cost}``.
 

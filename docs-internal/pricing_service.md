@@ -447,6 +447,29 @@ RLM agent, standalone chat-model nodes, in-process agents without a memory
 session, and every plugin whose only cost code is an `@Operation(cost=...)`
 block.
 
+### The spend limit of a reply
+
+`server/services/usage/limit.py`. A chat run (one reply) stops when its cost
+reaches the limit:
+
+- The limit is the owner's `UserSettings.chat_run_spend_limit_usd` when above
+  0, else env `CHAT_RUN_SPEND_LIMIT_USD` (`resolve_spend_limit`). 0, the
+  default, means no limit.
+- `spend_limit_notice(chat_run_id)` returns the line the agent says when the
+  run's cost (`chat_run_cost`) has reached the limit, else `None`.
+- The agent's model step (`agent.execute_llm_step`) asks before each model
+  call. At the limit it makes no call and answers with the notice, so the run
+  ends as a normal reply and the owner's next message starts a new run. See
+  [Chat Protocol](./chat_protocol.md), "Spend limit".
+- The check runs between turns, so a run can pass the limit by the cost of
+  one turn.
+- A managed employee job is never limited: its step does not ask.
+- A limit that cannot be read answers `None` and logs a warning, so a failed
+  check never ends the owner's reply.
+
+The default is written in three places (`.env.template`, `Settings`,
+`UserSettings`); a test keeps them equal.
+
 ## Frontend Display
 
 The credentials modal displays usage statistics through two section components, both wired via
@@ -550,6 +573,7 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
 | `server/services/usage/recording.py` | `record_api_usage()` and `record_llm_usage()`: one usage row per call; neither raises |
 | `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()`, `chat_run_costs()`, `workflow_costs()`, `month_start()` |
+| `server/services/usage/limit.py` | `resolve_spend_limit()`, `spend_limit_notice()`: the spend limit of a chat run |
 | `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` / `get_chat_run_costs` / `get_workflow_costs` commands |
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |

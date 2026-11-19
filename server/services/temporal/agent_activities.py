@@ -482,9 +482,13 @@ async def _until_chat_run_stops(call: Any, run_id: Optional[str]) -> Any:
         await asyncio.gather(task, watcher, return_exceptions=True)
 
 
-async def _stopped_llm_step(payload: Dict[str, Any], messages: List[Any], *, partial: str) -> Dict[str, Any]:
-    """The step's result when the owner stopped the run: what was written so
-    far (possibly nothing) as the final answer. The conversation keeps the
+async def _stopped_llm_step(
+    payload: Dict[str, Any], messages: List[Any], *, partial: str, reason: str = "stopped"
+) -> Dict[str, Any]:
+    """The step's result when the run ends here without a model call: the
+    owner stopped it (``reason`` ``stopped``), or it reached its spend limit
+    (``spend_limit``, with the notice as ``partial``). What was written so
+    far (possibly nothing) is the final answer. The conversation keeps the
     turn as far as it went: the request (its tool results included, so no
     call is left unanswered) and the partial answer, marked stopped; nothing
     is added when nothing was written."""
@@ -507,7 +511,7 @@ async def _stopped_llm_step(payload: Dict[str, Any], messages: List[Any], *, par
         "stopped": True,
     }
     if payload.get("include_finish_reason"):
-        result["finish_reason"] = "stopped"
+        result["finish_reason"] = reason
     return result
 
 
@@ -521,6 +525,7 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     from services.llm.protocol import (
         LLMError,
         Message,
+        StreamEvent,
         ThinkingConfig,
         ToolDef,
         message_to_wire,
@@ -568,6 +573,19 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
     emitter = ChatStreamEmitter.from_payload(payload, attempt=_llm_activity_attempt())
     if emitter is not None:
         emitter.begin()
+
+    # A chat run that reached the owner's spend limit ends at this step too,
+    # with a line saying so (services/usage/limit.py). A managed employee job
+    # is never limited.
+    if chat_run_id and not (payload.get("attribution") or {}).get("employee_job_id"):
+        from services.usage import spend_limit_notice
+
+        notice = await spend_limit_notice(chat_run_id)
+        if notice is not None:
+            if emitter is not None:
+                await emitter(StreamEvent("text", notice))
+                emitter.end(final=True)
+            return await _stopped_llm_step(payload, messages, partial=notice, reason="spend_limit")
 
     from services.llm.observation import observe_stage
     observe_stage("authentication")

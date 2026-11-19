@@ -513,6 +513,11 @@ class Settings(BaseSettings):
     # the cap. Per-user UserSettings row overrides at runtime.
     tool_result_max_chars: int = Field(default=100_000, env="TOOL_RESULT_MAX_CHARS", ge=0)
 
+    # Most one chat reply (a chat run) may cost in USD, model calls and paid
+    # tool calls together. A reply that reaches it stops and says so. 0 means
+    # no limit. Per-user UserSettings row overrides at runtime.
+    chat_run_spend_limit_usd: float = Field(default=0.0, env="CHAT_RUN_SPEND_LIMIT_USD", ge=0)
+
     # Agent loop hard step cap. Per-user UserSettings row overrides
     # at runtime; per-agent-node ``parameters.max_iterations`` is the
     # innermost override.
