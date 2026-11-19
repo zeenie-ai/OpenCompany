@@ -179,6 +179,62 @@ async def test_the_unifier_passes_effort_only_to_the_effort_models(monkeypatch):
         await unifier.aclose()
 
 
+@pytest.mark.asyncio
+async def test_the_unifier_sends_the_models_default_effort(monkeypatch):
+    """With no effort chosen a model takes its provider's ``default_effort``;
+    the owner's choice still wins, and ``effort_models`` stays the gate."""
+    from services.llm import config, registry
+    from services.llm.registry import ProviderSpec
+    from services.llm.unifier import ChatUnifier
+
+    client = MagicMock()
+    client.chat = AsyncMock(return_value=LLMResponse(content="ok"))
+    name = "default-effort-test"
+    registry._REGISTRY[name] = ProviderSpec(name=name, factory=lambda **kwargs: client, sdk_exception_refs=("openai:OpenAIError",))
+    block = {"effort_models": ["think-"], "default_effort": {"think-": "medium", "plain-": "medium"}}
+    monkeypatch.setitem(config.LLM_DEFAULTS["providers"], name, block)
+    auth = MagicMock()
+    auth.resolve_api_key = AsyncMock(return_value=None)
+    unifier = ChatUnifier(defaults={"providers": {}}, auth_service=auth, client_cache_size=0)
+    hello = [Message(role="user", content="Hi")]
+    try:
+        await unifier.chat(provider=name, api_key="secret", messages=hello, model="think-1")
+        assert client.chat.call_args.kwargs["effort"] == "medium"
+        await unifier.chat(provider=name, api_key="secret", messages=hello, model="think-1", effort="high")
+        assert client.chat.call_args.kwargs["effort"] == "high"
+        # A default for a model outside effort_models is never sent.
+        await unifier.chat(provider=name, api_key="secret", messages=hello, model="plain-1")
+        assert "effort" not in client.chat.call_args.kwargs
+        await unifier.chat(provider=name, api_key="secret", messages=hello, model="other-1")
+        assert "effort" not in client.chat.call_args.kwargs
+    finally:
+        registry._REGISTRY.pop(name, None)
+        await unifier.aclose()
+
+
+def test_every_default_effort_is_one_the_provider_sends():
+    """A default the gate would drop, or a level no provider knows, is a
+    config mistake that fails silently at run time; catch it here."""
+    from services.llm.config import LLM_DEFAULTS, default_effort, supports_effort
+
+    declared = {
+        (provider, prefix): level
+        for provider, block in LLM_DEFAULTS["providers"].items()
+        for prefix, level in (block.get("default_effort") or {}).items()
+    }
+    assert declared, "no provider declares a default_effort"
+    for (provider, prefix), level in declared.items():
+        assert supports_effort(provider, prefix), f"{provider}: {prefix} is not in effort_models"
+        assert level in {"low", "medium", "high", "xhigh", "max"}, f"{provider}: {prefix} has level {level!r}"
+    # Claude 5.x answers at medium on both routes; other models keep their own default.
+    assert default_effort("anthropic", "claude-sonnet-5-5") == "medium"
+    assert default_effort("anthropic", "claude-fable-5-2") == "medium"
+    assert default_effort("openrouter", "anthropic/claude-sonnet-5.5") == "medium"
+    assert default_effort("anthropic", "claude-opus-4-8") is None
+    assert default_effort("openrouter", "openai/gpt-6.1-sol") is None
+    assert default_effort("openai", "gpt-6-sol") is None
+
+
 def test_the_effort_models_are_the_thinking_generations():
     from services.llm.config import supports_effort
 

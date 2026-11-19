@@ -237,6 +237,16 @@ def supports_effort(provider: str, model: str) -> bool:
     return any(model.startswith(prefix) for prefix in prefixes)
 
 
+def default_effort(provider: str, model: str) -> Optional[str]:
+    """The effort a request carries when nobody chose one: the level of the
+    first prefix in its provider's ``default_effort`` that ``model`` starts
+    with, or ``None`` (the model's own default)."""
+    for prefix, level in (_provider_block(provider).get("default_effort") or {}).items():
+        if model.startswith(prefix):
+            return str(level)
+    return None
+
+
 def provider_display_name(provider: str) -> str:
     """The provider's name as the owner sees it (``display_name``)."""
     return str(_provider_block(provider).get("display_name", provider))

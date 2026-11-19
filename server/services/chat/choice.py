@@ -1,8 +1,9 @@
 """The model and thinking the owner picks for the employee answering them.
 
 Home's employee chat has a model picker: Auto, or a model of a provider the
-owner can run on now, and how hard the model thinks: Balanced (the employee's
-own setting), Quick (effort ``low``) or Thorough (``high``). The picker offers
+owner can run on now, and how hard the model thinks: Balanced (no effort
+chosen: the model's ``default_effort`` in llm_defaults.json, else its own
+default), Quick (effort ``low``) or Thorough (``high``). The picker offers
 what the editor's Set Global Model offers, by provider: each connected
 provider's ``offered`` models (services/llm/connected.py), so a provider such
 as OpenRouter, a local server or a named endpoint lists its models too. The

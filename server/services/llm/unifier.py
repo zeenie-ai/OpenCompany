@@ -24,7 +24,7 @@ import httpx
 
 from core.encryption import fingerprint_credential
 from core.logging import get_logger
-from services.llm.config import resolve_credential, split_provider_ref, supports_effort
+from services.llm.config import default_effort, resolve_credential, split_provider_ref, supports_effort
 from services.llm.endpoints import base_url_key, redact_url, unconfigured_endpoint_message
 from services.llm.protocol import (
     LLMError,
@@ -152,9 +152,11 @@ class ChatUnifier:
         a caller handles both the same way. The response is the same either
         way.
 
-        ``effort`` is the owner's chat choice (``low`` / ``high``). It reaches
-        the provider only for a model listed in its ``effort_models``; any
-        other model answers as it would without it.
+        ``effort`` is the owner's chat choice (``low`` / ``high``). Without
+        one, the model's ``default_effort`` in llm_defaults.json applies,
+        the same on every step of a run. Either reaches the provider only
+        for a model listed in its ``effort_models``; any other model answers
+        as it would without it.
 
         An empty ``api_key`` means the install has no key of its own for the
         provider. If the OpenCompany Gateway serves it and is connected, the
@@ -184,6 +186,7 @@ class ChatUnifier:
             }
             if streams:
                 kwargs["on_event"] = on_event
+            effort = effort or default_effort(provider, model)
             if effort and supports_effort(provider, model):
                 kwargs["effort"] = effort
             if route is not None:

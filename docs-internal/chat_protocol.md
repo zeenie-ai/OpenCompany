@@ -771,7 +771,8 @@ OpenAI-compatible endpoint, each with its `offered` models: its curated list (`p
 `llm_defaults.json`, else its `max_output_tokens` keys) and, with none, such as a local server or an endpoint, the
 models stored with its key. Each row is a `provider::model` id, named by the model id under the provider's name (the
 button shows the id's last part: `anthropic/claude-sonnet-5.5` on OpenRouter shows `claude-sonnet-5.5`). Then how
-hard the model thinks: Quick (`effort: "low"`), Balanced (no effort sent: the agent's own settings) or Thorough
+hard the model thinks: Quick (`effort: "low"`), Balanced (no effort chosen: the model's `default_effort` where its
+provider declares one in `llm_defaults.json`, medium for Claude 5.x, else the model's own default) or Thorough
 (`"high"`). The picker's other words come from `chat_defaults.json` `choice`. The Dev editor's chat has no picker:
 each node keeps its model.
 

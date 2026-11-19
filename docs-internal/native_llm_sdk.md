@@ -267,6 +267,18 @@ body, which it maps to the vendor's own setting (Anthropic's
 thinking is on by default, while on Claude 4.x an effort would turn it on. It
 overrides the agent's own effort or level and never turns thinking on or off.
 
+When nobody chose an effort, `ChatUnifier.chat` uses the model's
+`default_effort`: a map of model prefix to level in the provider's block
+(`default_effort` in `services/llm/config.py`; the first matching prefix
+wins). The `anthropic` and `openrouter` blocks set `medium` for the Claude
+5.x families, whose own default is `high` on Sonnet 5.x, Opus 5 and Fable
+5.x; Anthropic's effort guide says to start agentic, multistep tool use at
+`medium`. The default passes the same `effort_models` gate, so it is one
+rule for every caller: agent steps on both paths, teammates, chat-model
+nodes, the summarizer and employee setup. It is fixed for a run, so the
+prompt cache holds. `tests/llm/test_chat_effort.py` checks that every
+declared default names a model the gate lets through and a valid level.
+
 All providers return the same `LLMResponse` dataclass, regardless of SDK:
 
 ```python
