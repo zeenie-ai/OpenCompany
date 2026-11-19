@@ -509,21 +509,5 @@
     "groq": {
       "speech_to_text": "speech_to_text"
     }
-  },
-
-  "url_patterns": {
-    "twitter": {
-      "base": "https?://api\\.(twitter|x)\\.com",
-      "actions": {
-        "/2/tweets$": {"action": "content_create", "method": "POST"},
-        "/2/tweets/search": {"action": "posts_read", "method": "GET", "count_path": "data.length"},
-        "/2/users/.*/following": {"action": "following_read", "method": "GET", "count_path": "data.length"},
-        "/2/users/.*/followers": {"action": "followers_read", "method": "GET", "count_path": "data.length"},
-        "/2/users/.*/likes$": {"action": "user_interaction_create", "method": "POST"},
-        "/2/users/by": {"action": "user_read", "method": "GET", "count_path": "data.length"},
-        "/2/users/me": {"action": "user_read", "method": "GET"},
-        "/2/users/\\d+$": {"action": "user_read", "method": "GET"}
-      }
-    }
   }
 }

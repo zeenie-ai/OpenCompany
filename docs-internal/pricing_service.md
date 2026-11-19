@@ -6,8 +6,7 @@ The pricing service provides centralized cost tracking for both LLM tokens and e
 
 - **LLM Token Costs**: Per-model pricing with input/output/cache/reasoning token breakdown
 - **API Service Costs**: Per-request/resource pricing for third-party APIs (Twitter/X, Google Maps, TikHub, Search APIs), and the provider's own reported charge where it gives one (treg)
-- **Automatic Tracking**: HTTPX event hooks for transparent API call tracking
-- **Manual Tracking**: Helper functions for services that don't use HTTPX
+- **Tracking**: each plugin calls its own tracker after a paid call returns
 
 ## Architecture
 
@@ -15,10 +14,10 @@ The pricing service provides centralized cost tracking for both LLM tokens and e
 ┌─────────────────────────────────────────────────────────────────┐
 │                   Pricing Configuration                          │
 │                 server/config/pricing.json                       │
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────────┐ │
-│  │   llm     │  │    api    │  │ operation │  │  url_patterns │ │
-│  │  pricing  │  │  pricing  │  │    _map   │  │               │ │
-│  └───────────┘  └───────────┘  └───────────┘  └───────────────┘ │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────┐    │
+│  │      llm      │  │      api      │  │   operation_map   │    │
+│  │    pricing    │  │    pricing    │  │                   │    │
+│  └───────────────┘  └───────────────┘  └───────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -37,18 +36,18 @@ The pricing service provides centralized cost tracking for both LLM tokens and e
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                               │
-            ┌─────────────────┼─────────────────┐
-            ▼                 ▼                 ▼
-┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
-│ Manual Tracking   │ │ HTTPX Event Hooks │ │  AI Service       │
-│ track_*_usage()   │ │ tracked_http.py   │ │ _track_token_     │
-│ location/_service │ │                   │ │ usage() ai.py     │
-│ twitter/_base     │ │                   │ │                   │
-│ google/_base      │ │                   │ │                   │
-│ proxy/_usage      │ │                   │ │                   │
-└───────────────────┘ └───────────────────┘ └───────────────────┘
-            │                 │                 │
-            └─────────────────┼─────────────────┘
+            ┌─────────────────┴─────────────────┐
+            ▼                                   ▼
+┌───────────────────┐                   ┌───────────────────┐
+│ Plugin trackers   │                   │  AI Service       │
+│ track_*_usage()   │                   │ _track_token_     │
+│ location/_service │                   │ usage() ai.py     │
+│ twitter/_base     │                   │                   │
+│ google/_base      │                   │                   │
+│ proxy/_usage      │                   │                   │
+└───────────────────┘                   └───────────────────┘
+            │                                   │
+            └─────────────────┬─────────────────┘
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Database Storage                            │
@@ -135,16 +134,6 @@ these examples are not independently verified current vendor quotes.
     "perplexity": {
       "sonar_search": "sonar_search"
     }
-  },
-
-  "url_patterns": {
-    "twitter": {
-      "base": "https?://api\\.(twitter|x)\\.com",
-      "actions": {
-        "/2/tweets$": {"action": "content_create", "method": "POST"},
-        "/2/tweets/search": {"action": "posts_read", "method": "GET", "count_path": "data.length"}
-      }
-    }
   }
 }
 ```
@@ -156,7 +145,6 @@ these examples are not independently verified current vendor quotes.
 | `llm` | Per-model pricing in USD per million tokens (MTok). Supports `input`, `output`, `cache_read`, `cache_write`, `reasoning`. `input`, `output` and `cache_read` follow the OpenRouter snapshot (`config/model_registry.json`) for every model it lists; the snapshot has carried cache prices since 2026-11-19, and until then `cache_read` was each vendor's published cache discount applied to the input price. A row without `cache_read` bills cached tokens at its input price. `cache_write` is listed only where the provider's usage reports cache writes (Anthropic). A lookup tries the exact id, then the first key the id starts with, then the first key it contains, so list a longer id (`gemini-3.5-flash-lite`) before its prefix (`gemini-3.5-flash`). A provider block with `"_from_registry": true` (`openrouter`, `openai_compatible`) then prices its models from the model registry before its `_default`: for OpenRouter that is the catalogue's own `prompt`, `completion`, `input_cache_read` and `input_cache_write` prices, and for a named endpoint the price recorded when it was saved. A free model (0/0) is a real price; a router's negative placeholder and an unlisted id take `_default` |
 | `api` | Per-service pricing in USD per request/resource. Keys starting with `_` are metadata |
 | `operation_map` | Maps handler action names to pricing operation keys |
-| `url_patterns` | Regex patterns for automatic HTTPX tracking. `count_path` extracts resource count from response JSON |
 
 ## PricingService API
 
@@ -230,9 +218,9 @@ pricing.save_config(updated_config)
 pricing.reload()
 ```
 
-## Manual Tracking Pattern
+## Tracking Pattern
 
-For services that make API calls directly (not through HTTPX), use manual tracking functions.
+A plugin that makes a paid API call records it with its own tracking function, called after the call returns.
 
 ### Example: Maps Service
 
@@ -323,54 +311,6 @@ async def search(self, ctx, params): ...
 ```
 
 The `cost=` metadata is attached to the operation's `OperationSpec` (`server/services/plugin/operation.py`); `duckduckgo_search` is free and carries no cost block.
-
-## Automatic HTTPX Tracking
-
-For services using `httpx.AsyncClient`, use the tracked client for transparent tracking.
-
-### Usage
-
-```python
-from services.tracked_http import get_tracked_client, set_tracking_context
-
-# Set context before making requests
-set_tracking_context(node_id="twitter-1", session_id="user-123")
-
-# Use tracked client - tracking happens automatically
-client = get_tracked_client()
-response = await client.post("https://api.twitter.com/2/tweets", json={...})
-# Automatically tracked via response hook!
-```
-
-### How It Works
-
-1. **Context Variables**: `set_tracking_context()` sets node_id, session_id, workflow_id in `contextvars`
-2. **URL Matching**: Response hook matches URL against `url_patterns` in pricing.json
-3. **Resource Counting**: `count_path` extracts resource count from response JSON (e.g., `data.length`)
-4. **Fire-and-Forget**: `_save_metric()` runs as `asyncio.create_task()` to avoid blocking
-
-### URL Pattern Format
-
-```json
-{
-  "twitter": {
-    "base": "https?://api\\.(twitter|x)\\.com",
-    "actions": {
-      "/2/tweets$": {"action": "content_create", "method": "POST"},
-      "/2/tweets/search": {
-        "action": "posts_read",
-        "method": "GET",
-        "count_path": "data.length"
-      }
-    }
-  }
-}
-```
-
-- `base`: Regex to match domain
-- `actions`: Dict of endpoint patterns to action config
-- `method`: HTTP method filter (`*` for any)
-- `count_path`: Dot-notation path to extract count from response (e.g., `data.length`, `results.count`)
 
 ## Database Storage
 
@@ -489,7 +429,7 @@ handler in that module, `get_api_usage_summary`, IS live — `useApiKeys` calls 
 }
 ```
 
-### 2. Add Manual Tracking (if not using HTTPX)
+### 2. Add a tracker
 
 ```python
 # server/nodes/<group>/<plugin>/_base.py (or the plugin __init__.py)
@@ -518,23 +458,7 @@ await track_new_service_usage(node_id, 'get_data', len(results), workflow_id)
 
 Alternatively, for a service billed per operation, skip the helper entirely and declare the cost inline via `@Operation("get_data", cost={"service": "new_service", "action": "read_operation", "count": 1})` (the search-plugin pattern).
 
-### 3. Add URL Patterns (if using HTTPX)
-
-```json
-{
-  "url_patterns": {
-    "new_service": {
-      "base": "https?://api\\.newservice\\.com",
-      "actions": {
-        "/v1/items$": {"action": "read_operation", "method": "GET", "count_path": "items.length"},
-        "/v1/items$": {"action": "write_operation", "method": "POST"}
-      }
-    }
-  }
-}
-```
-
-### 4. Frontend Display
+### 3. Frontend Display
 
 Nothing to add. `ApiUsageSection` renders whatever services come back from
 `get_api_usage_summary`, so a new service appears as soon as it records its first metric.
@@ -545,11 +469,10 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 |------|---------|
 | `server/config/pricing.json` | Pricing configuration (user-editable) |
 | `server/services/pricing.py` | PricingService with LLM and API cost calculation |
-| `server/services/tracked_http.py` | HTTPX event hooks for automatic tracking |
-| `server/nodes/location/_service.py` | Maps manual tracker (`_track_maps_usage`) |
-| `server/nodes/twitter/_base.py` | Twitter manual tracker (`track_twitter_usage`) |
-| `server/nodes/google/_base.py` | Google Workspace manual tracker (`track_google_usage`, cost $0) |
-| `server/nodes/proxy/_usage.py` | Proxy manual tracker (`track_proxy_usage`, per-GB) |
+| `server/nodes/location/_service.py` | Maps tracker (`_track_maps_usage`) |
+| `server/nodes/twitter/_base.py` | Twitter tracker (`track_twitter_usage`) |
+| `server/nodes/google/_base.py` | Google Workspace tracker (`track_google_usage`, cost $0) |
+| `server/nodes/proxy/_usage.py` | Proxy tracker (`track_proxy_usage`, per-GB) |
 | `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins — declarative `@Operation(cost={...})` (no `_track_search_usage`) |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost` metadata |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |

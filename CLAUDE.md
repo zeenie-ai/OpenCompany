@@ -28,7 +28,7 @@ OpenCompany is an open-source operating system for self-improving AI employees. 
 | **[Agent Teams](./docs-internal/agent_teams.md)** | Claude SDK Agent Teams pattern - AI Employee and Orchestrator nodes with input-teammates handle for multi-agent coordination |
 | **[Agent Context Flow](./docs-internal/agent_context_flow.md)** | Normative continuity reference — how a conversation survives firings, delegations, and rollovers on both paths. Plain conversation store: one `agent_conversations` row per `(workflow_id, generation, agent_node_id)` → messages JSON, loaded at run start and saved per turn (LangGraph thread_id / OpenAI conversation_id pattern; the journal/thread/epoch machinery is gone). Seeding precedence (carried rollover transcript > stored conversation > bare build, 1 MB guards), LOUD load failures (`ConversationLoadFailed` / `ConversationTooLarge`) vs best-effort saves, transcript size bounds (per-call tool-result cap, byte budget that clears old results, `context_pressure_version` replay contract), the specialized-provider bridge, and the August 2026 "lead forgot its plan" regression. Read before touching `services/agent_context/`, `nodes/context/`, `services/cli_agent/context_bridge.py`, `services/tool_output.py`, `agent.prepare_payload`, or the team-completion event chain. |
 | **[Memory Compaction](./docs-internal/memory_compaction.md)** | Native usage aggregation plus shared client-side summarization through `ChatUnifier` for memory-connected agents. Threshold = `Settings.compaction_ratio` (env `COMPACTION_RATIO`, default 0.8) × model context length; see the document for the per-session override limitation on Temporal runs. |
-| **[Pricing Service](./docs-internal/pricing_service.md)** | Centralized cost tracking for LLM tokens and API services (Twitter, Google Maps) with HTTPX event hooks |
+| **[Pricing Service](./docs-internal/pricing_service.md)** | Centralized cost tracking for LLM tokens and API services (Twitter, Google Maps), recorded by a tracker in each plugin |
 | **[Proxy Service](./docs-internal/proxy_service.md)** | Residential proxy provider management with template-based URL formatting, health scoring, and transparent HTTP node injection |
 | **[Email Service](./docs-internal/email_service.md)** | IMAP/SMTP integration via Himalaya CLI with EmailService orchestrator, provider presets, custom credential fallback, and polling triggers |
 | **[Browser](./docs-internal/browser.md)** | Current `browser` node: installed Chrome/Edge/Chromium in a dedicated profile rendered inside the workspace by default (`BROWSER_RUNTIME=system`, `BROWSER_HEADLESS=true`) and pinned browser-use CLI. Chrome for Testing requires explicit `BROWSER_RUNTIME=testing`. System mode retains the native user agent and OS password-store/keychain integration; basic/mock keychain flags are restricted to testing mode. Includes persistent employee/shared profiles (the Credentials / Connectors "Web browser" panel adds, deletes and imports logins from a session file; the node's profile dropdown lists only the caller's profiles, via `current_load_options_principal()`), session leases, agent/user handoff, network policy, screenshots as workspace FileRefs and authenticated `/ws/browser` live viewing. Plugin-owned installation is lazy (`_install_chrome.py`, `_install_bu.py`); importing or shutting down the plugin never installs it. Replaces the former agent-browser and separate `browserHarness` implementations. |
@@ -173,7 +173,6 @@ server/services/
 ├── chat_client.py           # JSON-RPC 2.0 WebSocket client for chat backend
 │                            # (Claude Code CLI wrapper + isolated OAuth moved to
 │                            #  nodes/agent/claude_code_agent/_oauth.py — CLAUDE_CONFIG_DIR=<DATA_DIR>/claude/)
-├── tracked_http.py          # HTTPX event hooks for automatic API cost tracking
 ├── handlers/                # Cross-cutting orchestration only (Wave 11: 16 → 4 files, 12.8K → 1.1K LOC)
 │   ├── tools.py             # AI-tool dispatch + agent delegation (~1,020 LOC)
 │   ├── triggers.py          # Generic event-trigger handler
@@ -1464,25 +1463,15 @@ Full reference — the `CompactionService` API, shared client-side compaction, t
 
 Centralized cost tracking for third-party API services (Twitter/X, Google Maps). See [Pricing Service](./docs-internal/pricing_service.md) for full documentation.
 
-### Two Tracking Methods
+### How a call is tracked
 
-**1. Manual Tracking** - For services using native SDKs:
+A plugin calls its tracker after the paid call returns:
 ```python
-# usage tracked inside server/nodes/twitter/
-await _track_twitter_usage(node_id, 'tweet', 1, workflow_id, session_id)
+# server/nodes/twitter/_base.py (ctx_raw is the plugin's raw context dict)
+await track_twitter_usage(node_id, 'tweet', 1, ctx_raw)
 
-# usage tracked inside server/nodes/location/_service.py
+# server/nodes/location/_service.py
 await _track_maps_usage(node_id, 'geocode', 1, workflow_id, session_id)
-```
-
-**2. Automatic HTTPX Tracking** - For services using httpx client:
-```python
-from services.tracked_http import get_tracked_client, set_tracking_context
-
-set_tracking_context(node_id="twitter-1", session_id="user-123")
-client = get_tracked_client()
-response = await client.post("https://api.twitter.com/2/tweets", json={...})
-# Automatically tracked via HTTPX response event hook!
 ```
 
 ### Pricing Configuration
@@ -1491,7 +1480,6 @@ All pricing in `server/config/pricing.json` (user-editable):
 - `llm`: Per-model token pricing (USD/MTok)
 - `api`: Per-service operation pricing (USD/request)
 - `operation_map`: Maps handler actions to pricing operations
-- `url_patterns`: Regex patterns for automatic HTTPX tracking
 
 ### Database Storage
 
