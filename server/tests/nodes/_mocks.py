@@ -98,7 +98,6 @@ def patched_container(
     else:
         db_mock = MagicMock(name="Database")
         db_mock.save_api_usage_metric = AsyncMock(return_value=None)
-        db_mock.add_token_usage_metric = AsyncMock(return_value=None)
         db_mock.get_node_parameters = AsyncMock(return_value={})
         db_mock.save_node_parameters = AsyncMock(return_value=None)
 

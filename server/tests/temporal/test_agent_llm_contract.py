@@ -889,6 +889,7 @@ class TestLlmStepActivity:
     async def test_step_disables_sdk_retries_and_keeps_result_keys(
         self,
         monkeypatch,
+        llm_usage,
     ):
         import core.container as container_module
         import services.agent_runtime as runtime_module
@@ -953,7 +954,7 @@ class TestLlmStepActivity:
         assert kwargs["tools"][0].name == "write_todos"
 
     @pytest.mark.asyncio
-    async def test_step_passes_no_max_tokens_through_as_none(self, monkeypatch):
+    async def test_step_passes_no_max_tokens_through_as_none(self, monkeypatch, llm_usage):
         import core.container as container_module
         import services.agent_runtime as runtime_module
         from services.llm.protocol import LLMResponse, Message, Usage, message_to_wire
@@ -997,86 +998,103 @@ class TestLlmStepActivity:
             "attribution": {"execution_id": "2:execution:8"},
         }
 
-    @pytest.mark.asyncio
-    async def test_step_books_one_usage_row(self, monkeypatch):
+    @staticmethod
+    def _answering(monkeypatch, response):
+        """The step's model call answers ``response``."""
         import core.container as container_module
         import services.agent_runtime as runtime_module
+
+        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
+        monkeypatch.setattr(runtime_module, "run_native_llm_step", AsyncMock(return_value=response))
+
+    @pytest.mark.asyncio
+    async def test_step_books_one_usage_row(self, monkeypatch, llm_usage):
         from services.llm.protocol import LLMResponse, Usage
         from services.temporal.agent_activities import _execute_native_llm_step
 
-        database = SimpleNamespace(save_token_metric=AsyncMock(return_value=True))
-        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
-        monkeypatch.setattr(container_module.container, "database", lambda: database)
-        monkeypatch.setattr(
-            runtime_module,
-            "run_native_llm_step",
-            AsyncMock(return_value=LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7))),
-        )
+        self._answering(monkeypatch, LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7)))
 
         result = await _execute_native_llm_step(self._booking_payload())
 
         assert set(result) == {"kind", "assistant_message", "content", "thinking", "usage"}
-        database.save_token_metric.assert_awaited_once()
-        row = database.save_token_metric.await_args.args[0]
-        assert row["session_id"] == "2"
-        assert row["workflow_id"] == "2"
-        assert row["execution_id"] == "2:execution:8"
-        assert row["node_id"] == "2:aiAgent:1"
+        llm_usage.assert_awaited_once()
+        booked = llm_usage.await_args.kwargs
+        assert booked["session_id"] == "2"
+        assert booked["workflow_id"] == "2"
+        assert booked["execution_id"] == "2:execution:8"
+        assert booked["node_id"] == "2:aiAgent:1"
         # The step's activity id is llm-step-5; 0 stays for summarizer rows.
-        assert row["iteration"] == 5
-        assert (row["provider"], row["model"]) == ("openrouter", "anthropic/claude-sonnet-5.5")
-        assert (row["input_tokens"], row["output_tokens"], row["total_tokens"]) == (50, 7, 57)
+        assert booked["iteration"] == 5
+        assert booked["provider"] == "openrouter"
+        assert booked["model"] == "anthropic/claude-sonnet-5.5"
+        assert booked["usage"]["input_tokens"] == 50
+        assert booked["usage"]["output_tokens"] == 7
+        assert booked["usage"]["total_tokens"] == 57
         # This step works for no chat run.
-        assert row["chat_run_id"] is None
+        assert booked["chat_run_id"] is None
 
     @pytest.mark.asyncio
-    async def test_a_step_of_a_chat_run_books_the_run_on_its_row(self, monkeypatch):
-        import core.container as container_module
-        import services.agent_runtime as runtime_module
+    async def test_a_step_books_what_the_provider_billed(self, monkeypatch, llm_usage):
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        response = LLMResponse(
+            content="done",
+            usage=Usage(input_tokens=5, output_tokens=2),
+            billing_usage=Usage(input_tokens=50, output_tokens=7),
+        )
+        self._answering(monkeypatch, response)
+
+        result = await _execute_native_llm_step(self._booking_payload())
+
+        assert llm_usage.await_args.kwargs["usage"]["input_tokens"] == 50
+        assert result["usage"]["input_tokens"] == 5
+
+    @pytest.mark.asyncio
+    async def test_a_step_of_a_chat_run_books_the_run_on_its_row(self, monkeypatch, llm_usage):
         from services.llm.protocol import LLMResponse, Usage
         from services.temporal import agent_activities
         from services.temporal.agent_activities import _execute_native_llm_step
 
-        database = SimpleNamespace(save_token_metric=AsyncMock(return_value=True))
-        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
-        monkeypatch.setattr(container_module.container, "database", lambda: database)
         monkeypatch.setattr(agent_activities, "_chat_run_stopping", AsyncMock(return_value=False))
-        monkeypatch.setattr(
-            runtime_module,
-            "run_native_llm_step",
-            AsyncMock(return_value=LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7))),
-        )
+        self._answering(monkeypatch, LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7)))
         payload = {**self._booking_payload(), "chat_run_id": "r_1"}
 
         await _execute_native_llm_step(payload)
 
-        row = database.save_token_metric.await_args.args[0]
-        assert row["chat_run_id"] == "r_1"
+        assert llm_usage.await_args.kwargs["chat_run_id"] == "r_1"
+
+    # The two below run the real recorder: it never raises, so a booking that
+    # cannot be priced or written leaves the billed step as it was.
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("failure", ["save", "price"])
-    async def test_a_failed_booking_never_fails_the_step(self, monkeypatch, failure):
+    async def test_a_usage_row_that_cannot_be_written_never_fails_the_step(self, monkeypatch):
         import core.container as container_module
-        import services.agent_runtime as runtime_module
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        def database_down():
+            raise RuntimeError("database down")
+
+        monkeypatch.setattr(container_module.container, "database", database_down)
+        self._answering(monkeypatch, LLMResponse(content="done", usage=Usage(input_tokens=5, output_tokens=2)))
+
+        result = await _execute_native_llm_step(self._booking_payload())
+
+        assert result["kind"] == "final"
+        assert result["usage"]["total_tokens"] == 7
+
+    @pytest.mark.asyncio
+    async def test_a_call_that_cannot_be_priced_never_fails_the_step(self, monkeypatch):
         import services.pricing as pricing_module
         from services.llm.protocol import LLMResponse, Usage
         from services.temporal.agent_activities import _execute_native_llm_step
 
-        database = SimpleNamespace(save_token_metric=AsyncMock(side_effect=RuntimeError("database down")))
-        if failure == "price":
-            database = SimpleNamespace(save_token_metric=AsyncMock(return_value=True))
+        def pricing_broken():
+            raise RuntimeError("pricing broken")
 
-            def broken_pricing():
-                raise RuntimeError("pricing broken")
-
-            monkeypatch.setattr(pricing_module, "get_pricing_service", broken_pricing)
-        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
-        monkeypatch.setattr(container_module.container, "database", lambda: database)
-        monkeypatch.setattr(
-            runtime_module,
-            "run_native_llm_step",
-            AsyncMock(return_value=LLMResponse(content="done", usage=Usage(input_tokens=5, output_tokens=2))),
-        )
+        monkeypatch.setattr(pricing_module, "get_pricing_service", pricing_broken)
+        self._answering(monkeypatch, LLMResponse(content="done", usage=Usage(input_tokens=5, output_tokens=2)))
 
         result = await _execute_native_llm_step(self._booking_payload())
 

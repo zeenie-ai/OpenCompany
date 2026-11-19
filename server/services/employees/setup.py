@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
 from fastapi import WebSocket
@@ -51,7 +51,7 @@ from services.authz.ws_surface import execution_principal
 from services.employees.apps import resolve_app
 from services.employees.connections import Connections
 from services.employees.context import build_setup_prompt_context
-from services.employees.llm import LLMChoice, employees_chat, record_llm_usage, resolve_llm_choice
+from services.employees.llm import USAGE_NODE_ID, LLMChoice, employees_chat, resolve_llm_choice
 from services.employees.setup_form import FORM_RETRY_NUDGE, fill_form, form_messages
 from services.employees.setup_prompt import RETRY_NUDGE, HistoryTurn, build_messages
 from services.employees.setup_reply import app_names, is_salvageable
@@ -170,6 +170,7 @@ def _with_nudge(messages: List[Message], nudge: str) -> List[Message]:
 
 async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
     from core.container import container
+    from services.usage import record_llm_usage
 
     database = container.database()
     auth_service = container.auth_service()
@@ -208,8 +209,16 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
                 break
             logger.warning("Setup model failed", provider=choice.provider, model=choice.model, error=str(exc))
             return _failure("provider_error", request.token, detail=str(exc))
-        await record_llm_usage(database, choice, response, session_id=owner)
-        usage = usage + (response.billing_usage or response.usage)
+        billed = response.billing_usage or response.usage
+        await record_llm_usage(
+            provider=choice.provider,
+            model=choice.model,
+            usage=asdict(billed),
+            session_id=owner,
+            node_id=USAGE_NODE_ID,
+            database=database,
+        )
+        usage = usage + billed
         truncated = str(response.finish_reason or "").lower() in TRUNCATED_FINISH_REASONS
         drawn = response.content if context.generated_ui else fill_form(response.content, request.job)
         usable = is_salvageable(drawn)

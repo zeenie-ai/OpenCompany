@@ -38,7 +38,6 @@ JOB = "Answer customer messages on WhatsApp and book appointments"
 
 class FakeDatabase:
     def __init__(self):
-        self.metrics = []
         self.settings = {"profile_call_name": "Alex", "profile_timezone": "Europe/London", "generated_ui": True}
 
     async def get_user_settings(self, user_id):
@@ -49,9 +48,6 @@ class FakeDatabase:
 
     async def get_provider_defaults(self, provider):
         return None
-
-    async def save_token_metric(self, row):
-        self.metrics.append(row)
 
 
 class FakeConnections:
@@ -102,7 +98,7 @@ class Auth:
 
 
 @pytest.fixture()
-def harness(monkeypatch):
+def harness(monkeypatch, llm_usage):
     database = FakeDatabase()
     state = SimpleNamespace(unifier=FakeUnifier(GOOD), choice=LLMChoice(provider="openai", model="gpt-x", local=False))
     fake = SimpleNamespace(database=lambda: database, auth_service=lambda: Auth(), chat_unifier=lambda: state.unifier)
@@ -116,12 +112,10 @@ def harness(monkeypatch):
         return state.choice
 
     monkeypatch.setattr(setup, "resolve_llm_choice", choose)
-    import services.pricing as pricing
-
-    costs = {"input_cost": 0.1, "output_cost": 0.2, "cache_cost": 0.0, "total_cost": 0.3}
-    monkeypatch.setattr(pricing, "get_pricing_service", lambda: SimpleNamespace(calculate_cost=lambda **_: costs))
     setup.reset_for_tests()
     state.database = database
+    # Every model call's booking (services.usage.record_llm_usage).
+    state.booked = llm_usage
     yield state
     setup.reset_for_tests()
 
@@ -158,10 +152,22 @@ async def test_returns_the_reply_with_its_apps_resolved(harness):
     assert result["apps"]["google calendar"]["can_trigger"] is False
     # One call, booked once, under the owner.
     assert len(harness.unifier.calls) == 1
-    assert [row["session_id"] for row in harness.database.metrics] == ["owner-1"]
+    assert [call.kwargs["session_id"] for call in harness.booked.await_args_list] == ["owner-1"]
     messages = harness.unifier.calls[0]["messages"]
     assert messages[-1].content == "The job: " + JOB
     assert "Names already on the team (don't reuse): Leo." in messages[0].content
+
+
+async def test_a_setup_call_is_booked_as_employee_setup(harness):
+    await generate()
+
+    booked = harness.booked.await_args.kwargs
+    assert booked["node_id"] == "employee_setup"
+    assert booked["provider"] == "openai"
+    assert booked["model"] == "gpt-x"
+    assert booked["usage"]["input_tokens"] == 100
+    assert booked["usage"]["output_tokens"] == 50
+    assert booked["database"] is harness.database
 
 
 async def test_a_cut_off_reply_gets_one_retry(harness):
@@ -170,7 +176,7 @@ async def test_a_cut_off_reply_gets_one_retry(harness):
     assert result["success"] is True
     assert result["retried"] is True
     assert result["reply"] == GOOD
-    assert len(harness.database.metrics) == 2
+    assert harness.booked.await_count == 2
     assert harness.unifier.calls[1]["messages"][-1].content.endswith(RETRY_NUDGE)
 
 

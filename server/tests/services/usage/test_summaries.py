@@ -3,12 +3,7 @@
 from types import SimpleNamespace
 
 from services.usage import api_usage_summary, provider_usage_summary
-from tests.services.usage._helpers import add_api_call, add_model_call
-
-
-def unavailable():
-    raise RuntimeError("database down")
-
+from tests.services.usage._helpers import add_api_call, add_model_call, unavailable
 
 BROKEN_DATABASE = SimpleNamespace(get_session=unavailable)
 

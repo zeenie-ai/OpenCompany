@@ -11,14 +11,12 @@ class _Database:
     get_or_create_session_token_state = AsyncMock(
         return_value={"cumulative_total": 123, "compaction_count": 0}
     )
-    save_token_metric = AsyncMock()
     save_compaction_event = AsyncMock()
     update_session_token_state = AsyncMock()
 
 
 @pytest.mark.asyncio
-async def test_compaction_uses_chat_unifier_with_native_messages(monkeypatch):
-    _Database.save_token_metric.reset_mock()
+async def test_compaction_uses_chat_unifier_with_native_messages(monkeypatch, llm_usage):
     _Database.update_session_token_state.reset_mock()
     registry = SimpleNamespace(get_max_output_tokens=lambda *_args: 2048)
     monkeypatch.setattr(
@@ -62,9 +60,9 @@ async def test_compaction_uses_chat_unifier_with_native_messages(monkeypatch):
         "cache_read_tokens": 2,
         "reasoning_tokens": 0,
     }
-    metric = _Database.save_token_metric.await_args.args[0]
-    assert metric["iteration"] == 0
-    assert metric["total_tokens"] == 45
+    booked = llm_usage.await_args.kwargs
+    assert booked["iteration"] == 0
+    assert booked["usage"]["total_tokens"] == 45
     # Metric-only recording must not add the summarizer tokens back into the
     # active context counter after compaction resets it.
     reset_updates = [
@@ -86,8 +84,8 @@ _REQUEST = dict(session_id="session-1", node_id="agent-1", memory_content="long 
 
 
 def _service(monkeypatch, chat):
-    for mock in (_Database.get_or_create_session_token_state, _Database.save_token_metric,
-                 _Database.save_compaction_event, _Database.update_session_token_state):
+    for mock in (_Database.get_or_create_session_token_state, _Database.save_compaction_event,
+                 _Database.update_session_token_state):
         mock.reset_mock()
     registry = SimpleNamespace(get_max_output_tokens=lambda *_args: 2048)
     monkeypatch.setattr("services.model_registry.get_model_registry", lambda: registry)
@@ -98,7 +96,7 @@ def _service(monkeypatch, chat):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content", ["", "  \n"])
-async def test_an_empty_summary_fails_and_replaces_nothing(monkeypatch, content):
+async def test_an_empty_summary_fails_and_replaces_nothing(monkeypatch, llm_usage, content):
     # 1b.27: saved behind its header, an empty reply replaced the conversation.
     reply = LLMResponse(content=content, usage=Usage(input_tokens=40, output_tokens=0, total_tokens=40))
     service = _service(monkeypatch, AsyncMock(return_value=reply))
@@ -107,7 +105,7 @@ async def test_an_empty_summary_fails_and_replaces_nothing(monkeypatch, content)
 
     assert result["success"] is False and result["error"] == "empty summary"
     assert result["usage"]["total_tokens"] == 40  # the call was billed
-    _Database.save_token_metric.assert_awaited_once()
+    llm_usage.assert_awaited_once()
     _Database.save_compaction_event.assert_not_awaited()
     assert all(call.args[1].get("cumulative_total") != 0 for call in _Database.update_session_token_state.await_args_list)
 
@@ -117,25 +115,34 @@ def _summary_reply():
 
 
 @pytest.mark.asyncio
-async def test_the_usage_row_names_the_employee_and_the_chat_run(monkeypatch):
+async def test_the_usage_row_names_the_employee_and_the_chat_run(monkeypatch, llm_usage):
     service = _service(monkeypatch, AsyncMock(return_value=_summary_reply()))
 
     await service.compact_context(**_REQUEST, workflow_id="wf", chat_run_id="r_1")
 
-    metric = _Database.save_token_metric.await_args.args[0]
-    assert metric["workflow_id"] == "wf"
-    assert metric["chat_run_id"] == "r_1"
+    booked = llm_usage.await_args.kwargs
+    assert booked["workflow_id"] == "wf"
+    assert booked["chat_run_id"] == "r_1"
 
 
 @pytest.mark.asyncio
-async def test_a_usage_row_outside_a_chat_run_names_none(monkeypatch):
+async def test_a_usage_row_outside_a_chat_run_names_none(monkeypatch, llm_usage):
     service = _service(monkeypatch, AsyncMock(return_value=_summary_reply()))
 
     await service.compact_context(**_REQUEST)
 
-    metric = _Database.save_token_metric.await_args.args[0]
-    assert metric["workflow_id"] is None
-    assert metric["chat_run_id"] is None
+    booked = llm_usage.await_args.kwargs
+    assert booked["workflow_id"] is None
+    assert booked["chat_run_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_summarizer_books_in_the_services_own_database(monkeypatch, llm_usage):
+    service = _service(monkeypatch, AsyncMock(return_value=_summary_reply()))
+
+    await service.compact_context(**_REQUEST)
+
+    assert llm_usage.await_args.kwargs["database"] is service._db
 
 
 @pytest.mark.asyncio

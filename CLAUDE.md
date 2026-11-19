@@ -149,6 +149,7 @@ server/services/
 ├── pricing.py               # LLM and API cost calculation (loads config/pricing.json)
 ├── usage/                   # Usage tracking: owns the two usage tables; imports no chat, employee,
 │   │                        # compaction or Temporal code (see pricing_service.md)
+│   ├── recording.py         # record_llm_usage: one token_usage_metrics row per model call; never raises
 │   ├── summaries.py         # provider_usage_summary / api_usage_summary
 │   └── handlers.py          # The get_provider_usage_summary / get_api_usage_summary commands
 ├── markdown_formatter.py    # GFM markdown to platform-specific formatting (Telegram HTML, WhatsApp, plain)
@@ -1452,9 +1453,12 @@ shared client-side summarization call through `ChatUnifier`. The Temporal
 `AgentWorkflow` also aggregates and returns loop usage and can invoke the same
 summarizer. It does not call `CompactionService.track()`; instead each
 `agent.execute_llm_step` books its own priced row in `token_usage_metrics`
-(`record_llm_usage` in `services/employees/llm.py`: session and `workflow_id` =
-the workflow id, `iteration` = the step number, `chat_run_id` = the chat run
-the step worked for, which the summarizer's row records too). Provider-native Anthropic/OpenAI context-management
+(session and `workflow_id` = the workflow id, `iteration` = the step number,
+`chat_run_id` = the chat run the step worked for, which the summarizer's row
+records too). Every row is written by one recorder, `record_llm_usage` in
+`services/usage/recording.py`: the step, `CompactionService.track()`, the
+summarizer and the hire screen's setup call all use it, and it never raises,
+because the call it books is already paid for. Provider-native Anthropic/OpenAI context-management
 compaction is not used by the agent runtime. Executions without connected
 memory still aggregate usage inside the loop but do not create session
 compaction records.

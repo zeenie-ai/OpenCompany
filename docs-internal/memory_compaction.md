@@ -15,9 +15,11 @@ automatic transcript compaction for agent executions with the appropriate
 stored Context or legacy memory-session descriptor. Every provider normalizes reported usage into `services.llm.protocol.Usage`,
 but only execution paths that call `CompactionService.track()` persist that
 usage to the session metric tables. An agent on Temporal books one
-`TokenUsageMetric` row per LLM step instead (`record_llm_usage`), without
-touching the session counters. Standalone chat-model calls and arbitrary
-third-party API requests are not part of this accounting surface.
+`TokenUsageMetric` row per LLM step instead, without touching the session
+counters. Every `TokenUsageMetric` row, on either path, is written by
+`record_llm_usage` in the usage package (`server/services/usage/recording.py`),
+which prices the call and never raises. Standalone chat-model calls and
+arbitrary third-party API requests are not part of this accounting surface.
 
 All providers use the same client-side summarization path:
 `CompactionService.compact_context()` calls
@@ -133,8 +135,10 @@ See [Temporal workflow control](temporal-workflow-control.md),
 
 ### TokenUsageMetric
 
-Stores one metric whenever `CompactionService.track()` or the compaction
-summarizer's internal metric writer is invoked. A memory-connected in-process
+Stores one metric for each call `record_llm_usage` books
+(`server/services/usage/recording.py`): `CompactionService.track()`, the
+compaction summarizer, an agent's LLM step on Temporal and the hire screen's
+setup call. A memory-connected in-process
 agent normally writes its loop aggregate as one row; the summarizer uses
 `iteration=0`. An agent on Temporal writes one row per LLM step (`iteration` =
 the step number, `session_id` and `workflow_id` = the workflow id,
@@ -169,7 +173,7 @@ class TokenUsageMetric(SQLModel, table=True):
     chat_run_id: Optional[str]       # The chat run the call worked for (indexed)
     created_at: Optional[datetime]
 
-    # Cost columns (USD), computed by PricingService at track() time
+    # Cost columns (USD), computed by PricingService when the row is booked
     input_cost: float = 0.0
     output_cost: float = 0.0
     cache_cost: float = 0.0

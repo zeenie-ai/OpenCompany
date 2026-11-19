@@ -21,7 +21,6 @@ from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from core.logging import get_logger
 from services.llm.protocol import LLMError
-from services.pricing import get_pricing_service
 
 if TYPE_CHECKING:
     from core.database import Database
@@ -142,12 +141,15 @@ class CompactionService:
 
     async def track(self, session_id: str, node_id: str, provider: str, model: str, usage: Dict[str, int]) -> Dict[str, Any]:
         """Track token usage and cost, return compaction status."""
-        cost = await self._record_usage_metric(
-            session_id=session_id,
-            node_id=node_id,
+        from services.usage import record_llm_usage
+
+        cost = await record_llm_usage(
             provider=provider,
             model=model,
             usage=usage,
+            session_id=session_id,
+            node_id=node_id,
+            database=self._db,
         )
 
         state = await self._db.get_or_create_session_token_state(session_id)
@@ -189,51 +191,6 @@ class CompactionService:
             "context_length": context_length,
             "needs_compaction": self._config.enabled and new_total >= threshold,
         }
-
-    async def _record_usage_metric(
-        self,
-        *,
-        session_id: str,
-        node_id: str,
-        provider: str,
-        model: str,
-        usage: Dict[str, int],
-        iteration: int = 1,
-        workflow_id: Optional[str] = None,
-        chat_run_id: Optional[str] = None,
-    ) -> Dict[str, float]:
-        """Persist billed usage without changing active-context counters."""
-
-        pricing_service = get_pricing_service()
-        cost = pricing_service.calculate_cost(
-            provider=provider,
-            model=model,
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            cache_read_tokens=usage.get("cache_read_tokens", 0),
-            cache_creation_tokens=usage.get("cache_creation_tokens", 0),
-            reasoning_tokens=usage.get("reasoning_tokens", 0),
-            total_tokens=usage.get("total_tokens", 0),
-        )
-
-        # Save token metric with cost fields
-        await self._db.save_token_metric(
-            {
-                "session_id": session_id,
-                "node_id": node_id,
-                "workflow_id": workflow_id,
-                "chat_run_id": chat_run_id,
-                "provider": provider,
-                "model": model,
-                "iteration": iteration,
-                **usage,
-                "input_cost": cost["input_cost"],
-                "output_cost": cost["output_cost"],
-                "cache_cost": cost["cache_cost"],
-                "total_cost": cost["total_cost"],
-            }
-        )
-        return cost
 
     async def record(
         self, session_id: str, node_id: str, provider: str, model: str, tokens_before: int, tokens_after: int, summary: Optional[str] = None
@@ -373,6 +330,7 @@ Provide a concise but complete summary."""
 
             from services.agent_runtime import run_native_llm_step
             from services.llm.protocol import Message
+            from services.usage import record_llm_usage
 
             response = await run_native_llm_step(
                 self._ai_service.chat_unifier,
@@ -387,17 +345,18 @@ Provide a concise but complete summary."""
                 translate_errors=False,
             )
             compaction_usage = asdict(response.usage)
-            await self._record_usage_metric(
-                session_id=session_id,
-                node_id=node_id,
+            await record_llm_usage(
                 provider=provider,
                 model=model,
                 usage=compaction_usage,
+                session_id=session_id,
+                node_id=node_id,
                 # Iteration zero distinguishes the summarizer call in the
                 # existing metric schema without adding a public field.
                 iteration=0,
                 workflow_id=workflow_id,
                 chat_run_id=chat_run_id,
+                database=self._db,
             )
             summary = _extract_text_from_response(response.content)
             if not summary.strip():

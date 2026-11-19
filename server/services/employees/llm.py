@@ -17,8 +17,8 @@ else (for a local server) the first model it reported, else the JSON
 default.
 
 ``employees_chat`` runs one completion through the ChatUnifier under a time
-budget; ``record_llm_usage`` books its tokens and cost like every other
-LLM call.
+budget. The setup call books its tokens and cost through
+``services.usage.record_llm_usage``, under ``USAGE_NODE_ID``.
 """
 
 from __future__ import annotations
@@ -172,65 +172,6 @@ async def employees_chat(
     )
 
 
-async def record_llm_usage(
-    database: Any,
-    choice: LLMChoice,
-    response: LLMResponse,
-    *,
-    session_id: str,
-    node_id: str = USAGE_NODE_ID,
-    iteration: int = 1,
-    workflow_id: Optional[str] = None,
-    execution_id: Optional[str] = None,
-    chat_run_id: Optional[str] = None,
-) -> None:
-    """Book one model call's tokens and cost: a setup call, or an agent's
-    step on Temporal (the usage panel reads these rows). ``chat_run_id`` is
-    the chat run the step worked for, when it worked for one.
-    Best effort: a failed price or write never fails the caller."""
-    try:
-        from services.pricing import get_pricing_service
-
-        usage = response.billing_usage or response.usage
-        tokens = {
-            "input_tokens": usage.input_tokens,
-            "output_tokens": usage.output_tokens,
-            "total_tokens": usage.total_tokens,
-            "cache_creation_tokens": usage.cache_creation_tokens,
-            "cache_read_tokens": usage.cache_read_tokens,
-            "reasoning_tokens": usage.reasoning_tokens,
-        }
-        cost = get_pricing_service().calculate_cost(
-            provider=choice.provider,
-            model=choice.model,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_creation_tokens=usage.cache_creation_tokens,
-            reasoning_tokens=usage.reasoning_tokens,
-            total_tokens=usage.total_tokens,
-        )
-        await database.save_token_metric(
-            {
-                "session_id": session_id,
-                "node_id": node_id,
-                "workflow_id": workflow_id,
-                "execution_id": execution_id,
-                "chat_run_id": chat_run_id,
-                "provider": choice.provider,
-                "model": choice.model,
-                "iteration": iteration,
-                **tokens,
-                "input_cost": cost["input_cost"],
-                "output_cost": cost["output_cost"],
-                "cache_cost": cost["cache_cost"],
-                "total_cost": cost["total_cost"],
-            }
-        )
-    except Exception:
-        logger.warning("Could not record LLM usage", provider=choice.provider, model=choice.model, exc_info=True)
-
-
 __all__ = [
     "CLOUD_BUDGET_SECONDS",
     "LLMChoice",
@@ -238,7 +179,6 @@ __all__ = [
     "SETUP_MAX_TOKENS",
     "USAGE_NODE_ID",
     "employees_chat",
-    "record_llm_usage",
     "resolve_llm_choice",
     "runs_locally",
 ]

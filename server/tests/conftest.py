@@ -13,9 +13,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Register shared real-database fixtures through pytest rather than importing
-# a sibling conftest, whose directory scope depends on collection order.
-pytest_plugins = ("tests.database_fixtures",)
+# Register shared fixtures (the real database, the usage recorders' stand-ins)
+# through pytest rather than importing a sibling conftest, whose directory
+# scope depends on collection order.
+pytest_plugins = ("tests.database_fixtures", "tests.usage_fixtures")
 
 # Ensure server/ is on sys.path
 SERVER_DIR = Path(__file__).parent.parent

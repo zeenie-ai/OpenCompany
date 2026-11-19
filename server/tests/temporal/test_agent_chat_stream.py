@@ -36,9 +36,9 @@ def _payload(**extra: Any) -> Dict[str, Any]:
 
 
 @pytest.fixture
-def env(monkeypatch):
+def env(monkeypatch, llm_usage):
     """The step's surroundings: the hub, the conversation store and the stop
-    flag, all recorded."""
+    flag, all recorded. The step's usage booking is a stand-in (``llm_usage``)."""
     import core.container as container_module
     import services.chat.config as chat_config
     import services.chat.hub as hub_module

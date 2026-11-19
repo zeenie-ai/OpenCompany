@@ -188,8 +188,9 @@ it counts cached tokens on OpenAI-shaped usage (OpenRouter included) but not on
 Anthropic's; the same call in either shape costs the same. Cache reads and
 writes take the model's `cache_read` / `cache_write` price, or its input price
 when it lists none. Without `total_tokens`, `input_tokens` is taken as the
-uncached input. Every caller passes it: the agent-step and setup booking
-(`record_llm_usage`), the compaction summarizer and the CLI agents.
+uncached input. Every caller passes it: `record_llm_usage` (the agent step,
+the setup call, `CompactionService.track()` and the compaction summarizer) and
+the CLI agents.
 
 ### API Methods
 
@@ -339,8 +340,26 @@ class APIUsageMetric(SQLModel, table=True):
 For LLM token usage (see memory_compaction.md for details). Rows come from the
 in-process agent path (`CompactionService.track`), the compaction summarizer,
 the hire-screen setup call, and one row per LLM step of every agent on
-Temporal (`record_llm_usage`). A row booked while an agent works for a chat
-run carries that run's id in `chat_run_id`.
+Temporal. All four book through one recorder, `record_llm_usage` in
+`server/services/usage/recording.py`:
+
+```python
+from services.usage import record_llm_usage
+
+cost = await record_llm_usage(
+    provider="anthropic",
+    model="claude-sonnet-5-5",
+    usage={"input_tokens": 5000, "output_tokens": 1500, "total_tokens": 6500},
+    session_id=workflow_id,
+    node_id=node_id,
+)
+```
+
+It prices the call, writes the row and returns the cost breakdown. It never
+raises, because the call it books is already paid for: a failed price returns
+a zero cost and writes nothing, and a failed write still returns the price.
+A row booked while an agent works for a chat run carries that run's id in
+`chat_run_id`.
 
 ```python
 class TokenUsageMetric(SQLModel, table=True):
@@ -489,7 +508,8 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins — declarative `@Operation(cost={...})` (no `_track_search_usage`) |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost` metadata |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
-| `server/core/database.py` | `save_api_usage_metric()`, `save_token_metric()` |
+| `server/core/database.py` | `save_api_usage_metric()` |
+| `server/services/usage/recording.py` | `record_llm_usage()`: one `token_usage_metrics` row per model call |
 | `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()` |
 | `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` commands |
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |

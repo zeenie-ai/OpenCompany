@@ -31,7 +31,6 @@ from models.database import (
     UserSkill,
     ChatMessage,
     UserSettings,
-    TokenUsageMetric,
     CompactionEvent,
     SessionTokenState,
     ProviderDefaults,
@@ -2665,43 +2664,6 @@ class Database:
 
         except Exception as e:
             logger.error("Failed to save provider defaults", provider=provider, error=str(e))
-            return False
-
-    # ============================================================================
-    # Token Usage Metrics
-    # ============================================================================
-
-    async def save_token_metric(self, metric: Dict[str, Any]) -> bool:
-        """Save a token usage metric record."""
-        try:
-            async with self.get_session() as session:
-                entry = TokenUsageMetric(
-                    session_id=metric.get("session_id", "default"),
-                    node_id=metric.get("node_id", ""),
-                    workflow_id=metric.get("workflow_id"),
-                    provider=metric.get("provider", ""),
-                    model=metric.get("model", ""),
-                    input_tokens=metric.get("input_tokens", 0),
-                    output_tokens=metric.get("output_tokens", 0),
-                    total_tokens=metric.get("total_tokens", 0),
-                    cache_creation_tokens=metric.get("cache_creation_tokens", 0),
-                    cache_read_tokens=metric.get("cache_read_tokens", 0),
-                    reasoning_tokens=metric.get("reasoning_tokens", 0),
-                    iteration=metric.get("iteration", 1),
-                    execution_id=metric.get("execution_id"),
-                    chat_run_id=metric.get("chat_run_id"),
-                    created_at=datetime.now(timezone.utc),
-                    # Cost fields
-                    input_cost=metric.get("input_cost", 0.0),
-                    output_cost=metric.get("output_cost", 0.0),
-                    cache_cost=metric.get("cache_cost", 0.0),
-                    total_cost=metric.get("total_cost", 0.0),
-                )
-                session.add(entry)
-                await session.commit()
-                return True
-        except Exception as e:
-            logger.error("Failed to save token metric", error=str(e))
             return False
 
     # ============================================================================

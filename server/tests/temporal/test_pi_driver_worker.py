@@ -108,7 +108,7 @@ def test_virtual_workspace_leaf_is_registered_on_its_plugin_queue(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_standalone_bootstrap_wires_native_compaction_before_polling(monkeypatch):
+async def test_standalone_bootstrap_wires_native_compaction_before_polling(monkeypatch, llm_usage):
     from core.container import container
     from services import compaction, model_registry
     from services.llm.protocol import LLMResponse, Message, Usage, message_to_wire
@@ -116,7 +116,7 @@ async def test_standalone_bootstrap_wires_native_compaction_before_polling(monke
 
     database = SimpleNamespace(startup=AsyncMock(),
         get_or_create_session_token_state=AsyncMock(return_value={"cumulative_total": 300, "compaction_count": 0}),
-        save_token_metric=AsyncMock(), save_compaction_event=AsyncMock(), update_session_token_state=AsyncMock())
+        save_compaction_event=AsyncMock(), update_session_token_state=AsyncMock())
     unifier = SimpleNamespace(chat=AsyncMock(return_value=LLMResponse(content="Retain the current assignment",
         usage=Usage(input_tokens=2, output_tokens=1, total_tokens=3))))
     ai_service = SimpleNamespace(chat_unifier=unifier)
