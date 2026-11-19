@@ -1,6 +1,6 @@
 # Dynamic workflows on OpenCompany: cross-reference
 
-> **Status: Planned.** Research result written 2026-11-12. Nothing in this file is built or decided. It processes the eleven gathered files in this folder; each claim names the file and section that holds the evidence. Code is cited as of commit 908a8ce6. What happens next is in [PLAN.md](PLAN.md).
+> **Status: Planned.** Research result written 2026-11-12; section 10 on Code Mode added 2026-11-19. Nothing in this file is built or decided. It processes the twelve gathered files in this folder; each claim names the file and section that holds the evidence. The code maps cite commit 908a8ce6. The line numbers in this file were checked again at commit 03327c5b on 2026-11-19. What happens next is in [PLAN.md](PLAN.md).
 
 Terms used here:
 
@@ -18,6 +18,7 @@ Terms used here:
 5. A cheaper first step needs no engine work: a MASS-style team plan (what each teammate must return, and in what order they are called) plus a delegation directive in the lead's prompt. The code path for it exists today for an agent that has other agents wired as tools. For hired team leads it runs through Task Manager, where results come back in later review runs and `depends_on` looks broken. Section 4.5.
 6. A standing decision applies. On 2026-11-11 the owner decided that OpenCompany "takes no pydantic-ai dependency and builds no Code Mode feature" ([temporal_production_practices.md](../../temporal_production_practices.md), "Decisions in this pass"). The build in section 5 honours the first half. Whether the second half covers a dynamic workflow is the owner's call. Section 8, question 1.
 7. Six decisions are open. Section 8.
+8. Added 2026-11-19: Claude Code shipped its own Code Mode on 2026-11-12, experimental and off by default. It is the same script idea with tools as the functions instead of sub-agents. It cannot be switched on inside OpenCompany's Claude Code agent, and it changes none of the recommendations above. What its design shows, and what a Code Mode here would touch, is in section 10.
 
 ## 2. One pattern, four implementations
 
@@ -55,7 +56,7 @@ They differ on durability, and that is the part OpenCompany cannot leave out: an
 | Named catalog of sub-agents | The lead's `tools` list holds one hidden `delegate_to_*` entry per teammate with node id, type, label, tools and skills. The lead's prompt already lists them. ([analysis/03](analysis/03-delegation-and-teams.md) sections 4.2 and 8) | Entries are addressed by node id, not as typed functions |
 | A sub-agent run | A child `AgentWorkflow` with its own history, model loop, compaction, approvals and Stop handling. ([analysis/02](analysis/02-agent-loop-on-temporal.md) section 3) | None. This is stronger than Pydantic's inline run |
 | One delegation per tool call | Two paths. A team lead calls Task Manager `assign_task`, is told "queued", and reads the answer in a later review run. Any other agent calls `delegate_to_*`: an attached child, awaited in the same turn, three at a time. ([analysis/03](analysis/03-delegation-and-teams.md) sections 3.1 and 3.2) | Nothing starts and joins several runs inside one tool call ([analysis/02](analysis/02-agent-loop-on-temporal.md) section 8) |
-| Sandbox | Monty is a pinned dependency (0.0.18, [server/pyproject.toml:239](../../../server/pyproject.toml#L239)) and a node, `montyExecutor`, with a time and a memory limit. ([analysis/05](analysis/05-code-execution-and-sandboxes.md) section 3.1) | A script cannot call tools or agents; the suspend-and-resume API is unused. 0.0.18 runs in-process; every release since 0.0.19 runs in worker subprocesses ([sources/03](sources/03-pydantic-monty-and-temporal-durability.md) section 8.2) |
+| Sandbox | Monty is a pinned dependency (0.0.18, [server/pyproject.toml:246](../../../server/pyproject.toml#L246)) and a node, `montyExecutor`, with a time and a memory limit. ([analysis/05](analysis/05-code-execution-and-sandboxes.md) section 3.1) | A script cannot call tools or agents; the suspend-and-resume API is unused. 0.0.18 runs in-process; every release since 0.0.19 runs in worker subprocesses ([sources/03](sources/03-pydantic-monty-and-temporal-durability.md) section 8.2) |
 | Check, then refuse with reasons | `show_ui`: the server checks a model-written spec against a catalogue and returns every problem in one tool error. ([analysis/06](analysis/06-tools-plugins-and-graph-mutation.md) section 5.8) | A pattern to reuse |
 | Limits | Three concurrent sub-agents (permits per root execution when the lead has a team, otherwise a start window of three per turn), delegation depth 2, the lead's own iteration limit. ([analysis/03](analysis/03-delegation-and-teams.md) section 7) | No cap on the number of delegations. A child's tokens are not added to the lead's. A delegated answer has no size cap |
 | Isolation | Each run is its own workflow. A teammate with a Context node continues one stored conversation across tasks, and two concurrent runs of one teammate overwrite it. Hire gives every team member a Context node. ([analysis/03](analysis/03-delegation-and-teams.md) section 5.2) | A script that calls one teammate twice in parallel needs isolated runs |
@@ -82,7 +83,7 @@ Recommendation: C for a script tool, and D as a first step that needs no release
 
 ### 4.2 Why Pydantic's placement does not fit here
 
-1. **Workflow code here is coordination only, and nothing enforces it.** Every workflow class is declared `sandboxed=False` (for example [agent_workflow.py:808](../../../server/services/temporal/agent_workflow.py#L808), [workflow.py:216](../../../server/services/temporal/workflow.py#L216)) and no lint exists. Determinism rests on convention, the replay corpus and the golden identity file ([analysis/01](analysis/01-graph-execution-on-temporal.md) section 5.1, [analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 24). Running a model-written script there is the opposite of the rule, with no check behind it.
+1. **Workflow code here is coordination only, and nothing enforces it.** Every workflow class is declared `sandboxed=False` (for example [agent_workflow.py:848](../../../server/services/temporal/agent_workflow.py#L848), [workflow.py:216](../../../server/services/temporal/workflow.py#L216)) and no lint exists. Determinism rests on convention, the replay corpus and the golden identity file ([analysis/01](analysis/01-graph-execution-on-temporal.md) section 5.1, [analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 24). Running a model-written script there is the opposite of the rule, with no check behind it.
 2. **A workflow task must return within 2 seconds.** The installed SDK (temporalio 1.34.0, `temporalio/worker/_workflow.py`) runs each workflow activation in a thread and fails the task after `_deadlock_timeout_seconds = 2`. Temporal then retries the task while the run stays open. A script that computes for two seconds would wedge the lead's run. Pydantic's docs give the same warning, and its only guard against a runaway loop inside a workflow, `max_duration_seconds`, is itself a replay hazard ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 6.5).
 3. **All workflow code shares ten slots.** Workflow tasks of every workflow type run on the main worker, at most 10 at a time ([worker.py:252](../../../server/services/temporal/worker.py#L252)). Script execution would compete with every employee's coordination.
 4. **Replay would re-run every script.** After a restart, each recorded script would run again in a fresh sandbox ([sources/03](sources/03-pydantic-monty-and-temporal-durability.md) section 3.6). Replaying an open run would then depend on the installed Monty behaving exactly as before. Monty went from 1.0 to 1.6 in seven weeks, and its API was rewritten between the pinned 0.0.18 and 1.x.
@@ -144,10 +145,10 @@ MASS's search loop (run a workflow, let the model judge it against the best so f
 
 This is a shape, not a plan. Each piece names what it mirrors.
 
-1. **A tool node in its own plugin folder.** Model-facing name `run_workflow`, one argument, `code`. The description is built from the lead's teammate entries: fixed rules, a budget sentence, and one line per teammate in the form `async def <name>(*, task: str) -> str`. Mirrors Pydantic's tool ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 3.2) and the roster the lead's prompt already gets ([agent_activities.py:1670](../../../server/services/temporal/agent_activities.py#L1670)).
+1. **A tool node in its own plugin folder.** Model-facing name `run_workflow`, one argument, `code`. The description is built from the lead's teammate entries: fixed rules, a budget sentence, and one line per teammate in the form `async def <name>(*, task: str) -> str`. Mirrors Pydantic's tool ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 3.2) and the roster the lead's prompt already gets ([agent_activities.py:1705](../../../server/services/temporal/agent_activities.py#L1705)).
 2. **A step activity owned by the plugin.** It type-checks the script against the same signatures, runs it until it blocks, and returns the pending calls, the final value or the error text. An error goes back to the model as one tool error that lists what to fix, as `show_ui` does. It runs on the `code-exec` queue, where `montyExecutor` runs.
-3. **A new workflow type that owns one script run.** A loop: step activity, start the children, collect the answers, with the concurrency window and the call budget. It takes part in Stop and Resume the way [EmployeeJobWorkflow](../../../server/services/temporal/employee_job_workflow.py#L71) does. Children start the way the direct delegation path starts them ([agent_workflow.py:1886](../../../server/services/temporal/agent_workflow.py#L1886)). A lead with a team could instead start them through the team's task runner, `DelegatedTaskWorkflow` ([agent_workflow.py:552](../../../server/services/temporal/agent_workflow.py#L552)), which another workflow type already starts and awaits. Each call would then be a task on the board with times and tokens, but that runner also publishes the task event that starts a review run. That choice belongs to question 3. A new workflow type needs no patch marker ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 1).
-4. **One branch in the agent workflow's tool dispatch** that starts that workflow as a child and awaits its result. Make it data-driven: the tool entry built at prepare time names the workflow type, as an entry can already name its own activity ([agent_workflow.py:2391](../../../server/services/temporal/agent_workflow.py#L2391)). That is one general rule. Task Manager's branch on its node type is the form not to repeat.
+3. **A new workflow type that owns one script run.** A loop: step activity, start the children, collect the answers, with the concurrency window and the call budget. It takes part in Stop and Resume the way [EmployeeJobWorkflow](../../../server/services/temporal/employee_job_workflow.py#L71) does. Children start the way the direct delegation path starts them ([agent_workflow.py:1926](../../../server/services/temporal/agent_workflow.py#L1926)). A lead with a team could instead start them through the team's task runner, `DelegatedTaskWorkflow` ([agent_workflow.py:583](../../../server/services/temporal/agent_workflow.py#L583)), which another workflow type already starts and awaits. Each call would then be a task on the board with times and tokens, but that runner also publishes the task event that starts a review run. That choice belongs to question 3. A new workflow type needs no patch marker ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 1).
+4. **One branch in the agent workflow's tool dispatch** that starts that workflow as a child and awaits its result. Make it data-driven: the tool entry built at prepare time names the workflow type, as an entry can already name its own activity ([agent_workflow.py:2432](../../../server/services/temporal/agent_workflow.py#L2432)). That is one general rule. Task Manager's branch on its node type is the form not to repeat.
 5. **A generation flag for piece 4**, written at Start, so only new generations take the branch. A flag touches seven places ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) section 7). Tests: a golden entry with `flags` and `new_types`, one recorded replay scenario, one real-SDK test per branch ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) section 5.11).
 6. **Two rows in central tables**: the approval class and the repeat safety of the new tool type. An unlisted type counts as a send ([classes.py:32](../../../server/services/approvals/classes.py#L32)) and is never repeated after a broken-off attempt.
 
@@ -168,6 +169,8 @@ The rules that bind it most, from [analysis/04](analysis/04-deployment-control-a
 **Sakana MASS.** Take the finding that the task-specific value sits in what each agent must return and check, and in the call order, and that a directive is what makes a model delegate. Leave the search loop and the fine-tuning.
 
 **Pydantic Code Mode.** The mechanics are the same sandbox and the same step model, with the agent's own tools as the functions. It is excluded by the 2026-11-11 decision. One fact for later: inside its scripts a tool that needs approval cannot pause the script; it is resolved while the script waits, or it fails ([sources/02](sources/02-pydantic-code-mode.md) section 3.6).
+
+**Claude Code Code Mode** (added 2026-11-19, from [sources/06](sources/06-claude-code-code-mode.md)). Take four design choices. A script is a new caller of the existing tools, so every call passes the same rules and hooks as a direct call. A review of the whole script is an extra check and not the gate, because it cannot see values computed at run time. The model is told what was still running when a script failed. And the feature shipped guarded: off by default, switched on per user, blockable by an organization, absent from every programmatic surface. Leave the specifics: it is a week old and experimental, and its helper list and limits are not published. Section 10.
 
 ## 7. Plugin architecture: DeepSeek Harness next to OpenCompany
 
@@ -200,7 +203,7 @@ Each option states what it assumes. The first option is the recommendation.
 
 1. **Scope against the 2026-11-11 decision.**
    - (a) Dynamic workflow only; Code Mode stays out. Assumes the decision's "no Code Mode feature" meant tools as functions, and that sub-agent orchestration is a separate question.
-   - (b) Reopen Code Mode as well. Assumes a ruling on approvals inside scripts: in the sources a held call is answered while the script waits, or it fails. None can pause a script and resume it later.
+   - (b) Reopen Code Mode as well. Assumes a ruling on approvals inside scripts: in the sources a held call is answered while the script waits, or it fails. None can pause a script and resume it later, and Claude Code's Code Mode, added since, is no exception. Section 10.6 lists what else this option assumes.
    - (c) Neither. This folder stays research.
 2. **First step.**
    - (a) The prompt-level plan first (section 4.5), the script tool later. Assumes no workflow-code release is wanted now, and that Dev-mode agents with agents as tools are a fair first audience.
@@ -234,6 +237,110 @@ Not checked:
 - Statements the gatherers marked INFERRED or NOT VERIFIED stay so; each file lists its own.
 - The external projects were read, not run.
 - The probe shows the mechanism, not an implementation: no child workflows, no limits on answers, no error paths beyond those listed.
+
+Added on 2026-11-19, for section 10:
+
+- Checked: every quoted passage in [sources/06](sources/06-claude-code-code-mode.md) was matched by a script against the downloaded pages.
+- Checked at commit 03327c5b: the Claude Code agent's pinned version, launch flags and gateway environment; the approval class table; the result cap; the sequential tool loop; that `server/services/llm` has no handling of code-execution blocks.
+- Checked at the same commit: the line numbers this file cites. Six had moved and were updated. The code maps and [FINDINGS.md](FINDINGS.md) still cite 908a8ce6.
+- Not checked: no Claude Code session was started in Code Mode, and the Claude API feature was not called.
+
+## 10. Code Mode: the same script, with tools as the functions
+
+Added 2026-11-19. Evidence: [sources/06](sources/06-claude-code-code-mode.md) (Claude Code and the Claude API), [sources/02](sources/02-pydantic-code-mode.md) (Pydantic), [sources/05](sources/05-deepseek-harness-plugin-architecture.md) section 7.5 (DeepSeek), [analysis/02](analysis/02-agent-loop-on-temporal.md) section 4, [analysis/05](analysis/05-code-execution-and-sandboxes.md) sections 3 and 4.
+
+The standing decision still applies: OpenCompany "builds no Code Mode feature" (section 1, item 6). This section does not reopen it. It records what the newest source shows and what a Code Mode would touch here, so that the decision can be reviewed against facts.
+
+### 10.1 What is new
+
+- Claude Code added Code Mode in v2.1.323 on 2026-11-12, the day this research was first written. The model writes JavaScript that calls the session's tools, and one tool, `REPL`, runs it. It is experimental and off by default.
+- Three of the four sources now have both kinds of script: one whose functions are sub-agents and one whose functions are tools. MASS has neither.
+- The Claude API offers the tool-level kind as a stable feature, programmatic tool calling. Its page holds the only measurements in this folder (10.7).
+
+### 10.2 How Claude Code built it
+
+What the public pages establish ([sources/06](sources/06-claude-code-code-mode.md), sections 3 to 7):
+
+1. **The script is a new caller of the old tools.** There is no second tool system: "each tool call in it goes through your `deny` and `ask` permission rules and your `PreToolUse` hooks under the tool's usual name". Pydantic, DeepSeek and the Claude API do the same in their own terms.
+2. **Two checks, and the one on each call is the gate.** In auto mode a classifier reads the whole script once before it runs. The page limits what that proves: it "doesn't see values computed at run time", so "keep rules or hooks for calls you must control".
+3. **A call that needs a person holds the script.** The user is prompted while the script waits. For a session nobody is watching, the page describes a countdown that ends in a refusal. No source can park a script and continue it days later.
+4. **Time limits stand in for durability.** Ten minutes when the model waits, two hours in the background. A script cut off by the end of the session is reported to the model as cut off. It is not continued.
+5. **Failure text is written for the model.** It is told which calls were still running when a script failed, where a failed edit nearly matched, and that long output was cut.
+6. **It is a mode of the whole session.** The Claude API and Pydantic decide per tool instead, with `allowed_callers` and a selector.
+7. **It shipped behind several guards.** Off by default; switched on per user, with a confirmation; an organization can block it and cannot force it on; unavailable in `-p`, the Agent SDK, the VS Code panel, the Desktop app and cloud sessions. The changelog has 35 Code Mode entries in the four releases after the first.
+
+Not published: the helper functions beyond `$`, `edit()` and `write()`, where the JavaScript runs and what isolates it, and any limit on calls or on output size.
+
+### 10.3 Four implementations
+
+The full table is in [sources/06](sources/06-claude-code-code-mode.md), section 10.1.
+
+| | Claude Code Code Mode | Claude API programmatic tool calling | Pydantic Code Mode | DeepSeek PTC |
+|---|---|---|---|---|
+| Status | Experimental, off by default | Stable | Alpha package | Ships disabled |
+| Where the code runs | The user's session, on their machine | A container Anthropic hosts | The Monty sandbox | A fresh Node process |
+| Who executes a tool call | Claude Code, through its permission rules | The calling application, one `tool_use` block at a time | The agent's own tool pipeline | The normal tool pipeline |
+| A call that needs a person | Prompted while the script waits; refused after a countdown | Must be answered in about 4 minutes | Resolved while the snippet waits, or it fails | A denied call rejects inside the program |
+| Limits | 10 minutes waiting, 2 hours in the background | About 4 minutes per waiting call; the container lives 30 days | 30 seconds of computation; 100 calls per script | 120 seconds by default; 1,024 calls per minute |
+| After a restart | Reported as cut off | Container state is restored; a waiting call is lost | Run again on Temporal replay | Lost |
+
+### 10.4 What OpenCompany has today
+
+| What | State | Evidence |
+|---|---|---|
+| Code that calls tools | Only the RLM agent. Tools are blocking Python functions inside one activity with one attempt; nothing inside it is durable | [analysis/05](analysis/05-code-execution-and-sandboxes.md) section 4.1 |
+| "Code Mode" by name | The autonomous agent's skill: a prompt that tells the model to batch calculations into one Python call. It has no tools as functions | [analysis/05](analysis/05-code-execution-and-sandboxes.md) section 4.2 |
+| A sandbox | `montyExecutor`. A script in it cannot call tools | Section 3 |
+| Tool calls on Temporal | One at a time, in the order of the model's message ([agent_workflow.py:2228](../../../server/services/temporal/agent_workflow.py#L2228)), each as the tool's own activity. That activity holds the approval check, the repeat guard and the chat step | [analysis/02](analysis/02-agent-loop-on-temporal.md) sections 4.4 and 4.7 |
+| Size of results | By default a tool result is cut to 100,000 characters for the model ([config.py:514](../../../server/core/config.py#L514)). TikHub and treg save an answer over 20,000 characters to a workspace file and return a reference with a preview | Read at 03327c5b |
+| Approval classes | One central table gives every call a class: `read`, `write`, `send` or `money`. An unlisted type is `send` ([classes.py:29](../../../server/services/approvals/classes.py#L29)) | Read at 03327c5b |
+
+**The Claude Code agent cannot simply turn Code Mode on.** This is read from the code and from the Code Mode page. It was not tried, because the installed CLI is never run here.
+
+- The pinned CLI is 2.1.258 ([ai_cli_providers.json:4](../../../server/config/ai_cli_providers.json#L4)). Code Mode needs 2.1.323.
+- The agent drives `claude` over stream-json pipes with `--ide`, without a terminal ([_provider.py:188](../../../server/nodes/agent/claude_code_agent/_provider.py#L188)). The page limits Code Mode to "an interactive `claude` session in a terminal" and names `-p`, the Agent SDK and the VS Code panel as unsupported.
+- The agent's default model is `claude-sonnet-4-6`. The page lists four newer models.
+- On the gateway route the agent sets `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` ([_oauth.py:343](../../../server/nodes/agent/claude_code_agent/_oauth.py#L343)). Each is a listed reason for Code Mode not to start.
+
+### 10.5 Where a Code Mode would run here
+
+The placements of section 4.1, and one more that the Claude API adds:
+
+| Option | How it would work here | What fits | What breaks or costs |
+|---|---|---|---|
+| In workflow code | Pydantic's way | No new activity | Section 4.2, unchanged |
+| One activity, tools called in process | The RLM agent's shape | It exists for RLM | Nothing inside is durable. Stop waits for the whole script. A retry repeats every call |
+| Step activities, each call as the tool's own activity | Section 4's option C, with tools in the catalog | The approval check, the repeat guard and the chat step come with the existing activity. Replay never runs the script | Results must travel by reference, and a held call needs a ruling (10.6) |
+| Run by the provider | The Claude API feature: the code runs in Anthropic's container, and each call comes back as a `tool_use` block | No model-written code would run on OpenCompany's machine. Each call would still be an ordinary activity | Anthropic models only, on the platforms that offer it. A call must be answered in about 4 minutes. Container data is kept up to 30 days. `server/services/llm` has no handling of code-execution blocks today. Not checked through the gateway |
+
+### 10.6 What differs from the build in section 5
+
+Shared with section 5: the tool node, the step activity, the check that refuses with reasons, a workflow type that owns one script run, and the generation flag.
+
+Different:
+
+- **Calls are activities, not child workflows.** The isolation question (question 4) and the sub-agent permits do not arise.
+- **Results by reference.** The step activity receives the recorded results again at every step. One tool result can be 100,000 characters, so about twenty full results add up to the 2,097,152 bytes at which Temporal rejects an activity input ([media_transport.md](../../media_transport.md)). An input over that limit fails the workflow task, not the activity ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 28). Results would be stored once and passed by reference, as large TikHub and treg answers already are.
+- **A call budget.** Pydantic allows 100 calls per script and DeepSeek 1,024 per minute; Claude Code publishes none. Every call is an activity in the history of the workflow that owns the script, so the budget also bounds that history.
+- **Held calls.** The approval check runs inside the tool's activity and can answer "held" instead of running ([analysis/02](analysis/02-agent-loop-on-temporal.md) section 4.5). Code cannot use that answer as a result. Two rulings are possible. Refuse a held call inside a script and tell the model to make that call directly. Or let the workflow wait for the owner and run the script again afterwards, which the step design allows because nothing is kept in memory while it waits; no source does this (10.2, point 3).
+- **Which tools.** The Claude API and Pydantic let the application choose per tool. Here the approval class of a call is the existing fact such a choice could use.
+
+### 10.7 Would it pay here
+
+- The only published numbers are on the Claude API page. Requests with 10 to 49 tools see "typical token savings of 20 to 40 percent". A 75-tool benchmark used roughly 38 percent fewer input tokens. A benchmark of one or two sequential calls per turn cost roughly 8 percent more: "Sequential single-call workflows do not benefit."
+- Two of the owner's runs were measured on 2026-11-13 and 2026-11-17 (their write-ups are not in this folder). One used 1.15 million input tokens over 24 steps; the other cost $7.60 over 64 steps. In both, most of the input was content the run had already sent and sent again at every step: tool results, tool-call arguments and the tool definitions.
+- Two changes made since then take most of that cost without a script: prompt caching for Claude models ([native_llm_sdk.md](../../native_llm_sdk.md)), and large TikHub and treg answers saved to a file.
+- What a script would still add: fewer model turns for fan-out and filtering work, and calls that run at the same time.
+- A smaller step toward the second exists. The Temporal loop runs the tool calls of one model message one after another. Running them at the same time needs no script. It does change the order of workflow commands, so it needs a patch marker or a generation flag. This is the lead's observation and was not researched.
+
+### 10.8 Effect on the decisions in section 8
+
+- **Question 1** keeps its three options. Option (b), reopening Code Mode, now has its assumptions written out: a placement from 10.5, results by reference, a call budget, and a ruling on held calls.
+- **The recommendation is unchanged:** dynamic workflow only, with the prompt-level plan as the first step. The reasons that concern Code Mode:
+  - Each of the three harnesses makes it an explicit opt-in: Claude Code calls it experimental, DeepSeek ships it disabled, and Pydantic's package is alpha. Only the Claude API feature is called stable, and the newest implementation is a week old.
+  - The measured benefit depends on the kind of work, and the cheaper changes for the two measured runs are already made.
+  - If the script tool of section 5 is built, tools as functions are a later addition to the same step activity and the same workflow type. It is a second kind of call, not a second feature.
+- Questions 2 to 6 are unaffected.
 
 ## Appendix A. The probe
 

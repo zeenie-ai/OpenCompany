@@ -1,12 +1,13 @@
 # Dynamic workflow: plan
 
-> **Status: Planned.** Written 2026-11-12. Nothing here is built, and no build has been asked for. The research behind it is in this folder; [CROSS-REFERENCE.md](CROSS-REFERENCE.md) is the result.
+> **Status: Planned.** Written 2026-11-12, updated 2026-11-19. Nothing here is built, and no build has been asked for. The research behind it is in this folder; [CROSS-REFERENCE.md](CROSS-REFERENCE.md) is the result.
 
 ## Where it stands
 
-- **Research: done.** Five source digests, six code maps, the cross-reference, the findings list and the probe are written and pass the docs lint.
+- **Research: done.** Six source digests, six code maps, the cross-reference, the findings list and the probe are written and pass the docs lint.
+- **Added 2026-11-19:** Claude Code's Code Mode ([sources/06](sources/06-claude-code-code-mode.md)) and section 10 of the cross-reference. It changes no recommendation and no step below.
 - **Decided: nothing new.** The owner's decision of 2026-11-11 stands: OpenCompany "takes no pydantic-ai dependency and builds no Code Mode feature" ([temporal_production_practices.md](../../temporal_production_practices.md)).
-- **Built: nothing.** The folder is untracked. Nothing was committed.
+- **Built: nothing.** No code was written. The research itself was committed on 2026-11-19.
 - **Recommendation on record** (the lead's; the owner has not ruled): do not run a model-written script in Temporal workflow code. Run it in short activities that re-run it against recorded results, and let workflow code only start the sub-agent runs. [CROSS-REFERENCE.md](CROSS-REFERENCE.md), section 4.
 
 ## Next: the owner's answers
@@ -23,6 +24,8 @@ The options and what each assumes are in [CROSS-REFERENCE.md](CROSS-REFERENCE.md
 | 6 | Waiting or queued | The tool call waits for the script |
 
 Questions 1 and 2 gate everything. Questions 3 to 6 matter only if the script tool is built.
+
+On question 1, the other answer is to reopen Code Mode as well. That would also need four rulings: where the code runs, results passed by reference, a call budget, and what a held call does inside a script ([CROSS-REFERENCE.md](CROSS-REFERENCE.md), sections 10.5 and 10.6).
 
 ## Then, depending on the answers
 
@@ -57,7 +60,6 @@ Code Mode. MASS's search loop and fine-tuning. Wiring for hired teams. Nesting, 
 ## To resume after a break
 
 - Read [README.md](README.md), then [CROSS-REFERENCE.md](CROSS-REFERENCE.md) sections 1, 4, 5 and 8.
-- The code maps cite commit 908a8ce6. At HEAD 13708877 (2026-11-12, after the v0.3.2 release commits) nothing under `server/services`, `server/nodes` or `server/core` differs from it. Run `git diff --stat 908a8ce6 HEAD -- server/services server/nodes server/core` before relying on a line number later.
+- The code maps cite commit 908a8ce6. By commit 03327c5b (2026-11-19), 54 files under `server/services`, `server/nodes` and `server/core` had changed. The line numbers in [CROSS-REFERENCE.md](CROSS-REFERENCE.md) were checked again that day. The code maps and [FINDINGS.md](FINDINGS.md) were not: find a symbol by name before relying on a line number there.
 - The probe and how to run it are in [PROBE.md](PROBE.md).
 - The docs lint for this folder: `server/.venv/Scripts/python.exe -m pytest cli/tests/test_docs_paths_resolve.py -k dynamic-workflow -q -p no:cacheprovider`, run from the repository root.
-- Ask before committing this folder. It is untracked until the owner says otherwise.
