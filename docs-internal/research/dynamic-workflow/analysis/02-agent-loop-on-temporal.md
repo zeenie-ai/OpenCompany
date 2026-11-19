@@ -1,5 +1,7 @@
 # The agent loop on Temporal: code map
 
+> **Status: Historical snapshot.** A map of the code at commit 908a8ce6 (2026-11-12), written for the [dynamic workflow research](../README.md) and not updated since, so a line number here may be stale. The maintained documents for this subject are [Agent Architecture](../../../agent_architecture.md), [Temporal Architecture](../../../TEMPORAL_ARCHITECTURE.md) and [Agent Context Flow](../../../agent_context_flow.md).
+
 Scope: `AgentWorkflow`, the activities it schedules, and how every kind of tool call is executed on the Temporal path. Delegation, Task Manager and teams are recorded only where they hook into the loop.
 Written 2026-11-12, as of commit 908a8ce6. The code files cited here are identical between that commit and the working tree that was read (checked with a diff over the cited paths). Nothing was run; every statement comes from reading the source.
 

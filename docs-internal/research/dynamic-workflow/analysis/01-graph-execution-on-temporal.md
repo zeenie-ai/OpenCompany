@@ -1,5 +1,7 @@
 # Graph execution on Temporal: code map
 
+> **Status: Historical snapshot.** A map of the code at commit 908a8ce6 (2026-11-12), written for the [dynamic workflow research](../README.md) and not updated since, so a line number here may be stale. The maintained documents for this subject are [Temporal Architecture](../../../TEMPORAL_ARCHITECTURE.md) and [Execution Engine Design](../../../DESIGN.md).
+
 Scope: how a workflow graph (canvas nodes and edges) runs on Temporal: `MachinaWorkflow`, the per-node activities, the executor, the worker pool and the versioning machinery.
 Written 2026-11-12, as of commit 908a8ce6, from reading the code. Nothing was run.
 The agent loop, delegation and teams, deployment control, code sandboxes and the plugin system belong to sibling files; hand-off points are named where they occur. Link text is abbreviated (temporal/workflow.py:216); every link target is the full repository path. Marks: INFERRED = derived, not read directly; NOT VERIFIED = could not be checked.

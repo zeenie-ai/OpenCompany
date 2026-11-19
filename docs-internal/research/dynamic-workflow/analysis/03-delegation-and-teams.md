@@ -1,5 +1,7 @@
 # Delegation, Task Manager and teams: code map
 
+> **Status: Historical snapshot.** A map of the code at commit 908a8ce6 (2026-11-12), written for the [dynamic workflow research](../README.md) and not updated since, so a line number here may be stale. The maintained documents for this subject are [Agent Teams](../../../agent_teams.md) and [Agent Delegation](../../../agent_delegation.md).
+
 Scope: how one agent starts, tracks, finishes and cancels a run of another agent: the Task Manager tool, the `delegate_to_*` tools, teams and teammates, on Temporal and on the older in-process paths. The agent turn loop in general is mapped by another file in this folder.
 Written 2026-11-12, as of commit 908a8ce6. Read from a clean working tree at 48c34266; a read-only `git diff --stat` between the two showed no server code file cited here changed. Nothing was run: every statement comes from reading code.
 Markers: INFERRED means derived by reading several places together, not observed. NOT VERIFIED means not checked.

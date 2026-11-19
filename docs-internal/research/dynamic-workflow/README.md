@@ -14,7 +14,7 @@ A dynamic workflow, as the sources use the term: an agent gets one tool, its mod
 
 [PLAN.md](PLAN.md) is the short plan: where things stand, the six questions with the recommended answers, the two paths that follow, and how to resume after a break.
 
-[FINDINGS.md](FINDINGS.md) lists possible defects and document drift the gatherers met on the way. None of it is fixed.
+[FINDINGS.md](FINDINGS.md) lists possible defects and document drift the gatherers met on the way. Ten of its sixteen defects were checked again on 2026-11-19: one has been fixed since, and the other nine are as they were.
 
 [PROBE.md](PROBE.md) holds the feasibility probe in full: the script, how to run it, and its output on the pinned Monty 0.0.18.
 
@@ -36,6 +36,8 @@ Digests of other projects, written from their documentation and source code. Eac
 Facts about this repository as of commit 908a8ce6. Every claim links to a file and line. INFERRED marks a conclusion drawn from several places; NOT VERIFIED marks something not checked. Each map ends with the places where a document and the code disagree.
 
 The code has moved since. At commit 03327c5b on 2026-11-19, 54 files under `server/services`, `server/nodes` and `server/core` differed from 908a8ce6, so a line number in a code map may be stale. Find the symbol by name before relying on it. The line numbers in the cross-reference were checked again that day.
+
+The maps are kept as they were written and are not updated. Each opens with a notice that says so and names the maintained document for its subject.
 
 | File | Covers |
 |---|---|

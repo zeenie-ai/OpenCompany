@@ -1,5 +1,7 @@
 # Deployment control and durability rules: code map
 
+> **Status: Historical snapshot.** A map of the code at commit 908a8ce6 (2026-11-12), written for the [dynamic workflow research](../README.md) and not updated since, so a line number here may be stale. The maintained documents for this subject are [Temporal workflow control](../../../temporal-workflow-control.md) and [Temporal Architecture](../../../TEMPORAL_ARCHITECTURE.md).
+
 Scope: how a saved workflow is started, stopped, resumed and reset on Temporal (one "generation" per Start), how trigger events become runs, how the control plane recovers, and the rules a change to workflow code must follow. Written on 2026-11-12, as of commit 908a8ce6. Read-only research: no code or test was run, and nothing here is a design.
 
 While this note was written, HEAD moved twice: to 90fc876c (`chore(release): v0.3.2`: version files, client canvas files and one document), then to 48c34266, which adds that release's recorded histories under `server/tests/temporal/fixtures/0.3.2/` and edits three documents and one test's docstring. `git diff --stat 908a8ce6 48c34266` lists no file under `server/services` or `server/nodes` and no test module under `server/tests`, so the code citations hold for all three commits. The test harness in section 5.11 is described as of 48c34266.

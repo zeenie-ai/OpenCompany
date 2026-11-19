@@ -23,6 +23,8 @@ The owner decided these on 2026-11-11:
 - **Edge conditions.** They are evaluated in an activity, behind a dormant patch marker (item 9).
 - **Conversations.** Each firing is relieved before its first step, under `context_pressure_version` 2, for new generations only (item 17).
 
+A later study, [research/dynamic-workflow](research/dynamic-workflow/README.md) (2026-11-12, extended 2026-11-19), looks at what a dynamic workflow or a Code Mode would take on this engine. It is research only: nothing in it is built, and the first decision above stands.
+
 ## Reading the items
 
 Each item gives the problem, who can hit it, the plainest change and its size. Two labels follow:

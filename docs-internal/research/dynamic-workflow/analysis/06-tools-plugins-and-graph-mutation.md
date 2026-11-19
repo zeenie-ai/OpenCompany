@@ -1,5 +1,7 @@
 # Tools, plugins and graph mutation: code map
 
+> **Status: Historical snapshot.** A map of the code at commit 908a8ce6 (2026-11-12), written for the [dynamic workflow research](../README.md) and not updated since, so a line number here may be stale. The maintained documents for this subject are [Plugin System](../../../plugin_system.md), [Node Creation Guide](../../../node_creation.md), [Workflow ops protocol](../../../workflow_ops_protocol.md) and [Normal Mode](../../../normal_mode.md).
+
 Scope: what an OpenCompany plugin can declare and register, how a node becomes a model-visible tool and how its calls are routed (in process and on Temporal), and how the Agent Builder and Hire build and change a workflow graph at runtime.
 Date: 2026-11-12, as of commit 908a8ce6. The later commits on the branch at the time of reading (up to 48c34266) change none of the files cited here.
 Method: read-only pass. Nothing was run. INFERRED marks a conclusion drawn from the code that no line states outright; NOT VERIFIED marks something not checked.

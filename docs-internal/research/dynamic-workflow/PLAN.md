@@ -55,11 +55,11 @@ Code Mode. MASS's search loop and fine-tuning. Wiring for hired teams. Nesting, 
 
 ## Separate from this plan
 
-[FINDINGS.md](FINDINGS.md) lists sixteen possible defects, read from code and not reproduced. Two that a user could hit: item 1 (a team task with an unmet dependency never unblocks) and item 9 (the pinned Monty runs model-written code inside the backend process). Neither is scheduled.
+[FINDINGS.md](FINDINGS.md) lists sixteen possible defects, read from code and not reproduced. Two that a user could hit: item 1 (a team task with an unmet dependency never unblocks) and item 9 (the pinned Monty runs model-written code inside the backend process). Both still stood when checked again on 2026-11-19, and neither is scheduled. Item 15 (no cost record for an agent on Temporal) was fixed on 2026-11-18.
 
 ## To resume after a break
 
 - Read [README.md](README.md), then [CROSS-REFERENCE.md](CROSS-REFERENCE.md) sections 1, 4, 5 and 8.
-- The code maps cite commit 908a8ce6. By commit 03327c5b (2026-11-19), 54 files under `server/services`, `server/nodes` and `server/core` had changed. The line numbers in [CROSS-REFERENCE.md](CROSS-REFERENCE.md) were checked again that day. The code maps and [FINDINGS.md](FINDINGS.md) were not: find a symbol by name before relying on a line number there.
+- The code maps cite commit 908a8ce6. By commit 03327c5b (2026-11-19), 54 files under `server/services`, `server/nodes` and `server/core` had changed. The line numbers in [CROSS-REFERENCE.md](CROSS-REFERENCE.md) were checked again that day, and ten of the sixteen items in [FINDINGS.md](FINDINGS.md) were checked again at commit 092def0c. The code maps were not: find a symbol by name before relying on a line number there.
 - The probe and how to run it are in [PROBE.md](PROBE.md).
 - The docs lint for this folder: `server/.venv/Scripts/python.exe -m pytest cli/tests/test_docs_paths_resolve.py -k dynamic-workflow -q -p no:cacheprovider`, run from the repository root.

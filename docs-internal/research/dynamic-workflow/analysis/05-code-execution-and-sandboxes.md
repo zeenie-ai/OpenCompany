@@ -1,5 +1,7 @@
 # Code execution and sandboxes: code map
 
+> **Status: Historical snapshot.** A map of the code at commit 908a8ce6 (2026-11-12), written for the [dynamic workflow research](../README.md) and not updated since, so a line number here may be stale. The maintained documents for this subject are [RLM Service](../../../rlm_service.md), [Pi coding agent](../../../pi_coding_agent.md) and the code executor cards under [node-logic-flows](../../../node-logic-flows/README.md).
+
 Scope: every place OpenCompany runs model-written or user-written code, or lets code or an external harness call models, tools or agents: the four code executor nodes, the RLM agent's REPL, the autonomous ("Code Mode") agent, the Pi coding agent on Temporal with its inline delegation, the CLI agents' MCP bridge and the JS/TS sidecar.
 
 Date: 2026-11-12, as of commit 908a8ce6. The two later commits on main at the time of reading (c6655c64, 90fc876c) touch none of the files cited here.

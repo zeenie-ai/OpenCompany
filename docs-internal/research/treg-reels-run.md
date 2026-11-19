@@ -1,5 +1,7 @@
 # treg reels run: token cost and coverage (2026-11-13)
 
+> **Status: Historical analysis.** It describes one run on 2026-11-13 and the code of that week. Two of its five fixes have been built since and a third in part; [Fixes](#fixes) gives the state of each on 2026-11-19. Current behaviour is in [treg Service](../treg_service.md), [Native LLM SDK](../native_llm_sdk.md#prompt-caching) and [Agent Context Flow](../agent_context_flow.md).
+
 On 2026-11-13 an agent searched Instagram through treg for viral reels. This note covers two questions about that run:
 
 - why three chat messages cost about $2.41 of model time for $0.05 of data;
@@ -21,7 +23,7 @@ The figures were measured on 2026-11-13 and written up on 2026-11-17. Some of th
   - It stopped paging queries that were still returning this week's posts.
   - Every search paired matcha with a place or venue name.
   - The two reels the owner counted and the agent missed were most likely two reels tagged Brooklyn, New York, whose captions never name New York.
-- **Fixes.** One is done (the shell tool's description, `d2d3f525`, not pushed); four are open.
+- **Fixes.** By 2026-11-19 two of five are built (the shell tool's description and prompt caching) and one is built in part (every agent step now books its cost, but nothing reports it in the chat). Two are open.
 
 ## The job
 
@@ -65,7 +67,7 @@ Missing prompt caching affects every one of these, since each step paid full pri
 
 ### No prompt caching
 
-- `cache_read` was 0 on all 24 steps. Nothing in `server/` marks a cache breakpoint (`cache_control`), either for OpenRouter or for the native Anthropic API.
+- `cache_read` was 0 on all 24 steps. At the time nothing in `server/` marked a cache breakpoint (`cache_control`), either for OpenRouter or for the native Anthropic API. Since `d6a656f7` (2026-11-18) a Claude request on either route carries a top-level `cache_control`.
 - Estimate with caching, at Anthropic's prices for Sonnet 5.5 (a five-minute cache write at 1.25 times the input price, a cache read at $0.10 per million tokens):
   - the 24 requests would have cost $0.65 instead of $2.41, 73% less;
   - the messages were less than five minutes apart, so a cache kept from one message to the next would have brought the cost to $0.45, 81% less.
@@ -101,7 +103,7 @@ Missing prompt caching affects every one of these, since each step paid full pri
 
 ### The cost the owner was told
 
-The agent said the whole check "cost about $0.05", which was only treg's share. OpenCompany does not record the token use of an agent that runs on Temporal: `token_usage_metrics` had no rows for this run, so the $2.41 appears nowhere in the app.
+The agent said the whole check "cost about $0.05", which was only treg's share. At the time OpenCompany did not record the token use of an agent that runs on Temporal: `token_usage_metrics` had no rows for this run, so the $2.41 appeared nowhere in the app. Since `3dd89528` (2026-11-18) every agent step books a priced row there. The agent itself is still told nothing about its model cost.
 
 ## Why 9 reels, not 11
 
@@ -157,16 +159,16 @@ So the gap most likely comes from the search plan. The agent looked only for cap
 
 ## Fixes
 
-| # | Fix | Saving on this run | Status on 2026-11-17 |
+| # | Fix | Saving on this run | State on 2026-11-19 |
 |---|---|---|---|
-| 1 | Shell tool: the description names the shells and the forms that work under each | the 142,013 tokens of failed steps | Done: `d2d3f525` with documentation bundle `fcbdaae1`, on local `main`, not pushed |
-| 2 | Prompt caching for Claude models, through OpenRouter and the native Anthropic API | about 73% of model cost | Open: nothing in `server/` sends `cache_control` |
-| 3 | treg node: save every answer to the workspace with a short preview, and have the tool description tell the model to pass `fields` and `max_items` | about 370,000 tokens | Open: answers under 20,000 characters still go inline, and the tool description mentions neither parameter |
-| 4 | Clear earlier messages' tool results when a new chat run starts, keeping the answers | about 355,000 tokens | Open: changes the rules that recorded runs replay under, so it needs `context_pressure_version` 2 (`server/services/temporal/agent_context_pressure.py` is at 1) |
-| 5 | Record the token use of agents on Temporal, and report model cost next to treg's | the true cost reaches the owner | Open: nothing under `server/services/temporal/` writes token usage |
+| 1 | Shell tool: the description names the shells and the forms that work under each | the 142,013 tokens of failed steps | Built: `d2d3f525`, on `origin/main` |
+| 2 | Prompt caching for Claude models, through OpenRouter and the native Anthropic API | about 73% of model cost | Built: `d6a656f7`, on `origin/main`. Claude requests carry a top-level `cache_control`, and OpenRouter's cache writes are read into usage. Not yet confirmed on a live run |
+| 3 | treg node: save every answer to the workspace with a short preview, and have the tool description tell the model to pass `fields` and `max_items` | about 370,000 tokens | Open: answers under 20,000 characters still go inline, and the tool description mentions neither parameter. The node's code has not changed since 2026-11-13 |
+| 4 | Clear earlier messages' tool results when a new chat run starts, keeping the answers | about 355,000 tokens | Open: it changes the rules that recorded runs replay under, so it needs `context_pressure_version` 2 (`server/services/temporal/agent_context_pressure.py` is still at 1) |
+| 5 | Record the token use of agents on Temporal, and report model cost next to treg's | the true cost reaches the owner | Built in part: `3dd89528` books a priced row for every agent step, and `4beeff31` prices OpenRouter models from the model registry, both on `origin/main`. The rows are summed per provider and model in the credentials panel's usage section. Nothing reports the model cost in the chat or to the agent |
 
 Notes for fixes 2 and 4:
-- **Recommended setup.** The Claude API documentation recommends, for agent loops, one cache breakpoint at the end of the system prompt plus automatic caching for the growing conversation.
+- **Recommended setup.** The Claude API documentation recommends, for agent loops, one cache breakpoint at the end of the system prompt plus automatic caching for the growing conversation. What was built is the automatic part alone, a top-level `cache_control`; the breakpoint after the system prompt was left out.
 - **Rewrites break the cache.** Rewriting an earlier message breaks the cache from that message on.
   - Clearing earlier results once at the start of a chat run (fix 4) costs one cache write per message.
   - The existing clearing over the transcript budget ([Agent Context Flow](../agent_context_flow.md#transcript-size-capped-results-cleared-old-results)) can run after any tool turn, and costs one cache write each time it does.

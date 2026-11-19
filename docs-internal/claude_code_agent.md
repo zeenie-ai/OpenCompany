@@ -28,6 +28,7 @@ This page is a **router**. The detail lives in the documents below — start her
 | Permission-mode semantics (`default` / `acceptEdits` / `plan` / `dontAsk` / `bypassPermissions`); why OpenCompany uses `dontAsk` | [claude_code_permission_modes_reference.md](./claude_code_permission_modes_reference.md) (snapshot) |
 | Headless / print mode (`claude -p`, `--output-format`, stream-json event schema) — the schema the pool parses off stdout | [claude_code_headless_reference.md](./claude_code_headless_reference.md) (snapshot) |
 | SKILL.md frontmatter spec, discovery paths, `context: fork` — what we materialise skills against | [claude_code_skills_reference.md](./claude_code_skills_reference.md) (snapshot) |
+| Can this agent use Claude Code's Code Mode (the `REPL` tool that runs model-written JavaScript)? | Not as it runs today: the pinned CLI (`package_version` in `server/config/ai_cli_providers.json`) predates the feature, and Anthropic limits it to a session in a terminal, which the pipe-driven pool is not. Read from the code and Anthropic's pages on 2026-11-19, never tried: [Code Mode digest](./research/dynamic-workflow/sources/06-claude-code-code-mode.md) and the [cross-reference, section 10.4](./research/dynamic-workflow/CROSS-REFERENCE.md#104-what-opencompany-has-today) (research) |
 
 The five `cli-reference` / `env-vars` / `permission-modes` / `headless` / `skills`
 documents are **verbatim snapshots** of code.claude.com docs (fetched 2026-05-11), kept so

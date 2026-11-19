@@ -2,7 +2,7 @@
 
 Possible defects and document drift that the gatherers met while mapping the code on 2026-11-12 (commit 908a8ce6). None of this was the task, and none of it was run: every item is read from code. "Lead check" says what the lead re-read. Items the gatherers marked INFERRED stay inferred until someone reproduces them.
 
-Nothing here is fixed or planned. It is a list to pick from.
+Nothing here was fixed or planned when it was written. It is a list to pick from. Ten of the sixteen possible defects were checked again on 2026-11-19; one has been fixed since ([Checked again on 2026-11-19](#checked-again-on-2026-11-19)).
 
 ## Possible defects
 
@@ -22,10 +22,29 @@ Nothing here is fixed or planned. It is a list to pick from.
 | 12 | The JS and TS executors accept a `timeout` up to 600 s, but the HTTP client to the sidecar has a fixed 30 s total timeout. | [analysis/05](analysis/05-code-execution-and-sandboxes.md), section 3.3 | Not re-read |
 | 13 | A lone `add_node` result from the Agent Builder (a saved tool the run lacks) may be skipped by the hot rebind whenever the calling agent's id is known. | [analysis/06](analysis/06-tools-plugins-and-graph-mutation.md), section 10 | Not re-read |
 | 14 | The Skill tool's "loaded" state is a dictionary in one process. It does not survive a restart or reach a second worker. | [analysis/06](analysis/06-tools-plugins-and-graph-mutation.md), section 4.9 | Not re-read |
-| 15 | No code was found that stores the token usage or cost of an agent run on the Temporal path; the usage is only returned. | [analysis/02](analysis/02-agent-loop-on-temporal.md), section 7.1 | Not re-read |
+| 15 | No code was found that stores the token usage or cost of an agent run on the Temporal path; the usage is only returned. | [analysis/02](analysis/02-agent-loop-on-temporal.md), section 7.1 | Fixed on 2026-11-18, see below |
 | 16 | Tool messages on the Temporal path carry no image blocks; only the in-process loop attaches them. | [analysis/02](analysis/02-agent-loop-on-temporal.md), section 4.6 | Not re-read |
 
 Already known and queued elsewhere: the Python code node runs on the event loop and never reads its timeout ([temporal_production_practices.md](../../temporal_production_practices.md), item 2); an oversized activity input fails the workflow task forever (the same note, item 3).
+
+### Checked again on 2026-11-19
+
+Checked at commit 092def0c, again from code only. Nothing was run.
+
+| # | Result |
+|---|---|
+| 1 | Still as described. No code moves a task from `blocked` to `queued`: outside the tests, the status is written only where a task is created, and read where tasks are listed, edited or cancelled |
+| 2 | Still as described for a failure that may be retried. `fail_task` in [agent_team.py](../../../server/services/agent_team.py) has since gained a `retryable` argument: with `retryable=False` the task fails at once and is not queued again |
+| 8 | Still as described. The prompt block is at [agent_activities.py:1705](../../../server/services/temporal/agent_activities.py#L1705) |
+| 9 | The pin is unchanged: `pydantic-monty==0.0.18` in [pyproject.toml](../../../server/pyproject.toml) |
+| 10 | Not read again, but the two files it rests on ([plugin/tool.py](../../../server/services/plugin/tool.py) and the canvas node) have not changed since 908a8ce6 |
+| 11 | Still as described: the call at [workflow.py:639](../../../server/services/temporal/workflow.py#L639) passes a 10-second timeout and no retry policy |
+| 12 | Not read again, but the two files it rests on ([_base.py](../../../server/nodes/code/_base.py) and [_nodejs.py](../../../server/nodes/code/_nodejs.py)) have not changed since 908a8ce6 |
+| 14 | Still as described. The only change to [skill_runtime.py](../../../server/services/skill_runtime.py) since 908a8ce6 is the wording of one error |
+| 15 | **Fixed** by `3dd89528` on 2026-11-18: every `agent.execute_llm_step` books a priced row in `token_usage_metrics` through `record_llm_usage` ([agent_activities.py:662](../../../server/services/temporal/agent_activities.py#L662)) |
+| 16 | Still as described: `image_blocks_from_tool_result` is called only by the in-process loop ([agent_runtime.py:440](../../../server/services/agent_runtime.py#L440)) |
+
+Items 3, 4, 5, 6, 7 and 13 were not checked again.
 
 ## Document drift
 
@@ -40,7 +59,7 @@ Each code map ends with a section that lists where a document and the code disag
 | [analysis/05](analysis/05-code-execution-and-sandboxes.md) | 9 | see the file |
 | [analysis/06](analysis/06-tools-plugins-and-graph-mutation.md) | 9 | 12 |
 
-The ones that touch [CLAUDE.md](../../../CLAUDE.md):
+The ones that touch [CLAUDE.md](../../../CLAUDE.md), all four still in it on 2026-11-19:
 
 - It says Turn on Talk and Apply are "each a restart on the saved graph" through `restart.py`. The code calls Safe Apply, and `restart_with_latest_graph` has no production caller ([analysis/04](analysis/04-deployment-control-and-durability-rules.md), section 8).
 - Its Task Trigger section shows completion going through `broadcaster.send_custom_event('task_completed')`. The code publishes through `dispatch.emit`, scoped to the workflow ([analysis/03](analysis/03-delegation-and-teams.md), section 9).

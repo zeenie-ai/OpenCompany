@@ -1,5 +1,7 @@
 # three.js weather app run: token cost and root causes (2026-11-17)
 
+> **Status: Historical analysis.** It describes one day's runs and the code at commit `493d8017`. Prompt caching, a cost record for every agent step, medium effort and four smaller fixes have been built since. [Fixes](#fixes) gives the state of each fix on 2026-11-19. Current behaviour is in [Native LLM SDK](../native_llm_sdk.md#prompt-caching), [Pricing Service](../pricing_service.md) and [Agent Context Flow](../agent_context_flow.md).
+
 On 2026-11-17 the owner asked the AI Assistant employee to put a weather check on a website, then to rebuild the site as a three.js scene. The model calls for that work cost about $10 on OpenRouter. This note answers two questions:
 
 - where those tokens went;
@@ -38,7 +40,7 @@ Five read-only investigations split the work: the cost ledger, what each request
 - **What it should have cost:**
   - with prompt caching alone: about **$2.51** for the three.js run and **$3.70** for the day;
   - a lean run of the same build (write the files once, one check, one deploy): $1.47 without caching, $0.83 with it.
-- **Fixes.** Ten, ranked by saving; none is built yet. Three of them were already open in the [treg reels run](treg-reels-run.md) note of 2026-11-13: prompt caching, recording agent token use, and trimming carried-over results.
+- **Fixes.** Ten, ranked by saving. None was built when this was written; by 2026-11-19 two are built and four are built in part ([Fixes](#fixes)). Three of them were already open in the [treg reels run](treg-reels-run.md) note of 2026-11-13: prompt caching, recording agent token use, and trimming carried-over results.
 
 ## The job
 
@@ -267,7 +269,7 @@ The native Anthropic provider sets no breakpoint either.
 - A write costs 1.25 times the input price for 5 minutes, or 2 times for an hour. A read costs $0.10 per million for Sonnet 5.5.
 
 **Two things to fix before, or with, caching:**
-- **The tool definitions are not byte-stable.** The day saw three versions, changing at 12:03 and 12:31 UTC, each at the start of a chat run. Each change reordered the same two lists inside the browser tool's schema (`ref.displayOptions.show.operation` and `selector.displayOptions.show.operation`), which looks like a set iterated in a new process. Tool definitions come first in the prompt, so any change misses every cache entry after it.
+- **The tool definitions are not byte-stable.** The day saw three versions, changing at 12:03 and 12:31 UTC, each at the start of a chat run. Each change reordered the same two lists inside the browser tool's schema (`ref.displayOptions.show.operation` and `selector.displayOptions.show.operation`). Tool definitions come first in the prompt, so any change misses every cache entry after it. The cause was confirmed on 2026-11-18: both fields built that list from `_TARGETED`, a set in `server/nodes/browser/browser/__init__.py`, and a set's order follows the process's hash seed, so it changed at every backend restart. `d6ff0d96` made it a tuple.
 - **The usage mapping is incomplete** (`server/services/llm/providers/openai.py:651-658`):
   - it reads cache reads (`prompt_tokens_details.cached_tokens`);
   - it never reads cache writes (`cache_write_tokens`);
@@ -331,7 +333,7 @@ The native Anthropic provider sets no breakpoint either.
 - Reasoning from before the newest owner message is not billed.
 - A 6-minute step would also let a 5-minute cache entry expire.
 
-**No output limit either.** Because of `omit_default_max_tokens`, no `max_tokens` is sent to OpenRouter. One step could emit up to the model's 128,000-token limit, about $1.28.
+**No output limit either.** Because of `omit_default_max_tokens`, no `max_tokens` is sent to OpenRouter. One step could emit up to the model's 128,000-token limit, about $1.28. The setting is deliberate. The owner chose it on 2026-11-04: OpenRouter holds a sent `max_tokens` as credit before the request runs, and that had refused requests while the account still had money.
 
 ### 5. A large fixed prefix on every call
 
@@ -407,13 +409,13 @@ So once caching is on, the next levers are reasoning and the compactions and cle
 
 ## Fixes
 
-Savings are for the three.js run unless a row says otherwise. "Alone" means applied to today's code; "after caching" means applied on top of fix 1. None of these is built yet.
+Savings are for the three.js run unless a row says otherwise. "Alone" means applied to the code at `493d8017`; "after caching" means applied on top of fix 1. The table is as written on 2026-11-17, when none of these was built, except that fix 3 no longer proposes a default `max_tokens`. [State on 2026-11-19](#state-on-2026-11-19) says what has been built since.
 
 | # | Fix | Saving | Effort | Notes |
 |---|---|---|---|---|
 | 1 | **Prompt caching** for Claude models through OpenRouter and the native Anthropic API: a top-level `cache_control` plus a breakpoint after the system prompt; read `cache_write_tokens` into usage | $7.60 to about $2.5 (-67%); day $10.74 to about $3.7 | Small | Make the tool definitions byte-stable first (sort or strip the browser schema's `displayOptions` lists). Runs inside the model activity, so Temporal replay is unaffected. Check one live request pair for `cached_tokens` above 0 |
 | 2 | **Record and show the cost:** a usage row per agent step on Temporal with OpenRouter's `usage.cost`; real OpenRouter prices in `server/config/pricing.json`; correct cache arithmetic in `server/services/pricing.py`; the cost of each chat run on the run or in the chat | None directly. The owner currently sees $0.19 of $10.74 | Small | Activity-side, replay-safe |
-| 3 | **Guard rails:** a per-run token or dollar cap that ends the run with a message; a generous `max_tokens` (32,000 to 64,000) for agent steps; an instruction to stop and report when a check cannot be verified or keeps failing | Up to the $3.14 loop, with a cap or rule set accordingly | Small to medium | A cap that stops the loop is a workflow decision: gate it with a value recorded at prepare time, as `context_pressure_version` is |
+| 3 | **Guard rails:** a per-run token or dollar cap that ends the run with a message; an instruction to stop and report when a check cannot be verified or keeps failing | Up to the $3.14 loop, with a cap or rule set accordingly | Small to medium | A cap that stops the loop is a workflow decision: gate it with a value recorded at prepare time, as `context_pressure_version` is |
 | 4 | **Prune by tokens on what is sent,** not stored bytes. At a compaction, replace older whole-file write contents with a stub (path and size; the file is on disk). Summarize once instead of clearing a few results every few turns | About $1.8 alone; $0.1 to $0.4 after caching | Medium | Needs `context_pressure_version` 2. Editing a past assistant turn invalidates later reasoning blocks on Sonnet 5.5, so make the edit only at a compaction, which rewrites the prompt anyway |
 | 5 | **Reasoning effort for agent steps,** for example `medium`, which Anthropic suggests for agentic coding; let the owner's Quick and Thorough choice reach OpenRouter models | $0.33 to $0.67 alone, assuming 30 to 60% less reasoning (not measured); $0.20 to $0.45 after caching | Small | The owner's decision. Check how OpenRouter maps effort for Sonnet 5.5 before relying on it |
 | 6 | **Trim the fixed prefix:** strip UI-only schema keys for every provider (this also fixes the reordering in fix 1); list only skills whose tools are connected; detach memory, treg and Skill from this employee if the owner agrees | About $0.76 alone; under $0.05 after caching | Small | Gemini already gets the stripped schema |
@@ -425,6 +427,23 @@ Savings are for the three.js run unless a row says otherwise. "Alone" means appl
 If caching cannot ship first, the order by saving is 4, 9, 6, then 5. Fixes 2 and 3 are needed either way.
 
 Stacked estimate for the three.js run: caching takes it to about $2.5, effort to about $2.1, and fixes 4 and 5 to about $1.6 to $1.7. Most of what remains is the output that writing a three.js app needs.
+
+### State on 2026-11-19
+
+Read from the commits and the code at `092def0c`. Commits up to `03327c5b` are on `origin/main`; `5b999018`, `d071e202` and `092def0c` are on local `main` only. The live check of caching and the cost rows was still open in the fix plan on this date.
+
+| # | State | What exists |
+|---|---|---|
+| 1 | Built | `d6a656f7`: Claude requests through Anthropic and OpenRouter carry a top-level `cache_control`, switched per model by `cache_control_models` in `server/config/llm_defaults.json`, and OpenRouter's cache writes are read into usage. `d6ff0d96` made the tool definitions byte-stable. The breakpoint after the system prompt was left out. Simulated the same way as the table above, the top-level field alone takes the three.js run to about $2.66 and the day to about $3.88 |
+| 2 | Built in part | `3dd89528` books a priced usage row for every agent step on Temporal. `4beeff31` prices OpenRouter models from the model registry, and `1d088817` fixed the cache arithmetic. The rows are summed per provider and model in the credentials panel's usage section. OpenRouter's own `usage.cost` is still not read, and no screen shows what one chat run cost |
+| 3 | Built in part | `5b999018`: the chat guide tells the answering agent to say what it could not check and ask the owner, not to build its own tools. No spend cap exists. The default `max_tokens` this row first proposed was withdrawn, because it conflicts with the 2026-11-04 decision described under root cause 4 |
+| 4 | Not built | Stubbing old file writes was set aside: with caching on it saves little, and it would drop stored reasoning. The duplicate copies in the stored transcript (root cause 2) are still there |
+| 5 | Built | `d071e202` and `092def0c`: every Claude 5.x model answers at medium effort unless the owner picks Quick or Thorough, on OpenRouter and on Anthropic's API |
+| 6 | Built in part | `7c62b691`: UI-only schema keys no longer reach any provider. The skill catalogue and this employee's unused tools are unchanged |
+| 7 | Built in part | `6157ef53`: a relative `cwd` resolves against the workspace for every agent. The browser's start failure is not traced, and the `fs_search` pattern syntax is not documented: neither piece of code has changed since `493d8017` |
+| 8 | Not built | |
+| 9 | Not built | `context_pressure_version` is still 1 |
+| 10 | The owner's files | `_tmp` was no longer in the workspace on 2026-11-18. The debug hook in `app.js` was not checked again |
 
 ## Data and method
 
@@ -456,7 +475,7 @@ Every source was only read. No request was sent to OpenRouter or Vercel for this
 4. Decode each row with the temporalio `History` message. Payloads are `json/plain`.
 5. For each `agent.execute_llm_step` event, `input[0]` holds `system_message`, `tools` and `messages`, and `result[0].usage` holds the token counts.
 
-The five investigation reports and their scripts are in a temporary folder of the session that wrote this note, and may be gone. The Temporal history may also be removed later, as happened to the 2026-11-13 run's history.
+The five investigation reports and their scripts were kept in a temporary folder and were deleted on 2026-11-18. The Temporal history may also be removed later, as happened to the 2026-11-13 run's history.
 
 Related: [Agent Context Flow](../agent_context_flow.md) describes the clearing and compaction rules, and [treg reels run](treg-reels-run.md) is the earlier analysis of the same employee.
 
