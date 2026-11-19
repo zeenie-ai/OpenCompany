@@ -23,15 +23,14 @@ from typing import Dict, Any
 from core.config import Settings
 from core.logging import get_logger, log_execution_time
 from services.auth import AuthService
-from services.pricing import get_pricing_service
 
 logger = get_logger(__name__)
 
 
 async def _track_maps_usage(
     node_id: str, action: str, resource_count: int = 1, workflow_id: str = None, session_id: str = "default"
-) -> Dict[str, float]:
-    """Track Google Maps API usage for cost calculation.
+) -> float:
+    """Record a Google Maps API call in ``api_usage_metrics``; returns its USD cost.
 
     Args:
         node_id: The node executing the Maps action
@@ -39,32 +38,17 @@ async def _track_maps_usage(
         resource_count: Number of resources (usually 1 per request)
         workflow_id: Optional workflow context
         session_id: Session for aggregation
-
-    Returns:
-        Cost breakdown dict with operation, unit_cost, resource_count, total_cost
     """
-    from services.plugin.deps import get_database
+    from services.usage import record_api_usage
 
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost("google_maps", action, resource_count)
-
-    # Save to database
-    db = get_database()
-    await db.save_api_usage_metric(
-        {
-            "session_id": session_id,
-            "node_id": node_id,
-            "workflow_id": workflow_id,
-            "service": "google_maps",
-            "operation": cost_data.get("operation", action),
-            "endpoint": action,
-            "resource_count": resource_count,
-            "cost": cost_data.get("total_cost", 0.0),
-        }
+    return await record_api_usage(
+        "google_maps",
+        action,
+        resource_count,
+        node_id=node_id,
+        session_id=session_id,
+        workflow_id=workflow_id,
     )
-
-    logger.debug(f"[Maps] Tracked usage: {action} x{resource_count} = ${cost_data.get('total_cost', 0):.6f}")
-    return cost_data
 
 
 class MapsService:

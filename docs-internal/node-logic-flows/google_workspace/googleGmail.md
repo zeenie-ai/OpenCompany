@@ -96,7 +96,7 @@ flowchart TD
   S3 --> V3{message_id?}
   V3 -- no --> Eret
   V3 -- yes --> R3[users.messages.get id=message_id]
-  R1 --> T[track_google_usage gmail -> save_api_usage_metric]
+  R1 --> T[track_google_usage gmail -> record_api_usage]
   L2 --> T
   R3 --> T
   T --> OUT[Return GmailOutput; BaseNode.execute serializes envelope]
@@ -112,7 +112,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: one row per API call in `api_usage_metrics` via `track_google_usage` (`_base.py`) -> `database.save_api_usage_metric` with `service='gmail'`, `endpoint=<action>`, `resource_count`, `cost` (always 0 for Google APIs).
+- **Database writes**: one row per API call in `api_usage_metrics` via `track_google_usage` (`_base.py`) -> `record_api_usage` (`services/usage`) with `service='gmail'`, `endpoint=<action>`, `resource_count`, `cost` (always 0 for Google APIs).
 - **Broadcasts**: none from the operation itself; `BaseNode.execute()` / the executor emit standard `node_status`.
 - **External API calls**: Gmail API v1 via `googleapiclient.discovery.build("gmail", "v1", creds)` - `users().messages().send/list/get`. Token refresh hits `https://oauth2.googleapis.com/token`.
 - **File I/O**: none.

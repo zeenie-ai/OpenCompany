@@ -169,7 +169,7 @@ class TestDeepLWireShape:
         assert route.called
 
     @respx.mock
-    async def test_provider_reported_billing_is_preferred(self, harness):
+    async def test_provider_reported_billing_is_preferred(self, harness, api_usage):
         """DeepL tells us what it billed; that beats counting input."""
         respx.post(self.URL).mock(
             return_value=httpx.Response(
@@ -178,14 +178,14 @@ class TestDeepLWireShape:
             )
         )
 
-        with patched_container(auth_api_keys=_KEYS), patched_pricing() as pricing:
+        with patched_container(auth_api_keys=_KEYS):
             await harness.execute(
                 "translateText",
                 {"provider": "deepl", "text": "short", "target_language": "de"},
             )
 
-        counts = [c.args[2] for c in pricing.calculate_api_cost.call_args_list]
-        assert 4242 in counts
+        api_usage.assert_awaited_once()
+        assert api_usage.await_args.args == ("deepl", "translate", 4242)
 
 
 class TestSarvamWireShape:

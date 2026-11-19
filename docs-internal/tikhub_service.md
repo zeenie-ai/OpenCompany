@@ -352,15 +352,14 @@ returns it) but a flat rate was the user's decision (2026-09-04) because
 the per-endpoint table changes independently of the SDK and would need
 its own refresh loop.
 
-`track_tikhub_usage(ctx, action, endpoint_path)` in `_sdk.py` is modelled
-on `track_twitter_usage` (`server/nodes/twitter/_base.py`):
-`get_pricing_service().calculate_api_cost("tikhub", action, 1)` then
-`get_database().save_api_usage_metric({session_id, node_id, workflow_id,
-service: "tikhub", operation, endpoint: <REST path>, resource_count: 1,
-cost})`, wrapped in `try/except -> logger.warning` (a metrics failure
-never fails a paid call that already succeeded). Called **only after a
+`track_tikhub_usage(ctx, action, endpoint_path)` in `_sdk.py` makes one
+call to `record_api_usage("tikhub", action, node_id=..., session_id=...,
+workflow_id=..., endpoint=<REST path>)` in the usage package
+(`server/services/usage/recording.py`), which prices the request, writes the
+`api_usage_metrics` row and never raises (a metrics failure never fails a
+paid call that already succeeded). Called **only after a
 successful call**, never for `list_endpoints` or `describe`, never after a 4xx/5xx
-(TikHub does not bill those either). Returns `total_cost` for the
+(TikHub does not bill those either). Returns the recorder's cost for the
 `cost_usd` output key. The `cost=` metadata on each `@Operation` is
 dormant - the manual tracker does the work, because the framework's
 cost hook fires per operation and cannot know whether the call was
@@ -447,8 +446,8 @@ when `tikhub` is missing. The plugin imports in a subprocess with
 `tikhub`. Probe 200 yields `ProbeResult.valid` + `extra["balance"]`;
 401 raises. Catalogue / assets present (`credential_providers.json`
 entry, `visuals.json` skill, `node_allowlist.json`, `SKILL.md`,
-`icon.svg`, `tikhub.svg`, `meta.json` colour). `save_api_usage_metric`
-awaited once with `service == "tikhub"` after a 2xx, not for
+`icon.svg`, `tikhub.svg`, `meta.json` colour). `record_api_usage`
+awaited once for `"tikhub"` after a 2xx, not for
 `list_endpoints`, not after a 4xx. Every skill endpoint id resolves.
 
 ## Live check (2026-11-13)

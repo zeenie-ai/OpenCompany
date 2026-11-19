@@ -98,7 +98,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_sheets'`.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `record_api_usage` (`services/usage`) with `service='google_sheets'`.
 - **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: Sheets API v4 - `spreadsheets().values().get/update/append`.
 - **File I/O**: none.

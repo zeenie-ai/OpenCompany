@@ -123,7 +123,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per API call via `track_google_usage` -> `save_api_usage_metric` with `service='google_tasks'`. The `list` branch DOES call `track_google_usage` (`resource_count = len(tasks)`).
+- **Database writes**: `api_usage_metrics` row per API call via `track_google_usage` -> `record_api_usage` (`services/usage`) with `service='google_tasks'`. The `list` branch DOES call `track_google_usage` (`resource_count = len(tasks)`).
 - **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: Tasks API v1 - `tasks().insert/list/get/update/delete`.
 - **File I/O**: none.

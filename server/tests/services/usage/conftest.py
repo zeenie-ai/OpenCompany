@@ -29,6 +29,12 @@ def prices(monkeypatch):
         "reasoning_cost": 0.0,
         "total_cost": 0.033,
     }
+    service.calculate_api_cost.return_value = {
+        "operation": "content_create",
+        "unit_cost": 0.01,
+        "resource_count": 1,
+        "total_cost": 0.01,
+    }
     monkeypatch.setattr(pricing, "get_pricing_service", lambda: service)
     return service
 

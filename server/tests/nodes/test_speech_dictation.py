@@ -14,14 +14,13 @@ import pytest
 
 from nodes.speech import _handlers
 
-from ._mocks import patched_container, patched_pricing
+from ._mocks import patched_container
 
 
 def database(owner: str = "") -> MagicMock:
     db = MagicMock(name="Database")
     # A saved workflow; with no owner, anyone (login off) may use it.
     db.get_workflow = AsyncMock(return_value=SimpleNamespace(data={"owner_id": owner} if owner else {}))
-    db.save_api_usage_metric = AsyncMock(return_value=None)
     return db
 
 
@@ -60,12 +59,25 @@ async def test_a_recording_becomes_text_and_is_deleted(workspace, monkeypatch):
     recording.write_bytes(b"webm-audio")
     transcribe = AsyncMock(return_value=SimpleNamespace(text="Send reminders for tomorrow", language="en", billed_units=None, billed_unit="seconds", duration_seconds=3.2))
     monkeypatch.setattr(_handlers._unifier, "transcribe", transcribe)
-    with patched_container(auth_api_keys={"openai": "sk-test"}, database=database()), patched_pricing():
+    with patched_container(auth_api_keys={"openai": "sk-test"}, database=database()):
         result = await _handlers.handle_transcribe_audio({"session_id": "wf", "path": "uploads/dictation-1.webm"}, None)
     assert result == {"success": True, "text": "Send reminders for tomorrow", "language": "en", "provider": "openai"}
     assert not recording.exists()
     call = transcribe.await_args.kwargs
     assert (call["provider"], call["api_key"], call["request"].audio, call["request"].filename) == ("openai", "sk-test", b"webm-audio", "dictation-1.webm")
+
+
+async def test_a_transcribed_recording_is_booked_by_its_length(workspace, monkeypatch, api_usage):
+    recording = workspace / "uploads" / "dictation-3.webm"
+    recording.write_bytes(b"webm-audio")
+    transcribe = AsyncMock(return_value=SimpleNamespace(text="Hello", language="en", billed_units=None, billed_unit="seconds", duration_seconds=3.2))
+    monkeypatch.setattr(_handlers._unifier, "transcribe", transcribe)
+    with patched_container(auth_api_keys={"openai": "sk-test"}, database=database()):
+        await _handlers.handle_transcribe_audio({"session_id": "wf", "path": "uploads/dictation-3.webm"}, None)
+
+    api_usage.assert_awaited_once()
+    assert api_usage.await_args.args == ("openai", "speech_to_text", 3.2)
+    assert api_usage.await_args.kwargs["workflow_id"] == "wf"
 
 
 @pytest.mark.parametrize("path, message", [("notes/dictation.webm", "uploaded"), ("uploads/missing.webm", "no longer there")])

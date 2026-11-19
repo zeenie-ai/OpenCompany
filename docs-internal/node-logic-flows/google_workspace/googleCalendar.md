@@ -122,7 +122,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_calendar'`.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `record_api_usage` (`services/usage`) with `service='google_calendar'`.
 - **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: Calendar API v3 - `events().insert/list/update/delete/get`. `sendUpdates` on create/update/delete drives email invitations/cancellations.
 - **File I/O**: none.

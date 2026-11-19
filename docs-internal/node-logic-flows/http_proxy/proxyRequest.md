@@ -86,7 +86,7 @@ flowchart TD
   J2 --> K
   J3 --> K
   K --> L[proxy_svc.report_result success=status<400]
-  L --> M[track_proxy_usage -> db.save_api_usage_metric]
+  L --> M[track_proxy_usage -> record_api_usage]
   M --> Lq{status >= 400?}
   Lq -- yes --> Lerr[raise NodeUserError HTTP status]
   Lq -- no --> N[return dict status/data/headers/url/method/provider/latency_ms/bytes/attempt]
@@ -115,7 +115,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: one row per attempt that returned a response in `api_usage_metrics` via `database.save_api_usage_metric` (called from `track_proxy_usage` in [`server/nodes/proxy/_usage.py`](../../../server/nodes/proxy/_usage.py)), with `service=proxy_<provider_name>` (or `proxy` when empty), `operation=proxy_request`, `cost` computed as `bytes / 1GB * cost_per_gb` from `config/pricing.json`.
+- **Database writes**: one row per attempt that returned a response in `api_usage_metrics` via `record_api_usage` in `services/usage` (called from `track_proxy_usage` in [`server/nodes/proxy/_usage.py`](../../../server/nodes/proxy/_usage.py)), with `service=proxy_<provider_name>` (or `proxy` when empty), `operation=proxy_request`, `cost` computed as `bytes / 1GB * cost_per_gb` from `config/pricing.json`.
 - **In-memory writes**: `proxy_svc.report_result(...)` mutates the provider's rolling history deque (length 100), which feeds `compute_score()`. The service also increments `_daily_spend_usd`.
 - **Broadcasts**: none.
 - **External API calls**: the target URL, tunneled through the selected proxy URL.

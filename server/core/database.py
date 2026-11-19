@@ -2667,37 +2667,6 @@ class Database:
             return False
 
     # ============================================================================
-    # API Usage Metrics (Twitter, Google Maps, etc.)
-    # ============================================================================
-
-    async def save_api_usage_metric(self, metric: Dict[str, Any]) -> bool:
-        """Save an API usage metric record.
-
-        Args:
-            metric: Dict with session_id, node_id, service, operation, endpoint, resource_count, cost
-        """
-        try:
-            from models.database import APIUsageMetric
-
-            async with self.get_session() as session:
-                entry = APIUsageMetric(
-                    session_id=metric.get("session_id", "default"),
-                    node_id=metric.get("node_id", ""),
-                    workflow_id=metric.get("workflow_id"),
-                    service=metric.get("service", ""),
-                    operation=metric.get("operation", ""),
-                    endpoint=metric.get("endpoint", ""),
-                    resource_count=metric.get("resource_count", 1),
-                    cost=metric.get("cost", 0.0),
-                )
-                session.add(entry)
-                await session.commit()
-                return True
-        except Exception as e:
-            logger.error("Failed to save API usage metric", error=str(e))
-            return False
-
-    # ============================================================================
     # Session Token State
     # ============================================================================
 

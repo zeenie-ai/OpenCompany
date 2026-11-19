@@ -235,8 +235,8 @@ flowchart TD
 - **Credentials**: `TikHubCredential` (`ApiKeyCredential`, id `tikhub`,
   bearer `Authorization`) resolved via `TikHubCredential.resolve(user_id=ctx.credential_customer_id)`;
   stored in `EncryptedAPIKey`. Modal probe: `GET /api/v1/tikhub/user/get_user_info`.
-- **Services**: `PricingService` (`api.tikhub` + `operation_map.tikhub`
-  in `pricing.json`), `Database.save_api_usage_metric`, option-loader
+- **Services**: `services.usage.record_api_usage` (priced by `PricingService`
+  from `api.tikhub` + `operation_map.tikhub` in `pricing.json`), option-loader
   registry (`tikhubEndpoints`), `services.media.write_media` (saved
   results).
 - **Python packages**: `tikhub>=2.2.0,<3` (imported lazily inside `_sdk.py`

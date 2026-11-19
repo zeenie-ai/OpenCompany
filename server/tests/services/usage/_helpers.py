@@ -22,6 +22,13 @@ async def model_rows(database) -> list:
         return result.scalars().all()
 
 
+async def api_rows(database) -> list:
+    """Every ``api_usage_metrics`` row, oldest first."""
+    async with database.get_session() as session:
+        result = await session.execute(select(APIUsageMetric).order_by(APIUsageMetric.id))
+        return result.scalars().all()
+
+
 async def add_model_call(database, **fields) -> None:
     """One ``token_usage_metrics`` row; ``fields`` override the defaults."""
     values = {"session_id": "wf", "node_id": "agent", "provider": "openai", "model": "gpt-a"}

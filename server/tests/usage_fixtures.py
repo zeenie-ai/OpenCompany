@@ -22,3 +22,14 @@ def llm_usage(monkeypatch):
     recorder = AsyncMock(return_value=dict(NO_COST))
     monkeypatch.setattr(services.usage, "record_llm_usage", recorder)
     return recorder
+
+
+@pytest.fixture
+def api_usage(monkeypatch):
+    """``services.usage.record_api_usage`` replaced by a mock that books
+    nothing and returns a cost of 0.0."""
+    import services.usage
+
+    recorder = AsyncMock(return_value=0.0)
+    monkeypatch.setattr(services.usage, "record_api_usage", recorder)
+    return recorder

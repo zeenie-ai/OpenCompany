@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, Tuple
 
-from core.logging import get_logger
 from services.media import coerce_file_param, read_media_bytes, resolve_media
 from services.media.inspect import inspect_audio
 from services.plugin import NodeContext, NodeUserError, coerce_blank_params  # noqa: F401
@@ -18,8 +17,6 @@ from . import _config as speech_config
 
 if TYPE_CHECKING:
     from services.gateway.routing import GatewayRoute
-
-logger = get_logger(__name__)
 
 
 def gateway_serves(provider: str) -> bool:
@@ -138,34 +135,16 @@ async def track_usage(
     """
     if units is None or units <= 0:
         return
-    try:
-        from services.plugin.deps import get_database
-        from services.pricing import get_pricing_service
+    from services.usage import record_api_usage
 
-        cost_data = get_pricing_service().calculate_api_cost(
-            provider, operation, units
-        )
-        await get_database().save_api_usage_metric(
-            {
-                "session_id": ctx.raw.get("session_id", "default"),
-                "node_id": ctx.node_id,
-                "workflow_id": ctx.workflow_id,
-                "service": provider,
-                "operation": cost_data.get("operation", operation),
-                "endpoint": operation,
-                "resource_count": units,
-                "cost": cost_data.get("total_cost", 0.0),
-            }
-        )
-    except Exception as exc:
-        # Cost attribution must never fail a workflow that already did the
-        # paid work.
-        logger.warning(
-            "failed to record speech usage",
-            provider=provider,
-            operation=operation,
-            error=str(exc),
-        )
+    await record_api_usage(
+        provider,
+        operation,
+        units,
+        node_id=ctx.node_id,
+        session_id=ctx.raw.get("session_id", "default"),
+        workflow_id=ctx.workflow_id,
+    )
 
 
 __all__ = [

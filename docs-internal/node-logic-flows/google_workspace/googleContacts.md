@@ -153,7 +153,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `save_api_usage_metric` with `service='google_contacts'`. `list` DOES call `track_google_usage`.
+- **Database writes**: `api_usage_metrics` row per call via `track_google_usage` -> `record_api_usage` (`services/usage`) with `service='google_contacts'`. `list` DOES call `track_google_usage`.
 - **Broadcasts**: none from the operation; executor emits standard `node_status`.
 - **External API calls**: People API v1 - `people().createContact/get/updateContact/deleteContact/searchContacts`, `people().connections().list`.
 - **File I/O**: none.

@@ -6,56 +6,38 @@ The pricing service provides centralized cost tracking for both LLM tokens and e
 
 - **LLM Token Costs**: Per-model pricing with input/output/cache/reasoning token breakdown
 - **API Service Costs**: Per-request/resource pricing for third-party APIs (Twitter/X, Google Maps, TikHub, Search APIs), and the provider's own reported charge where it gives one (treg)
-- **Tracking**: each plugin calls its own tracker after a paid call returns
+- **Tracking**: the usage package (`server/services/usage/`) books every call. A plugin calls it after a paid call returns, and every model call is booked through it
 
 ## Architecture
 
+Prices and usage are two services. `PricingService` knows what a call costs.
+The usage package records each call, asks `PricingService` for its price, and
+owns every read and write of the two usage tables. It imports no chat,
+employee, compaction or Temporal code.
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   Pricing Configuration                          │
-│                 server/config/pricing.json                       │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────┐    │
-│  │      llm      │  │      api      │  │   operation_map   │    │
-│  │    pricing    │  │    pricing    │  │                   │    │
-│  └───────────────┘  └───────────────┘  └───────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    PricingService                                │
-│                 server/services/pricing.py                       │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │ LLM Methods:                                                │ │
-│  │  - get_pricing(provider, model) → ModelPricing             │ │
-│  │  - calculate_cost(provider, model, tokens...) → cost dict  │ │
-│  │                                                             │ │
-│  │ API Methods:                                                │ │
-│  │  - get_api_price(service, operation) → USD                 │ │
-│  │  - map_action_to_operation(service, action) → operation    │ │
-│  │  - calculate_api_cost(service, action, count) → cost dict  │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-            ┌─────────────────┴─────────────────┐
-            ▼                                   ▼
-┌───────────────────┐                   ┌───────────────────┐
-│ Plugin trackers   │                   │  AI Service       │
-│ track_*_usage()   │                   │ _track_token_     │
-│ location/_service │                   │ usage() ai.py     │
-│ twitter/_base     │                   │                   │
-│ google/_base      │                   │                   │
-│ proxy/_usage      │                   │                   │
-└───────────────────┘                   └───────────────────┘
-            │                                   │
-            └─────────────────┬─────────────────┘
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Database Storage                            │
-│  ┌────────────────────────┐  ┌────────────────────────────────┐ │
-│  │   APIUsageMetric       │  │     TokenUsageMetric           │ │
-│  │   (twitter, maps)      │  │     (LLM token usage)          │ │
-│  └────────────────────────┘  └────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────┐        ┌───────────────────────────┐
+│ Plugins (paid API calls)  │        │ Model calls               │
+│ track_*_usage() helpers   │        │ agent step on Temporal    │
+│ twitter, google, maps,    │        │ CompactionService.track() │
+│ tikhub, treg, speech, ... │        │ summarizer, setup call    │
+└─────────────┬─────────────┘        └─────────────┬─────────────┘
+              │ record_api_usage()                 │ record_llm_usage()
+              └─────────────────┬──────────────────┘
+                                ▼
+┌────────────────────────────────────────────────────────────────┐
+│   Usage package: server/services/usage/                        │
+│   recording.py   prices a call and writes its row; never raises│
+│   summaries.py   what was recorded, added up                   │
+│   handlers.py    the WebSocket commands that read it           │
+└───────────────┬─────────────────────────────────┬──────────────┘
+                │ asks the price                  │ writes and reads
+                ▼                                 ▼
+┌───────────────────────────────┐  ┌─────────────────────────────┐
+│ PricingService                │  │ Database                    │
+│ server/services/pricing.py    │  │ api_usage_metrics           │
+│ reads config/pricing.json     │  │ token_usage_metrics         │
+└───────────────────────────────┘  └─────────────────────────────┘
 ```
 
 ## Configuration: pricing.json
@@ -221,39 +203,57 @@ pricing.reload()
 
 ## Tracking Pattern
 
-A plugin that makes a paid API call records it with its own tracking function, called after the call returns.
+A plugin that makes a paid API call books it after the call returns, with one
+call to `record_api_usage` in the usage package
+(`server/services/usage/recording.py`):
+
+```python
+from services.usage import record_api_usage
+
+cost = await record_api_usage(
+    "twitter",   # service: the pricing.json key
+    "tweet",     # action: operation_map turns it into a priced operation
+    1,           # count: how many units were billed
+    node_id=node_id,
+    session_id=context.get("session_id", "default"),
+    workflow_id=context.get("workflow_id"),
+)
+```
+
+It prices `count` units of the action, writes one `api_usage_metrics` row and
+returns the USD cost. Two optional arguments cover the plugins that need more:
+
+- `endpoint` says what was called when the action alone does not (TikHub's
+  REST path, treg's tool id). It is the action unless given.
+- `cost` is the provider's own charge, booked as given with no price lookup
+  (treg's reported charge, the proxy's per-GB cost).
+
+**It never raises.** The call it books already happened and was paid for, and
+callers act on an exception: the proxy node would send a paid request again, a
+retried tweet could post twice, and a mail trigger would drop the email it
+just read. A failed price or write is logged as a warning, and the cost
+returned is 0.0 when the price could not be read.
+
+Each plugin keeps a small helper of its own, so its operations do not repeat
+the service name or how the plugin reads its context. The helper imports the
+recorder inside its body, as the examples below do.
 
 ### Example: Maps Service
 
 ```python
 # server/nodes/location/_service.py
 
-async def _track_maps_usage(
-    node_id: str,
-    action: str,
-    resource_count: int = 1,
-    workflow_id: str = None,
-    session_id: str = "default"
-) -> Dict[str, float]:
-    """Track Google Maps API usage."""
-    from services.plugin.deps import get_database
+async def _track_maps_usage(node_id, action, resource_count=1, workflow_id=None, session_id="default") -> float:
+    from services.usage import record_api_usage
 
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost('google_maps', action, resource_count)
-
-    db = get_database()
-    await db.save_api_usage_metric({
-        'session_id': session_id,
-        'node_id': node_id,
-        'workflow_id': workflow_id,
-        'service': 'google_maps',
-        'operation': cost_data.get('operation', action),
-        'endpoint': action,
-        'resource_count': resource_count,
-        'cost': cost_data.get('total_cost', 0.0)
-    })
-
-    return cost_data
+    return await record_api_usage(
+        "google_maps",
+        action,
+        resource_count,
+        node_id=node_id,
+        session_id=session_id,
+        workflow_id=workflow_id,
+    )
 
 # Usage inside the maps plugins (server/nodes/location/{gmaps_locations,gmaps_nearby_places,...}):
     # ... API call ...
@@ -267,12 +267,17 @@ The Twitter plugins (`server/nodes/twitter/twitter_send`, `twitter_search`, `twi
 ```python
 # server/nodes/twitter/_base.py
 
-async def track_twitter_usage(node_id, action, resource_count, context):
-    # Same pattern as maps
-    from services.plugin.deps import get_database
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost('twitter', action, resource_count)
-    # ... save to database (reads session_id / workflow_id from `context`) ...
+async def track_twitter_usage(node_id, action, resource_count, context) -> float:
+    from services.usage import record_api_usage
+
+    return await record_api_usage(
+        "twitter",
+        action,
+        resource_count,
+        node_id=node_id,
+        session_id=context.get("session_id", "default"),
+        workflow_id=context.get("workflow_id"),
+    )
 
 # Usage (ctx_raw is the plugin's raw NodeContext dict):
 await track_twitter_usage(node_id, 'tweet', 1, ctx_raw)
@@ -281,24 +286,22 @@ await track_twitter_usage(node_id, 'search', len(tweets), ctx_raw)
 
 ### Example: Google Workspace Plugins
 
-The 6 Google service plugins (`server/nodes/google/{gmail,calendar,drive,sheets,tasks,contacts}`) plus `gmail_receive` call `track_google_usage()` on `server/nodes/google/_base.py`. Google Workspace APIs are free within rate limits, so this records resource counts at `cost=$0` for analytics; `service` must be the pricing key (`gmail`, `google_calendar`, `google_drive`, `google_sheets`, `google_tasks`, `google_contacts`), not the folder name.
+The 6 Google service plugins (`server/nodes/google/{gmail,calendar,drive,sheets,tasks,contacts}`) plus `gmail_receive` call `track_google_usage()` on `server/nodes/google/_base.py`, which books through `record_api_usage` under the service it is given. Google Workspace APIs are free within rate limits, so this records resource counts at `cost=$0` for analytics; `service` must be the pricing key (`gmail`, `google_calendar`, `google_drive`, `google_sheets`, `google_tasks`, `google_contacts`), not the folder name.
 
 ```python
 # server/nodes/google/_base.py
 
-async def track_google_usage(service, node_id, action, resource_count, context):
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost(service, action, resource_count)
-    # ... save to database ...
+async def track_google_usage(service, node_id, action, resource_count, context) -> float:
+    ...  # the Twitter helper with `service` in place of "twitter"
 ```
 
 ### Example: TikHub Plugin (flat per-request)
 
-TikHub prices each endpoint (most cost $0.001 a successful request, the `instagram_v2` family $0.002 and `instagram_v3` $0.008) and does not charge non-2xx responses. OpenCompany records a flat $0.001 for each billed request, a deliberate floor rather than TikHub's own figure: `server/nodes/scraper/tikhub_action/_sdk.py::track_tikhub_usage(ctx, action, endpoint_path)` records one `resource_count=1` metric only after a 2xx and never for the `list_endpoints` and `describe` operations, which spend nothing. It takes the `NodeContext` (not the raw dict), reads `session_id` / `workflow_id` from it, wraps everything in `try/except` + `logger.warning` so a metrics failure never fails a call that already cost money, and returns the USD figure for the node's `cost_usd` output key. `pricing.json` carries `api.tikhub` (`request` 0.001, `meta` 0.0) and `operation_map.tikhub` (`call` / `fetch_url` -> `request`, `account` -> `meta`); the credential entry sets `"usage_service": "tikhub"` so the spend shows in the Credentials modal usage table. See [tikhub_service.md](./tikhub_service.md).
+TikHub prices each endpoint (most cost $0.001 a successful request, the `instagram_v2` family $0.002 and `instagram_v3` $0.008) and does not charge non-2xx responses. OpenCompany records a flat $0.001 for each billed request, a deliberate floor rather than TikHub's own figure: `server/nodes/scraper/tikhub_action/_sdk.py::track_tikhub_usage(ctx, action, endpoint_path)` records one `resource_count=1` metric only after a 2xx and never for the `list_endpoints` and `describe` operations, which spend nothing. It takes the `NodeContext` (not the raw dict), reads `session_id` / `workflow_id` from it, books through `record_api_usage` with `endpoint` set to the REST path (the recorder never raises, so a metrics failure never fails a call that already cost money), and returns the USD figure for the node's `cost_usd` output key. `pricing.json` carries `api.tikhub` (`request` 0.001, `meta` 0.0) and `operation_map.tikhub` (`call` / `fetch_url` -> `request`, `account` -> `meta`); the credential entry sets `"usage_service": "tikhub"` so the spend shows in the Credentials modal usage table. See [tikhub_service.md](./tikhub_service.md).
 
 ### Example: treg Plugin (the provider's own charge)
 
-treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` writes one `resource_count=1` row with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. Like TikHub's tracker it never raises, and the credential entry sets `"usage_service": "treg"`. See [treg_service.md](./treg_service.md).
+treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` books one `resource_count=1` row through `record_api_usage(..., cost=<the charge>)`, with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. The recorder never raises, and the credential entry sets `"usage_service": "treg"`. See [treg_service.md](./treg_service.md).
 
 ### Example: Search Plugins (declarative cost)
 
@@ -381,21 +384,10 @@ class TokenUsageMetric(SQLModel, table=True):
 
 ### Writing and reading rows
 
-```python
-# Save API usage
-await db.save_api_usage_metric({
-    'session_id': 'default',
-    'node_id': 'twitter-1',
-    'service': 'twitter',
-    'operation': 'content_create',
-    'endpoint': 'tweet',
-    'resource_count': 1,
-    'cost': 0.01
-})
-```
-
-The summaries live in the usage package, `server/services/usage/`, which owns
-the reads of both usage tables:
+Rows are written only by the two recorders in
+`server/services/usage/recording.py`: `record_api_usage` (see Tracking
+Pattern) and `record_llm_usage` (see TokenUsageMetric). The summaries live in
+the same package, which owns the reads of both usage tables too:
 
 ```python
 from services.usage import api_usage_summary, provider_usage_summary
@@ -466,25 +458,19 @@ mounted anywhere and were deleted; the `get_pricing_config` / `save_pricing_conf
 ```python
 # server/nodes/<group>/<plugin>/_base.py (or the plugin __init__.py)
 
-async def track_new_service_usage(node_id, action, count=1, workflow_id=None, session_id="default"):
-    from services.plugin.deps import get_database
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost('new_service', action, count)
+async def track_new_service_usage(node_id, action, count=1, workflow_id=None, session_id="default") -> float:
+    from services.usage import record_api_usage
 
-    db = get_database()
-    await db.save_api_usage_metric({
-        'session_id': session_id,
-        'node_id': node_id,
-        'workflow_id': workflow_id,
-        'service': 'new_service',
-        'operation': cost_data.get('operation', action),
-        'endpoint': action,
-        'resource_count': count,
-        'cost': cost_data.get('total_cost', 0.0)
-    })
-    return cost_data
+    return await record_api_usage(
+        "new_service",
+        action,
+        count,
+        node_id=node_id,
+        session_id=session_id,
+        workflow_id=workflow_id,
+    )
 
-# Call inside the plugin's execute_op / operation method:
+# Call inside the plugin's operation method, after the paid call returned:
 await track_new_service_usage(node_id, 'get_data', len(results), workflow_id)
 ```
 
@@ -508,8 +494,7 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins — declarative `@Operation(cost={...})` (no `_track_search_usage`) |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost` metadata |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
-| `server/core/database.py` | `save_api_usage_metric()` |
-| `server/services/usage/recording.py` | `record_llm_usage()`: one `token_usage_metrics` row per model call |
+| `server/services/usage/recording.py` | `record_api_usage()` and `record_llm_usage()`: one usage row per call; neither raises |
 | `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()` |
 | `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` commands |
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |

@@ -209,7 +209,6 @@ def _build_mock_database() -> MagicMock:
     db.get_session.return_value.__aenter__ = AsyncMock(return_value=session)
     db.get_node_parameters = AsyncMock(return_value={})
     db.save_node_parameters = AsyncMock(return_value=None)
-    db.save_api_usage_metric = AsyncMock(return_value=None)
     db.read_chat_messages = AsyncMock(return_value=[])
     db.add_chat_message = AsyncMock(return_value=None)
     db.add_console_log = AsyncMock(return_value=None)

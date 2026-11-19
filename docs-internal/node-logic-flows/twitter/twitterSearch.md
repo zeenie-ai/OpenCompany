@@ -148,7 +148,7 @@ flowchart TD
 
 - **Database writes**: one `api_usage_metrics` row per non-empty search (op
   `search`, `resource_count=len(tweets)`) via `track_twitter_usage` ->
-  `database.save_api_usage_metric`.
+  `record_api_usage` (`services/usage`).
 - **Broadcasts**: none.
 - **External API calls**:
   - `GET https://api.twitter.com/2/tweets/search/recent` with `expansions=author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id`, `tweet_fields=author_id,created_at,entities,public_metrics,possibly_sensitive,lang,source,conversation_id,in_reply_to_user_id,referenced_tweets,note_tweet`, `media_fields=url,preview_image_url,type,alt_text,variants`, `user_fields=username,name,profile_image_url`.

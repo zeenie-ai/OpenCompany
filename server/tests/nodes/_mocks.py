@@ -97,7 +97,6 @@ def patched_container(
         db_mock = _ACTIVE_HARNESS_SERVICES["database"]
     else:
         db_mock = MagicMock(name="Database")
-        db_mock.save_api_usage_metric = AsyncMock(return_value=None)
         db_mock.get_node_parameters = AsyncMock(return_value={})
         db_mock.save_node_parameters = AsyncMock(return_value=None)
 

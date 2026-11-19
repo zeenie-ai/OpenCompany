@@ -149,7 +149,7 @@ server/services/
 ├── pricing.py               # LLM and API cost calculation (loads config/pricing.json)
 ├── usage/                   # Usage tracking: owns the two usage tables; imports no chat, employee,
 │   │                        # compaction or Temporal code (see pricing_service.md)
-│   ├── recording.py         # record_llm_usage: one token_usage_metrics row per model call; never raises
+│   ├── recording.py         # record_llm_usage / record_api_usage: one usage row per call; neither raises
 │   ├── summaries.py         # provider_usage_summary / api_usage_summary
 │   └── handlers.py          # The get_provider_usage_summary / get_api_usage_summary commands
 ├── markdown_formatter.py    # GFM markdown to platform-specific formatting (Telegram HTML, WhatsApp, plain)
@@ -1469,18 +1469,27 @@ Full reference — the `CompactionService` API, shared client-side compaction, t
 
 ## API Cost Tracking
 
-Centralized cost tracking for third-party API services (Twitter/X, Google Maps). See [Pricing Service](./docs-internal/pricing_service.md) for full documentation.
+Centralized cost tracking for third-party API services (Twitter/X, Google Maps, TikHub, treg, speech, translate, proxies). See [Pricing Service](./docs-internal/pricing_service.md) for full documentation.
 
 ### How a call is tracked
 
-A plugin calls its tracker after the paid call returns:
+Usage tracking is one package, [`server/services/usage/`](./server/services/usage/). It owns the two usage tables (`api_usage_metrics`, `token_usage_metrics`): the recorders, the summaries and the commands that read them. It imports no chat, employee, compaction or Temporal code, and nothing else writes those tables.
+
+A plugin books a paid call after it returns, through its own small helper, which makes one call to `record_api_usage`:
 ```python
 # server/nodes/twitter/_base.py (ctx_raw is the plugin's raw context dict)
 await track_twitter_usage(node_id, 'tweet', 1, ctx_raw)
 
-# server/nodes/location/_service.py
-await _track_maps_usage(node_id, 'geocode', 1, workflow_id, session_id)
+# which is
+from services.usage import record_api_usage
+
+await record_api_usage("twitter", action, resource_count, node_id=node_id,
+                       session_id=context.get("session_id", "default"), workflow_id=context.get("workflow_id"))
 ```
+
+`record_api_usage(service, action, count=1, *, node_id, session_id, workflow_id, endpoint=None, cost=None)` prices the call with `PricingService`, writes the row and returns the USD cost. `endpoint` says what was called when the action does not (TikHub's REST path, treg's tool id); `cost` is the provider's own charge, booked as given (treg, the proxy's per-GB cost).
+
+**A recorder never raises.** The call it books already happened and was paid for, and callers act on an exception: the proxy node would send a paid request again, a retried tweet could post twice, a mail trigger would drop the email it just read. A failed price or write is one warning in the log. Keep it that way, and import the recorder inside the function that calls it (`core.container` imports compaction at load, and a test replaces the name on the package).
 
 ### Pricing Configuration
 

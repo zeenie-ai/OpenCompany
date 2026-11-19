@@ -120,7 +120,7 @@ flowchart TD
 ## Side Effects
 
 - **Database writes**: one row per successful action in `api_usage_metrics` via
-  `track_twitter_usage` -> `database.save_api_usage_metric(...)` with
+  `track_twitter_usage` -> `record_api_usage(...)` (`services/usage`) with
   `service='twitter'` and `operation` from `PricingService.calculate_api_cost`.
   Action -> op name: `tweet`, `reply`, `quote`, `retweet`, `like`, `unlike`, `delete`.
 - **Broadcasts**: none from the handler.

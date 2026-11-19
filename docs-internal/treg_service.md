@@ -215,10 +215,11 @@ treg reports in each envelope what it charged. `_record_cost` in
 [`treg_action.py`](../server/nodes/treg/treg_action.py) records that
 figure; `pricing.json` has no treg entry.
 
-- One `save_api_usage_metric` row: `service: "treg"`,
-  `operation: "call"`, `endpoint` the tool id, `resource_count: 1`,
-  `cost` the charge in USD. It is written before the answer is saved, and
-  also when the call failed but was charged.
+- One `api_usage_metrics` row, booked through `record_api_usage`
+  (`server/services/usage/recording.py`) with treg's charge as its `cost`:
+  `service: "treg"`, `operation: "call"`, `endpoint` the tool id,
+  `resource_count: 1`, `cost` the charge in USD. It is written before the
+  answer is saved, and also when the call failed but was charged.
 - An asynchronous submission (a generation) reports `reserved_micro`, a
   hold treg settles when the task ends and refunds when it fails. The
   node records it as `operation: "task"` and returns it as `reserved_usd`,

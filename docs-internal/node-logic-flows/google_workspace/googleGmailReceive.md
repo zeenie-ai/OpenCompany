@@ -105,7 +105,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: one `api_usage_metrics` row via `save_api_usage_metric` per email processed (operation `receive`).
+- **Database writes**: one `api_usage_metrics` row via `track_google_usage` -> `record_api_usage` (`services/usage`) per email processed (operation `receive`).
 - **Broadcasts**: initial `update_node_status(node_id, "waiting", {...}, workflow_id=...)` via `get_status_broadcaster()`. Event dispatch via `event_waiter.dispatch('gmail_email_received', email_data)`.
 - **External API calls**: repeated `users().messages().list(q=query, maxResults=20)`, one `users().messages().get(format=full)` per new email, optional `users().messages().modify(removeLabelIds=['UNREAD'])`. Token refresh path as per shared helper.
 - **File I/O**: none.

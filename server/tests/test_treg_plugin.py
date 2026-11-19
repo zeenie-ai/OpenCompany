@@ -888,19 +888,8 @@ def _call_failed_with(status, result, **meta):
     return _failed(stdout=json.dumps(envelope), stderr="")
 
 
-@pytest.fixture
-def usage_rows(monkeypatch):
-    rows = []
-
-    class _Database:
-        async def save_api_usage_metric(self, row):
-            rows.append(row)
-            return True
-
-    import services.plugin.deps as plugin_deps
-
-    monkeypatch.setattr(plugin_deps, "get_database", lambda: _Database())
-    return rows
+# ``api_usage`` (tests/usage_fixtures.py) stands in for the usage recorder:
+# a call test takes it so nothing is written, and checks what was booked.
 
 
 def _call_params(**fields):
@@ -911,7 +900,7 @@ def _ceiling(argv):
     return next(arg for arg in argv if arg.startswith("--header=X-Treg-Route-Max-Cost:"))
 
 
-async def test_call_looks_the_tool_up_then_sends_the_catalog_s_method_ceiling_and_body(node_cli, usage_rows, tmp_path):
+async def test_call_looks_the_tool_up_then_sends_the_catalog_s_method_ceiling_and_body(node_cli, api_usage, tmp_path):
     calls = node_cli(_ok(GET_ANSWER), _call_ok({"organic": [{"title": "a"}]}, charged_micro=1000))
     out = await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "coffee", "gl": "us"}))
 
@@ -930,27 +919,18 @@ async def test_call_looks_the_tool_up_then_sends_the_catalog_s_method_ceiling_an
     assert call["timeout"] == treg_action_mod._CALL_TIMEOUT_SECONDS
     assert out["data"] == {"organic": [{"title": "a"}]}
     assert out["cost_usd"] == 0.001 and out["http_status"] == 200 and out["call_id"] == "c" * 32
-    assert usage_rows == [
-        {
-            "session_id": "default",
-            "node_id": "treg1",
-            "workflow_id": None,
-            "service": "treg",
-            "operation": "call",
-            "endpoint": "serper.web.search",
-            "resource_count": 1,
-            "cost": 0.001,
-        }
-    ]
+    api_usage.assert_awaited_once_with(
+        "treg", "call", node_id="treg1", session_id="default", workflow_id=None, endpoint="serper.web.search", cost=0.001
+    )
 
 
-async def test_an_unknown_tool_never_reaches_call(node_cli, usage_rows, tmp_path):
+async def test_an_unknown_tool_never_reaches_call(node_cli, api_usage, tmp_path):
     body = {"detail": {"error": "unknown endpoint", "did_you_mean": ["serper.web.search"]}}
     calls = node_cli(_failed(stdout=json.dumps(body), stderr=""))
     with pytest.raises(NodeUserError, match="unknown endpoint"):
         await TregActionNode().call(_node_ctx(tmp_path), _call_params())
     assert [call["argv"][0] for call in calls] == ["catalog"]
-    assert usage_rows == []
+    api_usage.assert_not_awaited()
 
 
 async def test_a_job_id_is_refused_before_any_call(node_cli, tmp_path):
@@ -960,21 +940,21 @@ async def test_a_job_id_is_refused_before_any_call(node_cli, tmp_path):
     assert len(calls) == 1
 
 
-async def test_no_amount_means_treg_did_not_bill(node_cli, usage_rows, tmp_path):
+async def test_no_amount_means_treg_did_not_bill(node_cli, api_usage, tmp_path):
     node_cli(_ok(GET_ANSWER), _call_ok({"ok": True}))
     out = await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "x"}))
     assert "cost_usd" not in out
-    assert usage_rows == []
+    api_usage.assert_not_awaited()
 
 
-async def test_a_free_call_costs_zero_and_writes_no_row(node_cli, usage_rows, tmp_path):
+async def test_a_free_call_costs_zero_and_writes_no_row(node_cli, api_usage, tmp_path):
     node_cli(_ok(GET_ANSWER), _call_ok({"ok": True}, charged_micro=0))
     out = await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "x"}))
     assert out["cost_usd"] == 0
-    assert usage_rows == []
+    api_usage.assert_not_awaited()
 
 
-async def test_a_large_answer_goes_to_the_workspace(node_cli, usage_rows, tmp_path):
+async def test_a_large_answer_goes_to_the_workspace(node_cli, api_usage, tmp_path):
     big = {"items": [{"text": "x" * 1000} for _ in range(40)]}
     node_cli(_ok(GET_ANSWER), _call_ok(big, charged_micro=1000))
     out = await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "x"}))
@@ -984,7 +964,7 @@ async def test_a_large_answer_goes_to_the_workspace(node_cli, usage_rows, tmp_pa
     assert "data" not in out
 
 
-async def test_the_cost_is_recorded_even_when_saving_the_answer_fails(node_cli, usage_rows):
+async def test_the_cost_is_recorded_even_when_saving_the_answer_fails(node_cli, api_usage):
     from services.plugin import NodeContext
 
     big = {"items": [{"text": "x" * 1000} for _ in range(40)]}
@@ -993,10 +973,10 @@ async def test_the_cost_is_recorded_even_when_saving_the_answer_fails(node_cli, 
     with pytest.raises(NodeUserError) as raised:
         await TregActionNode().call(no_workspace, _call_params(params={"q": "x"}))
     assert "c" * 32 in str(raised.value)
-    assert [row["cost"] for row in usage_rows] == [0.0025]
+    assert [booked.kwargs["cost"] for booked in api_usage.await_args_list] == [0.0025]
 
 
-async def test_a_binary_answer_is_saved_as_a_file(node_cli, usage_rows, tmp_path):
+async def test_a_binary_answer_is_saved_as_a_file(node_cli, api_usage, tmp_path):
     audio = b"ID3\x04fake-mp3"
     answer = {"base64": __import__("base64").b64encode(audio).decode("ascii"), "content_type": "audio/mpeg"}
     node_cli(_ok(GET_ANSWER), _call_ok(answer, charged_micro=15000))
@@ -1006,7 +986,7 @@ async def test_a_binary_answer_is_saved_as_a_file(node_cli, usage_rows, tmp_path
     assert saved.suffix == ".mp3"
 
 
-async def test_a_task_reports_its_reservation_and_how_to_check_it(node_cli, usage_rows, tmp_path):
+async def test_a_task_reports_its_reservation_and_how_to_check_it(node_cli, api_usage, tmp_path):
     endpoint = json.loads(json.dumps(GET_ANSWER))
     endpoint["endpoint"]["async"] = {
         "id_from": "data.task_id",
@@ -1027,30 +1007,30 @@ async def test_a_task_reports_its_reservation_and_how_to_check_it(node_cli, usag
         "result_path": "data.output.video",
         "interval_seconds": 10,
     }
-    assert [(row["operation"], row["cost"]) for row in usage_rows] == [("task", 0.25)]
+    assert [(booked.args[1], booked.kwargs["cost"]) for booked in api_usage.await_args_list] == [("task", 0.25)]
 
 
-async def test_a_charged_failure_is_recorded_and_reported(node_cli, usage_rows, tmp_path):
+async def test_a_charged_failure_is_recorded_and_reported(node_cli, api_usage, tmp_path):
     body = {"detail": {"error": "route_failed", "message": "every provider failed", "charged_micro": 400}}
     node_cli(_ok(GET_ANSWER), _call_failed_with(502, body, charged_micro=400))
     with pytest.raises(NodeUserError) as raised:
         await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "x"}))
     assert "HTTP 502" in str(raised.value) and "every provider failed" in str(raised.value)
     assert "charged $0.0004" in str(raised.value)
-    assert [row["cost"] for row in usage_rows] == [0.0004]
+    assert [booked.kwargs["cost"] for booked in api_usage.await_args_list] == [0.0004]
 
 
-async def test_a_low_balance_needs_the_owner(node_cli, usage_rows, tmp_path):
+async def test_a_low_balance_needs_the_owner(node_cli, api_usage, tmp_path):
     body = {"detail": {"error": "insufficient_balance", "balance_micro": 500, "estimated_cost_micro": 1200}}
     node_cli(_ok(GET_ANSWER), _call_failed_with(402, body, charged_micro=0))
     with pytest.raises(NodeUserError) as raised:
         await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "x"}))
     assert raised.value.requires_user_action is True
     assert "$0.0012" in str(raised.value) and "$0.0005" in str(raised.value)
-    assert usage_rows == []
+    api_usage.assert_not_awaited()
 
 
-async def test_a_call_over_the_ceiling_says_nothing_was_charged(node_cli, usage_rows, tmp_path):
+async def test_a_call_over_the_ceiling_says_nothing_was_charged(node_cli, api_usage, tmp_path):
     body = {"detail": {"error": "route_max_cost", "max_cost_micro": 1000, "estimated_cost_micro": 5000}}
     node_cli(_ok(GET_ANSWER), _call_failed_with(402, body, charged_micro=0))
     with pytest.raises(NodeUserError) as raised:
@@ -1068,7 +1048,7 @@ async def test_a_rejected_sign_in_points_at_credentials(node_cli, tmp_path):
     assert "Credentials" in raised.value.hint
 
 
-async def test_a_call_that_does_not_come_back_is_not_repeated(node_cli, usage_rows, tmp_path):
+async def test_a_call_that_does_not_come_back_is_not_repeated(node_cli, api_usage, tmp_path):
     calls = node_cli(_ok(GET_ANSWER), {"success": False, "error": "treg.exe timed out (200.0s)"})
     with pytest.raises(NodeUserError) as raised:
         await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "x"}))
@@ -1076,7 +1056,7 @@ async def test_a_call_that_does_not_come_back_is_not_repeated(node_cli, usage_ro
     assert [call["argv"][0] for call in calls] == ["catalog", "call"]
 
 
-async def test_a_model_cannot_raise_the_ceiling(node_cli, usage_rows, tmp_path):
+async def test_a_model_cannot_raise_the_ceiling(node_cli, api_usage, tmp_path):
     from services.plugin.base import restore_locked_fields
 
     calls = node_cli(_ok(GET_ANSWER), _call_ok({"ok": True}, charged_micro=1000))

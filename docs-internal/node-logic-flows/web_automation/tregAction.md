@@ -207,7 +207,7 @@ flowchart TD
   the Credentials modal (`treg_login` / `treg_status` / `treg_logout` in
   [`_handlers.py`](../../../server/nodes/treg/_handlers.py)).
 - **Services**: uv at run time (bundled in the desktop app; absent from the
-  default Docker image); `Database.save_api_usage_metric`;
+  default Docker image); `services.usage.record_api_usage`;
   `services.media.write_media`.
 - **Python packages**: none in the server; the CLI is `tools-registry==0.30.0`
   in its own uv tool environment.

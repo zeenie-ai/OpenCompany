@@ -14,7 +14,6 @@ import asyncio
 from typing import Any, Dict, Optional
 
 from core.logging import get_logger
-from services.pricing import get_pricing_service
 
 logger = get_logger(__name__)
 
@@ -29,27 +28,18 @@ async def track_twitter_usage(
     action: str,
     resource_count: int,
     context: Dict[str, Any],
-) -> Dict[str, float]:
-    """Record a Twitter API call in ``api_usage_metrics``."""
-    from services.plugin.deps import get_database
+) -> float:
+    """Record a Twitter API call in ``api_usage_metrics``; returns its USD cost."""
+    from services.usage import record_api_usage
 
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost("twitter", action, resource_count)
-
-    db = get_database()
-    await db.save_api_usage_metric(
-        {
-            "session_id": context.get("session_id", "default"),
-            "node_id": node_id,
-            "workflow_id": context.get("workflow_id"),
-            "service": "twitter",
-            "operation": cost_data.get("operation", action),
-            "endpoint": action,
-            "resource_count": resource_count,
-            "cost": cost_data.get("total_cost", 0.0),
-        }
+    return await record_api_usage(
+        "twitter",
+        action,
+        resource_count,
+        node_id=node_id,
+        session_id=context.get("session_id", "default"),
+        workflow_id=context.get("workflow_id"),
     )
-    return cost_data
 
 
 async def get_twitter_client():

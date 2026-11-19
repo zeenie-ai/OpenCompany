@@ -30,7 +30,7 @@ import httpx
 import pytest
 import respx
 
-from tests.nodes._mocks import patched_container, patched_pricing
+from tests.nodes._mocks import patched_container
 
 pytestmark = pytest.mark.node_contract
 
@@ -146,8 +146,15 @@ def no_retries(monkeypatch):
     monkeypatch.setattr(_sdk, "_MAX_RETRIES", 0)
 
 
-async def _execute(harness, params, *, keys=KEYS, total_cost=0.001, **kwargs):
-    with patched_container(auth_api_keys=keys), patched_pricing(total_cost=total_cost):
+@pytest.fixture(autouse=True)
+def tikhub_price(api_usage):
+    """Every billed request is booked at $0.001: the usage recorder's
+    stand-in (``tests/usage_fixtures.py``) returns that cost."""
+    api_usage.return_value = 0.001
+
+
+async def _execute(harness, params, *, keys=KEYS, **kwargs):
+    with patched_container(auth_api_keys=keys):
         return await harness.execute("tikhubAction", params, **kwargs)
 
 
@@ -417,7 +424,7 @@ class TestLargeResults:
         assert json.loads((tmp_path / payload["file"]["path"]).read_text(encoding="utf-8")) == data
 
     @respx.mock
-    async def test_usage_is_recorded_before_the_result_is_saved(self, harness):
+    async def test_usage_is_recorded_before_the_result_is_saved(self, harness, api_usage):
         # No workspace in the context: saving fails, but TikHub has already
         # billed the request, so the metric must exist.
         respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(200, json=_ok(_big())))
@@ -427,7 +434,7 @@ class TestLargeResults:
         harness.assert_envelope(result, success=False)
         assert result["error_type"] == "NodeUserError"
         assert "workspace" in result["error"].lower()
-        harness.database.save_api_usage_metric.assert_awaited_once()
+        api_usage.assert_awaited_once()
 
 
 class TestPreview:
@@ -790,7 +797,7 @@ class TestListEndpoints:
 
 class TestDescribe:
     @respx.mock
-    async def test_merges_tikhubs_documentation_into_the_sdk_signature(self, harness):
+    async def test_merges_tikhubs_documentation_into_the_sdk_signature(self, harness, api_usage):
         spec = respx.get(SPEC_URL).mock(return_value=httpx.Response(200, json=ONE_VIDEO_SPEC))
 
         # No key: the document is public.
@@ -823,7 +830,7 @@ class TestDescribe:
 
         assert spec.call_count == 1
         assert "Authorization" not in respx.calls.last.request.headers
-        harness.database.save_api_usage_metric.assert_not_awaited()
+        api_usage.assert_not_awaited()
 
     @respx.mock
     async def test_the_document_is_fetched_once(self, harness):
@@ -1249,46 +1256,43 @@ class TestCatalogueAndAssets:
 
 class TestUsageTracking:
     @respx.mock
-    async def test_call_records_one_metric_after_2xx(self, harness):
+    async def test_call_records_one_metric_after_2xx(self, harness, api_usage):
         respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(200, json=_ok({"x": 1})))
 
         result = await _execute(
             harness,
             {"operation": "call", "endpoint": "douyin_web.fetch_one_video", "params": {"aweme_id": "1"}},
-            total_cost=0.001,
         )
 
         harness.assert_envelope(result, success=True)
-        harness.database.save_api_usage_metric.assert_awaited_once()
-        metric = harness.database.save_api_usage_metric.await_args.args[0]
-        assert metric["service"] == "tikhub"
-        assert metric["resource_count"] == 1
-        assert metric["cost"] == 0.001
-        assert metric["workflow_id"] == "test_workflow"
-        assert metric["session_id"] == "test_session"
-        assert metric["node_id"]
-        assert "/api/v1/douyin/web/fetch_one_video" in str(metric.get("endpoint"))
+        api_usage.assert_awaited_once()
+        booked = api_usage.await_args
+        assert booked.args == ("tikhub", "call")
+        assert booked.kwargs["workflow_id"] == "test_workflow"
+        assert booked.kwargs["session_id"] == "test_session"
+        assert booked.kwargs["node_id"]
+        assert booked.kwargs["endpoint"] == "/api/v1/douyin/web/fetch_one_video"
         assert result["result"]["cost_usd"] == 0.001
 
     @respx.mock
-    async def test_fetch_url_records_metric(self, harness):
+    async def test_fetch_url_records_metric(self, harness, api_usage):
         respx.get(HYBRID_VIDEO_DATA).mock(return_value=httpx.Response(200, json=_ok({}, router="/api/v1/hybrid/video_data")))
 
         result = await _execute(harness, {"operation": "fetch_url", "url": "https://v.douyin.com/abc/"})
 
         harness.assert_envelope(result, success=True)
-        harness.database.save_api_usage_metric.assert_awaited_once()
-        assert harness.database.save_api_usage_metric.await_args.args[0]["service"] == "tikhub"
+        api_usage.assert_awaited_once()
+        assert api_usage.await_args.args == ("tikhub", "fetch_url")
 
-    async def test_list_endpoints_records_nothing(self, harness):
+    async def test_list_endpoints_records_nothing(self, harness, api_usage):
         with respx.mock:
             result = await _execute(harness, {"operation": "list_endpoints", "platform": "douyin"})
 
         harness.assert_envelope(result, success=True)
-        harness.database.save_api_usage_metric.assert_not_awaited()
+        api_usage.assert_not_awaited()
 
     @respx.mock
-    async def test_4xx_records_nothing(self, harness):
+    async def test_4xx_records_nothing(self, harness, api_usage):
         respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(402, json={"detail": "no balance"}))
 
         result = await _execute(
@@ -1297,12 +1301,13 @@ class TestUsageTracking:
         )
 
         harness.assert_envelope(result, success=False)
-        harness.database.save_api_usage_metric.assert_not_awaited()
+        api_usage.assert_not_awaited()
 
     @respx.mock
-    async def test_tracking_failure_never_fails_the_call(self, harness):
+    async def test_a_call_that_could_not_be_priced_still_answers(self, harness, api_usage):
+        # The recorder never raises; it returns 0.0 when the price is unknown.
         respx.get(FETCH_ONE_VIDEO).mock(return_value=httpx.Response(200, json=_ok({"x": 1})))
-        harness.database.save_api_usage_metric.side_effect = RuntimeError("db down")
+        api_usage.return_value = 0.0
 
         result = await _execute(
             harness,
@@ -1311,6 +1316,7 @@ class TestUsageTracking:
 
         harness.assert_envelope(result, success=True)
         assert result["result"]["data"] == {"x": 1}
+        assert result["result"]["cost_usd"] == 0.0
 
 
 # ============================================================================

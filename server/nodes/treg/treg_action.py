@@ -37,7 +37,6 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from core.logging import get_logger
 from services.media import write_media
 from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue, coerce_blank_params
 from services.plugin.approval import ApprovalSpec
@@ -48,9 +47,7 @@ from ._request import build_request, check_tool_id, parameters_of
 from ._result import RESULT_SUBDIR, deliver, preview_of
 from ._service import run_treg
 
-logger = get_logger(__name__)
-
-_SEARCH = {"displayOptions": {"show": {"operation": ["search"]}}}
+_SEARCH ={"displayOptions": {"show": {"operation": ["search"]}}}
 _TOOL = {"displayOptions": {"show": {"operation": ["describe", "call"]}}}
 _CALL = {"displayOptions": {"show": {"operation": ["call"]}}}
 
@@ -277,25 +274,19 @@ def _task(endpoint: Dict[str, Any], answer: Any) -> Optional[Dict[str, Any]]:
 
 async def _record_cost(ctx: NodeContext, tool_id: str, micro: int, operation: str) -> None:
     """One ``api_usage_metrics`` row for what treg charged (or reserved, for a
-    task). Never raises: the call is already paid for."""
-    try:
-        from services.plugin.deps import get_database
+    task). The recorder never raises: the call is already paid for."""
+    from services.usage import record_api_usage
 
-        raw = ctx.raw if isinstance(ctx.raw, dict) else {}
-        await get_database().save_api_usage_metric(
-            {
-                "session_id": ctx.session_id or raw.get("session_id", "default"),
-                "node_id": ctx.node_id,
-                "workflow_id": ctx.workflow_id or raw.get("workflow_id"),
-                "service": "treg",
-                "operation": operation,
-                "endpoint": tool_id[:100],
-                "resource_count": 1,
-                "cost": micro / 1_000_000,
-            }
-        )
-    except Exception as exc:  # noqa: BLE001 - recording must never fail a paid call
-        logger.warning("treg usage recording failed", tool_id=tool_id, error=str(exc))
+    raw = ctx.raw if isinstance(ctx.raw, dict) else {}
+    await record_api_usage(
+        "treg",
+        operation,
+        node_id=ctx.node_id,
+        session_id=ctx.session_id or raw.get("session_id", "default"),
+        workflow_id=ctx.workflow_id or raw.get("workflow_id"),
+        endpoint=tool_id[:100],
+        cost=micro / 1_000_000,
+    )
 
 
 def _call_failed(tool_id: str, status: Any, answer: Any, cost_usd: Optional[float]) -> NodeUserError:

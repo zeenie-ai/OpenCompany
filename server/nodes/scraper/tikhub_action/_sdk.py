@@ -538,32 +538,22 @@ async def track_tikhub_usage(ctx: NodeContext, action: str, endpoint_path: Optio
     """Record one billed TikHub request in ``api_usage_metrics``.
 
     Called only after a successful call (non-2xx is not billed by TikHub)
-    and never for ``list_endpoints``. Best-effort: a tracking failure logs a
-    warning and returns 0.0 rather than failing a call that already cost
-    money. Returns the computed USD cost for the ``cost_usd`` output key.
+    and never for ``list_endpoints``. The recorder never raises, so a
+    tracking failure cannot fail a call that already cost money; it returns
+    0.0 when the price could not be read. Returns the USD cost for the
+    ``cost_usd`` output key.
     """
-    try:
-        from services.plugin.deps import get_database
-        from services.pricing import get_pricing_service
+    from services.usage import record_api_usage
 
-        cost_data = get_pricing_service().calculate_api_cost("tikhub", action, 1)
-        raw = ctx.raw if isinstance(ctx.raw, dict) else {}
-        await get_database().save_api_usage_metric(
-            {
-                "session_id": ctx.session_id or raw.get("session_id", "default"),
-                "node_id": ctx.node_id,
-                "workflow_id": ctx.workflow_id or raw.get("workflow_id"),
-                "service": "tikhub",
-                "operation": cost_data.get("operation", action),
-                "endpoint": endpoint_path or action,
-                "resource_count": 1,
-                "cost": cost_data.get("total_cost", 0.0),
-            }
-        )
-        return float(cost_data.get("total_cost", 0.0) or 0.0)
-    except Exception as exc:  # noqa: BLE001 — tracking must never fail a billed call
-        logger.warning("tikhub usage tracking failed", action=action, error=str(exc))
-        return 0.0
+    raw = ctx.raw if isinstance(ctx.raw, dict) else {}
+    return await record_api_usage(
+        "tikhub",
+        action,
+        node_id=ctx.node_id,
+        session_id=ctx.session_id or raw.get("session_id", "default"),
+        workflow_id=ctx.workflow_id or raw.get("workflow_id"),
+        endpoint=endpoint_path or action,
+    )
 
 
 async def load_tikhub_endpoints(params: Dict[str, Any]) -> List[Dict[str, Any]]:

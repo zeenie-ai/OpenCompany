@@ -12,11 +12,11 @@ It depends on the price service, the models and a database session.
   ``main.py`` imports that module; importing this package registers nothing.
 
 Callers import a recorder inside the function that calls it
-(``from services.usage import record_llm_usage``), so the name is read when
+(``from services.usage import record_api_usage``), so the name is read when
 the call runs.
 """
 
-from .recording import record_llm_usage
+from .recording import record_api_usage, record_llm_usage
 from .summaries import api_usage_summary, provider_usage_summary
 
-__all__ = ["api_usage_summary", "provider_usage_summary", "record_llm_usage"]
+__all__ = ["api_usage_summary", "provider_usage_summary", "record_api_usage", "record_llm_usage"]

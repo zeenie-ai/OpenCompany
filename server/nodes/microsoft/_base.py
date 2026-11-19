@@ -20,7 +20,6 @@ import httpx
 
 from core.logging import get_logger
 from services.plugin import NodeUserError
-from services.pricing import get_pricing_service
 
 from ._auth_helper import ensure_fresh_microsoft_token
 
@@ -220,30 +219,21 @@ async def track_microsoft_usage(
     action: str,
     resource_count: int,
     context: Dict[str, Any],
-) -> Dict[str, float]:
-    """Record a Microsoft Graph call in ``api_usage_metrics``.
+) -> float:
+    """Record a Microsoft Graph call in ``api_usage_metrics``; returns its USD cost.
 
     ``action`` maps through ``pricing.json``'s ``microsoft_graph``
     operation_map (send / read / search / reply / create / update /
     delete / list). Graph is free at our tier — analytics bookkeeping,
     cost is $0.
     """
-    from services.plugin.deps import get_database
+    from services.usage import record_api_usage
 
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost("microsoft_graph", action, resource_count)
-
-    db = get_database()
-    await db.save_api_usage_metric(
-        {
-            "session_id": context.get("session_id", "default"),
-            "node_id": node_id,
-            "workflow_id": context.get("workflow_id"),
-            "service": "microsoft_graph",
-            "operation": cost_data.get("operation", action),
-            "endpoint": action,
-            "resource_count": resource_count,
-            "cost": cost_data.get("total_cost", 0.0),
-        }
+    return await record_api_usage(
+        "microsoft_graph",
+        action,
+        resource_count,
+        node_id=node_id,
+        session_id=context.get("session_id", "default"),
+        workflow_id=context.get("workflow_id"),
     )
-    return cost_data

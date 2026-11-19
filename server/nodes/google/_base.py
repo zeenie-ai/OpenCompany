@@ -3,7 +3,7 @@
 Every Google plugin follows the same pattern:
 
     creds -> googleapiclient.discovery.build(name, version) -> .execute()
-    track usage via pricing service -> return result
+    track usage (services.usage) -> return result
 
 These two helpers capture that boilerplate so each ``@Operation`` in a
 plugin shrinks to the API-specific call + argument shaping.
@@ -18,7 +18,6 @@ from googleapiclient.discovery import build
 
 from core.logging import get_logger
 from ._credentials import GoogleCredential
-from services.pricing import get_pricing_service
 
 logger = get_logger(__name__)
 
@@ -52,33 +51,24 @@ async def track_google_usage(
     action: str,
     resource_count: int,
     context: Dict[str, Any],
-) -> Dict[str, float]:
-    """Record a Google API call in ``api_usage_metrics``.
+) -> float:
+    """Record a Google API call in ``api_usage_metrics``; returns its USD cost.
 
     ``service`` must match a pricing-config key: ``gmail`` /
     ``google_calendar`` / ``google_drive`` / ``google_sheets`` /
     ``google_tasks`` / ``google_contacts``. Google APIs are free at our
     tier — this is analytics bookkeeping, cost is $0.
     """
-    from services.plugin.deps import get_database
+    from services.usage import record_api_usage
 
-    pricing = get_pricing_service()
-    cost_data = pricing.calculate_api_cost(service, action, resource_count)
-
-    db = get_database()
-    await db.save_api_usage_metric(
-        {
-            "session_id": context.get("session_id", "default"),
-            "node_id": node_id,
-            "workflow_id": context.get("workflow_id"),
-            "service": service,
-            "operation": cost_data.get("operation", action),
-            "endpoint": action,
-            "resource_count": resource_count,
-            "cost": cost_data.get("total_cost", 0.0),
-        }
+    return await record_api_usage(
+        service,
+        action,
+        resource_count,
+        node_id=node_id,
+        session_id=context.get("session_id", "default"),
+        workflow_id=context.get("workflow_id"),
     )
-    return cost_data
 
 
 async def run_sync(fn):
