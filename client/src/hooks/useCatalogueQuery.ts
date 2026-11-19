@@ -157,7 +157,8 @@ export interface ServerProviderConfig {
   instructions?: string;
   has_defaults?: boolean;
   has_rate_limits?: boolean;
-  usage_service?: string;
+  /** The services this connector's nodes book their calls under (pricing.json keys). */
+  usage_services?: string[];
   /** Server-resolved: whether a key/token is stored in the credentials DB. */
   stored?: boolean;
   /** Connected account identifier (email or display name) for OAuth providers. */

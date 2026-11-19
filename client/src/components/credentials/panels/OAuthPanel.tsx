@@ -62,7 +62,7 @@ const OAuthPanel: React.FC<CredentialPanelProps> = ({
         onLogout={() => panel.actions.oauthLogout()}
         onRefresh={() => panel.actions.oauthRefresh()}
         extraSection={
-          showTechnicalSections && config.usageService && <ApiUsageSection service={config.usageService} serviceName={config.name} />
+          showTechnicalSections && config.usageServices && <ApiUsageSection services={config.usageServices} serviceName={config.name} />
         }
       />
     </div>

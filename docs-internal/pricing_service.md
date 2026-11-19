@@ -297,11 +297,11 @@ async def track_google_usage(service, node_id, action, resource_count, context) 
 
 ### Example: TikHub Plugin (flat per-request)
 
-TikHub prices each endpoint (most cost $0.001 a successful request, the `instagram_v2` family $0.002 and `instagram_v3` $0.008) and does not charge non-2xx responses. OpenCompany records a flat $0.001 for each billed request, a deliberate floor rather than TikHub's own figure: `server/nodes/scraper/tikhub_action/_sdk.py::track_tikhub_usage(ctx, action, endpoint_path)` records one `resource_count=1` metric only after a 2xx and never for the `list_endpoints` and `describe` operations, which spend nothing. It takes the `NodeContext` (not the raw dict), reads `session_id` / `workflow_id` from it, books through `record_api_usage` with `endpoint` set to the REST path (the recorder never raises, so a metrics failure never fails a call that already cost money), and returns the USD figure for the node's `cost_usd` output key. `pricing.json` carries `api.tikhub` (`request` 0.001, `meta` 0.0) and `operation_map.tikhub` (`call` / `fetch_url` -> `request`, `account` -> `meta`); the credential entry sets `"usage_service": "tikhub"` so the spend shows in the Credentials modal usage table. See [tikhub_service.md](./tikhub_service.md).
+TikHub prices each endpoint (most cost $0.001 a successful request, the `instagram_v2` family $0.002 and `instagram_v3` $0.008) and does not charge non-2xx responses. OpenCompany records a flat $0.001 for each billed request, a deliberate floor rather than TikHub's own figure: `server/nodes/scraper/tikhub_action/_sdk.py::track_tikhub_usage(ctx, action, endpoint_path)` records one `resource_count=1` metric only after a 2xx and never for the `list_endpoints` and `describe` operations, which spend nothing. It takes the `NodeContext` (not the raw dict), reads `session_id` / `workflow_id` from it, books through `record_api_usage` with `endpoint` set to the REST path (the recorder never raises, so a metrics failure never fails a call that already cost money), and returns the USD figure for the node's `cost_usd` output key. `pricing.json` carries `api.tikhub` (`request` 0.001, `meta` 0.0) and `operation_map.tikhub` (`call` / `fetch_url` -> `request`, `account` -> `meta`); the credential entry sets `"usage_services": ["tikhub"]` so the spend shows in the Credentials modal usage table. See [tikhub_service.md](./tikhub_service.md).
 
 ### Example: treg Plugin (the provider's own charge)
 
-treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` books one `resource_count=1` row through `record_api_usage(..., cost=<the charge>)`, with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. The recorder never raises, and the credential entry sets `"usage_service": "treg"`. See [treg_service.md](./treg_service.md).
+treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` books one `resource_count=1` row through `record_api_usage(..., cost=<the charge>)`, with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. The recorder never raises, and the credential entry sets `"usage_services": ["treg"]`. See [treg_service.md](./treg_service.md).
 
 ### `@Operation(cost=...)` records nothing
 
@@ -416,6 +416,16 @@ The credentials modal displays usage statistics through two section components, 
 
 const { getAPIUsageSummary, getProviderUsageSummary } = useApiKeys();
 ```
+
+A connector's card shows the API section when its catalogue entry
+(`server/config/credential_providers.json`) lists `usage_services`, the
+service names its nodes book under. `ApiUsageSection` reads every service's
+summary and adds up the listed ones. Most connectors list one service; Google
+Workspace lists six (`gmail`, `google_calendar`, `google_drive`,
+`google_sheets`, `google_tasks`, `google_contacts`), because each of its nodes
+books under its own pricing key. A test
+(`tests/test_credential_catalogue_consumer_fields.py`) fails when a connector
+lists a name nothing books under.
 
 **Both render precomputed costs, never the pricing config.** `get_api_usage_summary` is a
 `SUM(APIUsageMetric.cost)` GROUP BY, and the `cost` column was calculated at write time by

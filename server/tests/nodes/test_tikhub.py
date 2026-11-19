@@ -1192,7 +1192,7 @@ class TestCatalogueAndAssets:
         assert entry["name"] == "TikHub"
         assert entry["kind"] == "apiKey"
         assert entry["category"] == "scrapers"
-        assert entry["usage_service"] == "tikhub"
+        assert entry["usage_services"] == ["tikhub"]
         assert entry["icon_ref"] == "/api/schemas/credentials/tikhub/icon"
         assert "validate_as" not in entry
         field = entry["fields"][0]

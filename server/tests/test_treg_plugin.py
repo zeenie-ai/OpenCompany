@@ -1126,7 +1126,7 @@ def test_catalogue_card_is_a_cli_sign_in():
     assert provider["ws"] == {"login": "treg_login", "logout": "treg_logout", "status": "treg_status"}
     # No fields: nothing is typed in, and a required one would disable Login.
     assert "fields" not in provider
-    assert provider["usage_service"] == "treg"
+    assert provider["usage_services"] == ["treg"]
     assert provider["consumer_category"] == "research"
     assert provider["icon_ref"] == "/api/schemas/credentials/treg/icon"
 

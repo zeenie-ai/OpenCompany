@@ -171,7 +171,7 @@ which a CLI sign-in never stores).
 
 The `treg` entry in `credential_providers.json` is `kind: "oauth"` with
 `ws: {login: "treg_login", status: "treg_status", logout: "treg_logout"}`,
-`consumer_category: "research"` and `usage_service: "treg"`, so Dev mode
+`consumer_category: "research"` and `usage_services: ["treg"]`, so Dev mode
 shows the node's `api_usage_metrics` rows on the card.
 
 ## Calls

@@ -12,6 +12,9 @@ IMAP/SMTP account's keys).
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from services import credential_registry as registry_module
@@ -19,6 +22,14 @@ from services.credential_registry import CredentialRegistry, provider_connection
 from services.status_broadcaster import get_status_broadcaster
 
 MAX_DESCRIPTION = 90
+PRICING_JSON = Path(__file__).resolve().parents[1] / "config" / "pricing.json"
+
+
+def booked_services() -> set:
+    """The service names a plugin books its paid calls under: every service
+    ``pricing.json`` prices, and treg, which books treg's own charge."""
+    priced = json.loads(PRICING_JSON.read_text(encoding="utf-8"))["api"]
+    return {name for name in priced if not name.startswith("_")} | {"treg"}
 
 
 @pytest.fixture()
@@ -83,6 +94,33 @@ class TestCatalogueFields:
             publisher = provider.get("publisher")
             assert isinstance(publisher, str) and publisher.strip(), provider["id"]
             assert isinstance(provider.get("verified"), bool), provider["id"]
+
+    def test_a_connector_lists_usage_services_its_nodes_book_under(self, registry):
+        """The API usage section adds up the rows of the services a connector
+        lists, so a name nothing books under shows no usage. Google Workspace
+        once listed ``google_workspace`` while its nodes booked ``gmail``,
+        ``google_calendar`` and the rest."""
+        booked = booked_services()
+        listing = [provider for provider in registry.get_all_providers() if "usage_services" in provider]
+        assert listing
+        for provider in listing:
+            services = provider["usage_services"]
+            assert isinstance(services, list) and services, provider["id"]
+            assert set(services) <= booked, provider["id"]
+
+    def test_google_workspace_lists_the_service_of_each_of_its_nodes(self, registry):
+        assert registry.get_provider("google")["usage_services"] == [
+            "gmail",
+            "google_calendar",
+            "google_drive",
+            "google_sheets",
+            "google_tasks",
+            "google_contacts",
+        ]
+
+    def test_no_connector_uses_the_single_usage_service_key(self, registry):
+        for provider in registry.get_all_providers():
+            assert "usage_service" not in provider, provider["id"]
 
     def test_every_credential_class_has_a_catalogue_entry(self, registry):
         """A credential with no catalogue entry has no screen that can store

@@ -1,6 +1,11 @@
 /**
- * ApiUsageSection — generic API call stats for external services.
- * Used by Twitter, Google Workspace, Google Maps panels.
+ * ApiUsageSection — API call stats for a connector's external services.
+ * Used by Twitter, Google Workspace, Google Maps, TikHub and treg panels.
+ *
+ * A connector lists the services its nodes book their calls under
+ * (`usage_services` in credential_providers.json). Most list one; Google
+ * Workspace lists six (gmail, google_calendar, ...), and the section adds
+ * them up.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -18,30 +23,65 @@ import {
 import { useApiKeys, type APIUsageSummary } from '../../../hooks/useApiKeys';
 
 interface Props {
-  service: string;
+  /** The services whose calls this connector's nodes book. */
+  services: string[];
   serviceName: string;
 }
 
-const ApiUsageSection: React.FC<Props> = ({ service, serviceName }) => {
+interface OperationRow {
+  service: string;
+  operation: string;
+  resourceCount: number;
+  totalCost: number;
+}
+
+interface Totals {
+  totalCost: number;
+  executionCount: number;
+  totalResources: number;
+  operations: OperationRow[];
+}
+
+/** The listed services added up; null when none has recorded a call. */
+function addUp(summaries: APIUsageSummary[], services: string[]): Totals | null {
+  const mine = summaries.filter((summary) => services.includes(summary.service));
+  if (mine.length === 0) return null;
+  const totals: Totals = { totalCost: 0, executionCount: 0, totalResources: 0, operations: [] };
+  for (const summary of mine) {
+    totals.totalCost += summary.total_cost;
+    totals.executionCount += summary.execution_count;
+    totals.totalResources += summary.total_resources;
+    for (const operation of summary.operations) {
+      totals.operations.push({
+        service: summary.service,
+        operation: operation.operation,
+        resourceCount: operation.resource_count,
+        totalCost: operation.total_cost,
+      });
+    }
+  }
+  return totals;
+}
+
+const ApiUsageSection: React.FC<Props> = ({ services, serviceName }) => {
   const { getAPIUsageSummary, isConnected } = useApiKeys();
-  const [data, setData] = useState<APIUsageSummary | null>(null);
+  const [data, setData] = useState<Totals | null>(null);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!isConnected) return;
     setLoading(true);
     try {
-      const services = await getAPIUsageSummary(service);
-      setData(services.find((s) => s.service === service) ?? null);
+      setData(addUp(await getAPIUsageSummary(), services));
     } finally {
       setLoading(false);
     }
-  }, [isConnected, service, getAPIUsageSummary]);
+  }, [isConnected, services, getAPIUsageSummary]);
 
   useEffect(() => { load(); }, [load]);
 
   const costBadge = data ? (
-    <Badge variant="success">${data.total_cost.toFixed(4)}</Badge>
+    <Badge variant="success">${data.totalCost.toFixed(4)}</Badge>
   ) : null;
 
   return (
@@ -67,12 +107,12 @@ const ApiUsageSection: React.FC<Props> = ({ service, serviceName }) => {
           ) : (
             <div className="flex w-full flex-col gap-4">
               <div className="flex flex-wrap gap-4">
-                <Stat label="Total Cost" value={`$${data.total_cost.toFixed(4)}`} className="text-success" />
-                <Stat label="API Calls" value={data.execution_count} className="text-info" />
-                <Stat label="Resources" value={data.total_resources} className="text-primary" />
+                <Stat label="Total Cost" value={`$${data.totalCost.toFixed(4)}`} className="text-success" />
+                <Stat label="API Calls" value={data.executionCount} className="text-info" />
+                <Stat label="Resources" value={data.totalResources} className="text-primary" />
               </div>
 
-              {data.operations?.length > 0 && (
+              {data.operations.length > 0 && (
                 <div className="overflow-hidden rounded-md border border-border">
                   <div className="border-b border-border bg-muted px-3 py-1.5 text-xs font-semibold">
                     Operations Breakdown
@@ -80,13 +120,13 @@ const ApiUsageSection: React.FC<Props> = ({ service, serviceName }) => {
                   <div className="divide-y divide-border">
                     {data.operations.map((op) => (
                       <div
-                        key={op.operation}
+                        key={`${op.service}:${op.operation}`}
                         className="grid grid-cols-[1fr_auto] items-center gap-3 px-3 py-2 text-sm"
                       >
                         <code className="text-xs text-muted-foreground">{op.operation}</code>
                         <div className="flex items-center gap-1.5">
-                          <Badge variant="outline">{op.resource_count} resources</Badge>
-                          <Badge variant="success">${op.total_cost.toFixed(4)}</Badge>
+                          <Badge variant="outline">{op.resourceCount} resources</Badge>
+                          <Badge variant="success">${op.totalCost.toFixed(4)}</Badge>
                         </div>
                       </div>
                     ))}

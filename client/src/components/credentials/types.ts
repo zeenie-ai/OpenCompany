@@ -123,8 +123,9 @@ export interface ProviderConfig {
   hasDefaults?: boolean;
   /** Show WhatsApp rate limit configuration section. */
   hasRateLimits?: boolean;
-  /** Service key for API cost tracking section (twitter, google_workspace, google_maps). */
-  usageService?: string;
+  /** The services this connector's nodes book their calls under, for the API
+   *  usage section (twitter; gmail, google_calendar, ... for Google Workspace). */
+  usageServices?: string[];
   /** Server-resolved: whether a key/token exists in the credentials DB. */
   stored?: boolean;
   /** Connected account identifier (email or display name) for OAuth providers. */

@@ -214,7 +214,7 @@ const ApiKeyPanel: React.FC<CredentialPanelProps> = ({
 
       {showTechnicalSections && config.hasDefaults && <ProviderDefaultsSection providerId={config.id} />}
       {showTechnicalSections && config.hasDefaults && <LlmUsageSection providerId={config.id} providerName={config.name} />}
-      {showTechnicalSections && config.usageService && <ApiUsageSection service={config.usageService} serviceName={config.name} />}
+      {showTechnicalSections && config.usageServices && <ApiUsageSection services={config.usageServices} serviceName={config.name} />}
     </div>
   );
 };

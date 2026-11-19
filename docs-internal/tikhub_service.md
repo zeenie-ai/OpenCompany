@@ -63,7 +63,7 @@ server/nodes/scraper/
 ```
 
 Config touched outside the folder: `server/config/credential_providers.json`
-(`providers.tikhub`, category `scrapers`, `usage_service: "tikhub"`),
+(`providers.tikhub`, category `scrapers`, `usage_services: ["tikhub"]`),
 `server/config/pricing.json` (`api.tikhub` + `operation_map.tikhub`),
 `server/config/node_allowlist.json` (`tikhubAction` in `enabled_nodes`),
 `server/nodes/visuals.json` (`"tikhubAction": {"skill": "tikhub-skill"}`),
@@ -297,7 +297,7 @@ class TikHubCredential(ApiKeyCredential):
 Catalogue entry (`credential_providers.json`, same shape as `apify`, no
 `validate_as`): `kind: "apiKey"`, one required password field `apiKey`
 with placeholder "TikHub API key (user portal -> API keys)", icon ref
-`/api/schemas/credentials/tikhub/icon`, `usage_service: "tikhub"` so the
+`/api/schemas/credentials/tikhub/icon`, `usage_services: ["tikhub"]` so the
 API usage panel groups the rows.
 
 ## Error mapping - `raise_user_error(e, endpoint)`

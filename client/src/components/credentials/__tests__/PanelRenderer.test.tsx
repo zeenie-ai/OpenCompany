@@ -32,7 +32,7 @@ import { queryKeys } from '@/lib/queryConfig';
 
 const API: ProviderConfig = {
   id: 'first', name: 'First provider', category: 'ai', categoryLabel: 'AI',
-  color: '', kind: 'apiKey', iconRef: '', hasDefaults: true, usageService: 'first-api',
+  color: '', kind: 'apiKey', iconRef: '', hasDefaults: true, usageServices: ['first-api'],
   fields: [{ key: 'apiKey', label: 'API key', placeholder: 'Provider key', required: true, help: 'Create a key in your account.' }],
 };
 
@@ -95,7 +95,7 @@ describe('shared credential panel policy', () => {
 
     view.change(API, true);
     await waitFor(() => expect(mocks.getProviderDefaults).toHaveBeenCalledWith(API.id));
-    expect(mocks.getAPIUsageSummary).toHaveBeenCalledWith('first-api');
+    expect(mocks.getAPIUsageSummary).toHaveBeenCalledWith();
     expect(screen.getByRole('button', { name: 'Default Parameters' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Provider key')).toBe(field);
     expect(field).toHaveValue('draft-key');
