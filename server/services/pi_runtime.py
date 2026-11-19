@@ -38,6 +38,29 @@ def _resolve_pi_host() -> Path:
     raise _missing("Pi runtime assets are missing. Rebuild OpenCompany before running Coding Agent.")
 
 
+def resolve_pi_tool_host() -> Path:
+    """Locate the separate effect runner used by Pi's canvas tool nodes.
+
+    An older checkout may already contain the maintenance bundle but not the
+    tool bundle. Its installed, pinned SDK still permits running tool source.
+    Packaged installs have no source dependencies and must ship the new bundle.
+    """
+    try:
+        root = Path(__file__).resolve().parent.parent / "pi"
+        bundle = root / "dist" / "tool-host.js"
+        if bundle.is_file():
+            return bundle
+        source = root / "src" / "tool-host.ts"
+        package = root / "node_modules" / "@earendil-works" / "pi-coding-agent" / "package.json"
+        if source.is_file() and package.is_file():
+            metadata = json.loads(package.read_text(encoding="utf-8"))
+            if isinstance(metadata, dict) and metadata.get("version") == "1.1.0":
+                return source
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise _missing("Pi tool runtime assets are unreadable or incompatible. Rebuild OpenCompany.") from exc
+    raise _missing("Pi tool runtime assets are missing. Rebuild OpenCompany before using Pi tool nodes.")
+
+
 def pi_package_dir(host: Path) -> Path:
     """The folder the SDK reads its own package.json from (``PI_PACKAGE_DIR``)."""
     if host.suffix == ".ts":

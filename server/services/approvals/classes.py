@@ -100,6 +100,10 @@ CLASSES: Dict[str, str] = {
     "fileHandler": READ,
     "fileRead": READ,
     "fsSearch": READ,
+    "piRead": READ,
+    "piGrep": READ,
+    "piFind": READ,
+    "piLs": READ,
     "gallery": READ,
     "masterSkill": READ,
     "proxyStatus": READ,
@@ -140,6 +144,8 @@ CLASSES: Dict[str, str] = {
     "canvas": WRITE,
     "employeeJob": WRITE,
     "fileModify": WRITE,
+    "piWrite": WRITE,
+    "piEdit": WRITE,
     "textToSpeech": WRITE,
     "writeTodos": WRITE,
     # The owner's own phone.
@@ -162,6 +168,8 @@ CLASSES: Dict[str, str] = {
     # Commands on the computer (the code tools' sandboxes are weak, D16),
     # tools that drive apps, CLI agents, custom connectors.
     "shell": SEND,
+    "piBash": SEND,
+    "piPowerShell": SEND,
     "javascriptExecutor": SEND,
     "pythonExecutor": SEND,
     "typescriptExecutor": SEND,

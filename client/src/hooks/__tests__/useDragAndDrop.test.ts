@@ -34,25 +34,29 @@ function dropEvent(clientX: number, clientY: number) {
 }
 
 describe('useDragAndDrop.onDrop', () => {
-  it('creates a fresh agent through the authoritative API without speculative nodes or parameter writes', async () => {
+  it.each([
+    ['aiAgent', { creationParameters: { runtime_behavior_version: 1 as const } }, true],
+    ['coding_agent', { createsAgentBundle: true }, true],
+    ['coding_agent', { createsAgentBundle: true }, false],
+  ])('creates %s through the authoritative API (cached=%s) without speculative nodes or parameter writes', async (nodeType, uiHints, cached) => {
     const saveWorkflowWithinMutation = vi.fn().mockResolvedValue(true);
     const adoptSavedOperations = vi.fn();
     const state = { currentWorkflow: { id: 'wf' }, saveWorkflowWithinMutation, updateWorkflow: vi.fn(), adoptSavedOperations };
     const stateSpy = vi.spyOn(useAppStore, 'getState').mockReturnValue(state as unknown as ReturnType<typeof useAppStore.getState>);
-    const specSpy = vi.spyOn(nodeSpecs, 'getCachedNodeSpec').mockReturnValue({ type: 'aiAgent', displayName: 'Agent', icon: '', group: ['agent'], componentKind: 'agent', version: 1, uiHints: { creationParameters: { runtime_behavior_version: 1 } } });
+    const specSpy = vi.spyOn(nodeSpecs, 'getCachedNodeSpec').mockReturnValue(cached ? { type: nodeType, displayName: 'Agent', icon: '', group: ['agent'], componentKind: 'agent', version: 1, uiHints } : null);
     let acknowledge!: (value: agentCreation.SavedCreation) => void;
     const createSpy = vi.spyOn(agentCreation, 'createAgent').mockImplementation(() => new Promise((resolve) => { acknowledge = resolve; }));
     try {
       const setNodes = vi.fn(), setEdges = vi.fn(), saveNodeParameters = vi.fn();
       const { result } = renderHook(() => useDragAndDrop({ nodes: [existing], edges: [], setNodes, setEdges, saveNodeParameters, workflowId: 'wf', screenToFlowPosition: (point) => point }));
       const event = dropEvent(100, 200);
-      event.dataTransfer.getData = () => JSON.stringify({ type: 'aiAgent', data: { system: 'Be useful' } });
+      event.dataTransfer.getData = () => JSON.stringify({ type: nodeType, data: { system: 'Be useful' }, uiHints });
       let pending!: Promise<void>;
       await act(async () => { pending = result.current.onDrop(event); await vi.waitFor(() => expect(createSpy).toHaveBeenCalledOnce()); });
       expect(setNodes).not.toHaveBeenCalled();
       expect(saveNodeParameters).not.toHaveBeenCalled();
       await act(async () => { acknowledge({ node_ids: { agent: 'saved' }, operations: [] }); await pending; });
-      expect(createSpy.mock.calls[0][0]).toMatchObject({ workflow_id: 'wf', node_type: 'aiAgent', parameters: { system: 'Be useful' } });
+      expect(createSpy.mock.calls[0][0]).toMatchObject({ workflow_id: 'wf', node_type: nodeType, parameters: { system: 'Be useful' } });
       expect(createSpy.mock.calls[0][1]).toBeTruthy();
       expect(setNodes).toHaveBeenCalledOnce();
     } finally { createSpy.mockRestore(); specSpy.mockRestore(); stateSpy.mockRestore(); }

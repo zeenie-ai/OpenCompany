@@ -34,6 +34,15 @@ inherit the lead's model and receive purpose, private Context, validated scoped
 tools and selected skills. Use the intrinsic Task Manager for durable mission,
 context, dependencies, acceptance criteria, and lead review.
 
+A new Coding Agent also receives its connected Pi tool nodes through the same
+[`coding_agent_additions`](../../../server/services/coding_agent_recipe.py)
+recipe used by the editor/API and Hire: Read File, Write File, Edit File, Bash,
+Search Text, Find Files and List Directory, plus PowerShell on Windows.
+Explicit `tool_types` entries keep their validated `tool_parameters` and take
+the place of same-type defaults. Existing Coding Agent teammates are reused
+without adding or restoring tools. See [Coding Agent](../specialized_agents/coding_agent.md)
+for tool names and the separate legacy `workspace` mode.
+
 Every change is saved through
 [`services/workflow_storage/mutate.py`](../../../server/services/workflow_storage/mutate.py)
 `apply_graph_additions`, the server's one path for growing a saved workflow
@@ -66,6 +75,8 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
 | `target_member_id` | string | `""` | no | - | Employee member receiving the tool; defaults to the caller. Must belong to this employee, including legacy employees. |
 | `skill_name` | string | `""` | no | `operation == add_skill` | Skill name (SKILL.md frontmatter `name`, or a library skill's name), from `available_skills` |
 | `agent_type` | string | `""` | no | `operation == add_subagent` | Agent node type to add as a teammate (caller must be a team lead) |
+| `tool_types` | string array | `[]` | no | `operation == add_subagent` | Explicit scoped tools; Coding Agent also receives its default Pi tools without duplicate same-type nodes |
+| `tool_parameters` | object | `{}` | no | `operation == add_subagent` | Initial configuration by tool type, validated against its plugin contract |
 | `workflow_name` | string | `""` | no | `operation == create_workflow` | Employee display name for the shared Hire pipeline |
 | `workflow_description` | string | `""` | no | `operation == create_workflow` | Optional one-line description |
 
@@ -82,9 +93,10 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
   operation?: string;
   // One plain sentence on an employee refusal: the agent passes it on.
   summary?: string;
-  // add_tool / add_subagent: the ops this call saved (as announced), plus a
-  // saved tool the calling agent's run lacks. The agent loop binds every tool
-  // add_node here. Empty for add_skill.
+  // add_tool / add_subagent: saved ops scoped to the caller's bindings,
+  // plus a saved tool the caller's run lacks. Specialist-owned tool nodes
+  // are announced to editors but excluded from the caller's tool rebind.
+  // Empty for add_skill.
   operations?: Array<Record<string, unknown>>;
   // inspect_canvas extras:
   nodes?: Array<{ id; type; label; key_params }>;
@@ -116,9 +128,9 @@ flowchart TD
   K -- no --> Kn[summary = reason]
   K -- yes --> Kp[merge into each target's Skills node row<br/>wire the shared one to a target without one, else a new Skills node]
   Kp --> S
-  R -- add_subagent --> G{editor-built, caller a team lead,<br/>type allowed, not a team lead}
+  R -- add_subagent --> G{caller a team lead,<br/>type allowed, not a team lead}
   G -- no --> Gn[summary = reason]
-  G -- yes --> Gp[agent + its Context + output-top -> input-teammates]
+  G -- yes --> Gp[agent + private Context + scoped tools<br/>Coding Agent includes Pi defaults<br/>output-top -> input-teammates]
   Gp --> S
   R -- create_workflow --> W[trusted owner request -> shared Hire pipeline -> configured employee team]
 ```
@@ -157,7 +169,9 @@ flowchart TD
   target's tool only on a node naming the same app.
   `check_skill` refuses `skill` and `*-personality`; skills come from the
   library (all of it, on or off for new hires) and the Discover folder
-  (`server/skills/employee/`), text copied in. `add_subagent` is refused.
+  (`server/skills/employee/`), text copied in. Managed teams route
+  `add_subagent` through their lead and require the owner's scoped permission;
+  callers without a team lead cannot add teammates.
 - **One concrete tool owner**: a same-type tool on another member is never
   attached to this target. The target reuses its private node or receives a
   fresh node. Ownership and parameter rows are read inside the mutation
@@ -187,7 +201,11 @@ flowchart TD
 - **add_subagent**: team leads only (`orchestrator_agent`, `ai_employee`),
   never another team lead; one teammate per type except repeatable `aiAgent`.
   The new agent gets its own Context (`context_of`) and an `output-top` →
-  `input-teammates` edge.
+  `input-teammates` edge. Coding Agent's Pi defaults are separate saved nodes
+  connected only to that specialist. Creation is refused if a required default
+  is disabled. The employee grant request includes default and explicit tool
+  types; mutation authorization and child grants cover the resulting nodes.
+  The optional [Write Todos](./writeTodos.md) tool is not a Pi default.
 - **create_workflow**: independently switchable with `_CREATE_WORKFLOW_ENABLED`;
   enabled creation calls the shared owner-verified Hire pipeline and saves a
   configured team, never a Start-only placeholder.

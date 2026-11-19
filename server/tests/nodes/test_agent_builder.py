@@ -543,22 +543,73 @@ class TestAddSubagent:
 
         assert "cannot spawn another team-lead" in result.summary
 
-    async def test_adds_the_teammate_with_its_context(self, builder, database):
+    async def test_adds_the_coding_teammate_with_its_context_and_pi_tools(self, builder, database):
+        from services.coding_agent_recipe import default_pi_tool_types
+
         await save_graph(database, _lead_graph())
 
         result = await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent")
 
         graph = await saved(database)
-        agent, context = graph["nodes"][-2:]
+        agent = next(item for item in graph["nodes"] if item["type"] == "coding_agent")
+        context = next(item for item in graph["nodes"] if item["type"] == "context")
         assert (agent["id"], agent["type"]) == ("7:coding_agent:1", "coding_agent")
         assert context["id"] == "7:context:1"
         assert context["data"] == {"label": "Context", "systemManaged": True, "agentNodeId": "7:coding_agent:1"}
         assert edges_into(graph, "7:coding_agent:1", "input-context")[0]["source"] == "7:context:1"
         [teammate] = edges_into(graph, "7:orchestrator_agent:1", "input-teammates")
         assert (teammate["source"], teammate["sourceHandle"]) == ("7:coding_agent:1", "output-top")
-        assert [op["type"] for op in result.operations] == ["add_node", "add_node", "add_edge", "add_edge"]
+        tool_edges = edges_into(graph, agent["id"], "input-tools")
+        tools = [item for item in graph["nodes"] if item["id"] in {edge["source"] for edge in tool_edges}]
+        assert {item["type"] for item in tools} == set(default_pi_tool_types())
+        assert len(tools) == len(tool_edges) == len(default_pi_tool_types())
+        for tool in tools:
+            assert tool["data"]["label"] == get_node_class(tool["type"]).display_name
+            assert await database.get_node_parameters(tool["id"]) == {}
+        announced = builder.frames[0]["data"]["operations"]
+        assert sum(op["type"] == "add_node" for op in announced) == len(tools) + 2
+        assert sum(op["type"] == "add_edge" for op in announced) == len(tools) + 2
+        # The lead receives its new teammate, not that teammate's private tools.
+        assert {op["node_type"] for op in result.operations if op["type"] == "add_node"} == {"coding_agent", "context"}
         assert result.operations[0]["node_type"] == "coding_agent"
-        assert result.operations[-1]["target_handle"] == "input-teammates"
+
+    async def test_explicit_pi_tool_is_not_duplicated_and_keeps_its_parameters(self, builder, database):
+        from services.coding_agent_recipe import default_pi_tool_types
+
+        await save_graph(database, _lead_graph())
+        result = await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent",
+            tool_types=["piRead", "piRead"], tool_parameters={"piRead": {"path": "README.md", "limit": 20}})
+
+        assert result.activation_state == "saved"
+        graph = await saved(database)
+        tools = [item for item in graph["nodes"] if item["type"] in default_pi_tool_types()]
+        assert len(tools) == len(default_pi_tool_types())
+        [reader] = [item for item in tools if item["type"] == "piRead"]
+        assert await database.get_node_parameters(reader["id"]) == {"path": "README.md", "limit": 20}
+        assert sum(edge["source"] == reader["id"] for edge in edges_into(graph, "7:coding_agent:1", "input-tools")) == 1
+
+    async def test_coding_defaults_respect_operator_policy(self, builder, database):
+        await save_graph(database, _lead_graph())
+        with _allowlist(disabled_nodes=["piBash"]):
+            result = await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent")
+
+        assert "Pi coding tools are disabled" in result.summary
+        assert (await saved(database))["nodes"] == _lead_graph()["nodes"]
+        assert builder.frames == []
+
+    async def test_coding_permission_scope_includes_default_tools(self, builder, database, monkeypatch):
+        from services.coding_agent_recipe import default_pi_tool_types
+
+        await save_graph(database, _lead_graph())
+        monkeypatch.setattr(ab, "_employee_of", AsyncMock(return_value=SimpleNamespace(row=SimpleNamespace(team_plan={}))))
+        permission = AsyncMock(return_value=ab.AgentBuilderOutput(operation="add_subagent", activation_state="blocked"))
+        monkeypatch.setattr(ab, "_permission", permission)
+
+        await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent", tool_types=["httpRequest"],
+            tool_parameters={"httpRequest": {"url": "https://example.com"}})
+
+        assert set(permission.await_args.args[5]["tool_types"]) == {*default_pi_tool_types(), "httpRequest"}
+        assert builder.frames == []
 
     async def test_an_existing_teammate_is_reused(self, builder, database):
         graph = _lead_graph()
@@ -566,7 +617,8 @@ class TestAddSubagent:
         graph["edges"].append({"id": "t", "source": "7:coding_agent:1", "sourceHandle": "output-top", "target": "7:orchestrator_agent:1", "targetHandle": "input-teammates"})
         await save_graph(database, graph)
 
-        result = await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent")
+        with _allowlist(disabled_nodes=["piBash"]):
+            result = await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent")
 
         assert result.operations == []
         assert "already wired" in result.summary and "7:coding_agent:1" in result.summary

@@ -40,6 +40,7 @@ describe.skipIf(!staged)("staged app-root", () => {
       "server/nodejs/dist/index.js",
       "server/nodejs/package.json",
       "server/pi/dist/index.js",
+      "server/pi/dist/tool-host.js",
       "server/pi/dist/package.json",
       "server/pi/dist/THIRD-PARTY-LICENSES.txt",
       "client/dist/index.html",
@@ -78,14 +79,16 @@ describe.skipIf(!staged)("staged app-root", () => {
     expect(/require\(["']express["']\)/.test(js)).toBe(false);
   });
 
-  it("ships the Pi host as one bundle with the SDK inlined", () => {
+  it("ships separate Pi driver and tool bundles with the SDK inlined", () => {
     const pi = join(APP_ROOT, "server", "pi");
     const js = readFileSync(join(pi, "dist", "index.js"), "utf-8");
     expect(/from\s+["']@earendil-works\//.test(js)).toBe(false);
+    const tools = readFileSync(join(pi, "dist", "tool-host.js"), "utf-8");
+    expect(/from\s+["']@earendil-works\//.test(tools)).toBe(false);
     const sdk = JSON.parse(readFileSync(join(pi, "dist", "package.json"), "utf-8")) as { name: string; version: string };
     expect(sdk.name).toBe("@earendil-works/pi-coding-agent");
     expect(sdk.version).toBe("1.1.0");
-    expect(readdirSync(join(pi, "dist")).sort()).toEqual(["THIRD-PARTY-LICENSES.txt", "index.js", "package.json"]);
+    expect(readdirSync(join(pi, "dist")).sort()).toEqual(["THIRD-PARTY-LICENSES.txt", "index.js", "package.json", "tool-host.js"]);
     expect(readdirSync(pi)).toEqual(["dist"]);
   });
 

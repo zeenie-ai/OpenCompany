@@ -68,6 +68,10 @@ REPEATABLE: FrozenSet[str] = frozenset(
         "openaiCompatibleChatModel",
         "openrouterChatModel",
         "perplexitySearch",
+        "piRead",
+        "piGrep",
+        "piFind",
+        "piLs",
         "proxyStatus",
         "pythonExecutor",
         "sarvamChatModel",
@@ -100,6 +104,9 @@ REPEATABLE: FrozenSet[str] = frozenset(
         # Local, and harmless to do twice.
         "canvas",
         "fileDownloader",
+        # Replacing a workspace file with the same complete content is idempotent.
+        # Pi edit and shell tools remain unsafe to repeat after an interrupted call.
+        "piWrite",
         "simpleMemory",
         "textToSpeech",
         "webhookResponse",

@@ -931,6 +931,7 @@ class TestNodeSpecContractInvariants:
         known = {
             "creationParameters",
             "createsBrowserAgent",
+            "createsAgentBundle",
             "hideInputSection",
             "hideOutputSection",
             "hideRunButton",

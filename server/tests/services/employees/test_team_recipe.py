@@ -76,6 +76,41 @@ def test_browser_employee_respects_companion_node_policy():
         build(job="Use the browser to read website accounts", allowed=lambda kind: kind != "visionAnalyze")
 
 
+async def test_new_coding_employee_gets_its_own_connected_pi_tools():
+    from services.coding_agent_recipe import default_pi_tool_types
+    from services.node_registry import get_node_class
+
+    built = build(job="Develop software")
+    member = next(member for member in built.team_plan["members"] if member["node_type"] == "coding_agent")
+    tools = [item for item in built.nodes if item["type"] in default_pi_tool_types()]
+    assert {item["type"] for item in tools} == set(default_pi_tool_types())
+    assert len(tools) == len(default_pi_tool_types())
+    for tool in tools:
+        assert tool["id"] in member["tools"]
+        assert tool["data"]["label"] == get_node_class(tool["type"]).display_name
+        assert [edge["target"] for edge in built.edges if edge["source"] == tool["id"]
+                and edge.get("targetHandle") == "input-tools"] == [member["node_id"]]
+    assert built.parameters[member["node_id"]]["model"] == "configured-model"
+    assert sum(edge["target"] == member["node_id"] and edge.get("targetHandle") == "input-context" for edge in built.edges) == 1
+    report = await validate_workflow(nodes=built.nodes, edges=built.edges, parameters_by_id=built.parameters)
+    assert report["errors"] == [], report["errors"]
+
+
+def test_coding_employee_respects_companion_node_policy():
+    with pytest.raises(BuildError, match="Pi coding tools"):
+        build(job="Develop software", allowed=lambda kind: kind != "piBash")
+
+
+def test_shipped_hire_allowlist_allows_the_complete_coding_bundle():
+    from services.coding_agent_recipe import default_pi_tool_types
+    from services.node_allowlist import get_node_allowlist_service
+
+    built = build(job="Develop software", allowed=get_node_allowlist_service().is_hire_allowed)
+    member = next(member for member in built.team_plan["members"] if member["node_type"] == "coding_agent")
+    tool_types = {item["type"] for item in built.nodes if item["id"] in member["tools"]}
+    assert set(default_pi_tool_types()) <= tool_types
+
+
 def test_hire_refuses_a_recipe_that_reintroduces_shared_tools(monkeypatch):
     from services.employees import team_recipe
     from services.graph_build import tool_edge

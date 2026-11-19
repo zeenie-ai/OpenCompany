@@ -94,8 +94,13 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
         }
 
         const spec = getCachedNodeSpec(nodeData.type);
-        const authoritativeAgent = spec?.componentKind === 'agent' && spec?.uiHints?.creationParameters?.runtime_behavior_version === 1;
-        if (spec?.uiHints?.createsBrowserAgent || authoritativeAgent) {
+        // A registry refresh can invalidate the cache between drag and drop.
+        // Carry the palette's creation recipe with the drag as a fallback.
+        const uiHints = spec?.uiHints ?? nodeData.uiHints;
+        const authoritativeAgent = uiHints?.createsAgentBundle || (
+          spec?.componentKind === 'agent' && uiHints?.creationParameters?.runtime_behavior_version === 1
+        );
+        if (uiHints?.createsBrowserAgent || authoritativeAgent) {
           const store = useAppStore.getState();
           if (!setEdges || !store.currentWorkflow || store.currentWorkflow.id !== workflowId) {
             toast.error('Open a workflow before adding an agent.');
@@ -106,7 +111,7 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
             try {
               const result = await createSavedGraphResource(workflowId,
                 flushCanvas ?? (() => useAppStore.getState().updateWorkflow({ nodes, edges })),
-                () => spec?.uiHints?.createsBrowserAgent
+                () => uiHints?.createsBrowserAgent
                   ? createBrowserAgent({ workflow_id: workflowId, position: [position.x, position.y], ...(globalModelDefaults || {}) }, mutationId)
                   : createAgent({ workflow_id: workflowId, node_type: nodeData.type, position: [position.x, position.y],
                     parameters: { ...(nodeData.data || {}), ...(globalModelDefaults || {}) } }, mutationId));
@@ -175,7 +180,8 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
     });
     event.dataTransfer.setData('application/reactflow', JSON.stringify({ 
       type: definition.name || definition.type, // Handle both new (name) and old (type) formats
-      data: defaults 
+      data: defaults,
+      uiHints: definition.uiHints,
     }));
     event.dataTransfer.effectAllowed = 'move';
   }, []);

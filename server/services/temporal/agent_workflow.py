@@ -251,9 +251,20 @@ def _append_tool_result_message(
     content: str,
     tool_call_id: str,
     name: str,
+    media_result: Any = None,
 ) -> None:
     """Append a tool result message in the canonical wire shape."""
+    if media_result is not None:
+        from services.llm.media import image_blocks_from_tool_result
+        from services.llm.protocol import Message, message_to_wire
 
+        result = media_result
+        if isinstance(result, dict) and "success" in result and isinstance(result.get("result"), dict):
+            result = result["result"]
+        message = Message(role="tool", content=content, tool_call_id=tool_call_id, name=name)
+        message.blocks.extend(image_blocks_from_tool_result(result))
+        messages.append(message_to_wire(message))
+        return
     messages.append(
         _native_message(
             role="tool",
@@ -2226,6 +2237,7 @@ class AgentWorkflow:
 
             blocked_error = None
             for call_index, call in enumerate(calls):
+                pi_media_result = None
                 runtime_rejection = await self._before_runtime_tool_call(call_index, call, messages)
                 if runtime_rejection:
                     _append_tool_result_message(messages, content=_serialise_tool_result({"error": runtime_rejection}),
@@ -2644,6 +2656,10 @@ class AgentWorkflow:
                                     if not any(existing.get("path") == ref.get("path") for existing in browser_artifacts) and len(browser_artifacts) < 32:
                                         browser_artifacts.append(ref)
                         tool_content = _serialise_tool_result(tool_result)
+                        # piRead is a new node type, so existing histories keep
+                        # their exact text-only wire. New Pi reads retain image
+                        # references through receipts and provider hydration.
+                        pi_media_result = tool_result if tool_info.get("node_type") == "piRead" else None
                         if (
                             tool_output_limit
                             and not is_delegation
@@ -2680,7 +2696,7 @@ class AgentWorkflow:
                         auto_rebind_enabled = bool(payload.get("auto_rebind_tools", True))
                         if self._execution_control.enabled and call_index not in recorded_tool_results:
                             _append_tool_result_message(messages, content=tool_content,
-                                tool_call_id=call.get("id", ""), name=call.get("name", ""))
+                                tool_call_id=call.get("id", ""), name=call.get("name", ""), media_result=pi_media_result)
                             recorded_tool_results.add(call_index)
                             if tool_action_active:
                                 self._execution_control.end_action()
@@ -2904,6 +2920,7 @@ class AgentWorkflow:
                             content=tool_content,
                             tool_call_id=call.get("id", ""),
                             name=call.get("name", ""),
+                            media_result=pi_media_result,
                         )
 
                 finally:

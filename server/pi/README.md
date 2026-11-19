@@ -1,17 +1,22 @@
 # Private Pi SDK host
 
-This package pins the full Earendil Pi Coding Agent SDK to 1.1.0. It is a
-maintenance driver for one assistant response and its tool batch. Model requests
-and tool effects are performed by OpenCompany Temporal leaves, never by this
-process. The host disables ambient resources, provider networking, SDK retries,
-compaction and cache warming.
+This package pins the full Earendil Pi Coding Agent SDK to 1.1.0 and builds two
+hosts. The maintenance driver manages one assistant response and its tool batch;
+model requests and tool effects are performed by OpenCompany Temporal leaves,
+never by the driver process. The separate tool host executes SDK tools inside
+those admitted node activities. The maintenance driver disables ambient
+resources, provider networking, SDK retries, compaction and cache warming.
 
 Run `bun install --frozen-lockfile`, `bun test`, and `bun run typecheck` here.
-`bun run build` writes three files to `dist/`:
+`bun run build` writes four files to `dist/`:
 
 - `index.js`: the host with the SDK and every package it imports inlined, one
   file of about 12 MiB. It runs on Bun with no `node_modules`. Nothing is
   installed, unpacked or cached where it runs.
+- `tool-host.js`: the separate leaf runner for the Pi Read File, Write File,
+  Edit File, Bash, PowerShell, Search Text, Find Files and List Directory nodes.
+  It invokes the pinned SDK's actual tools; the maintenance driver still has
+  all built-ins disabled.
 - `package.json`: the SDK's own manifest. The SDK reads its name and version
   from `PI_PACKAGE_DIR`, and the Python driver points that at this folder.
 - `THIRD-PARTY-LICENSES.txt`: the licenses of the inlined packages.
@@ -19,7 +24,19 @@ Run `bun install --frozen-lockfile`, `bun test`, and `bun run typecheck` here.
 The build fails when the installed SDK differs from the pin in `src/types.ts`.
 It rebuilds `dist/` whole, so a file left by an earlier build never ships.
 `bun run test:distribution` runs the built bundle from a folder outside the
-repository. CLI, desktop and Docker ship these three files.
+repository. CLI, desktop and Docker ship these four files.
+
+New Coding Agents created through the editor/API, Agent Builder and Hire receive
+the seven portable Pi tool nodes, plus Pi PowerShell on Windows, connected to
+their Tools input. This is a creation recipe; existing agents are not migrated.
+The [Pi integration guide](../../docs-internal/pi_coding_agent.md) maps node
+types to model tool names and describes operator policy and saved-graph wiring.
+
+Pi has no core todo tool. Its `examples/extensions/todo.ts` is an optional
+extension example that this host does not load. Connect OpenCompany's
+[Write Todos node](../../docs-internal/node-logic-flows/ai_tools/writeTodos.md)
+for the existing checklist UI. It is not part of the automatic Pi bundle;
+its workflow/node-scoped state is in memory and does not survive server restarts.
 
 The bundle holds what the host imports statically. The SDK's lazily loaded
 features are not in it, and they fail if called:
@@ -30,14 +47,48 @@ features are not in it, and they fail if called:
 - extensions loaded from source, and provider modules the SDK imports by a
   computed name.
 
-The host calls none of them: it passes empty resources, no built-in tools, its
+The model host calls none of them: it passes empty resources, no built-in tools, its
 own provider and text input. A change that needs one of them has to ship that
 feature's files beside the bundle.
 
-Without a build, a source checkout runs `src/index.ts` against this folder's
-`node_modules` (`server/services/pi_runtime.py`).
+The leaf runner disables image resizing, preserving native PNG/JPEG/GIF/WebP
+bytes for OpenCompany's media pipeline. BMP conversion still requires the
+unshipped Photon assets. It uses the SDK's operation hooks to confine file
+operations to the workflow workspace and rejects symlinks/junctions. Bash and
+PowerShell remain explicitly open-world command capabilities. Shell calls have
+a 30-second default deadline (maximum 600 seconds), SDK process-tree
+cancellation and the Python leaf's independent bounded watchdog/cleanup.
+Truncated shell output is retained under `.pi-output/` in the workflow
+workspace; SDK result paths are rewritten so Pi Read File can retrieve it.
 
-The JSONL protocol is defined in `src/types.ts`. Frames are UTF-8 JSON separated
+Search Text requires `rg` (ripgrep) on PATH. Find Files supplies the SDK's glob
+operation using `rg --files`, preserving `.gitignore` filtering without an `fd`
+dependency. `PI_OFFLINE=1` prevents automatic downloads. Windows Bash uses Git
+Bash or a configured Bash installation; PowerShell is Windows-only. Missing
+executables are reported as tool errors.
+
+The leaf protocol accepts one LF-delimited `{protocol:1,tool,cwd,args}` request,
+followed optionally by `{type:"abort"}`. Stdin stays open until the result;
+unexpected EOF aborts the call. Stdout contains exactly one `{ok:true,result}`
+or `{ok:false,error}` response. Frames are bounded to 16 MiB, and the parent
+retains ownership of timeout, cancellation, approvals and result recording.
+
+Without a build, a source checkout resolves `src/index.ts` for the maintenance
+driver and `src/tool-host.ts` for tool activities against this folder's pinned
+`node_modules` (`server/services/pi_runtime.py`). A packaged install without
+`dist/tool-host.js` must be rebuilt.
+
+For tool validation, run `bun run test tests/builtin-tools.test.ts tests/distribution.test.ts`
+after building, along with `bun run typecheck`.
+The tests exercise actual SDK file/image operations, shell exit errors,
+timeouts, cancellation, inherited output pipes and offline packaged startup.
+They require Bash and ripgrep; Windows additionally exercises PowerShell.
+The Python bridge smoke is opt-in: set `PI_TOOL_INTEGRATION=1`, then run
+`.venv/Scripts/python.exe -m pytest tests/services/test_pi_builtin_tools.py -k real_source_host`
+from `server/` on Windows (use `.venv/bin/python` on Unix). It checks that
+command children have exited after timeout and cancellation.
+
+The maintenance driver's JSONL protocol is defined in `src/types.ts`. Frames are UTF-8 JSON separated
 only by LF, bounded to 256 KiB. Larger values use canonical JSON transport files
 in Python's private attempt directory, bounded to 16 MiB. References verify
 scope, epoch, content hash, byte count, canonical encoding and regular-file paths.

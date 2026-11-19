@@ -1273,6 +1273,7 @@ class AgentBuilderNode(ToolNode):
         nodes = [NewNode("agent", agent_type, label, specialist_params, position=(x + 300, y + 200)),
                  NewNode("context", _CONTEXT_TYPE, "Context", position=(x + 300, y + 20), context_of="agent")]
         edges = [Edge("agent", _TEAMMATE_OUTPUT, str(caller), _TEAMMATES_INPUT)]
+        bundled_tool_types: set[str] = set()
         if agent_type == "browser_agent":
             from services.browser_agent_recipe import BROWSER_AGENT_ROLE, browser_agent_additions
             if not {"browser", "visionAnalyze"}.issubset(_allowed_tool_types()) or "web_agent" in _allowlist_config().get("disabled_skill_folders", []):
@@ -1281,6 +1282,7 @@ class AgentBuilderNode(ToolNode):
             bundle = browser_agent_additions(agent_parameters=specialist_params, position=(x + 300, y + 200))
             nodes = list(bundle.nodes)
             edges.extend(bundle.edges)
+            bundled_tool_types.update({"browser", "visionAnalyze"})
         for index, tool_type in enumerate(dict.fromkeys(params.tool_types)):
             if tool_type not in _allowed_tool_types():
                 return _refused("add_subagent", f"The specialist cannot use '{tool_type}'. Inspect available tools first.")
@@ -1298,6 +1300,17 @@ class AgentBuilderNode(ToolNode):
             ref = f"tool_{index}"
             nodes.append(NewNode(ref, tool_type, getattr(cls, "display_name", "") or tool_type, validated, position=(x + 160 + index * 170, y + 440)))
             edges.append(tool_edge(ref, "agent"))
+        if agent_type == "coding_agent" and not existing:
+            from services.coding_agent_recipe import coding_agent_additions, default_pi_tool_types
+
+            bundled_tool_types.update(default_pi_tool_types())
+            if not bundled_tool_types.issubset(_allowed_tool_types()):
+                return _refused("add_subagent", "Pi coding tools are disabled by the operator.")
+            # Explicit tools keep their validated configuration and identity.
+            bundle = coding_agent_additions(position=(x + 300, y + 200),
+                create_agent=False, create_context=False, exclude_tool_types=params.tool_types)
+            nodes.extend(bundle.nodes)
+            edges.extend(bundle.edges)
         skill_config = {}
         if agent_type == "browser_agent":
             skill_config.update(next(node.params["skills_config"] for node in nodes if node.ref == "skills"))
@@ -1322,7 +1335,7 @@ class AgentBuilderNode(ToolNode):
         grant_ids: List[str] = []
         if employee is not None and not existing:
             permission = await _permission(database, ctx, params, agent_type, [str(caller)], {
-                "purpose": specialist_params["system_message"], "tool_types": sorted(set(params.tool_types) | ({"browser", "visionAnalyze"} if agent_type == "browser_agent" else set())),
+                "purpose": specialist_params["system_message"], "tool_types": sorted(set(params.tool_types) | bundled_tool_types),
                 "tool_parameters": params.tool_parameters, "skill_names": sorted(set(params.skill_names)),
                 "model": specialist_params.get("model"), "provider": specialist_params.get("provider"),
             }, grant_ids)

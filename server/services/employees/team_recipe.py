@@ -222,6 +222,23 @@ def build_team(built: Any, inputs: Any) -> Any:
         default_skills = browser_agent_additions(create_agent=False, create_context=False, fresh_skills=True).nodes
         config = next(node.params["skills_config"] for node in default_skills if node.type == "masterSkill")
         built.parameters[holder]["skills_config"].update(config)
+    # Fresh Coding specialists receive the same Pi tools as canvas/Builder.
+    # Reuse any explicitly assigned tools rather than duplicating them.
+    from services.coding_agent_recipe import coding_agent_additions
+    for member in members:
+        if member["node_type"] != "coding_agent":
+            continue
+        position = next(node["position"] for node in built.nodes if node["id"] == member["node_id"])
+        connected_types = tuple(node["type"] for node in built.nodes if node["id"] in member["tools"])
+        additions = coding_agent_additions(agent_ref=member["node_id"],
+            create_agent=False, create_context=False, exclude_tool_types=connected_types,
+            position=(position["x"], position["y"]))
+        if any(not inputs.allowed(node.type) for node in additions.nodes):
+            raise BuildError("not_allowed", "Pi coding tools are not available")
+        placed = add_to_graph(inputs.workflow_id, {"nodes": built.nodes, "edges": built.edges}, additions)
+        built.nodes, built.edges = placed.graph["nodes"], placed.graph["edges"]
+        built.parameters.update(placed.parameters)
+        member["tools"].extend(node["id"] for node in placed.nodes)
     # Keep one memory per member. A legacy Talk line may share the worker's
     # memory: remove that binding and give each agent its own instance.
     memories = {node["id"] for node in built.nodes if node["type"] == "simpleMemory"}

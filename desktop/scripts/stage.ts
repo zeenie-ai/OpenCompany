@@ -106,7 +106,7 @@ function bundleSidecar(): void {
 }
 
 /** Everything the Pi package's own build writes to server/pi/dist. */
-const PI_DIST = ["index.js", "package.json", "THIRD-PARTY-LICENSES.txt"];
+const PI_DIST = ["index.js", "tool-host.js", "package.json", "THIRD-PARTY-LICENSES.txt"];
 
 function bundlePi(): number {
   const piDir = join(REPO_ROOT, "server", "pi");

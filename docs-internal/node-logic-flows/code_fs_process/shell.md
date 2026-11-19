@@ -19,8 +19,8 @@ When Nushell is selected, `&&` / `||` / `$VAR` / backticks / `>` do not use
 bash semantics; see `shell-skill/SKILL.md` for conditional Nu guidance. When
 Nushell is absent, all other syntax is interpreted by the host shell. For
 long-running processes (dev servers, watchers), users are directed to
-[`processManager`](./processManager.md); this node kills the command at
-`timeout`. Node metadata describes this as short-lived execution from the
+[`processManager`](./processManager.md); this node requests termination at
+`timeout`, subject to the Windows pipe limitation below. Node metadata describes this as short-lived execution from the
 workflow workspace and marks the tool as open-world.
 
 The tool description (`tool_description`) is the model's whole contract,
@@ -53,6 +53,12 @@ an eighth of the run.
 
 Runs synchronously under `asyncio.to_thread()` so the event loop keeps
 servicing other requests while the command executes.
+
+New Coding Agents use connected [Pi Bash](./piBash.md) and, on Windows,
+[Pi PowerShell](./piPowerShell.md) nodes through the shared creation recipe.
+Existing Shell nodes and the legacy `tool_mode=workspace` toolkit still use
+this backend. Switching a connection also requires using the selected shell's
+command syntax; Pi Bash does not parse Nushell commands.
 
 ## Inputs (handles)
 
@@ -115,10 +121,12 @@ flowchart TD
 - **Inherited PATH**: `WorkspaceBackend(inherit_env=True)` — external tools
   (`npm`, `node`, `python`, `git`, …) ARE reachable. The previous "scrubbed
   PATH" framing no longer holds. AI agents are still steered toward
-  `process_manager` for long-running daemons (the shell kills at `timeout`).
+  `process_manager` for long-running daemons.
 - **Timeout handling**: `timeout` is forwarded to
   `backend.execute(command, timeout=timeout)`. On timeout the backend kills
-  the process and sets `exit_code=124` (POSIX convention). Logged at WARNING.
+  the direct process and, once output collection finishes, sets `exit_code=124`
+  (POSIX convention). Logged at WARNING. This is not a bound on Windows pipe
+  draining; see the known limitation below.
 - **Non-zero exit still returns `success: true`**: the envelope-level success
   reflects whether the handler itself finished, not whether the command
   succeeded. Users must inspect `exit_code` in the payload.
@@ -173,6 +181,16 @@ flowchart TD
   `subprocess.run(..., timeout=)` and kills the direct child on expiry.
   Descendant processes started by that shell may not be terminated as a
   process group.
+- **Windows inherited pipes can prevent completion after timeout**: after
+  killing the direct child, Python drains captured output with `communicate()`.
+  A descendant holding stdout/stderr open can keep that wait blocked. Cancelling
+  the `asyncio.to_thread()` await does not stop the running thread or its
+  subprocess. In the investigated `shell.log` run, the 120-second shell command
+  outlived its deadline until Temporal's 600-second activity timeout; recovery
+  returned an unknown-outcome error rather than executing the command again.
+  The new Pi shell nodes use the SDK's inherited-pipe handling and process-tree
+  cleanup, with an independent bounded host watchdog. This does not retrofit
+  the legacy Shell backend.
 - **Stdin is empty**: the node exposes no way to pipe data into the
   command - `input_data` from upstream nodes does not reach it.
 - **No environment variable override**: users cannot inject env vars via

@@ -212,6 +212,8 @@ export interface INodeUIHints {
   creationParameters?: { runtime_behavior_version?: 0 | 1 };
   /** Palette creation uses the server's atomic Browser agent bundle. */
   createsBrowserAgent?: boolean;
+  /** Create the agent and connected companion nodes through the saved-graph API. */
+  createsAgentBundle?: boolean;
   /** Graph capability: this node must own one system-managed Context node. */
   requiresContext?: boolean;
   /** The graph lifecycle owns this node; it is not directly palette-created. */

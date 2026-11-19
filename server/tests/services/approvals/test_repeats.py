@@ -46,6 +46,15 @@ def test_each_listed_value_is_one_the_field_accepts(node_type):
         ("browser", {"operation": "request_user"}, True, True),
         ("awsAction", {"operation": "call", "api_operation": "describe_vpcs"}, False, False),
         ("approvalGate", {}, False, True),
+        ("piRead", {"path": "src/main.py"}, True, True),
+        ("piGrep", {"pattern": "TODO"}, True, True),
+        ("piFind", {"pattern": "*.py"}, True, True),
+        ("piLs", {}, True, True),
+        ("piWrite", {"path": "note.txt", "content": "hello"}, True, True),
+        # An edit can match different content on a second pass; commands are open-world.
+        ("piEdit", {"path": "note.txt", "edits": [{"oldText": "hello", "newText": "hello!"}]}, True, False),
+        ("piBash", {"command": "echo hello"}, True, False),
+        ("piPowerShell", {"command": "Write-Output hello"}, True, False),
         ("whatsappSend", {"message": "hi"}, True, False),
         # Each store gives its chunks new random ids: a repeat writes them twice.
         ("vectorStore", {}, False, False),

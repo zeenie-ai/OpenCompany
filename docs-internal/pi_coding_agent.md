@@ -12,7 +12,59 @@ The existing node type, handles, model settings and output envelope stay the
 same. `tool_mode` is `connected` by default; `workspace` fills missing
 `fileRead`, `fileModify`, `fsSearch` and `shell` capabilities. Connected nodes
 of those types override automatic bindings. Remaining tool-name collisions
-fail before billing. Other tool types must be connected explicitly.
+fail before billing. Additional tool types can be connected explicitly.
+
+Pi's SDK tools are exposed as filesystem nodes. Node types identify saved graph
+nodes; tool names are the names presented to the model:
+
+| Node | Node type | Agent tool |
+|---|---|---|
+| [Pi Read File](node-logic-flows/code_fs_process/piRead.md) | `piRead` | `pi_read` |
+| [Pi Write File](node-logic-flows/code_fs_process/piWrite.md) | `piWrite` | `pi_write` |
+| [Pi Edit File](node-logic-flows/code_fs_process/piEdit.md) | `piEdit` | `pi_edit` |
+| [Pi Bash](node-logic-flows/code_fs_process/piBash.md) | `piBash` | `pi_bash` |
+| [Pi PowerShell](node-logic-flows/code_fs_process/piPowerShell.md) | `piPowerShell` | `pi_powershell` |
+| [Pi Search Text](node-logic-flows/code_fs_process/piGrep.md) | `piGrep` | `pi_grep` |
+| [Pi Find Files](node-logic-flows/code_fs_process/piFind.md) | `piFind` | `pi_find` |
+| [Pi List Directory](node-logic-flows/code_fs_process/piLs.md) | `piLs` | `pi_ls` |
+
+New Coding Agents added from the editor, creation API, Agent Builder or Hire
+include these nodes connected to their Tools input. PowerShell is included on
+Windows hosts only; it also requires a Windows execution worker. The
+[shared creation recipe](../server/services/coding_agent_recipe.py) preserves
+explicitly supplied Pi tool parameters and does not modify existing agents or
+recreate removed tools. Operator restrictions apply to the whole new bundle;
+creation fails if a required tool is disabled. API retries reuse the saved
+creation receipt instead of adding duplicate nodes. The editor carries creation
+metadata through a registry refresh so a drop cannot lose its companion nodes.
+
+The nodes execute the pinned SDK tools in a separate Bun leaf host through
+ordinary node activities, so
+approvals, interrupted-call handling and durable results still belong to
+OpenCompany. The maintenance host continues to use `noTools: "builtin"`.
+File tools are constrained to the workflow workspace; command tools remain
+open-world and have a 30-second default command timeout, capped at 600 seconds.
+SDK process-tree termination and bounded Python host cleanup handle timeout
+and cancellation; startup and cleanup add time beyond the command timeout.
+Truncated shell output is saved under the workflow's `.pi-output/` directory
+and can be retrieved with Pi Read File. Image reads retain durable media
+references, rather than base64 image bodies, in tool results and history.
+PowerShell requires a native Windows worker, and Bash on Windows requires an
+available Bash installation such as Git Bash. The host performs no implicit
+package downloads. Search Text and Find Files require ripgrep (`rg`) on PATH.
+These connected nodes do not replace existing nodes or change the legacy
+`tool_mode=workspace` defaults. Existing workflows can connect Pi Bash or
+Pi PowerShell in place of the legacy Shell node; commands must use the chosen
+shell's syntax. The legacy Windows inherited-pipe timeout limitation is
+documented in [Shell](node-logic-flows/code_fs_process/shell.md#edge-cases--known-limits).
+
+For checklists, connect OpenCompany's [Write Todos](node-logic-flows/ai_tools/writeTodos.md)
+node (`writeTodos`, tool `write_todos`). Pi 1.1.0 has no core todo tool; its
+`examples/extensions/todo.ts` is an optional example extension, and this host
+does not load ambient extensions. Our node already works through Pi's connected
+tool bridge and provides the editable Current Todos panel. It is not included
+in this automatic Pi tool bundle. Lists are scoped by workflow and todo node
+and are stored in server memory, so they do not survive a server restart.
 
 New generations/invocations freeze `pi_harness_version=1` before preparation.
 Missing metadata denotes an existing native run and stays native across
@@ -155,10 +207,11 @@ the ordinary canonical/configuration/binding rebuild path.
 
 ## Distribution and validation
 
-The private Pi package has a frozen lockfile. Its build writes one bundle,
-`server/pi/dist/index.js`, with the SDK and every package it imports inlined,
+The private Pi package has a frozen lockfile. Its build writes two bundles,
+`server/pi/dist/index.js` for the session driver and `tool-host.js` for SDK tool
+activities, with the SDK and every package they import inlined,
 plus the SDK's own `package.json` and the inlined packages' licenses. CLI,
-desktop and Docker ship those three files, and the backend runs the bundle
+desktop and Docker ship those four files, and the backend runs each bundle
 where it is: nothing is verified, unpacked or cached first. No runtime package
 installation or dependency on the root workspace is permitted. The bundle
 leaves out the SDK's lazily loaded features (codemode, image resizing,

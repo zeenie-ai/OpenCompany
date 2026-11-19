@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from routers import agents, browser_agents
+from services.coding_agent_recipe import default_pi_tool_types
 from tests.nodes._agent_builder_harness import (  # noqa: F401 -- pytest registers imported fixtures
     builder_fixture, database_fixture, save_graph, saved,
 )
@@ -49,6 +50,44 @@ async def test_gate_off_never_accepts_client_upgrade(database, creation, monkeyp
     result = await agents.create_agent(agents.CreateAgent(workflow_id="7", node_type="aiAgent",
         mutation_id=uuid4(), parameters={"runtime_behavior_version": 1}), request())
     assert "runtime_behavior_version" not in await database.get_node_parameters(result["node_ids"]["agent"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("runtime_v1", ["false", "true"])
+async def test_coding_agent_has_connected_pi_tools_and_idempotent_creation(database, creation, monkeypatch, runtime_v1):
+    monkeypatch.setenv("NEW_AGENT_RUNTIME_V1_ENABLED", runtime_v1)
+    await save_graph(database, {"nodes": [], "edges": [], "owner_id": "owner"})
+    body = agents.CreateAgent(workflow_id="7", node_type="coding_agent", mutation_id=uuid4(),
+        position=(400, 300), parameters={"model": "gemini-2.5-flash"})
+    first = await agents.create_agent(body, request())
+    retry = await agents.create_agent(body, request())
+    assert first["applied"] and not retry["applied"]
+    assert retry["node_ids"] == first["node_ids"]
+    graph = await saved(database)
+    by_id = {node["id"]: node for node in graph["nodes"]}
+    agent_id = first["node_ids"]["agent"]
+    tool_edges = [edge for edge in graph["edges"] if edge["target"] == agent_id and edge["targetHandle"] == "input-tools"]
+    assert {by_id[edge["source"]]["type"] for edge in tool_edges} == set(default_pi_tool_types())
+    assert all(edge["sourceHandle"] == "output-tool" for edge in tool_edges)
+    assert len(tool_edges) == len(default_pi_tool_types())
+    assert len(by_id) == len(default_pi_tool_types()) + 2
+    assert any(edge["target"] == agent_id and edge["targetHandle"] == "input-context" for edge in graph["edges"])
+    assert (await database.get_node_parameters(agent_id))["model"] == "gemini-2.5-flash"
+
+
+@pytest.mark.asyncio
+async def test_coding_agent_disabled_tool_rejects_whole_bundle(database, creation, monkeypatch):
+    from services import node_allowlist
+    monkeypatch.setattr(node_allowlist, "get_node_allowlist_service", lambda: SimpleNamespace(get_config=lambda: {
+        "disabled_nodes": ["piBash"], "disabled_groups": [],
+    }))
+    await save_graph(database, {"nodes": [], "edges": [], "owner_id": "owner"})
+    with pytest.raises(HTTPException) as caught:
+        await agents.create_agent(agents.CreateAgent(workflow_id="7", node_type="coding_agent", mutation_id=uuid4()), request())
+    assert caught.value.status_code == 403
+    assert "Pi Bash" in caught.value.detail
+    assert (await saved(database))["nodes"] == []
+    assert creation.frames == []
 
 
 @pytest.mark.asyncio

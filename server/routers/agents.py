@@ -59,10 +59,20 @@ async def create_agent(body: CreateAgent, request: Request):
     # Receipts do not confer access if ownership changes after creation.
     async with database.get_session() as session:
         await authorize(session)
-    nodes = [NewNode("agent", body.node_type, cls.display_name, parameters, body.position)]
-    if getattr(cls, "requires_context", False):
-        nodes.append(NewNode("context", "context", "Context", position=(body.position[0], body.position[1] + 180), context_of="agent"))
-    result = await apply_graph_additions(database, body.workflow_id, GraphAdditions(nodes=nodes),
+    if body.node_type == "coding_agent":
+        from services.coding_agent_recipe import coding_agent_additions
+        additions = coding_agent_additions(agent_parameters=parameters, position=body.position)
+        for node in additions.nodes:
+            node_cls = get_node_class(node.type)
+            if (node_cls is None or node.type in policy["disabled_nodes"]
+                    or set(node_cls.group).intersection(policy["disabled_groups"])):
+                raise HTTPException(status_code=403, detail=f"Coding Agent requires the enabled {node.label} node")
+    else:
+        nodes = [NewNode("agent", body.node_type, cls.display_name, parameters, body.position)]
+        if getattr(cls, "requires_context", False):
+            nodes.append(NewNode("context", "context", "Context", position=(body.position[0], body.position[1] + 180), context_of="agent"))
+        additions = GraphAdditions(nodes=nodes)
+    result = await apply_graph_additions(database, body.workflow_id, additions,
         mutation_id=f"create-agent:{principal}:{body.mutation_id}", authorize=authorize)
     if result is None:
         raise HTTPException(status_code=404, detail="Workflow not found")

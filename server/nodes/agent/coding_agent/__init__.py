@@ -18,4 +18,5 @@ class CodingAgentNode(SpecializedAgentBase):
     subtitle = "Code Execution"
     group = ("agent",)
     description = "AI agent for code execution"
+    ui_hints = {**SpecializedAgentBase.ui_hints, "createsAgentBundle": True}
     Params = CodingAgentParams

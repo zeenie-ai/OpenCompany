@@ -8,11 +8,12 @@ const dist=join(root,"dist");
 const sdkManifest=join(root,"node_modules","@earendil-works","pi-coding-agent","package.json");
 if (JSON.parse(await readFile(sdkManifest,"utf8")).version!==SDK_VERSION) throw new Error("Pi distribution SDK version differs from its pin");
 
-// One file. The SDK and every package it imports are inlined, so the host needs
-// no node_modules and nothing is installed or unpacked where it runs. dist is
-// rebuilt whole: files left by an earlier build must never ship.
+// Each entry is self-contained. Tool effects run in their own durable leaf,
+// never in the model driver. Neither bundle needs node_modules at runtime.
+// Verify the recursive target before rebuilding the generated assets.
+if (resolve(dist)!==join(root,"dist") || dirname(resolve(dist))!==root) throw new Error("Invalid Pi distribution directory");
 await rm(dist,{recursive:true,force:true});
-const result=await Bun.build({entrypoints:[join(root,"src","index.ts")],outdir:dist,target:"bun",minify:false,metafile:true});
+const result=await Bun.build({entrypoints:[join(root,"src","index.ts"),join(root,"src","tool-host.ts")],outdir:dist,target:"bun",minify:false,metafile:true});
 if (!result.success) throw new Error(`Pi host build failed: ${result.logs.join("\n")}`);
 // The SDK reads its own name and version from the package.json in PI_PACKAGE_DIR.
 await copyFile(sdkManifest,join(dist,"package.json"));
@@ -35,4 +36,4 @@ for (const [directory,manifest] of [...packages].sort(([,a],[,b])=>String(a.name
   notices.push([`${manifest.name} ${manifest.version}`,typeof manifest.license==="string" ? `License: ${manifest.license}` : "",...texts.map(text=>text.trim())].filter(Boolean).join("\n\n"));
 }
 await writeFile(join(dist,"THIRD-PARTY-LICENSES.txt"),notices.join(`\n\n${"-".repeat(72)}\n\n`)+"\n");
-console.log(`Built the Pi host bundle (${Math.ceil(result.outputs[0]!.size/1024/1024)} MiB, ${packages.size} packages inlined)`);
+console.log(`Built Pi driver and tool bundles (${Math.ceil(result.outputs.reduce((sum,output)=>sum+output.size,0)/1024/1024)} MiB, ${packages.size} packages inlined)`);
