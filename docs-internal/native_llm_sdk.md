@@ -259,10 +259,13 @@ Thorough `high`; see [Chat Protocol](chat_protocol.md#model-and-thinking)).
 provider's `effort_models` in `llm_defaults.json` (`supports_effort` in
 `services/llm/config.py`), so a provider that never declares the list never
 receives it. Anthropic sends it as `output_config.effort`, OpenAI as
-`reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses), and
+`reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses),
 Gemini 3 as `thinking_level`, replacing any budget, since a level and a
-budget never go together. It overrides the agent's own effort or level and
-never turns thinking on or off.
+budget never go together, and OpenRouter as `reasoning.effort` in the request
+body, which it maps to the vendor's own setting (Anthropic's
+`output_config.effort`). OpenRouter lists only the Claude 5.x families: their
+thinking is on by default, while on Claude 4.x an effort would turn it on. It
+overrides the agent's own effort or level and never turns thinking on or off.
 
 All providers return the same `LLMResponse` dataclass, regardless of SDK:
 

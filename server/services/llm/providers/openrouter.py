@@ -59,6 +59,11 @@ class OpenRouterProvider(OpenAIProvider):
         del context_management
         # Strip [FREE] prefix from model ID
         clean_model = model.replace("[FREE] ", "")
+        if effort:
+            # OpenRouter takes effort in its reasoning object, which it maps
+            # to each vendor's own setting (Anthropic's output_config.effort).
+            # Only the effort_models receive one (ChatUnifier).
+            extra_body = {**(extra_body or {}), "reasoning": {"effort": effort}}
         return await super().chat(
             messages,
             model=clean_model,
@@ -67,7 +72,6 @@ class OpenRouterProvider(OpenAIProvider):
             thinking=thinking,
             tools=tools,
             context_management=None,
-            effort=effort,
             extra_headers=extra_headers,
             extra_body=extra_body,
         )

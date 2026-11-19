@@ -74,6 +74,26 @@ async def test_openai_sends_reasoning_effort_on_chat_completions():
 
 
 @pytest.mark.asyncio
+async def test_openrouter_sends_effort_as_the_reasoning_object():
+    with patch("openai.AsyncOpenAI"):
+        from services.llm.providers.openrouter import OpenRouterProvider
+
+        provider = OpenRouterProvider("sk-or-test")
+    create = provider._client.chat.completions.create = AsyncMock(return_value=_completion())
+    hello = [Message(role="user", content="Hi")]
+
+    await provider.chat(hello, model="anthropic/claude-sonnet-5.5", effort="low", max_tokens=None)
+    sent = create.call_args.kwargs
+    # Beside the cache flag; never OpenAI's top-level field, whose meaning
+    # for Claude OpenRouter does not document.
+    assert sent["extra_body"] == {"cache_control": {"type": "ephemeral"}, "reasoning": {"effort": "low"}}
+    assert "reasoning_effort" not in sent
+
+    await provider.chat(hello, model="anthropic/claude-sonnet-5.5", max_tokens=None)
+    assert create.call_args.kwargs["extra_body"] == {"cache_control": {"type": "ephemeral"}}
+
+
+@pytest.mark.asyncio
 async def test_openai_effort_wins_over_the_agents_own_on_responses():
     provider = _openai()
     response = SimpleNamespace(
@@ -166,4 +186,8 @@ def test_the_effort_models_are_the_thinking_generations():
     assert not supports_effort("anthropic", "claude-haiku-4-5")
     assert supports_effort("openai", "gpt-6-sol") and not supports_effort("openai", "gpt-4.1")
     assert supports_effort("gemini", "gemini-3.1-pro-preview") and not supports_effort("gemini", "gemini-2.5-pro")
-    assert not supports_effort("openrouter", "anthropic/claude-sonnet-5.5")
+    # On OpenRouter: the Claude 5.x families only. Reasoning is opt-in on
+    # Claude 4.x, where an effort would turn thinking on.
+    assert supports_effort("openrouter", "anthropic/claude-sonnet-5.5") and supports_effort("openrouter", "anthropic/claude-fable-5.2")
+    assert not supports_effort("openrouter", "anthropic/claude-opus-4.8")
+    assert not supports_effort("openrouter", "openai/gpt-6.1-sol")

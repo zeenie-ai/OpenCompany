@@ -795,7 +795,8 @@ each node keeps its model.
 - **Effort** rides the prepared payload into each LLM step (`effort`, activity input only) and reaches the provider
   only for a model in its provider's `effort_models` (`ChatUnifier`, `supports_effort`): Anthropic as
   `output_config.effort`, OpenAI as `reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses),
-  Gemini 3 as `thinking_level`. It never turns thinking on or off; any other model answers as without it, and the
+  Gemini 3 as `thinking_level`, OpenRouter (Claude 5.x models) as `reasoning.effort` in the request body. It never
+  turns thinking on or off; any other model answers as without it, and the
   picker shows `effort_note` ("{model} sets its own pace") in place of the levels.
 - **`get_chat_models`** lists the picker for one employee: Auto's row says what Auto uses now (the default model, or
   the answering agent's own), then each connected provider's offered models in `connected_providers` order (each row
