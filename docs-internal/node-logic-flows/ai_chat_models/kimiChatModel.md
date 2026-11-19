@@ -11,9 +11,10 @@
 
 ## Purpose
 
-Kimi models by Moonshot AI. `kimi-k3` is the current default with a
-1,048,576-token context window and a 131,072-token output ceiling, and
-`kimi-k3.1-pro` has the same window and ceiling;
+Kimi models by Moonshot AI. `kimi-k3.1-pro`, K3's successor, is the current
+default with a 1,048,576-token context window and a 131,072-token output
+ceiling, and `kimi-k3`, the default until 2026-11-19, has the same window and
+ceiling;
 `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` remain available
 as 262K tiers (`kimi-k2.5` left Moonshot's pricing page in September 2026). The node uses Moonshot's OpenAI-compatible endpoint through the native
 provider layer and the shared `ChatModelParams`.
@@ -30,7 +31,7 @@ provider layer and the shared `ChatModelParams`.
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `system_prompt` | string | `""` | no | - | System prompt |
-| `model` | string | `""` (injected) | no | - | `kimi-k3` default; `kimi-k3.1-pro`, `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` also supported |
+| `model` | string | `""` (injected) | no | - | `kimi-k3.1-pro` default; `kimi-k3`, `kimi-k2.6`, `kimi-k2.7-code` and `kimi-k2.7-code-highspeed` also supported |
 | `temperature` | number\|null | `null` | no | - | Shared schema field; accepted but not sent, because Moonshot fixes every model's temperature |
 | `max_tokens` | number\|null | `null` (model ceiling) | no | - | Up to 131,072 for K3 and K3.1 Pro; lower model-specific ceilings for K2 tiers |
 | `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |

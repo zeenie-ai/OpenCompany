@@ -103,7 +103,7 @@ sections below. Backend graph normalization, registered plugin schemas and
 - `groqChatModel` - Groq ultra-fast inference (Llama, Qwen3, GPT-OSS)
 - `cerebrasChatModel` - Cerebras custom AI hardware (Llama, Qwen)
 - `deepseekChatModel` - DeepSeek V4 (deepseek-v4.1-flash, the default / deepseek-v4-pro / deepseek-v4-flash)
-- `kimiChatModel` - Moonshot Kimi K3 (the default) / K3.1 Pro / K2.6 / K2.7-code
+- `kimiChatModel` - Moonshot Kimi K3.1 Pro (the default) / K3 / K2.6 / K2.7-code
 - `mistralChatModel` - Mistral Large / Small / Codestral
 - `ollamaChatModel` - Local Ollama server (OpenAI-compat via `{provider}_proxy` URL)
 - `lmstudioChatModel` - Local LM Studio server (OpenAI-compat via `{provider}_proxy` URL)

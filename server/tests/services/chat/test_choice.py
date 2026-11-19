@@ -291,7 +291,7 @@ async def test_the_picker_and_whether_the_employee_takes_it(chat, connected, mon
     picker = await chat.handlers.handle_get_chat_models({"session_id": "wf"}, None)
     assert picker["success"] is True and picker["session_id"] == "wf"
     # The agent has no model saved: its provider's default (OpenAI's) answers.
-    assert picker["auto"]["description"] == "Uses gpt-6.1-sol, Maya’s own model"
+    assert picker["auto"]["description"] == "Uses gpt-6.2-sol, Maya’s own model"
     assert [row["id"] for row in picker["models"]] == ANTHROPIC_ROWS
     default = await chat.handlers.handle_get_chat_models({"session_id": "default"}, None)
     assert default["success"] is False and default["error"] == "invalid_request"

@@ -105,7 +105,7 @@ The curated lists and figures in `llm_defaults.json` and `pricing.json` take the
 
 | Provider | Key Models | Context | Max Output | Thinking | Temp Range |
 |----------|-----------|---------|-----------|----------|------------|
-| **OpenAI** | GPT-6.2 Sol/Astra (+ `-pro`), GPT-6.1 Sol/Terra (+ `-pro`; default `gpt-6.1-sol`, until the gateway's pinned price list prices `gpt-6.2-sol`), GPT-6 Sol/Luna/Astra (+ `-pro`), GPT-5.6 Sol/Terra/Luna (+ `-pro`), GPT-5.5/5.4 | 1.05M | 128K | effort | omitted for reasoning models |
+| **OpenAI** | GPT-6.2 Sol/Astra (+ `-pro`; default `gpt-6.2-sol`), GPT-6.1 Sol/Terra (+ `-pro`), GPT-6 Sol/Luna/Astra (+ `-pro`), GPT-5.6 Sol/Terra/Luna (+ `-pro`), GPT-5.5/5.4 | 1.05M | 128K | effort | omitted for reasoning models |
 | **OpenAI** | GPT-4.1 | ~1.05M | 32K | none | 0-2 |
 | **Anthropic** | Claude Opus 5.5 (default `claude-opus-5-5`), Opus 5, Fable 5.2 / 5.1 / 5, Sonnet 5.5 / 5, Haiku 5.5 | 1M | 128K | adaptive | omitted (`temperature` / `top_p` / `top_k` rejected — `sampling_params_removed`) |
 | **Anthropic** | Claude Opus 4.8/4.7 | 1M | 128K | adaptive | omitted (`sampling_params_removed`) |
@@ -114,7 +114,7 @@ The curated lists and figures in `llm_defaults.json` and `pricing.json` take the
 | **Google** | Gemini 3.8-flash (default), 4-neon/hydrogen/carbon/argon, 3.7/3.6/3.5-flash, 3.5-flash-lite, 3.1-pro-preview/flash-lite, 3-flash-preview, 2.5-pro/flash/flash-lite | 1M | 64K; ~944K (Gemini 4) | budget (`thinking_level` on 3.x when set explicitly; Gemini 4 runs its default thinking until it is verified) | 0-2 |
 | **xAI** | Grok 4.20/4.20-multi-agent, 4.3, 4.7, 4.6, 4.5 | 500K-2M | 450K-1.8M | model/provider dependent | 0-2 |
 | **DeepSeek** | deepseek-v4.1-flash (default), deepseek-v4-pro, deepseek-v4-flash | 1M | ~944K (V4.1 Flash); ~393K (V4 Pro, V4 Flash) | thinking modes | 0-2 |
-| **Kimi** | kimi-k3 (default), kimi-k3.1-pro, kimi-k2.6, kimi-k2.7-code (+ `-highspeed`) | 1M (K3, K3.1 Pro); 256K (K2) | 131K (K3, K3.1 Pro); 32K/96K (K2) | K2.6 default explicitly disabled unless requested; K2.7 Code always on; K3 always reasons | omitted (Moonshot fixes every model's value; any other is a 400) |
+| **Kimi** | kimi-k3.1-pro (default), kimi-k3, kimi-k2.6, kimi-k2.7-code (+ `-highspeed`) | 1M (K3, K3.1 Pro); 256K (K2) | 131K (K3, K3.1 Pro); 32K/96K (K2) | K2.6 default explicitly disabled unless requested; K2.7 Code always on; K3 always reasons | omitted (Moonshot fixes every model's value; any other is a 400) |
 | **Mistral** | mistral-large/medium/small-latest (Large 3 / Medium 3.5 / Small 4), codestral-latest | 256K | 32K-131K | none | 0-1.5 |
 | **Groq** | GPT-OSS-120b/20b, Llama 3.x tiers, qwen3.8-27b + minimax-m2.7 (preview) | 131K-196K | 16K-131K | effort (GPT-OSS), format (Qwen3) | 0-2 |
 | **OpenRouter** | 400+ models from multiple providers | varies | varies | varies | 0-2 |
