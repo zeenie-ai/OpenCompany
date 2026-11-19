@@ -80,7 +80,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: one row in `api_usage_metrics` via the framework's cost-tracking on the `@Operation("search", cost={...})` spec (`service='brave_search'`, `action='web_search'`, `count=1`).
+- **Database writes**: none. `@Operation("search", cost={...})` (`service='brave_search'`, `action='web_search'`, `count=1`) is metadata nothing reads, so a search books no `api_usage_metrics` row.
 - **Broadcasts**: per-node status via `BaseNode.execute` (`update_node_status` executing/success/error); no plugin-specific broadcasts.
 - **External API calls**: `GET https://api.search.brave.com/res/v1/web/search` via `ctx.connection`.
 - **File I/O**: none.

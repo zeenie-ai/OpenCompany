@@ -130,6 +130,7 @@ flowchart TD
 - **Credential reads**: `auth_service.get_api_key("vercel_token")` per op.
 - **Cost metadata**: every op declares
   `cost={"service": "vercel", "action": "<operation>", "count": 1}`.
+  Nothing reads it; no usage row is written.
 - **Broadcasts**: standard node status; `credential.oauth.runtime_failed`
   via the annotated `PermissionError` path.
 

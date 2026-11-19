@@ -360,10 +360,9 @@ workflow_id=..., endpoint=<REST path>)` in the usage package
 paid call that already succeeded). Called **only after a
 successful call**, never for `list_endpoints` or `describe`, never after a 4xx/5xx
 (TikHub does not bill those either). Returns the recorder's cost for the
-`cost_usd` output key. The `cost=` metadata on each `@Operation` is
-dormant - the manual tracker does the work, because the framework's
-cost hook fires per operation and cannot know whether the call was
-billed.
+`cost_usd` output key. The `cost=` metadata on each `@Operation` does
+nothing: no framework code reads it. The tracker does the work, and it has
+to run from the plugin, which alone knows whether a call was billed.
 
 ## Team visibility
 

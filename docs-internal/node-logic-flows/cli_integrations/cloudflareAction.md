@@ -189,6 +189,7 @@ flowchart TD
   CLI call, plus `get_api_key("cloudflare_email")` for GraphQL.
 - **Cost metadata**: every operation declares
   `cost={"service": "cloudflare", "action": "<operation>", "count": 1}`.
+  Nothing reads it; no usage row is written.
 - **Broadcasts**: standard node status via `BaseNode.execute`; nothing
   plugin-specific beyond the upgrade marker clear. (Login / logout / status
   belong to the WS handlers `cloudflare_login` / `cloudflare_logout` /

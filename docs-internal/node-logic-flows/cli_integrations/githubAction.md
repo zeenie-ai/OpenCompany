@@ -138,6 +138,7 @@ flowchart TD
   write depending on the command.
 - **Cost metadata**: every op declares
   `cost={"service": "github", "action": "<operation>", "count": 1}`.
+  Nothing reads it; no usage row is written.
 - **Broadcasts / DB writes**: none beyond the standard node status.
 
 ## External Dependencies

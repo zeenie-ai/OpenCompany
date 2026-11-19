@@ -93,7 +93,7 @@ flowchart TD
 - **Broadcasts**: standard node status via `BaseNode.execute`.
 - **External API calls**: `POST /channels/{id}/messages`, `POST /users/@me/channels`,
   `Authorization: Bot <token>`.
-- **Cost tracking**: `{"service": "discord", "action": "send", "count": 1}`.
+- **Cost tracking**: none. The operation declares `cost={"service": "discord", "action": "send", "count": 1}`, which is metadata nothing reads; no usage row is written.
 
 ## External Dependencies
 

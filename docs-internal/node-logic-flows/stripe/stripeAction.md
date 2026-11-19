@@ -100,7 +100,7 @@ flowchart TD
 - **External API calls**: whatever the Stripe CLI performs for the command;
   `trigger <event>` causes Stripe to deliver a synthetic webhook to the
   `stripe listen` daemon (see [`stripeReceive`](./stripeReceive.md)).
-- **Cost metadata**: `cost={"service": "stripe", "action": "run", "count": 1}`.
+- **Cost metadata**: `cost={"service": "stripe", "action": "run", "count": 1}`. Nothing reads it; no usage row is written.
 - **Broadcasts / DB writes**: none beyond the standard node status.
 
 ## External Dependencies

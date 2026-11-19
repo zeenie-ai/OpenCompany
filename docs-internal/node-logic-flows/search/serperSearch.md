@@ -99,7 +99,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: one `api_usage_metrics` row per call via the `@Operation` cost spec (`service='serper'`, `action='web_search'`, `count=1`).
+- **Database writes**: none. The `@Operation` cost spec (`service='serper'`, `action='web_search'`, `count=1`) is metadata nothing reads, so a search books no `api_usage_metrics` row.
 - **Broadcasts**: per-node status via `BaseNode.execute`; no plugin-specific broadcasts.
 - **External API calls**: `POST` to one of `https://google.serper.dev/{search,news,images,places}` via `ctx.connection`.
 - **File I/O**: none.

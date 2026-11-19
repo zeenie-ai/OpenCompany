@@ -92,7 +92,7 @@ flowchart TD
 - **File I/O**: `download` writes into the workflow workspace via
   `fetch_to_workspace`; `upload` reads a workspace file via
   `coerce_file_param` (containment enforced).
-- **Cost tracking**: `upload` and `download` declare `cost={...}`.
+- **Cost tracking**: none. `upload` and `download` declare `cost={...}`, which is metadata nothing reads; no usage row is written.
 
 ## External Dependencies
 

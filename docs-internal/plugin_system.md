@@ -378,6 +378,11 @@ async def read(self, ctx: NodeContext, params: GmailParams) -> Any: ...
 
 Single-op nodes use one method; `parameters.operation` can be omitted.
 
+`cost=` is metadata only. The decorator copies it onto `OperationSpec.cost`
+and nothing reads it, so declaring it books no usage. A plugin that makes a
+paid call books it by calling `record_api_usage` after the call returns (see
+[pricing_service.md](./pricing_service.md), Tracking Pattern).
+
 ### Declarative REST via `Routing`
 
 For pure REST integrations, leave the op body empty and attach a

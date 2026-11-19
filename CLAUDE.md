@@ -1491,6 +1491,8 @@ await record_api_usage("twitter", action, resource_count, node_id=node_id,
 
 **A recorder never raises.** The call it books already happened and was paid for, and callers act on an exception: the proxy node would send a paid request again, a retried tweet could post twice, a mail trigger would drop the email it just read. A failed price or write is one warning in the log. Keep it that way, and import the recorder inside the function that calls it (`core.container` imports compaction at load, and a test replaces the name on the package).
 
+**`@Operation(cost={...})` books nothing.** Many operations declare that block; the decorator copies it onto `OperationSpec.cost` and no code reads it. A plugin's calls are booked only if it calls `record_api_usage` itself, so the search plugins, WhatsApp Business, Discord, Telegram, email and the CLI nodes record no usage today. Do not describe `cost=` as tracking, and do not rely on it in a new plugin.
+
 ### Pricing Configuration
 
 All pricing in `server/config/pricing.json` (user-editable):
@@ -1696,7 +1698,7 @@ Dedicated plugins under `server/nodes/search/` (`brave_search` / `serper_search`
 - **Serper**: `POST https://google.serper.dev/search` with `X-API-KEY` header. Supports web/news/images/places search types. Returns `{query, results, result_count, search_type, provider}` with optional `knowledge_graph`.
 - **Perplexity Sonar**: `POST https://api.perplexity.ai/chat/completions` with Bearer token. Returns `{query, answer (markdown), citations: [url], results: [{url}], model, provider}` with optional `images` and `related_questions`.
 
-All handlers fetch API keys via `auth_service.get_api_key()`; usage is tracked declaratively through the `cost={...}` argument on each node's `@Operation("search", ...)`.
+All handlers fetch API keys via `auth_service.get_api_key()`. Their calls are not booked as usage: each `@Operation("search", ...)` carries a `cost={...}` argument, and nothing reads it (see "API Cost Tracking" above).
 
 ## Config Node Architecture
 

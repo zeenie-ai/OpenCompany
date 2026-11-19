@@ -124,7 +124,7 @@ flowchart TD
 
 - **External API calls**: `graph.facebook.com/v25.0/...`, bearer token from the
   credential.
-- **Cost tracking**: each `@Operation` declares a `cost={...}` block.
+- **Cost tracking**: none. Each `@Operation` declares a `cost={...}` block, which is metadata nothing reads; no usage row is written.
 - **File I/O**: `send_media` with `media_source == 'file'` reads a workspace
   file via `coerce_file_param` (containment enforced).
 

@@ -153,6 +153,7 @@ flowchart TD
   `run_deploy --source` uploads the cwd.
 - **Cost metadata**: every op declares
   `cost={"service": "gcloud", "action": "<operation>", "count": 1}`.
+  Nothing reads it; no usage row is written.
 - **Broadcasts / DB writes**: none beyond the standard node status.
 
 ## External Dependencies
