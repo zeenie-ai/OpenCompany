@@ -40,7 +40,9 @@ CHAT_GUIDE_BASE = (
     "went back from), and [feedback]{...}[/feedback] is how the owner rated one of your answers; learn from it. "
     "[attachments]{...}[/attachments] after their words lists the files they attached, with their paths in your "
     "workspace.\n"
-    "- A search result numbered n is a source: cite the ones you rely on as [n] right after what they support."
+    "- A search result numbered n is a source: cite the ones you rely on as [n] right after what they support.\n"
+    "- If the tools you have cannot check something, such as how a page or image looks, say what you could not "
+    "check and ask the owner; do not build your own tools to check it."
 )
 FOLLOWUPS_GUIDE = (
     "- When a few short next questions would help the owner, end your reply with "

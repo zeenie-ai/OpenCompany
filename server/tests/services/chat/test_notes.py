@@ -121,6 +121,8 @@ GUIDE = (
     "[attachments]{...}[/attachments] after their words lists the files they attached, with their paths in your "
     "workspace.\n"
     "- A search result numbered n is a source: cite the ones you rely on as [n] right after what they support.\n"
+    "- If the tools you have cannot check something, such as how a page or image looks, say what you could not "
+    "check and ask the owner; do not build your own tools to check it.\n"
     "- When a few short next questions would help the owner, end your reply with "
     '<followups>["...", "..."]</followups>: at most 3, each a short question in the owner\'s own words. The chat '
     "shows them as buttons; the block itself is never shown."

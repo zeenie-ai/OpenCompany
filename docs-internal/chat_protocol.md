@@ -865,8 +865,9 @@ something), so a run that failed or stopped before writing offers them again, an
 untold. Clearing the chat forgets them.
 
 The answering agent's system prompt ends with a fixed guide (`services/chat/guide.py`): bracketed lines come from
-OpenCompany, not from the owner; a search result numbered n is cited as `[n]`; and, while the owner has Generated UI
-on, how to suggest follow-ups (`CHAT_REPLY_GUIDE`). With it off the agent reads `CHAT_GUIDE_BASE`, the same guide
+OpenCompany, not from the owner; a search result numbered n is cited as `[n]`; a check its tools cannot make (how a
+page or image looks, say) is reported to the owner with a question, not worked around with tooling of its own; and,
+while the owner has Generated UI on, how to suggest follow-ups (`CHAT_REPLY_GUIDE`). With it off the agent reads `CHAT_GUIDE_BASE`, the same guide
 without that line. Each is byte for byte the same on every turn.
 
 ## Follow-ups
