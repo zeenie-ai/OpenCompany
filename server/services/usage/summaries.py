@@ -1,14 +1,97 @@
-"""What was recorded, added up for the usage panels."""
+"""What was recorded, added up for the usage panels.
 
+A cost is model calls plus paid tool calls: the rows of
+``token_usage_metrics`` and of ``api_usage_metrics``.
+"""
+
+from datetime import datetime, timezone
+from operator import itemgetter
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func
 from sqlmodel import select
 
 from core.logging import get_logger
-from models.database import APIUsageMetric, TokenUsageMetric
+from models.database import APIUsageMetric, TokenUsageMetric, Workflow
 
 logger = get_logger(__name__)
+
+
+def month_start(now: datetime, zone_name: Optional[str]) -> datetime:
+    """Midnight on the 1st of this month in the owner's time zone, the month
+    Settings > Billing counts tasks over. UTC when the zone is unset or
+    unknown."""
+    try:
+        zone = ZoneInfo(zone_name or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        zone = ZoneInfo("UTC")
+    return now.astimezone(zone).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+async def chat_run_costs(database: Any, workflow_id: str) -> Dict[str, float]:
+    """USD per chat run of one workflow: ``{run_id: cost}``.
+
+    A run with no booked call is absent. Errors propagate, so a caller shows
+    that the costs are unavailable instead of a zero.
+    """
+    async with database.get_session() as session:
+        model_calls = await session.execute(
+            select(TokenUsageMetric.chat_run_id, func.sum(TokenUsageMetric.total_cost))
+            .where(TokenUsageMetric.workflow_id == workflow_id, TokenUsageMetric.chat_run_id.is_not(None))
+            .group_by(TokenUsageMetric.chat_run_id)
+        )
+        tool_calls = await session.execute(
+            select(APIUsageMetric.chat_run_id, func.sum(APIUsageMetric.cost))
+            .where(APIUsageMetric.workflow_id == workflow_id, APIUsageMetric.chat_run_id.is_not(None))
+            .group_by(APIUsageMetric.chat_run_id)
+        )
+        rows = [*model_calls.all(), *tool_calls.all()]
+
+    costs: Dict[str, float] = {}
+    for run_id, cost in rows:
+        costs[run_id] = costs.get(run_id, 0.0) + float(cost or 0)
+    return {run_id: round(cost, 6) for run_id, cost in costs.items()}
+
+
+async def workflow_costs(database: Any, since: datetime) -> List[Dict[str, Any]]:
+    """USD per workflow since ``since``: ``[{workflow_id, name, total_cost}]``.
+
+    Workflows come highest cost first. Calls booked with no workflow (a hire
+    screen's setup call), or for a workflow deleted since, add up in one last
+    row whose ``workflow_id`` and ``name`` are ``None``. Errors propagate.
+    """
+    since_utc = since.astimezone(timezone.utc)
+    async with database.get_session() as session:
+        # token_usage_metrics.created_at holds UTC without a zone;
+        # api_usage_metrics.timestamp is declared with one.
+        model_calls = await session.execute(
+            select(TokenUsageMetric.workflow_id, func.sum(TokenUsageMetric.total_cost))
+            .where(TokenUsageMetric.created_at >= since_utc.replace(tzinfo=None))
+            .group_by(TokenUsageMetric.workflow_id)
+        )
+        tool_calls = await session.execute(
+            select(APIUsageMetric.workflow_id, func.sum(APIUsageMetric.cost))
+            .where(APIUsageMetric.timestamp >= since_utc)
+            .group_by(APIUsageMetric.workflow_id)
+        )
+        rows = [*model_calls.all(), *tool_calls.all()]
+        names = dict((await session.execute(select(Workflow.id, Workflow.name))).all())
+
+    costs: Dict[Optional[str], float] = {}
+    for workflow_id, cost in rows:
+        key = workflow_id if workflow_id in names else None
+        costs[key] = costs.get(key, 0.0) + float(cost or 0)
+
+    workflows = [
+        {"workflow_id": workflow_id, "name": names[workflow_id], "total_cost": round(cost, 6)}
+        for workflow_id, cost in costs.items()
+        if workflow_id is not None
+    ]
+    workflows.sort(key=itemgetter("total_cost"), reverse=True)
+    if None in costs:
+        workflows.append({"workflow_id": None, "name": None, "total_cost": round(costs[None], 6)})
+    return workflows
 
 
 async def provider_usage_summary(database: Any) -> List[Dict[str, Any]]:

@@ -150,8 +150,9 @@ server/services/
 ├── usage/                   # Usage tracking: owns the two usage tables; imports no chat, employee,
 │   │                        # compaction or Temporal code (see pricing_service.md)
 │   ├── recording.py         # record_llm_usage / record_api_usage: one usage row per call; neither raises
-│   ├── summaries.py         # provider_usage_summary / api_usage_summary
-│   └── handlers.py          # The get_provider_usage_summary / get_api_usage_summary commands
+│   ├── summaries.py         # provider_usage_summary / api_usage_summary; chat_run_costs (per reply),
+│   │                        # workflow_costs (per employee since an instant), month_start
+│   └── handlers.py          # get_provider_usage_summary / get_api_usage_summary / get_chat_run_costs / get_workflow_costs
 ├── markdown_formatter.py    # GFM markdown to platform-specific formatting (Telegram HTML, WhatsApp, plain)
 ├── ws_handler_registry.py   # Plugin-owned WS commands self-register here (Wave 11.H)
 ├── todo_service.py          # TodoService singleton for writeTodos tool (JSON per-session state)
@@ -2563,7 +2564,7 @@ Updated `client_left` and presence handlers use `has_real_android_devices()` ins
 | **User Settings** | `get_user_settings`, `save_user_settings` |
 | **Provider Defaults** | `get_provider_defaults`, `save_provider_defaults` |
 | **Pricing** | `get_pricing_config`, `save_pricing_config` |
-| **Usage/Compaction** | `get_api_usage_summary`, `get_compaction_stats`, `configure_compaction`, `get_provider_usage_summary` |
+| **Usage/Compaction** | `get_api_usage_summary`, `get_provider_usage_summary`, `get_chat_run_costs` (USD per chat run of a workflow), `get_workflow_costs` (this month's cost by employee) from `services/usage/handlers.py`; `get_compaction_stats`, `configure_compaction` |
 | **Agent Teams** | `create_team`, `get_team`, `get_team_status`, `dissolve_team`, `add_team_task`, `claim_team_task`, `complete_team_task`, `get_team_tasks`, `send_team_message`, `get_team_messages` |
 | **Model Registry** | `get_model_constraints`, `refresh_model_registry` |
 | **Employees (Normal mode)** | `list_employees`, `get_employee`, `get_employee_usage`, `generate_employee_setup`, `cancel_employee_setup`, `hire_employee`, `start_employee`, `enable_employee_talk`, `apply_employee_changes`, `rename_employee`, `set_employee_photo`, `workspace_steps_list` (see [normal_mode.md](./docs-internal/normal_mode.md)) |

@@ -9,7 +9,7 @@ from services.usage import handlers
 from services.ws_handler_registry import get_ws_handlers
 from tests.services.usage._helpers import add_api_call, add_model_call
 
-COMMANDS = ("get_provider_usage_summary", "get_api_usage_summary")
+COMMANDS = ("get_provider_usage_summary", "get_api_usage_summary", "get_chat_run_costs", "get_workflow_costs")
 MAIN_PY = Path(__file__).resolve().parents[3] / "main.py"
 
 

@@ -2,11 +2,16 @@
 
 from sqlmodel import select
 
-from models.database import APIUsageMetric, TokenUsageMetric
+from models.database import APIUsageMetric, TokenUsageMetric, Workflow
 
 
 def unavailable():
     raise RuntimeError("database down")
+
+
+async def add_workflow(database, workflow_id: str, name: str) -> None:
+    """One saved workflow (an employee) with that id and name."""
+    await _add(database, Workflow(id=workflow_id, name=name, slug=f"{name}_{workflow_id}", data={}))
 
 
 async def _add(database, row) -> None:

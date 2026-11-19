@@ -148,7 +148,7 @@ Live total = `len(MESSAGE_HANDLERS) + len(get_ws_handlers())` -- the `MESSAGE_HA
 | Memory | `clear_memory`, `reset_skill`, `configure_compaction`, `get_compaction_stats` |
 | User settings | `get_user_settings`, `save_user_settings`, `get_provider_defaults`, `save_provider_defaults` |
 | Pricing | `get_pricing_config`, `save_pricing_config` (`services/pricing_handlers.py`) |
-| Usage | `get_api_usage_summary`, `get_provider_usage_summary` (`services/usage/handlers.py`) |
+| Usage | `get_api_usage_summary`, `get_provider_usage_summary`, `get_chat_run_costs`, `get_workflow_costs` (`services/usage/handlers.py`) |
 | Agent teams | `create_team`, `add_team_task`, `claim_team_task`, `complete_team_task`, `get_team_messages` |
 | Model registry | `get_model_constraints`, `refresh_model_registry` |
 

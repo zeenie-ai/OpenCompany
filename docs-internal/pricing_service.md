@@ -410,6 +410,43 @@ providers = await provider_usage_summary(database)
 `server/services/usage/handlers.py` serves both as the WebSocket commands
 `get_api_usage_summary` and `get_provider_usage_summary`.
 
+### What a reply and an employee cost
+
+A cost is model calls plus paid tool calls, the rows of both tables:
+
+```python
+from services.usage import chat_run_costs, month_start, workflow_costs
+
+# USD per chat run of one workflow
+runs = await chat_run_costs(database, workflow_id)
+# Returns: {'r_3f2a...': 0.412, 'r_91bc...': 0.058}
+
+# USD per workflow since an instant, highest first
+since = month_start(datetime.now(timezone.utc), settings.get('profile_timezone'))
+costs = await workflow_costs(database, since)
+# Returns: [{'workflow_id': '2', 'name': 'Ava', 'total_cost': 3.2},
+#           {'workflow_id': None, 'name': None, 'total_cost': 0.04}]
+```
+
+- A chat run with no booked call is absent from `chat_run_costs`.
+- `workflow_costs` ends with one unnamed row (`workflow_id` and `name` both
+  `None`) for calls booked with no workflow, such as a hire screen's setup
+  call, and for a workflow deleted since.
+- `month_start` is midnight on the 1st in the owner's `profile_timezone`
+  (UTC when unset or unknown), the month Settings > Billing counts tasks over.
+- Both read functions let an error propagate, so a screen shows that the
+  figure is unavailable instead of a zero.
+
+The commands are `get_chat_run_costs {workflow_id}`, answering
+`{runs: {run_id: usd}}`, and `get_workflow_costs {}`, answering
+`{since, total_cost, workflows: [{workflow_id, name, total_cost}]}` with
+`since` as YYYY-MM-DD.
+
+Not counted, because nothing books them: Claude Code and Codex agents, the
+RLM agent, standalone chat-model nodes, in-process agents without a memory
+session, and every plugin whose only cost code is an `@Operation(cost=...)`
+block.
+
 ## Frontend Display
 
 The credentials modal displays usage statistics through two section components, both wired via
@@ -512,8 +549,8 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost`, metadata nothing reads |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
 | `server/services/usage/recording.py` | `record_api_usage()` and `record_llm_usage()`: one usage row per call; neither raises |
-| `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()` |
-| `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` commands |
+| `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()`, `chat_run_costs()`, `workflow_costs()`, `month_start()` |
+| `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` / `get_chat_run_costs` / `get_workflow_costs` commands |
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |
 | `client/src/hooks/useApiKeys.ts` | `getAPIUsageSummary` / `getProviderUsageSummary` |
