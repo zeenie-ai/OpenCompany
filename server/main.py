@@ -188,11 +188,15 @@ async def lifespan(app: FastAPI):
     # line for work that keeps retrying).
     import services.attention  # noqa: F401
 
-    # Wave 13.8: services/pricing_handlers.py self-registers the 3
-    # pricing handlers (get_pricing_config / save_pricing_config /
-    # get_api_usage_summary). Flat module (sibling to services/pricing.py)
-    # to avoid renaming the existing `services.pricing` import path.
+    # Wave 13.8: services/pricing_handlers.py self-registers the 2
+    # pricing handlers (get_pricing_config / save_pricing_config). Flat
+    # module (sibling to services/pricing.py) to avoid renaming the
+    # existing `services.pricing` import path.
     import services.pricing_handlers  # noqa: F401
+
+    # services/usage/handlers.py self-registers the usage commands
+    # (get_provider_usage_summary / get_api_usage_summary).
+    import services.usage.handlers  # noqa: F401
 
     container.wire(
         modules=[

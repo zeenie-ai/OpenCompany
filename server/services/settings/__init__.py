@@ -2,8 +2,8 @@
 
 Side-effect import registers the settings handlers listed in
 ``handlers.WS_HANDLERS`` (user_settings + provider_defaults +
-validated_ai_providers + global_model + compaction stats/config +
-provider usage summary) into ``ws_handler_registry``.
+validated_ai_providers + global_model + compaction stats/config) into
+``ws_handler_registry``.
 """
 
 from __future__ import annotations

@@ -147,6 +147,10 @@ server/services/
 ├── agent_team.py            # AgentTeamService for multi-agent coordination
 ├── model_registry.py        # ModelRegistryService - model constraints from OpenRouter + llm_defaults
 ├── pricing.py               # LLM and API cost calculation (loads config/pricing.json)
+├── usage/                   # Usage tracking: owns the two usage tables; imports no chat, employee,
+│   │                        # compaction or Temporal code (see pricing_service.md)
+│   ├── summaries.py         # provider_usage_summary / api_usage_summary
+│   └── handlers.py          # The get_provider_usage_summary / get_api_usage_summary commands
 ├── markdown_formatter.py    # GFM markdown to platform-specific formatting (Telegram HTML, WhatsApp, plain)
 ├── ws_handler_registry.py   # Plugin-owned WS commands self-register here (Wave 11.H)
 ├── todo_service.py          # TodoService singleton for writeTodos tool (JSON per-session state)

@@ -1267,8 +1267,10 @@ async def handle_process_restart(data: Dict[str, Any], websocket: WebSocket) -> 
 # ============================================================================
 # Pricing Config Handlers — extracted to services/pricing_handlers.py (Wave 13.8)
 # ============================================================================
-# 3 handlers (get_pricing_config / save_pricing_config / get_api_usage_summary)
-# self-register on services/pricing_handlers.py import.
+# 2 handlers (get_pricing_config / save_pricing_config) self-register on
+# services/pricing_handlers.py import. The usage summaries
+# (get_provider_usage_summary / get_api_usage_summary) self-register on
+# services/usage/handlers.py import.
 
 
 @ws_handler()
@@ -1282,8 +1284,8 @@ async def handle_get_node_allowlist(data: Dict[str, Any], websocket: WebSocket) 
 # ============================================================================
 # Compaction Handlers — extracted to services/settings/handlers.py (Wave 13.3)
 # ============================================================================
-# get_compaction_stats + configure_compaction moved, and so did
-# get_provider_usage_summary; all three self-register from services/settings.
+# get_compaction_stats + configure_compaction moved; both self-register
+# from services/settings.
 
 
 # ============================================================================

@@ -360,7 +360,7 @@ class TokenUsageMetric(SQLModel, table=True):
     total_cost: float
 ```
 
-### Database Methods
+### Writing and reading rows
 
 ```python
 # Save API usage
@@ -373,11 +373,24 @@ await db.save_api_usage_metric({
     'resource_count': 1,
     'cost': 0.01
 })
-
-# Get usage summary (aggregated by service)
-summary = await db.get_api_usage_summary(service='twitter')
-# Returns: [{'service': 'twitter', 'total_resources': 50, 'total_cost': 0.5, 'execution_count': 45}]
 ```
+
+The summaries live in the usage package, `server/services/usage/`, which owns
+the reads of both usage tables:
+
+```python
+from services.usage import api_usage_summary, provider_usage_summary
+
+# Paid API calls, added up by service and operation
+summary = await api_usage_summary(database, service='twitter')
+# Returns: [{'service': 'twitter', 'total_resources': 50, 'total_cost': 0.5, 'execution_count': 45, 'operations': [...]}]
+
+# Model calls, added up by provider and model
+providers = await provider_usage_summary(database)
+```
+
+`server/services/usage/handlers.py` serves both as the WebSocket commands
+`get_api_usage_summary` and `get_provider_usage_summary`.
 
 ## Frontend Display
 
@@ -397,8 +410,8 @@ const { getAPIUsageSummary, getProviderUsageSummary } = useApiKeys();
 
 There is no UI for editing pricing. `PricingConfigModal` + `usePricing` existed but were never
 mounted anywhere and were deleted; the `get_pricing_config` / `save_pricing_config` WS handlers
-remain registered with no client caller. Editing `pricing.json` means editing the file. (The third
-handler in that module, `get_api_usage_summary`, IS live — `useApiKeys` calls it.)
+(`server/services/pricing_handlers.py`) remain registered with no client caller. Editing
+`pricing.json` means editing the file.
 
 ### Display Format
 
@@ -476,7 +489,9 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins — declarative `@Operation(cost={...})` (no `_track_search_usage`) |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost` metadata |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
-| `server/core/database.py` | `save_api_usage_metric()`, `get_api_usage_summary()` |
+| `server/core/database.py` | `save_api_usage_metric()`, `save_token_metric()` |
+| `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()` |
+| `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` commands |
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |
 | `client/src/hooks/useApiKeys.ts` | `getAPIUsageSummary` / `getProviderUsageSummary` |

@@ -11,7 +11,8 @@ Extracted from ``routers/websocket.py`` (Wave 13.3). 8 handlers covering:
     ``configure_compaction``).
 
 Wire shape preserved across the move; frontend handlers continue
-working unchanged.
+working unchanged. The provider usage summary is served by
+``services/usage/handlers.py``.
 """
 
 from __future__ import annotations
@@ -218,21 +219,6 @@ async def handle_configure_compaction(data: Dict[str, Any], websocket: WebSocket
     return {"success": success}
 
 
-@ws_handler()
-async def handle_get_provider_usage_summary(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
-    """Get aggregated token usage and cost by provider for Credentials Modal.
-
-    Lives in settings/ for now (Wave 13.3). Wave 13.8 may move it to a
-    dedicated ``services/pricing/handlers.py`` module alongside
-    ``get_pricing_config`` / ``save_pricing_config`` / ``get_api_usage_summary``.
-    """
-    from core.container import container
-
-    database = container.database()
-    providers = await database.get_provider_usage_summary()
-    return {"success": True, "providers": providers}
-
-
 WS_HANDLERS: Dict[str, Any] = {
     "get_user_settings": handle_get_user_settings,
     "save_user_settings": handle_save_user_settings,
@@ -242,7 +228,6 @@ WS_HANDLERS: Dict[str, Any] = {
     "save_global_model": handle_save_global_model,
     "get_compaction_stats": handle_get_compaction_stats,
     "configure_compaction": handle_configure_compaction,
-    "get_provider_usage_summary": handle_get_provider_usage_summary,
 }
 
 
@@ -251,7 +236,6 @@ __all__ = [
     "handle_configure_compaction",
     "handle_get_compaction_stats",
     "handle_get_provider_defaults",
-    "handle_get_provider_usage_summary",
     "handle_get_user_settings",
     "handle_get_validated_ai_providers",
     "handle_save_global_model",
