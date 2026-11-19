@@ -1,6 +1,6 @@
 {
   "source_commit": "56f0b397d0b313ec550791c1e2772525a9f7cf12",
-  "count": 158,
+  "count": 166,
   "nodes": [
     {
       "type": "agentBuilder",
@@ -2922,6 +2922,230 @@
       ],
       "source": "server/nodes/search/perplexity_search/__init__.py",
       "card": "docs-internal/node-logic-flows/search/perplexitySearch.md"
+    },
+    {
+      "type": "piBash",
+      "name": "Pi Bash",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_bash/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piBash.md"
+    },
+    {
+      "type": "piEdit",
+      "name": "Pi Edit File",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_edit/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piEdit.md"
+    },
+    {
+      "type": "piFind",
+      "name": "Pi Find Files",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_find/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piFind.md"
+    },
+    {
+      "type": "piGrep",
+      "name": "Pi Search Text",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_grep/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piGrep.md"
+    },
+    {
+      "type": "piLs",
+      "name": "Pi List Directory",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_ls/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piLs.md"
+    },
+    {
+      "type": "piPowerShell",
+      "name": "Pi PowerShell",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_powershell/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piPowerShell.md"
+    },
+    {
+      "type": "piRead",
+      "name": "Pi Read File",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_read/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piRead.md"
+    },
+    {
+      "type": "piWrite",
+      "name": "Pi Write File",
+      "family": "filesystem",
+      "groups": [
+        "filesystem",
+        "tool"
+      ],
+      "plugin_bases": [
+        "PiToolNode",
+        "ActionNode",
+        "BaseNode"
+      ],
+      "component_kind": "square",
+      "availability": "registered",
+      "availability_note": "Prerequisites and operation limits remain in the node card.",
+      "agent_tool_eligible": true,
+      "workspace_task_eligible": false,
+      "canvas_run_hint": "renderer-dependent",
+      "config_hint": true,
+      "task_queue": "machina-default",
+      "credentials": [],
+      "operations": [
+        "execute"
+      ],
+      "source": "server/nodes/filesystem/pi_write/__init__.py",
+      "card": "docs-internal/node-logic-flows/code_fs_process/piWrite.md"
     },
     {
       "type": "processManager",

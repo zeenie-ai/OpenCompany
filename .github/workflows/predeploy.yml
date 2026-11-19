@@ -32,6 +32,13 @@ jobs:
         run: bun run --filter react-flow-client typecheck
       - name: JS executor TypeScript check
         run: bun run --filter opencompany-nodejs-executor typecheck
+      - name: Install Pi search dependency
+        # SDK search tests use the real executable with downloads disabled.
+        # ripgrep is not guaranteed to be present on hosted Ubuntu runners.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ripgrep
+          rg --version
       - name: Pi SDK contracts and TypeScript check
         run: |
           bun --cwd=server/pi run typecheck

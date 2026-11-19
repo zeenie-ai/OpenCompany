@@ -426,6 +426,21 @@ def test_predeploy_checks_executor_types(predeploy_yml: dict, sidecar_pkg: dict)
     assert f"bun run --filter {SIDECAR_PKG_NAME} typecheck" in commands
 
 
+def test_pi_contracts_install_search_dependency_before_running(predeploy_yml: dict):
+    """The real SDK search tests run offline and cannot download ripgrep."""
+    job = predeploy_yml["jobs"]["build-and-lint"]
+    steps = job["steps"]
+    contracts = next(i for i, step in enumerate(steps) if "bun run test:pi" in step.get("run", ""))
+    setup = next((i for i, step in enumerate(steps)
+                  if re.search(r"apt-get\s+install\b[^\n]*\bripgrep\b", step.get("run", ""))), None)
+    assert setup is not None, "Install ripgrep explicitly; hosted runners need not include rg"
+    assert job["runs-on"] == "ubuntu-latest", "Update dependency provisioning when changing the Pi test runner"
+    assert setup < contracts
+    assert "rg --version" in steps[setup]["run"]
+    assert "if" not in steps[setup] and not steps[setup].get("continue-on-error", False)
+    assert not steps[contracts].get("continue-on-error", False)
+
+
 def test_backend_tests_run_on_every_os_with_the_pinned_temporal_cli(predeploy_yml: dict):
     """RFC-0005 Phase 1: the whole server suite runs on Linux, Windows and
     macOS, and its real-server tests get the CLI the app pins, installed by

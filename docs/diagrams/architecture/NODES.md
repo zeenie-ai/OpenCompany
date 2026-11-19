@@ -1,6 +1,6 @@
 # Registered-node capability index
 
-Source-backed declaration snapshot: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. **158 registered types**.
+Source-backed declaration snapshot: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. **166 registered types**.
 
 Companion to views 06 and 07. Rows describe declarations, not successful provider/device execution.
 Agent-tool eligibility comes from `iter_tool_node_classes`; direct Workspace tasks require the explicit
@@ -128,7 +128,7 @@ Regenerate with the backend Python environment: `python scripts/architecture_dia
 | [`emailReceive`](../../../docs-internal/node-logic-flows/email/emailReceive.md) · [source](../../../server/nodes/email/email_receive/__init__.py) | registered | PollingTriggerNode | — | — | renderer-dependent | `triggers-poll` |
 | [`emailSend`](../../../docs-internal/node-logic-flows/email/emailSend.md) · [source](../../../server/nodes/email/email_send/__init__.py) | registered | ActionNode | eligible | — | renderer-dependent | `messaging` |
 
-## filesystem (5)
+## filesystem (13)
 
 | Node / evidence | Status | Plugin base | Agent tool | Workspace task | Canvas hint | Queue |
 |---|---|---|---|---|---|---|
@@ -136,6 +136,14 @@ Regenerate with the backend Python environment: `python scripts/architecture_dia
 | [`fileRead`](../../../docs-internal/node-logic-flows/code_fs_process/fileRead.md) · [source](../../../server/nodes/filesystem/file_read/__init__.py) | registered | ActionNode | eligible | — | renderer-dependent | `machina-default` |
 | [`fsSearch`](../../../docs-internal/node-logic-flows/code_fs_process/fsSearch.md) · [source](../../../server/nodes/filesystem/fs_search/__init__.py) | registered | ActionNode | eligible | — | renderer-dependent | `machina-default` |
 | [`gallery`](../../../docs-internal/node-logic-flows/code_fs_process/gallery.md) · [source](../../../server/nodes/filesystem/gallery/__init__.py) | registered | ActionNode | — | — | renderer-dependent | `machina-default` |
+| [`piBash`](../../../docs-internal/node-logic-flows/code_fs_process/piBash.md) · [source](../../../server/nodes/filesystem/pi_bash/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piEdit`](../../../docs-internal/node-logic-flows/code_fs_process/piEdit.md) · [source](../../../server/nodes/filesystem/pi_edit/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piFind`](../../../docs-internal/node-logic-flows/code_fs_process/piFind.md) · [source](../../../server/nodes/filesystem/pi_find/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piGrep`](../../../docs-internal/node-logic-flows/code_fs_process/piGrep.md) · [source](../../../server/nodes/filesystem/pi_grep/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piLs`](../../../docs-internal/node-logic-flows/code_fs_process/piLs.md) · [source](../../../server/nodes/filesystem/pi_ls/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piPowerShell`](../../../docs-internal/node-logic-flows/code_fs_process/piPowerShell.md) · [source](../../../server/nodes/filesystem/pi_powershell/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piRead`](../../../docs-internal/node-logic-flows/code_fs_process/piRead.md) · [source](../../../server/nodes/filesystem/pi_read/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
+| [`piWrite`](../../../docs-internal/node-logic-flows/code_fs_process/piWrite.md) · [source](../../../server/nodes/filesystem/pi_write/__init__.py) | registered | PiToolNode | eligible | — | renderer-dependent | `machina-default` |
 | [`shell`](../../../docs-internal/node-logic-flows/code_fs_process/shell.md) · [source](../../../server/nodes/filesystem/shell/__init__.py) | registered | ActionNode | eligible | — | renderer-dependent | `machina-default` |
 
 ## google (7)

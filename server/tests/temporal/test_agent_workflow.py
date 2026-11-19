@@ -1399,11 +1399,53 @@ class TestTranscriptPressureReplaySafety:
         assert 'context_usage_total.get("total_tokens")' in section
         assert "compact_source = messages" in section
 
-    def test_only_external_results_outside_delegation_are_cut(self):
-        source = self._source()
-        start = source.index("tool_content = _serialise_tool_result(tool_result)")
-        cap = source[start : start + 600]
+    @pytest.mark.parametrize("limit,is_delegation,node_type,should_cap", [
+        (100, False, "shell", True),
+        (100, False, "piRead", True),
+        (0, False, "shell", False),
+        (None, False, "shell", False),
+        (100, True, "shell", False),
+        (100, False, "coding_agent", False),
+        (100, False, "taskManager", False),
+        (100, False, "_builtin_skill", False),
+    ])
+    def test_only_external_results_outside_delegation_are_cut(
+        self, limit, is_delegation, node_type, should_cap
+    ):
+        import ast
+        import textwrap
 
-        assert "not is_delegation" in cap
-        assert 'tool_output_is_capped(tool_info["node_type"])' in cap
-        assert "bound_tool_output(" in cap
+        from services.tool_output import bound_tool_output, tool_output_is_capped
+
+        tree = ast.parse(textwrap.dedent(self._source()))
+
+        def assigns_tool_content(statement, function_name):
+            return (
+                isinstance(statement, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "tool_content" for target in statement.targets)
+                and isinstance(statement.value, ast.Call)
+                and isinstance(statement.value.func, ast.Name)
+                and statement.value.func.id == function_name
+            )
+
+        serialise = next(node for node in ast.walk(tree) if assigns_tool_content(node, "_serialise_tool_result"))
+        # Select the actual guard following result serialization, independent
+        # of comments or intervening media bookkeeping. A character window
+        # made this contract fail when the Pi Read binding grew that section.
+        cap = min(
+            (node for node in ast.walk(tree)
+             if isinstance(node, ast.If) and node.lineno > serialise.lineno
+             and any(assigns_tool_content(statement, "bound_tool_output") for statement in node.body)),
+            key=lambda node: node.lineno,
+        )
+        original = "x" * 200
+        namespace = {
+            "tool_content": original, "tool_output_limit": limit,
+            "is_delegation": is_delegation, "tool_info": {"node_type": node_type},
+            "tool_output_is_capped": tool_output_is_capped, "bound_tool_output": bound_tool_output,
+        }
+        exec(compile(ast.Module(body=[cap], type_ignores=[]), "<workflow-tool-result-cap>", "exec"), namespace)
+        if should_cap:
+            assert namespace["tool_content"].startswith("x" * 100 + "\n\n[Tool result truncated:")
+        else:
+            assert namespace["tool_content"] == original
