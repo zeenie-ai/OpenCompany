@@ -78,6 +78,56 @@ async def test_tool_errors_only_stop_the_loop_when_the_owner_must_fix_them(needs
         assert len(unifier.calls) == 2
 
 
+def _ai_service():
+    from services.ai import AIService
+
+    return AIService(
+        auth_service=_Auth(),
+        database=_Database(),
+        cache=None,
+        settings=object(),
+        chat_unifier=_FakeUnifier([]),
+    )
+
+
+async def _track(service, **overrides):
+    """One in-process agent run's usage, tracked for workflow ``wf``."""
+    call = {
+        "session_id": "session-1",
+        "node_id": "agent-1",
+        "provider": "openai",
+        "model": "gpt-test",
+        "ai_response": Usage(input_tokens=5, output_tokens=2, total_tokens=7),
+        "all_messages": [],
+        "workflow_id": "wf",
+    }
+    call.update(overrides)
+    return await service._track_token_usage(**call)
+
+
+@pytest.mark.asyncio
+async def test_in_process_usage_is_tracked_under_its_workflow(monkeypatch):
+    compaction = SimpleNamespace(track=AsyncMock(return_value={"total": 7, "needs_compaction": False}))
+    monkeypatch.setattr("services.compaction.get_compaction_service", lambda: compaction)
+
+    await _track(_ai_service())
+
+    assert compaction.track.await_args.kwargs["workflow_id"] == "wf"
+
+
+@pytest.mark.asyncio
+async def test_in_process_compaction_books_under_its_workflow(monkeypatch):
+    compaction = SimpleNamespace(
+        track=AsyncMock(return_value={"total": 7, "needs_compaction": True}),
+        compact_context=AsyncMock(return_value={"success": True}),
+    )
+    monkeypatch.setattr("services.compaction.get_compaction_service", lambda: compaction)
+
+    await _track(_ai_service(), memory_content="earlier turns", api_key="secret")
+
+    assert compaction.compact_context.await_args.kwargs["workflow_id"] == "wf"
+
+
 def test_in_process_compaction_usage_joins_execution_wide_total():
     from services.ai import _accumulate_compaction_usage
 

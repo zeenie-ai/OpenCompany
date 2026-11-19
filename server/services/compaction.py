@@ -139,8 +139,20 @@ class CompactionService:
             threshold = self.get_model_threshold(model, provider, ratio=ratio)
         return {"context_management": {"compact_threshold": threshold}}
 
-    async def track(self, session_id: str, node_id: str, provider: str, model: str, usage: Dict[str, int]) -> Dict[str, Any]:
-        """Track token usage and cost, return compaction status."""
+    async def track(
+        self,
+        session_id: str,
+        node_id: str,
+        provider: str,
+        model: str,
+        usage: Dict[str, int],
+        workflow_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Track token usage and cost, return compaction status.
+
+        ``workflow_id`` goes on the usage row, so the call counts for the
+        employee it worked for.
+        """
         from services.usage import record_llm_usage
 
         cost = await record_llm_usage(
@@ -149,6 +161,7 @@ class CompactionService:
             usage=usage,
             session_id=session_id,
             node_id=node_id,
+            workflow_id=workflow_id,
             database=self._db,
         )
 

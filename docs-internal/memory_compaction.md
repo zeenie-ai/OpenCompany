@@ -139,8 +139,8 @@ Stores one metric for each call `record_llm_usage` books
 (`server/services/usage/recording.py`): `CompactionService.track()`, the
 compaction summarizer, an agent's LLM step on Temporal and the hire screen's
 setup call. A memory-connected in-process
-agent normally writes its loop aggregate as one row; the summarizer uses
-`iteration=0`. An agent on Temporal writes one row per LLM step (`iteration` =
+agent normally writes its loop aggregate as one row, and its summarizer one
+more with `iteration=0`; both carry the agent's `workflow_id`. An agent on Temporal writes one row per LLM step (`iteration` =
 the step number, `session_id` and `workflow_id` = the workflow id,
 `execution_id` = the generation). A step that works for a chat run also
 records that run in `chat_run_id`, and so does the summarizer's row on

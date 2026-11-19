@@ -649,7 +649,9 @@ class AIService:
         }
 
         try:
-            tracking = await svc.track(session_id=session_id, node_id=node_id, provider=provider, model=model, usage=usage_dict)
+            tracking = await svc.track(
+                session_id=session_id, node_id=node_id, provider=provider, model=model, usage=usage_dict, workflow_id=workflow_id
+            )
             logger.debug(f"[TokenTracking] Tracked {usage_dict['total_tokens']} tokens for session {session_id}, total={tracking['total']}")
 
             # Broadcast token update
@@ -667,7 +669,13 @@ class AIService:
                     await broadcaster.broadcast({"type": "compaction_starting", "session_id": session_id, "node_id": node_id})
 
                 result = await svc.compact_context(
-                    session_id=session_id, node_id=node_id, memory_content=memory_content, provider=provider, api_key=api_key, model=model
+                    session_id=session_id,
+                    node_id=node_id,
+                    memory_content=memory_content,
+                    provider=provider,
+                    api_key=api_key,
+                    model=model,
+                    workflow_id=workflow_id,
                 )
 
                 if broadcaster:

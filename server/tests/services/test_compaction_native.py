@@ -146,6 +146,33 @@ async def test_the_summarizer_books_in_the_services_own_database(monkeypatch, ll
 
 
 @pytest.mark.asyncio
+async def test_a_tracked_call_is_booked_under_its_workflow(monkeypatch, llm_usage):
+    state = {"cumulative_total": 0, "cumulative_input_tokens": 0, "cumulative_output_tokens": 0}
+    database = SimpleNamespace(
+        get_or_create_session_token_state=AsyncMock(return_value=state),
+        update_session_token_state=AsyncMock(),
+        get_user_settings=AsyncMock(return_value=None),
+    )
+    registry = SimpleNamespace(
+        get_agent_defaults=lambda: {"compaction": {"ratio": 0.8}},
+        get_context_length=lambda *_args: 100_000,
+    )
+    monkeypatch.setattr("services.model_registry.get_model_registry", lambda: registry)
+    service = CompactionService(database, SimpleNamespace(compaction_enabled=True))
+
+    await service.track(
+        session_id="session-1",
+        node_id="agent-1",
+        provider="openai",
+        model="gpt-test",
+        usage={"input_tokens": 5, "output_tokens": 2, "total_tokens": 7},
+        workflow_id="wf",
+    )
+
+    assert llm_usage.await_args.kwargs["workflow_id"] == "wf"
+
+
+@pytest.mark.asyncio
 async def test_an_llm_error_is_raised_only_when_asked(monkeypatch):
     error = LLMError("private body", "openai", category=LLMErrorCategory.RATE_LIMIT, retryable=True)
     service = _service(monkeypatch, AsyncMock(side_effect=error))
