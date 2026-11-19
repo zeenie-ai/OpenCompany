@@ -298,6 +298,15 @@ class LLMResponse:
 `thinking`, and `tool_calls` fields remain convenience views; `raw` is never
 written to memory or Temporal history.
 
+A `Message` holds its tool calls in `tool_calls` only. Its `blocks` are the
+text, reasoning and images in the provider's order, and never repeat a call.
+Messages stored before 2026-11-19 also carry a `tool_call` block per call:
+`message_from_wire` and `message_to_wire` still read and write those
+unchanged, so a stored conversation keeps its bytes, and no request encoder
+reads them, so a request is the same from either shape
+(`tests/llm/test_wire_requests_identical.py` sends both through each SDK's
+transport and compares the bytes).
+
 ### Streaming (`on_event`)
 
 `chat()` takes an optional `on_event: StreamSink`, an async callable that

@@ -378,7 +378,6 @@ class GeminiProvider:
                     if state_part:
                         provider_parts.append(state_part)
                     tool_calls.append(call)
-                    blocks.append(ContentBlock(type="tool_call", tool_call=call))
                 elif hasattr(part, "text") and part.text:
                     state_part = self._api_part_to_state(part)
                     if state_part:

@@ -652,7 +652,6 @@ class OpenAIProvider:
                     arguments=args,
                 )
                 tool_calls.append(call)
-                blocks.append(ContentBlock(type="tool_call", tool_call=call))
 
         u = resp.usage
         usage = Usage(
@@ -766,7 +765,6 @@ class OpenAIProvider:
                     arguments=getattr(item, "arguments", "{}"),
                 )
                 tool_calls.append(call)
-                blocks.append(ContentBlock(type="tool_call", tool_call=call))
 
         usage_obj = getattr(resp, "usage", None)
         input_details = getattr(usage_obj, "input_tokens_details", None)

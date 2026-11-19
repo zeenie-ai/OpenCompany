@@ -303,11 +303,13 @@ def test_anthropic_signed_thinking_round_trips_in_original_block_order():
     )
 
     normalized = provider._normalize(response, "claude-sonnet-4-6")
+    # The call is held once, in ``tool_calls``; its place between the
+    # thinking and the text comes from ``provider_state`` (asserted below).
     assert [block.type for block in normalized.assistant_message.blocks] == [
         "reasoning",
-        "tool_call",
         "text",
     ]
+    assert [call.id for call in normalized.assistant_message.tool_calls] == ["tool-1"]
     json.dumps(normalized.assistant_message.provider_state)
     api_message = provider._to_api_message(normalized.assistant_message)
     assert api_message["content"] == [

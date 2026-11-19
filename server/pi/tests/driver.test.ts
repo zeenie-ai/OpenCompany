@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { TurnDriver } from "../src/driver.ts";
 import { canonicalDigest, encodeFrame, losslessParse } from "../src/protocol.ts";
 import { piToWire, projectCanonical, wireToPi } from "../src/codec.ts";
-import { DriverInterrupted, type Operation, type ModelResult } from "../src/types.ts";
+import { DriverInterrupted, type MessageWire, type Operation, type ModelResult } from "../src/types.ts";
 import {call,message,run,toolResult} from "./fixtures.ts";
 
 test("full SDK executes one model/tool round and snapshots exact canonical wires", async()=>{
@@ -85,6 +85,35 @@ test("stored view timestamps preserve exact historical calls and opaque metadata
   const unstamped=message("user","New request");
   expect(piToWire(wireToPi(unstamped,{id:"m",provider:"p"}))).toEqual(unstamped);
   expect(piToWire(wireToPi(unstamped,{id:"m",provider:"p"}))).not.toHaveProperty("ts");
+});
+
+test("a message that holds each tool call once round trips and runs a round",async()=>{
+  // Python writes a message's calls in `tool_calls` only (services/llm/protocol.py);
+  // conversations stored before that also repeat each call in `blocks`. Both
+  // shapes must project back exactly, in one transcript.
+  const once=(wire:MessageWire):MessageWire=>({...wire,blocks:wire.blocks.filter(block=>block.type!=="tool_call")});
+  const malformed=call("bad");malformed.args={};malformed.raw_arguments="{";malformed.parse_error="Invalid JSON";
+  const reasoned=once(message("assistant","Reading",[call("r")]));
+  reasoned.blocks.unshift({type:"reasoning",text:"Need the file",tool_call:null,tool_call_id:null,name:null,metadata:{signature:"opaque+/="},source:null});
+  for(const wire of [once(message("assistant","Reading",[call()])),once(message("assistant","",[call("a"),malformed])),reasoned]) {
+    expect(wire.blocks.some(block=>block.type==="tool_call")).toBe(false);
+    expect(piToWire(wireToPi(wire,{id:"m",provider:"p"}))).toEqual(wire);
+  }
+
+  const stored=[message("user","Earlier request"),message("assistant","",[call("historical")]),toolResult("historical")];
+  expect(stored[1]!.blocks.map(block=>block.type)).toEqual(["tool_call"]);
+  const input=run([message("system","Current policy"),...stored,message("user","Read a.txt")]);
+  const assistant=once(message("assistant","Reading",[call("current")]));const result=toolResult("current");
+  const operations:Operation[]=[];
+  const checkpoint=await new TurnDriver(input,async(op)=>{
+    operations.push(op);
+    return op.kind==="model" ? {assistant_message:assistant} : {message:result};
+  }).execute();
+  expect(operations.map(op=>op.id)).toEqual(["turn:0:model","turn:0:tool:0:current"]);
+  expect(checkpoint.assistant_message).toEqual(assistant);
+  const completed=[...input.messages,assistant,result];
+  expect(checkpoint.projection_digest).toBe(canonicalDigest(completed));
+  expect(projectCanonical(checkpoint.snapshot.entries.filter(entry=>entry.type==="message").map(entry=>entry.message) as never)).toEqual(completed);
 });
 
 test("a restored stamped conversation completes a round and reuses its exact snapshot",async()=>{

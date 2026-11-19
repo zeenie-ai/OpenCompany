@@ -223,6 +223,20 @@ grew a saved row past the 1 MB seed cap and every later firing failed).
   message's `ts` when it changes. If the latest turn alone still overflows,
   its external results are cut to one shared length
   (`services/temporal/agent_context_pressure.py`).
+- **A message does not repeat its tool calls.** An assistant turn's calls are
+  its `tool_calls`; its `blocks` carry text, reasoning and images, never a
+  copy of a call (`services/llm/protocol.py`). Turns written before
+  2026-11-19 also repeated each call in `blocks`, which doubled every call's
+  arguments (a file write's whole content) in the transcript. Those turns
+  decode and save back byte for byte, so their `ts` stamps and the digests
+  chat branches rewind to stay valid, and no request encoder reads the copy,
+  so both shapes build the same request
+  (`tests/llm/test_wire_requests_identical.py`). Stored rows are not
+  rewritten: a conversation from before reaches the byte budget sooner than
+  a new one until a Reset or a summary replaces its old turns. The arguments
+  still appear a second time where a request is rebuilt from them:
+  `raw_arguments` when the provider sent a string, and `provider_state` when
+  the provider's own turn is replayed.
 - **The rules are selected by the recorded payload.** `agent.prepare_payload`
   also records `context_pressure_version` and `tool_result_max_chars`; a run
   recorded before those keys existed replays the original rules (no cap,

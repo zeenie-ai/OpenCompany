@@ -190,8 +190,10 @@ class ContentBlock:
 
     ``type`` is intentionally an open string rather than an enum: providers
     can add a new block without making old workers unable to decode history.
-    Known values are ``text``, ``reasoning``, ``tool_call`` and
-    ``tool_result``.
+    Known values are ``text``, ``reasoning``, ``tool_result`` and ``image``.
+    ``tool_call`` is no longer written (a message's calls are its
+    ``tool_calls``), but stored messages that carry such blocks still decode
+    and re-encode unchanged.
     """
 
     type: str
@@ -211,9 +213,11 @@ class Message:
     """Normalized chat message.
 
     The original flat fields remain the compatibility surface. ``blocks``
-    preserves provider response ordering and ``provider_state`` contains the
+    holds the message's text, reasoning and images in the provider's order;
+    its tool calls are in ``tool_calls`` only. ``provider_state`` contains the
     minimal same-provider continuation metadata (for example an Anthropic
-    thinking signature or Gemini thought signature).
+    thinking signature or Gemini thought signature), with the exact order of
+    text and tool use within a turn.
     """
 
     role: str  # system | user | assistant | tool
@@ -299,10 +303,6 @@ class LLMResponse:
                 blocks.append(ContentBlock(type="reasoning", text=self.thinking))
             if self.content:
                 blocks.append(ContentBlock(type="text", text=self.content))
-            blocks.extend(
-                ContentBlock(type="tool_call", tool_call=call)
-                for call in self.tool_calls
-            )
             self.assistant_message = Message(
                 role="assistant",
                 content=self.content,
@@ -631,22 +631,20 @@ def messages_from_wire(values: Iterable[Mapping[str, Any]]) -> List[Message]:
 
 
 def _default_blocks(message: Message) -> List[ContentBlock]:
-    blocks: List[ContentBlock] = []
-    if message.content:
-        block_type = "tool_result" if message.role == "tool" else "text"
-        blocks.append(
-            ContentBlock(
-                type=block_type,
-                text=message.content,
-                tool_call_id=message.tool_call_id,
-                name=message.name,
-            )
+    # Tool calls live in ``tool_calls`` alone. A copy of each call in
+    # ``blocks`` was read by nothing and doubled the arguments' bytes in every
+    # stored transcript.
+    if not message.content:
+        return []
+    block_type = "tool_result" if message.role == "tool" else "text"
+    return [
+        ContentBlock(
+            type=block_type,
+            text=message.content,
+            tool_call_id=message.tool_call_id,
+            name=message.name,
         )
-    blocks.extend(
-        ContentBlock(type="tool_call", tool_call=call)
-        for call in message.tool_calls
-    )
-    return blocks
+    ]
 
 
 def _tool_call_to_wire(call: ToolCall) -> Dict[str, Any]:

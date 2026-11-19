@@ -535,10 +535,12 @@ AgentWorkflow.run(context):
     1. emit_phase("llm_step", iteration=N)
     2. execute_activity("agent.execute_llm_step")
          returns {kind, assistant_message, calls?, content?, usage}.
-         assistant_message is a MessageWire dict: ordered text/reasoning/tool
-         blocks plus JSON-safe provider continuation state (Gemini thought
-         signatures, Anthropic signed/redacted thinking, OpenAI response
-         metadata). It is appended verbatim to messages.
+         assistant_message is a MessageWire dict: ordered text and reasoning
+         blocks, the turn's tool calls (in tool_calls only; a turn recorded
+         before 2026-11-19 also repeats each call as a block, and replays
+         as recorded), plus JSON-safe provider continuation state (Gemini
+         thought signatures, Anthropic signed/redacted thinking, OpenAI
+         response metadata). It is appended verbatim to messages.
          After filter_empty_messages, a list with no user/assistant/tool
          message raises ApplicationError(type="EmptyAgentPrompt",
          non_retryable=True) — providers require >=1 non-system

@@ -434,7 +434,6 @@ class AnthropicProvider:
                     arguments=block.input,
                 )
                 tool_calls.append(call)
-                blocks.append(ContentBlock(type="tool_call", tool_call=call))
                 provider_blocks.append(
                     {
                         "type": "tool_use",

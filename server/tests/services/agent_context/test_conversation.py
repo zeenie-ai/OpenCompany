@@ -216,6 +216,47 @@ async def test_timestamps_stamp_new_messages_and_preserve_old_ones(
 
 
 @pytest.mark.asyncio
+async def test_resaving_a_conversation_stored_with_call_blocks_changes_nothing(
+    conversation_database, isolated_listeners
+):
+    """Rows saved before tool calls were held once repeat each call in
+    ``blocks``. Every turn decodes the stored conversation and saves it
+    again with the new turn, so the old messages must come back byte for
+    byte: their stamps stay, and the digest a chat branch rewinds to
+    (``services/chat/branches.py``) still matches."""
+    from services.chat.branches import conversation_digest
+    from services.llm.protocol import ContentBlock, ToolCall, messages_from_wire, messages_to_wire
+
+    call = ToolCall(id="call-1", name="lookup", args={"q": "weather"})
+    stored_before = [
+        _wire("user", "weather?"),
+        dict(message_to_wire(Message(
+            role="assistant",
+            content="Checking",
+            tool_calls=[call],
+            blocks=[ContentBlock(type="text", text="Checking"), ContentBlock(type="tool_call", tool_call=call)],
+        ))),
+        dict(message_to_wire(Message(role="tool", tool_call_id="call-1", name="lookup", content="sunny"))),
+    ]
+    assert [block["type"] for block in stored_before[1]["blocks"]] == ["text", "tool_call"]
+    await save_conversation(conversation_database, **_KEY, messages=stored_before)
+    first = await load_conversation(conversation_database, **_KEY)
+    cursor_digest = conversation_digest(first)
+
+    # The next turn: what was stored, decoded and encoded again, plus a new
+    # assistant turn, which holds its call once.
+    resent = [dict(wire) for wire in messages_to_wire(messages_from_wire(first))]
+    next_turn = dict(message_to_wire(Message(role="assistant", tool_calls=[ToolCall(id="call-2", name="lookup", args={})])))
+    await save_conversation(conversation_database, **_KEY, messages=[*resent, next_turn])
+    second = await load_conversation(conversation_database, **_KEY)
+
+    assert second[:3] == first
+    assert conversation_digest(second[:3]) == cursor_digest
+    assert second[3]["blocks"] == []
+    assert [call["id"] for call in second[3]["tool_calls"]] == ["call-2"]
+
+
+@pytest.mark.asyncio
 async def test_keys_are_isolated_across_generation_and_agent(
     conversation_database, isolated_listeners
 ):
