@@ -72,7 +72,7 @@ It applies only while the gateway serves Gemini, and the owner's own choice alwa
 ## Pins
 
 - **LiteLLM 1.103.4**, in four places that `test_pins.py` keeps in agreement: `local.litellm_version` and the module `version` in `main.tf`, the compose image tag, and `LITELLM_VERSION` in CI. 1.103.x is the only stable line with the streamed-alias billing fix (LiteLLM PR #44341).
-- **The price list**: `LITELLM_MODEL_COST_MAP_URL` points at one reviewed commit of LiteLLM's `model_prices_and_context_window.json`, in `main.tf` and the compose file. Unpinned, the gateway downloads upstream `main` at every start, so prices would change unannounced; the list bundled with 1.103.4 predates `gpt-6-sol` and the Claude 5.5 models. `GET /model/cost_map/source` shows the list a process loaded (on the deployed stack it is routed to the backend service, not the gateway tasks).
+- **The price list**: `LITELLM_MODEL_COST_MAP_URL` points at one reviewed commit of LiteLLM's `model_prices_and_context_window.json`, in `main.tf` and the compose file. Unpinned, the gateway downloads upstream `main` at every start, so prices would change unannounced; the list bundled with 1.103.4 predates `gpt-6-sol` and the Claude 5.5 models. The pin last moved on 2026-11-19, to a list that prices GPT-6.2 Sol and Astra, GPT-6.1 Terra, Gemini 4, Claude Fable 5.2 and Kimi K3.1 Pro, so `gpt-6.2-sol` and `kimi-k3.1-pro` could become their providers' defaults; OpenAI's `-pro` variants are in neither list, and the gateway refuses them. `GET /model/cost_map/source` shows the list a process loaded (on the deployed stack it is routed to the backend service, not the gateway tasks).
 
 ## Served providers
 

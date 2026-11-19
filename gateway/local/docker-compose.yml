@@ -56,7 +56,7 @@ services:
       LITELLM_SALT_KEY: sk-local-salt-key
       LITELLM_MODE: PRODUCTION
       STORE_MODEL_IN_DB: "False"
-      LITELLM_MODEL_COST_MAP_URL: https://raw.githubusercontent.com/BerriAI/litellm/729b02d05719715f4faeb1f81ef2728ef06c3273/model_prices_and_context_window.json
+      LITELLM_MODEL_COST_MAP_URL: https://raw.githubusercontent.com/BerriAI/litellm/2f29a55a5102fbf23e406d313ea4b91a7257e48f/model_prices_and_context_window.json
     volumes:
       - ./config.local.yaml:/app/config.yaml:ro
     ports:

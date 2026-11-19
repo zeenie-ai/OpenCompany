@@ -20,7 +20,7 @@ locals {
     # Prices come from this reviewed copy of LiteLLM's price list. Without it
     # the gateway downloads upstream main on every start (prices change
     # unannounced), and its bundled list predates the current models.
-    LITELLM_MODEL_COST_MAP_URL = "https://raw.githubusercontent.com/BerriAI/litellm/729b02d05719715f4faeb1f81ef2728ef06c3273/model_prices_and_context_window.json"
+    LITELLM_MODEL_COST_MAP_URL = "https://raw.githubusercontent.com/BerriAI/litellm/2f29a55a5102fbf23e406d313ea4b91a7257e48f/model_prices_and_context_window.json"
   }
 
   # Creates the two SpendLogs indexes that LiteLLM stopped creating in
