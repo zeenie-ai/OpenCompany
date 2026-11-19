@@ -415,6 +415,9 @@ class TokenUsageMetric(SQLModel, table=True):
     reasoning_tokens: int = Field(default=0)
     iteration: int = Field(default=1)
     execution_id: Optional[str] = Field(default=None, max_length=255)
+    # The chat run the call worked for (models/chat.py ChatRun.run_id), when
+    # it worked for one. A run's cost is the sum of its rows.
+    chat_run_id: Optional[str] = Field(default=None, index=True, max_length=64)
     created_at: Optional[datetime] = Field(default=None)
     # Cost fields (USD)
     input_cost: float = Field(default=0.0)

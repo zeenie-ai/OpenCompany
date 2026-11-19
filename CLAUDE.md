@@ -1450,7 +1450,8 @@ shared client-side summarization call through `ChatUnifier`. The Temporal
 summarizer. It does not call `CompactionService.track()`; instead each
 `agent.execute_llm_step` books its own priced row in `token_usage_metrics`
 (`record_llm_usage` in `services/employees/llm.py`: session and `workflow_id` =
-the workflow id, `iteration` = the step number). Provider-native Anthropic/OpenAI context-management
+the workflow id, `iteration` = the step number, `chat_run_id` = the chat run
+the step worked for, which the summarizer's row records too). Provider-native Anthropic/OpenAI context-management
 compaction is not used by the agent runtime. Executions without connected
 memory still aggregate usage inside the loop but do not create session
 compaction records.

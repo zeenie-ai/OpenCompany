@@ -1026,6 +1026,32 @@ class TestLlmStepActivity:
         assert row["iteration"] == 5
         assert (row["provider"], row["model"]) == ("openrouter", "anthropic/claude-sonnet-5.5")
         assert (row["input_tokens"], row["output_tokens"], row["total_tokens"]) == (50, 7, 57)
+        # This step works for no chat run.
+        assert row["chat_run_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_a_step_of_a_chat_run_books_the_run_on_its_row(self, monkeypatch):
+        import core.container as container_module
+        import services.agent_runtime as runtime_module
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal import agent_activities
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        database = SimpleNamespace(save_token_metric=AsyncMock(return_value=True))
+        monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
+        monkeypatch.setattr(container_module.container, "database", lambda: database)
+        monkeypatch.setattr(agent_activities, "_chat_run_stopping", AsyncMock(return_value=False))
+        monkeypatch.setattr(
+            runtime_module,
+            "run_native_llm_step",
+            AsyncMock(return_value=LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7))),
+        )
+        payload = {**self._booking_payload(), "chat_run_id": "r_1"}
+
+        await _execute_native_llm_step(payload)
+
+        row = database.save_token_metric.await_args.args[0]
+        assert row["chat_run_id"] == "r_1"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("failure", ["save", "price"])

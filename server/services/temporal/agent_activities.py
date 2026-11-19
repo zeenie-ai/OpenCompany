@@ -668,6 +668,7 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
                 iteration=int(payload.get("iteration") or 0) + 1,
                 workflow_id=workflow_id,
                 execution_id=(payload.get("attribution") or {}).get("execution_id"),
+                chat_run_id=payload.get("chat_run_id"),
             )
         except Exception:
             logger.warning("LLM step usage not recorded", exc_info=True)
@@ -2917,8 +2918,9 @@ async def compact_context(payload: Dict[str, Any]) -> Dict[str, Any]:
     from core.logging import log_context
     from services.llm.protocol import LLMError
 
+    attribution = payload.get("attribution") or {}
     try:
-        async with log_context(**(payload.get("attribution") or {})):
+        async with log_context(**attribution):
             result = await _await_with_llm_heartbeats(
                 svc.compact_context(
                     session_id=str(payload.get("session_id") or "default"),
@@ -2927,6 +2929,10 @@ async def compact_context(payload: Dict[str, Any]) -> Dict[str, Any]:
                     provider=payload["provider"],
                     api_key=await _resolve_activity_api_key(payload),
                     model=payload["model"],
+                    # The summarizer's usage row counts for this employee
+                    # and this chat run.
+                    workflow_id=attribution.get("workflow_id"),
+                    chat_run_id=attribution.get("chat_run_id"),
                     # Temporal owns activity retries; never repeat an ambiguous provider
                     # request inside the activity or SDK.
                     explicit_max_retries=0,

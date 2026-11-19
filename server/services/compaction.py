@@ -199,6 +199,8 @@ class CompactionService:
         model: str,
         usage: Dict[str, int],
         iteration: int = 1,
+        workflow_id: Optional[str] = None,
+        chat_run_id: Optional[str] = None,
     ) -> Dict[str, float]:
         """Persist billed usage without changing active-context counters."""
 
@@ -219,6 +221,8 @@ class CompactionService:
             {
                 "session_id": session_id,
                 "node_id": node_id,
+                "workflow_id": workflow_id,
+                "chat_run_id": chat_run_id,
                 "provider": provider,
                 "model": model,
                 "iteration": iteration,
@@ -307,10 +311,14 @@ class CompactionService:
         *,
         explicit_max_retries: int = 2,
         raise_llm_errors: bool = False,
+        workflow_id: Optional[str] = None,
+        chat_run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Perform compaction by summarizing conversation history.
 
         Uses the AI service to generate a structured summary following Claude Code pattern.
+        ``workflow_id`` and ``chat_run_id`` go on the summarizer's usage row,
+        so its cost counts for the employee and the chat run it worked for.
 
         A failed summarizer call, or an empty summary, returns ``success:
         False`` and records nothing, so an empty reply never replaces the
@@ -388,6 +396,8 @@ Provide a concise but complete summary."""
                 # Iteration zero distinguishes the summarizer call in the
                 # existing metric schema without adding a public field.
                 iteration=0,
+                workflow_id=workflow_id,
+                chat_run_id=chat_run_id,
             )
             summary = _extract_text_from_response(response.content)
             if not summary.strip():

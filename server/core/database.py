@@ -402,6 +402,11 @@ class Database:
                     if col not in columns:
                         await conn.execute(text(f"ALTER TABLE token_usage_metrics ADD COLUMN {col} REAL DEFAULT 0.0"))
                         logger.info(f"Added {col} column to token_usage_metrics")
+                # The chat run a call worked for; rows from before have none.
+                if "chat_run_id" not in columns:
+                    await conn.execute(text("ALTER TABLE token_usage_metrics ADD COLUMN chat_run_id VARCHAR(64)"))
+                    logger.info("Added chat_run_id column to token_usage_metrics")
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_token_usage_metrics_chat_run_id ON token_usage_metrics(chat_run_id)"))
 
                 # Migrate session_token_states table - add cumulative cost columns
                 result = await conn.execute(text("PRAGMA table_info(session_token_states)"))
@@ -2684,6 +2689,7 @@ class Database:
                     reasoning_tokens=metric.get("reasoning_tokens", 0),
                     iteration=metric.get("iteration", 1),
                     execution_id=metric.get("execution_id"),
+                    chat_run_id=metric.get("chat_run_id"),
                     created_at=datetime.now(timezone.utc),
                     # Cost fields
                     input_cost=metric.get("input_cost", 0.0),

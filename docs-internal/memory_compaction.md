@@ -138,8 +138,10 @@ summarizer's internal metric writer is invoked. A memory-connected in-process
 agent normally writes its loop aggregate as one row; the summarizer uses
 `iteration=0`. An agent on Temporal writes one row per LLM step (`iteration` =
 the step number, `session_id` and `workflow_id` = the workflow id,
-`execution_id` = the generation). This table is not populated by every LLM
-request in the system.
+`execution_id` = the generation). A step that works for a chat run also
+records that run in `chat_run_id`, and so does the summarizer's row on
+Temporal, with its `workflow_id`, so a chat run's cost is the sum of its rows.
+This table is not populated by every LLM request in the system.
 
 ```python
 class TokenUsageMetric(SQLModel, table=True):
@@ -164,6 +166,7 @@ class TokenUsageMetric(SQLModel, table=True):
 
     iteration: int = 1               # Agent loop iteration number
     execution_id: Optional[str]      # Workflow execution ID
+    chat_run_id: Optional[str]       # The chat run the call worked for (indexed)
     created_at: Optional[datetime]
 
     # Cost columns (USD), computed by PricingService at track() time

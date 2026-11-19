@@ -182,9 +182,11 @@ async def record_llm_usage(
     iteration: int = 1,
     workflow_id: Optional[str] = None,
     execution_id: Optional[str] = None,
+    chat_run_id: Optional[str] = None,
 ) -> None:
     """Book one model call's tokens and cost: a setup call, or an agent's
-    step on Temporal (the usage panel reads these rows).
+    step on Temporal (the usage panel reads these rows). ``chat_run_id`` is
+    the chat run the step worked for, when it worked for one.
     Best effort: a failed price or write never fails the caller."""
     try:
         from services.pricing import get_pricing_service
@@ -214,6 +216,7 @@ async def record_llm_usage(
                 "node_id": node_id,
                 "workflow_id": workflow_id,
                 "execution_id": execution_id,
+                "chat_run_id": chat_run_id,
                 "provider": choice.provider,
                 "model": choice.model,
                 "iteration": iteration,

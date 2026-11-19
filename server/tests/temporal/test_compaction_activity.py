@@ -58,6 +58,29 @@ async def test_a_rate_limit_waits_like_an_llm_step(summarizer):
 
 
 @pytest.mark.asyncio
+async def test_the_usage_row_gets_the_employee_and_the_chat_run(summarizer):
+    summarizer.return_value = {"success": True, "summary": "A summary.", "usage": {}}
+    payload = {**_PAYLOAD, "attribution": {"workflow_id": "wf", "chat_run_id": "r_1"}}
+
+    await ActivityEnvironment().run(compact_context, payload)
+
+    request = summarizer.await_args.kwargs
+    assert request["workflow_id"] == "wf"
+    assert request["chat_run_id"] == "r_1"
+
+
+@pytest.mark.asyncio
+async def test_a_summary_outside_a_chat_run_names_no_run(summarizer):
+    summarizer.return_value = {"success": True, "summary": "A summary.", "usage": {}}
+
+    await ActivityEnvironment().run(compact_context, _PAYLOAD)
+
+    request = summarizer.await_args.kwargs
+    assert request["workflow_id"] is None
+    assert request["chat_run_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_a_missing_service_stays_retryable(monkeypatch):
     monkeypatch.setattr("services.compaction.get_compaction_service", lambda: None)
     with pytest.raises(ApplicationError) as raised:

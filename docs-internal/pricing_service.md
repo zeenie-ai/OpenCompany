@@ -399,7 +399,8 @@ class APIUsageMetric(SQLModel, table=True):
 For LLM token usage (see memory_compaction.md for details). Rows come from the
 in-process agent path (`CompactionService.track`), the compaction summarizer,
 the hire-screen setup call, and one row per LLM step of every agent on
-Temporal (`record_llm_usage`).
+Temporal (`record_llm_usage`). A row booked while an agent works for a chat
+run carries that run's id in `chat_run_id`.
 
 ```python
 class TokenUsageMetric(SQLModel, table=True):
@@ -407,6 +408,7 @@ class TokenUsageMetric(SQLModel, table=True):
 
     session_id: str
     node_id: str
+    chat_run_id: Optional[str]  # the chat run the call worked for
     provider: str          # 'openai', 'anthropic'
     model: str
     input_tokens: int

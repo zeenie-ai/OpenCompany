@@ -112,6 +112,32 @@ async def test_an_empty_summary_fails_and_replaces_nothing(monkeypatch, content)
     assert all(call.args[1].get("cumulative_total") != 0 for call in _Database.update_session_token_state.await_args_list)
 
 
+def _summary_reply():
+    return LLMResponse(content="compact summary", usage=Usage(input_tokens=40, output_tokens=5, total_tokens=45))
+
+
+@pytest.mark.asyncio
+async def test_the_usage_row_names_the_employee_and_the_chat_run(monkeypatch):
+    service = _service(monkeypatch, AsyncMock(return_value=_summary_reply()))
+
+    await service.compact_context(**_REQUEST, workflow_id="wf", chat_run_id="r_1")
+
+    metric = _Database.save_token_metric.await_args.args[0]
+    assert metric["workflow_id"] == "wf"
+    assert metric["chat_run_id"] == "r_1"
+
+
+@pytest.mark.asyncio
+async def test_a_usage_row_outside_a_chat_run_names_none(monkeypatch):
+    service = _service(monkeypatch, AsyncMock(return_value=_summary_reply()))
+
+    await service.compact_context(**_REQUEST)
+
+    metric = _Database.save_token_metric.await_args.args[0]
+    assert metric["workflow_id"] is None
+    assert metric["chat_run_id"] is None
+
+
 @pytest.mark.asyncio
 async def test_an_llm_error_is_raised_only_when_asked(monkeypatch):
     error = LLMError("private body", "openai", category=LLMErrorCategory.RATE_LIMIT, retryable=True)
