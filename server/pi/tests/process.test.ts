@@ -1,6 +1,8 @@
 import {expect,test} from "bun:test";
 import {join,dirname,resolve,sep} from "node:path";
 import {fileURLToPath} from "node:url";
+import {createInterface} from "node:readline";
+import {Readable} from "node:stream";
 import {encodeFrame,losslessParse,canonicalDigest} from "../src/protocol.ts";
 import {ScopedProtocolBlobs} from "../src/transport.ts";
 import {INLINE_LIMIT_BYTES,MAX_FRAME_BYTES} from "../src/types.ts";
@@ -28,16 +30,26 @@ test.each(["expired-clock.ts","terminate.ts"])("bootstrap host exits on %s while
   } finally {if(child.exitCode===null){child.kill();await child.exited;}}
 },15000);
 
-test.each(["expired-clock.ts","terminate.ts"])("active host aborts on %s and drains its task before exit",async(preload)=>{
-  const child=Bun.spawn([process.execPath,"--preload",join(fixtures,preload),source],{stdin:"pipe",stdout:"pipe",stderr:"pipe"});
-  const stdout=new Response(child.stdout).text();const stderr=new Response(child.stderr).text();
+test.each(["expired-clock", "terminate"])("active host aborts on %s and drains its task before exit", async (trigger) => {
+  const child = Bun.spawn([process.execPath, "--preload", join(fixtures, "active-interrupt.ts"), source], {
+    stdin: "pipe", stdout: "pipe", stderr: "pipe", ipc() {},
+  });
+  const stderr = new Response(child.stderr).text();
+  const readFrames = async () => {
+    const types: string[] = [];
+    for await (const line of createInterface({input: Readable.from(child.stdout)})) {
+      const {type} = losslessParse(line) as {type: string};
+      types.push(type);
+      if (type === "operation") child.send(trigger);
+    }
+    return types;
+  };
   try {
     child.stdin.write(encodeFrame(run()));
-    expect(await within(child.exited)).toBe(0);
-    const frames=(await stdout).trim().split("\n").map(frame=>losslessParse(frame) as {type:string});
-    expect(frames.some(frame=>frame.type==="operation")).toBe(true);
-    expect(frames.at(-1)?.type).toBe("aborted");expect(frames.some(frame=>frame.type==="turn_checkpoint")).toBe(false);
-    expect(await stderr).toBe("");
+    const [code, types, errors] = await within(Promise.all([child.exited, readFrames(), stderr]));
+    expect(errors).toBe("");
+    expect(code).toBe(0);
+    expect(types).toEqual(["operation", "aborted"]);
   } finally {if(child.exitCode===null){child.kill();await child.exited;}}
 },15000);
 
