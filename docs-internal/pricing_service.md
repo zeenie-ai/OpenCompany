@@ -322,7 +322,11 @@ So the search plugins (`server/nodes/search/{brave_search,serper_search,perplexi
 
 ### APIUsageMetric
 
-For third-party API services (Twitter, Google Maps).
+For third-party API services (Twitter, Google Maps). A row booked while a
+plugin works for a chat run carries that run's id in `chat_run_id`, as a
+`TokenUsageMetric` row does, so a chat run's cost is the sum of its rows in
+both tables. `record_api_usage` takes the run from the log context, which
+`BaseNode.execute` binds for every plugin operation; no plugin passes it.
 
 ```python
 class APIUsageMetric(SQLModel, table=True):
@@ -333,6 +337,7 @@ class APIUsageMetric(SQLModel, table=True):
     session_id: str        # Index for aggregation
     node_id: str
     workflow_id: Optional[str]
+    chat_run_id: Optional[str]  # the chat run the call worked for (indexed)
     service: str           # 'twitter', 'google_maps'
     operation: str         # 'content_create', 'geocode'
     endpoint: str          # Handler action name

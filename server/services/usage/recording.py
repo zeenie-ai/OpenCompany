@@ -10,6 +10,8 @@ or write is logged as a warning instead.
 from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, Optional
 
+import structlog
+
 from core.logging import get_logger
 from models.database import APIUsageMetric, TokenUsageMetric
 
@@ -107,6 +109,11 @@ async def record_api_usage(
     ``action`` unless given. The cost returned is 0.0 when the price lookup
     failed and the real cost when only the write failed. With no
     ``database`` the container's is used.
+
+    The row also takes the chat run bound in the log context. ``BaseNode.execute``
+    binds it for every plugin operation (``services/plugin/base.py``), so a
+    tool call an agent makes while it answers a chat run counts for that run,
+    and no plugin has to pass it. A call outside a chat run stores none.
     """
     if endpoint is None:
         endpoint = action
@@ -124,6 +131,7 @@ async def record_api_usage(
             session_id=session_id,
             node_id=node_id,
             workflow_id=workflow_id,
+            chat_run_id=structlog.contextvars.get_contextvars().get("chat_run_id"),
             service=service,
             operation=operation,
             endpoint=endpoint,

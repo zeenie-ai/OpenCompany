@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+import structlog
+
 from services.usage import record_api_usage
 from tests.services.usage._helpers import api_rows, unavailable
 
@@ -79,6 +81,22 @@ async def test_a_providers_own_charge_is_never_looked_up(database, prices):
     await record_api_usage("treg", "call", node_id=NODE, cost=0.0025, database=database)
 
     prices.calculate_api_cost.assert_not_called()
+
+
+async def test_a_call_made_for_a_chat_run_keeps_the_run(database, prices):
+    # BaseNode.execute binds the chat run in the log context for a plugin
+    # operation; the test conftest replaces core.logging.log_context, so the
+    # run is bound through structlog here.
+    with structlog.contextvars.bound_contextvars(chat_run_id="r_1"):
+        await record_api_usage("twitter", "tweet", node_id=NODE, database=database)
+
+    assert (await api_rows(database))[0].chat_run_id == "r_1"
+
+
+async def test_a_call_outside_a_chat_run_keeps_none(database, prices):
+    await record_api_usage("twitter", "tweet", node_id=NODE, database=database)
+
+    assert (await api_rows(database))[0].chat_run_id is None
 
 
 async def test_a_fractional_count_is_priced_as_given(database, prices):

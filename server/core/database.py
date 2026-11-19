@@ -443,6 +443,13 @@ class Database:
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_api_usage_session ON api_usage_metrics(session_id)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS idx_api_usage_service ON api_usage_metrics(service)"))
                 logger.info("Ensured api_usage_metrics table exists")
+                # The chat run a paid call worked for; rows from before have none.
+                result = await conn.execute(text("PRAGMA table_info(api_usage_metrics)"))
+                columns = {row[1] for row in result.fetchall()}
+                if "chat_run_id" not in columns:
+                    await conn.execute(text("ALTER TABLE api_usage_metrics ADD COLUMN chat_run_id VARCHAR(64)"))
+                    logger.info("Added chat_run_id column to api_usage_metrics")
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_usage_metrics_chat_run_id ON api_usage_metrics(chat_run_id)"))
 
                 # Migrate gmail_connections to google_connections
                 # Check if old table exists and new table doesn't

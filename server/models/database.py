@@ -484,6 +484,9 @@ class APIUsageMetric(SQLModel, table=True):
     session_id: str = Field(index=True, max_length=255)
     node_id: str = Field(max_length=255)
     workflow_id: Optional[str] = Field(default=None, max_length=255)
+    # The chat run the call worked for (models/chat.py ChatRun.run_id), when
+    # it worked for one. A run's cost is its rows here plus its token rows.
+    chat_run_id: Optional[str] = Field(default=None, index=True, max_length=64)
 
     # Service identification
     service: str = Field(index=True, max_length=50)  # twitter, google_maps, etc.
