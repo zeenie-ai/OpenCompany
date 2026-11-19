@@ -105,13 +105,13 @@ The curated lists and figures in `llm_defaults.json` and `pricing.json` take the
 
 | Provider | Key Models | Context | Max Output | Thinking | Temp Range |
 |----------|-----------|---------|-----------|----------|------------|
-| **OpenAI** | GPT-6.1 Sol/Terra (+ `-pro`; default `gpt-6.1-sol`), GPT-6 Sol/Luna/Astra (+ `-pro`), GPT-5.6 Sol/Terra/Luna (+ `-pro`), GPT-5.5/5.4 | 1.05M | 128K | effort | omitted for reasoning models |
+| **OpenAI** | GPT-6.2 Sol/Astra (+ `-pro`), GPT-6.1 Sol/Terra (+ `-pro`; default `gpt-6.1-sol`, until the gateway's pinned price list prices `gpt-6.2-sol`), GPT-6 Sol/Luna/Astra (+ `-pro`), GPT-5.6 Sol/Terra/Luna (+ `-pro`), GPT-5.5/5.4 | 1.05M | 128K | effort | omitted for reasoning models |
 | **OpenAI** | GPT-4.1 | ~1.05M | 32K | none | 0-2 |
 | **Anthropic** | Claude Opus 5.5 (default `claude-opus-5-5`), Opus 5, Fable 5.2 / 5.1 / 5, Sonnet 5.5 / 5, Haiku 5.5 | 1M | 128K | adaptive | omitted (`temperature` / `top_p` / `top_k` rejected — `sampling_params_removed`) |
 | **Anthropic** | Claude Opus 4.8/4.7 | 1M | 128K | adaptive | omitted (`sampling_params_removed`) |
 | **Anthropic** | Claude Sonnet 4.6 | 1M | 128K | budget | 0-1 |
 | **Anthropic** | Claude Haiku 4.5 | 200K | 64K | budget | 0-1 |
-| **Google** | Gemini 3.8-flash (default), 4-hydrogen/carbon/argon, 3.7/3.6/3.5-flash, 3.5-flash-lite, 3.1-pro-preview/flash-lite, 3-flash-preview, 2.5-pro/flash/flash-lite | 1M | 64K; ~944K (Gemini 4) | budget (`thinking_level` on 3.x when set explicitly; Gemini 4 runs its default thinking until it is verified) | 0-2 |
+| **Google** | Gemini 3.8-flash (default), 4-neon/hydrogen/carbon/argon, 3.7/3.6/3.5-flash, 3.5-flash-lite, 3.1-pro-preview/flash-lite, 3-flash-preview, 2.5-pro/flash/flash-lite | 1M | 64K; ~944K (Gemini 4) | budget (`thinking_level` on 3.x when set explicitly; Gemini 4 runs its default thinking until it is verified) | 0-2 |
 | **xAI** | Grok 4.20/4.20-multi-agent, 4.3, 4.7, 4.6, 4.5 | 500K-2M | 450K-1.8M | model/provider dependent | 0-2 |
 | **DeepSeek** | deepseek-v4.1-flash (default), deepseek-v4-pro, deepseek-v4-flash | 1M | ~944K (V4.1 Flash); ~393K (V4 Pro, V4 Flash) | thinking modes | 0-2 |
 | **Kimi** | kimi-k3 (default), kimi-k3.1-pro, kimi-k2.6, kimi-k2.7-code (+ `-highspeed`) | 1M (K3, K3.1 Pro); 256K (K2) | 131K (K3, K3.1 Pro); 32K/96K (K2) | K2.6 default explicitly disabled unless requested; K2.7 Code always on; K3 always reasons | omitted (Moonshot fixes every model's value; any other is a 400) |
@@ -569,7 +569,7 @@ provider's current documentation before relying on those external guarantees.
 | **Claude** (budget) | `claude-sonnet-4-6`, `claude-haiku-4-5` and older 4.x/3.5 | `thinking_budget` (1024-16000 tokens) | budget | `{"type":"enabled","budget_tokens":N}`; provider bumps `max_tokens` to `budget + 1024` if it is not already larger. Temperature auto-set to 1. |
 | **Gemini** | gemini-3.x, gemini-2.5-pro/flash | `thinking_budget` (token count); `thinking_level` on 3.x when set explicitly | budget | Uses `thinking_budget` API parameter (`thinking_level` only when the user set it — Vertex rejects an unsolicited level on 2.5-era models) |
 | **OpenAI** | `o3`, `o4-mini` (reasoning-only; both on the API-shutdown path per `_models_note`, `o1`/`o3`/`o4` prefixes still detected) | `reasoning_effort` (low/medium/high) | effort | Reasoning-only models. Temperature omitted. |
-| **OpenAI** | GPT-6.1 sol/terra, GPT-6 sol/luna/astra and GPT-5.6 sol/terra/luna (+ `-pro`), GPT-5.5, GPT-5.4 (`thinking_models: ["gpt-5", "gpt-6"]`) | `reasoning_effort` (low/medium/high/xhigh) | effort | Hybrid reasoning: can operate with or without thinking. |
+| **OpenAI** | GPT-6.2 sol/astra, GPT-6.1 sol/terra, GPT-6 sol/luna/astra and GPT-5.6 sol/terra/luna (+ `-pro`), GPT-5.5, GPT-5.4 (`thinking_models: ["gpt-5", "gpt-6"]`) | `reasoning_effort` (low/medium/high/xhigh) | effort | Hybrid reasoning: can operate with or without thinking. |
 | **Groq** | qwen/qwen3.8-27b (`thinking_models: ["qwen3"]`, prefix match) | `reasoning_format` ('parsed' or 'hidden') | format | 'parsed' returns reasoning, 'hidden' returns only final answer. GPT-OSS models on Groq use `reasoning_effort` instead (`openai.py:671-675`). |
 | **Cerebras** | none — `thinking_models` is empty since zai-glm-4.7 left the public endpoints (2026-09) | `thinking_budget` | budget | Would be sent as `extra_body.thinking_budget` (`openai.py:111-114`) if a thinking model were curated again. The qwen-3-235b variants are shut down upstream. |
 

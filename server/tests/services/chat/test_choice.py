@@ -225,10 +225,10 @@ async def test_openrouter_and_a_local_server_offer_their_models(database, connec
     assert rows[0]["short"] == "claude-sonnet-5.5"
     # Claude 5.x takes Quick and Thorough on OpenRouter; other vendors' models there do not.
     assert rows[0]["effort"] is True and rows[0]["effort_note"] is None
-    gpt = next(row for row in rows if row["name"] == "openai/gpt-6.1-sol")
-    assert gpt["effort"] is False and gpt["effort_note"] == "gpt-6.1-sol sets its own pace"
+    gpt = next(row for row in rows if row["name"] == "openai/gpt-6.2-sol")
+    assert gpt["effort"] is False and gpt["effort_note"] == "gpt-6.2-sol sets its own pace"
 
-    picked = "openrouter::openai/gpt-6.1-sol"
+    picked = "openrouter::openai/gpt-6.2-sol"
     assert await options(database, {"model": picked}) == {"model": picked}
     assert await options(database, {"model": "ollama::qwen3:32b"}) == {"model": "ollama::qwen3:32b"}
     assert await options(database, {"model": "auto"}) == {"model": "openrouter::anthropic/claude-sonnet-5.5"}

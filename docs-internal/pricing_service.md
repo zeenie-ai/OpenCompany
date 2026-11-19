@@ -72,11 +72,11 @@ these examples are not independently verified current vendor quotes.
 ```json
 {
   "version": "2026.11",
-  "last_updated": "2026-11-13",
+  "last_updated": "2026-11-19",
 
   "llm": {
     "openai": {
-      "gpt-6.1-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.20},
+      "gpt-6.1-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.10},
       "gpt-6-luna": {"input": 0.10, "output": 0.50, "cache_read": 0.01},
       "_default": {"input": 2.50, "output": 15.00}
     },
@@ -153,7 +153,7 @@ these examples are not independently verified current vendor quotes.
 
 | Section | Purpose |
 |---------|---------|
-| `llm` | Per-model pricing in USD per million tokens (MTok). Supports `input`, `output`, `cache_read`, `cache_write`, `reasoning`. `input` and `output` follow the OpenRouter snapshot (`config/model_registry.json`) for every model it lists; `cache_read` keeps each vendor's published cache discount applied to that input price. A lookup tries the exact id, then the first key the id starts with, then the first key it contains, so list a longer id (`gemini-3.5-flash-lite`) before its prefix (`gemini-3.5-flash`). A provider block with `"_from_registry": true` (`openrouter`, `openai_compatible`) then prices its models from the model registry before its `_default`: for OpenRouter that is the catalogue's own `prompt`, `completion`, `input_cache_read` and `input_cache_write` prices, and for a named endpoint the price recorded when it was saved. A free model (0/0) is a real price; a router's negative placeholder and an unlisted id take `_default` |
+| `llm` | Per-model pricing in USD per million tokens (MTok). Supports `input`, `output`, `cache_read`, `cache_write`, `reasoning`. `input`, `output` and `cache_read` follow the OpenRouter snapshot (`config/model_registry.json`) for every model it lists; the snapshot has carried cache prices since 2026-11-19, and until then `cache_read` was each vendor's published cache discount applied to the input price. A row without `cache_read` bills cached tokens at its input price. `cache_write` is listed only where the provider's usage reports cache writes (Anthropic). A lookup tries the exact id, then the first key the id starts with, then the first key it contains, so list a longer id (`gemini-3.5-flash-lite`) before its prefix (`gemini-3.5-flash`). A provider block with `"_from_registry": true` (`openrouter`, `openai_compatible`) then prices its models from the model registry before its `_default`: for OpenRouter that is the catalogue's own `prompt`, `completion`, `input_cache_read` and `input_cache_write` prices, and for a named endpoint the price recorded when it was saved. A free model (0/0) is a real price; a router's negative placeholder and an unlisted id take `_default` |
 | `api` | Per-service pricing in USD per request/resource. Keys starting with `_` are metadata |
 | `operation_map` | Maps handler action names to pricing operation keys |
 | `url_patterns` | Regex patterns for automatic HTTPX tracking. `count_path` extracts resource count from response JSON |
