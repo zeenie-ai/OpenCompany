@@ -1,8 +1,34 @@
 {
-  "_generated": "2026-11-19T08:28:35.383041+00:00",
+  "_generated": "2026-11-20T14:04:30.439981+00:00",
   "_source": "openrouter",
-  "_model_count": 480,
+  "_model_count": 477,
   "models": {
+    "mistralai/pixtral-large-2502": {
+      "id": "mistralai/pixtral-large-2502",
+      "name": "Mistral: Pixtral Large 2502",
+      "provider": "mistralai",
+      "local_id": "pixtral-large-2502",
+      "context_length": 128000,
+      "max_output_tokens": 102400,
+      "input_price_per_mtok": 2.0,
+      "output_price_per_mtok": 6.0,
+      "supports_thinking": false,
+      "thinking_type": "none",
+      "temperature_range": [
+        0.0,
+        2.0
+      ],
+      "is_reasoning_model": false,
+      "supported_parameters": [
+        "max_tokens",
+        "stop",
+        "temperature",
+        "top_k",
+        "top_p"
+      ],
+      "cache_read_price_per_mtok": null,
+      "cache_write_price_per_mtok": null
+    },
     "gemini/gemini-4-neon": {
       "id": "google/gemini-4-neon",
       "name": "Google: Gemini 4 Neon",
@@ -694,36 +720,6 @@
       "cache_read_price_per_mtok": 0.03,
       "cache_write_price_per_mtok": null
     },
-    "thinkingmachines/inkling-2-small:free": {
-      "id": "thinkingmachines/inkling-2-small:free",
-      "name": "Thinking Machines: Inkling 2 Small (free)",
-      "provider": "thinkingmachines",
-      "local_id": "inkling-2-small:free",
-      "context_length": 1048576,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "reasoning_effort",
-        "seed",
-        "stop",
-        "temperature",
-        "tools",
-        "top_p"
-      ],
-      "cache_read_price_per_mtok": null,
-      "cache_write_price_per_mtok": null
-    },
     "anthropic/claude-fable-5.2": {
       "id": "anthropic/claude-fable-5.2",
       "name": "Anthropic: Claude Fable 5.2",
@@ -1050,17 +1046,26 @@
       ],
       "is_reasoning_model": false,
       "supported_parameters": [
+        "frequency_penalty",
         "include_reasoning",
+        "logit_bias",
+        "logprobs",
         "max_completion_tokens",
         "max_tokens",
+        "min_p",
+        "presence_penalty",
         "reasoning",
         "reasoning_effort",
+        "repetition_penalty",
         "response_format",
         "stop",
         "structured_outputs",
         "temperature",
         "tool_choice",
-        "tools"
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
       ],
       "cache_read_price_per_mtok": 0.021,
       "cache_write_price_per_mtok": null
@@ -1140,7 +1145,7 @@
       "local_id": "particle-1",
       "context_length": 1048576,
       "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.06,
+      "input_price_per_mtok": 0.07,
       "output_price_per_mtok": 0.5,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -1170,7 +1175,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.003,
+      "cache_read_price_per_mtok": 0.006,
       "cache_write_price_per_mtok": null
     },
     "particle-ai/particle-1:free": {
@@ -1406,9 +1411,13 @@
         "reasoning",
         "reasoning_effort",
         "repetition_penalty",
+        "response_format",
         "seed",
         "stop",
+        "structured_outputs",
         "temperature",
+        "tool_choice",
+        "tools",
         "top_k",
         "top_p"
       ],
@@ -1495,8 +1504,8 @@
       "local_id": "deepseek-v4.1-flash-1017",
       "context_length": 1048576,
       "max_output_tokens": 393216,
-      "input_price_per_mtok": 0.3,
-      "output_price_per_mtok": 1.2,
+      "input_price_per_mtok": 0.15,
+      "output_price_per_mtok": 0.6,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1528,7 +1537,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.006,
+      "cache_read_price_per_mtok": 0.003,
       "cache_write_price_per_mtok": null
     },
     "deepseek/deepseek-v4.1-flash-1017:batch": {
@@ -1538,8 +1547,8 @@
       "local_id": "deepseek-v4.1-flash-1017:batch",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.036,
-      "output_price_per_mtok": 0.15,
+      "input_price_per_mtok": 0.035,
+      "output_price_per_mtok": 0.149,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -1569,7 +1578,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.003,
+      "cache_read_price_per_mtok": 0.0029,
       "cache_write_price_per_mtok": null
     },
     "elorian/glimpse": {
@@ -2298,8 +2307,8 @@
       "local_id": "ling-3.1-flash",
       "context_length": 1000000,
       "max_output_tokens": 262144,
-      "input_price_per_mtok": 0.045,
-      "output_price_per_mtok": 0.135,
+      "input_price_per_mtok": 0.06,
+      "output_price_per_mtok": 0.18,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -2324,7 +2333,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.009,
+      "cache_read_price_per_mtok": 0.012,
       "cache_write_price_per_mtok": null
     },
     "unbiased/pareto-26.10-preview": {
@@ -3250,7 +3259,7 @@
     },
     "xai/grok-4.7": {
       "id": "x-ai/grok-4.7",
-      "name": "SpaceXAI: Grok 4.7",
+      "name": "SpaceXSI: Grok 4.7",
       "provider": "xai",
       "local_id": "grok-4.7",
       "context_length": 500000,
@@ -3286,7 +3295,7 @@
     },
     "xai/grok-4.7:batch": {
       "id": "x-ai/grok-4.7:batch",
-      "name": "SpaceXAI: Grok 4.7 (batch)",
+      "name": "SpaceXSI: Grok 4.7 (batch)",
       "provider": "xai",
       "local_id": "grok-4.7:batch",
       "context_length": 500000,
@@ -3433,7 +3442,7 @@
       "local_id": "deepseek-pro-latest",
       "context_length": 1048576,
       "max_output_tokens": 393216,
-      "input_price_per_mtok": 0.0999,
+      "input_price_per_mtok": 0.2066,
       "output_price_per_mtok": 8.0,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -3464,7 +3473,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.0999,
+      "cache_read_price_per_mtok": 0.21,
       "cache_write_price_per_mtok": null
     },
     "deepseek/deepseek-flash-latest": {
@@ -3474,8 +3483,8 @@
       "local_id": "deepseek-flash-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.035,
-      "output_price_per_mtok": 0.15,
+      "input_price_per_mtok": 0.036,
+      "output_price_per_mtok": 0.5,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3507,7 +3516,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.0015,
+      "cache_read_price_per_mtok": 0.01,
       "cache_write_price_per_mtok": null
     },
     "inference-net/schematron-v2-turbo": {
@@ -3806,9 +3815,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4.1-flash",
       "context_length": 1048576,
-      "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.3,
-      "output_price_per_mtok": 1.2,
+      "max_output_tokens": 393216,
+      "input_price_per_mtok": 0.0507,
+      "output_price_per_mtok": 0.2028,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3840,7 +3849,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.006,
+      "cache_read_price_per_mtok": 0.001,
       "cache_write_price_per_mtok": null
     },
     "deepseek/deepseek-v4.1-flash:batch": {
@@ -3849,9 +3858,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4.1-flash:batch",
       "context_length": 1048576,
-      "max_output_tokens": 131072,
-      "input_price_per_mtok": 0.112,
-      "output_price_per_mtok": 0.336,
+      "max_output_tokens": 384000,
+      "input_price_per_mtok": 0.05,
+      "output_price_per_mtok": 0.15,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -3881,7 +3890,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.0034,
+      "cache_read_price_per_mtok": 0.004,
       "cache_write_price_per_mtok": null
     },
     "nex-agi/nex-n2.5-mini": {
@@ -4512,9 +4521,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.3-flash",
       "context_length": 1048576,
-      "max_output_tokens": 943717,
-      "input_price_per_mtok": 0.15,
-      "output_price_per_mtok": 0.5,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.0399,
+      "output_price_per_mtok": 0.0784,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4554,9 +4563,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.3-flash:batch",
       "context_length": 1048576,
-      "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.024,
-      "output_price_per_mtok": 0.069,
+      "max_output_tokens": 943717,
+      "input_price_per_mtok": 0.023,
+      "output_price_per_mtok": 0.068,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4586,7 +4595,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.01,
+      "cache_read_price_per_mtok": 0.009,
       "cache_write_price_per_mtok": null
     },
     "meta/muse-spark-1.2-contributor": {
@@ -4832,9 +4841,9 @@
       "provider": "z-ai",
       "local_id": "glm-5.3:batch",
       "context_length": 1048576,
-      "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.281,
-      "output_price_per_mtok": 1.25,
+      "max_output_tokens": 943717,
+      "input_price_per_mtok": 0.28,
+      "output_price_per_mtok": 1.249,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -4864,7 +4873,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.062,
+      "cache_read_price_per_mtok": 0.061,
       "cache_write_price_per_mtok": null
     },
     "qwen/qwen3.8-27b": {
@@ -4875,7 +4884,7 @@
       "context_length": 1024000,
       "max_output_tokens": 235929,
       "input_price_per_mtok": 0.06,
-      "output_price_per_mtok": 2.2,
+      "output_price_per_mtok": 1.96,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5120,8 +5129,8 @@
       "local_id": "deepseek-v4-pro-0813",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.111,
-      "output_price_per_mtok": 4.44,
+      "input_price_per_mtok": 1.32,
+      "output_price_per_mtok": 3.96,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5151,12 +5160,12 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.097,
+      "cache_read_price_per_mtok": 0.044,
       "cache_write_price_per_mtok": null
     },
     "xai/grok-4.6": {
       "id": "x-ai/grok-4.6",
-      "name": "SpaceXAI: Grok 4.6",
+      "name": "SpaceXSI: Grok 4.6",
       "provider": "xai",
       "local_id": "grok-4.6",
       "context_length": 500000,
@@ -5192,7 +5201,7 @@
     },
     "xai/grok-4.6:batch": {
       "id": "x-ai/grok-4.6:batch",
-      "name": "SpaceXAI: Grok 4.6 (batch)",
+      "name": "SpaceXSI: Grok 4.6 (batch)",
       "provider": "xai",
       "local_id": "grok-4.6:batch",
       "context_length": 500000,
@@ -5514,9 +5523,9 @@
       "provider": "deepseek",
       "local_id": "deepseek-v4-flash-latest",
       "context_length": 1048576,
-      "max_output_tokens": 384000,
-      "input_price_per_mtok": 0.06,
-      "output_price_per_mtok": 0.18,
+      "max_output_tokens": 131072,
+      "input_price_per_mtok": 0.044,
+      "output_price_per_mtok": 0.132,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -5548,7 +5557,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.015,
+      "cache_read_price_per_mtok": 0.0014,
       "cache_write_price_per_mtok": null
     },
     "deepseek/deepseek-v4-flash-0731": {
@@ -5558,7 +5567,7 @@
       "local_id": "deepseek-v4-flash-0731",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.065,
+      "input_price_per_mtok": 0.0443,
       "output_price_per_mtok": 0.3,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -6535,7 +6544,7 @@
     },
     "xai/grok-4.5": {
       "id": "x-ai/grok-4.5",
-      "name": "SpaceXAI: Grok 4.5",
+      "name": "SpaceXSI: Grok 4.5",
       "provider": "xai",
       "local_id": "grok-4.5",
       "context_length": 500000,
@@ -6881,39 +6890,6 @@
       "cache_read_price_per_mtok": 0.2,
       "cache_write_price_per_mtok": 0.375
     },
-    "cohere/north-mini-code:free": {
-      "id": "cohere/north-mini-code:free",
-      "name": "Cohere: North Mini Code (free)",
-      "provider": "cohere",
-      "local_id": "north-mini-code:free",
-      "context_length": 256000,
-      "max_output_tokens": 64000,
-      "input_price_per_mtok": 0.0,
-      "output_price_per_mtok": 0.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "include_reasoning",
-        "max_tokens",
-        "presence_penalty",
-        "reasoning",
-        "seed",
-        "stop",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_k",
-        "top_p"
-      ],
-      "cache_read_price_per_mtok": null,
-      "cache_write_price_per_mtok": null
-    },
     "z-ai/glm-5.2": {
       "id": "z-ai/glm-5.2",
       "name": "Z.ai: GLM 5.2",
@@ -7004,7 +6980,7 @@
       "context_length": 262144,
       "max_output_tokens": 235929,
       "input_price_per_mtok": 0.6,
-      "output_price_per_mtok": 3.5,
+      "output_price_per_mtok": 3.0,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -7018,7 +6994,6 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
-        "min_p",
         "parallel_tool_calls",
         "presence_penalty",
         "reasoning",
@@ -7034,7 +7009,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.16,
+      "cache_read_price_per_mtok": 0.12,
       "cache_write_price_per_mtok": null
     },
     "anthropic/claude-fable-latest": {
@@ -7527,39 +7502,6 @@
       "cache_read_price_per_mtok": 0.295,
       "cache_write_price_per_mtok": 1.8438
     },
-    "xai/grok-build-0.1": {
-      "id": "x-ai/grok-build-0.1",
-      "name": "SpaceXAI: Grok Build 0.1",
-      "provider": "xai",
-      "local_id": "grok-build-0.1",
-      "context_length": 256000,
-      "max_output_tokens": 230400,
-      "input_price_per_mtok": 1.0,
-      "output_price_per_mtok": 2.0,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "include_reasoning",
-        "logprobs",
-        "max_tokens",
-        "reasoning",
-        "response_format",
-        "seed",
-        "structured_outputs",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_logprobs",
-        "top_p"
-      ],
-      "cache_read_price_per_mtok": 0.2,
-      "cache_write_price_per_mtok": null
-    },
     "gemini/gemini-3.5-flash": {
       "id": "google/gemini-3.5-flash",
       "name": "Google: Gemini 3.5 Flash",
@@ -7751,7 +7693,7 @@
     },
     "xai/grok-4.3": {
       "id": "x-ai/grok-4.3",
-      "name": "SpaceXAI: Grok 4.3",
+      "name": "SpaceXSI: Grok 4.3",
       "provider": "xai",
       "local_id": "grok-4.3",
       "context_length": 1000000,
@@ -7785,7 +7727,7 @@
     },
     "xai/grok-4.3:batch": {
       "id": "x-ai/grok-4.3:batch",
-      "name": "SpaceXAI: Grok 4.3 (batch)",
+      "name": "SpaceXSI: Grok 4.3 (batch)",
       "provider": "xai",
       "local_id": "grok-4.3:batch",
       "context_length": 1000000,
@@ -8020,7 +7962,7 @@
       "local_id": "kimi-latest",
       "context_length": 1048576,
       "max_output_tokens": 943718,
-      "input_price_per_mtok": 0.1824,
+      "input_price_per_mtok": 0.1805,
       "output_price_per_mtok": 11.0055,
       "supports_thinking": false,
       "thinking_type": "none",
@@ -8437,7 +8379,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.25,
+      "cache_read_price_per_mtok": 0.2,
       "cache_write_price_per_mtok": null
     },
     "deepseek/deepseek-v4-flash": {
@@ -8997,7 +8939,7 @@
     },
     "xai/grok-4.20-multi-agent": {
       "id": "x-ai/grok-4.20-multi-agent",
-      "name": "SpaceXAI: Grok 4.20 Multi-Agent",
+      "name": "SpaceXSI: Grok 4.20 Multi-Agent",
       "provider": "xai",
       "local_id": "grok-4.20-multi-agent",
       "context_length": 2000000,
@@ -9029,7 +8971,7 @@
     },
     "xai/grok-4.20": {
       "id": "x-ai/grok-4.20",
-      "name": "SpaceXAI: Grok 4.20",
+      "name": "SpaceXSI: Grok 4.20",
       "provider": "xai",
       "local_id": "grok-4.20",
       "context_length": 2000000,
@@ -9448,9 +9390,9 @@
       "provider": "qwen",
       "local_id": "qwen3.5-9b",
       "context_length": 262144,
-      "max_output_tokens": 40960,
-      "input_price_per_mtok": 0.154,
-      "output_price_per_mtok": 0.226,
+      "max_output_tokens": 235929,
+      "input_price_per_mtok": 0.17,
+      "output_price_per_mtok": 0.25,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -9480,7 +9422,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.138,
+      "cache_read_price_per_mtok": null,
       "cache_write_price_per_mtok": null
     },
     "openai/gpt-5.4-pro": {
@@ -9750,9 +9692,9 @@
       "provider": "qwen",
       "local_id": "qwen3.5-27b",
       "context_length": 262144,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.195,
-      "output_price_per_mtok": 1.56,
+      "max_output_tokens": 81920,
+      "input_price_per_mtok": 0.26,
+      "output_price_per_mtok": 2.6,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -11545,6 +11487,7 @@
         "temperature",
         "tool_choice",
         "tools",
+        "top_k",
         "top_p"
       ],
       "cache_read_price_per_mtok": 0.0375,
@@ -12555,9 +12498,9 @@
       "provider": "openai",
       "local_id": "gpt-oss-120b",
       "context_length": 131072,
-      "max_output_tokens": 65536,
-      "input_price_per_mtok": 0.15,
-      "output_price_per_mtok": 0.6,
+      "max_output_tokens": 117964,
+      "input_price_per_mtok": 0.09,
+      "output_price_per_mtok": 0.36,
       "supports_thinking": true,
       "thinking_type": "effort",
       "temperature_range": [
@@ -12588,7 +12531,7 @@
         "top_logprobs",
         "top_p"
       ],
-      "cache_read_price_per_mtok": 0.075,
+      "cache_read_price_per_mtok": null,
       "cache_write_price_per_mtok": null
     },
     "openai/gpt-oss-120b:batch": {
@@ -14979,47 +14922,15 @@
       "cache_read_price_per_mtok": 2.5,
       "cache_write_price_per_mtok": null
     },
-    "meta/llama-3.2-1b-instruct": {
-      "id": "meta-llama/llama-3.2-1b-instruct",
-      "name": "Meta: Llama 3.2 1B Instruct",
-      "provider": "meta",
-      "local_id": "llama-3.2-1b-instruct",
-      "context_length": 60000,
-      "max_output_tokens": 54000,
-      "input_price_per_mtok": 0.027,
-      "output_price_per_mtok": 0.201,
-      "supports_thinking": false,
-      "thinking_type": "none",
-      "temperature_range": [
-        0.0,
-        2.0
-      ],
-      "is_reasoning_model": false,
-      "supported_parameters": [
-        "frequency_penalty",
-        "logit_bias",
-        "max_tokens",
-        "min_p",
-        "presence_penalty",
-        "repetition_penalty",
-        "seed",
-        "stop",
-        "temperature",
-        "top_k",
-        "top_p"
-      ],
-      "cache_read_price_per_mtok": null,
-      "cache_write_price_per_mtok": null
-    },
     "meta/llama-3.2-3b-instruct": {
       "id": "meta-llama/llama-3.2-3b-instruct",
       "name": "Meta: Llama 3.2 3B Instruct",
       "provider": "meta",
       "local_id": "llama-3.2-3b-instruct",
       "context_length": 131072,
-      "max_output_tokens": 72000,
-      "input_price_per_mtok": 0.0509,
-      "output_price_per_mtok": 0.335,
+      "max_output_tokens": 117964,
+      "input_price_per_mtok": 0.05,
+      "output_price_per_mtok": 0.33,
       "supports_thinking": false,
       "thinking_type": "none",
       "temperature_range": [
@@ -15032,7 +14943,6 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
-        "min_p",
         "presence_penalty",
         "repetition_penalty",
         "seed",
@@ -15976,7 +15886,7 @@
       "provider": "openrouter",
       "local_id": "auto-code",
       "context_length": 2000000,
-      "max_output_tokens": 64000,
+      "max_output_tokens": 128000,
       "input_price_per_mtok": -1000000.0,
       "output_price_per_mtok": -1000000.0,
       "supports_thinking": false,
@@ -16021,7 +15931,7 @@
       "provider": "typesafe",
       "local_id": "jev-router",
       "context_length": 1000000,
-      "max_output_tokens": 64000,
+      "max_output_tokens": 128000,
       "input_price_per_mtok": -1000000.0,
       "output_price_per_mtok": -1000000.0,
       "supports_thinking": false,
@@ -16086,7 +15996,7 @@
       "provider": "openrouter",
       "local_id": "auto-beta",
       "context_length": 2000000,
-      "max_output_tokens": 64000,
+      "max_output_tokens": 128000,
       "input_price_per_mtok": -1000000.0,
       "output_price_per_mtok": -1000000.0,
       "supports_thinking": false,
