@@ -305,7 +305,10 @@ the amount taken from the account, and on a bring-your-own-key call, where
 that is only OpenRouter's fee, the provider's charge sits beside it in
 `usage.cost_details.upstream_inference_cost`
 ([usage accounting](https://openrouter.ai/docs/use-cases/usage-accounting)).
-`OpenRouterProvider._reported_cost` adds the two; the base
+`OpenRouterProvider._reported_cost` adds the two, except on a call marked
+`is_byok: false`, which reports `cost` alone: the guide says a call paid with
+credits has no upstream charge, one of its examples lists one, and a charge
+must never be counted twice. A cost of another shape reports nothing. The base
 `OpenAIProvider._reported_cost` returns `None`, so no other provider reports
 one even if its usage has a `cost` field. No request parameter asks for it.
 The model step, the summarizer and the hire screen's setup call pass it to

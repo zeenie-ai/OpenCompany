@@ -85,6 +85,10 @@ class OpenRouterProvider(OpenAIProvider):
         ``usage.cost_details.upstream_inference_cost``, so the two are added.
         (openrouter.ai/docs/use-cases/usage-accounting)
 
+        The guide says a call paid with credits has no upstream charge, but
+        one of its examples lists one, so a call marked ``is_byok: false``
+        reports ``cost`` alone and is never counted twice.
+
         Anything but those shapes reports nothing: this runs after the call
         was paid for, and an error here would make the step send it again.
         """
@@ -93,7 +97,9 @@ class OpenRouterProvider(OpenAIProvider):
             return None
         details = getattr(usage, "cost_details", None)
         upstream = details.get("upstream_inference_cost") if isinstance(details, dict) else None
-        return cost + (upstream if isinstance(upstream, (int, float)) else 0)
+        if getattr(usage, "is_byok", None) is False or not isinstance(upstream, (int, float)):
+            return cost
+        return cost + upstream
 
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx
