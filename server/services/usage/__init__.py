@@ -20,7 +20,7 @@ Callers import a recorder inside the function that calls it
 the call runs.
 """
 
-from .limit import monthly_budget_reached, resolve_spend_limit, spend_limit_notice
+from .limit import BUDGET_NOTICE, BUDGET_PAUSED, monthly_budget_reached, resolve_spend_limit, spend_limit_notice
 from .recording import record_api_usage, record_llm_usage
 from .summaries import (
     api_usage_summary,
@@ -33,6 +33,8 @@ from .summaries import (
 )
 
 __all__ = [
+    "BUDGET_NOTICE",
+    "BUDGET_PAUSED",
     "api_usage_summary",
     "chat_run_cost",
     "chat_run_costs",

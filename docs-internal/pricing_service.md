@@ -477,9 +477,43 @@ reaches the limit:
   [Chat Protocol](./chat_protocol.md), "Spend limit".
 - The check runs between turns, so a run can pass the limit by the cost of
   one turn.
-- A managed employee job is never limited: its step does not ask.
+- This limit covers the agent that answers in chat. A managed employee job is
+  not asked, and `chat_run_cost` counts the run's own rows only; team and
+  background work are limited by the monthly budget below.
 - A limit that cannot be read answers `None` and logs a warning, so a failed
   check never ends the owner's reply.
+
+### The monthly budget of an employee
+
+The same module. An employee (one workflow) is paused when everything booked
+for it this month reaches the budget: its replies, its team's jobs, and its
+scheduled and triggered runs.
+
+- The budget is the owner's `UserSettings.employee_monthly_budget_usd` when
+  above 0, else env `EMPLOYEE_MONTHLY_BUDGET_USD`. 0, the default, means no
+  budget. One amount applies to every employee.
+- `monthly_budget_reached(workflow_id)` returns the budget when the workflow's
+  cost since the 1st of the month has reached it, else `None`. The month starts
+  in the owner's `profile_timezone` (`month_start`), the month the cost panel
+  shows, and the sum is `workflow_cost_since`.
+- The agent's model step asks before each model call for a step that has a
+  workflow. At the budget it calls
+  `services/deployment/handlers.pause_generation_for_budget`, which pauses the
+  running generation the way the Workspace's Stop does, with pause reason
+  `budget`. Home then shows the employee as needing attention with the line
+  "Reached this month's budget of $20.00. Raise it in Settings > Billing, then
+  resume."
+- A reply the agent is giving the owner ends there with one line saying so,
+  and no model call is made. Any other step (a team job, a scheduled run)
+  makes its call, and its workflow holds at its next step boundary, as it does
+  for any pause. So an employee passes its budget by up to one model call for
+  each agent running at that moment.
+- Resume is refused with `monthly_budget_reached` while the workflow is still
+  over. Raising the amount, setting it to 0, or a new month lets it through,
+  and the paused work carries on from where it was.
+- A manual canvas run has no running generation, so it is never paused. A
+  workflow with no agent step is not checked, because the check runs in the
+  model step. A budget that cannot be read lets the step run.
 
 The default is written in three places (`.env.template`, `Settings`,
 `UserSettings`); a test keeps them equal.
@@ -618,7 +652,7 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
 | `server/services/usage/recording.py` | `record_api_usage()` and `record_llm_usage()`: one usage row per call; neither raises |
 | `server/services/usage/summaries.py` | `api_usage_summary()`, `provider_usage_summary()`, `chat_run_costs()`, `workflow_costs()`, `month_start()` |
-| `server/services/usage/limit.py` | `resolve_spend_limit()`, `spend_limit_notice()`: the spend limit of a chat run |
+| `server/services/usage/limit.py` | `resolve_spend_limit()`, `spend_limit_notice()`: the spend limit of a chat run. `monthly_budget_reached()`: the monthly budget of an employee |
 | `server/services/usage/handlers.py` | The `get_api_usage_summary` / `get_provider_usage_summary` / `get_chat_run_costs` / `get_workflow_costs` commands |
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |

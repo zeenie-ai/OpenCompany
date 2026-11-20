@@ -487,7 +487,8 @@ async def _stopped_llm_step(
 ) -> Dict[str, Any]:
     """The step's result when the run ends here without a model call: the
     owner stopped it (``reason`` ``stopped``), or it reached its spend limit
-    (``spend_limit``, with the notice as ``partial``). What was written so
+    or its employee's monthly budget (``spend_limit``, with the notice as
+    ``partial``). What was written so
     far (possibly nothing) is the final answer. The conversation keeps the
     turn as far as it went: the request (its tool results included, so no
     call is left unanswered) and the partial answer, marked stopped; nothing
@@ -575,17 +576,36 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         emitter.begin()
 
     # A chat run that reached the owner's spend limit ends at this step too,
-    # with a line saying so (services/usage/limit.py). A managed employee job
-    # is never limited.
-    if chat_run_id and not (payload.get("attribution") or {}).get("employee_job_id"):
+    # with a line saying so (services/usage/limit.py). That limit covers the
+    # agent that answers the owner, not a managed employee job.
+    answers_owner = bool(chat_run_id) and not (payload.get("attribution") or {}).get("employee_job_id")
+    notice = None
+    if answers_owner:
         from services.usage import spend_limit_notice
 
         notice = await spend_limit_notice(chat_run_id)
-        if notice is not None:
-            if emitter is not None:
-                await emitter(StreamEvent("text", notice))
-                emitter.end(final=True)
-            return await _stopped_llm_step(payload, messages, partial=notice, reason="spend_limit")
+
+    # An employee that reached its monthly budget is paused, the way the
+    # Workspace's Stop pauses it. A reply to the owner ends here with a line
+    # saying so. Any other step runs, and its workflow holds at its next
+    # boundary until the owner raises the budget and resumes.
+    workflow_id = payload.get("workflow_id") or None
+    if notice is None and workflow_id:
+        from services.usage import BUDGET_NOTICE, BUDGET_PAUSED, monthly_budget_reached
+
+        budget = await monthly_budget_reached(workflow_id)
+        if budget is not None:
+            from services.deployment.handlers import pause_generation_for_budget
+
+            paused = await pause_generation_for_budget(workflow_id=workflow_id, detail=BUDGET_PAUSED.format(budget=budget))
+            if paused and answers_owner:
+                notice = BUDGET_NOTICE.format(budget=budget)
+
+    if notice is not None:
+        if emitter is not None:
+            await emitter(StreamEvent("text", notice))
+            emitter.end(final=True)
+        return await _stopped_llm_step(payload, messages, partial=notice, reason="spend_limit")
 
     from services.llm.observation import observe_stage
     observe_stage("authentication")
@@ -675,7 +695,6 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
         # and the iteration matches the ``llm-step-N`` activity id.
         from services.usage import record_llm_usage
 
-        workflow_id = payload.get("workflow_id") or None
         await record_llm_usage(
             provider=payload["provider"],
             model=payload["model"],

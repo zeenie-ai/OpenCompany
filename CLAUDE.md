@@ -154,7 +154,10 @@ server/services/
 │   ├── summaries.py         # provider_usage_summary / api_usage_summary; chat_run_costs (per reply, with the
 │   │                        # employee jobs it started), workflow_costs (per employee since an instant), month_start
 │   ├── limit.py             # The spend limit of a chat run: the model step asks spend_limit_notice before
-│   │                        # each call (UserSettings.chat_run_spend_limit_usd, else CHAT_RUN_SPEND_LIMIT_USD; 0 = off)
+│   │                        # each call (UserSettings.chat_run_spend_limit_usd, else CHAT_RUN_SPEND_LIMIT_USD; 0 = off).
+│   │                        # The monthly budget of an employee: the step asks monthly_budget_reached and, at the
+│   │                        # budget, pauses the employee through deployment/handlers.pause_generation_for_budget
+│   │                        # (UserSettings.employee_monthly_budget_usd, else EMPLOYEE_MONTHLY_BUDGET_USD; 0 = off)
 │   └── handlers.py          # get_provider_usage_summary / get_api_usage_summary / get_chat_run_costs / get_workflow_costs
 ├── markdown_formatter.py    # GFM markdown to platform-specific formatting (Telegram HTML, WhatsApp, plain)
 ├── ws_handler_registry.py   # Plugin-owned WS commands self-register here (Wave 11.H)

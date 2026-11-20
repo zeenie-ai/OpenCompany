@@ -44,3 +44,15 @@ def spend_limit(monkeypatch):
     notice = AsyncMock(return_value=None)
     monkeypatch.setattr(services.usage, "spend_limit_notice", notice)
     return notice
+
+
+@pytest.fixture
+def monthly_budget(monkeypatch):
+    """``services.usage.monthly_budget_reached`` replaced by a mock: no
+    employee has reached its budget, until a test sets ``return_value`` to
+    the budget."""
+    import services.usage
+
+    reached = AsyncMock(return_value=None)
+    monkeypatch.setattr(services.usage, "monthly_budget_reached", reached)
+    return reached

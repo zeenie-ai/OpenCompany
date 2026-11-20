@@ -32,6 +32,16 @@ NOTICE = (
     "Ask me to continue and I'll carry on from where I stopped."
 )
 
+#: What the owner reads on an employee paused at its budget, and when a
+#: Resume is refused because it is still over.
+BUDGET_PAUSED = "Reached this month's budget of ${budget:.2f}. Raise it in Settings > Billing, then resume."
+
+#: What the agent says in a reply the budget ended.
+BUDGET_NOTICE = (
+    "I stopped here because I reached this month's budget of ${budget:.2f}. "
+    "Raise it in Settings > Billing, then resume me, and I'll carry on."
+)
+
 
 def _owner_or_environment(user_settings: Optional[Mapping[str, Any]], settings: Any, name: str) -> float:
     """A limit in USD: the owner's value when above 0, else the environment's."""

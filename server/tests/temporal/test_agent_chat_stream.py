@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, Dict, List
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -36,10 +37,11 @@ def _payload(**extra: Any) -> Dict[str, Any]:
 
 
 @pytest.fixture
-def env(monkeypatch, llm_usage, spend_limit):
+def env(monkeypatch, llm_usage, spend_limit, monthly_budget):
     """The step's surroundings: the hub, the conversation store and the stop
-    flag, all recorded. The step's usage booking and its spend-limit check
-    are stand-ins (``llm_usage``, ``spend_limit``)."""
+    flag, all recorded. The step's usage booking, its spend-limit check and
+    its budget check are stand-ins (``llm_usage``, ``spend_limit``,
+    ``monthly_budget``)."""
     import core.container as container_module
     import services.chat.config as chat_config
     import services.chat.hub as hub_module
@@ -66,7 +68,11 @@ def env(monkeypatch, llm_usage, spend_limit):
     monkeypatch.setattr(agent_activities, "_chat_run_stopping", stopping)
     monkeypatch.setattr(chat_config, "runs_setting", lambda name: 0.0 if name == "stop_poll_s" else real_runs_setting(name))
     monkeypatch.setattr(container_module.container, "chat_unifier", lambda: object())
-    return type("Env", (), {"published": published, "saved": saved, "state": state, "spend_limit": spend_limit})
+    return type(
+        "Env",
+        (),
+        {"published": published, "saved": saved, "state": state, "spend_limit": spend_limit, "monthly_budget": monthly_budget},
+    )
 
 
 def _run_step(monkeypatch, step):
@@ -244,6 +250,112 @@ async def test_a_step_outside_a_chat_run_is_never_limited(env, monkeypatch):
     await _execute_native_llm_step(payload)
 
     env.spend_limit.assert_not_awaited()
+
+
+BUDGET_PAUSED = "Reached this month's budget of $20.00. Raise it in Settings > Billing, then resume."
+BUDGET_NOTICE = (
+    "I stopped here because I reached this month's budget of $20.00. "
+    "Raise it in Settings > Billing, then resume me, and I'll carry on."
+)
+TEAM_STEP = {"employee_job_id": "job-1"}
+
+
+@pytest.fixture
+def budget_pause(monkeypatch):
+    """The deployment service's pause for the budget, recorded. It answers
+    that the employee is paused, until a test sets ``return_value``."""
+    import services.deployment.handlers as deployment
+
+    pause = AsyncMock(return_value=True)
+    monkeypatch.setattr(deployment, "pause_generation_for_budget", pause)
+    return pause
+
+
+def _model_answers(monkeypatch):
+    async def step(unifier, **kwargs):
+        return LLMResponse(content="Done.", finish_reason="stop", usage=Usage())
+
+    _run_step(monkeypatch, step)
+
+
+async def test_an_employee_at_its_budget_is_paused(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_answers(monkeypatch)
+    env.monthly_budget.return_value = 20.0
+
+    await _execute_native_llm_step(_payload(workflow_id="wf", attribution=TEAM_STEP))
+
+    env.monthly_budget.assert_awaited_once_with("wf")
+    budget_pause.assert_awaited_once_with(workflow_id="wf", detail=BUDGET_PAUSED)
+
+
+async def test_a_team_step_at_the_budget_still_runs(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_answers(monkeypatch)
+    env.monthly_budget.return_value = 20.0
+
+    result = await _execute_native_llm_step(_payload(workflow_id="wf", attribution=TEAM_STEP))
+
+    assert result["content"] == "Done."
+
+
+async def test_a_reply_to_the_owner_ends_with_the_budget_line(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_must_not_be_called(monkeypatch)
+    env.monthly_budget.return_value = 20.0
+
+    result = await _execute_native_llm_step(_payload(workflow_id="wf"))
+
+    assert (result["kind"], result["content"], result["finish_reason"]) == ("final", BUDGET_NOTICE, "spend_limit")
+    assert _texts(env.published) == BUDGET_NOTICE
+
+
+async def test_a_reply_goes_on_when_the_employee_could_not_be_paused(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_answers(monkeypatch)
+    env.monthly_budget.return_value = 20.0
+    budget_pause.return_value = False
+
+    result = await _execute_native_llm_step(_payload(workflow_id="wf"))
+
+    assert result["content"] == "Done."
+
+
+async def test_an_employee_under_its_budget_is_not_paused(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_answers(monkeypatch)
+
+    result = await _execute_native_llm_step(_payload(workflow_id="wf"))
+
+    budget_pause.assert_not_awaited()
+    assert result["content"] == "Done."
+
+
+async def test_a_step_with_no_workflow_asks_no_budget(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_answers(monkeypatch)
+
+    await _execute_native_llm_step(_payload())
+
+    env.monthly_budget.assert_not_awaited()
+
+
+async def test_a_reply_at_its_own_limit_is_not_asked_for_the_budget(env, budget_pause, monkeypatch):
+    from services.temporal.agent_activities import _execute_native_llm_step
+
+    _model_must_not_be_called(monkeypatch)
+    env.spend_limit.return_value = LIMIT_NOTICE
+
+    result = await _execute_native_llm_step(_payload(workflow_id="wf"))
+
+    assert result["content"] == LIMIT_NOTICE
+    env.monthly_budget.assert_not_awaited()
 
 
 async def test_stopping_midway_keeps_what_was_shown(env, monkeypatch):

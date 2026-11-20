@@ -837,7 +837,10 @@ and Resume.
   `pause_generation_for_budget(workflow_id, detail)` in
   `services/deployment/handlers.py` pauses a running generation whose
   workflow reached the owner's budget for the month, through the same
-  `handle_pause_workflow` the Workspace's Stop uses. It answers true when the
+  `handle_pause_workflow` the Workspace's Stop uses. The agent's model step
+  calls it before a model call when the usage service says the budget is
+  reached; that call still runs unless it answers the owner in chat, and the
+  workflow holds at its next step boundary. It answers true when the
   generation is paused or already on its way there, leaves a manual run alone
   (it has no running generation), and never raises. A Resume from that pause
   is refused with `monthly_budget_reached` and a message naming Settings >

@@ -201,7 +201,7 @@ async def test_resume_is_refused_while_the_employee_is_over_its_budget(monkeypat
 
     assert reply["success"] is False
     assert reply["error"] == "monthly_budget_reached"
-    assert reply["message"] == "This employee reached this month's budget of $20.00. Raise it in Settings > Billing, then resume."
+    assert reply["message"] == BUDGET_DETAIL
     resume_harness.transition.assert_not_awaited()
 
 

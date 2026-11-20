@@ -463,6 +463,13 @@ Settings are in `server/config/chat_defaults.json` (`stream`, `steps`, `runs`).
   starts a new run. The conversation keeps the line as the agent's turn. A run can pass the limit by the cost of one
   turn, since the check runs between turns. A managed employee job is never limited, and a limit that cannot be
   read lets the step run.
+- **Monthly budget** (`services/usage/limit.py`, `UserSettings.employee_monthly_budget_usd`). When everything booked
+  for an employee this month reaches the owner's budget, the model step pauses the employee
+  (`pause_generation_for_budget`, pause reason `budget`). A reply in progress ends the same way as at the spend limit,
+  with its own line ("I stopped here because I reached this month's budget of $20.00. Raise it in Settings > Billing,
+  then resume me, and I'll carry on.") and `finish_reason: "spend_limit"`. A message sent while the employee is
+  paused is queued, and Resume answers `monthly_budget_reached` until the amount is raised. See
+  [Pricing Service](./pricing_service.md).
 - **Agents that are not AgentWorkflows.** Only the agents in `AGENT_WORKFLOW_TYPES` (`services/temporal/workflow.py`)
   run as an AgentWorkflow and are prepared by `agent.prepare_payload`. The others (Claude Code, Codex, RLM)
   run as one activity and get no `chat_stream`: nothing they write streams, their tool calls show no steps, they

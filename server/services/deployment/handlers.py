@@ -2466,14 +2466,14 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     if getattr(control, "pause_reason", None) == PAUSE_REASON_BUDGET:
         # Paused at the owner's monthly budget: running again would only pay
         # for the next call and pause again, so the amount is raised first.
-        from services.usage import monthly_budget_reached
+        from services.usage import BUDGET_PAUSED, monthly_budget_reached
 
         budget = await monthly_budget_reached(workflow_id)
         if budget is not None:
             return {
                 "success": False,
                 "error": "monthly_budget_reached",
-                "message": f"This employee reached this month's budget of ${budget:.2f}. Raise it in Settings > Billing, then resume.",
+                "message": BUDGET_PAUSED.format(budget=budget),
                 **await _control_payload(control, controller_status=controller_status),
             }
     async with _control_completion_lock(workflow_id):

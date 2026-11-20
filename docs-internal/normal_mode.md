@@ -735,9 +735,13 @@ rollover, recovery and operating limits.
 
 Automatic pauses now record why: `WorkflowControlExecution.pause_reason`
 (`failures` from the circuit breaker, `recovery` after a crash,
-`controller_missing`) and `pause_detail`, emitted by `serialize_control` and
-cleared on resume. Home shows such an employee as "Needs attention". See
-[Temporal Workflow Control](./temporal-workflow-control.md#recovery-policies).
+`controller_missing`, `budget` when the employee reached the owner's monthly
+budget) and `pause_detail`, emitted by `serialize_control` and cleared on
+resume. Home shows such an employee as "Needs attention", with the detail as
+its text. An employee paused for its budget cannot be resumed until the amount
+is raised in Settings > Billing. See
+[Temporal Workflow Control](./temporal-workflow-control.md#recovery-policies)
+and [Pricing Service](./pricing_service.md).
 
 ### One-click starters
 
