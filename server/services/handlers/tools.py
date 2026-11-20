@@ -115,6 +115,14 @@ async def execute_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict[s
     """
     from services.status_broadcaster import get_status_broadcaster
 
+    from services.agent_instances.admission import AdmissionHalted, get_gate, is_invalid_request
+    gate = get_gate(config)
+    if gate is not None:
+        try:
+            gate.admit("tool")
+        except AdmissionHalted as exc:
+            return {"success": False, "error_type": exc.code, "error": str(exc), "turn_halted": True}
+
     broadcaster = get_status_broadcaster()
     node_id = config.get("node_id")
     workflow_id = config.get("workflow_id")
@@ -139,6 +147,13 @@ async def execute_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict[s
                 workflow_id=workflow_id,
             )
         raise
+
+    if is_invalid_request(result):
+        from services.agent_instances.tools import record_invalid_tool_request
+        correction = await record_invalid_tool_request(config, result)
+        if correction and correction["halted"]:
+            result = {**result, "turn_halted": True,
+                      "admission_state": correction.get("admission_state") or {"invalid_count": correction["count"], "reason": "invalid_request_limit"}}
 
     # Awaited-delegation results (delegation_wait_seconds > 0) carry a
     # delegation_lifecycle marker: run_child_agent already broadcast the
@@ -166,6 +181,10 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
     """
     node_type = config.get("node_type", "")
     node_params = config.get("parameters", {})
+
+    if config.get("agent_operation") or node_params.get("_agent_operation"):
+        from services.agent_instances.tools import execute_lifecycle_tool
+        return await execute_lifecycle_tool(tool_name, tool_args, config)
 
     # Execution context for tool handlers. Includes canvas state
     # (nodes/edges/workflow_id) that callers (chat_tool_executor in
@@ -200,6 +219,12 @@ async def _dispatch_tool(tool_name: str, tool_args: Dict[str, Any], config: Dict
                 "ai_service", "database", "approval_wait_version"):
         if key in config:
             context[key] = config[key]
+    for key in ("agent_lifecycle_version", "agent_protocol_version", "agent_instance_id", "agent_run_id",
+                "agent_instance_scope", "agent_instance_role", "task_attempt"):
+        if key in config:
+            context[key] = config[key]
+        elif key in (config.get("agent_runtime") or {}):
+            context[key] = config["agent_runtime"][key]
     if config.get("pi_harness_version") == 1:
         from services.temporal.pi_inline_delegation import forward_inline_scope
 

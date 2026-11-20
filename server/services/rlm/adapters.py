@@ -222,7 +222,11 @@ class ToolBridgeAdapter:
                 t_execution,
                 t_ambiguous_outcome_sink,
             ):
-                def wrapper(**kwargs):
+                def wrapper(*positional, **kwargs):
+                    from services.agent_instances.admission import get_gate
+                    admission = get_gate(context)
+                    if admission is not None:
+                        admission.check()
                     config = {
                         **dict(t_execution or {}),
                         "node_type": t_type,
@@ -234,6 +238,10 @@ class ToolBridgeAdapter:
                         "provider": provider,
                     }
                     if context:
+                        config["agent_runtime"] = context
+                        for key in ("agent_protocol_version", "agent_lifecycle_version", "agent_instance_id", "agent_run_id", "agent_instance_scope"):
+                            if key in context:
+                                config[key] = context[key]
                         if context.get("pi_harness_version") == 1:
                             from services.temporal.pi_inline_delegation import forward_inline_scope
                             config.update(forward_inline_scope(context))
@@ -244,7 +252,7 @@ class ToolBridgeAdapter:
                         if context.get("pi_harness_version") == 1:
                             config["pi_harness_version"] = 1
                         config["user_id"] = context.get("user_id", "owner")
-                    if t_type in {"coding_agent", "taskManager"} and config.get("pi_harness_version") == 1:
+                    if config.get("agent_run_id") or (t_type in {"coding_agent", "taskManager"} and config.get("pi_harness_version") == 1):
                         # RLM executes Python rather than emitting function-call
                         # IDs. Admit a source-position receipt before child work:
                         # code, instruction and occurrence identify the call;
@@ -259,12 +267,14 @@ class ToolBridgeAdapter:
                                 code = frame.f_locals["code"]
                                 break
                             frame = frame.f_back
-                        if code is not None and caller is not None:
-                            position = (hashlib.sha256(code.encode()).hexdigest(), caller.f_lineno, caller.f_lasti)
+                        if caller is not None:
+                            source = code if code is not None else f"{caller.f_code.co_filename}:{caller.f_code.co_firstlineno}:{caller.f_code.co_name}"
+                            position = (hashlib.sha256(source.encode()).hexdigest(), caller.f_lineno, caller.f_lasti)
                             with pi_position_lock:
                                 occurrence = pi_call_positions.get(position, 0)
                                 pi_call_positions[position] = occurrence + 1
-                            config["tool_call_id"] = f"rlm:{position[0]}:{position[1]}:{position[2]}:{occurrence}"
+                            run_namespace = f"{config['agent_run_id']}:" if config.get("agent_run_id") else ""
+                            config["tool_call_id"] = f"rlm:{run_namespace}{position[0]}:{position[1]}:{position[2]}:{occurrence}"
                         del frame, caller
                     if config.get("pi_harness_version") == 1:
                         from services.plugin.deps import get_ai_service, get_database
@@ -273,16 +283,30 @@ class ToolBridgeAdapter:
 
                     if t_input_model is not None:
                         try:
+                            if positional:
+                                raise ValueError("Tool arguments must be supplied by name")
                             validated = t_input_model.model_validate(kwargs)
                             tool_args = validated.model_dump(
                                 mode="json",
                                 exclude_unset=True,
                             )
                         except Exception as exc:
-                            return {
+                            error = {
                                 "error": "Invalid tool arguments",
+                                "error_type": "invalid_tool_input",
                                 "details": str(exc),
                             }
+                            from services.agent_instances.tools import record_invalid_tool_request
+                            receipt = asyncio.run_coroutine_threadsafe(record_invalid_tool_request(config, error), main_loop)
+                            try:
+                                state = receipt.result(timeout=ToolBridgeAdapter.TOOL_TIMEOUT_SECONDS)
+                            except BaseException:
+                                if admission is not None:
+                                    admission.revoke("admission_persistence_failed")
+                                raise
+                            if state:
+                                error.update(turn_halted=state["halted"], agent_admission_state=state.get("admission_state"))
+                            return error
                     else:
                         tool_args = dict(kwargs)
 

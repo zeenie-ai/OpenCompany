@@ -89,7 +89,7 @@ export const employeeSummarySchema = z.object({
   pending_changes: z.boolean().catch(false),
   has_team: z.boolean().catch(false),
   can_give_team: z.boolean().catch(false),
-  job_progress: z.object({ request_id: z.string(), state: z.string(), message: z.string() }).nullable().catch(null),
+  job_progress: z.object({ request_id: z.string(), state: z.string(), message: z.string(), revision: z.string().optional() }).nullable().catch(null),
 });
 
 export type EmployeeSummary = Omit<z.infer<typeof employeeSummarySchema>, 'control'> & {

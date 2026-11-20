@@ -620,7 +620,39 @@ def get_mcp_app() -> Any:
 
     from mcp.server.fastmcp import FastMCP
 
-    mcp = FastMCP(
+    class ScopedFastMCP(FastMCP):
+        async def list_tools(self):
+            tools = await super().list_tools()
+            ctx = _current_batch.get()
+            if ctx is None:
+                return tools  # Internal diagnostics; HTTP requests always authenticate.
+            from services.cli_agent.workflow_tools import _connected_tool_name, _entry_input_model
+            connected = {_connected_tool_name(entry): entry for entry in ctx.connected_tools}
+            visible = []
+            for tool in tools:
+                entry = connected.get(tool.name)
+                if entry is not None:
+                    model = _entry_input_model(entry)
+                    schema = entry.get("_agent_tool_schema") or (model.model_json_schema() if model else tool.inputSchema)
+                    visible.append(tool.model_copy(update={"inputSchema": schema}))
+                elif tool.name in self._infrastructure_tool_names:
+                    visible.append(tool)
+            return visible
+
+        async def call_tool(self, name: str, arguments: dict[str, Any]):
+            # FastMCP validates its generated signature before invoking the
+            # handler. Intercept here so absent required orchestration fields
+            # still consume the durable correction budget for this auth scope.
+            from services.cli_agent.workflow_tools import prevalidate_agent_request
+            error = await prevalidate_agent_request(self, name, arguments)
+            if error is not None:
+                import json
+                from mcp.types import CallToolResult, TextContent
+                return CallToolResult(isError=True, structuredContent=error,
+                    content=[TextContent(type="text", text=json.dumps(error, default=str))])
+            return await super().call_tool(name, arguments)
+
+    mcp = ScopedFastMCP(
         name="opencompany-cli-agent",
         instructions=(
             "OpenCompany IDE MCP server. Exposes workspace files, connected "
@@ -631,6 +663,7 @@ def get_mcp_app() -> Any:
         # under /mcp/ide externally.
     )
     _build_tools(mcp)
+    mcp._infrastructure_tool_names = frozenset(tool.name for tool in mcp._tool_manager.list_tools())
     _mcp_singleton = mcp
 
     asgi_app = mcp.streamable_http_app()

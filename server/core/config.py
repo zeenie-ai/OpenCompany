@@ -530,6 +530,13 @@ class Settings(BaseSettings):
     max_concurrent_subagents: int = Field(default=3, env="MAX_CONCURRENT_SUBAGENTS", ge=1, le=50)
     max_delegation_depth: int = Field(default=2, env="MAX_DELEGATION_DEPTH", ge=1, le=2)
 
+    # Peer inbox backpressure. Mandatory task/review notices remain durable
+    # even when these peer limits are reached.
+    agent_peer_message_bytes: int = Field(default=8192, env="AGENT_PEER_MESSAGE_BYTES", ge=1)
+    agent_pending_messages: int = Field(default=256, env="AGENT_PENDING_MESSAGES", ge=1)
+    agent_pending_bytes: int = Field(default=1048576, env="AGENT_PENDING_BYTES", ge=1)
+    agent_peer_chain_turns: int = Field(default=8, env="AGENT_PEER_CHAIN_TURNS", ge=1)
+
     # Gunicorn Configuration (for production deployment)
     gunicorn_timeout: int = Field(default=120, env="GUNICORN_TIMEOUT", ge=30)
     gunicorn_graceful_timeout: int = Field(default=30, env="GUNICORN_GRACEFUL_TIMEOUT", ge=10)

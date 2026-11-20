@@ -75,6 +75,83 @@ def _entry_input_model(entry: Dict[str, Any]) -> Optional[type]:
     )
 
 
+def authenticated_tool_config(ctx: Any, entry: Dict[str, Any], tool_name: str, *, mcp: Any = None) -> Dict[str, Any]:
+    """One trusted scope and request identity for prevalidation and execution."""
+    config = {
+        **dict(entry.get("_agent_tool_execution") or {}),
+        **dict(entry.get("_pi_inline_scope") or {}),
+        "node_type": entry.get("node_type"), "node_id": entry.get("node_id"),
+        "workflow_id": ctx.workflow_id, "execution_id": ctx.execution_id,
+        "user_id": (entry.get("_pi_inline_scope") or {}).get("user_id", ctx.user_id),
+        "workspace_dir": str(ctx.workspace_dir), "parent_node_id": ctx.node_id,
+        "label": entry.get("label") or tool_name, "parameters": dict(entry.get("parameters") or {}),
+        **({"pi_harness_version": 1} if entry.get("pi_harness_version") == 1 else {}),
+    }
+    if entry.get("agent_runtime"):
+        config["agent_runtime"] = entry["agent_runtime"]
+    server = mcp or _get_mcp()
+    if server is not None:
+        try:
+            request_context = server.get_context().request_context
+            request = request_context.request
+            session_id = request.headers.get("mcp-session-id") if request is not None else None
+            request_id = request_context.request_id
+            runtime = config.get("agent_runtime") or {}
+            # The authenticated run is a namespace when a direct/internal MCP
+            # transport has no HTTP session header. Never use arguments as scope.
+            namespace = session_id or runtime.get("agent_run_id")
+            if namespace and request_id is not None:
+                from services.temporal.pi_protocol import canonical_digest
+                identity = {"session": str(namespace), "request": request_id}
+                if runtime.get("agent_run_id"):
+                    # A warm MCP connection may survive several instance turns.
+                    # Reused provider IDs belong to the authenticated run; a
+                    # transport retry within that run retains the same receipt.
+                    identity["run"] = str(runtime["agent_run_id"])
+                config["tool_call_id"] = "mcp:" + canonical_digest(identity)
+        except (ValueError, AttributeError):
+            pass
+    return config
+
+
+async def prevalidate_agent_request(mcp: Any, tool_name: str, arguments: Any) -> Optional[Dict[str, Any]]:
+    """Run before FastMCP's argument binding so missing required fields count."""
+    from services.cli_agent.mcp_server import _require_batch
+    from services.agent_instances.admission import get_gate
+    from services.agent_instances.tools import record_invalid_tool_request
+
+    ctx = _require_batch()
+    entry = next((item for item in ctx.connected_tools if _connected_tool_name(item) == tool_name), None)
+    runtime_entry = entry or next((item for item in ctx.connected_tools if item.get("agent_runtime")), {})
+    gate = get_gate(runtime_entry.get("agent_runtime") or runtime_entry.get("_agent_tool_execution"))
+    if gate is not None:
+        gate.check()
+    if entry is None or not (entry.get("_agent_tool_execution") or {}).get("agent_operation"):
+        return None
+    config = authenticated_tool_config(ctx, entry, tool_name, mcp=mcp)
+    if not config.get("tool_call_id"):
+        # A retryable orchestration request needs a stable transport receipt.
+        # Fail closed rather than consuming an untracked correction or effect.
+        return {"success": False, "error_type": "missing_call_identity", "error": "MCP request identity is unavailable."}
+    input_model = _entry_input_model(entry)
+    if input_model is None:
+        raise RuntimeError("Canonical agent tool validation is unavailable")
+    try:
+        input_model.model_validate(arguments)
+    except Exception as exc:
+        error = {"success": False, "error_type": "invalid_tool_input", "error": "Invalid tool arguments", "details": str(exc)}
+        try:
+            state = await record_invalid_tool_request(config, error)
+        except BaseException:
+            if gate is not None:
+                gate.revoke("admission_persistence_failed")
+            raise
+        if state:
+            error.update(turn_halted=state["halted"], agent_admission_state=state.get("admission_state"))
+        return error
+    return None
+
+
 def _entry_schema_fingerprint(
     entry: Dict[str, Any],
     input_model: type,
@@ -295,6 +372,11 @@ def _build_handler(
                 "error": f"tool {tool_name!r} not connected to this batch",
                 "status": 403,
             }
+        config = authenticated_tool_config(ctx, entry, tool_name)
+        from services.agent_instances.admission import get_gate
+        admission = get_gate(config)
+        if admission is not None:
+            admission.check()
         # Resolve from the authenticated current batch, not the first workflow
         # that happened to install this global FastMCP handler.
         current_input_model = _entry_input_model(entry)
@@ -307,10 +389,14 @@ def _build_handler(
             validated = current_input_model.model_validate(kwargs)
             args = validated.model_dump(mode="json", exclude_unset=True)
         except Exception as exc:
-            return {
+            error = {
                 "error": "Invalid tool arguments",
+                "error_type": "invalid_tool_input",
                 "details": str(exc),
             }
+            from services.agent_instances.tools import record_invalid_tool_request
+            await record_invalid_tool_request(config, error)
+            return error
         logger.info(
             "[CC-Agent MCP %s] node=%s wf=%s args_keys=%s",
             tool_name,
@@ -320,38 +406,6 @@ def _build_handler(
         )
         from services.handlers.tools import execute_tool
 
-        config: Dict[str, Any] = {
-            **dict(entry.get("_agent_tool_execution") or {}),
-            **dict(entry.get("_pi_inline_scope") or {}),
-            "node_type": entry.get("node_type") or node_type,
-            "node_id": entry.get("node_id"),
-            "workflow_id": ctx.workflow_id,
-            "execution_id": ctx.execution_id,
-            "user_id": (entry.get("_pi_inline_scope") or {}).get("user_id", ctx.user_id),
-            "workspace_dir": str(ctx.workspace_dir),
-            "parent_node_id": ctx.node_id,
-            "label": entry.get("label") or tool_name,
-            "parameters": dict(entry.get("parameters") or {}),
-            **({"pi_harness_version": 1} if entry.get("pi_harness_version") == 1 else {}),
-        }
-        # Every call gets the request's identity: a stateful tool's idempotency
-        # key, and a held call's draft key (services/approvals/tool_calls.py).
-        # Request IDs are local to one client. The stateful HTTP transport
-        # validates its server-issued session ID before calling this tool, so
-        # parallel CLI sessions need that namespace as well.
-        mcp = _get_mcp()
-        if mcp is not None:
-            try:
-                request_context = mcp.get_context().request_context
-                request = request_context.request
-                session_id = request.headers.get("mcp-session-id") if request is not None else None
-                if session_id:
-                    from services.temporal.pi_protocol import canonical_digest
-                    config["tool_call_id"] = "mcp:" + canonical_digest({
-                        "session": session_id, "request": request_context.request_id,
-                    })
-            except ValueError:
-                pass  # The admission guard, or the draft, reports the missing identity.
         if config.get("node_type") in {"coding_agent", "taskManager", "_builtin_check_delegated_tasks"} and config.get("pi_harness_version") == 1:
             from services.plugin.deps import get_ai_service, get_database
             config["ai_service"] = get_ai_service()

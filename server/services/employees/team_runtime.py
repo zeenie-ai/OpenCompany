@@ -202,6 +202,16 @@ async def employee_job_parameters(database: Any, context: dict) -> dict:
         job = await session.get(EmployeeJob, str(context["employee_job_id"]))
     if job is None or job.workflow_id != context.get("workflow_id"):
         raise ValueError("The employee job does not belong to this workflow")
+    if context.get("agent_instance_id"):
+        from services.employees.job_source import authorize_employee_job_source
+        from services.agent_instances.service import AgentInstanceService
+        await authorize_employee_job_source(database, {**context, "parent_node_id": context.get("node_id")})
+        instance = await AgentInstanceService(database).get_instance(str(context["agent_instance_id"]))
+        frozen = instance.get("config") or {}
+        template = frozen.get("template") or {}
+        return {**dict(job.source.get("parameters") or {}),
+                **dict((frozen.get("runtime_context") or {}).get("parameter_snapshot") or {}),
+                str(instance["template_node_id"]): dict(template.get("parameters") or {})}
     return dict(job.source.get("parameters") or {})
 def validate_managed_assignment(args, scope):
     """Require reviewable assignments only in server-admitted employee jobs."""

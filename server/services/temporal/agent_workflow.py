@@ -138,6 +138,32 @@ async def _execute_plugin_tool_activity(
     process settings.
     """
     policy = (tool_info or {}).get("activity_policy")
+    if context.get("agent_instance_id"):
+        # All plugin activities, including those on the legacy routing path,
+        # carry the same authenticated instance and attempt identity.
+        tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
+        admission = await workflow.execute_activity("agent.instance.admit", {
+            "instance_id": context["agent_instance_id"], "run_id": context["agent_run_id"]},
+            start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY)
+        if not admission["allowed"]:
+            return {"success": False, "error_type": "agent_turn_halted", "error": "Agent execution is halted."}
+    if (tool_info or {}).get("agent_operation"):
+        result = await workflow.execute_activity(activity_name, args=[tool_payload], activity_id=activity_id,
+            start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY,
+            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
+        if "waits_for_child" in ((tool_info or {}).get("execution_traits") or ()):
+            # This branch is only reached by native/Pi, after the caller has
+            # yielded its root permit and Pi has parked its driver. Timers
+            # are durable and do not occupy an activity or provider slot.
+            for poll in range(30):
+                if not isinstance(result, dict) or result.get("status") != "pending":
+                    break
+                await workflow.sleep(timedelta(seconds=1))
+                result = await workflow.execute_activity(activity_name, args=[tool_payload],
+                    activity_id=f"{activity_id}-wait-{poll + 1}",
+                    start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY,
+                    cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
+        return result
     if (context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
             or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1
             or uses_pi(context.get("node_type"), context)) and policy:
@@ -322,6 +348,8 @@ def _refresh_tools_activity_id(tool_node_id: str, iteration: int, call_index: in
 # and its turns are silently never journalled. Forwarded verbatim — the
 # framework does not interpret any of them.
 _INHERITED_SCOPE_KEYS = (
+    "agent_lifecycle_version", "agent_protocol_version", "agent_instance_id", "agent_run_id",
+    "agent_instance_scope", "agent_admission_state", "task_attempt",
     "graphVersion",
     "generation",
     "data_scope_id",
@@ -541,6 +569,13 @@ def _tool_call_metadata(
             call.get("id") or f"{iteration + 1}:{call_index + 1}"
         ),
     }
+
+
+def _instance_operation_id(context: dict, call: dict, iteration: int, call_index: int) -> str:
+    """A transport occurrence ID, separate from the provider's call ID."""
+    return "native:" + json.dumps([
+        str(context.get("agent_run_id") or context.get("execution_id") or ""),
+        iteration + 1, call_index + 1, str(call.get("id") or "")], separators=(",", ":"))
 
 
 def _duplicate_visible_tool_name_conflicts(
@@ -1003,6 +1038,16 @@ class AgentWorkflow:
 
     @workflow.run
     async def run(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        from services.agent_instances.protocol import should_bootstrap
+        if should_bootstrap(context or {}):
+            admitted = await workflow.execute_activity("agent.instance.bootstrap", context,
+                start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2, retry_policy=AGENT_ACTIVITY_RETRY)
+            if admitted.get("review_event"):
+                return admitted["result"]
+            if admitted.get("applicable"):
+                return await workflow.execute_activity("agent.instance.dispatch_wait", admitted,
+                    start_to_close_timeout=timedelta(days=31), heartbeat_timeout=timedelta(seconds=30),
+                    retry_policy=BOOKKEEPING_RETRY)
         if context and uses_pi(context.get("node_type"), context) and not self._pi_runtime_enabled:
             from temporalio.exceptions import ApplicationError
             raise ApplicationError("The admitted Coding Agent runtime requires PiCodingAgentWorkflow",
@@ -1012,7 +1057,7 @@ class AgentWorkflow:
         runtime_v2 = runtime_v2 and workflow.patched("employee-task-manager-runtime-v2")
         self._employee_runtime_v2 = runtime_v2
         async def fail_job(cancelled=False):
-            if runtime_v2:
+            if runtime_v2 and not context.get("agent_instance_id"):
                 await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": cancelled, "runtime_admission": True},
                     activity_id="employee-runtime-failed", start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY))
         bug = False
@@ -1035,6 +1080,13 @@ class AgentWorkflow:
             # A bug fails the task and records nothing on the way out (_exits).
             if not bug:
                 if not self._continuing:
+                    for lease_id in (context.get("agent_instance_permit_leases") or []):
+                        await workflow.execute_activity("agent.release_subagent_permit", {
+                            "agent_instance_id": context["agent_instance_id"], "agent_run_id": context["agent_run_id"],
+                            "root_execution_id": context.get("root_execution_id") or context.get("execution_id"),
+                            "permit_id": lease_id},
+                            start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY,
+                            cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
                     for binding in reversed(self._browser_claims):
                         async def release(binding=binding):
                             await workflow.execute_activity(
@@ -1138,7 +1190,7 @@ class AgentWorkflow:
         # in the workflow body (workflows must be deterministic).
         resume = dict(context.get(_RESUME_MARKER) or {})
         pi_runtime = uses_pi(context.get("node_type"), context)
-        durable_runtime = self._execution_control.enabled or context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1 or pi_runtime
+        durable_runtime = self._execution_control.enabled or context.get("native_workspace_version") == 1 or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1 or pi_runtime or bool(context.get("agent_instance_id"))
         if durable_runtime and resume.get("prepared_payload"):
             payload = dict(resume["prepared_payload"])
         else:
@@ -1248,6 +1300,12 @@ class AgentWorkflow:
         # steers the request — the activity always builds from ``messages``;
         # the key only says where to save.
         conversation_key = payload.get("conversation_key")
+        self._instance_context = context if context.get("agent_instance_id") else None
+        self._instance_revision = int(resume.get("agent_transcript_revision", payload.get("agent_transcript_revision", 0)))
+        self._instance_delivery_ids = list(resume.get("agent_delivery_ids", payload.get("agent_delivery_ids") or []))
+        self._instance_checkpoint_sequence = int(resume.get("agent_checkpoint_sequence") or 0)
+        self._instance_invalid_count = max(int(resume.get("agent_invalid_count") or 0),
+            int((payload.get("agent_admission_state") or {}).get("invalid_count") or 0))
 
         # ---- Build the message list -------------------------------------
         # Precedence: carried rollover transcript (a resumed run continues
@@ -1290,6 +1348,9 @@ class AgentWorkflow:
 
             if user_prompt:
                 messages.append(_owner_message(user_prompt, payload.get("user_images")))
+
+        if context.get("agent_instance_id") and not carried_transcript:
+            messages.extend(dict(item) for item in payload.get("agent_input_messages") or [])
 
         # Map LLM tool name -> {node_type, version, task_queue, node_id,
         # parameters} so the workflow can schedule the right activity
@@ -1352,13 +1413,24 @@ class AgentWorkflow:
         # ---- Main loop --------------------------------------------------
         iteration_offset = int(resume.get("iteration") or 0)
         correction_count = int(resume.get("delegation_correction_count") or 0)
-        if correction_count and not any(_DELEGATION_CORRECTION == message.get("content") for message in messages):
+        correction_text = ("No task was assigned. Use a connected spawn_<teammate> tool with clear instructions to create the required work."
+                           if self._instance_context else _DELEGATION_CORRECTION)
+        if correction_count and not any(correction_text == message.get("content") for message in messages):
             # Legacy rollover can drop an oversized transcript. Preserve the
             # already-issued correction without granting a second allowance.
-            messages.append(_native_message(role="user", content=_DELEGATION_CORRECTION))
+            messages.append(_native_message(role="user", content=correction_text))
         delegation_repair = False
         for iteration in range(iteration_offset, max_iterations):
             await self._wait_until_resumed()
+            if self._instance_context:
+                pending = await workflow.execute_activity("agent.instance.drain", {
+                    "instance_id": context["agent_instance_id"], "run_id": context["agent_run_id"],
+                    "request_id": f"boundary:{iteration}"}, start_to_close_timeout=PERSIST_TURN_TIMEOUT,
+                    retry_policy=BOOKKEEPING_RETRY)
+                if pending.get("halted"):
+                    return {"success": False, "error_type": "agent_turn_halted", "error": "Agent execution is halted.", "review_blocked": True}
+                messages.extend(pending.get("messages") or [])
+                self._instance_delivery_ids.extend(pending.get("deliveries") or [])
             workflow.logger.info(f"AgentWorkflow iteration {iteration} " f"(messages={len(messages)} tools={len(tools)})")
 
             # CloudEvents-shaped agent_progress per LLM turn. Mirrors the
@@ -1607,7 +1679,7 @@ class AgentWorkflow:
                             if correction_count or iteration + 1 >= max_iterations:
                                 return await self._fail_without_assignments(context, payload, team_id, correction_count, iteration + 1, usage_total)
                             correction_count = 1
-                            messages.append(_native_message(role="user", content=_DELEGATION_CORRECTION))
+                            messages.append(_native_message(role="user", content=correction_text))
                             final_content = None
                             # Follow the normal clean-turn boundary below, including
                             # Continue-As-New. This turn schedules no tools.
@@ -1771,10 +1843,14 @@ class AgentWorkflow:
                 context.get("team_permit_id")
                 or own_logical_permit_id
             )
-            if delegation_call_indices and own_permit_id:
+            instance_waits = self._instance_context and any(
+                "waits_for_child" in ((tool_index.get(call.get("name")) or {}).get("execution_traits") or ())
+                for call in calls)
+            if (delegation_call_indices or instance_waits) and own_permit_id:
                 await workflow.execute_activity(
                     "agent.release_subagent_permit",
                     args=[{
+                        **({"agent_instance_id": context["agent_instance_id"], "agent_run_id": context["agent_run_id"]} if self._instance_context else {}),
                         "root_execution_id": root_execution_id,
                         "permit_id": own_permit_id,
                     }],
@@ -2117,6 +2193,7 @@ class AgentWorkflow:
                 if (
                     preflight_tool
                     and preflight_tool.get("node_type") == "taskManager"
+                    and not preflight_tool.get("agent_operation")
                     and self._runtime_tool_call_allowed(preflight_index, preflight_call)
                     and preflight_args.get("operation") == "assign_task"
                 ):
@@ -2238,12 +2315,29 @@ class AgentWorkflow:
             blocked_error = None
             for call_index, call in enumerate(calls):
                 pi_media_result = None
+                tool_info = tool_index.get(call.get("name", ""))
+                if self._instance_context and self._instance_invalid_count >= 3:
+                    blocked_error = {"error": "Three invalid orchestration requests; explicit retry is required.",
+                                     "error_type": "agent_turn_halted", "review_blocked": True}
+                    _append_tool_result_message(messages, content=_serialise_tool_result(blocked_error),
+                        tool_call_id=call.get("id", ""), name=call.get("name", ""))
+                    continue
                 runtime_rejection = await self._before_runtime_tool_call(call_index, call, messages)
                 if runtime_rejection:
+                    if self._instance_context and (tool_info or {}).get("agent_operation"):
+                        await self._record_invalid_orchestration_call(call, iteration, call_index)
+                        if self._instance_invalid_count >= 3:
+                            blocked_error = {"error": "Three invalid orchestration requests; explicit retry is required.",
+                                             "error_type": "agent_turn_halted", "review_blocked": True}
                     _append_tool_result_message(messages, content=_serialise_tool_result({"error": runtime_rejection}),
                         tool_call_id=call.get("id", ""), name=call.get("name", ""))
                     continue
                 if call.get("parse_error"):
+                    if self._instance_context and (tool_info or {}).get("agent_operation"):
+                        await self._record_invalid_orchestration_call(call, iteration, call_index)
+                        if self._instance_invalid_count >= 3:
+                            blocked_error = {"error": "Three invalid orchestration requests; explicit retry is required.",
+                                             "error_type": "agent_turn_halted", "review_blocked": True}
                     # Native adapters retain malformed arguments rather than
                     # throwing during normalization. Return a deterministic
                     # tool result and let the model repair its invocation on
@@ -2263,7 +2357,6 @@ class AgentWorkflow:
                         name=call.get("name", ""),
                     )
                     continue
-                tool_info = tool_index.get(call.get("name", ""))
                 if tool_info is None:
                     workflow.logger.warning(f"AgentWorkflow: LLM called unknown tool {call.get('name')!r}; " "returning error to model")
                     _append_tool_result_message(
@@ -2373,6 +2466,10 @@ class AgentWorkflow:
                     call=call,
                 )
                 tool_payload = {
+                    **({"agent_tool_config": {**tool_info, **_inherited_scope(context),
+                        "parent_node_id": agent_node_id, "tool_call_id": str(call.get("id") or f"{iteration + 1}:{call_index + 1}"),
+                        "operation_id": _instance_operation_id(context, call, iteration, call_index)}}
+                       if tool_info.get("agent_operation") else {}),
                     **({"runtime_behavior_version": 1} if payload.get("runtime_behavior_version") == 1 else {}),
                     "node_id": tool_info["tool_node_id"],
                     "node_type": tool_info["node_type"],
@@ -2442,6 +2539,7 @@ class AgentWorkflow:
                     tool_payload["approval_wait"] = True
 
                 tool_activity_name = (
+                    "agent.instance.tool" if tool_info.get("agent_operation") else
                     tool_info["activity_name"] if tool_info.get("virtual_workspace") else "agent.skill.invoke"
                     if tool_info["node_type"] == "_builtin_skill"
                     else f"node.{tool_info['node_type']}.v{tool_info['version']}"
@@ -2656,6 +2754,17 @@ class AgentWorkflow:
                                     if not any(existing.get("path") == ref.get("path") for existing in browser_artifacts) and len(browser_artifacts) < 32:
                                         browser_artifacts.append(ref)
                         tool_content = _serialise_tool_result(tool_result)
+                        if self._instance_context and isinstance(tool_result, dict) and tool_result.get("error_type") == "agent_turn_halted":
+                            blocked_error = {**tool_result, "review_blocked": True}
+                        if self._instance_context and tool_info.get("agent_operation"):
+                            from services.agent_instances.admission import is_invalid_request
+                            if is_invalid_request(tool_result):
+                                self._instance_invalid_count += 1
+                                if self._instance_invalid_count >= 3:
+                                    blocked_error = {"error": "Three invalid orchestration requests; explicit retry is required.",
+                                                     "error_type": "agent_turn_halted", "review_blocked": True}
+                            elif tool_result.get("error_type") == "agent_turn_halted":
+                                blocked_error = {**tool_result, "review_blocked": True}
                         # piRead is a new node type, so existing histories keep
                         # their exact text-only wire. New Pi reads retain image
                         # references through receipts and provider hydration.
@@ -2933,14 +3042,16 @@ class AgentWorkflow:
 
             await self._complete_runtime_turn(messages)
 
-            if yielded_own_permit:
+            if yielded_own_permit and (not self._instance_context or not blocked_error):
                 await self._wait_until_resumed()
-                await workflow.execute_activity(
+                reacquired = await workflow.execute_activity(
                     "agent.acquire_subagent_permit",
                     args=[{
                         "root_execution_id": root_execution_id,
                         "permit_id": own_permit_id,
                         "limit": max_concurrent_subagents,
+                        **({"lease_version": 2} if self._instance_context else {}),
+                        **({"agent_instance_id": context["agent_instance_id"], "agent_run_id": context["agent_run_id"]} if self._instance_context else {}),
                     }],
                     activity_id=f"reacquire-own-permit-{iteration + 1}",
                     start_to_close_timeout=timedelta(hours=1),
@@ -2948,6 +3059,15 @@ class AgentWorkflow:
                     retry_policy=AGENT_ACTIVITY_RETRY,
                     **acquire_cancellation_options,
                 )
+                if self._instance_context:
+                    # Released permits are terminal records. A fresh physical
+                    # lease is required for every reacquisition; this child
+                    # owns its cleanup while the supervisor owns the initial
+                    # lease. Carry cleanup obligations through rollover.
+                    lease_id = reacquired["lease_id"]
+                    context["team_permit_id"] = lease_id
+                    context["agent_instance_permit_leases"] = [
+                        *(context.get("agent_instance_permit_leases") or []), lease_id]
 
             # ---- Persist this turn (append-per-turn) -------------------
             # Snapshot the most recent user/assistant pair into memory.
@@ -2960,9 +3080,14 @@ class AgentWorkflow:
 
             # ---- Transcript pressure and compaction ----------------------
             if blocked_error:
+                if self._instance_context and blocked_error.get("error_type") == "agent_turn_halted":
+                    await workflow.execute_activity("agent.instance.halt", {
+                        "instance_id": context["agent_instance_id"], "reason": blocked_error["error"],
+                        "request_id": f"invalid-limit:{context['agent_run_id']}"},
+                        start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY)
                 # Complete/persist the current tool turn, then stop before
                 # another model request or paid compaction can be scheduled.
-                if conversation_key and workflow.patched("agent-blocked-tool-turn-save-v1"):
+                if conversation_key and not self._instance_context and workflow.patched("agent-blocked-tool-turn-save-v1"):
                     await workflow.execute_activity(
                         "agent.persist_turn",
                         args=[{"conversation_key": conversation_key,
@@ -3286,6 +3411,10 @@ class AgentWorkflow:
                                 "usage": usage_total,
                                 "context_usage": context_usage_total,
                                 "prepared_payload": _carried_payload(payload),
+                                "agent_transcript_revision": self._instance_revision,
+                                "agent_delivery_ids": self._instance_delivery_ids,
+                                "agent_checkpoint_sequence": self._instance_checkpoint_sequence,
+                                "agent_invalid_count": self._instance_invalid_count,
                                 "tools": tools,
                                 "thinking": thinking_accumulated,
                                 "browser_artifacts": browser_artifacts,
@@ -3485,7 +3614,29 @@ class AgentWorkflow:
         pass
 
     async def _complete_runtime_turn(self, messages):
-        pass
+        await self._checkpoint_instance(messages)
+
+    async def _record_invalid_orchestration_call(self, call, iteration, call_index):
+        context = self._instance_context
+        recorded = await workflow.execute_activity("agent.instance.invalid", {
+            "instance_id": context["agent_instance_id"], "run_id": context["agent_run_id"],
+            "request_id": _instance_operation_id(context, call, iteration, call_index)},
+            start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY)
+        self._instance_invalid_count = max(self._instance_invalid_count + 1, int(recorded["count"]))
+
+    async def _checkpoint_instance(self, messages):
+        context = getattr(self, "_instance_context", None)
+        if not context:
+            return
+        result = await workflow.execute_activity("agent.instance.checkpoint", {
+            "instance_id": context["agent_instance_id"], "run_id": context["agent_run_id"],
+            "messages": messages, "expected_revision": self._instance_revision,
+            "delivery_ids": self._instance_delivery_ids,
+            "request_id": f"round:{self._instance_checkpoint_sequence}"},
+            start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY)
+        self._instance_revision = result["revision"]
+        self._instance_delivery_ids = []
+        self._instance_checkpoint_sequence += 1
 
     async def _emit_phase(
         self,

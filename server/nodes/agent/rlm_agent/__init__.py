@@ -112,4 +112,7 @@ class RLMAgentNode(ActionNode):
         )
         if response.get("success") is False:
             raise RuntimeError(response.get("error") or "rlm_agent execution failed")
-        return response.get("result") or response
+        result = response.get("result") or response
+        if ctx.raw.get("agent_instance_id"):
+            result = {**result, **{key: response[key] for key in ("agent_transcript", "agent_admission_state") if key in response}}
+        return result

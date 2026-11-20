@@ -289,7 +289,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         bindings = {entry["name"]: entry for entry in tools}
         # These native branches start an independent bounded child batch, or
         # await durable tasks. Park the parent before children need driver slots.
-        self._pi_detached = any(str(call.get("name") or "").startswith("delegate_to_") or
+        self._pi_detached = any(bool(set((bindings.get(call.get("name")) or {}).get("execution_traits") or ()) & {"starts_child", "waits_for_child"}) or str(call.get("name") or "").startswith("delegate_to_") or
             (bindings.get(call.get("name")) or {}).get("node_type") == "taskManager" for call in calls)
         if self._pi_detached:
             await self._stop_driver()
@@ -325,6 +325,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
 
     async def _complete_runtime_turn(self, messages):
         if not self._pi_request:
+            await self._checkpoint_instance(messages)
             return
         wires = await self._collect_tool_receipts(messages)
         if len(wires) != len(self._pi_calls):
@@ -385,6 +386,8 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         self._pi.parked = True
         self._pi_checkpointing = False
         self._pi_receipt_checkpointing = False
+
+        await self._checkpoint_instance(messages)
 
     async def _before_runtime_rollover(self):
         if self._pi_driver is not None or self._pi_request or self._pi.operations or self._pi.expected or self._pi_checkpointing:

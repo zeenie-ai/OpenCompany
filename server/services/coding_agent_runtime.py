@@ -64,6 +64,8 @@ def freeze_generation_harness(payload: dict, manifest: Mapping[str, Any] | None)
         raise ValueError("Unsupported recorded Coding Agent harness version")
     _freeze(payload, PI_HARNESS_KEY, version)
     _freeze(payload, APPROVAL_WAIT_KEY, 1 if (manifest or {}).get(APPROVAL_WAIT_KEY) == 1 else None)
+    for key in ("agent_lifecycle_version", "agent_protocol_version"):
+        _freeze(payload, key, 1 if (manifest or {}).get(key) == 1 else None)
 
 
 def enabled_coding_agents(nodes: list[dict]) -> bool:

@@ -37,7 +37,20 @@ ways depending on the run's recorded runtime and frozen settings flags:
 | **Per-type activity** (`node.{type}.v{version}`) | `TEMPORAL_PER_TYPE_DISPATCH=true` (production default) | Each plugin gets its own Activity definition. Graph dispatch applies plugin retry and, with the frozen worker-pool flag on, `cls.task_queue`. Ordinary graph timeout/heartbeat remain 24 h / 2 min; Workspace-task patches use plugin values. Version 1 agent-tool dispatch records and uses all declared Activity policies. |
 | **Agent-as-child-workflow** (`AgentWorkflow`) | `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` | Agent types in `AGENT_WORKFLOW_TYPES` in `services/temporal/workflow.py` run as child Workflows. Each LLM turn and ordinary tool call is a regular Activity; direct delegations can start attached agent children and Task Manager assignments start detached runners. |
 
-`rlm_agent`, `claude_code_agent`, and `codex_agent` are excluded from AgentWorkflow. RLM and Claude retain their external REPL or CLI session continuity; Codex runs a batch of native `exec --json` processes whose internal turns are opaque to Temporal. The authoritative list is `AGENT_WORKFLOW_TYPES` in `services/temporal/workflow.py`; any type outside it runs as an ordinary whole-node Activity, using per-type or legacy dispatch according to the run's frozen routing flags.
+The reusable-agent protocol adds an ownership layer over these execution paths.
+New job leads and spawned teammates run through `AgentInstanceSessionWorkflow`;
+its native/Pi turns use the existing agent Workflows, and its opaque turns use
+the direct `agent.instance.execute` Activity. See [Reusable agent sessions](#reusable-agent-sessions-protocol-1).
+
+`rlm_agent`, `claude_code_agent`, and `codex_agent` are excluded from AgentWorkflow.
+Their internal completion or CLI loops remain opaque to Temporal. Outside an
+instance session they retain the ordinary whole-node Activity routing selected
+by the recorded flags. Inside a session, Claude resumes its persisted session
+UUID, Codex explicitly resumes its persisted thread ID, and RLM replays the
+instance conversation into a fresh completion; RLM's REPL variables are ephemeral.
+Missing CLI continuation state blocks continuation rather than silently opening
+a fresh session. The authoritative native type list is `AGENT_WORKFLOW_TYPES` in
+`services/temporal/workflow.py`.
 
 **CLI-agent parameter validation.** `MachinaWorkflow` takes the node's `node_data` from `parameter_snapshot[node_id]` when a snapshot is present. Both the legacy WebSocket dispatcher and `BaseNode.as_activity()` pass those supplied values to the shared executor. `NodeExecutor` merges saved settings with supplied fields taking precedence, then validates the plugin's Params; the plugin validates again before its operation runs. Claude Code and Codex both convert saved `tasks=null` and `allowed_credentials=null` into empty lists at this boundary. Existing saved settings and captured Activity payloads therefore work without rewriting deployment history. See the [Codex node contract](node-logic-flows/specialized_agents/codex_agent.md) for its prompt fallback and validation tests. This is the node's own parameter boundary: the CLI per-type wrapper does not automatically forward the complete parameter snapshot for connected-node reads, so it does not establish full snapshot isolation for those settings.
 
@@ -514,7 +527,128 @@ Env overrides: `TEMPORAL_<QUEUE>_CONCURRENCY` (int) and `TEMPORAL_<QUEUE>_RATE_L
 
 **Tuning order** (per the worker-performance docs): host provisioning -> executor slots -> poller counts -> rate limits.
 
+### Reusable agent sessions (protocol 1)
+
+Newly admitted generations record `agent_lifecycle_version: 1`, with
+`agent_protocol_version: 1` as its compatibility alias. Admission captures these
+values in the routing input and generation resource manifest; restored generations
+keep their recorded choice. Histories without the marker retain the original
+Task Manager/delegation path. This is additive storage and a new runtime path,
+not a rewrite of existing histories or node-scoped conversations.
+
+| Identity | Owner and lifetime |
+|---|---|
+| Template node | The connected graph configuration and authorized tools/skills. Spawning copies a frozen template into a new instance. |
+| Agent instance | One reusable conversation within a job and team; multiple instances may use the same template independently. |
+| Agent run | One execution claimed by the session owner, with a run fence and the exact Temporal workflow/run identity. |
+| Task and attempt | Reviewed work and one execution of its snapshotted requirements, feedback, dependencies and configuration. |
+
+Talk keeps its own conversation. `submit_job(instructions)` passes an explicit
+handoff to an isolated job lead. Instance turns use `agent-instance:<id>` for
+both the session and output-store scope, so template-variable fallback cannot
+read another instance's or Talk's latest output. Peer messages stay within the
+job. A worker submission and its owning lead's review notification commit
+together; delivery to Talk runs only after the lead run commits, through the
+existing reviewed-delivery gates. A taskTrigger event addressed to that lead
+checks the persisted task, job and generation and only wakes the existing
+owner. Duplicate or old-generation events cannot create a replacement lead.
+
+**One execution owner.** The deterministic workflow ID is
+`agent-instance:<instance_id>`. Signal-with-start wakes that owner; it drains a
+busy period serially and exits when idle. The database instance and inbox
+outlive the workflow, and a later wake reuses its workflow ID. Claiming an
+`AgentRun` happens before waiting for root capacity. Database ownership and
+revision checks reject stale transcript writes, task submissions and effect
+admissions. The owner continues as new at a settled boundary after 100 claims.
+Programming errors fail the Workflow Task for replay; they do not finalize
+the task or release its ownership as a business failure.
+
+The plain MessageWire transcript is built in, even without a Context node.
+`agent.instance.checkpoint` atomically saves its next revision and advances the
+receipts for input answered by that durable response. Native and Pi admit new
+mail only at complete model/tool boundaries, after every outstanding call has
+a result. Pi also retains its operation receipts and canonical checkpoint
+validation. Opaque turns consume queued input on the next turn and return a
+checkpoint payload for a separate bookkeeping Activity. A persistence retry
+therefore does not rerun the provider call. `consumed` records a durable
+response, not understanding, task completion or acceptance.
+
+**Dispatch and cancellation.** Narrow tools come from the shared typed manifest
+in `services/agent_instances/tools.py`; trusted execution traits select lifecycle
+operations and waits. The model supplies instructions to `spawn_<teammate>`;
+scope, template identity, task metadata and authorization stay in runtime
+bindings. Native operation IDs include the run, iteration, call position and
+original provider call ID. This separates retry identity from the unchanged
+call IDs and arguments saved in the transcript.
+
+The opaque `agent.instance.execute` Activity calls `WorkflowService` directly
+with the complete trusted context. It does not use the legacy WebSocket
+bridge. Cancellation waits for the actual provider coroutine to drain and
+keeps heartbeating while it does so. Stopping an instance fences admission and
+cancels the current run, including a pending capacity or child-start gate;
+a late stop hint rechecks the current run before cancelling it. Task
+cancellation fences that attempt while leaving its instance reusable.
+Generation Stop preserves queues and continuation; Reset fences old instances
+and disposes their pending deliveries without redirecting them.
+
+**Capacity and waits.** Instance execution uses the root concurrency limit
+captured at admission. Native/Pi `wait_for_agents` yields the caller's permit;
+Pi parks its SDK driver before the wait. Temporal timers poll fresh state for
+up to 30 one-second waits. Before model execution resumes, a new version 2
+physical lease is acquired: released lease IDs cannot be reacquired. The
+native child carries additional lease cleanup across rollover and releases
+those leases on exit; the session owns the initial lease. Opaque adapters that
+cannot yield their execution lease return `pending` immediately.
+
+**Durable recovery.** Inbox records, startup obligations and stop fences are
+the recovery source; signals are latency hints. `AgentInstanceReconcilerWorkflow`
+uses ID `agent-instances:reconciler:v1`, runs a reconciliation pass followed by
+a 30-second timer, and continues as new after 100 passes. Each pass repairs
+completed-job retirement, pending permit cleanup, draining executors and missed
+starts/wakeups. Pending/stopping scans rotate their checked instances, while
+permit scans use `last_permit_reconcile_at` and preserve creation timestamps.
+Healthy owners therefore cannot permanently occupy the first recovery batch.
+
+`AgentRun.permit_leases` records each physical lease and its root/Temporal owner
+**before** capacity acquisition. Release acknowledgements clear
+`permits_pending`. This ledger also covers a crash after business completion
+but before the workflow's cleanup. Recovery confirms the exact recorded owner
+run is terminal or missing, fences an interrupted run, and checks the native
+child's current chain before releasing capacity. A still-running child is
+cancelled and kept draining. Recorded lease owners must also be terminal;
+transport errors or a reused workflow ID are not evidence of termination.
+Retirement creates a released tombstone even for an unacquired reservation,
+so a late executor cannot recreate it. Conditional release decrements the
+root counter once.
+
+The embedded worker starts the reconciler independently of normal polling and
+retries startup with the configured worker-restart backoff until admitted or
+the worker stops. Standalone startup awaits reconciler admission before entering
+its worker run. A failed wake never removes the durable obligation.
+
+Three classified invalid orchestration requests halt the affected turn; ordinary
+tool failures and revision conflicts do not consume that budget. Already-valid
+child work remains reviewable. A lead halt with assigned work exposes
+`review_blocked`; owner-authenticated `retry_employee_review` resumes that same
+lead without rerunning accepted tasks. A lead with no assignments instead uses
+the existing atomic no-assignment failure gate. Mail wakeups cannot clear a halt.
+
+Implementation: [session workflows and Activities](../server/services/temporal/agent_instance_workflow.py),
+[transactional lifecycle](../server/services/agent_instances/service.py),
+[wakeup/recovery bridge](../server/services/agent_instances/runtime.py),
+and [instance models](../server/models/agent_instances.py).
+The [team contract](agent_teams.md) documents task operations and mailbox bounds;
+[production practices](temporal_production_practices.md#implemented-reusable-agent-lifecycle)
+records operational checks. Deterministic tests and recorded replay validate
+protocol behavior; they do not establish comparative model performance.
+
 ### Agent-as-child-workflow (F4.B)
+
+The delegation branches below describe the original non-instance path.
+Protocol 1 instance turns reuse this native loop and its LLM/tool Activities,
+but the session layer above owns their inbox, transcript, task attempt and
+completion; `delegate_to_*` and the legacy Task Manager assignment preflight
+are not exposed to those instances.
 
 When `TEMPORAL_AGENT_WORKFLOW_ENABLED=true` and the node type is in `AGENT_WORKFLOW_TYPES` (`aiAgent`, `chatAgent`, the specialized agents and the team leads; `rlm_agent`, `claude_code_agent`, and `codex_agent` are excluded), the orchestrator schedules `AgentWorkflow` as a child workflow instead of an activity. Inside the workflow:
 
@@ -710,7 +844,7 @@ The other ten support skills and durable delegation (17 `agent.*` activities in 
 | `agent.finish_delegation` | Idempotently records a delegated child's terminal result and usage. |
 | `agent.finalize_team` | Finalizes a team after its required tasks reach accepted or terminal states. |
 
-**Context needs no dedicated activities.** The plain conversation store
+**Legacy node-scoped Context uses the existing loop activities.** The plain conversation store
 (see [agent_context_flow.md](./agent_context_flow.md)) rides the existing
 pipeline: `agent.prepare_payload` loads the stored conversation for
 `(workflow_id, generation, agent_node_id)` and returns it with the
@@ -734,13 +868,14 @@ missing assignment arguments or turn an invalid call into a durable task.
 Validation failures return through the existing tool-result correction loop;
 they contain no delegation request and start no task runner.
 
-After updated workers are deployed, newly prepared runs receive the locked
+On the legacy Task Manager path, newly prepared runs receive the locked
 Task Manager schema. Existing runs retain their recorded tool definitions;
 deployment does not rewrite their history or force a schema refresh. The
 validation change adds only activity input data, preserving activity names,
 versions, queues and scheduling commands. It needs no database migration or
 new replay marker; the previous-release replay and identity gates cover this
-compatibility boundary.
+compatibility boundary. This schema-only compatibility rule does not describe
+the additive storage and generation admission used by protocol 1 instances.
 
 The F4.B compaction threshold is prepared from the model context length and
 the ratio configuration, and is absent when the global `COMPACTION_ENABLED`
@@ -752,7 +887,11 @@ the tool-result cap apply whether or not compaction is on (see
 
 **Broadcasts inside the loop** wrap `WorkflowEvent` (CloudEvents v1.0) per RFC §6.4: `agent_progress` events (`com.opencompany.agent.progress`) and `node_parameters_updated` events (`com.opencompany.node.parameters.updated`) flow through the `StatusBroadcaster.broadcast_agent_progress` and `StatusBroadcaster.broadcast_node_parameters_updated` wrappers respectively. The latter is reused by the legacy `routers/websocket.py:handle_save_node_parameters` (user-source) and `services/cli_agent/service.py:_persist_memory` (cli-source) — all three emission sites share the same envelope, distinguished by `source_hint` (`"user"` / `"cli"` / `"agent"`).
 
-`rlm_agent`, `claude_code_agent`, and `codex_agent` remain outside `AGENT_WORKFLOW_TYPES`. RLM runs its REPL loop inside the whole-node Activity; Claude executes the turn through its backend session pool, whose warm CLI process can survive between Activities. Codex uses one native `exec --json` process per task and completes the Activity after its batch settles; the host does not split the CLI's internal turns into AgentWorkflow steps. Activity heartbeats report liveness, not a checkpoint or native resume contract.
+`rlm_agent`, `claude_code_agent`, and `codex_agent` remain outside
+`AGENT_WORKFLOW_TYPES`. Their internal loops stay within a whole-node Activity;
+the host does not split CLI turns into AgentWorkflow steps. For protocol 1,
+the instance layer supplies the continuation and checkpoint contract described
+above. Heartbeats alone report liveness, not a conversation checkpoint.
 
 References: [Temporal AI Cookbook](https://docs.temporal.io/ai-cookbook), [`temporal-community/temporal-ai-agent`](https://github.com/temporal-community/temporal-ai-agent), [`temporalio.contrib.openai_agents`](https://github.com/temporalio/sdk-python/tree/main/temporalio/contrib/openai_agents).
 
@@ -1049,6 +1188,7 @@ server/services/temporal/
 ├── plugin_activities.py # collect_plugin_activities() -> per-type node.{type}.v{ver} activities (F4.A)
 ├── agent_workflow.py    # AgentWorkflow loop + detached DelegatedTaskWorkflow
 ├── agent_activities.py  # collect_agent_activities() -> the agent.* activities (F4.B)
+├── agent_instance_workflow.py # Serialized instance sessions, durable reconciliation and agent.instance.* Activities
 ├── workflow.py          # MachinaWorkflow class
 │   ├── run()                     # Main orchestrator
 │   ├── _filter_executable_graph() # Config node filtering

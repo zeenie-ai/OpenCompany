@@ -61,6 +61,35 @@ class _Socket:
     scope = {"path": "/ws/status", "user_id": "owner"}
 
 
+@pytest.mark.asyncio
+async def test_instance_viewer_is_isolated_and_cannot_clear_job_history(handler_database, monkeypatch):
+    from models.agent_instances import AgentInstance, AgentInstanceConversation
+    from nodes.context import _handlers
+
+    database = handler_database
+    await database.save_workflow("wf-1", "WF", "wf", _graph())
+    async with database.get_session() as session:
+        for instance_id, workflow_id, content in (("first", "wf-1", "first job"),
+                                                   ("second", "wf-1", "second job"),
+                                                   ("private", "wf-2", "private job")):
+            session.add(AgentInstance(id=instance_id, workflow_id=workflow_id, generation=2,
+                                     team_id="team", job_id=instance_id, template_node_id="agent-a"))
+            session.add(AgentInstanceConversation(instance_id=instance_id, messages=[{"role": "user", "content": content}]))
+        await session.commit()
+    monkeypatch.setattr(_handlers, "_database", lambda: database)
+    request = {"workflow_id": "wf-1", "context_node_id": "ctx-1", "agent_instance_id": "second"}
+    result = await _handlers.handle_get_agent_context(request, _Socket())
+    assert result["context"]["agent_instance_id"] == "second"
+    assert result["context"]["messages"][0]["content"] == "second job"
+    assert {row["agent_instance_id"] for row in result["context"]["conversations"]} == {"first", "second"}
+    private = await _handlers.handle_get_agent_context({**request, "agent_instance_id": "private"}, _Socket())
+    assert private["context"]["messages"] == []
+    refused = await _handlers.handle_clear_agent_context(request, _Socket())
+    assert refused["success"] is False
+    again = await _handlers.handle_get_agent_context(request, _Socket())
+    assert again["context"]["messages"] == result["context"]["messages"]
+
+
 def _graph() -> dict:
     return {
         "owner_id": "owner",

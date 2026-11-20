@@ -2651,6 +2651,12 @@ async def _reset_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[st
             error=str(exc),
         )
 
+    if (current.resource_manifest or {}).get("agent_lifecycle_version") == 1:
+        from services.agent_instances.service import AgentInstanceService
+        from services.agent_instances.runtime import wake_instances
+        reset = await AgentInstanceService(service.database).reset_generation(workflow_id, current.generation)
+        await wake_instances(reset)
+
     # Remove cron producers before terminating executions; otherwise a firing
     # between the execution scan and schedule deletion could survive Reset.
     deleted_schedules = await _delete_cron_schedules(

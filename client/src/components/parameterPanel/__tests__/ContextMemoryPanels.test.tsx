@@ -7,9 +7,10 @@ import ContextPanel from '../ContextPanel';
 import MemoryToolPanel from '../MemoryToolPanel';
 
 const sendRequest = vi.fn();
+const addEventListener = vi.fn(() => vi.fn());
 
 vi.mock('../../../contexts/WebSocketContext', () => ({
-  useWebSocket: () => ({ sendRequest }),
+  useWebSocket: () => ({ sendRequest, addEventListener }),
 }));
 
 beforeEach(() => {
@@ -17,6 +18,17 @@ beforeEach(() => {
 });
 
 describe('ContextPanel', () => {
+  it('keeps job instance history read-only', async () => {
+    sendRequest.mockResolvedValue({ context: {
+      conversations: [], generation: 2, agent_node_id: 'worker', agent_instance_id: 'instance-12345678',
+      message_count: 1, messages: [{ role: 'user', content: 'Independent job instructions' }],
+    } });
+    render(<ContextPanel nodeId="ctx-1" workflowId="wf-1" />);
+    await screen.findByText('Independent job instructions');
+    expect(screen.getByRole('button', { name: /Clear/i })).toBeDisabled();
+    expect(screen.getByText('Instance 12345678')).toBeInTheDocument();
+  });
+
   it('loads the live conversation through get_agent_context', async () => {
     sendRequest.mockImplementation(async (operation: string) => {
       if (operation === 'get_agent_context') {

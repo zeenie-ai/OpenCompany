@@ -184,7 +184,7 @@ def _agent_child_workflow_id(root_workflow_id: str, agent_node_id: str) -> str:
 #: (tests/temporal/test_workflow_identity_golden.py). ``approval_wait_version``:
 #: what asks is the mode and the class, and the agent answering a chat run
 #: waits for the owner (RFC-0007).
-GENERATION_FLAGS = ("pi_harness_version", "approval_wait_version")
+GENERATION_FLAGS = ("pi_harness_version", "approval_wait_version", "agent_lifecycle_version", "agent_protocol_version")
 
 
 def _frozen_routing_from_input(
@@ -787,6 +787,9 @@ class MachinaWorkflow:
                             context[key] = workflow_data[key]
                 if frozen_routing.get("approval_wait_version") == 1:
                     context["approval_wait_version"] = 1
+                for flag in ("agent_lifecycle_version", "agent_protocol_version"):
+                    if frozen_routing.get(flag) == 1:
+                        context[flag] = 1
                 if workflow_data.get("browser_routing_version") == 1:
                     context.update(browser_routing_version=1, browser_bindings=workflow_data.get("browser_bindings") or {})
                     binding = context["browser_bindings"].get(node_id)
@@ -1031,6 +1034,8 @@ class MachinaWorkflow:
         # this marker keep their native commands even after worker upgrades.
         if node_type == "coding_agent" and (routing_snapshot or {}).get("pi_harness_version") == 1:
             return {"kind": "child_workflow", "name": "PiCodingAgentWorkflow"}
+        if node_type in {"orchestrator_agent", "ai_employee"} and (routing_snapshot or {}).get("agent_lifecycle_version") == 1:
+            return {"kind": "child_workflow", "name": "AgentWorkflow"}
         if pi_delegator and node_type in AGENT_WORKFLOW_TYPES and (routing_snapshot or {}).get("pi_harness_version") == 1:
             return {"kind": "child_workflow", "name": "AgentWorkflow"}
         # This new capability has no historical single-Activity implementation

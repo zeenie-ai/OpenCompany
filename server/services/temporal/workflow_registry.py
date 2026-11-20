@@ -17,8 +17,10 @@ def framework_workflows() -> list:
     from services.temporal.approved_tool_call_workflow import ApprovedToolCallWorkflow
     from services.temporal.approval_workflow import ApprovalWorkflow
     from services.temporal.employee_job_workflow import EmployeeJobWorkflow, EmployeeJobDeliveryWorkflow
+    from services.temporal.agent_instance_workflow import AgentInstanceSessionWorkflow, AgentInstanceReconcilerWorkflow
 
     return [
+        AgentInstanceSessionWorkflow, AgentInstanceReconcilerWorkflow,
         EmployeeJobWorkflow, EmployeeJobDeliveryWorkflow, ApprovedToolCallWorkflow,
         ApprovalWorkflow, NodeInvocationWorkflow, WorkspaceTaskControllerWorkflow,
         MachinaWorkflow, AgentWorkflow, PiCodingAgentWorkflow,

@@ -14,6 +14,24 @@ invocation and delegated work. The SDK driver has isolated worker capacity and
 parks during child waits. Existing native generations and other agent types
 retain the execution paths described below.
 
+## Reusable team lifecycle
+
+New generations freeze `agent_lifecycle_version=1` and `agent_protocol_version=1`.
+For job leads and teammates, a connected node is a template; an independent
+instance owns its conversation and a run identifies one execution. Spawning
+creates the initial reviewed task. `AgentInstanceSessionWorkflow` serializes
+the instance's turns and supervises native/Pi children or the opaque adapter
+Activity. A durable inbox carries peer input and review notifications.
+
+The model receives narrow typed tools from `services/agent_instances/tools.py`:
+`spawn_<teammate>` requires only `instructions`; runtime scope and tracking data
+come from the authorized binding. Reads return current task references, and
+review mutations preserve requirements and accumulated feedback. Talk exposes
+`submit_job` and retains its own history. See [Agent Teams](./agent_teams.md)
+for the complete contract and [validation](./agent_lifecycle_validation.md)
+for coverage. The direct delegation and legacy generation paths below remain
+compatibility behavior, not the version 1 team lifecycle.
+
 <!-- architecture-suite:start -->
 ## Architecture diagrams
 
@@ -545,7 +563,12 @@ Patterns covered in the canonical doc:
 
 ## Context and Memory Integration
 
-Conversation continuity is the RFC-0002 Context store, documented in
+Version 1 job instances always persist canonical transcripts through fenced,
+transactional instance checkpoints, including without a Context connection.
+Their viewer is read-only and their runtime output sessions are independent.
+The following opt-in store description applies to legacy and owner-chat contexts.
+
+That conversation continuity is the RFC-0002 Context store, documented in
 [agent_context_flow.md](./agent_context_flow.md) and
 [RFC-0002](../RFC-0002-AGENT-CONTEXT-AND-MEMORY.md). The agent reads
 `context_data` — the first element of the `collect_agent_connections()`
@@ -844,6 +867,9 @@ Handle layouts are declared in `server/nodes/agent/_handles.py` (local to `nodes
 ---
 
 ## Async Agent Delegation (overview)
+
+Version 1 teams use the instance owner and inbox described above. This section
+describes direct non-team delegation and the retained version 0 team protocol.
 
 AI Agents delegate to other agents wired to their `input-tools` handle, enabling hierarchical agent trees. There are two execution paths depending on whether the parent runs under Temporal F4.B:
 

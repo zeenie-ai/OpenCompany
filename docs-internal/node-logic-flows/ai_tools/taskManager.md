@@ -1,23 +1,36 @@
 # Task Manager (`taskManager`)
 
+Lifecycle version 1 exposes narrow typed tools from
+`services.agent_instances.tools`. A connected graph node is an authorized
+template; spawning creates an independent instance and its first reviewed
+task. The runtime supplies identity, conversation history, title, scope and
+scheduling metadata. The model supplies instructions and explicit dependencies.
+
+New generations capture `agent_lifecycle_version=1` and
+`agent_protocol_version=1`. Already-admitted generations without those markers
+retain version 0, including their tool schemas and later trigger firings.
+Lifecycle version is separate from employee recipe version and graph version.
+
 | Field | Value |
 |------|-------|
 | **Category** | tool / ai |
 | **Backend handler** | [`server/nodes/tool/task_manager/__init__.py::TaskManagerNode.manage`](../../../server/nodes/tool/task_manager/__init__.py) |
-| **Tests** | [`server/tests/nodes/test_task_manager_delegation_bridge.py`](../../../server/tests/nodes/test_task_manager_delegation_bridge.py) |
+| **Tests** | [`server/tests/services/agent_instances/`](../../../server/tests/services/agent_instances/), legacy [`test_task_manager_delegation_bridge.py`](../../../server/tests/nodes/test_task_manager_delegation_bridge.py) |
 | **Skill (if any)** | [`server/skills/assistant/task-manager/SKILL.md`](../../../server/skills/assistant/task-manager/SKILL.md) |
-| **Dual-purpose tool** | ToolNode - tool name `task_manager` |
+| **Tool surface** | Version 1: typed bound tools below; version 0: `task_manager` |
 
 Task Manager is the durable control plane intrinsically bound to
 `orchestrator_agent` and `ai_employee`. It is hidden from the palette and Agent
 Builder, so users cannot remove the lead's task capability. Historical explicit
 nodes remain readable and protected from deletion.
 
-Version 2 employee recipes also bind this tool to the separate Talk agent. Talk
-uses `submit_job` to acknowledge substantive work promptly; the lead uses the
-existing assignment and review operations. Specialists connect through the
-lead's canonical `input-teammates` handle and keep their own Context and scoped
-tools. The recipe does not add job-forwarding nodes or a duplicate Task Manager.
+Version 2 employee recipes also bind this capability to the separate Talk
+agent. In lifecycle version 1, Talk receives only `submit_job(instructions)`
+for team work. Its acknowledgement is followed by a separately reviewed result.
+Specialists connect through the lead's canonical `input-teammates` handle and
+retain their own configured tools and skills. Instance history is built in;
+it does not require a Context edge. The recipe does not add job-forwarding
+nodes or a duplicate Task Manager.
 
 ## Inputs (handles)
 
@@ -29,6 +42,174 @@ tools. The recipe does not add job-forwarding nodes or a duplicate Task Manager.
 team lead's `input-tools`. `ui_hints` = `isTaskManagerPanel`,
 `hideInputSection`, `hideOutputSection`, `hideRunButton` (all `True`);
 `needs_canvas = True`.
+
+## Lifecycle version 1 tool contract
+
+The common manifest carries the public schema, Pydantic validator, trusted
+binding and execution traits across native, Pi, CLI/MCP and RLM. All inputs
+reject unknown fields. Saved node settings or a custom tool schema cannot fill
+missing model arguments. Execution scope, template selection, provider settings
+and sender identity are supplied by the runtime.
+
+Talk receives `submit_job`. Lead instances receive assignment, review,
+instance-control, messaging and observation tools; teammates receive only
+messaging and observation tools. The actual bound
+`<teammate>` suffix combines node type and a stable node-ID hash. Use the
+published tool name; there is no model-supplied template argument.
+
+| Tool | Required arguments | Optional arguments | Effect / valid source state |
+|---|---|---|---|
+| `submit_job` | `instructions` | — | Talk only: admit work for the configured employee lead |
+| `spawn_<teammate>` | `instructions` | `after` | Lead: fresh instance, task, first attempt and inbox obligation in one commit |
+| `assign_task` | `agent`, `instructions` | `after` | Lead: new reviewed work on an existing teammate instance |
+| `send_message` | `agent`, `message` | — | Same-job coordination; return a delivery receipt |
+| `list_agents` | — | — | Instances, capabilities and execution state |
+| `get_agent` | `agent` | — | Instance and recent runs/results |
+| `wait_for_agents` | — | `agents`, `timeout_seconds` | Wait for other instances; default selection excludes caller |
+| `list_tasks` | — | `status` | This job's tasks, current references and allowed actions |
+| `get_task` | `task_ref` | — | Read task and attempts; reads also accept a task ID in this field |
+| `inspect_task` | `task_ref` | `detail`, `query`, `cursor`, `limit` | Bounded stored result and Temporal trace evidence |
+| `modify_task` | `task_ref`, `instructions` | `after` | Lead: `blocked` or `queued`; omitted `after` preserves dependencies |
+| `request_changes` | `task_ref`, `feedback` | — | Lead: `submitted`; append feedback and queue another attempt on the same instance |
+| `accept_task` | `task_ref` | — | Lead: `submitted`; accept and unblock eligible dependents |
+| `retry_task` | `task_ref` | — | Lead: `failed`, `submitted` or `cancelled`; preserve requirements, feedback and history |
+| `cancel_task` | `task_ref` | `reason` | Lead: `blocked`, `queued` or `running`; fence/stop the attempt, keep instance reusable |
+| `reassign_<teammate>` | `task_ref` | — | Lead: `failed`, `submitted` or `cancelled`; move the same task to a fresh instance and attempt |
+| `stop_agent` | `agent` | — | Lead: halt admission and interrupt execution; no automatic task retry |
+| `resume_agent` | `agent` | — | Lead: reopen a drained, nonclosed instance and its held inbox |
+| `close_agent` | `agent` | — | Lead: require no active execution, unresolved tasks or pending inbox |
+| `finish_team` | — | — | Lead: apply reviewed completion gates; managed delivery remains separately gated |
+
+`instructions` and `feedback` must contain nonblank text and are bounded to
+10,000 characters. Their whitespace is preserved in storage. `agent` and
+`task_ref` are nonblank references of at most 2,000 characters. `after` and
+`agents` accept at most 100 references; dependencies are explicit and must
+belong to the same job/generation. `reason` is at most 2,000 characters.
+`wait_for_agents.timeout_seconds` is an integer from zero to 30, default 30.
+
+`list_tasks.status` is one of `blocked`, `queued`, `running`, `submitted`,
+`accepted`, `failed`, `cancelled`. `inspect_task.detail` is `summary` (default),
+`failures`, `timeline` or `search`; `query` is at most 200 characters; `limit`
+defaults to 25 and ranges from one to 100. It returns stored result excerpts of
+at most 4,000 characters with `next_cursor`, plus bounded trace evidence where
+available. Stored full results remain readable when Temporal traces are
+unavailable; result cursors and Temporal cursors are separate.
+
+### Task references and review
+
+The runtime preserves the exact instructions and derives a short display
+title. It does not ask the model to supply `operation`, `title`, `mission`,
+`assignee_node_id` or generated acceptance criteria. For example, the arguments
+to an exposed spawn binding are simply:
+
+```json
+{"instructions":"Find three primary sources on durable queues and summarize their recovery guarantees."}
+```
+
+Copy the returned `agent.id` for messages and follow-up assignments. Copy the
+latest `task.task_ref` for review; a typical subsequent call is:
+
+```json
+{"task_ref":"<copy current task_ref>","feedback":"Add direct links and explain what survives a worker restart."}
+```
+
+A versioned `task_ref` carries the observed team, task, revision, attempt and
+status. Every mutation checks it atomically. A stale reference returns
+`stale_reference`; read again before acting. Unlike version 0, no mutation
+infers the only submitted task or silently substitutes its latest revision.
+`allowed_actions` uses full names such as `modify_task` and `request_changes`;
+the `reassign` action means choose one of the exposed bound reassign tools.
+
+`request_changes` appends feedback once and snapshots the next attempt's
+effective contract. Retry retains the instructions and accumulated feedback;
+reassignment retains them while changing the instance. The task remains the
+same record. The default stored task budget permits three retries after
+attempt zero. `after` becomes satisfied only when every prerequisite is
+accepted; cancelled prerequisites cannot satisfy it.
+
+### Results and delivery receipts
+
+Version 1 results can include `agent`, `agents`, `runs`, `task`, `tasks`,
+`attempts`, `delivery`, `status`, `trace` and `result_excerpt`. Public result
+summaries are bounded while full results remain in storage. Provider session
+state and configuration credentials are not part of the public instance view.
+An assignment response confirms durable admission, not execution or success.
+
+| Receipt state | Meaning |
+|---|---|
+| `queued` | Persisted, awaiting the recipient owner |
+| `admitted` | Assigned to a particular run |
+| `consumed` | Durable response/checkpoint and receipt advancement committed together |
+| `held` | Recovery required, such as a chain limit or failure before checkpoint |
+| `cancelled` | Superseded input or interrupted execution |
+| `recipient_closed` | Pending input disposed by job retirement or Reset |
+
+Requests carry a trusted identity and payload fingerprint. A duplicate returns
+the original receipt; reuse with different content fails with
+`idempotency_conflict`. `consumed`, an idle instance and a message acknowledgement
+do not imply accepted work. Messages coordinate; they do not revise task
+requirements or confer owner authorization.
+
+Default peer limits are 8,192 UTF-8 bytes per message, 256 pending peer messages
+and 1,048,576 pending peer bytes per recipient, configured by
+`AGENT_PEER_MESSAGE_BYTES`, `AGENT_PENDING_MESSAGES` and `AGENT_PENDING_BYTES`.
+Queued, admitted and held peer deliveries count toward the pending limits.
+Oversize or full inbox admission returns `message_too_large` or `inbox_full`.
+Mandatory task/review notices remain durable outside those peer quotas.
+`AGENT_PEER_CHAIN_TURNS` defaults to eight automatically induced turns; further
+input in that causal chain is held with a notice until explicit resume.
+
+### Ownership and recovery
+
+`AgentInstanceSessionWorkflow` serializes all input for an instance. Native/Pi
+consume mailbox input at complete tool-round boundaries; CLI and RLM consume
+it on the next turn. Native/Pi waits release root capacity and driver resources;
+opaque runtimes that cannot yield their lease return `pending` immediately.
+Instance history and output/session namespaces isolate repeated spawns of the
+same template and separate jobs.
+
+Submission and the owning lead's review notice commit together. A version 1
+`taskTrigger` notification only wakes the exact persisted lead; it cannot
+create a second review executor. Signals are hints, with fair database-backed
+reconciliation recovering missed starts, wakeups, stops and permit cleanup.
+
+After three classified invalid orchestration requests, the logical turn halts.
+The counter survives continuation/retries and does not reset after unrelated
+successes. Infrastructure errors and stale references do not count. Already
+admitted operations may settle; no new provider request or effect is admitted.
+Child work is preserved. A recoverable lead failure with existing tasks exposes
+`review_blocked` and the owner-authenticated, idempotent
+`retry_employee_review` action / **Retry review** button. Recovery reuses the
+same lead, tasks and model without repeating accepted work.
+
+Generation Stop preserves pending input and continuations. Resume continues
+that generation. `stop_agent` instead interrupts an instance; failed work needs
+an explicit retry. Reset fences old instances, cancels unfinished attempts and
+disposes pending deliveries. It never redirects them to a replacement agent.
+
+`finish_team` requires all tasks accepted or cancelled; managed employee teams
+must also have assigned work. Final employee delivery is stricter: at least one
+task, every task accepted, a nonempty final lead result and the original
+delivery/approval gates. A finish receipt alone does not authorize delivery.
+
+### Side effects
+
+Validated lifecycle calls write instance/run/task/attempt, inbox, transcript
+and idempotency records transactionally. They request deterministic Temporal
+owner starts or signals after commit and broadcast UI state as a best-effort
+notification. Executing an instance can invoke its configured model, tools or
+CLI subprocess through the existing adapter. Final reviewed employee delivery
+can append to Talk or invoke the captured app destination and approval gate.
+Read/inspection tools return scoped state and may read Temporal history; they
+do not select arbitrary teams or provider session IDs.
+
+## Legacy contract (version 0)
+
+The sections below retain the single `task_manager` operation schema and
+detached task-runner semantics for old generations and compatibility callers.
+They do not describe version 1 model arguments or instance ownership. Employee
+job admission/delivery provenance and UI presentation are shared unless a
+version difference is stated.
 
 ## Parameters
 
@@ -175,9 +356,10 @@ operation valid in the wrong state. Expected conflicts produce a warning
 without a traceback; unexpected database failures retain their error type and
 normal exception logging. Both are failure results, not successful mutations.
 
-Newly prepared runs receive the locked schema after updated workers are
-deployed. Already prepared Temporal runs keep their recorded definitions;
-the change does not rewrite history or require a database migration.
+Version 0 callers use the locked legacy validator; already prepared Temporal
+runs keep their recorded definitions. The version 1 rollout adds storage and
+selects its different tool surface at generation admission. It does not rewrite
+old histories.
 
 If the next model turn takes time, inspect its LLM activity separately from the
 completed tool call. Activity heartbeats show worker liveness, not provider
@@ -204,7 +386,8 @@ The acknowledgement confirms assignment only. Specialists submit work through
 Task Manager, and the lead reviews and accepts it. The runtime delivers the
 reviewed result once to the original conversation or app, preserving approval
 gates. Scheduled and app-triggered lead work uses the same server job boundary.
-Existing version 1 graphs keep their compatible execution path.
+Existing employee recipe version 1 graphs keep their compatible execution
+path; that recipe number is distinct from agent lifecycle version 1.
 
 ## Assignment result
 

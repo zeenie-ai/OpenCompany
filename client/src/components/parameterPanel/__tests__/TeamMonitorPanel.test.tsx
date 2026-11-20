@@ -71,4 +71,21 @@ describe('TeamMonitorPanel', () => {
     expect(screen.getByText(/Connect an Orchestrator Agent or AI Employee/)).toBeInTheDocument();
     await waitFor(() => expect(wsMock.sendRequest).not.toHaveBeenCalled());
   });
+
+  it('shows independent instances of the same template separately from reviewed tasks', async () => {
+    wsMock.sendRequest.mockImplementation((type: string) => Promise.resolve(type === 'get_team_status' ? {
+      status: { status: 'active', instances: [
+        { id: 'instance-a', template_node_id: 'coder', display_name: 'API worker', role: 'teammate', state: 'running', active_run_id: 'run-a' },
+        { id: 'instance-b', template_node_id: 'coder', display_name: 'Test worker', role: 'teammate', state: 'idle' },
+      ] },
+    } : { tasks: [{ id: 'task-1', title: 'Build API', status: 'submitted', assigned_to: 'coder', assigned_instance_id: 'instance-a' }] }));
+    render(<TeamMonitorPanel nodeId="monitor" workflowId="workflow-1" nodes={nodes} edges={edges} />);
+    const instances = await screen.findByRole('list', { name: 'Agent instances' });
+    expect(within(instances).getByText('API worker')).toBeInTheDocument();
+    expect(within(instances).getByText('Test worker')).toBeInTheDocument();
+    expect(within(instances).getByText('Active run')).toBeInTheDocument();
+    expect(within(instances).getByText('No active run')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Connected templates/ })).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Tasks by status' })).getByText('accepted')).toHaveTextContent('0');
+  });
 });

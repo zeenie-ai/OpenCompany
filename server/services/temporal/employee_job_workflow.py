@@ -134,6 +134,10 @@ class EmployeeJobWorkflow:
             await asyncio.shield(workflow.execute_activity("employee.job.failed", {**context, "cancelled": isinstance(exc, asyncio.CancelledError) or is_cancelled_exception(exc)},
                 start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING_RETRY))
             raise
+        if result.get("instance_managed"):
+            # The serialized job lead owns every review and delivery attempt.
+            # A halted lead's durable work remains available for explicit retry.
+            return result
         if not result.get("success"):
             await workflow.execute_activity("employee.job.failed", context,
                 start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING_RETRY)

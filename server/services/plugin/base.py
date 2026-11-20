@@ -1417,6 +1417,10 @@ class BaseNode:
                     "parent_node_id",
                     "team_lead_node_id",
                     "root_execution_id",
+                    "agent_protocol_version", "agent_lifecycle_version",
+                    "agent_instance_id", "agent_run_id", "agent_instance_scope", "agent_instance_role",
+                    "agent_admission_state", "agent_runtime", "agent_operation", "agent_template",
+                    "team_task_id", "task_attempt", "employee_job_id",
                     # The model's unmerged arguments for an LLM-invoked tool
                     # call; routes ToolNodes through execute_as_tool in the
                     # legacy handler so split-schema ToolInput validation

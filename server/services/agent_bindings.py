@@ -15,10 +15,15 @@ async def node_tools(ai_service: Any, tool_info: Mapping[str, Any]) -> list:
     node's, and its ``binding_key`` tells it apart from the node's others."""
     from services.agent_runtime import AgentToolSpec
     from services.llm.protocol import ToolDef
-    from services.plugin.tool import node_tool_bindings
+    from services.plugin.tool import binding_input_model, node_tool_bindings
 
     try:
-        bindings = await node_tool_bindings(tool_info)
+        runtime = dict(tool_info.get("agent_runtime") or {})
+        if tool_info.get("node_type") == "taskManager" and (runtime.get("agent_protocol_version") == 1 or runtime.get("agent_lifecycle_version") == 1):
+            from services.agent_instances.tools import build_bindings
+            bindings = build_bindings(tool_info.get("parameters") or {}, runtime=runtime)
+        else:
+            bindings = await node_tool_bindings(tool_info)
     except Exception as exc:  # noqa: BLE001 - skip the node, as a tool that cannot be built
         logger.error("Could not read the tools of a connected node", node_type=tool_info.get("node_type"), error=str(exc))
         return []
@@ -35,9 +40,13 @@ async def node_tools(ai_service: Any, tool_info: Mapping[str, Any]) -> list:
             "label": tool_info.get("label") or tool_info.get("node_type", ""),
             "connected_services": [],
             "binding_key": f"{node_id}:{binding.key}",
+            "execution_traits": sorted(binding.execution_traits),
         }
+        if binding.parameters.get("_agent_operation"):
+            config.update(agent_operation=binding.parameters["_agent_operation"],
+                agent_template=binding.parameters.get("_agent_template"), agent_runtime=runtime)
         definition = ToolDef(name=binding.name, description=binding.description, parameters=binding.schema)
-        built.append((AgentToolSpec(definition=definition, args_schema=None, execution=config), config))
+        built.append((AgentToolSpec(definition=definition, args_schema=binding_input_model(binding), execution=config), config))
     return await _runtime_tools(built, tool_info)
 
 

@@ -100,6 +100,21 @@ async def test_every_call_carries_its_request_identity(monkeypatch):
     assert execute.await_args.args[2]["tool_call_id"] == "mcp:" + canonical_digest({"session": "session-1", "request": 7})
 
 
+def test_instance_call_identity_separates_turns_and_deduplicates_transport_retries():
+    request_context = SimpleNamespace(request_id=7, request=SimpleNamespace(headers={"mcp-session-id": "warm-session"}))
+    mcp = SimpleNamespace(get_context=lambda: SimpleNamespace(request_context=request_context))
+    context = BatchContext(workflow_id="wf", node_id="cli", workspace_dir=Path.cwd())
+    entry = {"node_type": "taskManager", "agent_runtime": {"agent_run_id": "first-turn"}}
+    identity = lambda: workflow_tools.authenticated_tool_config(context, entry, "spawn_worker", mcp=mcp)["tool_call_id"]
+    first = identity()
+    assert identity() == first
+    request_context.request_id = 8
+    assert identity() != first
+    request_context.request_id = 7
+    entry["agent_runtime"]["agent_run_id"] = "next-turn"
+    assert identity() != first
+
+
 async def test_handler_validates_the_authenticated_batch_schema():
     context = BatchContext(
         workflow_id="workflow-2",

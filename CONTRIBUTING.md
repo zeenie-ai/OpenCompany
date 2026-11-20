@@ -217,8 +217,9 @@ The [documentation audit](docs-internal/DOCUMENTATION_AUDIT.md) records the comm
 | [SCRIPTS.md](docs-internal/SCRIPTS.md) | bun/shell scripts and CLI verbs reference |
 | [server-readme.md](docs-internal/ARCHIVE/server-readme.md) | *Archived*; see SETUP.md, authentication.md, plugin_system.md |
 | [agent_architecture.md](docs-internal/agent_architecture.md) | AI Agent / Chat Agent skill and tool discovery |
-| [agent_delegation.md](docs-internal/agent_delegation.md) | How delegated agents share context and memory |
-| [agent_teams.md](docs-internal/agent_teams.md) | Agent Teams pattern with `input-teammates` handle |
+| [agent_delegation.md](docs-internal/agent_delegation.md) | Connected templates, instance isolation and legacy delegation |
+| [agent_teams.md](docs-internal/agent_teams.md) | Reusable agents, reviewed tasks, durable messaging and recovery |
+| [agent_lifecycle_validation.md](docs-internal/agent_lifecycle_validation.md) | Lifecycle acceptance coverage and recorded deterministic validation |
 | [native_llm_sdk.md](docs-internal/native_llm_sdk.md) | Native LLM SDK layer and provider protocol |
 | [rlm_service.md](docs-internal/rlm_service.md) | Recursive Language Model agent via REPL |
 | [claude_code_agent.md](docs-internal/claude_code_agent.md) | Claude Code agent hub (routes to architecture, interactive mode, and the vendored `claude_code_*_reference.md` snapshots) |

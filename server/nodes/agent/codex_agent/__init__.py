@@ -90,6 +90,8 @@ class CodexAgentOutput(BaseModel):
     timestamp: Optional[str] = None
     # Legacy single-task convenience
     response: Optional[str] = None
+    agent_transcript: Optional[dict[str, Any]] = None
+    agent_admission_state: Optional[dict[str, Any]] = None
     model_config = ConfigDict(extra="allow")
 
 
@@ -195,6 +197,7 @@ class CodexAgentNode(ActionNode):
                 else None
             ),
             execution_id=ctx.execution_id,
+            instance_context=ctx.raw,
             allowed_credentials=params.allowed_credentials,
             max_parallel=params.max_parallel,
             ai_service=get_ai_service(),
@@ -225,7 +228,7 @@ class CodexAgentNode(ActionNode):
         task_models = [
             session_result_to_model(t).model_dump() for t in result.tasks
         ]
-        if (context_data or {}).get("kind") == "context":
+        if (context_data or {}).get("kind") == "context" and not ctx.raw.get("agent_instance_id"):
             for task_model in task_models:
                 # Codex Context fidelity is observable-only/non-resumable.
                 # A provider-emitted identifier must not look like a
@@ -245,6 +248,8 @@ class CodexAgentNode(ActionNode):
             "provider": result.provider,
             "timestamp": result.timestamp or datetime.now().isoformat(),
             "response": legacy_response,
+            **({"agent_transcript": result.agent_transcript, "agent_admission_state": result.agent_admission_state}
+               if ctx.raw.get("agent_instance_id") else {}),
         }
 
     @staticmethod

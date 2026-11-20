@@ -128,11 +128,12 @@ class ClaudeTaskSpec(BaseAICliTaskSpec):
 
 
 class CodexTaskSpec(BaseAICliTaskSpec):
-    """OpenAI Codex CLI task. Sandbox-first; no session/resume/budget/turns."""
+    """OpenAI Codex CLI task, including an exact server-owned continuation."""
 
     provider: Literal["codex"] = "codex"
     sandbox: Literal["read-only", "workspace-write", "danger-full-access"] = "workspace-write"
     ask_for_approval: Literal["untrusted", "on-request", "never"] = "never"
+    resume_session_id: Optional[str] = Field(default=None, exclude=True)
 
 
 class GeminiTaskSpec(BaseAICliTaskSpec):

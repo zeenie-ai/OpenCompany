@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -211,3 +211,92 @@ async def test_pool_queue_worker_stops_when_queue_has_no_activities():
         )
         # Crash, then rebuild returns None -> the supervisor task ends.
         await asyncio.wait_for(task, timeout=1.0)
+
+
+def _startable_manager(monkeypatch):
+    from services.temporal import worker
+
+    session = SimpleNamespace(closed=False, close=AsyncMock())
+    pool = SimpleNamespace(start=AsyncMock(), stop=AsyncMock())
+    monkeypatch.setattr(worker, "create_shared_session", AsyncMock(return_value=session))
+    monkeypatch.setattr(worker, "PiDriverWorkerPool", lambda client: pool)
+    manager = TemporalWorkerManager(client=MagicMock(), task_queue="q")
+    manager._build_worker = AsyncMock(return_value=object())
+
+    async def healthy():
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(manager, "_run_worker", healthy)
+    return manager, session, pool
+
+
+async def test_reconciler_start_retries_while_worker_remains_healthy(monkeypatch):
+    from services.agent_instances import runtime
+
+    manager, session, pool = _startable_manager(monkeypatch)
+    admitted = asyncio.Event()
+    calls = []
+
+    async def ensure(client):
+        calls.append(client)
+        if len(calls) < 3:
+            raise RuntimeError("transient StartWorkflow failure")
+        admitted.set()
+
+    monkeypatch.setattr(runtime, "ensure_reconciler", ensure)
+    with _patch_backoff():
+        await manager.start()
+        retry_task = manager._reconciler_start_task
+        try:
+            await manager.start()  # Repeated start must not create a second supervisor.
+            assert manager._reconciler_start_task is retry_task
+            await asyncio.wait_for(admitted.wait(), timeout=1)
+            await asyncio.wait_for(asyncio.shield(retry_task), timeout=1)
+            assert calls == [manager.client] * 3
+            assert manager.is_running
+            manager._build_worker.assert_awaited_once()
+            pool.start.assert_awaited_once()
+        finally:
+            await manager.stop()
+    assert retry_task.done()
+    assert manager._reconciler_start_task is None
+    session.close.assert_awaited_once()
+
+
+@pytest.mark.parametrize("phase", ["rpc", "backoff"])
+async def test_stop_cancels_and_reaps_reconciler_start_retry(monkeypatch, phase):
+    from services.agent_instances import runtime
+
+    manager, session, pool = _startable_manager(monkeypatch)
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def ensure(client):
+        calls.append(client)
+        entered.set()
+        if phase == "backoff":
+            raise RuntimeError("retry admission later")
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(runtime, "ensure_reconciler", ensure)
+    monkeypatch.setattr("core.config.Settings", lambda: SimpleNamespace(
+        temporal_worker_restart_backoff_seconds=60,
+        temporal_worker_restart_backoff_max_seconds=60,
+    ))
+    await manager.start()
+    retry_task, worker_task = manager._reconciler_start_task, manager._worker_task
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+    finally:
+        await asyncio.wait_for(manager.stop(), timeout=1)
+    assert retry_task.done() and retry_task.cancelled()
+    assert worker_task.done() and not manager.is_running
+    assert manager._reconciler_start_task is None
+    assert calls == [manager.client]
+    if phase == "rpc":
+        assert cancelled.is_set()
+    pool.stop.assert_awaited_once()
+    session.close.assert_awaited_once()

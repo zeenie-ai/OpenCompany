@@ -24,9 +24,10 @@ OpenCompany is an open-source operating system for self-improving AI employees. 
 | **[Nodes Cookbook](./server/nodes/README.md)** | 5-minute recipe + folder map + shared helpers (`_base.py` / `_inline.py` per domain) + shared credentials + **canonical folder-per-plugin shape (telegram is the reference implementation)** + contract invariants + common pitfalls. Lives next to the plugin files. |
 | **[Node Creation Guide](./docs-internal/node_creation.md)** | Canonical plugin recipe — one self-contained folder per plugin under `server/nodes/<group>/<plugin>/`, rooted at `__init__.py`. Multi-file split (`_service.py` / `_handlers.py` / etc.) when the plugin owns long-lived state. Zero frontend edits, zero core-services edits. Auto-registers via `BaseNode.__init_subclass__` + the generic `register_*` hooks (see the Plugin System row). Covers tool nodes, dual-purpose nodes (workflow + AI tool), and specialized agents as variations of the same recipe. |
 | **[Agent Architecture](./docs-internal/agent_architecture.md)** | How AI Agent and Chat Agent discover skills/tools, inject them into LLM prompts, and execute through the provider-neutral `run_native_agent_loop` |
-| **[Agent Delegation](./docs-internal/agent_delegation.md)** | How memory, parameters, and execution context flow when one AI agent delegates work to another agent connected as a tool |
-| **[Agent Teams](./docs-internal/agent_teams.md)** | Claude SDK Agent Teams pattern - AI Employee and Orchestrator nodes with input-teammates handle for multi-agent coordination |
-| **[Agent Context Flow](./docs-internal/agent_context_flow.md)** | Normative continuity reference — how a conversation survives firings, delegations, and rollovers on both paths. Plain conversation store: one `agent_conversations` row per `(workflow_id, generation, agent_node_id)` → messages JSON, loaded at run start and saved per turn (LangGraph thread_id / OpenAI conversation_id pattern; the journal/thread/epoch machinery is gone). Seeding precedence (carried rollover transcript > stored conversation > bare build, 1 MB guards), LOUD load failures (`ConversationLoadFailed` / `ConversationTooLarge`) vs best-effort saves, transcript size bounds (per-call tool-result cap, byte budget that clears old results, `context_pressure_version` replay contract), the specialized-provider bridge, and the August 2026 "lead forgot its plan" regression. Read before touching `services/agent_context/`, `nodes/context/`, `services/cli_agent/context_bridge.py`, `services/tool_output.py`, `agent.prepare_payload`, or the team-completion event chain. |
+| **[Agent Delegation](./docs-internal/agent_delegation.md)** | Connected templates, frozen capabilities and instance-scoped delegation; the separate compatibility path for existing generations. |
+| **[Agent Teams](./docs-internal/agent_teams.md)** | Reusable job-scoped instances, narrow spawn/review tools, durable tasks and inboxes, execution ownership, recovery and generation compatibility. OpenCompany owns this lifecycle. |
+| **[Agent Lifecycle Validation](./docs-internal/agent_lifecycle_validation.md)** | Deterministic acceptance coverage, reproducible checks and the 2026-11-20 validation record; no comparative model-performance claims. |
+| **[Agent Context Flow](./docs-internal/agent_context_flow.md)** | Normative continuity reference: mandatory instance transcripts with revision/run fences and atomic receipt checkpoints; separate Talk/job histories; exact provider continuation. Also retains the node-keyed legacy/owner-chat store, compaction rules and historical continuity regressions. Read before changing either persistence path or the team-completion chain. |
 | **[Memory Compaction](./docs-internal/memory_compaction.md)** | Native usage aggregation plus shared client-side summarization through `ChatUnifier` for memory-connected agents. Threshold = `Settings.compaction_ratio` (env `COMPACTION_RATIO`, default 0.8) × model context length; see the document for the per-session override limitation on Temporal runs. |
 | **[Pricing Service](./docs-internal/pricing_service.md)** | Centralized cost tracking for LLM tokens and API services (Twitter, Google Maps), recorded by a tracker in each plugin |
 | **[Proxy Service](./docs-internal/proxy_service.md)** | Residential proxy provider management with template-based URL formatting, health scoring, and transparent HTTP node injection |
@@ -1428,6 +1429,28 @@ A new chat-model provider is one self-contained folder under `server/nodes/model
 ## Context and Memory (RFC-0002)
 
 Two different things, deliberately separated. Read [RFC-0002](./RFC-0002-AGENT-CONTEXT-AND-MEMORY.md) before touching either.
+
+### Reusable job instances (lifecycle version 1)
+
+New generations capture `agent_lifecycle_version=1` and `agent_protocol_version=1`.
+Connected teammates are templates. Each job owns an isolated lead, and spawning
+creates an independent instance plus its first reviewed task. The runtime owns
+identity, execution, inbox delivery and conversation persistence. Talk retains
+the owner conversation and passes an explicit handoff to the job.
+
+`agent_instance_conversations` stores plain MessageWire lists per instance,
+including without a Context connection. `AgentInstanceSessionWorkflow` owns
+serial execution; `AgentInstanceService.checkpoint` atomically validates the run
+and transcript revision, writes history and advances consumed receipts. These
+checkpoints are required, unlike legacy best-effort saves. The Context viewer
+selects instances separately and makes job transcripts read-only.
+
+Use the [Agent Teams contract](./docs-internal/agent_teams.md) and
+[validation record](./docs-internal/agent_lifecycle_validation.md) before changing
+the narrow tools, task references, inboxes, permit recovery or Retry review.
+Existing generation histories retain version 0 and are not rewritten.
+
+### Legacy and owner-chat context
 
 **Context** is the plain conversation store — what the agent actually sent and received, as JSON messages. One table (`agent_conversations`, [models/agent_context.py](./server/models/agent_context.py)) keyed by **`(workflow_id, generation, agent_node_id)`** → `messages` (MessageWire list) + `updated_at`; the service is four functions in [`services/agent_context/conversation.py`](./server/services/agent_context/conversation.py) (`load_conversation` / `save_conversation` (per-key lock, whole-list upsert, post-commit notify) / `clear_conversation` / `list_conversations`). Every firing of an agent — chat message or taskTrigger review — loads the row at run start and saves the live message list back per turn, so the one conversation continues across firings; Reset admits a new generation = new key = fresh conversation, AND the Context node's `reset_execution_state` clears the workflow's stored rows + fences warm claude subprocesses + broadcasts `context.updated` — the generation bump alone is not enough because the panel shows the newest STORED generation, so surviving rows would render the pre-Reset conversation as the live context and Reset would look like a no-op. (A plain Stop→Start leaves prior generations as inert, non-browsable history until workflow delete or Reset.) The `context` node (`server/nodes/context/`, `input-context` handle) is the **opt-in switch and viewing panel**, nothing more — it declares no parameters. It is an ordinary canvas node the user deletes like any other: `normalize_workflow_graph` never creates, reconnects or deletes one (rewriting a legacy `simpleMemory -> input-memory` edge is the one exception), save never restores a deleted one, and `workflow_validator` does not require one — `INVALID_CONTEXT_EDGE` / `MULTIPLE_CONTEXTS` / `SHARED_CONTEXT` still reject ambiguous wiring. Deleting it opts the agent out, and the save's archive outbox then clears the workflow's stored conversations. The palette does not offer it (`uiHints.systemManaged`), so a deleted Context cannot be re-added from there. This is the LangGraph `thread_id` / OpenAI `conversation_id` pattern; the previous hash-chained journal (threads, epochs, checkpoints, blobs, provider bindings, session/task/execution thread routing) is deleted.
 

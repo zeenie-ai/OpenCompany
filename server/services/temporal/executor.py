@@ -44,6 +44,8 @@ def capture_temporal_routing_input() -> Dict[str, Any]:
                 getattr(settings, "temporal_worker_pool_enabled", False)
             ),
             "pi_harness_version": 1,
+            "agent_lifecycle_version": 1,
+            "agent_protocol_version": 1,
         }
     }
 

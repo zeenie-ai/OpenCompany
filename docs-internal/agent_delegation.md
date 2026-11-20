@@ -1,28 +1,155 @@
 # Agent-to-Agent Delegation (Nested Agents)
 
-> **Team-lead contract:** Orchestrator and AI Employee models do not call
-> `delegate_to_*` directly. They create durable work through the intrinsic
-> `task_manager(assign_task)` interface described in
-> [agent_teams.md](agent_teams.md). Delegate names below are internal dispatch
-> identities or legacy/non-team-lead compatibility mechanics.
+New generations record `agent_lifecycle_version=1`. They use connected nodes as
+templates, reusable instances as conversations, and tasks as reviewed work.
+This document describes execution ownership and adapter boundaries. See
+[Agent Teams](agent_teams.md#reusable-instances-lifecycle-version-1) for lifecycle,
+receipts and recovery, and the [Task Manager contract](node-logic-flows/ai_tools/taskManager.md#lifecycle-version-1-tool-contract)
+for model-facing arguments. Generations without the recorded marker retain the
+version 0 path documented later in this file.
 
-How memory, parameters, and execution context flow when one AI agent delegates work to another agent connected as a tool.
+## Version 1 execution path
 
-> **Related docs:** [tool_building_pipeline.md](./tool_building_pipeline.md)
-> for the underlying `_build_tool_from_node` + `execute_tool` pipeline that
-> backs `delegate_to_*` (delegation tools use the same provider-neutral
-> `AgentToolSpec` / `ToolDef` construction path as other AI tools — what makes
-> them special is the fire-and-forget background task and the
-> `{"status": "delegated"}` lifecycle opt-out documented there).
+```mermaid
+sequenceDiagram
+    participant Talk
+    participant Store as Durable job and inbox store
+    participant Lead as Lead instance owner
+    participant Worker as Teammate instance owner
+    participant Runtime as Native / Pi / CLI / RLM
+    Talk->>Store: submit_job(instructions), trusted source context
+    Store-->>Talk: acknowledgement and job ID
+    Store->>Lead: explicit handoff, isolated conversation
+    Lead->>Store: spawn_<teammate>(instructions, after?)
+    Note over Store: Commit instance, task, attempt and input together
+    Store-->>Lead: agent ID and current task_ref
+    Store->>Worker: wake hint; inbox remains authoritative
+    Worker->>Store: claim one fenced run
+    Worker->>Runtime: execute with instance history and frozen template
+    Runtime->>Store: checkpoint transcript and consumed receipts
+    Worker->>Store: submit result and enqueue owning-lead review atomically
+    Store->>Lead: review input through the same owner
+    Lead->>Store: inspect_task; accept_task or request_changes
+    Lead->>Store: final result through reviewed delivery gates
+    Store-->>Talk: append final result using original delivery identity
+```
+
+### Admission and one execution owner
+
+`AgentWorkflow.run` bootstraps a version 1 `ai_employee` or
+`orchestrator_agent` lead into `AgentInstanceSessionWorkflow`. The Talk agent
+keeps its chat execution and only receives `submit_job` for team work.
+`bootstrap_instance` captures the admitted graph and configuration, and
+`turn_context` projects each claimed run from that durable snapshot.
+
+Spawning creates a fresh instance and its first task in one database
+transaction. Assigning again queues a new task on the selected instance.
+Queued work acquires no concurrency capacity. The instance owner claims one
+run, acquires capacity for an active descendant, and invokes the existing
+native/Pi child workflow or the direct opaque-runtime Activity. Follow-up
+messages and reviews enter that same inbox; they do not start another executor
+against the conversation.
+
+The instance ID, run fence, transcript revision and owning-run ID protect the
+plain MessageWire transcript. Each task attempt also records its assigned
+instance/run and contract snapshot. Cancelling an attempt invalidates its
+writer; a late response cannot overwrite the transcript or submit a newer
+attempt. Retry reuses the contract and conversation; reassignment creates a
+fresh target instance while preserving the task ID and feedback.
+
+The session workflow drains a busy period, exits when idle and can restart
+under the deterministic `agent-instance:<id>` workflow ID. Database input and
+physical owner/run identity survive worker restart and Temporal rollover.
+Signals only accelerate recovery. Fair reconciliation revisits queued input,
+interrupted owners, completed-job retirement and recorded permit cleanup.
+
+### What crosses the boundary
+
+| Input | Source and isolation |
+|---|---|
+| Work instructions and `after` | Validated model arguments; stored exactly, with explicit prerequisite task references |
+| Provider, model, tools, skills and capabilities | Frozen connected template configuration; peer text cannot grant access |
+| Conversation | Instance's built-in transcript, independent of the template node and other jobs |
+| Upstream values | Captured source outputs for the job; instance output/session namespace prevents sibling fallback reads |
+| Runtime authority | Trusted workflow, generation, job, team, lead and run metadata supplied by the runtime |
+| Peer messages | Ordered inbox deliveries labelled as another agent's input, never owner approval |
+| Final destination | Original durable job source and approval policy; not the instance's session ID |
+
+Instance turns strip Talk's live chat run scope. Their output/session IDs are
+`agent-instance:<id>`, while generation control and original delivery provenance
+retain their admitted identities. Reviews return to the original lead
+instance. A duplicate version 1 `taskTrigger` event validates the persisted
+task/owner/lead/job/generation and wakes that lead; it never calls `ensure_lead`
+to manufacture a replacement review conversation.
+
+### Adapter continuation and mailbox boundaries
+
+| Runtime | Continuation | Input and stopping boundary |
+|---|---|---|
+| Native | Instance-scoped canonical transcript | Admit queued input only after the complete model/tool round and all tool results are recorded |
+| Pi | Same transcript, with Pi receipts/checkpoints and original call ordering | Complete tool boundary; durable waits park and release driver resources |
+| Claude CLI | Instance-specific pool key, workspace and stored provider session UUID | Sequential warm turns or explicit session resume; queued input reaches the next turn |
+| Codex CLI | Persist returned thread ID; subsequent process uses explicit `codex exec resume <ID>` in the retained instance workspace | Next-turn delivery, process result as completion evidence |
+| RLM | Replay instance conversation into the next completion | REPL variables are ephemeral; next-turn delivery; root, nested, fallback and effectful requests honor admission fencing |
+
+Provider-session files must remain on durable storage or their recorded owning
+worker. Missing or incompatible continuation blocks the turn rather than
+silently starting a fresh conversation. OpenCompany owns team lifecycle and
+does not depend on Claude's native team availability in the pipe-based launch
+mode. Adapter behavior is also described in [CLI agent framework](cli_agent_framework.md)
+and [agent context flow](agent_context_flow.md).
+
+### Capacity, waits and interruption
+
+The root-wide active-descendant limit is captured at admission (default three,
+excluding the lead). One instance never has two execution owners. Native/Pi
+`wait_for_agents` releases the active permit while parked; continuation obtains
+a fresh physical lease. Lease records are attached to the durable run, so a
+confirmed terminated owner can be cleaned up without freeing a live sibling's
+capacity. Transport failure alone cannot authorize release.
+
+The wait schema permits `timeout_seconds` from zero to 30, default 30. Opaque
+adapters that cannot yield their execution lease return a current `pending`
+snapshot immediately. A wait or idle state says nothing about task acceptance.
+
+Generation Stop preserves queued inputs, tasks and continuations behind the
+generation control gate. It is distinct from `stop_agent`, which halts and
+fences an instance's current execution, and `cancel_task`, which cancels a
+particular attempt. Resume does not silently retry a failed task. Reset closes
+old recipients and disposes pending deliveries explicitly. A closed recipient
+is never redirected to a replacement instance.
+
+Three classified malformed orchestration requests halt the logical turn. The
+budget and original call IDs survive continuation/retries; successful unrelated
+calls do not reset it. Already admitted operations can settle, while no new
+provider request or effect is admitted. Existing child work remains durable.
+For a recoverable blocked job lead, the owner uses **Retry review** to resume
+that same lead and review existing work. See the
+[recovery contract](agent_teams.md#stop-resume-reset-and-review-recovery).
+
+## Legacy delegation (version 0)
+
+**Everything below describes retained version 0 or non-team compatibility.**
+Its `task_manager(operation="assign_task", ...)`, `delegate_to_*`, detached
+task runners and process-local background tasks are not the version 1 tool
+surface or ownership model. In version 0, Orchestrator and AI Employee models
+use the intrinsic Task Manager, while delegate names remain internal dispatch
+identities. Direct non-team agent-tool connections retain their separate
+compatibility behavior.
+
+The [tool-building pipeline](tool_building_pipeline.md) describes the common
+`AgentToolSpec` / `ToolDef` construction and the legacy
+`{"status": "delegated"}` lifecycle opt-out.
 
 <!-- architecture-suite:start -->
 ## Architecture diagrams
 
 Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
 
-**Teams and context — Current implementation.**
+**Teams and context — Historical version 0 baseline.** This image predates
+reusable instances; use the version 1 sequence above for current ownership.
 
-[![Teams and context (Current implementation)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
+[![Teams and context (historical baseline)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
 
 [Editable Mermaid](../docs/diagrams/architecture/09-teams-context.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/09-teams-context.brief.md)
 

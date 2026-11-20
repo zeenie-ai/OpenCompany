@@ -142,10 +142,62 @@ CLI configuration. MCP startup is required for the batch. See
 [JSONL events](https://learn.chatgpt.com/docs/non-interactive-mode#make-output-machine-readable)
 and [HTTP MCP configuration](https://learn.chatgpt.com/docs/extend/mcp#streamable-http-servers).
 
-The node exposes no native resume, warm pool, budget cap or turn limit.
-Codex CLI itself has broader capabilities. Context continuity in OpenCompany
-uses the stored-conversation prompt bridge; Context-bound node results suppress
-`session_id` so it is not mistaken for a native continuation contract.
+Native resume is runtime-owned for reusable job instances as described below;
+there is no owner-facing resume selector. Warm pooling, budget caps and turn
+limits remain absent from this node. Legacy Context invocations use the
+stored-conversation prompt bridge and suppress `session_id` in node results
+so it is not mistaken for an instance continuation handle.
+
+## Reusable job instances
+
+For new lifecycle generations, OpenCompany serializes turns of an agent
+instance and keeps its provider thread, workspace and inbox. Separate instances
+of one Codex template have separate directories and histories. Context wiring
+is optional because the instance transcript is built in.
+
+The first turn uses `codex exec --json ... -- <prompt>`. Before starting the
+process, the runtime commits an `opening` continuation record with provider,
+storage owner and exact resolved cwd. `thread.started` commits the returned
+thread ID before that event is exposed. Later turns use:
+
+```text
+codex exec resume --json -c approval_policy=... -c sandbox_mode=... ... -- <exact-thread-id> <prompt>
+```
+
+Resume carries sandbox policy through a config override because the resume
+subcommand does not accept `--sandbox`. It preserves model selection, the
+managed `CODEX_HOME` and the instance checkout
+`<workspace>/<node>/<instance>/wt_session`. The runtime never chooses `--last`
+or a thread ID supplied through template configuration, and it sends only the
+new turn input rather than duplicating prior history in the prompt.
+
+Recovery fails with `continuation_unavailable` if startup was recorded but the
+thread ID was never committed, or if the provider/storage owner or resolved
+workspace changed. A missing checkout is rejected before worktree creation.
+Missing native session files produce a failed provider resume; neither failure
+launches a replacement thread. Keep provider state on its owning worker/storage.
+Normal process cleanup retains instance workspaces; legacy one-shot tasks keep
+their previous cleanup behavior.
+
+Messages are admitted on the next serialized turn. This adapter does not expose
+live App Server steering or an internal model/tool checkpoint. Stopping the
+instance targets its exact subprocess and drains it before completion. Native
+and Pi agents can admit messages at complete model/tool boundaries; the
+[capability table](cli_agent_framework.md#reusable-job-instances) distinguishes
+those behaviors from CLI and RLM execution.
+
+The shared MCP manifest supplies the same required lifecycle arguments as other
+adapters. Validation runs before FastMCP binds arguments, and the third invalid
+orchestration request durably halts the run. Retries reuse a run-scoped transport
+receipt; a successful unrelated call does not reset the budget. Automatic inbox
+wakeups cannot clear a halt.
+
+Full instance responses and `agent_transcript` / `agent_admission_state` survive
+node Output serialization. The session owner checkpoints the transcript and
+consumed message receipts together in a separate Activity, then records the
+reviewed task result. Failed turns with no response leave their deliveries
+unconsumed. Task inspection therefore reads the full saved result rather than
+the legacy 4,000-character presentation value.
 
 ## Temporal and development restarts
 
@@ -162,6 +214,11 @@ the per-type wrapper heartbeats every 30 seconds. A Codex task has its own
 600-second default timeout. Generation Stop/Resume and native CLI resume
 are different contracts; see [Temporal workflow control](temporal-workflow-control.md)
 and [Temporal architecture](TEMPORAL_ARCHITECTURE.md).
+
+Reusable instances use the owner workflow's direct `agent.instance.execute`
+Activity with full trusted context and cancellation drain. Their transcript
+checkpoint is a separate retryable operation; provider execution is not repeated
+to repair bookkeeping. This lifecycle is versioned at generation admission.
 
 `company dev` gives the frontend Vite HMR, but starts uvicorn without
 `--reload`. After backend, plugin or provider-config changes, stop the existing
@@ -181,6 +238,8 @@ does not reliably restart the dev supervisor. See [development setup](SETUP.md).
 | Empty response and zero usage after `turn.failed` | No completed generation is available. Inspect the readable task error and `provider_data.error_code` / `status_code`; this does not by itself indicate response-parser failure. |
 | MCP DELETE after failure | Normal session teardown can follow an earlier provider error. Find the first failure before treating cleanup as the cause. |
 | Old Model default remains in the served schema | Restart the existing dev backend; source edits do not hot-reload Python in `company dev`. |
+| `continuation_unavailable` on an instance | Check its recorded provider, storage owner, thread ID and exact cwd. Preserve or restore the original state; do not clear the ID to force a new conversation. |
+| Native resume reports a missing thread/session | The provider cannot find the recorded conversation in the managed home. Restore that session on its owning storage; no automatic fresh-thread fallback occurs. |
 
 Relevant native evidence lives under `<CODEX_HOME>/sessions/` and the configured
 Codex log directory (the default app path is `<DATA_DIR>/codex/log/`, including
@@ -197,6 +256,8 @@ out of shared logs.
 - [Session tests](../server/tests/services/cli_agent/test_codex_session.py): chunked/final JSONL, pipe draining, failures, timeout, process-tree cleanup and environment isolation.
 - [Parameter and Activity tests](../server/tests/nodes/test_codex_parameters.py): null lists and unchanged explicit settings through direct, snapshot and real Temporal Activity wrapper paths for Codex and Claude.
 - [Dispatch tests](../server/tests/temporal/test_dispatch.py): Codex stays on the whole-node Activity path.
+- [Instance adapter tests](../server/tests/services/cli_agent/test_instance_adapters.py): exact resume ID/config, full task response and checkpoint metadata through the actual node executor.
+- [Orchestration boundary tests](../server/tests/services/cli_agent/test_orchestration_boundary.py): durable pre-launch startup, crash before thread identity, missing workspace, real MCP validation and halted follow-up admission.
 
 On 2026-11-04, the model-selection/parser change passed 225 targeted tests and a
 live read-only CLI smoke check returned `CODEX_OK` with no tool calls. That

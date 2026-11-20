@@ -50,6 +50,10 @@ from models.database import (
 from models.agent_context import (  # noqa: F401 - registers SQLModel tables
     AgentConversation,
 )
+from models.agent_instances import (  # noqa: F401 - additive instance protocol tables
+    AgentInstance, AgentRun, AgentInstanceConversation, AgentDelivery,
+    AgentMessageChain, AgentInstanceMutation,
+)
 from models.pi_checkpoint import PiRuntimeBlob  # noqa: F401 - immutable Pi runtime caches
 from models.employees import (  # noqa: F401 - registers SQLModel tables
     Employee,
@@ -202,6 +206,31 @@ class Database:
                     await conn.run_sync(lambda sync, index=index: index.create(sync, checkfirst=True))
                 if self.engine.dialect.name == "postgresql":
                     await conn.run_sync(_rebuild_chat_lane_index)
+
+                # Additive instance fields are portable and preserve old generation
+                # records. Run before shared-schema validation on PostgreSQL too.
+                instance_additions = {
+                    "agent_instance_runs": {"temporal_run_id": "VARCHAR(255)", "invalid_request_ids": "JSON NOT NULL DEFAULT '[]'",
+                        "permit_leases": "JSON NOT NULL DEFAULT '[]'", "permits_pending": "BOOLEAN NOT NULL DEFAULT FALSE",
+                        "last_permit_reconcile_at": "TIMESTAMP"},
+                    "team_tasks": {
+                        "assigned_instance_id": "VARCHAR(255)", "assigned_run_id": "VARCHAR(255)",
+                        "protocol_version": "INTEGER NOT NULL DEFAULT 0", "review_feedback": "JSON",
+                    },
+                    "team_task_attempts": {
+                        "assigned_instance_id": "VARCHAR(255)", "assigned_run_id": "VARCHAR(255)",
+                        "input_snapshot": "JSON",
+                    },
+                }
+                for table_name, additions in instance_additions.items():
+                    names = await conn.run_sync(lambda sync, table_name=table_name: {
+                        column["name"] for column in inspect_schema(sync).get_columns(table_name)})
+                    for column_name, definition in additions.items():
+                        if column_name not in names:
+                            await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_assigned_instance_id ON team_tasks(assigned_instance_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_runs_permits_pending ON agent_instance_runs(permits_pending)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_runs_last_permit_reconcile_at ON agent_instance_runs(last_permit_reconcile_at)"))
 
             # Existing SQLite upgrades retain their exact backfills. PostgreSQL
             # starts with the current SQLModel schema; legacy SQLite data is
@@ -3268,9 +3297,11 @@ class Database:
                 existing = await session.execute(select(TeamTask).where(TeamTask.id == task_id))
                 task = existing.scalar_one_or_none()
                 if task:
-                    if task.team_id != team_id:
+                    if task.team_id != team_id or task.protocol_version == 1:
                         return None
                     return {"id": task.id, "title": task.title, "status": task.status}
+                if (await session.execute(select(AgentInstance.id).where(AgentInstance.team_id == team_id).limit(1))).first():
+                    return None  # Instance teams admit work through their fenced service.
                 if await self._team_failed_without_assignments(session, team_id):
                     return None
                 task = TeamTask(
@@ -3299,7 +3330,7 @@ class Database:
             "failed": ["retry", "reassign"], "cancelled": ["retry", "reassign"],
             "accepted": [],
         }.get(task.status, [])
-        return {
+        snapshot = {
             "id": task.id, "team_id": task.team_id, "workflow_id": task.workflow_id,
             "execution_id": task.execution_id, "root_execution_id": task.root_execution_id,
             "parent_agent_id": task.parent_agent_id, "title": task.title,
@@ -3307,7 +3338,7 @@ class Database:
             "context": task.context, "acceptance_criteria": task.acceptance_criteria,
             "status": task.status, "priority": task.priority, "queue_sequence": task.queue_sequence,
             "created_by": task.created_by, "assigned_to": task.assigned_to,
-            "depends_on": task.depends_on.get("task_ids", []) if task.depends_on else [],
+            "depends_on": (task.depends_on.get("task_ids", []) if isinstance(task.depends_on, dict) else list(task.depends_on or [])),
             "result": task.result, "error": task.error, "progress": task.progress,
             "revision": task.revision, "current_attempt": task.current_attempt,
             "retry_count": task.retry_count, "max_retries": task.max_retries,
@@ -3336,6 +3367,15 @@ class Database:
             ],
             "allowed_actions": allowed_actions,
         }
+        if task.protocol_version == 1:
+            from services.agent_instances.service import task_ref
+            snapshot.update(protocol_version=1, assigned_instance_id=task.assigned_instance_id,
+                assigned_run_id=task.assigned_run_id, review_feedback=list(task.review_feedback or []),
+                task_ref=task_ref(task))
+            for item, attempt in zip(snapshot["attempts"], attempts or []):
+                item.update(assigned_instance_id=attempt.assigned_instance_id, assigned_run_id=attempt.assigned_run_id,
+                    input_snapshot={key: value for key, value in (attempt.input_snapshot or {}).items() if key != "configuration"})
+        return snapshot
 
     async def create_durable_team_task(self, **values: Any) -> Optional[Dict[str, Any]]:
         """Persist one scoped queue item, idempotently by task id."""
@@ -3343,7 +3383,10 @@ class Database:
             async with self.reserved_session() as session:
                 existing = (await session.execute(select(TeamTask).where(TeamTask.id == values["id"]))).scalar_one_or_none()
                 if existing:
-                    return self._team_task_dict(existing) if existing.team_id == values["team_id"] else None
+                    return self._team_task_dict(existing) if existing.team_id == values["team_id"] and existing.protocol_version == 0 else None
+                if values.get("protocol_version", 0) != 0 or (await session.execute(
+                    select(AgentInstance.id).where(AgentInstance.team_id == values["team_id"]).limit(1))).first():
+                    return None
                 if await self._team_failed_without_assignments(session, values["team_id"]):
                     return None
                 maximum = (await session.execute(
@@ -3388,6 +3431,7 @@ class Database:
             changed = await session.execute(
                 update(TeamTask).where(
                     TeamTask.id == task_id, TeamTask.team_id == team_id,
+                    TeamTask.protocol_version == 0,
                     TeamTask.revision == expected_revision, TeamTask.status.in_(allowed_statuses),
                 ).values(**values)
             )
@@ -3418,7 +3462,7 @@ class Database:
             task = (await session.execute(select(TeamTask).where(
                 TeamTask.id == task_id, TeamTask.team_id == team_id,
             ))).scalar_one_or_none()
-            if task is None or task.current_attempt != attempt_number:
+            if task is None or task.protocol_version != 0 or task.current_attempt != attempt_number:
                 return None
             attempt_id = f"{task_id}:attempt:{attempt_number}"
             attempt = (await session.execute(select(TeamTaskAttempt).where(
@@ -3492,6 +3536,7 @@ class Database:
                     update(TeamTask)
                     .where(
                         TeamTask.id == task_id,
+                        TeamTask.protocol_version == 0,
                         TeamTask.status.in_(["queued", "pending"]),
                         *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                         or_(TeamTask.assigned_to.is_(None), TeamTask.assigned_to == agent_node_id),
@@ -3509,7 +3554,7 @@ class Database:
                     select(TeamTask).where(TeamTask.id == task_id)
                 )
                 task = selected.scalar_one_or_none()
-                if task is None:
+                if task is None or task.protocol_version != 0:
                     await session.rollback()
                     return None
 
@@ -3546,6 +3591,7 @@ class Database:
                     update(TeamTask)
                     .where(
                         TeamTask.id == task_id,
+                        TeamTask.protocol_version == 0,
                         TeamTask.status == "running",
                         *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                     )
@@ -3571,7 +3617,7 @@ class Database:
                 task = selected.scalar_one_or_none()
                 return {
                     "success": bool(
-                        task is not None and task.status == "submitted"
+                        task is not None and task.protocol_version == 0 and task.status == "submitted"
                         and (expected_attempt is None or task.current_attempt == expected_attempt)
                     )
                 }
@@ -3603,6 +3649,7 @@ class Database:
                     update(TeamTask)
                     .where(
                         TeamTask.id == task_id,
+                        TeamTask.protocol_version == 0,
                         TeamTask.status == "running",
                         *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                     )
@@ -3638,7 +3685,7 @@ class Database:
                 # released/terminal state and must not increment twice.
                 return {
                     "success": bool(
-                        task is not None
+                        task is not None and task.protocol_version == 0
                         and task.status in {"queued", "failed"}
                         and task.error == error
                         and (expected_attempt is None or task.current_attempt == expected_attempt)
@@ -3689,6 +3736,7 @@ class Database:
                 .where(
                     TeamTask.id == task_id,
                     TeamTask.team_id == team_id,
+                    TeamTask.protocol_version == 0,
                     TeamTask.status.in_(active_statuses),
                     *([TeamTask.current_attempt == expected_attempt] if expected_attempt is not None else []),
                 )
@@ -3708,7 +3756,7 @@ class Database:
                     )
                 )
             ).scalar_one_or_none()
-            if task is None:
+            if task is None or task.protocol_version != 0:
                 return {"found": False}
             if expected_attempt is not None and task.current_attempt != expected_attempt:
                 return {"found": True, "valid_state": False, "cancellation_applied": False}
@@ -3791,7 +3839,7 @@ class Database:
                 completed_ids = {t.id for t in tasks if t.status == "accepted"}
                 claimable = []
                 for t in tasks:
-                    if t.status != "queued":
+                    if t.status != "queued" or t.protocol_version != 0:
                         continue
                     deps = t.depends_on.get("task_ids", []) if t.depends_on else []
                     if all(d in completed_ids for d in deps):
@@ -3842,7 +3890,7 @@ class Database:
                 if agent_node_id:
                     query = query.where(or_(AgentMessage.to_agent == agent_node_id, AgentMessage.to_agent.is_(None)))
                 if unread_only:
-                    query = query.where(not AgentMessage.read)
+                    query = query.where(AgentMessage.read.is_(False))
                 query = query.order_by(AgentMessage.created_at.asc()).limit(100)
                 result = await session.execute(query)
                 return [
@@ -3872,7 +3920,7 @@ class Database:
                 result = await session.execute(
                     select(AgentMessage).where(
                         AgentMessage.team_id == team_id,
-                        not AgentMessage.read,
+                        AgentMessage.read.is_(False),
                         or_(AgentMessage.to_agent == agent_node_id, AgentMessage.to_agent.is_(None)),
                     )
                 )
@@ -4140,6 +4188,35 @@ class Database:
                 error=str(e),
             )
             return False
+
+    async def retire_subagent_permit(self, root_execution_id: str, permit_id: str) -> bool:
+        """Fence a confirmed orphan reservation, including an unacquired one.
+
+        A tombstone prevents an old acquisition from racing recovery and
+        recreating its lease after the owner has already been interrupted.
+        """
+        async def retire(session):
+            permit = await session.get(SubagentConcurrencyPermit, permit_id)
+            timestamp = datetime.now(timezone.utc)
+            if permit is None:
+                session.add(SubagentConcurrencyPermit(permit_id=permit_id, root_execution_id=root_execution_id,
+                    status="released", released_at=timestamp))
+            elif permit.root_execution_id != root_execution_id:
+                raise ValueError("Permit belongs to another root execution")
+            elif permit.status == "active":
+                changed = await session.execute(update(SubagentConcurrencyPermit).where(
+                    SubagentConcurrencyPermit.permit_id == permit_id,
+                    SubagentConcurrencyPermit.root_execution_id == root_execution_id,
+                    SubagentConcurrencyPermit.status == "active").values(status="released", released_at=timestamp))
+                if changed.rowcount == 1:
+                    await session.execute(update(SubagentConcurrencyCounter).where(
+                        SubagentConcurrencyCounter.root_execution_id == root_execution_id,
+                        SubagentConcurrencyCounter.active_count > 0).values(
+                        active_count=SubagentConcurrencyCounter.active_count - 1, updated_at=timestamp))
+            return {"released": True}
+        result, _ = await self.run_runtime_mutation(resource_type="subagent_concurrency",
+            resource_id=root_execution_id, operation="retire", mutate=retire)
+        return bool(result["released"])
 
     # ============================================================================
     # Google Connections - Customer Mode OAuth Storage

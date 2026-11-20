@@ -36,7 +36,8 @@ const MEMBER_TONE: Partial<Record<string, StatusTone>> = { working: 'working', i
 
 interface Props { nodeId: string; workflowId?: string; nodes: Node[]; edges: Edge[] }
 interface Member { agent_node_id: string; agent_type?: string; label?: string; status?: string }
-interface Task { id: string; title: string; status: string; assigned_to?: string; assignee_label?: string; queue_position?: number; child_workflow_id?: string; child_run_id?: string; temporal_status?: string; trace_id?: string }
+interface Task { id: string; title: string; status: string; assigned_to?: string; assigned_instance_id?: string; assignee_label?: string; queue_position?: number; child_workflow_id?: string; child_run_id?: string; temporal_status?: string; trace_id?: string }
+interface AgentInstance { id: string; template_node_id: string; display_name: string; role: string; state: string; active_run_id?: string; halt_reason?: string }
 
 const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges }) => {
   const { sendRequest, addEventListener } = useWebSocket();
@@ -96,7 +97,7 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
     const update = () => void refresh(true);
     const removers = ['team_event', 'team.task.queued', 'team.task.running', 'team.task.submitted',
       'team.task.accepted', 'team.task.failed', 'team.task.cancelled', 'workflow_control_status',
-      'workflow.control.status'].map((event) => addEventListener(event, update));
+      'workflow.control.status', 'agent.instance.updated'].map((event) => addEventListener(event, update));
     return () => removers.forEach((remove) => remove());
   }, [addEventListener, refresh]);
 
@@ -166,7 +167,7 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
     >
       <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-4 overflow-auto p-4 lg:grid-cols-[minmax(220px,0.75fr)_minmax(0,2fr)]">
         <section className={CARD}>
-          <h3 className={CARD_HEAD}>Connected agents <span className={COUNT}>{members.length}</span></h3>
+          <h3 className={CARD_HEAD}>{status?.instances?.length ? 'Connected templates' : 'Connected agents'} <span className={COUNT}>{members.length}</span></h3>
           <ul className="divide-y divide-border-default">
             {members.map((member) => {
               const state = member.status || 'connected';
@@ -182,6 +183,19 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
             })}
             {members.length === 0 && <li className="p-6 text-center text-sm text-fg-muted">No teammates connected.</li>}
           </ul>
+          {(status?.instances?.length || 0) > 0 && <>
+            <h3 className={CARD_HEAD}>Agent instances <span className={COUNT}>{status!.instances.length}</span></h3>
+            <ul aria-label="Agent instances" className="divide-y divide-border-default">
+              {(status!.instances as AgentInstance[]).map((instance) => <li key={instance.id} className="flex items-center gap-3 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-fg-default">{instance.display_name}</div>
+                  <div className={MONO_NOTE}>{instance.role} · {instance.id.slice(-8)}</div>
+                  <div className="text-2xs text-fg-muted">{instance.active_run_id ? 'Active run' : 'No active run'}{instance.halt_reason ? ' · Needs attention' : ''}</div>
+                </div>
+                <StatePill tone={instance.active_run_id ? 'working' : instance.state === 'idle' ? 'ready' : 'paused'}>{instance.state}</StatePill>
+              </li>)}
+            </ul>
+          </>}
         </section>
 
         <section className={cn(CARD, 'min-w-0')}>
@@ -197,7 +211,7 @@ const TeamMonitorPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
                       : 'Temporal execution not registered'}
                   </div>
                 </div>
-                <span className="text-xs text-fg-muted">{task.assignee_label || task.assigned_to || 'Unassigned'}</span>
+                <span className="text-xs text-fg-muted">{task.assignee_label || task.assigned_to || 'Unassigned'}{task.assigned_instance_id ? ` · ${task.assigned_instance_id.slice(-8)}` : ''}</span>
                 <div className="flex flex-col items-end gap-1">
                   <div className="flex items-center gap-1.5">
                     {task.queue_position ? <span className="font-mono text-2xs text-fg-muted">#{task.queue_position}</span> : null}

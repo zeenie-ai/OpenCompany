@@ -1,6 +1,6 @@
 # RLM Service -- Recursive Language Model Agent Integration
 
-> **Related docs:** [agent_context_flow.md](./agent_context_flow.md) for conversation continuity — RLM is a specialized provider, so a connected Context node reaches it through `SpecializedAgentContextBridge` (`services/cli_agent/context_bridge.py`); [tool_building_pipeline.md](./tool_building_pipeline.md) for how connected tool nodes are bound to the REPL via `ToolBridgeAdapter`. [memory_lifecycle.md](./ARCHIVE/memory_lifecycle.md) describes only the retired markdown memory path.
+> **Related docs:** [agent_context_flow.md](./agent_context_flow.md) for conversation continuity — reusable RLM instances have built-in history through `SpecializedAgentContextBridge`; legacy nodes use the same bridge when Context is connected. [CLI framework capabilities](./cli_agent_framework.md#reusable-job-instances) compares native/Pi, CLI and RLM delivery and continuation. [tool_building_pipeline.md](./tool_building_pipeline.md) describes canonical tool bindings. [memory_lifecycle.md](./ARCHIVE/memory_lifecycle.md) describes only the retired markdown memory path.
 
 ## Overview
 
@@ -9,6 +9,61 @@ The RLM (Recursive Language Models) service integrates the `rlms` library into O
 **Library**: [rlms](https://pypi.org/project/rlms/) (pip install rlms)
 **Paper**: https://arxiv.org/abs/2512.24601
 **Docs**: https://alexzhang13.github.io/rlm/
+
+### Reusable instances and continuation
+
+Generations admitted with `agent_lifecycle_version=1` run each RLM instance
+under one durable session owner. Its instance ID, run ID and job scope are
+trusted runtime inputs; two instances of one template do not share a transcript.
+The bridge loads the canonical MessageWire history without requiring a Context
+connection and renders it into each new RLM completion.
+
+Python variables, child REPLs and local execution state exist only for that
+completion. They are not serialized across runs or restarts. Follow-up messages
+remain queued for the next serialized turn; RLM does not claim native/Pi's
+complete model/tool-boundary mailbox delivery. The frozen capability record
+declares `conversation_replay`, `next_turn`, `ephemeral` REPL state and
+`effects_fence_and_drain` stop behavior.
+
+The service returns the full answer plus `agent_transcript` and
+`agent_admission_state`. The RLM node preserves these fields when unwrapping the
+service result, and its Output model and `NodeExecutor` retain them. The session
+owner separately commits the transcript revision and consumed delivery receipts,
+then records the full reviewed task result. Retrying that checkpoint never
+repeats the completion. A failed execution without a recorded response leaves
+its input unconsumed. Legacy Context saves retain their existing behavior.
+
+### Admission fencing and stopping an instance
+
+Before dispatch, `restore_gate` restores the durable run's invalid-request
+count and halt reason. The shared tool manifest expands every authorized
+binding and supplies its exact typed input validator. Missing required fields
+or positional arguments to a lifecycle callable are caught at the Python
+wrapper boundary, persisted as classified orchestration failures, and returned
+to the model. Each receipt includes the trusted run plus source position and
+occurrence: repeated calls within one completion remain distinct, while a
+replayed position in the same run keeps its identity.
+
+The initial invalid request plus two correction opportunities exhausts the
+budget. Unrelated successes do not reset it; infrastructure and revision
+conflicts do not count. Automatic next-turn admission cannot clear a halt.
+Instance tools are available even without an explicit Task Manager connection.
+
+[`guarded.py`](../server/services/rlm/guarded.py) checks the same revocable gate
+at actual synchronous/asynchronous provider dispatch, including root, recursive,
+registered secondary and fallback clients, and before bridged tool admission.
+It wraps the pinned vendor's construction seams per engine instead of changing
+process-global client factories. An incompatible vendor seam fails closed.
+This prevents a caught REPL tool error from opening a fresh nested completion
+after the halt.
+
+Cancelling the `asyncio.to_thread` awaiter alone would leave Python running.
+`run_fenced_completion` revokes admission and drains the underlying thread,
+including already-admitted work, before reporting cancellation. The session
+Activity uses cancellation-completed semantics and retains execution ownership
+until that drain finishes. This is not a suspended or restored REPL, nor a hard
+kill of arbitrary Python already executing. See [agent teams](agent_teams.md)
+for queued work, explicit recovery and generation lifecycle controls.
 
 ### Temporal generation Stop/Resume boundary
 
@@ -21,7 +76,9 @@ relaunching the recorded completed RLM work. It does not pause at individual
 REPL iterations or recursive calls, and heartbeats do not serialize a REPL
 checkpoint. Failure recovery and unrecorded effects remain subject to the
 Activity/tool retry and idempotency contract. Legacy generation behavior is
-preserved. See [Temporal workflow control](temporal-workflow-control.md) and
+preserved. The instance-specific `stop_agent` fence and drain described above
+adds exact execution control without claiming a REPL checkpoint. See
+[Temporal workflow control](temporal-workflow-control.md) and
 [RLM node control boundary](node-logic-flows/specialized_agents/rlm_agent.md#temporal-stopresume-boundary).
 
 ### How RLM Differs from Standard Agents
@@ -30,7 +87,7 @@ preserved. See [Temporal workflow control](temporal-workflow-control.md) and
 |--------|---------------------------------------------|----------------------|
 | Execution model | LLM -> tool call -> LLM -> tool call | LLM -> `\`\`\`repl` code block -> exec() -> stdout -> LLM |
 | Tool interface | Provider-neutral `AgentToolSpec` / `ToolDef` values with Pydantic validation | Python functions injected into REPL namespace |
-| State management | In-process `run_native_agent_loop` or durable Temporal `AgentWorkflow` transcript | Python variables in REPL namespace + `context` variable |
+| State management | In-process `run_native_agent_loop` or durable Temporal `AgentWorkflow` transcript | Ephemeral Python variables during a completion; reusable instances replay durable conversation on the next turn |
 | Completion signal | LLM stops making tool calls | LLM calls `FINAL(answer)` or `FINAL_VAR(variable_name)` |
 | Recursion | Attached Temporal children, detached Task Manager runners, or process-local delegation according to routing | `rlm_query()` spawns child RLM with own REPL |
 | Strengths | Structured tool calling, provider-agnostic | Complex reasoning, code-driven decomposition, recursive sub-problems |
@@ -84,7 +141,8 @@ NodeExecutor._dispatch()
        +-- ToolBridgeAdapter.bridge()       [server/services/rlm/adapters.py]
        |
        v
-     asyncio.to_thread(RLM.completion())    [rlm library, sync -> async bridge]
+     run_fenced_completion(...)            [guarded to_thread + cancellation drain]
+       +-- guarded RLM.completion()         [root/nested/fallback admission checks]
        |
        v
      Result formatting + memory save + broadcast
@@ -100,6 +158,7 @@ server/services/rlm/
   constants.py         # Provider maps, base URLs, default parameters
   adapters.py          # BackendAdapter, ChatModelExtractor, ToolBridgeAdapter
   service.py           # RLMService class with execute() method
+  guarded.py           # Per-engine provider admission guards + thread drain
 
 server/nodes/agent/rlm_agent/
   __init__.py          # RLMAgentNode plugin + execute_op orchestration
@@ -170,7 +229,7 @@ Bridges non-agent, non-chat-model tool nodes into RLM `custom_tools` dict format
 
 **How it works**:
 1. Filters out ordinary `AI_AGENT_TYPES` and `AI_CHAT_MODEL_TYPES` (the latter go through ChatModelExtractor). Under a frozen `pi_harness_version=1`, connected Coding Agent targets use the durable inline-delegation bridge instead of this ordinary-agent exclusion.
-2. For each remaining tool node, creates a sync callable wrapper
+2. Expands the canonical manifest, including multi-tool nodes, and creates one typed sync callable wrapper per binding
 3. The wrapper uses `asyncio.run_coroutine_threadsafe()` to call OpenCompany's `execute_tool()` dispatcher from RLM's synchronous REPL thread
 4. Returns dict in RLM custom_tools format: `{"tool_name": {"tool": callable, "description": str}}`
 
@@ -273,7 +332,7 @@ return await ai_service.rlm_service.execute(node_id, parameters, ...)
 | Function | Source | Purpose in RLM |
 |----------|--------|----------------|
 | `collect_agent_connections()` | `services/plugin/edge_walker.py` | Discover context, skills, tools, input, task connections (renamed Wave-11 successor to `handlers/ai.py::_collect_agent_connections`; the old handler file is gone) |
-| `SpecializedAgentContextBridge` | `services/cli_agent/context_bridge.py` | Context continuity for a connected Context node: `resolve` loads the stored conversation (`rlm/service.py:48-56`), `augment_prompt` renders it into the REPL prompt (`:202-203`), `record_turn(original_prompt, response)` saves the turn (`:230-234`) |
+| `SpecializedAgentContextBridge` | `services/cli_agent/context_bridge.py` | Mandatory history for reusable instances, optional connected Context for legacy runs; `augment_prompt` replays history, `turn_checkpoint` returns separately committed instance bookkeeping |
 | `prepare_agent_call()` | `nodes/agent/_inline.py` | Shared pre-dispatch helper — collects connections + injects task context + auto-prompt from upstream input |
 | `_build_skill_system_prompt()` | `services/ai.py` | Build system prompt from connected skill nodes |
 | `is_model_valid_for_provider()` | `services/ai.py` | Validate model name for provider |
@@ -351,8 +410,10 @@ Wave 11 / Wave 12 D5 refactors removed the surfaces they named.
 f"delegate_to_{cls.type}"` on every agent plugin (`services/plugin/base.py:257`).
 `rlm_agent` is listed in both `_AGENT_DELEGATION_TYPES` (`services/ai.py:2509`,
 the `DelegateToAgentSchema` gate) and `AI_AGENT_TYPES` (`server/constants.py:32`,
-the `execute_tool` dispatch gate). It stays on the legacy fire-and-forget path
-— excluded from `AGENT_WORKFLOW_TYPES` because its REPL state is externalised.
+the `execute_tool` dispatch gate). Legacy delegation keeps its fire-and-forget
+path. Reusable instances execute through the session owner's whole-node
+`agent.instance.execute` Activity; RLM remains outside `AGENT_WORKFLOW_TYPES`
+because its private REPL loop is not a native agent workflow.
 
 ### Frontend (was Phase 5)
 There is nothing per-agent to add. `specializedAgentNodes.ts` and the
@@ -365,3 +426,12 @@ the `visuals.json` fallback).
 ### RLM skill (was Phase 6)
 `server/skills/rlm_agent/rlm-reasoning-skill/SKILL.md` exists and covers REPL
 usage, the available functions, and decomposition strategies.
+
+## Deterministic lifecycle coverage
+
+- [Admission tests](../server/tests/services/test_rlm_admission.py) check actual root, nested, secondary and fallback dispatch fencing, stable callable receipts, and cancellation that waits for its worker thread.
+- [Orchestration boundary tests](../server/tests/services/cli_agent/test_orchestration_boundary.py) exercise missing/positional arguments through the real Python callable and durable invalid-request store.
+- [Instance adapter tests](../server/tests/services/cli_agent/test_instance_adapters.py) execute the RLM node through `NodeExecutor` and verify full answers and checkpoint metadata survive the output envelope.
+
+These checks use deterministic fixtures and fake providers. They establish
+protocol behavior, not comparative model performance or live provider quality.

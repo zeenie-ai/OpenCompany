@@ -1,5 +1,219 @@
 # Durable Agent Teams
 
+## Reusable instances (lifecycle version 1)
+
+Start records `agent_lifecycle_version=1` and the compatibility spelling
+`agent_protocol_version=1` in the generation manifest. Runtime routing uses that
+recorded selection. A generation admitted without the marker retains version 0
+on Resume, later trigger firings and Temporal replay; upgrading workers does
+not replace its tool contract. Employee recipe version, graph version and
+`execution_control_version` are separate selections.
+
+### Identities and isolation
+
+| Identity | Meaning and lifetime |
+|---|---|
+| Template node | Connected graph configuration: provider, model, tools, skills and authorized capabilities |
+| Agent instance | One reusable conversation within a job and generation; several instances may use the same template |
+| Agent run | One execution owned by that instance's session workflow |
+| Task | A reviewed work item, retained through changes, retries and reassignment |
+| Task attempt | One execution contract, including instructions, feedback, dependencies and configuration |
+
+The employee's Talk agent retains the owner conversation. Its
+`submit_job(instructions)` admits a durable job and returns an acknowledgement.
+Each job has an isolated lead and team; its handoff contains the request and
+captured source context. Instance transcripts do not replace Talk history.
+Reviewed final output appends to the original conversation with a stable
+delivery identity, or goes through the captured app destination and approval
+gate.
+
+The canonical `input-teammates` connections authorize templates. A bound spawn
+tool selects one of those templates; model arguments cannot select another
+workflow, generation, team or provider configuration. Instances use their own
+`agent-instance:<id>` output/session namespace and built-in plain MessageWire
+history even without a Context connection. They retain captured upstream
+outputs for input resolution. Peer messages stay inside the job and generation
+and are marked as agent input, never owner approval.
+
+### Model-facing tools
+
+The shared typed manifest is `services/agent_instances/tools.py`. It supplies
+the JSON schema, Pydantic validator, authorized binding and execution traits
+to native, Pi, CLI/MCP and RLM. Unknown arguments are rejected. Runtime dispatch
+uses the binding traits; the original model call ID and arguments remain in
+the transcript.
+
+| Available to | Tools |
+|---|---|
+| Talk | `submit_job(instructions)` |
+| Job lead | Bound `spawn_<teammate>(instructions, after?)` and `reassign_<teammate>(task_ref)`; `assign_task`, review and instance controls; all peer tools below |
+| Lead and teammates | `send_message`, `list_agents`, `get_agent`, `wait_for_agents`, `list_tasks`, `get_task`, `inspect_task` |
+
+`<teammate>` is the exposed binding suffix, derived from node type and a stable
+node-ID hash. Use the published name. Labels do not retarget a binding.
+Spawning requires only `instructions`; the runtime derives the display title
+and commits the instance, task, first attempt and startup inbox delivery
+together. `assign_task(agent, instructions, after?)` creates new reviewed work
+on an existing instance. Neither call asks a second model to invent acceptance
+criteria. The exact instruction text defines success.
+
+See the [complete tool contract](node-logic-flows/ai_tools/taskManager.md#lifecycle-version-1-tool-contract)
+for arguments and limits.
+
+### Reviewed task lifecycle
+
+```mermaid
+flowchart LR
+    blocked -->|prerequisites accepted| queued
+    queued -->|instance owns attempt| running
+    running -->|result recorded| submitted
+    running -->|execution error| failed
+    submitted -->|accept_task| accepted
+    submitted -->|request_changes or retry_task| queued
+    failed -->|retry_task or bound reassign| queued
+    blocked -->|cancel_task| cancelled
+    queued -->|cancel_task| cancelled
+    running -->|cancel_task and fence| cancelled
+    cancelled -->|retry_task or bound reassign| queued
+```
+
+Retry and reassignment return to `blocked` when prerequisites are unresolved.
+Only an `accepted` prerequisite satisfies `after`; a cancellation, idle worker,
+message receipt or submitted result never does. Dependencies must belong to
+this job/generation and cannot form a cycle.
+
+Task reads return `task_ref` and `allowed_actions`. The opaque, versioned
+reference carries the observed team, task, revision, attempt and status.
+Mutations validate those observations atomically in a reserved write
+transaction. A `stale_reference` requires a fresh read; it does not consume the
+invalid-request budget. A raw task ID is accepted for reads, but cannot replace
+the required mutation reference.
+
+| Operation | Allowed source state | Effect |
+|---|---|---|
+| `modify_task(task_ref, instructions, after?)` | `blocked`, `queued` | Replace unstarted instructions; omitted `after` preserves dependencies |
+| `request_changes(task_ref, feedback)` | `submitted` | Append feedback and create the next attempt on the same instance |
+| `accept_task(task_ref)` | `submitted` | Accept the result and unblock eligible dependents |
+| `retry_task(task_ref)` | `failed`, `submitted`, `cancelled` | New attempt with the same requirements, feedback and instance history |
+| `reassign_<teammate>(task_ref)` | `failed`, `submitted`, `cancelled` | Fresh target instance, same task and retained contract, new attempt |
+| `cancel_task(task_ref, reason?)` | `blocked`, `queued`, `running` | Fence and stop its executor; leave the instance reusable |
+
+Attempts snapshot the effective contract. Feedback is appended once under the
+mutation's request identity; it does not overwrite the original instructions.
+The stored task attempt budget defaults to three retries after attempt zero.
+A late or superseded executor cannot submit into a later attempt.
+
+`finish_team` requires all tasks accepted or cancelled; managed employee teams
+must also have assigned work. Final employee delivery is a separate, stricter
+gate: at least one task and every task accepted. Failed or cancelled work must
+be resolved before delivery. A nonempty final lead response and the original
+delivery/approval gates still apply. A finish receipt or model response alone
+does not bypass those gates.
+
+### Serialized execution and durable messaging
+
+`AgentInstanceSessionWorkflow` owns the instance's turns. Assignments, peer
+messages, review notices and follow-ups enter its inbox. One active run owns
+the transcript; revision and run-fence checks prevent concurrent or late writes.
+Submission and its lead-review notification commit together. For version 1,
+an external `taskTrigger` event validates the persisted task, owning instance,
+lead, job and generation and only wakes the original lead. It never creates a
+competing review invocation or a replacement lead after Reset.
+
+| Delivery state | Meaning |
+|---|---|
+| `queued` | Committed for a recipient, awaiting admission |
+| `admitted` | Assigned to an owning run |
+| `consumed` | A durable response/checkpoint was recorded with receipt advancement |
+| `held` | Explicit recovery is needed, for example a peer-chain limit or a failed run before checkpoint |
+| `cancelled` | The input was superseded or its owning execution was interrupted |
+| `recipient_closed` | Job retirement or Reset disposed the pending delivery |
+
+`consumed` does not assert understanding, task completion or acceptance.
+Admission assigns an ordered recipient sequence and fingerprints the trusted
+sender, request and payload. A duplicate request returns its original receipt;
+reusing that identity with changed content raises `idempotency_conflict`.
+Transcript changes and consumed receipts commit atomically. CLI continuation
+uses the provider session; native/Pi mailbox input is admitted only after all
+outstanding tool results have been recorded. Opaque runtimes use the next turn.
+
+Temporal signals accelerate delivery; database inbox records remain the
+recovery source. The reconciler retries deterministic owner starts and wakeups.
+Recovery scans rotate durably across recipients, skip blocked-only inboxes and
+retain active owners for recovery checks. An embedded worker retries reconciler
+startup independently of healthy polling and reaps that retry task at shutdown.
+Run records retain physical execution permits so confirmed terminated owners
+can release them. Transport errors do not prove that an executor stopped.
+
+Queueing does not acquire root concurrency. Active descendants acquire capacity
+once; idle instances hold none. Native/Pi waits park, release capacity and Pi
+driver resources, then acquire fresh physical leases on continuation. Opaque
+adapters that cannot yield their execution lease return `pending` immediately.
+`wait_for_agents` accepts at most 30 seconds and never implies task acceptance.
+
+### Coordination limits
+
+| Setting | Default | Enforcement |
+|---|---|---|
+| `AGENT_PEER_MESSAGE_BYTES` | 8,192 bytes | UTF-8 bytes in one peer message |
+| `AGENT_PENDING_MESSAGES` | 256 | Pending peer deliveries per recipient, including queued, admitted and held |
+| `AGENT_PENDING_BYTES` | 1,048,576 bytes | Combined UTF-8 peer content per recipient |
+| `AGENT_PEER_CHAIN_TURNS` | 8 | Automatically induced turns in a causal peer-message chain |
+
+Excess peer sends return `message_too_large` or `inbox_full` before persistence.
+Mandatory assignment/review notices bypass peer quotas. Chain identity follows
+replies and induced reviews; reaching the limit holds further messages and
+records a notice. Explicit `resume_agent` releases held input and grants the
+chain another configured allowance. Automatic wakeups cannot clear a halt.
+
+### Stop, Resume, Reset and review recovery
+
+| Control | Effect |
+|---|---|
+| `stop_agent(agent)` | Halt new admission, fence the current executor and record interruption; do not silently retry its task |
+| `resume_agent(agent)` | Once the executor has drained, reopen the same instance and held inbox; failed tasks still need `retry_task` |
+| `close_agent(agent)` | Atomically require no active run, unresolved assigned work or pending inbox before closing |
+| Generation Stop / Resume | Preserve queues and continuations under the generation controller; resume existing work |
+| Generation Reset | Close/fence old instances, cancel queued/blocked/running tasks and explicitly dispose pending deliveries; never redirect them to replacement instances |
+| **Retry review** | Owner-authenticated, idempotent recovery of the same halted job lead and existing tasks |
+
+The third classified invalid orchestration request halts the logical run after
+the initial error and two correction opportunities. The counter and original
+call identities survive continuation and retries; unrelated successes do not
+reset it. Infrastructure failures and revision conflicts are not counted.
+Already admitted operations may settle, but new provider requests and effects
+are fenced, including RLM root, nested and fallback calls.
+
+A failed/halted lead with existing child work leaves the employee job
+`review_blocked` when no protected delivery/approval outcome already exists.
+Valid child work remains available. `retry_employee_review` and the employee
+Work view's **Retry review** button resume the original lead without recreating
+assignments, changing models or rerunning accepted work. An automatic review
+notice cannot perform that recovery.
+
+### Observation and implementation
+
+Team Monitor distinguishes graph templates, instances, active runs and reviewed
+tasks. Public task, attempt and run results are bounded summaries; full results
+remain in storage. `inspect_task` exposes a 4,000-character `result_excerpt`
+and `next_cursor`, including literal searches over retained results. Result
+cursors are distinct from Temporal trace cursors. Stored results remain
+readable when the trace service is unavailable.
+
+The current implementation is in `server/services/agent_instances/`,
+`server/models/agent_instances.py` and
+`server/services/temporal/agent_instance_workflow.py`. The
+[delegation runtime guide](agent_delegation.md#version-1-execution-path) describes
+adapter continuation and execution ownership. Deterministic tests establish
+protocol behavior; they do not establish comparative small-model performance.
+The [validation record](agent_lifecycle_validation.md) lists the exercised
+acceptance scenarios, exact suite results, skipped cases and environment limits.
+
+## Legacy generations (version 0)
+
+The remaining sections document the retained compatibility protocol for
+already-admitted histories, not version 1 arguments or conversation identity.
+
 OpenCompany team leads (`orchestrator_agent` and `ai_employee`) coordinate
 agents connected to their canonical `input-teammates` handle. The topology is
 the authorization boundary: ordinary tool edges and agents belonging to other
@@ -17,9 +231,10 @@ graphs.
 
 Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
 
-**Teams and context — Current implementation.**
+**Teams and context — Historical version 0 baseline.** This image predates
+reusable instances and is not the lifecycle version 1 ownership diagram.
 
-[![Teams and context (Current implementation)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
+[![Teams and context (historical baseline)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
 
 [Editable Mermaid](../docs/diagrams/architecture/09-teams-context.mmd) · [Source evidence and limitations](../docs/diagrams/architecture/09-teams-context.brief.md)
 

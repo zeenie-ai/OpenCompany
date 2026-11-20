@@ -661,6 +661,11 @@ class TeamTask(SQLModel, table=True):
     priority: int = Field(default=3)  # 1-5, lower = higher priority
     created_by: str = Field(max_length=255)  # agent_node_id
     assigned_to: Optional[str] = Field(default=None, max_length=255)
+    # Protocol 1 separates a graph template from its reusable conversation.
+    assigned_instance_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    assigned_run_id: Optional[str] = Field(default=None, max_length=255)
+    protocol_version: int = Field(default=0)
+    review_feedback: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
     workflow_id: Optional[str] = Field(default=None, index=True, max_length=255)
     execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
     root_execution_id: Optional[str] = Field(default=None, index=True, max_length=255)
@@ -704,6 +709,9 @@ class TeamTaskAttempt(SQLModel, table=True):
     team_id: str = Field(index=True, max_length=255)
     attempt_number: int
     assignee_node_id: Optional[str] = Field(default=None, max_length=255)
+    assigned_instance_id: Optional[str] = Field(default=None, max_length=255)
+    assigned_run_id: Optional[str] = Field(default=None, max_length=255)
+    input_snapshot: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     status: str = Field(default="queued", max_length=20)
     child_workflow_id: Optional[str] = Field(default=None, max_length=500)
     child_run_id: Optional[str] = Field(default=None, max_length=255)

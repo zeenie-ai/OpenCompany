@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, ClassVar, Dict, FrozenSet, List, Mapping, Optional, Type
 
-from pydantic import BaseModel, ConfigDict, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from core.logging import get_logger
 from services.plugin.base import BaseNode
@@ -120,6 +120,35 @@ class ToolBinding:
     schema: Dict[str, Any]
     #: Settings a call of it runs with, over the node's own.
     parameters: Dict[str, Any] = field(default_factory=dict)
+    #: Shared validation contract for native, MCP and Python adapters.
+    args_schema: Optional[Type[BaseModel]] = None
+    #: Trusted execution properties, never supplied by model arguments.
+    execution_traits: FrozenSet[str] = frozenset()
+
+
+def binding_input_model(binding: ToolBinding) -> Type[BaseModel]:
+    """Supply a validator/signature for schema-only remote multi-tool bindings."""
+    if binding.args_schema is not None:
+        return binding.args_schema
+    from typing import Annotated
+    from jsonschema import Draft202012Validator
+    schema = inline_schema_refs(binding.schema)
+    validator = Draft202012Validator(schema)
+
+    @model_validator(mode="before")
+    def validate_arguments(cls, value):
+        errors = sorted(validator.iter_errors(value), key=lambda error: str(error.path))
+        if errors:
+            raise ValueError(errors[0].message)
+        return value
+
+    required = set(schema.get("required") or [])
+    fields = {}
+    for name, prop in (schema.get("properties") or {}).items():
+        annotation = Annotated[Any, Field(json_schema_extra=prop)]
+        fields[name] = (annotation, ... if name in required else prop.get("default"))
+    return create_model("BoundToolInput", __config__=ConfigDict(extra="forbid" if schema.get("additionalProperties") is False else "allow"),
+                        __validators__={"validate_arguments": validate_arguments}, **fields)
 
 
 class ToolNode(BaseNode, abstract=True):

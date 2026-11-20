@@ -138,6 +138,21 @@ class AgentTeamService:
         if not team_id:
             return {"error": "Team not found"}
         status = await self.database.get_team_stats(team_id)
+        if not status.get("error") and hasattr(self.database, "get_session"):
+            from models.agent_instances import AgentInstance
+            from sqlmodel import select
+            async with self.database.get_session() as session:
+                instances = (await session.execute(select(AgentInstance).where(
+                    AgentInstance.team_id == team_id).order_by(AgentInstance.created_at, AgentInstance.id))).scalars().all()
+            status["instances"] = [{"id": item.id, "template_node_id": item.template_node_id,
+                "display_name": item.display_name, "role": item.role, "state": item.state,
+                "active_run_id": item.active_run_id, "halt_reason": item.halt_reason} for item in instances]
+            for member in status.get("members", []):
+                owned = [item for item in instances if item.template_node_id == member["agent_node_id"]]
+                if owned:
+                    member["instance_count"] = len(owned)
+                    member["active_run_count"] = sum(bool(item.active_run_id) for item in owned)
+                    member["status"] = "working" if member["active_run_count"] else "idle"
         if workflow_id and team_lead_node_id and not status.get("error"):
             executions = await self.database.list_team_executions(
                 workflow_id, team_lead_node_id
@@ -242,6 +257,8 @@ class AgentTeamService:
         task = await self.database.get_durable_team_task(team_id, task_id)
         if not task:
             raise ValueError("Task not found in this lead execution")
+        if task.get("protocol_version") == 1:
+            raise ValueError("This task belongs to a reusable agent. Use the instance task tools with its current task_ref so attempts and review messages remain consistent.")
         now = datetime.now(timezone.utc)
         transitions: Dict[str, tuple[List[str], Dict[str, Any], bool]] = {
             "modify": (["blocked", "queued"], {k: payload[k] for k in ("title", "mission", "context", "acceptance_criteria") if payload.get(k) is not None}, False),

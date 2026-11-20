@@ -220,7 +220,7 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
         state = "waiting"
         steps.insert(0, _step("browser", "Waiting for your help in the browser", "Employee", "waiting", node_id=browser_request.get("node_id")))
     job_message = None
-    if job_status and job_status.get("state") in {"failed", "cancelled", "waiting_for_approval", "delivery_needs_review"}:
+    if job_status and job_status.get("state") in {"failed", "cancelled", "waiting_for_approval", "delivery_needs_review", "review_blocked"}:
         state = _state(job_status["state"]) if job_status["state"] in {"failed", "cancelled"} else "waiting"
         job_message = job_status.get("message")
     paused = getattr(control, "status", None) in {"paused", "pausing"} and (steps or state in {"queued", "running", "waiting", "reviewing", "stopping"})

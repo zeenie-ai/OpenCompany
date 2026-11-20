@@ -2,9 +2,8 @@
 
 Stored conversations are returned only from ``get_agent_context`` after the
 saved workflow is verified to own the requested Context node. Conversations
-are keyed by ``(workflow_id, generation, agent_node_id)`` in the plain
-conversation store; the Context node is the opt-in switch and the viewing
-surface, not the key.
+include legacy node conversations and isolated instance conversations. The
+Context node is an optional viewer; instance history is owned by its session.
 """
 
 from __future__ import annotations
@@ -100,10 +99,31 @@ def _empty_context() -> Dict[str, Any]:
         "conversations": [],
         "generation": None,
         "agent_node_id": None,
+        "agent_instance_id": None,
         "updated_at": None,
         "message_count": 0,
         "messages": [],
     }
+
+
+async def _instance_conversations(database: Any, workflow_id: str) -> list[dict]:
+    from sqlalchemy import func
+    from sqlmodel import select
+    from models.agent_instances import AgentInstance, AgentInstanceConversation
+
+    # Only metadata is loaded for the selector; fetch one full transcript below.
+    async with database.get_session() as session:
+        result = await session.execute(select(
+            AgentInstance.id, AgentInstance.template_node_id, AgentInstance.generation,
+            AgentInstance.display_name, AgentInstance.job_id,
+            AgentInstanceConversation.updated_at,
+            func.json_array_length(AgentInstanceConversation.messages),
+        ).join(AgentInstanceConversation, AgentInstanceConversation.instance_id == AgentInstance.id)
+          .where(AgentInstance.workflow_id == workflow_id))
+        return [{"workflow_id": workflow_id, "agent_instance_id": row[0],
+                 "agent_node_id": row[1], "generation": row[2], "display_name": row[3],
+                 "job_id": row[4], "updated_at": row[5].isoformat() if row[5] else None,
+                 "message_count": row[6] or 0} for row in result.all()]
 
 
 @ws_response
@@ -131,11 +151,12 @@ async def handle_get_agent_context(
         context_node_id=context_node_id,
     )
     agent_node_id = str(data.get("agent_node_id") or "") or None
+    instance_id = str(data.get("agent_instance_id") or "") or None
 
     database = _database()
     rows = await list_conversations(database, workflow_id=workflow_id)
-    # list_conversations orders newest generation first; the live context
-    # is that generation only.
+    rows.extend(await _instance_conversations(database, workflow_id))
+    rows.sort(key=lambda row: (row["generation"], row.get("updated_at") or ""), reverse=True)
     live_generation = rows[0]["generation"] if rows else None
     conversations = [
         row for row in rows if row["generation"] == live_generation
@@ -144,7 +165,8 @@ async def handle_get_agent_context(
         (
             row
             for row in conversations
-            if agent_node_id is None or row["agent_node_id"] == agent_node_id
+            if (row.get("agent_instance_id") == instance_id if instance_id else
+                (agent_node_id is None or (not row.get("agent_instance_id") and row["agent_node_id"] == agent_node_id)))
         ),
         None,
     )
@@ -153,18 +175,24 @@ async def handle_get_agent_context(
         context["conversations"] = conversations
         return {"success": True, "context": context}
 
-    messages = await load_conversation(
-        database,
-        workflow_id=workflow_id,
-        generation=selected["generation"],
-        agent_node_id=selected["agent_node_id"],
-    )
+    if selected.get("agent_instance_id"):
+        from services.agent_instances.service import AgentInstanceService
+        transcript = await AgentInstanceService(database).get_transcript(selected["agent_instance_id"])
+        messages = transcript["messages"]
+    else:
+        messages = await load_conversation(
+            database, workflow_id=workflow_id, generation=selected["generation"],
+            agent_node_id=selected["agent_node_id"],
+        )
     return {
         "success": True,
         "context": {
             "conversations": conversations,
             "generation": selected["generation"],
             "agent_node_id": selected["agent_node_id"],
+            "agent_instance_id": selected.get("agent_instance_id"),
+            "display_name": selected.get("display_name"),
+            "job_id": selected.get("job_id"),
             "updated_at": selected["updated_at"],
             "message_count": len(messages),
             "messages": messages,
@@ -244,6 +272,8 @@ async def handle_clear_agent_context(
         workflow_id=workflow_id,
         context_node_id=context_node_id,
     )
+    if data.get("agent_instance_id"):
+        raise NodeUserError("Instance history is managed by its job and cannot be cleared here")
     agent_node_id = str(data.get("agent_node_id") or "") or None
     cleared = await forget_conversations(
         _database(),

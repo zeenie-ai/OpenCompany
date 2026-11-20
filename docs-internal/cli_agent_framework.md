@@ -1,5 +1,88 @@
 # AI CLI Agent Framework
 
+## Reusable job instances
+
+Generations admitted with `agent_lifecycle_version=1` (also carried as the
+compatibility alias `agent_protocol_version=1`) bind provider sessions, workspaces and MCP authority
+to a job-scoped agent instance. The template supplies frozen configuration;
+the instance owns conversation history, and each serialized execution has its
+own `agent_run_id`. Existing generations retain their legacy contracts.
+
+Capabilities are frozen at instance admission by
+[`runtime_capabilities`](../server/services/agent_instances/capabilities.py):
+
+| Runtime | Follow-up delivery | Continuation | Stop completion |
+|---|---|---|---|
+| Native / Pi | Complete model/tool boundary, after all tool results | Canonical instance transcript | Cooperative durable checkpoint |
+| Claude Code | Next serialized turn | Exact provider session UUID | Exact process termination and drain |
+| Codex CLI | Next serialized turn | Exact provider thread ID | Exact process termination and drain |
+| RLM | Next serialized turn | Replay of instance conversation; REPL variables are ephemeral | Revoke provider/tool admission, then drain the execution thread |
+
+Every instance has built-in MessageWire history without a Context connection.
+The session owner runs opaque adapters through `agent.instance.execute`,
+preserving trusted scope through the node executor. The adapter returns
+`agent_transcript` and `agent_admission_state`; a separate checkpoint Activity
+commits the transcript revision and consumed inbox receipts together. A failed
+turn with no response does not consume its input. Checkpoint retries do not
+rerun the provider. Full responses survive the service, plugin Output validator
+and node result envelope before reviewed task storage; the legacy 4,000-character
+presentation cut does not apply to instance results.
+
+### Provider continuation and startup recovery
+
+Claude pool keys include workflow, template, generation, instance, principal
+and job. Its stable checkout is `<workspace>/<node>/<instance>/wt_session`.
+Before first launch, the runtime persists the chosen UUID, resolved cwd,
+provider, storage owner and an `opening` startup record. Warm turns reuse the
+process; eviction or restart uses the persisted UUID with `--resume`. Template
+`session_id`, `resume_session_id` and `continue_session` values cannot override
+an instance's durable identity. Clearing a legacy Context conversation excludes
+instance pool entries.
+
+Codex uses the same stable instance checkout and managed `CODEX_HOME`. It
+persists the startup record before launch and the exact thread ID on
+`thread.started`. Later turns use `exec resume --json ... -- <thread-id> <prompt>`.
+If the worker dies after recording startup but before recording the returned
+thread ID, continuation fails instead of launching a fresh thread.
+
+Both adapters reject a changed provider/storage owner, missing or changed cwd,
+or absent required continuation identity with `continuation_unavailable`.
+They validate the existing checkout before any worktree creation. A native
+provider's missing-session error remains a failed turn; there is no fresh-session
+fallback. Session files must remain on their owning worker/storage, and instance
+checkouts survive normal process cleanup. A native resume sends the new input;
+it does not prepend the canonical conversation again.
+
+### Shared tools and bounded correction
+
+[`ToolBinding`](../server/services/plugin/tool.py) carries the public JSON
+schema, typed validator and trusted execution traits. `agent_bindings.node_tools`
+expands every binding from a connected node for native/Pi, CLI/MCP and RLM.
+Lifecycle bindings use the same manifest as the instance service. Required
+fields such as `spawn_<teammate>(instructions)` and unknown-field rejection
+remain identical across adapters. Instance tools are supplied even when the
+template has no explicit Task Manager connection.
+
+MCP `tools/list` exposes the authenticated batch's schema. Its `call_tool`
+boundary validates lifecycle arguments before FastMCP signature binding, so
+missing required arguments consume the same correction budget as dispatcher
+validation. Scope, operation and template come from the trusted binding, never
+the model's arguments. Receipt IDs include the authenticated run, transport
+session and request ID: a transport retry deduplicates, while the same provider
+ID in another turn is distinct.
+
+The first invalid orchestration request and two correction opportunities are
+persisted before returning errors. At three classified argument/operation
+failures, the shared admission gate halts further calls and terminates the exact
+CLI invocation. Infrastructure failures, revision conflicts and unrelated tool
+validation do not consume this budget; successful calls do not reset it. A new
+opaque execution restores durable admission state before provider dispatch.
+Automatic inbox wakeups cannot reopen a halted instance. See
+[agent teams](agent_teams.md) for explicit recovery and reviewed completion.
+
+These are OpenCompany-owned agent lifecycles. Vendor-native helpers inside a
+CLI invocation are not automatically registered as OpenCompany teammates.
+
 Multi-instance, multi-provider runtime for AI CLI agents (Claude Code, Codex, Gemini). One workflow node spawns N parallel CLI sessions over a list of tasks, each isolated in its own git worktree, each able to call back into OpenCompany over MCP.
 
 For Codex setup, Auto model selection, log diagnosis and development restarts,
@@ -50,8 +133,8 @@ BatchResult { tasks: [SessionResult, ...], n_succeeded, n_failed, total_cost_usd
 Temporal keeps the long run alive with activity heartbeats (the per-type activity's periodic
   heartbeat in BaseNode; the legacy execute_node_activity path heartbeats while waiting in
   NodeExecutionActivities._execute_via_websocket)
-SessionResult.response is truncated to 4000 chars where the result is built
-  (ClaudeSessionPool._build_result_from_events; AICliSession does the same)
+Legacy SessionResult.response is truncated to 4000 chars where the result is built.
+  Instance runs retain full response and checkpoint metadata instead.
 ```
 
 Reuses (do not duplicate):
@@ -75,6 +158,11 @@ Activity, including its subprocess and MCP work, to settle under its scheduled
 policy. Result bookkeeping completes normally before the graph/parent agent
 waits. Generation Resume releases the existing continuation; it does not create
 a replacement CLI task or repeat a recorded completed Activity.
+
+Reusable instances additionally have their session owner and exact run fence.
+`stop_agent` cancels that invocation and waits for provider cleanup before the
+owner completes the run. Its queues and continuation remain durable; this does
+not claim a checkpoint inside the CLI's private model/tool loop.
 
 Claude's native `--resume <session_id>`, warm session reuse, and pool crash
 recovery are separate provider/session mechanisms described below. Generation
@@ -160,7 +248,8 @@ All flags documented at
 Skill materialisation and the bearer-token MCP server are wired in
 `nodes/agent/claude_code_agent/_pool.py:_spawn`. **Every Claude run
 routes through the pool** (`AICliService.run_batch`): memory- or
-Context-bound runs get one warm session keyed by the conversation;
+Context-bound legacy runs get one warm session keyed by the conversation;
+instance runs use the full scoped `AgentPoolKey` described above;
 unbound runs get one ephemeral session per task keyed by
 `<node_id>:<turn_execution_id>:<index>` and terminated once the batch
 settles. `AICliSession` (PTY + on-disk JSONL watcher) is no longer used
@@ -434,8 +523,8 @@ publishes its totals at the top level.
     "provider": "claude|codex|gemini",
     "prompt": "...",
     "branch": "opencompany/t_<8hex>",
-    "worktree_path": "<abs path, removed after batch>",
-    "response": "<truncated to 4000 chars>",
+    "worktree_path": "<abs path; retained for a reusable instance>",
+    "response": "<full instance response; legacy responses capped at 4000 chars>",
     "cost_usd": 0.42,
     "duration_ms": 18234,
     "num_turns": 7,
@@ -468,9 +557,14 @@ publishes its totals at the top level.
 
 Codex usage comes from `turn.completed`, with cached input separated from
 uncached input. Cost derivation can still be unknown when no priced requested
-model is available, including Auto. A thread id identifies the native run; this
-node does not expose native resume. Context-bound node output clears
-`session_id` so it is not mistaken for a continuation handle.
+model is available, including Auto. Reusable instances persist the native thread
+ID for explicit resume. Legacy Context-bound node output clears `session_id`;
+that path still uses the stored-conversation prompt bridge.
+
+Instance node results also carry `agent_transcript` (messages, expected revision,
+delivery IDs and checkpoint request ID) and `agent_admission_state`. These fields
+survive Output validation and the `NodeExecutor` result envelope so the durable
+session owner can checkpoint them separately from provider execution.
 
 Failed turns remain failures. Nested JSON API errors are decoded into readable
 task errors and safe `provider_data.error_code` / `status_code` metadata.
@@ -479,6 +573,9 @@ trigger model substitution or a retry. A provider rejection before generation
 can legitimately have an empty response and zero token usage.
 
 ## Memory bridge — `simpleMemory` → `claude_code_agent`
+
+This section describes legacy graph invocations. Reusable instances use their
+own provider continuation record and ignore a memory node's native session ID.
 
 > See [memory_lifecycle.md](./ARCHIVE/memory_lifecycle.md) for the shared markdown surface (every agent uses the same `parse_memory_markdown` / `append_to_memory_markdown` / `trim_markdown_window` helpers to maintain `simpleMemory.memory_content`). This section documents what's UNIQUE to `claude_code_agent`: the markdown is the UI mirror, not the resume channel.
 
@@ -690,6 +787,9 @@ Unit tests (in `server/tests/services/cli_agent/`):
 - `test_codex_login_catalogue.py` — issue #128 status-to-marker/catalogue/broadcast acceptance through the real shared marker helpers.
 - `test_codex_auth_probe.py` — non-installing status/logout probes, missing/outdated pinned launcher guidance, installer-lock independence, managed environment and sanitized failures.
 - `test_codex_session.py` — chunked JSONL and final lines, drained pipes, failure/timeout/cancel cleanup, Context capture and isolated environment.
+- `test_instance_adapters.py` — explicit resume arguments, capability declarations, failed-response receipts, and full response/checkpoint preservation through actual node execution for Claude, Codex and RLM.
+- `test_orchestration_boundary.py` — real MCP prevalidation, durable correction counts, RLM callable validation, startup obligations and exact workspace recovery.
+- `test_workflow_tool_context.py` — authenticated tool scope and run-scoped request identity across retries and sequential turns.
 
 `tests/nodes/test_codex_parameters.py` compares Codex and Claude nullable-list
 handling through saved parameters, frozen snapshots and real Temporal Activity
@@ -713,8 +813,8 @@ Live verification (needs a real Claude install + auth):
 
 - **Codex authentication status is local.** `codex login status` confirms locally stored credentials; a later server-side revocation can still fail a task. Personal terminal logins use a different `CODEX_HOME` and do not connect the app automatically.
 - **Gemini deferred.** `factory.create_cli_provider("gemini")` raises `NotImplementedError` (the one name-specific branch left in the factory, kept so the dropdown can grey it out). v2 work: implement the provider, register it from a `nodes/agent/gemini_cli_agent/` plugin folder, and drop that branch. ~430 LoC. No abstraction changes needed.
-- **Codex remains one process per task.** Native resume, warm pooling, budget caps, and turn limits are not exposed by the node. Context continuity uses the existing stored-conversation bridge.
-- **Claude pool gaps.** Context-bound runs lose Claude's own session after a reap or eviction, the stored transcript is re-sent on every warm turn, the spawn inherits the backend's environment while passing `--ide`, `getCredential` / `broadcastLog` are model-visible, and warm reuse keeps the spawn-time flags and skill descriptors. Details in [claude_code_interactive_mode.md → Known gaps](./claude_code_interactive_mode.md#known-gaps).
+- **Codex remains one process per turn.** Reusable instances use explicit native resume; legacy Context continuity uses the stored-conversation bridge. Warm pooling, budget caps and turn limits are not exposed by the node.
+- **Claude legacy Context gaps.** Legacy Context-bound runs lose Claude's own session after a reap or eviction and re-send the rendered transcript. Reusable instances instead persist their UUID and resume it. Other pool considerations remain in [claude_code_interactive_mode.md → Known gaps](./claude_code_interactive_mode.md#known-gaps).
 - **Native-binary stdin sensitivity.** claude-code >= 2.1.162 ships a native binary that reads stdin during `auth login`. We spawn it with `stdin=asyncio.subprocess.PIPE` (never written) so the read blocks and the OAuth callback server stays alive; an inherited/closed stdin EOFs the binary into an early exit that drops the browser callback. If a future CLI version changes its stdin contract this is the spot to revisit.
 - **Marker token written without verifying CLI is actually functional** — we trust `claude auth status`'s exit code. If Anthropic invalidates the token server-side and the CLI hasn't re-checked, the modal still shows Connected until the next session attempt's `detect_auth_error` catches it.
 - **MCP SDK is pre-1.0-stable.** Pinned at `mcp>=1.0.0`. The surface is isolated in `mcp_server.py` so an SDK breaking change touches one file.

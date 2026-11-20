@@ -47,6 +47,10 @@ class RLMService:
         start_time = time.time()
         context_bridge = None
         route = None
+        from services.agent_instances.admission import restore_gate
+        admission = await restore_gate(context, database)
+        if (context or {}).get("agent_instance_id"):
+            context_data = {**(context_data or {}), **context, "kind": "context", "workflow_id": workflow_id}
         if (context_data or {}).get("kind") == "context":
             from services.cli_agent.context_bridge import (
                 SpecializedAgentContextBridge,
@@ -150,6 +154,11 @@ class RLMService:
             from services.skill_runtime import skill_tool_info
 
             effective_tool_data = list(tool_data or [])
+            if (context or {}).get("agent_instance_id") and ai_service is None:
+                from services.plugin.deps import get_ai_service
+                ai_service = get_ai_service()
+            if (context or {}).get("agent_instance_id") and not any(item.get("node_type") == "taskManager" for item in effective_tool_data):
+                effective_tool_data.append({"node_type": "taskManager", "node_id": f"{node_id}:instance_tools", "parameters": {}})
             if (context or {}).get("pi_harness_version") == 1 and any(item.get("node_type") == "coding_agent" for item in effective_tool_data):
                 effective_tool_data.append({"node_type": "_builtin_check_delegated_tasks", "node_id": "",
                                             "parameters": {}, "label": "Check Delegated Tasks"})
@@ -157,33 +166,21 @@ class RLMService:
             if progressive_skill_tool:
                 effective_tool_data.append(progressive_skill_tool)
             if ai_service is not None:
-                from services.plugin.tool import node_tool_bindings
+                from services.agent_bindings import node_tools
 
                 canonical_tool_data = []
                 for tool_info in effective_tool_data:
-                    if await node_tool_bindings(tool_info) is not None:
-                        raise ValueError(
-                            f"An RLM agent can't use {tool_info.get('label') or tool_info.get('node_type')!r}: "
-                            "it gives several tools. Connect it to an AI Agent instead."
-                        )
-                    tool, execution = await ai_service._build_tool_from_node(
-                        tool_info
-                    )
-                    if tool is None or execution is None:
+                    tool_info = {**tool_info, "agent_runtime": dict(context or {})}
+                    bindings = await node_tools(ai_service, tool_info)
+                    if not bindings:
                         raise ValueError(
                             "Could not build connected tool "
                             f"{tool_info.get('node_type')!r}"
                         )
-                    canonical_tool_data.append(
-                        {
-                            **tool_info,
-                            "_agent_tool_name": tool.name,
-                            "_agent_tool_description": tool.description,
-                            "_agent_tool_schema": tool.parameters,
-                            "_agent_tool_input_model": tool.args_schema,
-                            "_agent_tool_execution": execution,
-                        }
-                    )
+                    for tool, execution in bindings:
+                        canonical_tool_data.append({**tool_info, "_agent_tool_name": tool.name,
+                            "_agent_tool_description": tool.description, "_agent_tool_schema": tool.parameters,
+                            "_agent_tool_input_model": tool.args_schema, "_agent_tool_execution": execution})
                 effective_tool_data = canonical_tool_data
 
             custom_tools = ToolBridgeAdapter.bridge(
@@ -238,6 +235,10 @@ class RLMService:
                 from rlm import RLM
                 from rlm.logger import RLMLogger
 
+                if admission is not None:
+                    from services.rlm.guarded import guarded_rlm_class
+                    RLM = guarded_rlm_class(admission)
+
                 rlm_instance = RLM(
                     backend=backend,
                     backend_kwargs=backend_kwargs,
@@ -253,16 +254,27 @@ class RLMService:
                     logger=RLMLogger(),
                     verbose=verbose,
                 )
-                return rlm_instance.completion(augmented_prompt)
+                try:
+                    return rlm_instance.completion(augmented_prompt)
+                finally:
+                    close = getattr(rlm_instance, "close", None)
+                    if callable(close):
+                        close()
 
-            result = await asyncio.to_thread(_run_rlm)
+            # Cancelling to_thread's awaiter does not stop its Python thread.
+            # Keep its completion observable, fence further provider/tool calls,
+            # and drain admitted work before the session owner releases the run.
+            from services.rlm.guarded import run_fenced_completion
+            result = await run_fenced_completion(_run_rlm, admission)
 
-            if context_bridge is not None and result.response:
+            if context_bridge is not None and result.response and not (context or {}).get("agent_instance_id"):
                 # Best-effort: the provider already ran and billed, so a
                 # save failure must not fail the run.
                 try:
                     await context_bridge.record_turn(prompt, result.response)
                 except Exception as exc:
+                    if (context or {}).get("agent_instance_id"):
+                        raise
                     logger.warning(
                         "[RLM] conversation save failed; continuing: %s", exc
                     )
@@ -301,6 +313,9 @@ class RLMService:
                     "iterations": iterations,
                 },
                 "execution_time": execution_time,
+                **({"agent_transcript": context_bridge.turn_checkpoint(prompt, result.response)}
+                   if context_bridge is not None and (context or {}).get("agent_instance_id") else {}),
+                **({"agent_admission_state": admission.serialize_state()} if admission else {}),
             }
 
         except Exception as e:
@@ -322,6 +337,8 @@ class RLMService:
                 "node_id": node_id,
                 "node_type": "rlm_agent",
                 "error": public_error,
+                "error_code": getattr(e, "code", type(e).__name__),
+                **({"agent_admission_state": admission.serialize_state()} if admission else {}),
                 "execution_time": execution_time,
             }
         finally:

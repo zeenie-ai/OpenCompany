@@ -82,6 +82,8 @@ class BatchResult:
     budget_remaining_usd: Optional[float] = None
     provider: str = ""
     timestamp: str = ""
+    agent_transcript: Optional[Dict[str, Any]] = None
+    agent_admission_state: Optional[Dict[str, Any]] = None
 
 
 # ---------------------------------------------------------------------------

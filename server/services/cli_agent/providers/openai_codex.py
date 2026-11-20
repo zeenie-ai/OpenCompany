@@ -101,7 +101,10 @@ class OpenAICodexProvider:
         ask = task.ask_for_approval or defaults.get("default_ask_for_approval", self._defaults.get("default_ask_for_approval", "never"))
         # `exec` has no --ask-for-approval flag. Override its documented
         # config directly instead of relying on interactive/TUI options.
-        argv = [str(self.binary_path()), "exec", "--json", "-c", f"approval_policy={json.dumps(ask)}"]
+        argv = [str(self.binary_path()), "exec"]
+        if task.resume_session_id:
+            argv.append("resume")
+        argv += ["--json", "-c", f"approval_policy={json.dumps(ask)}"]
         # A forced historic default can be unavailable to ChatGPT logins.
         # With no explicit choice, let Codex apply its own config and account
         # catalogue. Explicit task/config choices remain unchanged.
@@ -109,7 +112,11 @@ class OpenAICodexProvider:
         if isinstance(model, str) and model.strip():
             argv += ["--model", model.strip()]
         sandbox = task.sandbox or defaults.get("default_sandbox", self._defaults.get("default_sandbox", "workspace-write"))
-        argv += ["--sandbox", sandbox]
+        if task.resume_session_id:
+            # exec resume accepts configuration overrides, not --sandbox.
+            argv += ["-c", f"sandbox_mode={json.dumps(sandbox)}"]
+        else:
+            argv += ["--sandbox", sandbox]
 
         if mcp_endpoint_url and mcp_bearer_token:
             # No secret in argv or persistent config. The session sets this env
@@ -127,7 +134,7 @@ class OpenAICodexProvider:
             prompt = task.prompt
             if task.system_prompt:
                 prompt = f"<system>\n{task.system_prompt}\n</system>\n\n{prompt}"
-            argv += ["--", prompt]
+            argv += ["--", *([task.resume_session_id] if task.resume_session_id else []), prompt]
         return argv
 
     def login_argv(self) -> List[str]:

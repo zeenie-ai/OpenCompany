@@ -27,6 +27,35 @@ async def authorize_employee_job_source(database: Any, context: dict):
         captured = {str(member.get("node_id") or "") for member in plan.get("members", [])}
         if plan.get("lead_node_id") != job.lead_node_id:
             raise PermissionError("The employee job has no captured team authority")
+        if context.get("agent_instance_id"):
+            from models.agent_instances import AgentInstance, AgentRun
+            instance = await session.get(AgentInstance, str(context["agent_instance_id"]))
+            run_id = str(context.get("agent_run_id") or "")
+            run = await session.get(AgentRun, run_id) if run_id else None
+            if (instance is None or run is None or instance.workflow_id != workflow_id
+                or instance.job_id != job.id or instance.team_id != job.team_id
+                or instance.generation != int((job.source or {}).get("generation") or 0)
+                or instance.generation != int(context.get("generation") or 0)
+                or instance.template_node_id != caller or instance.state != "running"
+                or instance.active_run_id != run_id or run.instance_id != instance.id
+                or run.status != "running" or run.fence != instance.fence):
+                raise PermissionError("The agent run no longer owns this employee job conversation")
+            if caller != job.lead_node_id:
+                member = (await session.execute(select(TeamMember).where(TeamMember.team_id == job.team_id,
+                    TeamMember.agent_node_id == caller))).scalar_one_or_none()
+                if caller not in captured or member is None or member.role != "teammate" or member.status == "offline":
+                    raise PermissionError("The instance is not a captured teammate of this employee job")
+            task_id = context.get("team_task_id")
+            if task_id:
+                task = await session.get(TeamTask, str(task_id))
+                if (task is None or task.team_id != job.team_id or task.workflow_id != workflow_id
+                    or task.assigned_instance_id != instance.id or task.assigned_run_id != run_id
+                    or task.current_attempt != run.attempt or task.id != run.task_id
+                    or task.cancellation_requested or task.status != "running"):
+                    raise PermissionError("The instance no longer owns this task attempt")
+            # A resumed peer conversation is authorized by its instance/run,
+            # independently of whether this particular turn owns a task.
+            return job
         if caller == job.lead_node_id:
             return job
         task_id = context.get("team_task_id")

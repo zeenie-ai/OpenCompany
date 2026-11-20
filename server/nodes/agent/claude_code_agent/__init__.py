@@ -235,6 +235,8 @@ class ClaudeCodeAgentOutput(BaseModel):
     response: Optional[str] = None
     session_id: Optional[str] = None
     cost_usd: Optional[float] = None
+    agent_transcript: Optional[dict[str, Any]] = None
+    agent_admission_state: Optional[dict[str, Any]] = None
     # `extra="forbid"` so a malformed CLI envelope raises a real
     # ValidationError at the Output boundary instead of silently emitting
     # an unparseable shape downstream.
@@ -426,6 +428,7 @@ class ClaudeCodeAgentNode(ActionNode):
             connected_memory=memory_data,
             connected_context=context_descriptor,
             execution_id=ctx.execution_id,
+            instance_context=ctx.raw,
             allowed_credentials=params.allowed_credentials,
             max_parallel=params.max_parallel,
             ai_service=get_ai_service(),
@@ -483,4 +486,6 @@ class ClaudeCodeAgentNode(ActionNode):
             "response": legacy_response,
             "session_id": legacy_session_id,
             "cost_usd": legacy_cost,
+            **({"agent_transcript": result.agent_transcript, "agent_admission_state": result.agent_admission_state}
+               if ctx.raw.get("agent_instance_id") else {}),
         }

@@ -107,6 +107,8 @@ class AICliSession(BaseProcessSupervisor):
         connected_skill_names: Optional[List[str]] = None,
         memory_bound: bool = False,
         context_event_sink: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        instance_id: Optional[str] = None,
+        context_start_sink: Optional[Callable[[Path], Awaitable[None]]] = None,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -123,6 +125,9 @@ class AICliSession(BaseProcessSupervisor):
         # parse as a DRIVE under WindowsPath division and discard the
         # workspace prefix entirely.
         self._worktree_dir = self._workspace_dir / safe_path_component(node_id, "node") / f"wt_{self._task_id}"
+        self._instance_id = str(instance_id or "")
+        if self._instance_id:
+            self._worktree_dir = self._workspace_dir / safe_path_component(node_id, "node") / safe_path_component(self._instance_id, "instance") / "wt_session"
         self._branch = task.branch or f"opencompany/{self._task_id}"
         self._broadcaster = broadcaster
         self._defaults = defaults
@@ -144,11 +149,12 @@ class AICliSession(BaseProcessSupervisor):
         # The per-task git worktree (random `wt_t_<rand>` suffix) is
         # incompatible with this — every spawn would land under a
         # brand-new project_key with no prior JSONL.
-        self._memory_bound: bool = bool(memory_bound)
+        self._memory_bound: bool = bool(memory_bound) and not self._instance_id
         # Backend Context raw-event sink. It receives each decoded
         # provider event before UI logging and before result presentation
         # truncates the assistant text to 4,000 characters.
         self._context_event_sink = context_event_sink
+        self._context_start_sink = context_start_sink
         self._context_capture_error: Optional[str] = None
 
         # Streaming state
@@ -261,6 +267,8 @@ class AICliSession(BaseProcessSupervisor):
                 self.label,
                 self._repo_root,
             )
+        if self._context_start_sink is not None:
+            await self._context_start_sink(self.cwd())
 
         # 2. IDE lockfile (VSCode pattern) — providers that support it.
         # `workspace_dir` in the lockfile points at whatever cwd will
@@ -895,7 +903,7 @@ class AICliSession(BaseProcessSupervisor):
 
         # Remove the per-task worktree (only created for non-memory
         # runs; memory-bound spawns ran directly under repo_root).
-        if not self._memory_bound:
+        if not self._memory_bound and not self._instance_id:
             try:
                 from services.cli_agent.worktree import remove_worktree
 
@@ -937,7 +945,7 @@ class AICliSession(BaseProcessSupervisor):
             prompt=self._task.prompt,
             branch=self._branch,
             worktree_path=str(self._worktree_dir),
-            response=str(provider_result.get("response") or "")[:4000],
+            response=(str(provider_result.get("response") or "") if self._instance_id else str(provider_result.get("response") or "")[:4000]),
             cost_usd=provider_result.get("cost_usd"),
             duration_ms=provider_result.get("duration_ms"),
             num_turns=provider_result.get("num_turns"),

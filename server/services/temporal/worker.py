@@ -130,6 +130,7 @@ class TemporalWorkerManager:
         self.pool_size = pool_size
         self._worker: Optional[Worker] = None
         self._worker_task: Optional[asyncio.Task] = None
+        self._reconciler_start_task: Optional[asyncio.Task] = None
         self._session: Optional[aiohttp.ClientSession] = None
         self._activities: Optional[NodeExecutionActivities] = None
         self._browser_pool = None
@@ -152,6 +153,11 @@ class TemporalWorkerManager:
                 span.set_attribute("already_running", True)
                 logger.warning("Temporal worker already running")
                 return
+
+            if self._reconciler_start_task:
+                self._reconciler_start_task.cancel()
+                await asyncio.gather(self._reconciler_start_task, return_exceptions=True)
+                self._reconciler_start_task = None
 
             # Create shared aiohttp session with connection pooling
             self._session = await create_shared_session(self.pool_size)
@@ -182,6 +188,28 @@ class TemporalWorkerManager:
                 self._run_worker(),
                 name="temporal-worker",
             )
+            self._reconciler_start_task = asyncio.create_task(
+                self._start_reconciler(), name="temporal-agent-reconciler-start",
+            )
+
+    async def _start_reconciler(self) -> None:
+        """Retry durable recovery admission independently of healthy polling."""
+        from core.config import Settings
+        from services.agent_instances.runtime import ensure_reconciler
+
+        settings = Settings()
+        backoff = settings.temporal_worker_restart_backoff_seconds
+        backoff_max = settings.temporal_worker_restart_backoff_max_seconds
+        while self.is_running:
+            try:
+                await ensure_reconciler(self.client)
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning("Agent inbox reconciliation startup failed; retrying in %.1fs", backoff, exc_info=True)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, backoff_max)
 
     async def _build_worker(self) -> Worker:
         """Construct a fresh, ready-to-run Worker instance.
@@ -328,6 +356,9 @@ class TemporalWorkerManager:
         the other, their grace windows added up."""
         logger.info("Stopping Temporal worker")
         stops = [pool.stop() for pool in (self._pi_driver_pool, self._browser_pool) if pool is not None]
+        if self._reconciler_start_task:
+            self._reconciler_start_task.cancel()
+            stops.append(self._reconciler_start_task)
         if self._worker_task:
             self._worker_task.cancel()
             stops.append(self._worker_task)
@@ -337,6 +368,7 @@ class TemporalWorkerManager:
         self._pi_driver_pool = None
         self._browser_pool = None
         self._worker_task = None
+        self._reconciler_start_task = None
 
         # Close shared session
         if self._session and not self._session.closed:
@@ -662,6 +694,7 @@ def _main_queue_activities(client: Client, execute_node_activity: Any) -> list:
         store_node_output_activity,
     )
     from services.temporal.agent_activities import collect_agent_activities
+    from services.temporal.agent_instance_workflow import INSTANCE_ACTIVITIES
     from services.temporal.browser_task_activities import BROWSER_OWNER_ACTIVITIES, HISTORY_ACTIVITIES
     from services.temporal.pi_activities import PiControlActivities, collect_pi_activities
     from services.temporal.pi_inline_delegation import collect_pi_inline_activities
@@ -686,6 +719,7 @@ def _main_queue_activities(client: Client, execute_node_activity: Any) -> list:
         store_node_output_activity,
         *_generic_plugin_activities(),
         *collect_agent_activities(),
+        *INSTANCE_ACTIVITIES,
         *collect_pi_activities(),
         *collect_pi_inline_activities(),
         *PiControlActivities(client).activities(),
@@ -889,6 +923,8 @@ async def run_standalone_worker(
         )
 
         logger.info("Worker running. Press Ctrl+C to stop.")
+        from services.agent_instances.runtime import ensure_reconciler
+        await ensure_reconciler(client)
         await worker.run()
 
     finally:

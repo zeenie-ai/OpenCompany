@@ -1,5 +1,67 @@
 # Agent Context & Team Continuity Flow
 
+## Instance conversations
+
+For `agent_lifecycle_version=1`, job leads and teammates have immutable instance
+IDs and mandatory plain MessageWire transcripts. The additive instance
+conversation table stores a list, revision and owning run, not an event journal.
+A durable session owner serializes all turns. Saves are fenced and checkpoint
+delivery receipts transactionally; a failed save cannot acknowledge consumption.
+
+Talk retains owner-chat continuity. Each job starts from explicit handoff
+context and has independent lead/review/worker histories. Reviewed delivery
+appends to Talk through existing idempotent gates; job history never replaces
+Talk history. Context remains an optional viewer/configuration surface.
+Runtime output sessions also use the instance identity; two instances of one
+template cannot overwrite each other's parameter-resolution fallback. Frozen
+handoff outputs remain available, and delivery uses the original job source.
+The viewer selects each instance separately even when instances share a template.
+Job transcripts are read-only there; clearing Talk or legacy Context history does
+not clear an independent job's transcript or terminate its provider session.
+
+Native/Pi use canonical instance wires. Claude and Codex also retain exact
+provider-session identities and instance workspaces. Missing provider history
+blocks continuation instead of silently starting fresh. RLM replays the
+conversation into a new REPL whose variables are ephemeral.
+
+The authoritative instance row is `agent_instance_conversations`, keyed by
+`instance_id`. `AgentInstanceService.checkpoint` checks both the expected
+transcript revision and the active run/fence, and commits the plain wire list
+with delivery consumption. The legacy best-effort save policy described below
+does not apply to this transaction. A stale or failed checkpoint cannot overwrite
+history or advance a receipt.
+
+```mermaid
+sequenceDiagram
+    participant Talk
+    participant Lead as Job lead instance
+    participant Store as Instance and task store
+    participant Owner as Teammate session owner
+    participant Runtime as Native, Pi or opaque adapter
+    Talk->>Lead: Explicit job handoff
+    Lead->>Store: Spawn from connected template
+    Store-->>Owner: Durable initial task and inbox obligation
+    Owner->>Store: Claim run and transcript revision
+    Owner->>Runtime: Execute with isolated instance context
+    Runtime->>Store: Checkpoint transcript and consumed deliveries
+    Owner->>Store: Complete attempt and enqueue lead review atomically
+    Store-->>Lead: Review notification through the owning inbox
+    Lead->>Store: Accept or request changes using current task_ref
+    Lead-->>Talk: Reviewed result through idempotent delivery gate
+```
+
+Native/Pi admit follow-ups only after all outstanding tool results are recorded.
+Opaque adapters return checkpoint metadata through their node output; the owner
+persists it before completing the run. Runtime output sessions use
+`agent-instance:<instance_id>` and do not inherit the owner's chat stream.
+See [Agent Teams](./agent_teams.md) for the lifecycle and
+[validation coverage](./agent_lifecycle_validation.md) for the corresponding tests.
+
+## Legacy and owner-chat conversations
+
+The node-keyed contract below applies to legacy generations and owner-chat
+contexts. Historical transcripts are not moved or rewritten during migration.
+
 Normative reference for how an agent's conversation survives across firings,
 delegations, and rollovers — on both execution paths. Read this before
 touching `services/agent_context/`, `nodes/context/`,
@@ -18,7 +80,7 @@ Companion documents: [RFC-0002](../RFC-0002-AGENT-CONTEXT-AND-MEMORY.md)
 
 Source baseline: `56f0b397`. [Complete diagram suite](../docs/diagrams/architecture/README.md).
 
-**Teams and context — Current implementation.**
+**Teams and context — template-era overview (version 0).**
 
 [![Teams and context (Current implementation)](../docs/diagrams/architecture/09-teams-context-v1.png)](../docs/diagrams/architecture/09-teams-context-v1.png)
 

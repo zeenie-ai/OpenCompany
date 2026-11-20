@@ -163,7 +163,7 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
               "parameters": parameters, "outputs": ctx.outputs, "user_id": employee.owner_id,
               "session_id": ctx.session_id, "generation": ctx.raw.get("generation", 0),
               "data_scope_id": ctx.raw.get("data_scope_id"), "graphVersion": (graph.data or {}).get("graphVersion", 2), "team_plan": plan}
-    source.update({key: ctx.raw[key] for key in ("execution_control_version", "controller_workflow_id", "pi_harness_version",
+    source.update({key: ctx.raw[key] for key in ("agent_lifecycle_version", "agent_protocol_version", "execution_control_version", "controller_workflow_id", "pi_harness_version",
                   "pi_local_control_version", "pi_local_control_state", "pi_local_control_revision") if key in ctx.raw})
     if isinstance(email_input, dict):
         source["email_input"] = dict(email_input)
@@ -258,7 +258,7 @@ async def dispatch_job(database: Any, job_id: str) -> bool:
         "generation": job.source.get("generation", 0), "graphVersion": job.source.get("graphVersion", 2),
         "data_scope_id": job.source.get("data_scope_id"), "employee_job_id": job.id,
         "parameter_snapshot": job.source["parameters"]}
-    context.update({key: job.source[key] for key in ("execution_control_version", "controller_workflow_id", "pi_harness_version",
+    context.update({key: job.source[key] for key in ("agent_lifecycle_version", "agent_protocol_version", "execution_control_version", "controller_workflow_id", "pi_harness_version",
                    "pi_local_control_version", "pi_local_control_state", "pi_local_control_revision") if key in job.source})
     try:
         await container.temporal_client().client.start_workflow("EmployeeJobWorkflow", context,
@@ -277,6 +277,22 @@ async def dispatch_job(database: Any, job_id: str) -> bool:
 
 
 async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
+    result = await _deliver_job(database, ctx, lead_node_id=lead_node_id)
+    if result.get("delivered") and result.get("job_id"):
+        async with database.get_session() as session:
+            job = await session.get(EmployeeJob, result["job_id"])
+        if job and (job.source or {}).get("agent_lifecycle_version") == 1:
+            from services.agent_instances.service import AgentInstanceService
+            from services.agent_instances.runtime import wake_instances
+            closed = await AgentInstanceService(database).close_job(scope={
+                "workflow_id": job.workflow_id, "team_id": job.team_id, "job_id": job.id,
+                "lead_node_id": job.lead_node_id, "generation": job.source.get("generation", 0),
+            }, request_id=f"delivered:{job.id}")
+            await wake_instances(closed)
+    return result
+
+
+async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
     """Review eligibility and deliver to the origin's configured sinks once."""
     outputs = ctx.outputs or {}
     lead_output = outputs.get(lead_node_id) or {}
@@ -303,6 +319,8 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
         if job.state == "failed":
             # Never deliver a failed job again (a refused send ends it so).
             return {"delivered": False, "state": "failed", "job_id": job.id}
+        if job.state == "review_blocked":
+            return {"delivered": False, "state": "review_blocked", "job_id": job.id}
         lease = job.delivery.get("lease_until")
         if lease and datetime.fromisoformat(lease) > _now() and not (holder and job.delivery.get("lease_holder") == holder):
             return {"delivered": False, "state": "delivering", "job_id": job.id}
@@ -320,6 +338,10 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
         # accepted task also prevents an un-delegated acknowledgement leaking.
         tasks = list((await session.execute(select(TeamTask).where(TeamTask.team_id == job.team_id))).scalars()) if job.team_id else []
         if tasks and any(task.status in {"failed", "cancelled"} for task in tasks):
+            if job.source.get("agent_lifecycle_version") == 1:
+                # A worker failure is input to the instance lead's review,
+                # not permission to abandon its siblings or fail the job.
+                return {"delivered": False, "state": "working", "job_id": job.id}
             if protected_job_outcome(job) or await job_has_approval(session, job):
                 return {"delivered": False, "state": job.state, "job_id": job.id}
             job.state = "failed" if any(task.status == "failed" for task in tasks) else "cancelled"
@@ -478,7 +500,9 @@ async def job_progress(database: Any, workflow_id: str) -> dict | None:
     messages = {"queued": "Your request is saved. The team will start when they are ready.",
                 "running": "The team is starting your request.", "working": "The team is working on your request and checking the result.",
                 "delivering": "Their checked result is ready to send.", "failed": "The team could not finish this request. Ask them to try again.",
-                "cancelled": "This request was stopped.", "delivery_needs_review": "The send was interrupted. Check whether it arrived before trying again."}
+                "cancelled": "This request was stopped.", "delivery_needs_review": "The send was interrupted. Check whether it arrived before trying again.",
+                "review_blocked": "The lead needs another review turn. Completed work is saved."}
     if no_assignments_failed(job):
         messages["failed"] = "The lead did not assign work to a teammate, so this request could not finish."
-    return {"request_id": job.id, "state": state, "message": messages.get(state, "The team is checking your request.")}
+    return {"request_id": job.id, "state": state, "message": messages.get(state, "The team is checking your request."),
+            **({"revision": job.updated_at.isoformat()} if state == "review_blocked" else {})}

@@ -65,7 +65,7 @@ async def test_a_node_that_gives_several_tools_builds_one_per_binding(monkeypatc
     assert built[0][0].definition.parameters["properties"] == {"order": {"type": "string"}}
 
 
-async def test_cli_agents_leave_out_a_node_that_gives_several_tools(monkeypatch):
+async def test_cli_agents_expand_a_node_that_gives_several_tools(monkeypatch):
     from services.cli_agent.service import AICliService
     from services.plugin import tool as tool_module
 
@@ -80,7 +80,10 @@ async def test_cli_agents_leave_out_a_node_that_gives_several_tools(monkeypatch)
     surface = await AICliService._canonical_tool_surface(
         [{"node_type": "mcpConnector", "node_id": "m"}, {"node_type": "calculatorTool", "node_id": "c"}], ai_service=AI()
     )
-    assert built == ["calculatorTool"] and [entry["node_type"] for entry in surface] == ["calculatorTool"]
+    assert built == ["calculatorTool"]
+    assert [entry["node_type"] for entry in surface] == ["mcpConnector", "calculatorTool"]
+    assert surface[0]["_agent_tool_name"] == "orders__lookup"
+    assert surface[0]["_agent_tool_input_model"] is not None
 
 
 def test_team_readiness_requires_both_execution_engines_and_connection():

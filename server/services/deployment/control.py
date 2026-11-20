@@ -165,7 +165,8 @@ class WorkflowControlService:
                 "workflow_slug": slug if isinstance(slug, str) and slug else None,
             },
             idempotency_key=idempotency_key,
-            resource_manifest={"execution_control_version": 1, "pi_harness_version": 1},
+            resource_manifest={"execution_control_version": 1, "pi_harness_version": 1,
+                               "agent_lifecycle_version": 1, "agent_protocol_version": 1},
             # Revisions are monotonic across generations so a delayed request
             # from an archived generation cannot pass CAS against a newer one
             # that happens to be at the same lifecycle step.

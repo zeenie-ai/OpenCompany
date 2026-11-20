@@ -760,6 +760,10 @@ async def _save_conversation(
     zero extra activities and zero Temporal-history payload. A step stopped
     before the model wrote anything saves ``sent`` alone.
     """
+    # Instance runs checkpoint after this activity result is durably recorded.
+    # A bookkeeping retry must never repeat an already billed provider call.
+    if (payload.get("conversation_key") or {}).get("agent_instance_id"):
+        return
     key = payload.get("conversation_key")
     if not isinstance(key, dict):
         return
@@ -845,6 +849,12 @@ async def _execute_llm_step_body(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
 
     from core.logging import log_context
+    instance_key = payload.get("conversation_key") or {}
+    if instance_key.get("agent_instance_id"):
+        from services.temporal.agent_instance_workflow import admit_instance_operation
+        admission = await admit_instance_operation({"instance_id": instance_key["agent_instance_id"], "run_id": instance_key["agent_run_id"]})
+        if not admission["allowed"]:
+            raise ApplicationError("Agent execution is halted", type="agent_turn_halted", non_retryable=True)
 
     activity.logger.info(
         f"Agent LLM step: provider={payload.get('provider')} " f"model={payload.get('model')} messages={len(payload.get('messages', []))}"
@@ -1345,7 +1355,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # ``prompt`` can never clobber the delegated task.
     invocation = context.get("invocation") or {}
     if invocation.get("task") or invocation.get("context"):
-        if node_type == "browser_agent":
+        if node_type == "browser_agent" or context.get("agent_instance_id"):
             # A Browser Agent keeps its saved role and safety instructions.
             prompt = "\n\n".join(str(invocation[key]) for key in ("task", "context") if invocation.get(key))
         else:
@@ -1505,7 +1515,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         # It must not mint a second empty "active" team for the same lead;
         # doing so makes the owning execution's submitted/accepted tasks seem
         # to disappear from Task Manager and Team Monitor.
-        if teammates and workflow_id and not trigger_task_data:
+        if teammates and workflow_id and not trigger_task_data and not context.get("agent_instance_id"):
             from services.agent_team import get_agent_team_service
 
             execution_id = str(context.get("execution_id") or "")
@@ -1532,6 +1542,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 if context.get("employee_job_id"):
                     team_execution_id = team.get("execution_id") or context["employee_job_id"]
                 owns_execution_team = True
+        if context.get("agent_instance_id") and context.get("agent_instance_role") == "lead":
+            owns_execution_team = True
 
     if execution_team_id and workflow_id:
         from services.employees.jobs import bind_job_team
@@ -1590,10 +1602,22 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     conversation: List[Dict[str, Any]] = []
     conversation_key: Optional[Dict[str, Any]] = None
     generation = int(context.get("generation") or 0)
-    if (
+    if context.get("agent_instance_id"):
+        from services.agent_instances.service import AgentInstanceService
+        stored_instance = await AgentInstanceService(database).get_transcript(context["agent_instance_id"])
+        conversation = list(stored_instance.get("messages") or [])
+        conversation_key = {"agent_instance_id": context["agent_instance_id"],
+                            "agent_run_id": context["agent_run_id"],
+                            "workflow_id": str(workflow_id), "generation": generation,
+                            "agent_node_id": node_id}
+        # The supervisor has already admitted provenance-bearing input messages.
+        # They are appended by the workflow, never promoted to system policy.
+        prompt = ""
+    elif (
         context_descriptor.get("kind") == "context"
         and workflow_id
         and generation > 0
+        and not context.get("_agent_instance_bootstrap")
     ):
         conversation_key = {
             "workflow_id": str(workflow_id),
@@ -1647,6 +1671,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     from services.skill_runtime import SkillRuntimeError, skill_tool_info
 
     effective_tool_data = _without_web_tools(chat_options, list(tool_data or []))
+    from services.agent_instances.protocol import enabled as instance_protocol_enabled
+    instance_talk = bool(instance_protocol_enabled(context) and employee_plan
+                         and node_id == employee_plan.get("talk_node_id"))
+    if context.get("agent_instance_id") and not any(item.get("node_type") == "taskManager" for item in effective_tool_data):
+        effective_tool_data.append({"node_type": "taskManager", "node_id": f"{node_id}:instance_tools", "parameters": {}})
     try:
         progressive_skill_tool = skill_tool_info(skill_data or [], node_id)
     except SkillRuntimeError as exc:
@@ -1656,6 +1685,16 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     if progressive_skill_tool:
         effective_tool_data.append(progressive_skill_tool)
     for tool_info in unique_node_bindings(effective_tool_data):
+        if context.get("agent_instance_id") or (instance_talk and tool_info.get("node_type") == "taskManager"):
+            tool_info = {**tool_info, "agent_runtime": {
+                **context, **(context.get("agent_instance_scope") or {}),
+                "agent_instance_id": context.get("agent_instance_id"),
+                "agent_run_id": context.get("agent_run_id"),
+                "agent_lifecycle_version": 1, "agent_protocol_version": 1,
+                "teammates": teammates if context.get("agent_instance_role") == "lead" else [],
+                "role": "talk" if instance_talk else context.get("agent_instance_role") or "teammate",
+                "runtime_context": context,
+            }}
         if frozen_runtime:
             from services.runtime_tool_context import bind_runtime_context
             tool_info = bind_runtime_context(tool_info, context, node_id)
@@ -1688,6 +1727,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                     # (ToolNode.tool_bindings) has one per binding.
                     "binding_key": config.get("binding_key") or tool_info.get("node_id", ""),
                     "parameters": config.get("parameters") or {},
+                    **{key: config[key] for key in ("agent_operation", "agent_template", "agent_runtime", "execution_traits") if key in config},
                     # Raw tool_info — what ``collect_agent_connections`` returned
                     # and what ``_build_tool_from_node`` accepts as input. Passed
                     # through the workflow verbatim so ``execute_llm_step`` can
@@ -1701,7 +1741,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                     # trusted assignee resolution, but are not callable directly
                     # by the model.
                     "llm_hidden": (
-                        node_type in {"orchestrator_agent", "ai_employee"}
+                        (context.get("agent_instance_id") or node_type in {"orchestrator_agent", "ai_employee"})
                         and tool.name.startswith("delegate_to_")
                     ),
                 }
@@ -1718,7 +1758,12 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         elif parameters.get("tool_mode", "connected") != "connected":
             raise ApplicationError("Invalid Coding Agent tool mode", type="CodingToolModeInvalid", non_retryable=True)
 
-    if any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
+    if instance_talk:
+        system_message += "\n\nFor substantive team work, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. Keep this conversation with the owner."
+    elif context.get("agent_instance_id"):
+        from services.agent_instances.tools import orchestration_prompt
+        system_message = f"{system_message}\n\n{orchestration_prompt()}"
+    elif any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
         from services.plugin.edge_walker import TEAMMATE_ROSTER_NOTE, format_teammate_roster_line
 
         delegates = "\n".join(
@@ -1776,7 +1821,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     # is connected via input-main, use the upstream output's `message`
     # / `text` / `content` as the user prompt. Same fallback the legacy
     # agent path uses.
-    if not prompt and input_data:
+    if not prompt and input_data and not context.get("agent_instance_id"):
         out = input_data.get("result") or input_data
         for field in ("message", "text", "content"):
             if field in out and out[field]:
@@ -1822,6 +1867,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 max_delegation_depth = min(2, raw_depth)
     except Exception as exc:  # noqa: BLE001 — defensive read
         activity.logger.debug(f"user_settings read failed: {exc}")
+
+    if context.get("agent_instance_id"):
+        # Reusable instances retain the limits captured at job admission.
+        max_concurrent_subagents = max(1, int(context.get("max_concurrent_subagents") or max_concurrent_subagents))
+        max_delegation_depth = max(1, min(2, int(context.get("max_delegation_depth") or max_delegation_depth)))
 
     # Precedence: per-node parameter > per-user UserSettings > env Settings.
     node_param_limit = parameters.get("max_iterations")
@@ -1871,6 +1921,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         from services.llm.observation import warning_seconds
         observer_config["llm_warning_seconds"] = warning_seconds()
 
+    from services.workflow_sanitizer import sanitize_runtime_payload
     prepared = {
         **frozen_runtime,
         **observer_config,
@@ -1888,11 +1939,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "workflow_id": workflow_id,
         "session_id": session_id,
         "parameter_snapshot": snapshot,
+        **({"instance_template_parameters": sanitize_runtime_payload(parameters)} if context.get("_agent_instance_bootstrap") else {}),
         "browser_bindings": browser_bindings,
         "browser_runtime_version": browser_runtime_version,
         "employee_job_id": context.get("employee_job_id"),
         "employee_team_plan": employee_plan,
-        "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")),
+        "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")
+                                          and not context.get("agent_instance_id")),
         "provider": provider,
         "model": model,
         # How long one LLM attempt may take for this provider (None: the
@@ -1915,6 +1968,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "context_descriptor": context_descriptor,
         "conversation": conversation,
         "conversation_key": conversation_key,
+        **({"agent_lifecycle_version": 1, "agent_protocol_version": 1,
+            "agent_instance_id": context["agent_instance_id"], "agent_run_id": context["agent_run_id"],
+            "agent_input_messages": context.get("agent_input_messages") or [],
+            "agent_delivery_ids": context.get("agent_delivery_ids") or [],
+            "agent_transcript_revision": context.get("agent_transcript_revision", 0),
+            "agent_admission_state": await AgentInstanceService(database).admission_state(
+                context["agent_instance_id"], context["agent_run_id"])} if context.get("agent_instance_id") else {}),
         "max_iterations": effective_recursion_limit,
         "thinking_config": thinking_config_dict,
         "compaction_threshold": compaction_threshold,
@@ -2434,6 +2494,10 @@ async def acquire_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     service = get_agent_team_service()
     lease_id = permit_id
+    instance_store = None
+    if payload.get("agent_instance_id") and payload.get("agent_run_id"):
+        from services.agent_instances.service import AgentInstanceService
+        instance_store = AgentInstanceService(service.database)
     attempt = 1
     owner: Dict[str, str] = {}
     if lease_version == 2:
@@ -2471,9 +2535,28 @@ async def acquire_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
                     f"{prior_lease_id}"
                 )
 
+    if instance_store:
+        from services.agent_instances.service import InstanceError
+        try:
+            await instance_store.record_run_permit(payload["agent_instance_id"], payload["agent_run_id"], lease={
+                "lease_id": lease_id, "root_execution_id": root_id, **owner})
+        except InstanceError as exc:
+            raise ApplicationError(str(exc), type=exc.code, non_retryable=True) from exc
+
+    async def ensure_instance_admission():
+        if instance_store:
+            state = await instance_store.admission_state(payload["agent_instance_id"], payload["agent_run_id"])
+            if state.get("reason"):
+                if not await service.release_subagent_permit(root_id, lease_id):
+                    raise RuntimeError("Failed to release fenced instance permit")
+                await instance_store.release_run_permit(payload["agent_instance_id"], payload["agent_run_id"], lease_id=lease_id)
+                raise ApplicationError("Agent execution is halted", type="agent_turn_halted", non_retryable=True)
+
     try:
         while True:
+            await ensure_instance_admission()
             if await service.acquire_subagent_permit(root_id, lease_id, limit):
+                await ensure_instance_admission()
                 result = {
                     "root_execution_id": root_id,
                     "permit_id": permit_id,
@@ -2514,6 +2597,8 @@ async def acquire_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
             )
             if not compensated:
                 raise RuntimeError("Permit compensation was rejected")
+            if instance_store:
+                await instance_store.release_run_permit(payload["agent_instance_id"], payload["agent_run_id"], lease_id=lease_id)
         except Exception as release_exc:  # noqa: BLE001
             logger.error(
                 "Failed to compensate cancelled subagent permit acquisition",
@@ -2544,6 +2629,10 @@ async def release_subagent_permit(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
     if not released:
         raise RuntimeError("Failed to release subagent permit")
+    if payload.get("agent_instance_id") and payload.get("agent_run_id"):
+        from services.agent_instances.service import AgentInstanceService
+        await AgentInstanceService(get_agent_team_service().database).release_run_permit(
+            payload["agent_instance_id"], payload["agent_run_id"], lease_id=lease_id)
     result = {
         "root_execution_id": root_id,
         "permit_id": permit_id,

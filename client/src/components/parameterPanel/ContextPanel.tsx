@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import JsonView from '@uiw/react-json-view';
 import { Loader2, RefreshCw, ShieldCheck, Trash2, Wrench } from 'lucide-react';
@@ -41,6 +41,9 @@ interface ConversationMeta {
   workflow_id: string;
   generation: number;
   agent_node_id: string;
+  agent_instance_id?: string | null;
+  display_name?: string | null;
+  job_id?: string | null;
   message_count: number;
   updated_at?: string | null;
 }
@@ -49,6 +52,9 @@ interface ContextSnapshot {
   conversations?: ConversationMeta[];
   generation?: number | null;
   agent_node_id?: string | null;
+  agent_instance_id?: string | null;
+  display_name?: string | null;
+  job_id?: string | null;
   updated_at?: string | null;
   message_count?: number;
   messages?: ConversationMessage[];
@@ -70,6 +76,9 @@ const contextQueryKey = (
   nodeId: string,
   agent: string,
 ) => ['agentContext', workflowId ?? '', nodeId, agent] as const;
+
+const conversationKey = (meta: { agent_instance_id?: string | null; agent_node_id?: string | null }) =>
+  meta.agent_instance_id ? `instance:${meta.agent_instance_id}` : (meta.agent_node_id ?? '');
 
 /** Per-role card treatment — same tokens the chat surface uses
  * (ConsolePanel: user bubbles on `bg-node-agent-soft`, bot bubbles on
@@ -140,7 +149,7 @@ const JsonOrText: React.FC<{
  * authorized `get_agent_context` handler.
  */
 const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
-  const { sendRequest } = useWebSocket();
+  const { sendRequest, addEventListener } = useWebSocket();
   const queryClient = useQueryClient();
   // '' = server default (the newest stored conversation). Only meaningful
   // when several agents share this Context node.
@@ -156,7 +165,9 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
       sendRequest<ContextResponse>('get_agent_context', {
         workflow_id: workflowId,
         context_node_id: nodeId,
-        ...(selectedAgent ? { agent_node_id: selectedAgent } : {}),
+        ...(selectedAgent.startsWith('instance:')
+          ? { agent_instance_id: selectedAgent.slice('instance:'.length) }
+          : selectedAgent ? { agent_node_id: selectedAgent } : {}),
       }),
     enabled: !!workflowId && !!nodeId,
     // The global default is refetchOnMount: false ("trust the cache; the
@@ -170,6 +181,12 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
   const snapshot = contextQuery.data?.context ?? {};
   const conversations = snapshot.conversations ?? [];
   const messages = snapshot.messages ?? [];
+
+  useEffect(() => addEventListener('agent.instance.updated', (event) => {
+    if (!event?.workflow_id || event.workflow_id === workflowId) {
+      void queryClient.invalidateQueries({ queryKey: ['agentContext', workflowId ?? '', nodeId] });
+    }
+  }), [addEventListener, nodeId, queryClient, workflowId]);
 
   const invalidateContext = async () => {
     await queryClient.invalidateQueries({
@@ -213,7 +230,7 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
             Agent Conversation
           </h3>
           <p className="text-xs text-muted-foreground">
-            The connected agent's live context — exactly what it loads on its next turn.
+            Stored conversations for Talk and individual job agents.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -241,7 +258,8 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
             size="sm"
             className="border-border-default text-fg-default"
             onClick={() => clearMutation.mutate()}
-            disabled={clearMutation.isPending || messages.length === 0}
+            disabled={clearMutation.isPending || messages.length === 0 || !!snapshot.agent_instance_id}
+            title={snapshot.agent_instance_id ? 'Instance history is managed by its job.' : undefined}
           >
             <Trash2 />
             Clear
@@ -251,7 +269,7 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
 
       {conversations.length > 1 && (
         <Select
-          value={selectedAgent || (snapshot.agent_node_id ?? '')}
+          value={selectedAgent || conversationKey(snapshot)}
           onValueChange={setSelectedAgent}
         >
           <SelectTrigger className="w-full max-w-md">
@@ -259,8 +277,10 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
           </SelectTrigger>
           <SelectContent>
             {conversations.map((meta) => (
-              <SelectItem key={meta.agent_node_id} value={meta.agent_node_id}>
-                {meta.agent_node_id} · {meta.message_count} message
+              <SelectItem key={conversationKey(meta)} value={conversationKey(meta)}>
+                {meta.display_name || meta.agent_node_id}
+                {meta.agent_instance_id ? ` · ${meta.agent_instance_id.slice(-8)}` : ' · Talk'}
+                {' · '}{meta.message_count} message
                 {meta.message_count === 1 ? '' : 's'}
               </SelectItem>
             ))}
@@ -271,6 +291,7 @@ const ContextPanel: React.FC<ContextPanelProps> = ({ nodeId, workflowId }) => {
       {snapshot.agent_node_id && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="outline">{snapshot.agent_node_id}</Badge>
+          {snapshot.agent_instance_id && <Badge variant="outline">Instance {snapshot.agent_instance_id.slice(-8)}</Badge>}
           <span>
             {snapshot.message_count ?? 0} message
             {(snapshot.message_count ?? 0) === 1 ? '' : 's'}

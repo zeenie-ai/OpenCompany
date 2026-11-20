@@ -918,6 +918,15 @@ sending and drafts belong to the chat (wire and client rules in
   came. While the talk agent waits to retry after a failed attempt, its retry
   message sits on the status line (`useRetryNote`, from the agent's node
   status).
+- **Retry review.** A job whose lead halted after invalid orchestration requests
+  can show `review_blocked` in `employee/JobProgress.tsx`, reached through
+  Employee Work. **Retry review** calls the owner-authenticated,
+  idempotent `retry_employee_review` action. It resumes the same job-lead
+  instance, preserves accepted work and pending results, and uses the existing
+  model. The client reuses the request identity after a network failure and
+  starts a new one for a later blocked revision. Automatic inbox wakeups do
+  not clear the halt. This action is distinct from deployment Resume; see
+  [Agent Teams](./agent_teams.md).
 - **Stop/Resume.** While the run works, Send is Stop, and Esc requests Stop
   too. In a controlled generation the current tool or model request finishes,
   its output stays, and the turn shows Stopping while work drains, then

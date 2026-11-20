@@ -22,6 +22,21 @@ function show(state = 'delivery_needs_review') {
 beforeEach(() => sendRequest.mockReset());
 
 describe('reviewed delivery progress', () => {
+  it('allows a new recovery after the same job halts on a later review', async () => {
+    sendRequest.mockResolvedValue({ success: true, message: 'Review resumed.' });
+    const cache = new QueryClient();
+    const employee = (revision: string) => parseEmployee({ workflow_id: '7', name: 'Maya', job_progress: {
+      request_id: 'job', state: 'review_blocked', revision, message: 'Review is blocked.',
+    } })!;
+    const view = render(<QueryClientProvider client={cache}><JobProgress employee={employee('first')} /></QueryClientProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Retry review' }));
+    await screen.findByText('Review resumed.');
+    view.rerender(<QueryClientProvider client={cache}><JobProgress employee={employee('second')} /></QueryClientProvider>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry review' }));
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledTimes(2));
+    expect(sendRequest.mock.calls[1][1].idempotency_key).not.toBe(sendRequest.mock.calls[0][1].idempotency_key);
+  });
+
   it('requires an explicit outcome and never retries on mount', async () => {
     show();
     expect(screen.getByRole('button', { name: 'It arrived' })).toBeInTheDocument();
@@ -67,5 +82,23 @@ describe('reviewed delivery progress', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'It arrived' })).not.toBeInTheDocument();
     expect(sendRequest).not.toHaveBeenCalled();
+  });
+
+  it('resumes the original review only after an explicit click and preserves retry identity', async () => {
+    sendRequest.mockRejectedValueOnce(new Error('Connection interrupted'))
+      .mockResolvedValueOnce({ success: true, message: 'Review resumed.' });
+    show('review_blocked');
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'It arrived' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry review' }));
+    await screen.findByRole('alert');
+    const first = sendRequest.mock.calls[0][1];
+    expect(sendRequest).toHaveBeenCalledWith('retry_employee_review', {
+      workflow_id: '7', job_id: 'job', idempotency_key: expect.any(String),
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Retry review' }));
+    await screen.findByText('Review resumed.');
+    expect(sendRequest.mock.calls[1][1]).toEqual(first);
+    expect(screen.queryByRole('button', { name: 'Retry review' })).not.toBeInTheDocument();
   });
 });

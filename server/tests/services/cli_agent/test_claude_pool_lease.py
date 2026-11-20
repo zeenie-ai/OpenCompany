@@ -163,3 +163,13 @@ async def test_warm_reuse_rebinds_full_batch_identity():
 
     await pool.release(acquired)
     unregister_batch(old_token)
+
+
+async def test_clearing_owner_context_does_not_terminate_job_instances():
+    from services.cli_agent.context_bridge import AgentPoolKey
+    owner = _session(("wf", "lead", 1), 1)
+    instance = _session(AgentPoolKey("wf", "lead", 1, "instance", "owner", "job"), 2)
+    pool = _pool_with(owner, instance)
+    pool._terminate_locked = AsyncMock()
+    assert await pool.terminate_conversations(workflow_id="wf", agent_node_id="lead") == 1
+    pool._terminate_locked.assert_awaited_once_with(owner.memory_node_id, reason="conversation_cleared")

@@ -47,6 +47,8 @@ def test_routing_snapshot_captures_all_command_shaping_flags():
             "per_type_dispatch_enabled": True,
             "worker_pool_enabled": True,
             "pi_harness_version": 1,
+            "agent_lifecycle_version": 1,
+            "agent_protocol_version": 1,
         }
     }
 
@@ -114,6 +116,8 @@ async def test_executor_places_frozen_routing_in_new_root_input():
         "per_type_dispatch_enabled": False,
         "worker_pool_enabled": False,
         "pi_harness_version": 1,
+        "agent_lifecycle_version": 1,
+        "agent_protocol_version": 1,
     }
 
 
@@ -279,7 +283,8 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
         lambda: timedelta(seconds=1),
     )
     monkeypatch.setattr(worker_module, "create_runtime", lambda: MagicMock())
-    connect = AsyncMock(return_value=MagicMock())
+    client = MagicMock(start_workflow=AsyncMock())
+    connect = AsyncMock(return_value=client)
     monkeypatch.setattr(worker_module.Client, "connect", connect)
 
     session = MagicMock(closed=False)
@@ -327,6 +332,7 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     assert captured["patch_activation_callback"] is activate_patch
     assert connect.await_args.kwargs["namespace"] == "tenant-ns"
     assert captured["task_queue"] == "tenant-queue"
+    assert client.start_workflow.await_args.args[0] == "AgentInstanceReconcilerWorkflow"
     session.close.assert_awaited_once()
     unifier.aclose.assert_awaited_once()
     database.startup.assert_awaited_once()

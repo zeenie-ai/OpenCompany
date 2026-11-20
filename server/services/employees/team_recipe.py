@@ -119,17 +119,17 @@ def build_team(built: Any, inputs: Any) -> Any:
         roles["context"] = context_id
     talk = roles["talk_agent"]
     built.parameters[talk]["system_message"] += (
-        "\nYou are the owner's conversational contact. For substantive work, use task_manager operation='submit_job' to give one mission to your team, "
+        "\nYou are the owner's conversational contact. For substantive work, use submit_job(instructions) to give one mission to your team, "
         "acknowledge promptly, and explain that the reviewed result will arrive here later. "
         "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval. "
         "Specialist tools belong to their specialist; ask the team to perform that work rather than attaching their tools to yourself."
     )
     built.parameters[lead]["system_message"] = (
         original_parameters["system_message"] + "\nYou coordinate and review this employee's specialist team. "
-        "Use the intrinsic Task Manager to assign durable tasks to your connected teammates. Each assignment must "
-        "state its mission, context, dependencies and acceptance criteria. Review submitted results; accept only "
-        "results meeting the criteria, otherwise request revision or reassign. Reuse the existing task identity for "
-        "retries. Finish the team only after all required work is accepted. Then provide one reviewed result. "
+        "Use spawn_<teammate>(instructions, after?) to create independent agents and reviewed tasks. Explain success "
+        "in the instructions and declare dependencies explicitly. Review submitted results with get_task or inspect_task; "
+        "accept_task only when the instructions are satisfied, otherwise request_changes with feedback or reassign. "
+        "Use assign_task to reuse an agent and retry_task to retry existing work. Finish the team only after all required work is accepted. Then provide one reviewed result. "
         "Do not present an assignment acknowledgement as completed work. Do not independently publish through apps."
     )
     selected = select_responsibilities(" ".join((inputs.request.job, inputs.request.role, *(step.title for step in inputs.request.steps))), (app.name for app in inputs.apps))

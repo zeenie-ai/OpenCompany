@@ -543,6 +543,7 @@ class ClaudeSessionPool:
                 key
                 for key in self._pool
                 if isinstance(key, tuple)
+                and not getattr(key, "instance_id", "")
                 and key[0] == workflow_id
                 and (agent_node_id is None or key[1] == agent_node_id)
                 and (keep_generation is None or key[2] != keep_generation)
@@ -1028,7 +1029,8 @@ class ClaudeSessionPool:
             provider=self._provider.name,
             prompt=prompt,
             worktree_path=str(session.cwd),
-            response=str(provider_result.get("response") or "")[:4000],
+            response=(str(provider_result.get("response") or "") if getattr(session.memory_node_id, "instance_id", "")
+                      else str(provider_result.get("response") or "")[:4000]),
             cost_usd=provider_result.get("cost_usd"),
             duration_ms=provider_result.get("duration_ms"),
             num_turns=provider_result.get("num_turns"),

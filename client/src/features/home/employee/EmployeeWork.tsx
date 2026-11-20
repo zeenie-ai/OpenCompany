@@ -131,7 +131,7 @@ export function EmployeeWork({ employee }: { employee: EmployeeSummary }) {
   // LiveWork); the employee's own snapshot describes it too.
   const progress = lane ? null : saved ?? null;
   const job = detail.data ? detail.data.job_progress : employee.job_progress;
-  const delivery = job && ['delivery_needs_review', 'waiting_for_approval', 'failed', 'cancelled'].includes(job.state);
+  const delivery = job && ['delivery_needs_review', 'review_blocked', 'waiting_for_approval', 'failed', 'cancelled'].includes(job.state);
   return <>
     {progress && <WorkPanel progress={progress} connected={isReady} failed={detail.isError || progress.state === 'unavailable'} refresh={() => void detail.refetch()} />}
     {!saved && !lane && detail.isError && <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">

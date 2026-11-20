@@ -322,6 +322,20 @@ async def handle_resolve_employee_delivery(data: Dict[str, Any], websocket: WebS
 
 # ----- Name and photo -----
 
+
+@ws_response
+async def handle_retry_employee_review(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+    from services.employees.review_recovery import retry_review
+    workflow_id = str(data.get("workflow_id") or "")
+    if ((getattr(websocket, "scope", {}) or {}).get("path") == "/ws/internal"
+        or not getattr(getattr(websocket, "state", None), "user_id", None)
+        or not workflow_id or not await _owns(container.database(), websocket, workflow_id)):
+        return {"success": False, "error": "not_found"}
+    return await retry_review(container.database(), workflow_id=workflow_id,
+        job_id=str(data.get("job_id") or ""), owner_id=execution_principal({}, websocket),
+        request_key=str(data.get("idempotency_key") or ""))
+
 #: What a photo may be: images the workspace file route shows inline.
 PHOTO_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 
@@ -426,6 +440,7 @@ WS_HANDLERS: Dict[str, Any] = {
     "list_employee_access": handle_list_employee_access,
     "decide_employee_access": handle_decide_employee_access,
     "resolve_employee_delivery": handle_resolve_employee_delivery,
+    "retry_employee_review": handle_retry_employee_review,
     "rename_employee": handle_rename_employee,
     "set_employee_photo": handle_set_employee_photo,
 }

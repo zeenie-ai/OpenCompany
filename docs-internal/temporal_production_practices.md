@@ -5,7 +5,11 @@ This note compares OpenCompany's Temporal execution with the production practice
 - one cross-check against the RFCs and the release plan;
 - one fact sheet on the external mechanisms the guide relies on.
 
-Nothing in the note is built yet. The fixes are queued for v0.3.3.
+The numbered recommendations preserve that review and its v0.3.3 release
+decisions; they are not a current implementation inventory. The separate
+[reusable-agent section](#implemented-reusable-agent-lifecycle) records the
+subsequent lifecycle implementation. It does not mark every recommendation
+below as completed.
 
 Sources:
 - Pydantic AI, [Durable Execution with Temporal](https://pydantic.dev/docs/ai/integrations/durable_execution/temporal/), and the [Temporal durability section of Code Mode](https://pydantic.dev/docs/ai/harness/code-mode/#temporal-durability).
@@ -13,6 +17,90 @@ Sources:
 - pydantic-ai 2.67.0, read only to see how the guide's own library implements a practice.
 
 Read it with [TEMPORAL_ARCHITECTURE.md](TEMPORAL_ARCHITECTURE.md), [temporal-workflow-control.md](temporal-workflow-control.md) and [agent_context_flow.md](agent_context_flow.md). The decisions it builds on are in [RFC-0004](../RFC-0004-TEMPORAL-SDK-FEATURE-ADOPTION.md), [RFC-0005](../RFC-0005-EVENT-OS-ON-TEMPORAL.md), [RFC-0006](../RFC-0006-TEMPORAL-DESIGN-PATTERNS.md) and [RFC-0007](../RFC-0007-APPROVALS-ON-TEMPORAL.md). Where a document and the code differ, the code wins.
+
+## Implemented reusable-agent lifecycle
+
+The instance protocol uses the existing native/Pi loops and opaque provider
+adapters under `AgentInstanceSessionWorkflow`. Connected graph nodes are
+templates; instances, runs, tasks and attempts have separate identities.
+The [execution contract](TEMPORAL_ARCHITECTURE.md#reusable-agent-sessions-protocol-1)
+describes the workflow commands and transcript boundaries. This section records
+the operational consequences of that implementation, not the private internals
+of another coding assistant.
+
+| Concern | Implemented behavior |
+|---|---|
+| Admission and legacy replay | Newly admitted generations capture `agent_lifecycle_version: 1` and its `agent_protocol_version` alias. Existing histories retain their recorded behavior. Additive instance/run/inbox/conversation tables and task references coexist with legacy readers; deployment does not rewrite old transcripts. |
+| Conversation ownership | One DB-fenced run owns an instance transcript. Job leads and teammates use separate instance session/output scopes; Talk retains its own conversation. Transcript revision and owning-run checks reject stale writes. |
+| Durable input and review | Spawn commits the instance, first reviewed task/attempt and startup obligation together. Message request identity and payload fingerprint deduplicate delivery. Task submission and the owning lead's review inbox entry commit together. Signals only accelerate committed obligations. |
+| Response receipts | Checkpoint and receipt advancement share a transaction. Native/Pi wait for all tool results before admitting another mailbox batch. Opaque turns return checkpoint data for a separate persistence Activity. `consumed` means a durable response was saved; acceptance is an explicit task transition. |
+| Capacity | Claim precedes capacity acquisition. Native/Pi waits release root capacity and Pi's driver resources. Every reacquisition gets a fresh physical lease, and the run ledger is written before acquiring it. Opaque adapters that cannot yield return `pending` immediately. |
+| Cancellation | Stop fences the run and waits for its executor to drain, including an opaque provider coroutine. Cancellation of a task does not close its reusable instance. A late stop hint verifies the current run before cancelling it. Generation Stop preserves work; Reset fences the old generation and disposes its pending deliveries. |
+| Bounded correction | Three classified invalid orchestration requests halt the turn. Stable operation IDs include native run/iteration/call position without changing the provider IDs stored in the transcript. Infrastructure errors, unrelated tool failures and ordinary revision conflicts do not spend this budget. |
+| Review recovery | Valid child work survives a lead halt. An owner can use `retry_employee_review` / **Retry review** to resume that job's original lead; accepted work is not reassigned. A lead that created no work instead goes through the atomic no-assignment failure gate. Inbox wakeups do not clear a halt. |
+
+Mailbox defaults are 8 KiB per peer message, 256 pending peer messages or 1 MiB
+per recipient, and eight automatically induced peer turns per chain. The
+configuration keys are `AGENT_PEER_MESSAGE_BYTES`, `AGENT_PENDING_MESSAGES`,
+`AGENT_PENDING_BYTES` and `AGENT_PEER_CHAIN_TURNS`. Peer sends over the inbox
+limits receive backpressure; mandatory task notifications remain durable.
+Exhausted chains hold further delivery and expose a notice until explicitly
+resumed. Neither an idle agent nor a message receipt accepts a task dependency.
+
+### Reconciler readiness and recovery
+
+`AgentInstanceReconcilerWorkflow` has deterministic ID
+`agent-instances:reconciler:v1`. It performs a pass followed by a 30-second
+Temporal timer and continues as new after 100 passes. Reconciliation repairs
+completed-job retirement, pending permit releases, draining executors and
+missed starts/wakeups from database records.
+
+The embedded worker retries reconciler startup independently of healthy queue
+polling, using `temporal_worker_restart_backoff_seconds` and
+`temporal_worker_restart_backoff_max_seconds`. Worker shutdown cancels this
+startup task. Standalone startup awaits admission of the reconciler before
+running its worker. A start/signal transport error therefore leaves a durable
+obligation; it is not a successful delivery or an instruction to recreate work.
+
+Recovery scans rotate checked pending/stopping instances. Permit-ledger scans
+rotate `last_permit_reconcile_at`, preserving `created_at`. This avoids a page
+of healthy, long-running owners starving a later orphan. Lease provenance lives
+on `AgentRun.permit_leases`, with `permits_pending` tracking unfinished cleanup;
+both active runs and runs whose business completion already committed can need
+repair.
+
+Releasing an orphan's capacity requires evidence: the recorded physical session
+owner must be terminal or missing, the native child's current chain must have
+ended, and the recorded lease owners must be terminal. A still-running native
+child is cancelled and remains draining. A transient describe failure is not
+proof of termination. Retirement writes a released tombstone even if acquisition
+never finished, preventing a late executor from recreating that reservation.
+Conditional release updates the root counter once. Do not substitute the
+legacy three-hour stale-permit sweep for these checks.
+
+### Validation and rollout checks
+
+Apply the additive storage changes before admitting protocol 1 work. Preserve
+the generation marker and frozen routing values through restart and resume;
+do not read live settings to decide which commands an existing history emits.
+An unmarked generation stays on its legacy tool and execution path. Updated
+workers must register both instance workflows and `INSTANCE_ACTIVITIES`, while
+retaining activities and workflows referenced by old histories.
+
+The deterministic coverage lives in
+`server/tests/temporal/test_agent_instance_workflow.py`, with transactional store,
+tool, provider and worker-startup tests beside the corresponding subsystems.
+It checks that permit provenance commits before real database capacity acquisition,
+duplicate and stale taskTrigger routing, isolated histories, halted admission,
+wait capacity, cancellation drain and exact-owner recovery. Run the existing
+Temporal replay/identity gates when these workflow commands change; inspect
+the recorded completion stage before interpreting a test-server teardown
+timeout as a failed business scenario. Do not suppress a failing assertion or
+replay mismatch as infrastructure noise.
+
+The lifecycle validation uses deterministic fixtures and fake provider calls.
+It does not establish comparative Grok, DeepSeek or Kimi performance, and it
+does not require paid model evaluation.
 
 ## Decisions in this pass
 

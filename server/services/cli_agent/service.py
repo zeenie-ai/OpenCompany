@@ -56,7 +56,7 @@ logger = get_logger(__name__)
 
 DEFAULT_MAX_PARALLEL = 5
 
-BatchKey = Tuple[str, str]  # (workflow_id, node_id)
+BatchKey = Tuple[str, ...]  # (workflow_id, node_id[, instance_id])
 
 
 async def with_chat_notes(database: Any, tasks: List[BaseAICliTaskSpec], chat_stream: Dict[str, Any]) -> List[BaseAICliTaskSpec]:
@@ -111,6 +111,7 @@ class AICliService:
         mcp_port: Optional[int] = None,
         ai_service: Any = None,
         chat_stream: Optional[Dict[str, Any]] = None,
+        instance_context: Optional[Dict[str, Any]] = None,
     ) -> BatchResult:
         """Run a list of CLI tasks under one batch. ``chat_stream``: the chat
         run the agent answers (services/chat/stream.py ``chat_stream_for``),
@@ -123,14 +124,27 @@ class AICliService:
             ValueError / NotImplementedError: provider unknown / v2-deferred.
         """
         provider = create_cli_provider(provider_name)
+        instance_context = dict(instance_context or {})
+        instance_id = str(instance_context.get("agent_instance_id") or "")
+        from services.agent_instances.admission import restore_gate
+        admission = await restore_gate(instance_context)
+        if admission is not None:
+            admission.check()
         task_list: List[BaseAICliTaskSpec] = list(tasks)
         if chat_stream:
             from services.plugin.deps import get_database
 
             task_list = await with_chat_notes(get_database(), task_list, chat_stream)
-        connected_tools = list(connected_tools or [])
+        connected_tools = [{**entry, **({"agent_runtime": instance_context} if instance_id else {})}
+                           for entry in (connected_tools or [])]
+        if instance_id and not any(entry.get("node_type") == "taskManager" for entry in connected_tools):
+            connected_tools.append({"node_type": "taskManager", "node_id": f"{node_id}:instance_tools",
+                                    "parameters": {}, "agent_runtime": instance_context})
         context_bridge: Optional[SpecializedAgentContextBridge] = None
         context_original_prompts: List[str] = []
+        if instance_id:
+            connected_context = {**(connected_context or {}), **instance_context, "kind": "context",
+                                 "workflow_id": workflow_id}
         if is_context(connected_context):
             from services.plugin.deps import get_database
 
@@ -151,20 +165,26 @@ class AICliService:
             task_list = [
                 task.model_copy(
                     update={
-                        "prompt": context_bridge.augment_prompt(
-                            task.prompt
-                        )
+                        "prompt": (task.prompt if instance_id and provider_name in {"claude", "codex"}
+                                   else context_bridge.augment_prompt(task.prompt))
                     }
                 )
                 for task in task_list
             ]
 
             # One conversation maps to one provider session.
-            if provider_name == "claude" and len(task_list) != 1:
+            if (provider_name == "claude" or instance_id) and len(task_list) != 1:
                 raise ValueError(
                     "Context-bound Claude batches require exactly one "
                     "task so one conversation maps to one provider session."
                 )
+            if instance_id:
+                resume_id = await context_bridge.provider_session_id()
+                if not resume_id and context_bridge.history:
+                    raise ValueError("continuation_unavailable: provider session identity is missing")
+                # Native identities come only from this instance's durable state.
+                task_list = [task.model_copy(update={"resume_session_id": resume_id,
+                    **({"session_id": None, "continue_session": False} if provider_name == "claude" else {})}) for task in task_list]
 
         # Pass the per-workflow workspace dir
         # (``data/workspaces/<workflow_id>/`` — injected into ctx by
@@ -284,7 +304,7 @@ class AICliService:
         cfg = get_provider_config(provider_name)
         defaults = dict(cfg.defaults) if cfg else {}
 
-        key: BatchKey = (workflow_id, node_id)
+        key = (workflow_id, node_id, instance_id) if instance_id else (workflow_id, node_id)
         async with self._lock:
             if key in self._active_sessions:
                 logger.warning(
@@ -333,11 +353,19 @@ class AICliService:
                     memory_bound=bool(connected_memory) or (
                         context_bridge is not None and provider_name == "claude"
                     ),
+                    **({"instance_id": instance_id, "context_event_sink": context_bridge.record_event,
+                        "context_start_sink": context_bridge.prepare_provider_start} if instance_id else {}),
                 )
                 async with self._lock:
                     self._active_sessions[key].append(session)
                 try:
+                    if admission is not None:
+                        current_loop = asyncio.get_running_loop()
+                        admission.on_halt = lambda reason: current_loop.call_soon_threadsafe(
+                            lambda: asyncio.create_task(session.cleanup()))
                     try:
+                        if instance_id:
+                            await context_bridge.validate_provider_workspace(session.worktree_dir)
                         await session.start()
                     except FileNotFoundError as exc:
                         return self._fail_result(provider_name, task, session.task_id, f"cli_not_installed: {exc}")
@@ -347,7 +375,12 @@ class AICliService:
                     except Exception as exc:
                         logger.exception("[CC-Agent service] start failed")
                         return self._fail_result(provider_name, task, session.task_id, f"start_failed: {exc}")
-                    return await session.wait_for_completion(task.timeout_seconds)
+                    result = await session.wait_for_completion(task.timeout_seconds)
+                    if admission is not None and admission.halted:
+                        result.success = False
+                        result.error = "agent_turn_halted: " + admission.reason
+                        result.provider_data["agent_admission_state"] = admission.serialize_state()
+                    return result
                 finally:
                     try:
                         await session.cleanup()
@@ -394,17 +427,32 @@ class AICliService:
         from services.cli_agent.worktree import add_worktree, remove_worktree
 
         worktree_parent = Path(workspace_dir).resolve() / safe_path_component(node_id, "node")
+        if instance_id:
+            worktree_parent = worktree_parent / safe_path_component(instance_id, "instance")
 
         async def run_pooled(task: BaseAICliTaskSpec, session_key: Any, worktree_name: str) -> SessionResult:
             async with sem:
                 try:
-                    cwd = await add_worktree(resolved_repo_root, worktree_parent / f"wt_{worktree_name}")
+                    target_cwd = worktree_parent / f"wt_{worktree_name}"
+                    if instance_id:
+                        await context_bridge.validate_provider_workspace(target_cwd)
+                    cwd = await add_worktree(resolved_repo_root, target_cwd)
+                    if instance_id:
+                        if not task.resume_session_id:
+                            import uuid
+                            task = task.model_copy(update={"session_id": str(uuid.uuid4()), "continue_session": False})
+                        await context_bridge.prepare_provider_start(cwd,
+                            session_id=task.resume_session_id or task.session_id)
                 except BaseException:
                     # The pool has not adopted this batch's token yet, and the
                     # finally below leaves pool tokens to the pool.
                     unregister_batch(token)
                     raise
-                return await self._run_pooled_turn(
+                if admission is not None:
+                    current_loop = asyncio.get_running_loop()
+                    admission.on_halt = lambda reason: current_loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(session_pool.terminate(session_key)))
+                result = await self._run_pooled_turn(
                     task=task,
                     session_key=session_key,
                     cwd=cwd,
@@ -415,7 +463,13 @@ class AICliService:
                     connected_tools=connected_tools or [],
                     connected_skill_names=list(connected_skill_names or []),
                     workflow_id=workflow_id,
+                    **({"context_event_sink": context_bridge.record_event} if instance_id else {}),
                 )
+                if admission is not None and admission.halted:
+                    result.success = False
+                    result.error = "agent_turn_halted: " + admission.reason
+                    result.provider_data["agent_admission_state"] = admission.serialize_state()
+                return result
 
         results: List[SessionResult]
         try:
@@ -444,6 +498,10 @@ class AICliService:
                     *(run_one(t) for t in task_list),
                     return_exceptions=False,
                 )
+        except asyncio.CancelledError:
+            if admission is not None:
+                admission.revoke("interrupted")
+            raise
         finally:
             async with self._lock:
                 self._active_sessions.pop(key, None)
@@ -473,7 +531,7 @@ class AICliService:
         # next run can `--resume <UUID>` and the UI sees the
         # conversation refresh live. Fire-and-forget — failure here
         # doesn't fail the batch.
-        if connected_memory:
+        if connected_memory and not instance_id:
             try:
                 await self._persist_memory(
                     connected_memory,
@@ -501,12 +559,16 @@ class AICliService:
             ):
                 if not (item.success and item.response):
                     continue
+                if instance_id:
+                    continue  # The durable session owner retries this checkpoint separately.
                 try:
                     await context_bridge.record_turn(
                         original_prompt,
                         item.response,
                     )
                 except Exception as exc:
+                    if instance_id:
+                        raise
                     logger.warning(
                         "[CC-Agent run_batch] conversation save failed; "
                         "continuing: %s",
@@ -541,6 +603,10 @@ class AICliService:
             budget_remaining_usd=None,
             provider=provider_name,
             timestamp=datetime.now(timezone.utc).isoformat(),
+            agent_transcript=(context_bridge.turn_checkpoint(context_original_prompts[0], results[0].response,
+                response_recorded=results[0].success or bool(results[0].response))
+                if instance_id and context_bridge is not None and results else None),
+            agent_admission_state=admission.serialize_state() if admission else None,
         )
 
         await self._broadcast_phase(
@@ -569,53 +635,26 @@ class AICliService:
         if not connected_tools:
             return []
         from services.plugin.deps import get_ai_service
-        from services.plugin.tool import node_tool_bindings
+        from services.agent_bindings import node_tools
         from services.tool_identity import ensure_unique_tool_names
 
         ai_service = ai_service or get_ai_service()
         surface: List[Dict[str, Any]] = []
         identities: List[Dict[str, str]] = []
         for tool_info in connected_tools:
-            # The surface gives one tool per node; a node that gives several
-            # (a custom MCP connector) is left out.
-            if await node_tool_bindings(tool_info) is not None:
-                logger.warning(
-                    "[cli_agent] skipping %r: a CLI agent can't use a node that gives several tools",
-                    tool_info.get("node_type"),
-                )
-                continue
-            tool, execution = await ai_service._build_tool_from_node(tool_info)
-            if tool is None or execution is None:
-                # Skip-and-log, matching the pre-existing contract. Raising
-                # here fails the whole batch over one unbuildable node — and
-                # this path serves every CLI agent, not only Context-bound
-                # ones, so a single bad tool took down runs that never used
-                # it. A surface that ends up entirely empty is caught below.
+            bindings = await node_tools(ai_service, tool_info)
+            if not bindings:
                 logger.warning(
                     "[cli_agent] skipping unbuildable connected tool %r",
                     tool_info.get("node_type"),
                 )
                 continue
-            entry = {
-                **tool_info,
-                "_agent_tool_name": tool.name,
-                "_agent_tool_description": tool.description,
-                "_agent_tool_schema": tool.parameters,
-                "_agent_tool_input_model": tool.args_schema,
-                "_agent_tool_execution": execution,
-            }
-            surface.append(entry)
-            identities.append(
-                {
-                    "name": tool.name,
-                    "node_id": str(tool_info.get("node_id") or ""),
-                    "label": str(
-                        tool_info.get("label")
-                        or tool_info.get("node_type")
-                        or "tool"
-                    ),
-                }
-            )
+            for tool, execution in bindings:
+                surface.append({**tool_info, "_agent_tool_name": tool.name,
+                    "_agent_tool_description": tool.description, "_agent_tool_schema": tool.parameters,
+                    "_agent_tool_input_model": tool.args_schema, "_agent_tool_execution": execution})
+                identities.append({"name": tool.name, "node_id": str(tool_info.get("node_id") or ""),
+                    "label": str(tool_info.get("label") or tool_info.get("node_type") or "tool")})
         ensure_unique_tool_names(identities)
         return surface
 
@@ -749,6 +788,10 @@ class AICliService:
                 timeout_seconds=task.timeout_seconds,
                 workflow_id=workflow_id,
             )
+        except asyncio.CancelledError:
+            # A cancelled turn cannot leave a warm subprocess executing tools.
+            await pool.terminate(session_key)
+            raise
         finally:
             if access.per_run:
                 # Its env carries this run's attribution headers. The next

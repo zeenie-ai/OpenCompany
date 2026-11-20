@@ -955,7 +955,20 @@
       "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
       "after": "5c27949be70b71eaf931a5520a928b2699eb4403ee66f3d04d7d743fd87d433f",
       "patch": "controller-spawn-backoff-v1",
-      "reason": "RFC-0006 §11.6 rec 2 and §7.4 A1: on the durable-queue path, WorkflowControlWorkflow's spawn-failure arm records controller-spawn-backoff-v1 before it retries a failed spawn behind the rest of the queue (5 s, 30 s, 2 min, 10 min) and then writes it to the dead rows through controller.queue.spill; a history without the marker keeps the head-of-line retry every 5 s. The marker ships dormant (services/temporal/patches.py DORMANT_PATCHES), so this release's runs record none; the only other change is the spill helper moving out of _continue_as_new with the same payloads."
+      "reason": "RFC-0006 \u00a711.6 rec 2 and \u00a77.4 A1: on the durable-queue path, WorkflowControlWorkflow's spawn-failure arm records controller-spawn-backoff-v1 before it retries a failed spawn behind the rest of the queue (5 s, 30 s, 2 min, 10 min) and then writes it to the dead rows through controller.queue.spill; a history without the marker keeps the head-of-line retry every 5 s. The marker ships dormant (services/temporal/patches.py DORMANT_PATCHES), so this release's runs record none; the only other change is the spill helper moving out of _continue_as_new with the same payloads."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "9d1c58abe5147056232f20bb4a020e381aa0b9063489a35ad8d602598ae47ead",
+      "new_types": [
+        "AgentInstanceSessionWorkflow",
+        "AgentInstanceReconcilerWorkflow"
+      ],
+      "flags": [
+        "agent_lifecycle_version",
+        "agent_protocol_version"
+      ],
+      "reason": "Reusable agents: new instance/session and reconciler types have no N-1 histories. Added AgentWorkflow bootstrap, mailbox, admission, checkpoint and wait commands are entered only with lifecycle version 1 captured at generation admission or its trusted instance context. Existing generations keep the legacy command path. Native/Pi replay and the immutable previous-release corpus remain mandatory."
     }
   ],
   "handlers": {

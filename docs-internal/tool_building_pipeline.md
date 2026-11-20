@@ -19,6 +19,33 @@ the original arguments and applies existing validation/policy. Workspace mode
 fills missing filesystem/shell types through virtual bindings and a dedicated
 Activity, without creating canvas nodes or node output records.
 
+## Typed lifecycle bindings (protocol version 1)
+
+`services/agent_instances/tools.py` declares the reusable-agent tool manifest.
+`ToolBinding` carries the public JSON schema, its Pydantic input validator,
+authorized operation/template binding and trusted `execution_traits`.
+`services/agent_bindings.py` expands a Task Manager connection into these narrow
+bindings for native, Pi, CLI/MCP and RLM. No instance scope, provider identity,
+tracking metadata or display title is supplied by the model.
+
+Spawn requires `instructions`; unknown arguments are rejected by the same
+validator across adapters. Traits such as `starts_child`, `waits_for_child` and
+`mutates_lifecycle` control execution behavior instead of public-name prefixes.
+Original model call IDs and arguments remain in the transcript. Separate
+runtime operation IDs distinguish repeated provider IDs across turns while
+deduplicating retries of the same operation.
+
+The dispatcher checks trusted `agent_operation` before ordinary plugin routing.
+Native/Pi validate admission at execution boundaries; MCP counts classified
+argument errors before generated handler-signature validation; RLM fences root,
+nested, fallback and effectful dispatch. After the third invalid orchestration
+request, no new operation enters that turn. Infrastructure failures and stale
+task references do not spend this budget. See [Agent Teams](./agent_teams.md)
+and [CLI adapters](./cli_agent_framework.md).
+
+Legacy generations retain the operation-based Task Manager contract. Ordinary
+plugins continue through the pipeline documented below.
+
 ## 1. Five stages
 
 ```
@@ -57,9 +84,9 @@ Activity, without creating canvas nodes or node output records.
 - **`tool_data`** is a list of dicts. Each entry: `{node_id, node_type, parameters, label}`. (The `connected_services` extra belonged to the retired `androidTool` gateway tool — see §7.)
 - **MasterSkill expansion** runs at discovery time: a single `masterSkill` connection with `skills_config` expands into N individual skill entries, one per enabled skill key.
 - **Team-lead expansion** (`orchestrator_agent` / `ai_employee`): agents connected
-  to `input-teammates` become authorized descriptors. Internal `delegate_to_*`
-  identities remain available to the coordinator, while the LLM delegates via
-  Task Manager.
+  to `input-teammates` become authorized template descriptors. Version 1 uses
+  bound spawn/reassign tools; version 0 retains Task Manager operations and
+  internal `delegate_to_*` identities for compatibility dispatch.
 
 ## 3. Stage 2 — Build (services/ai.py:_build_tool_from_node)
 
@@ -180,10 +207,11 @@ tool or crashing.
 4. Return result. Exceptions trigger an "error" broadcast and re-raise.
 ```
 
-[`_dispatch_tool`](../server/services/handlers/tools.py) is pure routing — no broadcasting. It checks `config["node_type"]` in this order:
+[`_dispatch_tool`](../server/services/handlers/tools.py) is pure routing — no broadcasting. It checks trusted lifecycle bindings first, then `config["node_type"]`:
 
 | Order | Pattern | Handler |
 |---|---|---|
+| 0 | Trusted `agent_operation` / `_agent_operation` binding | `services.agent_instances.tools.execute_lifecycle_tool` |
 | 1 | `_builtin_skill` | `services.skill_runtime.execute_skill_tool` |
 | 2 | Any registered plugin that is not a registered agent (`get_node_class(node_type)`) | The plugin fast path: `plugin_cls().execute_as_tool(tool_args, node_params, ctx)`. This covers every tool plugin, dual-purpose `usable_as_tool` nodes, the Android services, `taskManager` and `proxyConfig`. A plugin that needs to adjust the model's arguments overrides `execute_as_tool` (see §12). |
 | 3 | `ANDROID_SERVICE_NODE_TYPES`, `taskManager`, `proxyConfig` | Legacy branches (`execute_android_service_tool`, `_execute_task_manager`, `execute_proxy_config`). Each of these types is a registered plugin, so step 2 handles it first and these branches are not reached today. |
