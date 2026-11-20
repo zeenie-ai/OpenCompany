@@ -951,7 +951,10 @@ sending and drafts belong to the chat (wire and client rules in
   ([chat_protocol.md → Branches](./chat_protocol.md#branches)). Drafts waiting
   on the part left behind are cancelled, and the employee hears of anything
   sent there. Good and Bad rate an answer; the toast says the employee will see
-  it next time, which is when the rating reaches them.
+  it next time, which is when the rating reaches them. Beside an answer's time
+  is what it cost, an estimate of its model calls and paid tool calls
+  ([pricing_service.md](./pricing_service.md)); an answer with no booked call
+  shows none.
 - **The box** follows the control state the way `send_chat_message` does
   (`talkMode` in `presentation.ts`):
   - *send* (running, starting, resuming): a message accepted by the server shows at once

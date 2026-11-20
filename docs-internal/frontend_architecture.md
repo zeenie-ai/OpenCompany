@@ -201,6 +201,8 @@ client/src/
 │   ├── useWorkflowsQuery.ts        # Workflow list + save/delete mutations (Query)
 │   ├── useNodeParamsQuery.ts       # Per-node parameter Query + save mutation
 │   ├── useUserSettingsQuery.ts     # user_settings row Query + save mutation
+│   ├── useUsageQueries.ts          # What calls cost, from the server's usage service: USD per chat run
+│   │                               # (the figure under a reply, in Home's chat and Dev's console chat)
 │   ├── useApiKeys.ts               # WS-based API key CRUD
 │   ├── useApiKeyValidation.ts      # Provider-specific validation helpers
 │   ├── useComponentPalette.ts / useDragAndDrop.ts / useDragWorkspaceFile.ts
@@ -241,6 +243,7 @@ client/src/
 │   ├── aiModelProviders.ts         # Frontend-only AI provider icon/credential map
 │   ├── queryClient.ts              # Module-singleton QueryClient (imperative invalidation without React context)
 │   ├── queryConfig.ts / featureFlags.ts
+│   ├── format.ts                   # Formatters shared by more than one screen (`usd`)
 │   ├── queryPersist.ts             # localStorage persister + PERSISTED_KEY_PREFIXES whitelist
 │   ├── brandStorage.ts             # Canonical browser-storage keys + pre-rebrand aliases
 │   ├── connectionConfig.ts         # WS reconnect, heartbeat and close-code constants + auth-bootstrap backoff

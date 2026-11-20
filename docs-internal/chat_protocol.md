@@ -601,7 +601,11 @@ are the two hosts.
   (`turns/UserTurn.tsx`: time, ‹ 1 / 2 › between versions, Edit, Copy; Edit opens `turns/UserEditBox.tsx` in place,
   Enter sends, Esc cancels, ArrowUp in an empty box edits the last message); under a finished answer
   (`turns/ReplyActions.tsx`) Copy, Good and Bad (pressing again takes the rating back), Try again on the latest
-  answer, ‹ 1 / 2 › between answers, and the time. A run that stopped or failed without an answer has Try again in
+  answer, ‹ 1 / 2 › between answers, what the reply cost, and the time. The cost ("$0.42", or "<$0.01") is an
+  estimate of the run's model calls and paid tool calls. It does not come with the thread: the bar reads
+  `get_chat_run_costs` from the usage service (`hooks/useUsageQueries.ts`, see
+  [Pricing Service](./pricing_service.md)) and refreshes on `chat.updated`. A reply whose run booked no call shows
+  none. A run that stopped or failed without an answer has Try again in
   its note. Each command sends the thread's revision as read; a refusal is told in the host's words
   (`turns/runCopy.ts` `branchRefusalText`), `not_running` through the host's own refusal. A rating shows at once and
   goes back when it does not save; its toast says the employee will see it next time (`feedbackThanks`). Suggested

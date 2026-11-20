@@ -214,6 +214,8 @@ describe('WebSocket actions for Normal mode', () => {
 
     broadcast(updated('wf2'));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.chatThread.bySession('wf2').queryKey });
+    // A saved reply changes what its run cost.
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.chatRunCosts.bySession('wf2').queryKey });
     broadcast(updated('wf1'));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.chatThread.bySession('wf1').queryKey });
     await act(async () => {});

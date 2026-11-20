@@ -538,4 +538,30 @@ describe('ChatPane', () => {
     renderPane();
     expect(box()).toHaveValue('Half a thought');
   });
+
+  it('shows what a reply cost beside its time', async () => {
+    server.messages = [
+      row('m1', 'user', 'Book Saturday', { run_id: 'r1' }),
+      row('a_r1', 'assistant', 'Saturday is booked.', { run_id: 'r1' }),
+    ];
+    const answer = sendRequest.getMockImplementation()!;
+    sendRequest.mockImplementation(async (kind: string, data: Wire) => {
+      if (kind === 'get_chat_run_costs') return { success: true, runs: { r1: 0.42 } };
+      return answer(kind, data);
+    });
+    renderPane();
+
+    expect(await screen.findByText('Saturday is booked.')).toBeInTheDocument();
+    expect(await screen.findByTitle('Estimated cost of model and tool calls')).toHaveTextContent('$0.42');
+    expect(sendRequest).toHaveBeenCalledWith('get_chat_run_costs', { workflow_id: 'w1' });
+  });
+
+  it('shows no cost under a reply whose run booked none', async () => {
+    server.messages = [row('a_r1', 'assistant', 'Saturday is booked.', { run_id: 'r1' })];
+    renderPane();
+
+    expect(await screen.findByText('Saturday is booked.')).toBeInTheDocument();
+    await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('get_chat_run_costs', { workflow_id: 'w1' }));
+    expect(screen.queryByTitle('Estimated cost of model and tool calls')).not.toBeInTheDocument();
+  });
 });

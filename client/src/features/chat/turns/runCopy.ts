@@ -4,8 +4,10 @@
  * testable on its own.
  */
 
+import type { ChatRunCosts } from '@/hooks/useUsageQueries';
 import type { RunError } from '@/lib/agui/events';
 import type { RunSnapshot, RunStep } from '@/lib/agui/reduceRun';
+import { usd } from '@/lib/format';
 import type { ChatApproval, ChatApprovals } from '../data/approvals';
 
 /** The text a run that has not posted its answer shows. */
@@ -177,6 +179,16 @@ export function branchRefusalText(code: string, name: string): string {
     default:
       return 'That didn’t go through. Try again.';
   }
+}
+
+/** "$0.42": what the run that wrote a reply cost, or null when no cost is
+ *  known for it (the costs have not loaded, the reply has no run, or
+ *  nothing booked a call for the run). */
+export function costLabel(costs: ChatRunCosts | undefined, runId: string | null): string | null {
+  if (!costs || !runId) return null;
+  const cost = costs[runId];
+  if (cost === undefined) return null;
+  return usd(cost);
 }
 
 /** What the owner hears after rating an answer: where the rating goes. */

@@ -93,10 +93,20 @@ const chatContext = createQueryKeys('chatContext', {
 });
 
 /**
+ * What each chat run of one session cost (`get_chat_run_costs`; session id
+ * = the workflow id). The reply bar reads it (hooks/useUsageQueries.ts);
+ * WebSocketContext invalidates it on `chat.updated`, which the server sends
+ * when a reply is saved and when a run ends.
+ */
+const chatRunCosts = createQueryKeys('chatRunCosts', {
+  bySession: (sessionId: string) => [sessionId],
+});
+
+/**
  * Merged factory. Consumers call e.g.
  *   queryKeys.credentialValues.byProvider(id).queryKey
  * for a specific key, and
  *   queryKeys.credentialValues._def
  * for partial-match invalidation across the namespace.
  */
-export const queryKeys = mergeQueryKeys(credentialValues, compactionStats, chatThread, chatContext);
+export const queryKeys = mergeQueryKeys(credentialValues, compactionStats, chatThread, chatContext, chatRunCosts);

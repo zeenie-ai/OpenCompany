@@ -1214,6 +1214,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const sessionId = identity?.session_id;
           if (sessionId) {
             void queryClient.invalidateQueries({ queryKey: queryKeys.chatThread.bySession(sessionId).queryKey });
+            // A saved reply or a finished run changes what its run cost.
+            void queryClient.invalidateQueries({ queryKey: queryKeys.chatRunCosts.bySession(sessionId).queryKey });
           }
           break;
         }
