@@ -382,6 +382,16 @@ class TestPerplexitySearch:
         assert api_usage.await_args.kwargs["cost"] is None
 
     @respx.mock
+    async def test_a_reported_cost_of_another_shape_leaves_the_price_to_the_price_list(self, harness, api_usage):
+        respx.post(self.URL).mock(return_value=httpx.Response(200, json={"choices": [], "usage": {"cost": 0.012}}))
+
+        with patched_container(auth_api_keys={"perplexity": "tk"}):
+            result = await harness.execute("perplexitySearch", {"query": "x"})
+
+        harness.assert_envelope(result, success=True)
+        assert api_usage.await_args.kwargs["cost"] is None
+
+    @respx.mock
     async def test_a_failed_request_books_nothing(self, harness, api_usage):
         respx.post(self.URL).mock(return_value=httpx.Response(401, text="bad key"))
 

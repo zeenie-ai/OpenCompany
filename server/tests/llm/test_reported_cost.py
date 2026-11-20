@@ -70,6 +70,22 @@ async def test_openrouter_reports_nothing_when_the_response_has_no_cost(answerin
     assert response.reported_cost is None
 
 
+async def test_openrouter_reports_nothing_for_a_cost_that_is_not_a_number(answering):
+    answering({"cost": "0.0123"})
+
+    response = await OpenRouterProvider("sk-or-test", max_retries=0).chat(HELLO, model=MODEL)
+
+    assert response.reported_cost is None
+
+
+async def test_openrouter_adds_nothing_for_cost_details_of_another_shape(answering):
+    answering({"cost": 0.001, "cost_details": ["upstream_inference_cost", 0.02]})
+
+    response = await OpenRouterProvider("sk-or-test", max_retries=0).chat(HELLO, model=MODEL)
+
+    assert response.reported_cost == 0.001
+
+
 async def test_another_provider_reports_nothing_even_when_its_usage_has_a_cost(answering):
     answering({"cost": 0.0123})
 

@@ -84,12 +84,16 @@ class OpenRouterProvider(OpenAIProvider):
         and the provider's own charge is beside it in
         ``usage.cost_details.upstream_inference_cost``, so the two are added.
         (openrouter.ai/docs/use-cases/usage-accounting)
+
+        Anything but those shapes reports nothing: this runs after the call
+        was paid for, and an error here would make the step send it again.
         """
         cost = getattr(usage, "cost", None)
-        if cost is None:
+        if not isinstance(cost, (int, float)):
             return None
-        details = getattr(usage, "cost_details", None) or {}
-        return cost + (details.get("upstream_inference_cost") or 0)
+        details = getattr(usage, "cost_details", None)
+        upstream = details.get("upstream_inference_cost") if isinstance(details, dict) else None
+        return cost + (upstream if isinstance(upstream, (int, float)) else 0)
 
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx

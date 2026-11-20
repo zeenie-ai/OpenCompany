@@ -127,14 +127,14 @@ class PerplexitySearchNode(ActionNode):
         # tokens) when the response has one, else at the price list's fee.
         from services.usage import record_api_usage
 
-        reported = (data.get("usage") or {}).get("cost") or {}
+        charge = (data.get("usage") or {}).get("cost")
         await record_api_usage(
             "perplexity",
             "sonar_search",
             node_id=ctx.node_id,
             session_id=ctx.session_id,
             workflow_id=ctx.workflow_id,
-            cost=reported.get("total_cost"),
+            cost=charge.get("total_cost") if isinstance(charge, dict) else None,
         )
 
         choices = data.get("choices") or []
