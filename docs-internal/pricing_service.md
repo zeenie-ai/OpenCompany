@@ -670,7 +670,7 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/nodes/location/_service.py` | Maps tracker (`_track_maps_usage`) |
 | `server/nodes/twitter/_base.py` | Twitter tracker (`track_twitter_usage`) |
 | `server/nodes/google/_base.py` | Google Workspace tracker (`track_google_usage`, cost $0) |
-| `server/nodes/proxy/_usage.py` | Proxy tracker (`track_proxy_usage`, per-GB) |
+| `server/nodes/proxy/_usage.py` | Proxy tracker (`track_proxy_usage`): books the cost `ProxyService.request_cost` gives, the bytes at the provider's own price per GB |
 | `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins: one `record_api_usage` call in each `search` operation, after the response came back |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost`, metadata nothing reads |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |

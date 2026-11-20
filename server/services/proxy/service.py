@@ -275,9 +275,15 @@ class ProxyService:
         runtime.total_bytes += result.bytes_transferred
 
         # Track daily spend
-        if result.bytes_transferred > 0 and runtime.config.cost_per_gb > 0:
-            gb = result.bytes_transferred / (1024**3)
-            self._daily_spend_usd += gb * runtime.config.cost_per_gb
+        self._daily_spend_usd += self.request_cost(provider_name, result.bytes_transferred)
+
+    def request_cost(self, provider_name: str, bytes_transferred: int) -> float:
+        """USD cost of a request through a provider, at the price per GB saved
+        with that provider. 0.0 for a name that is not a configured provider."""
+        runtime = self._providers.get(provider_name)
+        if runtime is None:
+            return 0.0
+        return bytes_transferred / (1024**3) * runtime.config.cost_per_gb
 
     def get_providers(self) -> List[ProviderStats]:
         """Get health stats for all configured providers."""

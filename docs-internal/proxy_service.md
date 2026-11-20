@@ -61,7 +61,7 @@ httpx.AsyncClient(proxy=proxy_url)
 | `server/nodes/proxy/proxy_request/__init__.py` | `proxyRequest` plugin - direct proxy HTTP request with retry/failover + usage tracking |
 | `server/nodes/proxy/proxy_config/__init__.py` | `proxyConfig` plugin (dual-purpose) - `execute_proxy_config()` + the per-operation helpers (`_add_provider`, `_set_credentials`, `_test_provider`, routing-rule ops, ...) |
 | `server/nodes/proxy/proxy_status/__init__.py` | `proxyStatus` plugin - provider health stats |
-| `server/nodes/proxy/_usage.py` | `track_proxy_usage()` - shared cost tracker (computes cost from `pricing.json:proxy.<provider>.cost_per_gb`, books it through `services.usage.record_api_usage`) |
+| `server/nodes/proxy/_usage.py` | `track_proxy_usage()` - books the cost the node passes (from `ProxyService.request_cost`) through `services.usage.record_api_usage` |
 | `server/nodes/utility/http_request/__init__.py` | `httpRequest` plugin - `_resolve_proxy_url()` transparent proxy injection helper (`use_proxy` param) |
 | `server/nodes/document/http_scraper/__init__.py` | `httpScraper` plugin - inline proxy injection via `get_proxy_service().get_proxy_url()` (`use_proxy` param) |
 | `server/nodes/scraper/crawlee_scraper/__init__.py` | `crawleeScraper` plugin - `_get_proxy_config()` proxy injection |
@@ -307,6 +307,10 @@ If the provider uses an unfamiliar URL format, the LLM can use `python_code` to 
 
 ## Cost Tracking
 
-Proxy usage is tracked via the pricing service. When a proxied request completes, `track_proxy_usage()` in `server/nodes/proxy/_usage.py` (called by the `proxyRequest` plugin) calculates cost based on bytes transferred and the provider's `cost_per_gb` from `server/config/pricing.json` (`proxy.<provider>.cost_per_gb`). The cost is booked through `record_api_usage` in the usage package (`server/services/usage/recording.py`), which writes the `APIUsageMetric` row and never raises, so a failed booking cannot send the paid request again.
+The proxy service prices a request: `ProxyService.request_cost(provider_name, bytes_transferred)` is the bytes at the price per GB saved with that provider (`cost_per_gb` on its `proxy_providers` row, set through `proxyConfig`), and 0.0 for a name that is not a configured provider. `pricing.json` has no proxy prices.
 
-The daily spend is also tracked in-memory on `ProxyService._daily_spend_usd` and checked against `PROXY_BUDGET_DAILY_USD` before each request.
+When a proxied request returns a response, the `proxyRequest` plugin passes that cost to `track_proxy_usage()` in `server/nodes/proxy/_usage.py`, which books it through `record_api_usage` in the usage package (`server/services/usage/recording.py`). The recorder writes the `APIUsageMetric` row and never raises, so a failed booking cannot send the paid request again.
+
+The daily spend is also tracked in-memory on `ProxyService._daily_spend_usd` (`report_result` adds each request's `request_cost`) and checked against `PROXY_BUDGET_DAILY_USD` before each request.
+
+Both look the provider up by the name the node gives them. With `proxy_provider` left at `auto` the node does not know which provider the service picked, so that request is not priced, not counted toward the daily spend and not scored; see the `proxyRequest` card's known limits. `httpRequest`, `httpScraper` and `crawleeScraper` with a proxy turned on book no proxy usage at all.

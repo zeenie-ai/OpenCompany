@@ -22,7 +22,6 @@ from nodes.twitter._base import track_twitter_usage
 NODE = "wf:node:1"
 #: The raw execution context a plugin operation receives.
 CONTEXT = {"session_id": "chat-1", "workflow_id": "wf"}
-ONE_GB = 1024**3
 
 
 def node_context(**fields):
@@ -30,15 +29,6 @@ def node_context(**fields):
     values = {"node_id": NODE, "session_id": "chat-1", "workflow_id": "wf", "raw": dict(CONTEXT)}
     values.update(fields)
     return SimpleNamespace(**values)
-
-
-@pytest.fixture
-def proxy_prices(monkeypatch):
-    """A price list with one proxy provider at $8 per GB."""
-    import services.pricing as pricing
-
-    service = SimpleNamespace(_config={"proxy": {"brightdata": {"cost_per_gb": 8.0}}})
-    monkeypatch.setattr(pricing, "get_pricing_service", lambda: service)
 
 
 async def test_twitter_books_the_action_and_count(api_usage):
@@ -148,17 +138,15 @@ async def test_treg_cuts_a_long_tool_id_to_the_column(api_usage):
     assert api_usage.await_args.kwargs["endpoint"] == "t" * 100
 
 
-async def test_proxy_books_its_own_cost_per_gb(api_usage, proxy_prices):
-    await track_proxy_usage(NODE, "brightdata", ONE_GB, workflow_id="wf", session_id="chat-1")
+async def test_proxy_books_the_cost_it_is_given_under_its_provider(api_usage):
+    await track_proxy_usage(NODE, "brightdata", 8.0, workflow_id="wf", session_id="chat-1")
 
     api_usage.assert_awaited_once_with(
         "proxy_brightdata", "proxy_request", node_id=NODE, session_id="chat-1", workflow_id="wf", endpoint="proxy", cost=8.0
     )
 
 
-async def test_proxy_without_a_provider_books_under_proxy_at_no_cost(api_usage, proxy_prices):
-    await track_proxy_usage(NODE, "", ONE_GB)
+async def test_proxy_without_a_provider_books_under_proxy(api_usage):
+    await track_proxy_usage(NODE, "", 0.0)
 
-    booked = api_usage.await_args
-    assert booked.args[0] == "proxy"
-    assert booked.kwargs["cost"] == 0.0
+    assert api_usage.await_args.args[0] == "proxy"

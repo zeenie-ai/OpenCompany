@@ -138,7 +138,7 @@ class ProxyRequestNode(ActionNode):
                 await track_proxy_usage(
                     ctx.node_id,
                     provider_name,
-                    bytes_transferred,
+                    svc.request_cost(provider_name, bytes_transferred),
                     workflow_id=ctx.workflow_id,
                     session_id=ctx.session_id,
                 )

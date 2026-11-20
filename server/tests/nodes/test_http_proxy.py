@@ -40,19 +40,13 @@ def _make_proxy_service_mock(
     svc.is_enabled = MagicMock(return_value=enabled)
     svc.get_proxy_url = AsyncMock(return_value=proxy_url)
     svc.report_result = MagicMock(return_value=None)
+    svc.request_cost = MagicMock(return_value=0.0)
     svc.reload_providers = AsyncMock(return_value=None)
     svc.reload_routing_rules = AsyncMock(return_value=None)
     svc.get_providers = MagicMock(return_value=providers or [])
     svc.get_routing_rules = MagicMock(return_value=[])
     svc.get_stats = MagicMock(return_value=stats or {})
     return svc
-
-
-def _pricing_with_proxy_config() -> MagicMock:
-    """Pricing stub that satisfies `_track_proxy_usage`'s `pricing._config.get('proxy', {}).get(...)` chain."""
-    pricing = MagicMock(name="PricingService")
-    pricing._config = {"proxy": {}}
-    return pricing
 
 
 # ============================================================================
@@ -198,14 +192,25 @@ class TestProxyRequest:
         proxy_svc.report_result.assert_not_called()
 
     @respx.mock
+    async def test_a_request_is_booked_at_the_cost_the_proxy_service_gives(self, harness, api_usage):
+        respx.get(self.URL).mock(return_value=httpx.Response(200, json={"ok": True}))
+        proxy_svc = _make_proxy_service_mock()
+        proxy_svc.request_cost.return_value = 0.25
+
+        with patch("services.proxy.service.get_proxy_service", return_value=proxy_svc), patched_container():
+            await harness.execute("proxyRequest", {"method": "GET", "url": self.URL, "proxy_provider": "smart_proxy"})
+
+        booked = api_usage.await_args
+        assert booked.args[0] == "proxy_smart_proxy"
+        assert booked.kwargs["cost"] == 0.25
+
+    @respx.mock
     async def test_happy_path_reports_success_and_tracks_cost(self, harness):
         respx.get(self.URL).mock(return_value=httpx.Response(200, json={"ok": True}))
         proxy_svc = _make_proxy_service_mock()
-        pricing = _pricing_with_proxy_config()
 
         with (
             patch("services.proxy.service.get_proxy_service", return_value=proxy_svc),
-            patch("services.pricing.get_pricing_service", return_value=pricing),
             patched_container(),
         ):
             result = await harness.execute(

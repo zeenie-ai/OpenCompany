@@ -115,7 +115,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: one row per attempt that returned a response in `api_usage_metrics` via `record_api_usage` in `services/usage` (called from `track_proxy_usage` in [`server/nodes/proxy/_usage.py`](../../../server/nodes/proxy/_usage.py)), with `service=proxy_<provider_name>` (or `proxy` when empty), `operation=proxy_request`, `cost` computed as `bytes / 1GB * cost_per_gb` from `config/pricing.json`.
+- **Database writes**: one row per attempt that returned a response in `api_usage_metrics` via `record_api_usage` in `services/usage` (called from `track_proxy_usage` in [`server/nodes/proxy/_usage.py`](../../../server/nodes/proxy/_usage.py)), with `service=proxy_<provider_name>` (or `proxy` when empty), `operation=proxy_request`, and `cost` from `ProxyService.request_cost(provider_name, bytes)`: the response's bytes at the price per GB saved with that provider (`cost_per_gb`, set through `proxyConfig`).
 - **In-memory writes**: `proxy_svc.report_result(...)` mutates the provider's rolling history deque (length 100), which feeds `compute_score()`. The service also increments `_daily_spend_usd`.
 - **Broadcasts**: none.
 - **External API calls**: the target URL, tunneled through the selected proxy URL.
@@ -125,7 +125,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `auth_service` stores proxy username/password under keys `proxy_<name>_username` / `proxy_<name>_password` (read by ProxyService when loading providers).
-- **Services**: `ProxyService` (must be enabled), `PricingService` (read through `track_proxy_usage` -> `pricing._config["proxy"]`), `Database`.
+- **Services**: `ProxyService` (must be enabled; it also prices each request), `services.usage.record_api_usage`.
 - **Python packages**: `httpx`.
 - **Environment variables**: none directly; ProxyService reads daily budget from `Settings.proxy_budget_daily_usd`.
 
@@ -133,9 +133,9 @@ flowchart TD
 
 - Failed attempts are **not** tracked in `api_usage_metrics` - only successful requests that returned a response. If every attempt raises, the DB sees nothing for that call.
 - `follow_redirects` is a declared field but never forwarded to `httpx`; the client therefore keeps httpx's default of not following redirects.
-- `provider_name` in the result echoes `params.proxy_provider or ""` verbatim; with the default `auto` it shows `"auto"` even though `ProxyService` picked a concrete provider.
+- `provider_name` in the result echoes `params.proxy_provider or ""` verbatim; with the default `auto` it shows `"auto"` even though `ProxyService` picked a concrete provider. `get_proxy_url` returns only the URL, so the node never learns which provider that was, and `report_result` and `request_cost` look the provider up by the name they are given. A request sent with `auto` therefore updates no provider's health history, adds nothing to the daily spend, and is booked under `proxy_auto` at $0. Only a request that names its provider is scored, counted and priced.
 - Retry loop re-requests a new proxy URL via `get_proxy_url` on each retry; if that call raises (e.g. `BudgetExceededError`), the retry loop silently `break`s and the envelope reports the previous network error rather than the budget exception.
-- Cost tracking reads `pricing._config["proxy"]` directly - touching a private attribute. If the pricing config is missing a `proxy` section, `cost_per_gb` falls back to `0.0` and cost rows are still written with `cost=0`.
+- A provider saved without a `cost_per_gb` has the default `0`, so its requests are booked with `cost=0`.
 
 ## Related
 
