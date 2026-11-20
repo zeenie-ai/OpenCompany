@@ -1244,8 +1244,16 @@ changing page clears it.
 - **Billing**: usage only. It shows the tasks done this month
   (`get_employee_usage`), "Since {Mon D}, across your whole team", and the
   number of employees, "In your sidebar now". A count that can't be read
-  shows a dash, never a zero. A page picked in the nav slides in from 14px
-  to the right (`slideSettingsPage`) before its blocks stagger in.
+  shows a dash, never a zero. Under them is the cost panel
+  ([components/ui/CostPanel.tsx](../client/src/components/ui/CostPanel.tsx)),
+  the same component Dev's Settings panel mounts: an estimate of what model
+  calls and paid tools cost this month (`get_workflow_costs`, from the usage
+  service), one row per employee and "Other" for calls that belong to none,
+  and "Spend limit per reply", whose Save limit writes only
+  `chat_run_spend_limit_usd` (0 means no limit). See
+  [Pricing Service](./pricing_service.md#the-cost-panel). A page picked in
+  the nav slides in from 14px to the right (`slideSettingsPage`) before its
+  blocks stagger in.
 - **Help**: Welcome guide · Replay, which closes Settings and opens the guide
   at its first step, and Get started checklist · Show, which brings the
   hidden checklist back ([onboarding.md](./onboarding.md)).
@@ -1329,6 +1337,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone, whole team; `since` is that 1st as YYYY-MM-DD) |
+| `get_workflow_costs` | `{}` | `{since, total_cost, workflows: [{workflow_id, name, total_cost}]}`: this month's estimated cost in USD by employee, highest first, then one row with a null id and name for calls that belong to no employee. Answered by the usage service ([Pricing Service](./pricing_service.md)), read by the cost panel |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
 | `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building |
@@ -1401,7 +1410,9 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 `hooks/__tests__/useWorkflowOpsListener.test.ts` (persisted batches),
 `store/__tests__/deleteWorkflow.test.ts`,
 `features/home/__tests__/homeSidebar.test.tsx` and `employeesRemount.test.tsx`
-(deleting), `lib/__tests__/debouncedInvalidate.test.ts`.
+(deleting), `lib/__tests__/debouncedInvalidate.test.ts`,
+`components/ui/__tests__/CostPanel.test.tsx` (the cost panel) and
+`features/home/__tests__/homeSettings.test.tsx` (Billing mounts it).
 
 ## Known gaps
 
@@ -1417,7 +1428,10 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   separate paid hosted Pro and Max offerings; their current terms are on
   [official pricing](https://opencompany.sh/pricing/). A deleted employee's
   runs leave the local month's count because workflow deletion removes its
-  run records.
+  run records. Its cost stays in the month's total, under "Other". The cost
+  panel's figures are estimates, and they leave out what nothing books:
+  Claude Code and Codex agents among others (see
+  [Pricing Service](./pricing_service.md)).
 - Skill library changes reach only new hires: an employee keeps the skills it
   was hired with, and one hired before the library existed has none, until
   the owner asks them in Talk to add one. The library is shared across users

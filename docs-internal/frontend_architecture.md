@@ -124,6 +124,8 @@ client/src/
 │   │   ├── sonner.tsx       # Patched to read ThemeContext (not next-themes)
 │   │   ├── ApiKeyInput.tsx  # Composite: input + eye toggle + save/delete buttons
 │   │   ├── SettingsPanel.tsx # Shadcn Switch + Slider + Input
+│   │   ├── CostPanel.tsx    # This month's cost by employee + the spend limit of a reply. One component,
+│   │   │                    # mounted unchanged in Home's Settings > Billing and Dev's Settings panel
 │   │   ├── ConsolePanel.tsx # Chat (ConsoleChat, the shared chat) + console + terminal + output
 │   │   ├── ModelMenu.tsx    # The one model menu: Set Global Model and Home's chat picker
 │   │   └── TopToolbar.tsx   # File menu + Set Global Model (ModelMenu) + workflow controls
@@ -203,6 +205,7 @@ client/src/
 │   ├── useUserSettingsQuery.ts     # user_settings row Query + save mutation
 │   ├── useUsageQueries.ts          # What calls cost, from the server's usage service: USD per chat run
 │   │                               # (the figure under a reply, in Home's chat and Dev's console chat)
+│   │                               # and this month's cost by employee (the cost panel)
 │   ├── useApiKeys.ts               # WS-based API key CRUD
 │   ├── useApiKeyValidation.ts      # Provider-specific validation helpers
 │   ├── useComponentPalette.ts / useDragAndDrop.ts / useDragWorkspaceFile.ts
@@ -243,7 +246,7 @@ client/src/
 │   ├── aiModelProviders.ts         # Frontend-only AI provider icon/credential map
 │   ├── queryClient.ts              # Module-singleton QueryClient (imperative invalidation without React context)
 │   ├── queryConfig.ts / featureFlags.ts
-│   ├── format.ts                   # Formatters shared by more than one screen (`usd`)
+│   ├── format.ts                   # Formatters shared by more than one screen (`usd`, `monthDay`)
 │   ├── queryPersist.ts             # localStorage persister + PERSISTED_KEY_PREFIXES whitelist
 │   ├── brandStorage.ts             # Canonical browser-storage keys + pre-rebrand aliases
 │   ├── connectionConfig.ts         # WS reconnect, heartbeat and close-code constants + auth-bootstrap backoff

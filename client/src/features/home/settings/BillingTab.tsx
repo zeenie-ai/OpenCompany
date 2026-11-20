@@ -1,20 +1,18 @@
 /**
- * Settings > Billing, usage only: what the team did this month, and how
- * many employees it has (the sidebar's count). No billing account sits
+ * Settings > Billing, usage only: what the team did this month, how many
+ * employees it has (the sidebar's count), and what the work cost (the cost
+ * panel, the same one Dev's Settings panel shows). No billing account sits
  * behind OpenCompany yet, so there are no plans, payment method or
  * invoices (docs-internal/normal_mode.md, Known gaps). A count that can't
  * be read shows a dash, never a false zero.
  */
 
+import { CostPanel } from '@/components/ui/CostPanel';
 import { Skeleton } from '@/components/ui/skeleton';
+import { monthDay } from '@/lib/format';
 import { useEmployeesQuery } from '../data/employees';
 import { useEmployeeUsageQuery } from '../data/usage';
 import { MicroLabel } from '../ui/primitives';
-
-/** "Oct 1": the server's YYYY-MM-DD read as a calendar date, not an instant. */
-function monthDay(date: string): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`));
-}
 
 function Stat({ label, value, note, loading }: { label: string; value: number | null; note: string | null; loading: boolean }) {
   return (
@@ -37,7 +35,7 @@ export function BillingTab() {
     <div className="flex max-w-170 flex-col gap-5 px-8 pt-7 pb-8">
       <div data-stagger className="flex flex-col gap-1 pr-9">
         <h2 className="text-xl font-semibold tracking-[-0.01em] text-fg-default">Billing</h2>
-        <p className="text-sm text-pretty text-fg-muted">What your team has done this month.</p>
+        <p className="text-sm text-pretty text-fg-muted">What your team has done this month, and what it cost.</p>
       </div>
       <div data-stagger className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
         <Stat
@@ -47,6 +45,9 @@ export function BillingTab() {
           loading={usage.isPending}
         />
         <Stat label="Employees" value={team.data?.length ?? null} note="In your sidebar now" loading={team.isPending} />
+      </div>
+      <div data-stagger>
+        <CostPanel />
       </div>
     </div>
   );

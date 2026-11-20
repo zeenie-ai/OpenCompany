@@ -3,7 +3,7 @@
  * changed. Save sends only what the loaded settings don't hold yet, so a
  * window whose copy is stale never writes back what another window saved
  * (Home's Profile shows Generated UI too). Reset sends every setting at its
- * default.
+ * default. The cost panel is the one Home's Billing shows.
  */
 
 import { useState } from 'react';
@@ -16,6 +16,7 @@ const sendRequest = vi.fn();
 vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/contexts/WebSocketContext')>()),
   useWebSocket: () => ({ sendRequest, isReady: true }),
+  useWebSocketActions: () => ({ sendRequest, isReady: true }),
 }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -25,6 +26,8 @@ import { defaultSettings, toServerRow, type WorkflowSettings } from '../settings
 
 /** The row the server holds when the panel opens. */
 const ROW = toServerRow({ ...defaultSettings, autoSave: false });
+/** This month's cost, for the cost panel. */
+const COSTS = { success: true, since: '2026-11-01', total_cost: 4.5, workflows: [] };
 
 function Harness() {
   // AppShell keeps the panel's working copy; it starts from the defaults.
@@ -59,9 +62,11 @@ async function loaded() {
 }
 
 beforeEach(() => {
-  sendRequest.mockReset().mockImplementation(async (type: string) =>
-    type === 'get_user_settings' ? { settings: ROW } : { success: true },
-  );
+  sendRequest.mockReset().mockImplementation(async (type: string) => {
+    if (type === 'get_user_settings') return { settings: ROW };
+    if (type === 'get_workflow_costs') return COSTS;
+    return { success: true };
+  });
   vi.mocked(toast.success).mockClear();
 });
 
@@ -96,5 +101,13 @@ describe('SettingsPanel', () => {
     await loaded();
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
     await waitFor(() => expect(saves()).toEqual([toServerRow(defaultSettings)]));
+  });
+
+  it('shows the cost panel', async () => {
+    renderPanel();
+    await loaded();
+    const cost = within(screen.getByRole('region', { name: 'Cost' }));
+    expect(await cost.findByText('$4.50')).toBeInTheDocument();
+    expect(cost.getByLabelText('Spend limit per reply')).toBeInTheDocument();
   });
 });

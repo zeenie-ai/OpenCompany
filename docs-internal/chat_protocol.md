@@ -454,8 +454,9 @@ Settings are in `server/config/chat_defaults.json` (`stream`, `steps`, `runs`).
   without a result is answered when the conversation is next loaded (see
   [Agent Context Flow](./agent_context_flow.md)).
 - **Spend limit** (`services/usage/limit.py`). A run stops itself when its cost, model calls plus paid tool calls,
-  reaches the owner's limit (`UserSettings.chat_run_spend_limit_usd`, else `CHAT_RUN_SPEND_LIMIT_USD`; 0, the
-  default, means no limit). The model step asks before each model call. At the limit it makes no call: it streams
+  reaches the owner's limit (`UserSettings.chat_run_spend_limit_usd`, set in the cost panel on Home's Settings >
+  Billing and in Dev's Settings panel, else `CHAT_RUN_SPEND_LIMIT_USD`; 0, the default, means no limit). The model
+  step asks before each model call. At the limit it makes no call: it streams
   one line ("I stopped here because this reply reached the spend limit of $2.00 set in Settings. Ask me to continue
   and I'll carry on from where I stopped.") and returns it as the final answer, with `finish_reason: "spend_limit"`.
   Reply in Chat saves it as an ordinary reply (`status: "complete"`), the run finishes, and the owner's next message

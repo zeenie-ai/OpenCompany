@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { usd } from '../format';
+import { monthDay, usd } from '../format';
 
 describe('usd', () => {
   it('shows two decimals', () => {
@@ -17,5 +17,14 @@ describe('usd', () => {
 
   it('shows zero as zero', () => {
     expect(usd(0)).toBe('$0.00');
+  });
+});
+
+describe('monthDay', () => {
+  it('shows a server date as that month and day', () => {
+    // The reader's locale decides the order ("Nov 1" or "1 Nov").
+    const november1 = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(Date.UTC(2026, 10, 1));
+
+    expect(monthDay('2026-11-01')).toBe(november1);
   });
 });

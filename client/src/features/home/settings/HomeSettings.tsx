@@ -63,7 +63,7 @@ const PAGES: Page[] = [
     group: 'settings',
     label: 'Billing',
     icon: CreditCard,
-    keywords: 'plan invoices usage',
+    keywords: 'plan invoices usage cost spend limit',
     render: () => <BillingTab />,
   },
   {

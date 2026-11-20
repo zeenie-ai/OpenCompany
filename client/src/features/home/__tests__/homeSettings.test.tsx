@@ -1,12 +1,12 @@
 /**
  * Settings: the nav search keeps the pages whose label or keywords match
  * and drops a group left empty; changing page clears the category a page
- * was opened on; Billing shows this month's tasks and the team size, and a
- * dash when the count can't be read.
+ * was opened on; Billing shows this month's tasks and the team size, a
+ * dash when the count can't be read, and the cost panel.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -38,8 +38,21 @@ function renderSettings() {
   );
 }
 
+const USAGE = { success: true, tasks_this_month: 12, since: '2026-10-01' };
+const COSTS = { success: true, since: '2026-10-01', total_cost: 4.5, workflows: [] };
+
+/** The server's answers by command; `usage` is what `get_employee_usage` says. */
+function serve(usage: unknown) {
+  sendRequest.mockReset().mockImplementation(async (type: string) => {
+    if (type === 'get_employee_usage') return usage;
+    if (type === 'get_workflow_costs') return COSTS;
+    if (type === 'get_user_settings') return { settings: {} };
+    return { success: true };
+  });
+}
+
 beforeEach(() => {
-  sendRequest.mockReset().mockResolvedValue({ success: true, tasks_this_month: 12, since: '2026-10-01' });
+  serve(USAGE);
   useHomeStore.setState({ settingsOpen: false, settingsTab: 'profile', settingsCategory: 'all' });
 });
 
@@ -90,10 +103,18 @@ describe('HomeSettings', () => {
   });
 
   it('shows a dash when this month’s count can’t be read', async () => {
-    sendRequest.mockResolvedValue({ success: false, error: 'database locked' });
+    serve({ success: false, error: 'database locked' });
     useHomeStore.getState().openSettings('billing');
     renderSettings();
     expect(await screen.findByText('—')).toBeInTheDocument();
+  });
+
+  it('shows the cost panel on Billing', async () => {
+    useHomeStore.getState().openSettings('billing');
+    renderSettings();
+    const cost = within(await screen.findByRole('region', { name: 'Cost' }));
+    expect(await cost.findByText('$4.50')).toBeInTheDocument();
+    expect(await cost.findByLabelText('Spend limit per reply')).toBeInTheDocument();
   });
 
   it('replays the Welcome guide from Help, closing Settings', async () => {

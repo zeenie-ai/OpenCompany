@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
+import { CostPanel } from '@/components/ui/CostPanel';
 import Modal from './Modal';
 import {
   useUserSettingsQuery,
@@ -426,6 +427,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
               />
             </Row>
           </Section>
+
+          {/* Cost: the same panel as Home > Settings > Billing. It reads and
+              saves on its own, apart from this panel's Save and Reset. */}
+          <div className="mb-4">
+            <CostPanel />
+          </div>
 
           {/* Process Manager */}
           <Section title="Process Manager" Icon={Cpu} tone="workflow">

@@ -472,6 +472,9 @@ The default is written in three places (`.env.template`, `Settings`,
 
 ## Frontend Display
 
+Costs show in three places: the credentials modal's usage sections, the cost
+panel, and the figure under each chat reply.
+
 The credentials modal displays usage statistics through two section components, both wired via
 `credentials/useCredentialPanel.ts`:
 
@@ -507,6 +510,32 @@ mounted anywhere and were deleted; the `get_pricing_config` / `save_pricing_conf
 - Table with operation breakdown (operation name, count, unit cost, total cost)
 - Refresh button to reload data
 - Loading state while fetching
+
+### The cost panel
+
+`client/src/components/ui/CostPanel.tsx` is one component, mounted unchanged
+in Home's Settings > Billing and in Dev's Settings panel, so both modes show
+the same figures and the same limit.
+
+- **This month.** `useWorkflowCostsQuery()` (`client/src/hooks/useUsageQueries.ts`)
+  sends `get_workflow_costs` each time the panel opens, because calls are
+  booked while it is closed. The panel shows the total, "Since {Mon D}" (the
+  1st of the month in the owner's time zone), one row per employee, highest
+  first, and "Other" for the row with no workflow. A read that fails shows a
+  dash, never a zero.
+- **Spend limit per reply.** A number field and Save limit, which sends only
+  `chat_run_spend_limit_usd` through `save_user_settings`. An empty box reads
+  as 0, which means no limit, and a value below 0 is refused in the panel. A
+  save that fails says so and keeps what was typed. The limit itself is
+  described under "The spend limit of a reply" above.
+- The panel says what it leaves out: Claude Code and Codex agents.
+
+### The cost under a reply
+
+The shared chat shows what each reply cost beside its time
+(`client/src/features/chat/turns/ReplyActions.tsx`), from
+`useChatRunCostsQuery(workflowId)`, which sends `get_chat_run_costs`. See
+[Chat Protocol](./chat_protocol.md).
 
 ## Adding New Services
 
@@ -578,3 +607,5 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |
 | `client/src/hooks/useApiKeys.ts` | `getAPIUsageSummary` / `getProviderUsageSummary` |
+| `client/src/hooks/useUsageQueries.ts` | `useChatRunCostsQuery` (a reply's cost) and `useWorkflowCostsQuery` (this month's cost by employee) |
+| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee and the spend limit of a reply, in Home's Billing and Dev's Settings |
