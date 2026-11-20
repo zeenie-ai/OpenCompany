@@ -1,6 +1,7 @@
 ---
 name: task-manager
 description: Delegate work to connected teammates, coordinate reusable agents, and review durable task results.
+allowed-tools: task_manager
 metadata:
   author: opencompany
   version: "3.0"
