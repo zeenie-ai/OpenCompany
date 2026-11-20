@@ -402,6 +402,8 @@ class TokenUsageMetric(SQLModel, table=True):
     """Token usage per agent execution."""
 
     __tablename__ = "token_usage_metrics"
+    # For one workflow's cost since an instant (the monthly budget).
+    __table_args__ = (Index("ix_token_usage_metrics_workflow_created", "workflow_id", "created_at"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     session_id: str = Field(index=True, max_length=255)
@@ -481,6 +483,8 @@ class APIUsageMetric(SQLModel, table=True):
     """API service usage for cost tracking (Twitter, Google Maps, etc.)."""
 
     __tablename__ = "api_usage_metrics"
+    # For one workflow's cost since an instant (the monthly budget).
+    __table_args__ = (Index("ix_api_usage_metrics_workflow_timestamp", "workflow_id", "timestamp"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     timestamp: datetime = Field(

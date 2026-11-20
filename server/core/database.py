@@ -448,6 +448,8 @@ class Database:
                     await conn.execute(text("ALTER TABLE token_usage_metrics ADD COLUMN employee_job_id VARCHAR(255)"))
                     logger.info("Added employee_job_id column to token_usage_metrics")
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_token_usage_metrics_employee_job_id ON token_usage_metrics(employee_job_id)"))
+                # For one workflow's cost since an instant (the monthly budget).
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_token_usage_metrics_workflow_created ON token_usage_metrics(workflow_id, created_at)"))
 
                 # Migrate session_token_states table - add cumulative cost columns
                 result = await conn.execute(text("PRAGMA table_info(session_token_states)"))
@@ -496,6 +498,7 @@ class Database:
                     await conn.execute(text("ALTER TABLE api_usage_metrics ADD COLUMN employee_job_id VARCHAR(255)"))
                     logger.info("Added employee_job_id column to api_usage_metrics")
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_usage_metrics_employee_job_id ON api_usage_metrics(employee_job_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_api_usage_metrics_workflow_timestamp ON api_usage_metrics(workflow_id, timestamp)"))
 
                 # Migrate gmail_connections to google_connections
                 # Check if old table exists and new table doesn't

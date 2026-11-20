@@ -84,6 +84,28 @@ async def chat_run_costs(database: Any, workflow_id: str) -> Dict[str, float]:
     return {run_id: round(cost, 6) for run_id, cost in costs.items()}
 
 
+async def workflow_cost_since(database: Any, workflow_id: str, since: datetime) -> float:
+    """USD one workflow has cost since ``since``: its model calls plus its
+    paid tool calls. Errors propagate."""
+    since_utc = since.astimezone(timezone.utc)
+    async with database.get_session() as session:
+        # token_usage_metrics.created_at holds UTC without a zone;
+        # api_usage_metrics.timestamp is declared with one.
+        model_calls = await session.execute(
+            select(func.sum(TokenUsageMetric.total_cost)).where(
+                TokenUsageMetric.workflow_id == workflow_id,
+                TokenUsageMetric.created_at >= since_utc.replace(tzinfo=None),
+            )
+        )
+        tool_calls = await session.execute(
+            select(func.sum(APIUsageMetric.cost)).where(
+                APIUsageMetric.workflow_id == workflow_id,
+                APIUsageMetric.timestamp >= since_utc,
+            )
+        )
+        return float(model_calls.scalar() or 0) + float(tool_calls.scalar() or 0)
+
+
 async def workflow_costs(database: Any, since: datetime) -> List[Dict[str, Any]]:
     """USD per workflow since ``since``: ``[{workflow_id, name, total_cost}]``.
 
