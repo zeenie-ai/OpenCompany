@@ -5,8 +5,10 @@ the same recipient identity; it does not search Temporal Visibility.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
+from uuid import uuid4
 
 from temporalio.common import WorkflowIDConflictPolicy, WorkflowIDReusePolicy
 
@@ -14,6 +16,8 @@ from services.agent_instances.protocol import session_workflow_id
 
 logger = logging.getLogger(__name__)
 RECONCILER_ID = "agent-instances:reconciler:v1"
+RECONCILE_INTERVAL_SECONDS = 30
+RECONCILE_TIMEOUT_SECONDS = 120
 
 
 def _client():
@@ -51,14 +55,25 @@ async def wake_instance(instance_id: str, *, client=None, context=None, database
     )
 
 
-async def ensure_reconciler(client=None) -> None:
-    from core.config import Settings
-    await (client or _client()).start_workflow(
-        "AgentInstanceReconcilerWorkflow", {}, id=RECONCILER_ID,
-        task_queue=Settings().temporal_task_queue,
-        id_conflict_policy=WorkflowIDConflictPolicy.USE_EXISTING,
-        id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
-    )
+async def retire_legacy_reconciler(client) -> None:
+    """Retire the previous release's timer loop after local recovery is healthy."""
+    from temporalio.client import WorkflowExecutionStatus
+    from temporalio.service import RPCError, RPCStatusCode
+
+    try:
+        current = await client.get_workflow_handle(RECONCILER_ID).describe()
+        if current.status != WorkflowExecutionStatus.RUNNING or current.workflow_type != "AgentInstanceReconcilerWorkflow":
+            return
+        # Target the observed chain across Continue-As-New. An unrelated
+        # execution that subsequently reuses this workflow ID stays untouched.
+        first_run_id = current.raw_description.workflow_execution_info.first_run_id
+        if not first_run_id:
+            raise RuntimeError("Missing first run ID on the legacy agent reconciler")
+        handle = client.get_workflow_handle(RECONCILER_ID, first_execution_run_id=first_run_id)
+        await handle.cancel(reason="Agent recovery moved to the worker database scan")
+    except RPCError as exc:
+        if exc.status != RPCStatusCode.NOT_FOUND:
+            raise
 
 
 async def wake_instances(result: dict[str, Any], context=None, *, client=None, database=None) -> None:
@@ -197,8 +212,32 @@ async def reconcile_pending(*, client=None, database=None, limit=100) -> int:
         try:
             if instance.get("active_run_id"):
                 await _recover_missing_owner(store, instance, client)
-            await wake_instance(str(instance["id"]), client=client, database=database)
-            count += 1
+                # A running session drains pending deliveries before going idle.
+                # A recovery check must not append a wake event to its history.
+                continue
+            if await wake_instance(str(instance["id"]), client=client, database=database) is not None:
+                count += 1
         except Exception:
             logger.warning("Agent reconciliation will retry recipient %s", instance.get("id"), exc_info=True)
     return count
+
+
+async def scheduled_reconcile_pending(*, client=None, database=None, limit=100) -> int | None:
+    """Claim one shared scan interval. No Temporal workflow owns this maintenance."""
+    from core.container import container
+    from services.agent_instances.service import AgentInstanceService
+    database = database or container.database()
+    store = AgentInstanceService(database)
+    token = str(uuid4())
+    # Keep a grace interval beyond the local deadline for cancellation to drain.
+    if not await store.reserve_reconciliation(token, lease_seconds=RECONCILE_TIMEOUT_SECONDS + RECONCILE_INTERVAL_SECONDS):
+        return None
+    delay = RECONCILE_INTERVAL_SECONDS
+    try:
+        async with asyncio.timeout(RECONCILE_TIMEOUT_SECONDS):
+            return await reconcile_pending(client=client, database=database, limit=limit)
+    except asyncio.CancelledError:
+        delay = 0
+        raise
+    finally:
+        await store.finish_reconciliation(token, delay_seconds=delay)

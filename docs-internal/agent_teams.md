@@ -137,11 +137,11 @@ Transcript changes and consumed receipts commit atomically. CLI continuation
 uses the provider session; native/Pi mailbox input is admitted only after all
 outstanding tool results have been recorded. Opaque runtimes use the next turn.
 
-Temporal signals accelerate delivery; database inbox records remain the
-recovery source. The reconciler retries deterministic owner starts and wakeups.
-Recovery scans rotate durably across recipients, skip blocked-only inboxes and
-retain active owners for recovery checks. An embedded worker retries reconciler
-startup independently of healthy polling and reaps that retry task at shutdown.
+After committing a delivery, the runtime signals its Temporal session. If the
+signal is missed, a worker periodically scans the application database and
+retries the start or wakeup using the same session ID. A shared database lease
+coordinates this scan across workers. Recovery scans rotate across recipients,
+skip blocked-only inboxes and check active owners for interrupted work.
 Run records retain physical execution permits so confirmed terminated owners
 can release them. Transport errors do not prove that an executor stopped.
 

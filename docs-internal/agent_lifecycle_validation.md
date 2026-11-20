@@ -20,7 +20,8 @@ The current contract is in [Agent Teams](./agent_teams.md), with
 | CLI/MCP boundary | `server/tests/services/cli_agent/test_orchestration_boundary.py`, `server/tests/services/cli_agent/test_instance_adapters.py` | Validation before generated handler signatures, durable budgets, explicit provider identity, startup obligations, missing-session failure and checkpoint/full-result retention through actual node execution. |
 | RLM dispatch | `server/tests/services/test_rlm_admission.py` | Root/nested/fallback request fencing, effect admission and draining an already-admitted background completion. |
 | Owner review recovery | `server/tests/services/employees/test_review_recovery.py` | Owner authentication, idempotent retry and reuse of the original lead/job. |
-| Worker startup | `server/tests/temporal/test_worker_restart.py` | Reconciler admission retries while workers remain healthy; shutdown cancels and reaps the retry task. |
+| Worker startup | `server/tests/temporal/test_worker_restart.py` | Recovery runs alongside the worker and its local task is reaped on shutdown. |
+| Reconciler retirement | `server/tests/temporal/test_reconciler_retirement.py` | A real Temporal service records zero workflow executions for idle local scans and closes the running legacy reconciler on upgrade. |
 | Compatibility | `server/tests/temporal/test_workflow_identity_golden.py`, `server/tests/temporal/test_replay_corpus.py` | Registered command identities, generation flags and retained previous-release replay corpus. |
 | UI | Context, Team Monitor, Job Progress and Employee Work component tests | Separate instance display, read-only job context and review-retry interaction. |
 

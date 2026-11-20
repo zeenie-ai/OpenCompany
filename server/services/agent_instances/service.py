@@ -10,13 +10,15 @@ import hashlib
 import json
 import re
 from copy import deepcopy
+from datetime import timedelta
 from typing import Any
 
+from sqlalchemy import func, tuple_, update
 from sqlmodel import select
 
 from models.agent_instances import (
     AgentDelivery, AgentInstance, AgentInstanceConversation, AgentInstanceMutation,
-    AgentMessageChain, AgentRun, now,
+    AgentMessageChain, AgentReconcileLease, AgentRun, now,
 )
 from models.database import AgentMessage, AgentTeam, TeamMember, TeamTask, TeamTaskAttempt
 
@@ -771,39 +773,57 @@ class AgentInstanceService:
         return {"agent": _public_instance(instance), "status": "stop_requested" if operation == "stop_agent" and instance.active_run_id else instance.state,
                 "instance_wake": [instance.id] if operation == "resume_agent" else []}
 
+    async def reserve_reconciliation(self, token: str, *, lease_seconds: int) -> bool:
+        """Use the database clock and serialize first acquisition across workers."""
+        async with self.database.reserved_session() as session:
+            clock = (await session.execute(select(func.current_timestamp()))).scalar_one()
+            row = (await session.execute(select(AgentReconcileLease,
+                AgentReconcileLease.available_at > clock).where(AgentReconcileLease.id == 1))).first()
+            if row and row[1]:
+                return False
+            deadline = clock + timedelta(seconds=lease_seconds)
+            if row is None:
+                session.add(AgentReconcileLease(id=1, token=token, available_at=deadline))
+            else:
+                slot = row[0]
+                slot.token, slot.available_at = token, deadline
+            await session.commit()
+            return True
+
+    async def finish_reconciliation(self, token: str, *, delay_seconds: int) -> None:
+        async with self.database.reserved_session() as session:
+            clock = (await session.execute(select(func.current_timestamp()))).scalar_one()
+            # A delayed old worker cannot release a newer worker's claim.
+            await session.execute(update(AgentReconcileLease).where(
+                AgentReconcileLease.id == 1, AgentReconcileLease.token == token
+            ).values(available_at=clock + timedelta(seconds=delay_seconds)))
+            await session.commit()
+
     async def list_pending(self, limit: int = 100) -> list[dict]:
         from models.employees import EmployeeJob
+        # Blocked assignments wait for acceptance. Stale assignments still
+        # qualify so claim_run can retire them.
+        has_mail = select(AgentDelivery.id).outerjoin(TeamTask, AgentDelivery.task_id == TeamTask.id).where(
+            AgentDelivery.recipient_id == AgentInstance.id, AgentDelivery.state == "queued",
+            AgentDelivery.task_id.is_(None) | TeamTask.id.is_(None) |
+            (TeamTask.current_attempt != AgentDelivery.attempt) | (TeamTask.status != "blocked"),
+        ).correlate(AgentInstance).exists()
         async with self.database.reserved_session() as session:
-            rows = (await session.execute(select(AgentInstance).where(
-                AgentInstance.state.in_(["idle", "running"]) | AgentInstance.active_run_id.is_not(None))
-                .order_by(AgentInstance.updated_at, AgentInstance.id))).scalars().all()
-            result = []
+            rows = (await session.execute(select(AgentInstance)
+                .outerjoin(EmployeeJob, AgentInstance.job_id == EmployeeJob.id)
+                .outerjoin(AgentTeam, AgentInstance.team_id == AgentTeam.id)
+                .where(EmployeeJob.state.notin_(["delivered", "completed", "cancelled"]) |
+                    (EmployeeJob.id.is_(None) & (AgentTeam.id.is_(None) | (AgentTeam.status != "completed"))),
+                    AgentInstance.active_run_id.is_not(None) | (AgentInstance.state.in_(["idle", "running"]) & has_mail))
+                .order_by(AgentInstance.updated_at, AgentInstance.id)
+                .limit(max(1, limit)))).scalars().all()
             checked_at = now()
             for instance in rows:
-                job = await session.get(EmployeeJob, instance.job_id)
-                if job and job.state in {"delivered", "completed", "cancelled"}:
-                    continue
-                if job is None:
-                    team = await session.get(AgentTeam, instance.team_id)
-                    if team and team.status == "completed":
-                        continue
-                # A blocked assignment cannot be admitted until acceptance wakes
-                # it. Stale assignments still qualify so claim_run can retire them.
-                pending = (await session.execute(select(AgentDelivery.id).outerjoin(
-                    TeamTask, AgentDelivery.task_id == TeamTask.id).where(
-                    AgentDelivery.recipient_id == instance.id, AgentDelivery.state == "queued",
-                    AgentDelivery.task_id.is_(None) | TeamTask.id.is_(None) |
-                    (TeamTask.current_attempt != AgentDelivery.attempt) | (TeamTask.status != "blocked"))
-                    .limit(1))).first()
-                if pending or instance.active_run_id:
-                    # Persist rotation before external hints. A failed hint or an
-                    # active owner must not occupy the first page on every sweep.
-                    instance.updated_at = checked_at
-                    result.append(instance.model_dump(mode="json"))
-                if len(result) >= max(1, limit):
-                    break
+                # Persist rotation before external hints. Failed hints and
+                # active owners must not occupy the first page on every sweep.
+                instance.updated_at = checked_at
             await session.commit()
-            return result
+            return [instance.model_dump(mode="json") for instance in rows]
 
     async def list_stopping(self, limit: int = 100) -> list[str]:
         """Durable interrupted executors whose stop hint may have been lost."""
@@ -1111,29 +1131,27 @@ class AgentInstanceService:
         """Repair a crash between successful delivery and instance retirement."""
         from models.employees import EmployeeJob
         async with self.database.reserved_session() as session:
-            rows = (await session.execute(select(AgentInstance).outerjoin(EmployeeJob, AgentInstance.job_id == EmployeeJob.id)
+            scope_columns = (AgentInstance.workflow_id, AgentInstance.generation, AgentInstance.team_id,
+                             AgentInstance.job_id, AgentTeam.team_lead_node_id.label("lead_node_id"))
+            scopes = (await session.execute(select(*scope_columns).select_from(AgentInstance)
+                .outerjoin(EmployeeJob, AgentInstance.job_id == EmployeeJob.id)
                 .join(AgentTeam, AgentInstance.team_id == AgentTeam.id)
                 .where(AgentInstance.state != "closed", EmployeeJob.state.in_(["delivered", "completed"]) |
                     (EmployeeJob.id.is_(None) & (AgentTeam.status == "completed")))
-                .order_by(AgentInstance.updated_at, AgentInstance.id))).scalars().all()
-            scopes = {}
-            for instance in rows:
-                identity = (instance.job_id, instance.generation)
-                if identity not in scopes:
-                    scopes[identity] = deepcopy(instance.config.get("scope") or {})
-                if len(scopes) >= max(1, limit):
-                    break
-            # Rotate every instance of the selected jobs, including rows beyond
-            # the batch boundary. One large or draining job cannot hide others.
-            checked_at = now()
-            for instance in rows:
-                if (instance.job_id, instance.generation) in scopes:
-                    instance.updated_at = checked_at
+                .group_by(*scope_columns)
+                .order_by(func.min(AgentInstance.updated_at), func.min(AgentInstance.id))
+                .limit(max(1, limit)))).mappings().all()
+            if scopes:
+                keys = [(scope["team_id"], scope["job_id"], scope["generation"]) for scope in scopes]
+                await session.execute(update(AgentInstance).where(AgentInstance.state != "closed",
+                    tuple_(AgentInstance.team_id, AgentInstance.job_id, AgentInstance.generation).in_(keys)
+                ).values(updated_at=now()))
             await session.commit()
         results = []
-        for (job_id, generation), scope in scopes.items():
+        for scope in scopes:
+            job_id, generation = scope["job_id"], scope["generation"]
             try:
-                results.append(await self.close_job(scope=scope, request_id=f"delivered:{job_id}:{generation}"))
+                results.append(await self.close_job(scope=dict(scope), request_id=f"delivered:{job_id}:{generation}"))
             except InstanceError as exc:
                 # Inconsistent delivered jobs retain their records for inspection;
                 # they are already fenced from new run admission above.

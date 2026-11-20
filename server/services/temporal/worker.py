@@ -16,6 +16,7 @@ References:
 """
 
 import asyncio
+from collections.abc import Callable, Coroutine
 from datetime import timedelta
 from typing import Any, Optional
 
@@ -105,6 +106,49 @@ def create_runtime() -> Runtime:
     )
 
 
+async def _run_with_agent_reconciliation(client: Client, run_worker: Callable[[], Coroutine[Any, Any, None]]) -> None:
+    """Poll for persisted recovery obligations for exactly this worker's lifetime."""
+    from core.config import Settings
+    from services.agent_instances.runtime import (
+        RECONCILE_INTERVAL_SECONDS, retire_legacy_reconciler, scheduled_reconcile_pending,
+    )
+
+    settings = Settings()
+
+    async def retry(operation, label):
+        backoff = settings.temporal_worker_restart_backoff_seconds
+        while True:
+            try:
+                return await operation(client=client)
+            except Exception:
+                logger.warning("%s failed; retrying in %.1fs", label, backoff, exc_info=True)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, settings.temporal_worker_restart_backoff_max_seconds)
+
+    async def scan() -> None:
+        retirement_started = False
+        async with asyncio.TaskGroup() as tasks:
+            while True:
+                woken = await retry(scheduled_reconcile_pending, "Agent reconciliation")
+                if woken is not None and not retirement_started:
+                    # Retire the old timer only after this worker completed a
+                    # scan. A slow migration RPC must not block future scans.
+                    tasks.create_task(retry(retire_legacy_reconciler, "Legacy reconciler retirement"))
+                    retirement_started = True
+                await asyncio.sleep(RECONCILE_INTERVAL_SECONDS)
+
+    polling = asyncio.create_task(run_worker(), name="temporal-worker-poll")
+    recovery = asyncio.create_task(scan(), name="agent-instance-recovery")
+    try:
+        await asyncio.shield(polling)
+    finally:
+        # Stop scheduling new recovery work as soon as shutdown begins, even
+        # when the Temporal worker takes its full grace period to drain.
+        recovery.cancel()
+        polling.cancel()
+        await asyncio.gather(recovery, polling, return_exceptions=True)
+
+
 class TemporalWorkerManager:
     """Manages the Temporal worker lifecycle with shared resources.
 
@@ -130,7 +174,6 @@ class TemporalWorkerManager:
         self.pool_size = pool_size
         self._worker: Optional[Worker] = None
         self._worker_task: Optional[asyncio.Task] = None
-        self._reconciler_start_task: Optional[asyncio.Task] = None
         self._session: Optional[aiohttp.ClientSession] = None
         self._activities: Optional[NodeExecutionActivities] = None
         self._browser_pool = None
@@ -153,11 +196,6 @@ class TemporalWorkerManager:
                 span.set_attribute("already_running", True)
                 logger.warning("Temporal worker already running")
                 return
-
-            if self._reconciler_start_task:
-                self._reconciler_start_task.cancel()
-                await asyncio.gather(self._reconciler_start_task, return_exceptions=True)
-                self._reconciler_start_task = None
 
             # Create shared aiohttp session with connection pooling
             self._session = await create_shared_session(self.pool_size)
@@ -185,31 +223,9 @@ class TemporalWorkerManager:
 
             # Run worker in background task
             self._worker_task = asyncio.create_task(
-                self._run_worker(),
+                _run_with_agent_reconciliation(self.client, self._run_worker),
                 name="temporal-worker",
             )
-            self._reconciler_start_task = asyncio.create_task(
-                self._start_reconciler(), name="temporal-agent-reconciler-start",
-            )
-
-    async def _start_reconciler(self) -> None:
-        """Retry durable recovery admission independently of healthy polling."""
-        from core.config import Settings
-        from services.agent_instances.runtime import ensure_reconciler
-
-        settings = Settings()
-        backoff = settings.temporal_worker_restart_backoff_seconds
-        backoff_max = settings.temporal_worker_restart_backoff_max_seconds
-        while self.is_running:
-            try:
-                await ensure_reconciler(self.client)
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logger.warning("Agent inbox reconciliation startup failed; retrying in %.1fs", backoff, exc_info=True)
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, backoff_max)
 
     async def _build_worker(self) -> Worker:
         """Construct a fresh, ready-to-run Worker instance.
@@ -356,9 +372,6 @@ class TemporalWorkerManager:
         the other, their grace windows added up."""
         logger.info("Stopping Temporal worker")
         stops = [pool.stop() for pool in (self._pi_driver_pool, self._browser_pool) if pool is not None]
-        if self._reconciler_start_task:
-            self._reconciler_start_task.cancel()
-            stops.append(self._reconciler_start_task)
         if self._worker_task:
             self._worker_task.cancel()
             stops.append(self._worker_task)
@@ -368,7 +381,6 @@ class TemporalWorkerManager:
         self._pi_driver_pool = None
         self._browser_pool = None
         self._worker_task = None
-        self._reconciler_start_task = None
 
         # Close shared session
         if self._session and not self._session.closed:
@@ -923,9 +935,7 @@ async def run_standalone_worker(
         )
 
         logger.info("Worker running. Press Ctrl+C to stop.")
-        from services.agent_instances.runtime import ensure_reconciler
-        await ensure_reconciler(client)
-        await worker.run()
+        await _run_with_agent_reconciliation(client, worker.run)
 
     finally:
         await pi_driver_pool.stop()

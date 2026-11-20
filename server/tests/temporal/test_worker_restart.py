@@ -230,73 +230,113 @@ def _startable_manager(monkeypatch):
     return manager, session, pool
 
 
-async def test_reconciler_start_retries_while_worker_remains_healthy(monkeypatch):
+async def test_worker_scans_locally_and_retries_legacy_retirement_independently(monkeypatch):
     from services.agent_instances import runtime
 
     manager, session, pool = _startable_manager(monkeypatch)
-    admitted = asyncio.Event()
-    calls = []
+    scanning_while_retiring = asyncio.Event()
+    retiring = asyncio.Event()
+    retired = asyncio.Event()
+    scanned_after_retirement = asyncio.Event()
+    scans, retirements = [], []
 
-    async def ensure(client):
-        calls.append(client)
-        if len(calls) < 3:
-            raise RuntimeError("transient StartWorkflow failure")
-        admitted.set()
+    async def scan(*, client):
+        scans.append(client)
+        if len(scans) == 1:
+            raise RuntimeError("database temporarily unavailable")
+        if len(scans) == 2:
+            return None  # Another worker holds the scan lease.
+        if retiring.is_set():
+            scanning_while_retiring.set()
+        if retired.is_set():
+            scanned_after_retirement.set()
+        return 0
 
-    monkeypatch.setattr(runtime, "ensure_reconciler", ensure)
+    async def retire(*, client):
+        retirements.append((client, len(scans)))
+        if len(retirements) == 1:
+            raise RuntimeError("transient migration failure")
+        retiring.set()
+        await scanning_while_retiring.wait()
+        retired.set()
+
+    monkeypatch.setattr(runtime, "scheduled_reconcile_pending", scan)
+    monkeypatch.setattr(runtime, "retire_legacy_reconciler", retire)
+    monkeypatch.setattr(runtime, "RECONCILE_INTERVAL_SECONDS", 0.002)
     with _patch_backoff():
         await manager.start()
-        retry_task = manager._reconciler_start_task
+        worker_task = manager._worker_task
         try:
-            await manager.start()  # Repeated start must not create a second supervisor.
-            assert manager._reconciler_start_task is retry_task
-            await asyncio.wait_for(admitted.wait(), timeout=1)
-            await asyncio.wait_for(asyncio.shield(retry_task), timeout=1)
-            assert calls == [manager.client] * 3
+            await manager.start()
+            assert manager._worker_task is worker_task
+            await asyncio.wait_for(scanned_after_retirement.wait(), timeout=1)
+            assert all(client is manager.client for client in scans)
+            assert [client for client, _ in retirements] == [manager.client] * 2
+            assert retirements[0][1] == 3
+            manager.client.start_workflow.assert_not_called()
             assert manager.is_running
             manager._build_worker.assert_awaited_once()
             pool.start.assert_awaited_once()
         finally:
             await manager.stop()
-    assert retry_task.done()
-    assert manager._reconciler_start_task is None
+    assert worker_task.done()
     session.close.assert_awaited_once()
 
 
-@pytest.mark.parametrize("phase", ["rpc", "backoff"])
-async def test_stop_cancels_and_reaps_reconciler_start_retry(monkeypatch, phase):
+@pytest.mark.parametrize("phase", ["scan", "scan_backoff", "sleep", "retirement"])
+async def test_worker_stop_drains_maintenance(monkeypatch, phase):
     from services.agent_instances import runtime
 
     manager, session, pool = _startable_manager(monkeypatch)
     entered, cancelled = asyncio.Event(), asyncio.Event()
-    calls = []
+    scans = []
 
-    async def ensure(client):
-        calls.append(client)
+    async def scan(*, client):
+        scans.append(client)
+        if phase == "retirement":
+            return 0
         entered.set()
-        if phase == "backoff":
-            raise RuntimeError("retry admission later")
+        if phase == "scan_backoff":
+            raise RuntimeError("retry scan later")
+        if phase == "sleep":
+            return None
         try:
             await asyncio.Event().wait()
         finally:
             cancelled.set()
 
-    monkeypatch.setattr(runtime, "ensure_reconciler", ensure)
+    async def retire(*, client):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(runtime, "scheduled_reconcile_pending", scan)
+    monkeypatch.setattr(runtime, "retire_legacy_reconciler", retire)
     monkeypatch.setattr("core.config.Settings", lambda: SimpleNamespace(
         temporal_worker_restart_backoff_seconds=60,
         temporal_worker_restart_backoff_max_seconds=60,
     ))
+    if phase in {"scan", "retirement"}:
+        async def draining_worker():
+            try:
+                await asyncio.Event().wait()
+            finally:
+                # A worker may await graceful shutdown. Recovery must be
+                # cancelled concurrently, before that drain completes.
+                await cancelled.wait()
+
+        monkeypatch.setattr(manager, "_run_worker", draining_worker)
     await manager.start()
-    retry_task, worker_task = manager._reconciler_start_task, manager._worker_task
+    worker_task = manager._worker_task
     try:
         await asyncio.wait_for(entered.wait(), timeout=1)
     finally:
         await asyncio.wait_for(manager.stop(), timeout=1)
-    assert retry_task.done() and retry_task.cancelled()
     assert worker_task.done() and not manager.is_running
-    assert manager._reconciler_start_task is None
-    assert calls == [manager.client]
-    if phase == "rpc":
+    assert scans == [manager.client]
+    if phase in {"scan", "retirement"}:
         assert cancelled.is_set()
     pool.stop.assert_awaited_once()
     session.close.assert_awaited_once()

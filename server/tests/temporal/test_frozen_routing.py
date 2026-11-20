@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from datetime import timedelta
 from types import SimpleNamespace
@@ -253,6 +254,7 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
 ):
     from core import container as container_module
     from services import model_registry
+    from services.agent_instances import runtime
     from services.temporal import agent_activities
     from services.temporal import plugin_activities
     from services.temporal import worker as worker_module
@@ -312,13 +314,23 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     )
 
     captured = {}
+    scanning, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def scan(*, client):
+        scanning.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(runtime, "scheduled_reconcile_pending", scan)
 
     class _Worker:
         def __init__(self, _client, **kwargs):
             captured.update(kwargs)
 
         async def run(self):
-            return None
+            await asyncio.wait_for(scanning.wait(), timeout=1)
 
     monkeypatch.setattr(worker_module, "Worker", _Worker)
 
@@ -332,7 +344,8 @@ async def test_standalone_worker_registers_plugin_and_pause_activities(
     assert captured["patch_activation_callback"] is activate_patch
     assert connect.await_args.kwargs["namespace"] == "tenant-ns"
     assert captured["task_queue"] == "tenant-queue"
-    assert client.start_workflow.await_args.args[0] == "AgentInstanceReconcilerWorkflow"
+    client.start_workflow.assert_not_awaited()
+    assert cancelled.is_set()
     session.close.assert_awaited_once()
     unifier.aclose.assert_awaited_once()
     database.startup.assert_awaited_once()

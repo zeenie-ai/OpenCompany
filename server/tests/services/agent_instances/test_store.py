@@ -602,6 +602,51 @@ async def test_stop_reconciliation_rotates_unfinished_executors(setup):
     assert set(selected) == stopping
 
 
+async def test_idle_recovery_workers_share_one_db_slot_without_temporal_requests(setup):
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+    from models.agent_instances import AgentReconcileLease
+    from services.agent_instances.runtime import scheduled_reconcile_pending
+
+    db, store, _ = setup
+    client = Mock(spec=["get_workflow_handle", "start_workflow"])
+    results = await asyncio.gather(*(scheduled_reconcile_pending(database=db, client=client) for _ in range(3)))
+    assert results.count(0) == 1 and results.count(None) == 2
+    assert client.mock_calls == []
+
+    async with db.reserved_session() as session:
+        slots = (await session.execute(select(AgentReconcileLease))).scalars().all()
+        assert len(slots) == 1
+        previous = slots[0].token
+        slots[0].available_at = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        await session.commit()
+    assert await store.reserve_reconciliation("next-worker", lease_seconds=150)
+    await store.finish_reconciliation(previous, delay_seconds=0)
+    assert not await store.reserve_reconciliation("late-worker", lease_seconds=150)
+    await store.finish_reconciliation("next-worker", delay_seconds=0)
+    assert await scheduled_reconcile_pending(database=db, client=client) == 0
+    assert client.mock_calls == []
+
+
+async def test_recovery_checks_busy_owner_without_signaling_and_wakes_lost_assignment(setup, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+    from temporalio.client import WorkflowExecutionStatus
+    from services.agent_instances import runtime
+
+    db, service, scope = setup
+    busy = (await spawn(service, scope, "busy"))["agent"]["id"]
+    await service.claim_run(busy, request_id="turn", workflow_id="owner", workflow_run_id="physical")
+    waiting = (await spawn(service, scope, "waiting"))["agent"]["id"]
+    handle = SimpleNamespace(describe=AsyncMock(return_value=SimpleNamespace(status=WorkflowExecutionStatus.RUNNING)))
+    client = SimpleNamespace(get_workflow_handle=MagicMock(return_value=handle))
+    wake = AsyncMock(return_value=object())
+    monkeypatch.setattr(runtime, "wake_instance", wake)
+    assert await runtime.reconcile_pending(client=client, database=db) == 1
+    client.get_workflow_handle.assert_called_once_with("owner", run_id="physical")
+    wake.assert_awaited_once_with(waiting, client=client, database=db)
+
+
 async def test_retirement_reconciliation_rotates_past_draining_job(setup):
     db, service, scope = setup
     await service.enqueue_input(scope["agent_instance_id"], content="Final review", request_id="start")

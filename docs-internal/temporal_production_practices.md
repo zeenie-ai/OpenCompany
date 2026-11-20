@@ -49,18 +49,31 @@ resumed. Neither an idle agent nor a message receipt accepts a task dependency.
 
 ### Reconciler readiness and recovery
 
-`AgentInstanceReconcilerWorkflow` has deterministic ID
-`agent-instances:reconciler:v1`. It performs a pass followed by a 30-second
-Temporal timer and continues as new after 100 passes. Reconciliation repairs
-completed-job retirement, pending permit releases, draining executors and
-missed starts/wakeups from database records.
+Embedded and standalone workers check for pending recovery work on startup
+and wait locally for 30 seconds between passes. A shared, expiring lease in
+the application database coordinates the scan across workers. With an idle
+team, these checks create no Temporal activity or timer events. A failed
+start or wakeup leaves its database obligation pending. A later pass can
+also retire completed jobs, recover capacity permits and drain interrupted
+executors. While all workers are offline, outstanding obligations wait in
+the database for a worker to return.
 
-The embedded worker retries reconciler startup independently of healthy queue
-polling, using `temporal_worker_restart_backoff_seconds` and
-`temporal_worker_restart_backoff_max_seconds`. Worker shutdown cancels this
-startup task. Standalone startup awaits admission of the reconciler before
-running its worker. A start/signal transport error therefore leaves a durable
-obligation; it is not a successful delivery or an instruction to recreate work.
+Upgrade every worker process. After a successful coordinated sweep, an
+upgraded worker requests cancellation of the old `agent-instances:reconciler:v1`
+workflow. If an older worker restarts and recreates it after this one-time
+check, restart an upgraded worker once the last old worker is offline.
+Workers retain the legacy implementation for replay. Closed runs may remain visible until
+namespace retention expires. On embedded SQLite, deleting expired history
+frees pages for reuse, so the on-disk file can retain its previous size.
+
+The Temporal frontend warning `GetHistory page size is larger than threshold`
+reports the page-size parameter of a history read. With the pinned Temporal
+Server 1.32.0, `wf-size=1000` means the reader supplied 1,000 for a parameter
+whose maximum is 256. Temporal returns history in event batches and the reader
+can follow the next page token. Use the run's event IDs and timestamps
+to measure actual history growth. The warning contains no measurement of
+database size or sweep duration. [Temporal history handler](https://github.com/temporalio/temporal/blob/v1.32.0/service/frontend/workflow_handler.go#L899-L916)
+and [page-size cap](https://github.com/temporalio/temporal/blob/v1.32.0/common/primitives/constants.go#L18-L21).
 
 Recovery scans rotate checked pending/stopping instances. Permit-ledger scans
 rotate `last_permit_reconcile_at`, preserving `created_at`. This avoids a page

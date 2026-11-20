@@ -114,3 +114,11 @@ class AgentInstanceMutation(SQLModel, table=True):
     fingerprint: str = Field(max_length=64)
     result: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(default_factory=now)
+
+
+class AgentReconcileLease(SQLModel, table=True):
+    """One shared scheduling slot in the application database."""
+    __tablename__ = "agent_reconcile_lease"
+    id: int = Field(primary_key=True)
+    token: str = Field(max_length=36)
+    available_at: datetime

@@ -600,13 +600,15 @@ native child carries additional lease cleanup across rollover and releases
 those leases on exit; the session owns the initial lease. Opaque adapters that
 cannot yield their execution lease return `pending` immediately.
 
-**Durable recovery.** Inbox records, startup obligations and stop fences are
-the recovery source; signals are latency hints. `AgentInstanceReconcilerWorkflow`
-uses ID `agent-instances:reconciler:v1`, runs a reconciliation pass followed by
-a 30-second timer, and continues as new after 100 passes. Each pass repairs
-completed-job retirement, pending permit cleanup, draining executors and missed
-starts/wakeups. Pending/stopping scans rotate their checked instances, while
-permit scans use `last_permit_reconcile_at` and preserve creation timestamps.
+**Durable recovery.** Embedded and standalone workers run a local recovery
+loop. On startup and after each 30-second local wait, the loop tries to acquire a shared,
+expiring application-database lease. The lease holder checks for completed
+jobs needing retirement, pending permit releases, draining executors and
+missed starts or wakeups. The wait creates no Temporal history events. Inbox
+records, startup obligations and stop fences survive a worker restart, and
+post-commit signals still wake recipients as soon as work is available.
+Pending/stopping scans rotate their checked instances. Permit scans use
+`last_permit_reconcile_at` and preserve creation timestamps.
 Healthy owners therefore cannot permanently occupy the first recovery batch.
 
 `AgentRun.permit_leases` records each physical lease and its root/Temporal owner
@@ -621,10 +623,11 @@ Retirement creates a released tombstone even for an unacquired reservation,
 so a late executor cannot recreate it. Conditional release decrements the
 root counter once.
 
-The embedded worker starts the reconciler independently of normal polling and
-retries startup with the configured worker-restart backoff until admitted or
-the worker stops. Standalone startup awaits reconciler admission before entering
-its worker run. A failed wake never removes the durable obligation.
+On upgrade, the lease holder requests cancellation of the previous
+`agent-instances:reconciler:v1` workflow after a successful sweep. Workers
+retain its workflow and activity registrations so Temporal can replay existing
+runs. Closed runs follow the namespace's history retention policy. See
+[recovery operations and history warnings](./temporal_production_practices.md#reconciler-readiness-and-recovery).
 
 Three classified invalid orchestration requests halt the affected turn; ordinary
 tool failures and revision conflicts do not consume that budget. Already-valid
@@ -1188,7 +1191,7 @@ server/services/temporal/
 ├── plugin_activities.py # collect_plugin_activities() -> per-type node.{type}.v{ver} activities (F4.A)
 ├── agent_workflow.py    # AgentWorkflow loop + detached DelegatedTaskWorkflow
 ├── agent_activities.py  # collect_agent_activities() -> the agent.* activities (F4.B)
-├── agent_instance_workflow.py # Serialized instance sessions, durable reconciliation and agent.instance.* Activities
+├── agent_instance_workflow.py # Serialized instance sessions, legacy reconciler replay and agent.instance.* Activities
 ├── workflow.py          # MachinaWorkflow class
 │   ├── run()                     # Main orchestrator
 │   ├── _filter_executable_graph() # Config node filtering
