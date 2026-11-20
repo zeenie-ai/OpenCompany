@@ -552,7 +552,7 @@ describe('ChatPane', () => {
     renderPane();
 
     expect(await screen.findByText('Saturday is booked.')).toBeInTheDocument();
-    expect(await screen.findByTitle('Estimated cost of model and tool calls')).toHaveTextContent('$0.42');
+    expect(await screen.findByTitle(/^Estimated cost of model and tool calls/)).toHaveTextContent('$0.42');
     expect(sendRequest).toHaveBeenCalledWith('get_chat_run_costs', { workflow_id: 'w1' });
   });
 
@@ -562,6 +562,6 @@ describe('ChatPane', () => {
 
     expect(await screen.findByText('Saturday is booked.')).toBeInTheDocument();
     await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('get_chat_run_costs', { workflow_id: 'w1' }));
-    expect(screen.queryByTitle('Estimated cost of model and tool calls')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/^Estimated cost of model and tool calls/)).not.toBeInTheDocument();
   });
 });

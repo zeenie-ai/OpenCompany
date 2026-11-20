@@ -1,9 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const socket = vi.hoisted(() => ({ sendRequest: vi.fn(), isReady: true }));
+const socket = vi.hoisted(() => {
+  const listeners = new Map<string, (data: unknown) => void>();
+  return {
+    sendRequest: vi.fn(),
+    isReady: true,
+    listeners,
+    addEventListener: (type: string, handler: (data: unknown) => void) => {
+      listeners.set(type, handler);
+      return () => listeners.delete(type);
+    },
+  };
+});
 
 vi.mock('@/contexts/WebSocketContext', () => ({
   useWebSocketActions: () => socket,
@@ -59,6 +70,27 @@ describe('useChatRunCostsQuery', () => {
     renderHook(() => useChatRunCostsQuery('wf'), { wrapper });
 
     expect(socket.sendRequest).not.toHaveBeenCalled();
+  });
+
+  it('reads the costs again while this employee’s team works', async () => {
+    socket.sendRequest.mockResolvedValue({ success: true, runs: { r_1: 0.42 } });
+    const { result } = renderHook(() => useChatRunCostsQuery('wf'), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual({ r_1: 0.42 }));
+    socket.sendRequest.mockResolvedValue({ success: true, runs: { r_1: 1.5 } });
+
+    act(() => socket.listeners.get('agent.instance.updated')?.({ workflow_id: 'wf' }));
+
+    await waitFor(() => expect(result.current.data).toEqual({ r_1: 1.5 }));
+  });
+
+  it('leaves the costs alone while another employee’s team works', async () => {
+    socket.sendRequest.mockResolvedValue({ success: true, runs: { r_1: 0.42 } });
+    const { result } = renderHook(() => useChatRunCostsQuery('wf'), { wrapper });
+    await waitFor(() => expect(result.current.data).toEqual({ r_1: 0.42 }));
+
+    act(() => socket.listeners.get('agent.instance.updated')?.({ workflow_id: 'other' }));
+
+    expect(socket.sendRequest).toHaveBeenCalledTimes(1);
   });
 });
 

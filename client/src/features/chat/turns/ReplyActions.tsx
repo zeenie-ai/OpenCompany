@@ -97,7 +97,7 @@ export function ReplyActions({ message, latest, now }: { message: ChatMessage; l
         <VersionStepper siblings={message.siblings} noun="reply" disabled={actions.busy} onSwitch={actions.switchTo} />
       )}
       {cost && (
-        <span className="px-1.5 tabular-nums" title="Estimated cost of model and tool calls">
+        <span className="px-1.5 tabular-nums" title="Estimated cost of model and tool calls, including work handed to the team">
           {cost}
         </span>
       )}

@@ -606,8 +606,9 @@ are the two hosts.
   estimate of the run's model calls and paid tool calls, and of the team jobs the reply started. It does not come
   with the thread: the bar reads
   `get_chat_run_costs` from the usage service (`hooks/useUsageQueries.ts`, see
-  [Pricing Service](./pricing_service.md)) and refreshes on `chat.updated`. A reply whose run booked no call shows
-  none. A run that stopped or failed without an answer has Try again in
+  [Pricing Service](./pricing_service.md)) and refreshes on `chat.updated`, and on `agent.instance.updated` for its
+  workflow, because a team works on after the reply that started it has finished. A reply whose run booked no call
+  shows none. A run that stopped or failed without an answer has Try again in
   its note. Each command sends the thread's revision as read; a refusal is told in the host's words
   (`turns/runCopy.ts` `branchRefusalText`), `not_running` through the host's own refusal. A rating shows at once and
   goes back when it does not save; its toast says the employee will see it next time (`feedbackThanks`). Suggested

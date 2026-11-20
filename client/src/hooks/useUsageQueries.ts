@@ -6,14 +6,17 @@
  * `useChatRunCostsQuery(workflowId)` is USD per chat run of one workflow
  * (`get_chat_run_costs`), for the figure under a reply. WebSocketContext
  * invalidates it on `chat.updated`, which the server sends when a reply is
- * saved and when a run ends.
+ * saved and when a run ends. A reply's figure includes the team it handed
+ * work to, and the team works on after the reply has finished, so the hook
+ * also reads again on `agent.instance.updated` for its workflow.
  *
  * `useWorkflowCostsQuery()` is this month's cost by employee
  * (`get_workflow_costs`), for the cost panel. It is read again whenever the
  * panel opens, because calls are booked while it is closed.
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { queryKeys } from '@/lib/queryConfig';
@@ -24,7 +27,19 @@ export type ChatRunCosts = Record<string, number>;
 const runCostsSchema = z.object({ runs: z.record(z.string(), z.number()) });
 
 export function useChatRunCostsQuery(workflowId: string) {
-  const { sendRequest, isReady } = useWebSocketActions();
+  const { sendRequest, isReady, addEventListener } = useWebSocketActions();
+  const queryClient = useQueryClient();
+
+  useEffect(
+    () =>
+      addEventListener('agent.instance.updated', (event) => {
+        if (event?.workflow_id === workflowId) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.chatRunCosts.bySession(workflowId).queryKey });
+        }
+      }),
+    [addEventListener, queryClient, workflowId],
+  );
+
   return useQuery<ChatRunCosts, Error>({
     queryKey: queryKeys.chatRunCosts.bySession(workflowId).queryKey,
     enabled: isReady && Boolean(workflowId),

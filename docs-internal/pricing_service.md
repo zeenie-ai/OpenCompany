@@ -549,8 +549,9 @@ the same figures and the same limit.
 The shared chat shows what each reply cost beside its time
 (`client/src/features/chat/turns/ReplyActions.tsx`), from
 `useChatRunCostsQuery(workflowId)`, which sends `get_chat_run_costs`. The
-figure includes the work the reply handed to the employee's team. See
-[Chat Protocol](./chat_protocol.md).
+figure includes the work the reply handed to the employee's team, and the hook
+reads it again on `agent.instance.updated` for its workflow, so it keeps up
+while the team works. See [Chat Protocol](./chat_protocol.md).
 
 ## Adding New Services
 
