@@ -36,6 +36,7 @@ from services.ws_handler_registry import ws_handler
 from services.deployment.control import (
     ACTIVE_STATES,
     CLEAR_PAUSE_REASON,
+    PAUSE_REASON_BUDGET,
     PAUSE_REASON_CONTROLLER_MISSING,
     PAUSE_REASON_FAILURES,
     PAUSE_REASON_RECOVERY,
@@ -1050,7 +1051,7 @@ def _expected_revision(data: Dict[str, Any], control) -> int:
     return int(supplied)
 
 
-_AUTOMATIC_PAUSE_REASONS = frozenset({PAUSE_REASON_FAILURES, PAUSE_REASON_RECOVERY, PAUSE_REASON_CONTROLLER_MISSING})
+_AUTOMATIC_PAUSE_REASONS = frozenset({PAUSE_REASON_FAILURES, PAUSE_REASON_RECOVERY, PAUSE_REASON_CONTROLLER_MISSING, PAUSE_REASON_BUDGET})
 
 
 def _automatic_pause_values(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -2462,6 +2463,19 @@ async def handle_resume_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
             "error": "workflow_control_transition_pending",
             **await _control_payload(control, controller_status=controller_status),
         }
+    if getattr(control, "pause_reason", None) == PAUSE_REASON_BUDGET:
+        # Paused at the owner's monthly budget: running again would only pay
+        # for the next call and pause again, so the amount is raised first.
+        from services.usage import monthly_budget_reached
+
+        budget = await monthly_budget_reached(workflow_id)
+        if budget is not None:
+            return {
+                "success": False,
+                "error": "monthly_budget_reached",
+                "message": f"This employee reached this month's budget of ${budget:.2f}. Raise it in Settings > Billing, then resume.",
+                **await _control_payload(control, controller_status=controller_status),
+            }
     async with _control_completion_lock(workflow_id):
         control = await service.transition(
             control, expected_revision=_expected_revision(data, control), from_statuses={"paused"}, status="resuming"
@@ -2951,6 +2965,42 @@ async def pause_generation_on_failure(
             error=(result or {}).get("error") if isinstance(result, dict) else None,
         )
     return {"paused": paused, "failure": reason}
+
+
+async def pause_generation_for_budget(*, workflow_id: str, detail: str) -> bool:
+    """Pause a controlled deployment that reached its monthly budget.
+
+    Called by the agent's model step when the usage service says the
+    workflow has reached the owner's budget. Answers whether the deployment
+    is paused or on its way there: a generation already pausing or paused
+    counts, a running one is paused here with ``detail`` as what the owner
+    reads, and anything else (a manual run, an uncontrolled deployment) is
+    left alone. It never raises: a pause that could not be asked for lets
+    the step run.
+    """
+    try:
+        service = _control_service()
+        control = await service.database.get_latest_workflow_control(workflow_id)
+        if control is None:
+            return False
+        if control.status in {"pausing", "paused"}:
+            return True
+        if control.status != "running":
+            return False
+        result = await handle_pause_workflow(
+            {
+                "workflow_id": workflow_id,
+                "expected_revision": control.revision,
+                "idempotency_key": f"pause-for-budget:{control.id}:{control.revision}",
+                "_pause_reason": PAUSE_REASON_BUDGET,
+                "_pause_detail": detail,
+            },
+            None,
+        )
+    except Exception:  # noqa: BLE001 - the step runs when the pause could not be asked for
+        logger.warning("Budget pause did not complete", workflow_id=workflow_id, exc_info=True)
+        return False
+    return bool(result.get("success"))
 
 
 WS_HANDLERS: Dict[str, Any] = {

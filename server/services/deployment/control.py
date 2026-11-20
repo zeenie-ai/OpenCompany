@@ -83,6 +83,7 @@ def serialize_control(control: Optional[WorkflowControlExecution]) -> Dict[str, 
 PAUSE_REASON_FAILURES = "failures"
 PAUSE_REASON_RECOVERY = "recovery"
 PAUSE_REASON_CONTROLLER_MISSING = "controller_missing"
+PAUSE_REASON_BUDGET = "budget"
 
 #: What running again clears.
 CLEAR_PAUSE_REASON: Dict[str, Any] = {"pause_reason": None, "pause_detail": None}

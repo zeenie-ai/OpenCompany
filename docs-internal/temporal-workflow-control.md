@@ -832,10 +832,23 @@ and Resume.
   every knob is evaluated on the activity side so flipping config never
   touches recorded workflow commands.
 
-**Why an automatic pause happened.** Each of the three records it on the
-control row: `pause_reason` is `failures` (the circuit breaker),
-`recovery` (crash recovery) or `controller_missing`, with a readable
-`pause_detail`. `serialize_control` emits both; a transition back to
+- **The monthly budget** (`employee_monthly_budget_usd`, env
+  `EMPLOYEE_MONTHLY_BUDGET_USD`, default `0` = off):
+  `pause_generation_for_budget(workflow_id, detail)` in
+  `services/deployment/handlers.py` pauses a running generation whose
+  workflow reached the owner's budget for the month, through the same
+  `handle_pause_workflow` the Workspace's Stop uses. It answers true when the
+  generation is paused or already on its way there, leaves a manual run alone
+  (it has no running generation), and never raises. A Resume from that pause
+  is refused with `monthly_budget_reached` and a message naming Settings >
+  Billing while the usage service (`monthly_budget_reached`) still says the
+  workflow is over; raising the amount, or a new month, lets it through. See
+  [Pricing Service](./pricing_service.md).
+
+**Why an automatic pause happened.** Each one records it on the control row:
+`pause_reason` is `failures` (the circuit breaker), `recovery` (crash
+recovery), `controller_missing` or `budget` (the monthly budget), with a
+readable `pause_detail`. `serialize_control` emits both; a transition back to
 `running` (Resume, reconcile, restore) clears them. Only server-side calls
 can set a reason; a `pause_workflow` from a socket cannot. Normal mode shows
 such an employee as "Needs attention" ([normal_mode.md](./normal_mode.md)).

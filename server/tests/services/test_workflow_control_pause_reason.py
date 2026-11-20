@@ -119,3 +119,98 @@ async def test_the_circuit_breaker_and_recovery_pass_their_reasons(monkeypatch):
     request = pause.await_args.args[0]
     assert request["_pause_reason"] == "failures"
     assert "API key rejected" in request["_pause_detail"]
+
+
+# ---- the monthly budget --------------------------------------------------------
+
+BUDGET_DETAIL = "Reached this month's budget of $20.00. Raise it in Settings > Billing, then resume."
+
+
+def controls(monkeypatch, latest):
+    """The control service answering ``latest`` as the workflow's newest row."""
+    service = SimpleNamespace(database=SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=latest)))
+    monkeypatch.setattr(handlers, "_control_service", lambda: service)
+    return service
+
+
+@pytest.fixture()
+def pause(monkeypatch):
+    pause = AsyncMock(return_value={"success": True})
+    monkeypatch.setattr(handlers, "handle_pause_workflow", pause)
+    return pause
+
+
+async def test_a_running_employee_is_paused_for_its_budget(monkeypatch, pause):
+    controls(monkeypatch, row("running"))
+
+    assert await handlers.pause_generation_for_budget(workflow_id="wf", detail=BUDGET_DETAIL) is True
+
+    request = pause.await_args.args[0]
+    assert request["_pause_reason"] == "budget"
+    assert request["_pause_detail"] == BUDGET_DETAIL
+
+
+@pytest.mark.parametrize("status", ["pausing", "paused"])
+async def test_an_employee_already_stopping_is_left_alone(monkeypatch, pause, status):
+    controls(monkeypatch, row(status))
+
+    assert await handlers.pause_generation_for_budget(workflow_id="wf", detail=BUDGET_DETAIL) is True
+    pause.assert_not_awaited()
+
+
+async def test_a_run_with_no_generation_is_never_paused(monkeypatch, pause):
+    controls(monkeypatch, None)
+
+    assert await handlers.pause_generation_for_budget(workflow_id="wf", detail=BUDGET_DETAIL) is False
+    pause.assert_not_awaited()
+
+
+async def test_a_budget_pause_that_fails_answers_false(monkeypatch, pause):
+    controls(monkeypatch, row("running"))
+    pause.side_effect = RuntimeError("temporal down")
+
+    assert await handlers.pause_generation_for_budget(workflow_id="wf", detail=BUDGET_DETAIL) is False
+
+
+def test_the_budget_is_a_reason_the_server_may_give():
+    assert handlers._automatic_pause_values({"_pause_reason": "budget", "_pause_detail": BUDGET_DETAIL}) == {
+        "pause_reason": "budget",
+        "pause_detail": BUDGET_DETAIL,
+    }
+
+
+@pytest.fixture()
+def resume_harness(monkeypatch):
+    """A workflow paused for its budget, about to be resumed. The transition
+    to ``resuming`` raises, which ends the handler at the point the tests
+    look at: whether the resume got that far."""
+    paused = row("paused", pause_reason="budget", pause_detail=BUDGET_DETAIL)
+    service = controls(monkeypatch, paused)
+    service.transition = AsyncMock(side_effect=RuntimeError("the resume went ahead"))
+    monkeypatch.setattr(handlers, "_reconcile_control", AsyncMock(return_value=(paused, None)))
+    monkeypatch.setattr(handlers, "_control_payload", AsyncMock(return_value={}))
+    return service
+
+
+async def test_resume_is_refused_while_the_employee_is_over_its_budget(monkeypatch, resume_harness):
+    import services.usage as usage
+
+    monkeypatch.setattr(usage, "monthly_budget_reached", AsyncMock(return_value=20.0))
+
+    reply = await handlers.handle_resume_workflow({"workflow_id": "wf", "expected_revision": 2}, None)
+
+    assert reply["success"] is False
+    assert reply["error"] == "monthly_budget_reached"
+    assert reply["message"] == "This employee reached this month's budget of $20.00. Raise it in Settings > Billing, then resume."
+    resume_harness.transition.assert_not_awaited()
+
+
+async def test_resume_goes_ahead_once_the_budget_allows_it(monkeypatch, resume_harness):
+    import services.usage as usage
+
+    monkeypatch.setattr(usage, "monthly_budget_reached", AsyncMock(return_value=None))
+
+    reply = await handlers.handle_resume_workflow({"workflow_id": "wf", "expected_revision": 2}, None)
+
+    resume_harness.transition.assert_awaited_once()
+    assert reply.get("error") != "monthly_budget_reached"
