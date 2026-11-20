@@ -390,6 +390,7 @@
     "twitter": {
       "tweet": "content_create",
       "reply": "content_create",
+      "quote": "content_create",
       "retweet": "user_interaction_create",
       "like": "user_interaction_create",
       "unlike": "interaction_delete",

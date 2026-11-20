@@ -123,6 +123,9 @@ flowchart TD
   `track_twitter_usage` -> `record_api_usage(...)` (`services/usage`) with
   `service='twitter'` and `operation` from `PricingService.calculate_api_cost`.
   Action -> op name: `tweet`, `reply`, `quote`, `retweet`, `like`, `unlike`, `delete`.
+  Each has an `operation_map.twitter` entry in `pricing.json` (`quote` is priced
+  as `content_create`, like a post); an action without one would be booked at $0
+  with no error, so `tests/services/usage/test_price_list.py` checks all seven.
 - **Broadcasts**: none from the handler.
 - **External API calls**:
   - `POST https://api.twitter.com/2/tweets` (tweet, reply)
