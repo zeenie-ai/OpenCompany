@@ -155,6 +155,23 @@ describe('EmployeeView', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeEnabled();
   });
 
+  it('keeps the budget line visible for an employee paused at its monthly budget', () => {
+    const why = 'Reached this month’s budget of $20.00. Raise it in Settings > Billing, then resume.';
+    renderPage(summary({ status: 'attention', talk: TALK_ON }, { state: 'paused', pause_reason: 'budget', pause_detail: why }));
+    expect(screen.getByRole('alert')).toHaveTextContent(why);
+  });
+
+  it('says to raise the budget when Resume is refused at the monthly budget', async () => {
+    actions.resumeWorkflow.mockRejectedValue(new Error('monthly_budget_reached'));
+    renderPage(summary({ status: 'attention', talk: TALK_ON }, { state: 'paused', pause_reason: 'budget' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() =>
+      expect(pillToast).toHaveBeenCalledWith('They reached this month’s budget. Raise it in Settings > Billing, then resume.', {
+        tone: 'error',
+      }),
+    );
+  });
+
   it('says when a start went through, and spikes the orb', async () => {
     orbState.spike = 0;
     actions.startEmployee.mockResolvedValue(normalizeWorkflowControlStatus({ state: 'starting', revision: 2, generation: 1 }, 'w1'));

@@ -563,7 +563,7 @@ mounted anywhere and were deleted; the `get_pricing_config` / `save_pricing_conf
 
 `client/src/components/ui/CostPanel.tsx` is one component, mounted unchanged
 in Home's Settings > Billing and in Dev's Settings panel, so both modes show
-the same figures and the same limit.
+the same figures and the same limits.
 
 - **This month.** `useWorkflowCostsQuery()` (`client/src/hooks/useUsageQueries.ts`)
   sends `get_workflow_costs` each time the panel opens, because calls are
@@ -576,7 +576,17 @@ the same figures and the same limit.
   as 0, which means no limit, and a value below 0 is refused in the panel. A
   save that fails says so and keeps what was typed. The limit itself is
   described under "The spend limit of a reply" above.
+- **Monthly budget per employee.** The same field (`LimitField`, mounted once
+  per limit), with Save budget, which sends only
+  `employee_monthly_budget_usd`. 0 means no budget. See "The monthly budget of
+  an employee" above.
 - The panel says what it leaves out: Claude Code and Codex agents.
+
+An employee paused at its budget shows the reason on its page in Home
+(`features/home/employee/EmployeeChat.tsx`, the same alert a failure pause
+shows), and a Resume the server refuses with `monthly_budget_reached` says to
+raise the budget (`CONTROL_ERRORS` in `useEmployeeControl.ts`). Dev's toolbar
+shows the refusal's code, as it does for its other control refusals.
 
 ### The cost under a reply
 
@@ -658,4 +668,4 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |
 | `client/src/hooks/useApiKeys.ts` | `getAPIUsageSummary` / `getProviderUsageSummary` |
 | `client/src/hooks/useUsageQueries.ts` | `useChatRunCostsQuery` (a reply's cost) and `useWorkflowCostsQuery` (this month's cost by employee) |
-| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee and the spend limit of a reply, in Home's Billing and Dev's Settings |
+| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee, the spend limit of a reply and the monthly budget of an employee, in Home's Billing and Dev's Settings |

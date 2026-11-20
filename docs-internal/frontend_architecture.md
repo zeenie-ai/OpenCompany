@@ -124,8 +124,9 @@ client/src/
 │   │   ├── sonner.tsx       # Patched to read ThemeContext (not next-themes)
 │   │   ├── ApiKeyInput.tsx  # Composite: input + eye toggle + save/delete buttons
 │   │   ├── SettingsPanel.tsx # Shadcn Switch + Slider + Input
-│   │   ├── CostPanel.tsx    # This month's cost by employee + the spend limit of a reply. One component,
-│   │   │                    # mounted unchanged in Home's Settings > Billing and Dev's Settings panel
+│   │   ├── CostPanel.tsx    # This month's cost by employee + two limits (per reply, and a monthly budget per
+│   │   │                    # employee). One component, mounted unchanged in Home's Settings > Billing and Dev's
+│   │   │                    # Settings panel
 │   │   ├── ConsolePanel.tsx # Chat (ConsoleChat, the shared chat) + console + terminal + output
 │   │   ├── ModelMenu.tsx    # The one model menu: Set Global Model and Home's chat picker
 │   │   └── TopToolbar.tsx   # File menu + Set Global Model (ModelMenu) + workflow controls

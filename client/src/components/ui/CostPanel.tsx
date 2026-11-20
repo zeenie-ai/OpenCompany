@@ -1,16 +1,18 @@
 /**
  * The cost panel: what model calls and paid tools cost this month, by
- * employee, and the most one chat reply may cost.
+ * employee, the most one chat reply may cost, and the most one employee may
+ * cost in a month.
  *
  * One component for both modes. Home mounts it in Settings > Billing and Dev
  * in its Settings panel, unchanged, so the two always show the same figures
- * and the same limit.
+ * and the same limits.
  *
  * The figures come from the server's usage service (`get_workflow_costs`,
  * hooks/useUsageQueries.ts) and are estimates: the configured prices applied
  * to the usage each provider reported. A total that cannot be read shows a
- * dash, never a zero. The limit is the owner's `chat_run_spend_limit_usd`
- * setting; "Save limit" saves that one setting and nothing else.
+ * dash, never a zero. Each limit is one of the owner's settings
+ * (`chat_run_spend_limit_usd`, `employee_monthly_budget_usd`), and its Save
+ * saves that one setting and nothing else.
  */
 
 import { useState } from 'react';
@@ -24,34 +26,54 @@ import { useWorkflowCostsQuery } from '@/hooks/useUsageQueries';
 import { useSaveUserSettingsMutationCore, useUserSettingsQueryCore } from '@/hooks/useUserSettingsQuery';
 import { monthDay, usd } from '@/lib/format';
 
-const LIMIT_SETTING = 'chat_run_spend_limit_usd';
-const LIMIT_FIELD_ID = 'cost-panel-spend-limit';
-/** An empty box reads as 0, which means no limit. */
-const limitSchema = z.coerce.number().min(0);
+interface Limit {
+  /** The setting the field shows and its Save writes. */
+  setting: string;
+  label: string;
+  help: string;
+  /** What its Save and a failed save call it. */
+  noun: string;
+}
 
-/** The limit's field and its Save. `saved` is the limit the settings hold. */
-function SpendLimit({ saved }: { saved: number }) {
+const LIMITS: Limit[] = [
+  {
+    setting: 'chat_run_spend_limit_usd',
+    label: 'Spend limit per reply',
+    help: 'A chat reply that reaches this cost stops and says so, and your next message carries on. It covers the reply itself; work it hands to the team counts toward the monthly budget. 0 means no limit.',
+    noun: 'limit',
+  },
+  {
+    setting: 'employee_monthly_budget_usd',
+    label: 'Monthly budget per employee',
+    help: 'An employee whose cost this month reaches this pauses and shows as needing attention, team and scheduled work included. Raise the amount, then resume them. 0 means no budget.',
+    noun: 'budget',
+  },
+];
+
+/** An empty box reads as 0, which means off. */
+const amountSchema = z.coerce.number().min(0);
+
+/** One limit's field and its Save. `saved` is the amount the settings hold. */
+function LimitField({ setting, label, help, noun, saved }: Limit & { saved: number }) {
   const { sendRequest } = useWebSocketActions();
   const save = useSaveUserSettingsMutationCore(sendRequest);
   // What the owner typed and has not saved yet. While there is none the box
-  // shows the saved limit, so a limit saved elsewhere shows here too, and a
+  // shows the saved amount, so one saved elsewhere shows here too, and a
   // save that failed keeps what was typed.
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? saved;
-  const parsed = limitSchema.safeParse(shown);
+  const parsed = amountSchema.safeParse(shown);
   const limit = parsed.success ? parsed.data : null;
+  const fieldId = `cost-panel-${setting}`;
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <Label htmlFor={LIMIT_FIELD_ID} className="text-sm font-medium text-fg-default">
-            Spend limit per reply
+          <Label htmlFor={fieldId} className="text-sm font-medium text-fg-default">
+            {label}
           </Label>
-          <p className="text-xs text-pretty text-fg-muted">
-            A chat reply that reaches this cost stops and says so, and your next message carries on. Other work, such as
-            scheduled runs, is not limited. 0 means no limit.
-          </p>
+          <p className="text-xs text-pretty text-fg-muted">{help}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative w-28">
@@ -59,7 +81,7 @@ function SpendLimit({ saved }: { saved: number }) {
               $
             </span>
             <Input
-              id={LIMIT_FIELD_ID}
+              id={fieldId}
               type="number"
               inputMode="decimal"
               min={0}
@@ -75,10 +97,10 @@ function SpendLimit({ saved }: { saved: number }) {
             className="h-9 border-border-default px-3 text-fg-default"
             disabled={limit === null || limit === saved || save.isPending}
             onClick={() => {
-              if (limit !== null) save.mutate({ [LIMIT_SETTING]: limit }, { onSuccess: () => setDraft(null) });
+              if (limit !== null) save.mutate({ [setting]: limit }, { onSuccess: () => setDraft(null) });
             }}
           >
-            Save limit
+            Save {noun}
           </Button>
         </div>
       </div>
@@ -89,7 +111,7 @@ function SpendLimit({ saved }: { saved: number }) {
       )}
       {save.isError && (
         <p role="alert" className="text-xs text-destructive">
-          The limit didn’t save. Try again.
+          The {noun} didn’t save. Try again.
         </p>
       )}
     </div>
@@ -135,11 +157,12 @@ export function CostPanel() {
         </ul>
       )}
 
-      <div className="border-t border-border-default pt-4">
-        {/* A settings row nobody has saved yet carries no limit: 0, no limit. */}
-        {settings.data && <SpendLimit saved={settings.data[LIMIT_SETTING] ?? 0} />}
+      <div className="flex flex-col gap-4 border-t border-border-default pt-4">
+        {/* A settings row nobody has saved yet carries neither amount: 0, off. */}
+        {settings.data &&
+          LIMITS.map((limit) => <LimitField key={limit.setting} {...limit} saved={settings.data[limit.setting] ?? 0} />)}
         {settings.isPending && <Skeleton className="h-9 w-full" />}
-        {settings.isError && !settings.data && <p className="text-sm text-fg-muted">The spend limit can’t be read right now.</p>}
+        {settings.isError && !settings.data && <p className="text-sm text-fg-muted">The limits can’t be read right now.</p>}
       </div>
 
       <p className="text-xs text-pretty text-fg-faint">

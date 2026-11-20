@@ -36,6 +36,7 @@ const SYNC_WAIT_MS = 4000;
 
 const CONTROL_ERRORS: Record<string, string> = {
   control_revision_conflict: 'That changed a moment ago. Try again.',
+  monthly_budget_reached: 'They reached this month’s budget. Raise it in Settings > Billing, then resume.',
   missing_apps: 'Connect the apps they use first.',
   needs_ai: 'Connect an AI model first.',
   team_temporal_required: 'Their team is saved, but team work is not ready on this installation. Ask your administrator to finish setup, then press Start again.',

@@ -1,7 +1,8 @@
 /**
  * The cost panel, shared by Home's Billing and Dev's Settings: this month's
- * cost by employee, a dash when it can't be read, and the spend limit of a
- * reply, whose Save sends that one setting and nothing else.
+ * cost by employee, a dash when it can't be read, and two limits (the spend
+ * limit of a reply and the monthly budget of an employee), each with a Save
+ * that sends its one setting and nothing else.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,6 +49,14 @@ function saveButton(): HTMLElement {
   return screen.getByRole('button', { name: 'Save limit' });
 }
 
+function budgetBox(): Promise<HTMLElement> {
+  return screen.findByLabelText('Monthly budget per employee');
+}
+
+function saveBudgetButton(): HTMLElement {
+  return screen.getByRole('button', { name: 'Save budget' });
+}
+
 function savedSettings(): unknown[] {
   return socket.sendRequest.mock.calls.filter(([type]) => type === 'save_user_settings').map(([, data]) => data.settings);
 }
@@ -55,7 +64,7 @@ function savedSettings(): unknown[] {
 beforeEach(() => {
   replies = {
     get_workflow_costs: COSTS,
-    get_user_settings: { settings: { chat_run_spend_limit_usd: 2 } },
+    get_user_settings: { settings: { chat_run_spend_limit_usd: 2, employee_monthly_budget_usd: 20 } },
     save_user_settings: { settings: {} },
   };
   socket.sendRequest.mockReset().mockImplementation(async (type: string) => replies[type]);
@@ -102,7 +111,7 @@ describe('CostPanel', () => {
     expect(await limitBox()).toHaveValue(0);
   });
 
-  it('says so when the limit can’t be read', async () => {
+  it('says so when the limits can’t be read', async () => {
     socket.sendRequest.mockImplementation(async (type: string) => {
       if (type === 'get_user_settings') throw new Error('socket closed');
       return replies[type];
@@ -110,8 +119,9 @@ describe('CostPanel', () => {
 
     renderPanel();
 
-    expect(await screen.findByText('The spend limit can’t be read right now.')).toBeInTheDocument();
+    expect(await screen.findByText('The limits can’t be read right now.')).toBeInTheDocument();
     expect(screen.queryByLabelText('Spend limit per reply')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Monthly budget per employee')).not.toBeInTheDocument();
   });
 
   it('keeps Save limit off until the limit changes', async () => {
@@ -172,5 +182,37 @@ describe('CostPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The limit didn’t save. Try again.');
     expect(box).toHaveValue(5);
     expect(saveButton()).toBeEnabled();
+  });
+
+  it('shows the saved monthly budget in its box', async () => {
+    renderPanel();
+
+    expect(await budgetBox()).toHaveValue(20);
+  });
+
+  it('shows no budget when the settings hold none', async () => {
+    replies.get_user_settings = { settings: {} };
+
+    renderPanel();
+
+    expect(await budgetBox()).toHaveValue(0);
+  });
+
+  it('saves the budget and nothing else', async () => {
+    renderPanel();
+    fireEvent.change(await budgetBox(), { target: { value: '50' } });
+
+    fireEvent.click(saveBudgetButton());
+
+    await waitFor(() => expect(savedSettings()).toEqual([{ employee_monthly_budget_usd: 50 }]));
+  });
+
+  it('refuses a budget below zero', async () => {
+    renderPanel();
+
+    fireEvent.change(await budgetBox(), { target: { value: '-5' } });
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter 0 or more.');
+    expect(saveBudgetButton()).toBeDisabled();
   });
 });

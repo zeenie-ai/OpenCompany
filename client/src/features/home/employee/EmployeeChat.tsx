@@ -76,9 +76,13 @@ function BrowserNotice({ employee }: { employee: EmployeeSummary }) {
   );
 }
 
-/** Why the circuit breaker paused them: the failure that kept repeating. */
+/** The pauses the owner has to act on before resuming: the failure that kept
+ *  repeating (the circuit breaker), and the monthly budget. */
+const PAUSES_TO_FIX = ['failures', 'budget'];
+
+/** Why they paused, for a pause the owner has to act on. */
 function failurePauseText(employee: EmployeeSummary): string | null {
-  if (employee.control.pause_reason !== 'failures') return null;
+  if (!PAUSES_TO_FIX.includes(employee.control.pause_reason ?? '')) return null;
   return employee.control.pause_detail || (employee.task?.label === 'Paused' ? employee.task.text : null) || null;
 }
 

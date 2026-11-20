@@ -1262,8 +1262,11 @@ changing page clears it.
   the same component Dev's Settings panel mounts: an estimate of what model
   calls and paid tools cost this month (`get_workflow_costs`, from the usage
   service), one row per employee and "Other" for calls that belong to none,
-  and "Spend limit per reply", whose Save limit writes only
-  `chat_run_spend_limit_usd` (0 means no limit). See
+  "Spend limit per reply", whose Save limit writes only
+  `chat_run_spend_limit_usd` (0 means no limit), and "Monthly budget per
+  employee", whose Save budget writes only `employee_monthly_budget_usd` (0
+  means no budget; an employee that reaches it pauses and shows as needing
+  attention). See
   [Pricing Service](./pricing_service.md#the-cost-panel). A page picked in
   the nav slides in from 14px to the right (`slideSettingsPage`) before its
   blocks stagger in.
