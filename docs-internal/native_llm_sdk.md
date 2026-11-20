@@ -292,11 +292,27 @@ class LLMResponse:
     finish_reason: str = "stop"
     raw: Any = None
     assistant_message: Optional[Message] = None  # canonical replay envelope
+    reported_cost: Optional[float] = None  # what the provider says it charged, USD
 ```
 
 `assistant_message` is the durable source of truth. The flat `content`,
 `thinking`, and `tool_calls` fields remain convenience views; `raw` is never
 written to memory or Temporal history.
+
+`reported_cost` is the provider's own charge for the call, for a provider
+that reports one. Only OpenRouter does: every response carries `usage.cost`,
+the amount taken from the account, and on a bring-your-own-key call, where
+that is only OpenRouter's fee, the provider's charge sits beside it in
+`usage.cost_details.upstream_inference_cost`
+([usage accounting](https://openrouter.ai/docs/use-cases/usage-accounting)).
+`OpenRouterProvider._reported_cost` adds the two; the base
+`OpenAIProvider._reported_cost` returns `None`, so no other provider reports
+one even if its usage has a `cost` field. No request parameter asks for it.
+The model step, the summarizer and the hire screen's setup call pass it to
+`record_llm_usage(cost=...)`, which books it as the row's total in place of
+the priced estimate (see [pricing_service.md](pricing_service.md)). It is not
+part of `Usage` and not in a step's result, so workflow code never sees it.
+Locked by `tests/llm/test_reported_cost.py`.
 
 A `Message` holds its tool calls in `tool_calls` only. Its `blocks` are the
 text, reasoning and images in the provider's order, and never repeat a call.

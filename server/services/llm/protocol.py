@@ -291,6 +291,9 @@ class LLMResponse:
     finish_reason: str = "stop"
     raw: Any = None
     assistant_message: Optional[Message] = None
+    # What the provider says it charged for the call, in USD, when it says
+    # (OpenRouter). The usage recorder books it in place of a priced estimate.
+    reported_cost: Optional[float] = None
 
     def __post_init__(self) -> None:
         """Keep the flat response API while exposing a replayable message."""

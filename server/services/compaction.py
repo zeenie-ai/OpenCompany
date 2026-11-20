@@ -369,6 +369,7 @@ Provide a concise but complete summary."""
                 iteration=0,
                 workflow_id=workflow_id,
                 chat_run_id=chat_run_id,
+                cost=response.reported_cost,
                 database=self._db,
             )
             summary = _extract_text_from_response(response.content)

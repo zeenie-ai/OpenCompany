@@ -49,6 +49,7 @@ async def record_llm_usage(
     workflow_id: Optional[str] = None,
     execution_id: Optional[str] = None,
     chat_run_id: Optional[str] = None,
+    cost: Optional[float] = None,
     database: Any = None,
 ) -> Dict[str, float]:
     """Book one model call in ``token_usage_metrics`` and return its cost.
@@ -60,15 +61,22 @@ async def record_llm_usage(
     write failed. ``chat_run_id`` is the chat run the call worked for, when
     it worked for one. With no ``database`` the container's is used.
 
+    A provider that reports its own charge for the call has it passed as
+    ``cost`` (``LLMResponse.reported_cost``). It is the ``total_cost`` booked
+    and returned; the input, output and cache costs stay the price service's
+    estimates, so they need not add up to it.
+
     The row also takes the employee job bound in the log context: the model
     step and the summarizer bind it for a call made for a job.
     """
-    cost = dict(NO_COST)
+    priced = dict(NO_COST)
     try:
         from services.pricing import get_pricing_service
 
         tokens = {kind: usage.get(kind, 0) for kind in TOKEN_KINDS}
-        cost = get_pricing_service().calculate_cost(provider=provider, model=model, **tokens)
+        priced = get_pricing_service().calculate_cost(provider=provider, model=model, **tokens)
+        if cost is not None:
+            priced = {**priced, "total_cost": cost}
         row = TokenUsageMetric(
             session_id=session_id,
             node_id=node_id,
@@ -80,16 +88,16 @@ async def record_llm_usage(
             model=model,
             iteration=iteration,
             **tokens,
-            input_cost=cost["input_cost"],
-            output_cost=cost["output_cost"],
-            cache_cost=cost["cache_cost"],
-            total_cost=cost["total_cost"],
+            input_cost=priced["input_cost"],
+            output_cost=priced["output_cost"],
+            cache_cost=priced["cache_cost"],
+            total_cost=priced["total_cost"],
             created_at=datetime.now(timezone.utc),
         )
         await _save(row, database)
     except Exception:
         logger.warning("LLM usage not recorded", provider=provider, model=model, exc_info=True)
-    return cost
+    return priced
 
 
 async def record_api_usage(

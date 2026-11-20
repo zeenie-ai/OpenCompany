@@ -699,7 +699,14 @@ class OpenAIProvider:
             finish_reason=choice.finish_reason or "stop",
             raw=resp,
             assistant_message=assistant_message,
+            reported_cost=self._reported_cost(u),
         )
+
+    def _reported_cost(self, usage: Any) -> Optional[float]:
+        """What the provider says it charged for the call, in USD. The OpenAI
+        API reports none; a provider whose usage carries its charge overrides
+        this (OpenRouter)."""
+        return None
 
     def _raise_if_failed_response(self, resp: Any, *, failed: bool = False) -> None:
         error = getattr(resp, "error", None)

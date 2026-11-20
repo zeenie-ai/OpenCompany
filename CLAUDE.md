@@ -1487,7 +1487,10 @@ summarizer. It does not call `CompactionService.track()`; instead each
 records too). Every row is written by one recorder, `record_llm_usage` in
 `services/usage/recording.py`: the step, `CompactionService.track()`, the
 summarizer and the hire screen's setup call all use it, and it never raises,
-because the call it books is already paid for. Provider-native Anthropic/OpenAI context-management
+because the call it books is already paid for. OpenRouter reports its own
+charge for a call (`LLMResponse.reported_cost`, from `usage.cost`); the step,
+the summarizer and the setup call pass it as `cost=`, and the recorder books it
+as the row's total in place of the priced estimate. Provider-native Anthropic/OpenAI context-management
 compaction is not used by the agent runtime. Executions without connected
 memory still aggregate usage inside the loop but do not create session
 compaction records.

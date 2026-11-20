@@ -216,6 +216,7 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
             usage=asdict(billed),
             session_id=owner,
             node_id=USAGE_NODE_ID,
+            cost=response.reported_cost,
             database=database,
         )
         usage = usage + billed

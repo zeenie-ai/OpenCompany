@@ -170,6 +170,17 @@ async def test_a_setup_call_is_booked_as_employee_setup(harness):
     assert booked["database"] is harness.database
 
 
+async def test_a_setup_call_books_the_charge_its_provider_reported(harness):
+    async def charged():
+        return LLMResponse(content=GOOD, usage=Usage(input_tokens=100, output_tokens=50), model="gpt-x", reported_cost=0.004)
+
+    harness.unifier = FakeUnifier(charged)
+
+    await generate()
+
+    assert harness.booked.await_args.kwargs["cost"] == 0.004
+
+
 async def test_a_cut_off_reply_gets_one_retry(harness):
     harness.unifier = FakeUnifier((GOOD[: len(GOOD) // 2], "length"), GOOD)
     result = await generate()

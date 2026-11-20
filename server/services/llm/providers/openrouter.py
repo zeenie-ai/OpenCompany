@@ -76,6 +76,21 @@ class OpenRouterProvider(OpenAIProvider):
             extra_body=extra_body,
         )
 
+    def _reported_cost(self, usage: Any) -> Optional[float]:
+        """What OpenRouter charged for the call, in USD (its credits).
+
+        Every response carries ``usage.cost``, the amount taken from the
+        account. On a bring-your-own-key call that is only OpenRouter's fee,
+        and the provider's own charge is beside it in
+        ``usage.cost_details.upstream_inference_cost``, so the two are added.
+        (openrouter.ai/docs/use-cases/usage-accounting)
+        """
+        cost = getattr(usage, "cost", None)
+        if cost is None:
+            return None
+        details = getattr(usage, "cost_details", None) or {}
+        return cost + (details.get("upstream_inference_cost") or 0)
+
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx
 

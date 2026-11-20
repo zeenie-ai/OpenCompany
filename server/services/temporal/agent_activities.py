@@ -705,6 +705,7 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
             workflow_id=workflow_id,
             execution_id=(payload.get("attribution") or {}).get("execution_id"),
             chat_run_id=payload.get("chat_run_id"),
+            cost=response.reported_cost,
         )
 
         # Persist the conversation exactly as it happened: the message list this

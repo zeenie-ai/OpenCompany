@@ -133,6 +133,33 @@ async def test_the_price_is_returned(database, prices):
     assert cost == prices.calculate_cost.return_value
 
 
+async def test_a_providers_own_charge_is_the_total_booked(database, prices):
+    await book(database, cost=0.5)
+
+    assert (await model_rows(database))[0].total_cost == 0.5
+
+
+async def test_a_providers_own_charge_is_the_total_returned(database, prices):
+    cost = await book(database, cost=0.5)
+
+    assert cost["total_cost"] == 0.5
+
+
+async def test_the_parts_stay_estimates_beside_a_providers_own_charge(database, prices):
+    await book(database, cost=0.5)
+
+    row = (await model_rows(database))[0]
+    assert row.input_cost == 0.01
+    assert row.output_cost == 0.02
+    assert row.cache_cost == 0.003
+
+
+async def test_a_charge_of_zero_is_booked_as_zero(database, prices):
+    await book(database, cost=0)
+
+    assert (await model_rows(database))[0].total_cost == 0
+
+
 async def test_a_real_price_comes_from_the_pricing_file(database, real_prices):
     expected = real_prices.calculate_cost(provider="anthropic", model="claude-sonnet-5-5", **USAGE)
 

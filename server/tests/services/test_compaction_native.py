@@ -146,6 +146,16 @@ async def test_the_summarizer_books_in_the_services_own_database(monkeypatch, ll
 
 
 @pytest.mark.asyncio
+async def test_the_summarizer_books_the_charge_its_provider_reported(monkeypatch, llm_usage):
+    reply = LLMResponse(content="compact summary", usage=Usage(input_tokens=40, output_tokens=5), reported_cost=0.002)
+    service = _service(monkeypatch, AsyncMock(return_value=reply))
+
+    await service.compact_context(**_REQUEST)
+
+    assert llm_usage.await_args.kwargs["cost"] == 0.002
+
+
+@pytest.mark.asyncio
 async def test_a_tracked_call_is_booked_under_its_workflow(monkeypatch, llm_usage):
     state = {"cumulative_total": 0, "cumulative_input_tokens": 0, "cumulative_output_tokens": 0}
     database = SimpleNamespace(

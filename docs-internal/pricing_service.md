@@ -388,6 +388,18 @@ cost = await record_llm_usage(
 It prices the call, writes the row and returns the cost breakdown. It never
 raises, because the call it books is already paid for: a failed price returns
 a zero cost and writes nothing, and a failed write still returns the price.
+
+A provider that reports its own charge has it passed as `cost`, and that
+figure is the `total_cost` booked and returned. Only OpenRouter reports one
+(`LLMResponse.reported_cost`, read from `usage.cost`; see
+[native_llm_sdk.md](native_llm_sdk.md)). The model step, the summarizer and
+the hire screen's setup call pass it; the in-process agent path
+(`CompactionService.track`) books a whole loop at once and passes none, so it
+stays a priced estimate. The row's `input_cost`, `output_cost` and
+`cache_cost` are still the price service's estimates beside a reported total,
+so they need not add up to it. Every figure the app shows (a reply's cost, the
+cost panel, the monthly budget, the Credentials usage totals) is a sum of
+`total_cost`.
 A row booked while an agent works for a chat run carries that run's id in
 `chat_run_id`. A row booked while an agent works for an employee job carries
 the job's id in `employee_job_id`: the recorder reads it from the log context,

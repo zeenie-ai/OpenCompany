@@ -1051,6 +1051,31 @@ class TestLlmStepActivity:
         assert result["usage"]["input_tokens"] == 5
 
     @pytest.mark.asyncio
+    async def test_a_step_books_the_charge_the_provider_reported(self, monkeypatch, llm_usage):
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        response = LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7), reported_cost=0.0123)
+        self._answering(monkeypatch, response)
+
+        await _execute_native_llm_step(self._booking_payload())
+
+        assert llm_usage.await_args.kwargs["cost"] == 0.0123
+
+    @pytest.mark.asyncio
+    async def test_a_reported_charge_does_not_change_what_the_step_returns(self, monkeypatch, llm_usage):
+        from services.llm.protocol import LLMResponse, Usage
+        from services.temporal.agent_activities import _execute_native_llm_step
+
+        response = LLMResponse(content="done", usage=Usage(input_tokens=50, output_tokens=7), reported_cost=0.0123)
+        self._answering(monkeypatch, response)
+
+        result = await _execute_native_llm_step(self._booking_payload())
+
+        assert set(result) == {"kind", "assistant_message", "content", "thinking", "usage"}
+        assert "cost" not in result["usage"]
+
+    @pytest.mark.asyncio
     async def test_a_step_of_a_chat_run_books_the_run_on_its_row(self, monkeypatch, llm_usage, spend_limit):
         from services.llm.protocol import LLMResponse, Usage
         from services.temporal import agent_activities
