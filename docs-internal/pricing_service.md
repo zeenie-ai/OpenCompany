@@ -358,9 +358,12 @@ class APIUsageMetric(SQLModel, table=True):
     service: str           # 'twitter', 'google_maps'
     operation: str         # 'content_create', 'geocode'
     endpoint: str          # Handler action name
-    resource_count: int    # Number of resources
+    resource_count: float  # Number of units: requests, results, characters, seconds or minutes of audio
     cost: float            # USD cost
 ```
+
+`resource_count` is a float because speech is counted in seconds or minutes
+(12.5 seconds is one row with a count of 12.5).
 
 ### TokenUsageMetric
 

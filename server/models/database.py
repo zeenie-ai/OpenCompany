@@ -504,8 +504,8 @@ class APIUsageMetric(SQLModel, table=True):
     operation: str = Field(max_length=100)  # posts_read, content_create, etc.
     endpoint: str = Field(max_length=100)  # Handler action (tweet, search, like)
 
-    # Usage counts
-    resource_count: int = Field(default=1)
+    # Usage counts. A float: speech is counted in seconds or minutes.
+    resource_count: float = Field(default=1)
 
     # Cost in USD
     cost: float = Field(default=0.0)

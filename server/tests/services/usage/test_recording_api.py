@@ -119,6 +119,12 @@ async def test_a_fractional_count_is_priced_as_given(database, prices):
     assert len(await api_rows(database)) == 1
 
 
+async def test_a_fractional_count_is_stored_as_given(database, prices):
+    await record_api_usage("deepgram", "speech_to_text", 12.5, node_id=NODE, database=database)
+
+    assert (await api_rows(database))[0].resource_count == 12.5
+
+
 async def test_a_real_price_comes_from_the_pricing_file(database, real_prices):
     expected = real_prices.calculate_api_cost("twitter", "tweet", 1)
 

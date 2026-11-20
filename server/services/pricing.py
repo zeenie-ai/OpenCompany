@@ -313,7 +313,7 @@ class PricingService:
         service_map = operation_map.get(service, {})
         return service_map.get(action)
 
-    def calculate_api_cost(self, service: str, action: str, resource_count: int = 1) -> Dict[str, Any]:
+    def calculate_api_cost(self, service: str, action: str, resource_count: float = 1) -> Dict[str, Any]:
         """Calculate cost for API usage.
 
         Args:
