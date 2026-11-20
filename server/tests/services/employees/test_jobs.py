@@ -1,10 +1,12 @@
 """Real SQLite tests for reviewed, origin-bound employee delivery."""
 from __future__ import annotations
 import asyncio
+import os
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from datetime import datetime, timedelta, timezone
 import pytest
+from sqlalchemy import text
 from models.employees import EmployeeJob
 from models.database import TeamTask
 from services.employees.jobs import deliver_job, bind_job_team, dispatch_job, job_progress
@@ -73,6 +75,52 @@ async def test_v2_job_keeps_admitted_plan_after_saved_metadata_rollback(database
     assert job.source["data_scope_id"] == "original-scope"
     assert job.source["parameters"]["send"]["recipient"] == "original"
     assert {node["id"] for node in job.source["nodes"]} == {node["id"] for node in admitted_context["nodes"]}
+
+
+async def submitted_job(database, monkeypatch, **run):
+    """The job an employee's Talk agent submits; ``run`` adds to its run's context."""
+    from models.database import WorkflowControlExecution
+    from models.employees import Employee
+    from services.employees.jobs import create_job
+    from tests.services.employees.test_runtime_v2 import admitted
+    context, _plan = admitted()
+    context["workflow_id"] = "7"
+    context["outputs"] = context["inputs"]
+    context["parameter_snapshot"] = {node["id"]: {} for node in context["nodes"]}
+    async with database.reserved_session() as session:
+        session.add(Employee(id="employee", workflow_id="7", owner_id="owner", hire_state="ready", team_plan={}, node_roles={}))
+        session.add(WorkflowControlExecution(id="workflow-control:7:4", workflow_id="7", generation=4, execution_id="origin",
+            root_execution_id="origin", data_scope_id="original-scope", status="running", idempotency_key="start",
+            graph_hash="admitted", graph_snapshot={"nodes": context["nodes"], "edges": [], "parameters": context["parameter_snapshot"]}))
+        await session.commit()
+    monkeypatch.setattr(database, "get_workflow", AsyncMock(return_value=SimpleNamespace(data={"nodes": [], "edges": []})))
+    return await create_job(database, NodeContext.from_legacy("talk", "chatAgent", {**context, **run}), mission="Original work",
+        lead_node_id="lead", delivery_node_ids=["chat"], dispatch=True)
+
+
+async def test_a_job_started_from_a_chat_reply_keeps_the_run(database, monkeypatch):
+    job = await submitted_job(database, monkeypatch, run_scope={"run_id": "r_1", "session_id": "7"})
+
+    assert job.chat_run_id == "r_1"
+
+
+async def test_a_job_started_outside_a_chat_run_keeps_none(database, monkeypatch):
+    job = await submitted_job(database, monkeypatch)
+
+    assert job.chat_run_id is None
+
+
+@pytest.mark.skipif(bool(os.environ.get("TEST_POSTGRES_URL")), reason="SQLite schema check")
+async def test_an_older_database_gains_the_jobs_chat_run_column(database):
+    async with database.engine.begin() as conn:
+        await conn.execute(text("ALTER TABLE employee_jobs DROP COLUMN chat_run_id"))
+
+    await database._migrate_employees()
+
+    async with database.engine.begin() as conn:
+        result = await conn.execute(text("PRAGMA table_info(employee_jobs)"))
+        columns = {row[1] for row in result.fetchall()}
+    assert "chat_run_id" in columns
 
 @pytest.mark.parametrize("status", ["queued", "running", "submitted", "skipped"])
 async def test_unreviewed_or_skipped_tasks_never_publish(database, runtime, status):

@@ -22,7 +22,11 @@ not replace its tool contract. Employee recipe version, graph version and
 The employee's Talk agent retains the owner conversation. Its
 `submit_job(instructions)` admits a durable job and returns an acknowledgement.
 Each job has an isolated lead and team; its handoff contains the request and
-captured source context. Instance transcripts do not replace Talk history.
+captured source context. A job admitted while its agent answers a chat run
+records that run (`EmployeeJob.chat_run_id`), so the usage service can add the
+job's cost to the reply that started it; see
+[Pricing Service](./pricing_service.md). Instance transcripts do not replace
+Talk history.
 Reviewed final output appends to the original conversation with a stable
 delivery identity, or goes through the captured app destination and approval
 gate.

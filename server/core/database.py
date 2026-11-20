@@ -720,6 +720,10 @@ class Database:
                 apply_columns = {row[1] for row in (await conn.execute(text("PRAGMA table_info(employee_apply_requests)"))).fetchall()}
                 if apply_columns and "producer_states" not in apply_columns:
                     await conn.execute(text("ALTER TABLE employee_apply_requests ADD COLUMN producer_states JSON NOT NULL DEFAULT '{}'"))
+                result = await conn.execute(text("PRAGMA table_info(employee_jobs)"))
+                job_columns = {row[1] for row in result.fetchall()}
+                if job_columns and "chat_run_id" not in job_columns:
+                    await conn.execute(text("ALTER TABLE employee_jobs ADD COLUMN chat_run_id VARCHAR(64)"))
         except Exception as exc:
             logger.warning(f"Employee migration check failed: {exc}")
 

@@ -173,13 +173,14 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
     runtime = temporal_job_runtime(ctx.raw)
     if runtime:
         source["runtime"] = runtime
+    from services.chat.stream import chat_run_id_of
     async with database.reserved_session() as session:
         row = await session.get(EmployeeJob, identifier)
         if row is not None:
             return row
         row = EmployeeJob(id=identifier, workflow_id=str(ctx.workflow_id),
             origin_execution_id=identifier if dispatch else str(ctx.execution_id),
-            lead_node_id=lead_node_id, mission=mission, source=source,
+            lead_node_id=lead_node_id, chat_run_id=chat_run_id_of(ctx.raw), mission=mission, source=source,
             state="queued" if dispatch else "running", delivery={"node_ids": delivery_node_ids, "completed": [], "inflight": None})
         session.add(row)
         await session.commit()

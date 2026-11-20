@@ -140,6 +140,8 @@ class EmployeeJob(SQLModel, table=True):
     origin_execution_id: str = Field(index=True, max_length=255)
     lead_node_id: str = Field(max_length=255)
     team_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    # The chat run whose reply started the job, when one did.
+    chat_run_id: Optional[str] = Field(default=None, max_length=64)
     state: str = Field(default="queued", index=True, max_length=20)
     mission: str = Field(default="", max_length=20000)
     source: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
