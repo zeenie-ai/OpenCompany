@@ -343,6 +343,19 @@ PostgreSQL, shared storage and external Temporal. See the
 - **First launch is slow:** inspect `browser_runtime_status` for installer
   progress and use `diagnose` for runtime/host details. Cold installation and
   warm live-view latency are separate measurements.
+- **Chrome did not start:** the error says what happened ("Chrome exited
+  while starting (exit code 21)", or "Chrome did not open its debugging port
+  within 25 s"), quotes the last line Chrome wrote to stderr when it wrote
+  one, and names the browser that has the profile open ("The profile is open
+  in chrome.exe (pid 1234)"). That browser is found by its `--user-data-dir`
+  argument (`profile_holder` in `nodes/browser/_chrome.py`); Chrome's own
+  helper processes and the Chrome just started are never named. A second
+  Chrome on a profile that is already open exits at once with code 21 and
+  writes nothing (measured on Windows, 2026-11-20), so the named process is
+  the one to close. When no holder is found and Chrome exited within 3 s, the
+  error still says another Chrome may have the profile. The backend log
+  carries one warning with Chrome's last 20 stderr lines. During a protected
+  login no stderr line is kept or logged.
 - **Frames stop or the view disconnects:** use Reconnect. Screencast attachment
   retries at 1, 2 and 4 seconds; authentication and target failures require
   explicit correction. Details and diagnostics are in

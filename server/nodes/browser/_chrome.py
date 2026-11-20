@@ -31,8 +31,9 @@ import json
 import os
 import sys
 import time
+from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 from core.logging import get_logger
 from services._supervisor import BaseProcessSupervisor, register_supervisor
@@ -54,6 +55,14 @@ ENABLED_FEATURES = ("WebMCP",)
 
 _READY_TIMEOUT = 25.0
 _EARLY_EXIT_SECONDS = 3.0
+
+#: What a failed start may quote of Chrome's stderr: the last lines kept, and
+#: how much of the last one reaches the error message.
+_STDERR_TAIL_LINES = 20
+_STDERR_LINE_CHARS = 300
+#: How long a failed start waits for the stderr reader to reach the end of a
+#: Chrome that has exited.
+_STDERR_SETTLE_SECONDS = 1.0
 
 #: Environment Chrome may inherit. Everything else (API keys from .env,
 #: SECRET_KEY, cloud credentials) stays out of the browser's processes.
@@ -254,6 +263,26 @@ def sweep_orphan(pidfile: Path) -> bool:
     return True
 
 
+def profile_holder(user_data_dir: Path, own_pid: int) -> Optional[str]:
+    """The browser that has ``user_data_dir`` open, as ``name (pid N)``.
+
+    Chrome's helper processes (renderer, GPU) carry the same flag plus
+    ``--type=``, so only a browser process itself is named. ``own_pid`` is the
+    Chrome this backend just started, which is never the answer.
+    """
+    import psutil
+
+    flag = f"--user-data-dir={user_data_dir}"
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        cmdline = proc.info["cmdline"] or []
+        if proc.info["pid"] == own_pid or flag not in cmdline:
+            continue
+        if any(arg.startswith("--type=") for arg in cmdline):
+            continue
+        return f"{proc.info['name']} (pid {proc.info['pid']})"
+    return None
+
+
 class ChromeProcess(BaseProcessSupervisor):
     """One profile's Chrome. Constructed per profile, never a singleton."""
 
@@ -288,6 +317,7 @@ class ChromeProcess(BaseProcessSupervisor):
         self._override_user_agent = override_user_agent
         self._profile_lock = ProfileLock(profile_root / "oc.lock")
         self._locked = False
+        self._stderr_tail: Deque[str] = deque(maxlen=_STDERR_TAIL_LINES)
         self.port: Optional[int] = None
         self.ws_url: Optional[str] = None
         self.connection: Optional[CDPConnection] = None
@@ -330,8 +360,12 @@ class ChromeProcess(BaseProcessSupervisor):
 
     def stderr_log(self, line: str) -> None:
         # Chrome is chatty on stderr (GPU, dbus, updater); none of it is an error of ours.
-        if not getattr(self, "sensitive_login", False):
-            self._logger.debug(line)
+        # The last lines are kept so a start that fails can say what Chrome said.
+        # Nothing is logged or kept during a protected login.
+        if getattr(self, "sensitive_login", False):
+            return
+        self._stderr_tail.append(line.removeprefix(f"[{self.label}] "))
+        self._logger.debug(line)
 
     async def _pre_spawn(self) -> None:
         if not self._profile_lock.acquire():
@@ -340,6 +374,7 @@ class ChromeProcess(BaseProcessSupervisor):
                 "install sharing a data folder). Close it there, or use another profile."
             )
         self._locked = True
+        self._stderr_tail.clear()
         await asyncio.to_thread(sweep_orphan, self.pidfile)
         try:
             (self._user_data_dir / "DevToolsActivePort").unlink()
@@ -363,13 +398,13 @@ class ChromeProcess(BaseProcessSupervisor):
         return self.connection  # type: ignore[return-value]
 
     async def _wait_ready(self) -> None:
+        proc = self._proc
         started = time.monotonic()
         deadline = started + _READY_TIMEOUT
         while time.monotonic() < deadline:
             if not self.is_running():
-                elapsed = time.monotonic() - started
-                hint = " Another Chrome may have this profile open." if elapsed < _EARLY_EXIT_SECONDS else ""
-                raise NodeUserError(f"Chrome exited while starting.{hint} Run the browser 'diagnose' operation for details.")
+                early = time.monotonic() - started < _EARLY_EXIT_SECONDS
+                raise await self._start_failure(proc, f"Chrome exited while starting (exit code {proc.returncode}).", early_exit=early)
             found = read_devtools_active_port(self._user_data_dir)
             if found:
                 self.port, path = found
@@ -380,7 +415,30 @@ class ChromeProcess(BaseProcessSupervisor):
                 except OSError:
                     pass
             await asyncio.sleep(0.1)
-        raise NodeUserError(f"Chrome did not open its debugging port within {int(_READY_TIMEOUT)} s.")
+        raise await self._start_failure(proc, f"Chrome did not open its debugging port within {int(_READY_TIMEOUT)} s.")
+
+    async def _start_failure(self, proc: Any, summary: str, *, early_exit: bool = False) -> NodeUserError:
+        """The error for a Chrome that did not start.
+
+        ``summary`` says what happened. Added where known: the last line
+        Chrome wrote to stderr, and the browser that has the profile open.
+        The whole stderr tail goes to the log in one warning.
+        """
+        if proc.returncode is not None and self._drain_tasks:
+            # Chrome's last lines can still be in the pipe when its exit is seen.
+            await asyncio.wait(self._drain_tasks, timeout=_STDERR_SETTLE_SECONDS)
+        tail = list(self._stderr_tail)
+        holder = await asyncio.to_thread(profile_holder, self._user_data_dir, proc.pid)
+        parts = [summary]
+        if tail:
+            parts.append(f'Chrome\'s last message: "{tail[-1][:_STDERR_LINE_CHARS]}"')
+        if holder:
+            parts.append(f"The profile is open in {holder}.")
+        elif early_exit:
+            parts.append("Another Chrome may have this profile open.")
+        parts.append("Run the browser 'diagnose' operation for details.")
+        logger.warning("[browser] Chrome did not start for profile %s: %s Stderr: %s", self.profile_id, summary, " | ".join(tail) or "(nothing)")
+        return NodeUserError(" ".join(parts))
 
     def _write_pidfile(self) -> None:
         proc = self._proc

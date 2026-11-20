@@ -264,6 +264,154 @@ async def test_visible_browser_requires_linux_display(monkeypatch, tmp_path):
         await chrome.launch()
 
 
+def _spawned_chrome(tmp_path, *, returncode):
+    """A ChromeProcess after its spawn: ``returncode`` is Chrome's exit code,
+    or None while it is still running."""
+    from types import SimpleNamespace
+
+    from nodes.browser._chrome import ChromeProcess
+
+    chrome = ChromeProcess(profile_id="test", exe=Path("chrome"), profile_root=tmp_path, user_data_dir=tmp_path / "profile", proxy_port=1, major=154, no_sandbox=False, small_shm=False)
+    chrome._proc = SimpleNamespace(pid=4321, returncode=returncode)
+    return chrome
+
+
+async def _start_error(chrome) -> str:
+    """What a start that fails tells the agent."""
+    from services.plugin.base import NodeUserError
+
+    with pytest.raises(NodeUserError) as raised:
+        await chrome._wait_ready()
+    return str(raised.value)
+
+
+async def test_a_chrome_that_exits_while_starting_says_why(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    from nodes.browser import _chrome
+
+    holder = Mock(return_value="chrome.exe (pid 99)")
+    monkeypatch.setattr(_chrome, "profile_holder", holder)
+    chrome = _spawned_chrome(tmp_path, returncode=21)
+    chrome.stderr_log("[browser-chrome:test] Opening in existing browser session.")
+
+    assert await _start_error(chrome) == (
+        "Chrome exited while starting (exit code 21). "
+        'Chrome\'s last message: "Opening in existing browser session." '
+        "The profile is open in chrome.exe (pid 99). "
+        "Run the browser 'diagnose' operation for details."
+    )
+    holder.assert_called_once_with(tmp_path / "profile", 4321)
+
+
+async def test_an_early_exit_with_no_holder_found_keeps_the_guess(tmp_path, monkeypatch):
+    from nodes.browser import _chrome
+
+    monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
+    chrome = _spawned_chrome(tmp_path, returncode=1)
+
+    assert await _start_error(chrome) == (
+        "Chrome exited while starting (exit code 1). "
+        "Another Chrome may have this profile open. "
+        "Run the browser 'diagnose' operation for details."
+    )
+
+
+async def test_a_chrome_that_never_opens_its_port_says_what_it_last_wrote(tmp_path, monkeypatch):
+    from nodes.browser import _chrome
+
+    monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
+    monkeypatch.setattr(_chrome, "_READY_TIMEOUT", 0.0)
+    chrome = _spawned_chrome(tmp_path, returncode=None)
+    chrome.stderr_log("[browser-chrome:test] Failed to bind the debugging port.")
+
+    assert await _start_error(chrome) == (
+        "Chrome did not open its debugging port within 0 s. "
+        'Chrome\'s last message: "Failed to bind the debugging port." '
+        "Run the browser 'diagnose' operation for details."
+    )
+
+
+async def test_a_failed_start_logs_the_last_stderr_lines_once(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    from nodes.browser import _chrome
+
+    log = Mock()
+    monkeypatch.setattr(_chrome, "logger", log)
+    monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
+    chrome = _spawned_chrome(tmp_path, returncode=1)
+    for number in range(25):
+        chrome.stderr_log(f"line {number}")
+
+    await _start_error(chrome)
+
+    log.warning.assert_called_once()
+    assert log.warning.call_args.args[-1] == " | ".join(f"line {number}" for number in range(5, 25))
+
+
+async def test_stderr_is_not_kept_during_a_protected_login(tmp_path, monkeypatch):
+    from nodes.browser import _chrome
+
+    monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
+    chrome = _spawned_chrome(tmp_path, returncode=1)
+    chrome.sensitive_login = True
+    chrome.stderr_log("a line written while the owner signs in")
+
+    assert "last message" not in await _start_error(chrome)
+
+
+async def test_a_new_start_forgets_what_the_last_one_wrote(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    from nodes.browser import _chrome
+
+    monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
+    monkeypatch.setattr(_chrome, "sweep_orphan", Mock(return_value=False))
+    monkeypatch.setattr(_chrome.ChromeProcess, "pidfile", tmp_path / "oc-chrome.json")
+    chrome = _spawned_chrome(tmp_path, returncode=1)
+    chrome.stderr_log("a line from the start before")
+
+    await chrome._pre_spawn()
+    chrome._release()
+
+    assert "last message" not in await _start_error(chrome)
+
+
+def _process(pid, name, cmdline):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(info={"pid": pid, "name": name, "cmdline": cmdline})
+
+
+def test_the_profile_holder_is_the_other_browser_with_the_profile_open(tmp_path, monkeypatch):
+    import psutil
+
+    from nodes.browser._chrome import profile_holder
+
+    flag = f"--user-data-dir={tmp_path}"
+    processes = [
+        _process(1, "System", None),
+        _process(4321, "chrome.exe", ["chrome.exe", flag]),
+        _process(50, "chrome.exe", ["chrome.exe", "--type=renderer", flag]),
+        _process(60, "chrome.exe", ["chrome.exe", "--user-data-dir=elsewhere"]),
+        _process(99, "chrome.exe", ["chrome.exe", flag, "about:blank"]),
+    ]
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs: processes)
+
+    assert profile_holder(tmp_path, 4321) == "chrome.exe (pid 99)"
+
+
+def test_no_profile_holder_when_no_other_browser_has_the_profile(tmp_path, monkeypatch):
+    import psutil
+
+    from nodes.browser._chrome import profile_holder
+
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs: [_process(4321, "chrome.exe", ["chrome.exe", f"--user-data-dir={tmp_path}"])])
+
+    assert profile_holder(tmp_path, 4321) is None
+
+
 def test_the_cli_gets_no_secrets_and_no_telemetry(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
     monkeypatch.setenv("SECRET_KEY", "s" * 40)
