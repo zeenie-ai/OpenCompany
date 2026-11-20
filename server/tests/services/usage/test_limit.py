@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from models.database import UserSettings
 from services.usage import resolve_spend_limit, spend_limit_notice
 from tests.services.usage._helpers import add_api_call, add_model_call, unavailable
@@ -102,20 +104,27 @@ async def test_a_limit_that_cannot_be_read_lets_the_step_run():
 # ---- the default -------------------------------------------------------------
 
 
-def test_every_copy_of_the_default_is_no_limit():
-    """The default is written in three places: ``.env.template`` is canonical,
+@pytest.mark.parametrize(
+    "setting, variable",
+    [
+        ("chat_run_spend_limit_usd", "CHAT_RUN_SPEND_LIMIT_USD"),
+        ("employee_monthly_budget_usd", "EMPLOYEE_MONTHLY_BUDGET_USD"),
+    ],
+)
+def test_every_copy_of_the_default_is_off(setting, variable):
+    """Each default is written in three places: ``.env.template`` is canonical,
     ``Settings`` mirrors it for bare construction, and ``UserSettings`` for a
     new row. They cannot share a constant, so this test keeps them equal."""
     template = (REPO_ROOT / ".env.template").read_text(encoding="utf-8")
     config = (REPO_ROOT / "server" / "core" / "config.py").read_text(encoding="utf-8")
 
-    env_match = re.search(r"^CHAT_RUN_SPEND_LIMIT_USD=([\d.]+)\s*$", template, re.M)
-    config_match = re.search(r'chat_run_spend_limit_usd: float = Field\(default=([\d.]+), env="CHAT_RUN_SPEND_LIMIT_USD"', config)
+    env_match = re.search(rf"^{variable}=([\d.]+)\s*$", template, re.M)
+    config_match = re.search(rf'{setting}: float = Field\(default=([\d.]+), env="{variable}"', config)
     assert env_match and config_match
 
     copies = {
         ".env.template": float(env_match.group(1)),
         "Settings": float(config_match.group(1)),
-        "UserSettings": float(UserSettings.model_fields["chat_run_spend_limit_usd"].default),
+        "UserSettings": float(UserSettings.model_fields[setting].default),
     }
     assert set(copies.values()) == {0.0}, copies

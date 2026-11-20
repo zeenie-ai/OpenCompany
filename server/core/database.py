@@ -379,6 +379,10 @@ class Database:
                     await conn.execute(text("ALTER TABLE user_settings ADD COLUMN chat_run_spend_limit_usd REAL DEFAULT 0"))
                     logger.info("Added chat_run_spend_limit_usd column to user_settings")
 
+                if "employee_monthly_budget_usd" not in columns:
+                    await conn.execute(text("ALTER TABLE user_settings ADD COLUMN employee_monthly_budget_usd REAL DEFAULT 0"))
+                    logger.info("Added employee_monthly_budget_usd column to user_settings")
+
                 if "max_concurrent_subagents" not in columns:
                     await conn.execute(text("ALTER TABLE user_settings ADD COLUMN max_concurrent_subagents INTEGER DEFAULT 3"))
                 if "max_delegation_depth" not in columns:
@@ -2596,6 +2600,7 @@ class Database:
                     "agent_recursion_limit": settings.agent_recursion_limit,
                     "tool_result_max_chars": settings.tool_result_max_chars,
                     "chat_run_spend_limit_usd": settings.chat_run_spend_limit_usd,
+                    "employee_monthly_budget_usd": settings.employee_monthly_budget_usd,
                     "max_concurrent_subagents": settings.max_concurrent_subagents,
                     "max_delegation_depth": settings.max_delegation_depth,
                     "profile_full_name": settings.profile_full_name,

@@ -518,6 +518,12 @@ class Settings(BaseSettings):
     # no limit. Per-user UserSettings row overrides at runtime.
     chat_run_spend_limit_usd: float = Field(default=0.0, env="CHAT_RUN_SPEND_LIMIT_USD", ge=0)
 
+    # Most one employee may cost in a calendar month in USD, model calls and
+    # paid tool calls together. An employee that reaches it is paused until
+    # the amount is raised. 0 means no budget. Per-user UserSettings row
+    # overrides at runtime.
+    employee_monthly_budget_usd: float = Field(default=0.0, env="EMPLOYEE_MONTHLY_BUDGET_USD", ge=0)
+
     # Agent loop hard step cap. Per-user UserSettings row overrides
     # at runtime; per-agent-node ``parameters.max_iterations`` is the
     # innermost override.
