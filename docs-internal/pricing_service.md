@@ -435,6 +435,14 @@ costs = await workflow_costs(database, since)
 ```
 
 - A chat run with no booked call is absent from `chat_run_costs`.
+- A run's cost includes the employee jobs its reply started. A job records the
+  run that admitted it (`EmployeeJob.chat_run_id`), and a usage row that carries
+  the job (`employee_job_id`) and no chat run of its own is added to that run.
+  So the figure under "I've given this to the team" grows with the team's work.
+  A job a schedule or another trigger started adds to no run; its cost shows in
+  the monthly figure only.
+- `chat_run_cost`, which the spend limit reads, counts a run's own rows only,
+  so that limit covers the agent that answers in chat and not the team.
 - `workflow_costs` ends with one unnamed row (`workflow_id` and `name` both
   `None`) for calls booked with no workflow, such as a hire screen's setup
   call, and for a workflow deleted since.
@@ -540,7 +548,8 @@ the same figures and the same limit.
 
 The shared chat shows what each reply cost beside its time
 (`client/src/features/chat/turns/ReplyActions.tsx`), from
-`useChatRunCostsQuery(workflowId)`, which sends `get_chat_run_costs`. See
+`useChatRunCostsQuery(workflowId)`, which sends `get_chat_run_costs`. The
+figure includes the work the reply handed to the employee's team. See
 [Chat Protocol](./chat_protocol.md).
 
 ## Adding New Services

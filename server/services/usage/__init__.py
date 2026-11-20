@@ -3,7 +3,9 @@
 This package owns the two usage tables, ``token_usage_metrics`` (one row per
 model call) and ``api_usage_metrics`` (one row per paid API call). Other code
 calls in; nothing here imports chat, employee, compaction or Temporal code.
-It depends on the price service, the models and a database session.
+It depends on the price service, the models and a database session. A summary
+may join another table through its model, as ``chat_run_costs`` joins the
+employee jobs a reply started.
 
 - ``recording``: one row per call. A recorder never raises: the call it
   records already happened and was paid for.

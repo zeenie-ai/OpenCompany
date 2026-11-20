@@ -3,6 +3,7 @@
 from sqlmodel import select
 
 from models.database import APIUsageMetric, TokenUsageMetric, Workflow
+from models.employees import EmployeeJob
 
 
 def unavailable():
@@ -12,6 +13,11 @@ def unavailable():
 async def add_workflow(database, workflow_id: str, name: str) -> None:
     """One saved workflow (an employee) with that id and name."""
     await _add(database, Workflow(id=workflow_id, name=name, slug=f"{name}_{workflow_id}", data={}))
+
+
+async def add_job(database, job_id: str, *, workflow_id: str, chat_run_id=None) -> None:
+    """One employee job of that workflow, started by that chat run's reply."""
+    await _add(database, EmployeeJob(id=job_id, workflow_id=workflow_id, origin_execution_id=job_id, lead_node_id="lead", chat_run_id=chat_run_id))
 
 
 async def _add(database, row) -> None:

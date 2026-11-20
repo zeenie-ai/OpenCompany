@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from services.usage import chat_run_costs, handlers, month_start, workflow_costs
-from tests.services.usage._helpers import add_api_call, add_model_call, add_workflow, unavailable
+from tests.services.usage._helpers import add_api_call, add_job, add_model_call, add_workflow, unavailable
 
 NOVEMBER = datetime(2026, 11, 1, tzinfo=timezone.utc)
 #: Model rows keep their time without a zone, API rows with one.
@@ -61,6 +61,40 @@ async def test_calls_made_outside_a_chat_run_are_left_out(database):
 async def test_a_failed_read_of_run_costs_raises():
     with pytest.raises(RuntimeError):
         await chat_run_costs(SimpleNamespace(get_session=unavailable), "wf")
+
+
+# ---- the jobs a reply started ------------------------------------------------
+
+
+async def test_a_run_includes_the_jobs_its_reply_started(database):
+    await add_job(database, "job-1", workflow_id="wf", chat_run_id="r_1")
+    await add_model_cost(database, "wf", 0.25, chat_run_id="r_1")
+    await add_model_cost(database, "wf", 0.5, employee_job_id="job-1")
+    await add_tool_cost(database, "wf", 0.125, employee_job_id="job-1")
+
+    assert await chat_run_costs(database, "wf") == {"r_1": 0.875}
+
+
+async def test_a_job_row_with_its_own_chat_run_is_counted_once(database):
+    await add_job(database, "job-1", workflow_id="wf", chat_run_id="r_1")
+    await add_model_cost(database, "wf", 0.5, chat_run_id="r_1", employee_job_id="job-1")
+    await add_tool_cost(database, "wf", 0.25, chat_run_id="r_1", employee_job_id="job-1")
+
+    assert await chat_run_costs(database, "wf") == {"r_1": 0.75}
+
+
+async def test_a_job_of_another_workflow_is_left_out(database):
+    await add_job(database, "job-1", workflow_id="other", chat_run_id="r_1")
+    await add_model_cost(database, "other", 0.5, employee_job_id="job-1")
+
+    assert await chat_run_costs(database, "wf") == {}
+
+
+async def test_a_job_no_reply_started_adds_to_no_run(database):
+    await add_job(database, "job-1", workflow_id="wf")
+    await add_model_cost(database, "wf", 0.5, employee_job_id="job-1")
+
+    assert await chat_run_costs(database, "wf") == {}
 
 
 # ---- each employee's cost ----------------------------------------------------

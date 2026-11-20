@@ -151,8 +151,8 @@ server/services/
 ├── usage/                   # Usage tracking: owns the two usage tables; imports no chat, employee,
 │   │                        # compaction or Temporal code (see pricing_service.md)
 │   ├── recording.py         # record_llm_usage / record_api_usage: one usage row per call; neither raises
-│   ├── summaries.py         # provider_usage_summary / api_usage_summary; chat_run_costs (per reply),
-│   │                        # workflow_costs (per employee since an instant), month_start
+│   ├── summaries.py         # provider_usage_summary / api_usage_summary; chat_run_costs (per reply, with the
+│   │                        # employee jobs it started), workflow_costs (per employee since an instant), month_start
 │   ├── limit.py             # The spend limit of a chat run: the model step asks spend_limit_notice before
 │   │                        # each call (UserSettings.chat_run_spend_limit_usd, else CHAT_RUN_SPEND_LIMIT_USD; 0 = off)
 │   └── handlers.py          # get_provider_usage_summary / get_api_usage_summary / get_chat_run_costs / get_workflow_costs
@@ -1534,7 +1534,7 @@ All pricing in `server/config/pricing.json` (user-editable):
 
 `credentials/sections/ApiUsageSection.tsx` shows per-service API usage and costs; `LlmUsageSection.tsx` shows per-provider token usage. Both read **precomputed** costs (`SUM(APIUsageMetric.cost)` / `TokenUsageMetric`) — neither reads `config/pricing.json`, which is consumed only server-side by `PricingService` at execution time.
 
-`components/ui/CostPanel.tsx` is the cost panel: one component, mounted unchanged in Home's Settings > Billing and in Dev's Settings panel. It shows this month's estimated cost by employee (`get_workflow_costs` through `useWorkflowCostsQuery` in `hooks/useUsageQueries.ts`; a failed read shows a dash, never a zero) and holds "Spend limit per reply", whose Save limit sends only `chat_run_spend_limit_usd`. The shared chat shows each reply's cost beside its time (`get_chat_run_costs`). A new cost figure or field goes into this one panel, never into a version per mode.
+`components/ui/CostPanel.tsx` is the cost panel: one component, mounted unchanged in Home's Settings > Billing and in Dev's Settings panel. It shows this month's estimated cost by employee (`get_workflow_costs` through `useWorkflowCostsQuery` in `hooks/useUsageQueries.ts`; a failed read shows a dash, never a zero) and holds "Spend limit per reply", whose Save limit sends only `chat_run_spend_limit_usd`. The shared chat shows each reply's cost beside its time (`get_chat_run_costs`), including the work the reply handed to the employee's team: usage rows carry the job they worked for (`employee_job_id`), the job records the chat run that admitted it (`EmployeeJob.chat_run_id`), and `chat_run_costs` joins the two. A new cost figure or field goes into this one panel, never into a version per mode.
 
 ## AI Agent Tool System
 

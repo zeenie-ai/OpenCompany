@@ -603,7 +603,8 @@ are the two hosts.
   Enter sends, Esc cancels, ArrowUp in an empty box edits the last message); under a finished answer
   (`turns/ReplyActions.tsx`) Copy, Good and Bad (pressing again takes the rating back), Try again on the latest
   answer, ‹ 1 / 2 › between answers, what the reply cost, and the time. The cost ("$0.42", or "<$0.01") is an
-  estimate of the run's model calls and paid tool calls. It does not come with the thread: the bar reads
+  estimate of the run's model calls and paid tool calls, and of the team jobs the reply started. It does not come
+  with the thread: the bar reads
   `get_chat_run_costs` from the usage service (`hooks/useUsageQueries.ts`, see
   [Pricing Service](./pricing_service.md)) and refreshes on `chat.updated`. A reply whose run booked no call shows
   none. A run that stopped or failed without an answer has Try again in

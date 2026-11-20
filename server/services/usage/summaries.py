@@ -14,6 +14,7 @@ from sqlmodel import select
 
 from core.logging import get_logger
 from models.database import APIUsageMetric, TokenUsageMetric, Workflow
+from models.employees import EmployeeJob
 
 logger = get_logger(__name__)
 
@@ -44,8 +45,12 @@ async def chat_run_cost(database: Any, chat_run_id: str) -> float:
 async def chat_run_costs(database: Any, workflow_id: str) -> Dict[str, float]:
     """USD per chat run of one workflow: ``{run_id: cost}``.
 
-    A run with no booked call is absent. Errors propagate, so a caller shows
-    that the costs are unavailable instead of a zero.
+    A run's cost is its own rows plus the rows of the employee jobs its reply
+    started (``EmployeeJob.chat_run_id``), so the figure under a reply covers
+    the team it handed work to. A job's row that carries a chat run of its own
+    counts for that run only. A run with no booked call is absent. Errors
+    propagate, so a caller shows that the costs are unavailable instead of a
+    zero.
     """
     async with database.get_session() as session:
         model_calls = await session.execute(
@@ -58,7 +63,20 @@ async def chat_run_costs(database: Any, workflow_id: str) -> Dict[str, float]:
             .where(APIUsageMetric.workflow_id == workflow_id, APIUsageMetric.chat_run_id.is_not(None))
             .group_by(APIUsageMetric.chat_run_id)
         )
-        rows = [*model_calls.all(), *tool_calls.all()]
+        started_by_a_reply = (EmployeeJob.workflow_id == workflow_id, EmployeeJob.chat_run_id.is_not(None))
+        job_model_calls = await session.execute(
+            select(EmployeeJob.chat_run_id, func.sum(TokenUsageMetric.total_cost))
+            .join_from(TokenUsageMetric, EmployeeJob, EmployeeJob.id == TokenUsageMetric.employee_job_id)
+            .where(*started_by_a_reply, TokenUsageMetric.chat_run_id.is_(None))
+            .group_by(EmployeeJob.chat_run_id)
+        )
+        job_tool_calls = await session.execute(
+            select(EmployeeJob.chat_run_id, func.sum(APIUsageMetric.cost))
+            .join_from(APIUsageMetric, EmployeeJob, EmployeeJob.id == APIUsageMetric.employee_job_id)
+            .where(*started_by_a_reply, APIUsageMetric.chat_run_id.is_(None))
+            .group_by(EmployeeJob.chat_run_id)
+        )
+        rows = [*model_calls.all(), *tool_calls.all(), *job_model_calls.all(), *job_tool_calls.all()]
 
     costs: Dict[str, float] = {}
     for run_id, cost in rows:
