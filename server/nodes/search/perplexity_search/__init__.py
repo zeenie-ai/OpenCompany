@@ -122,6 +122,21 @@ class PerplexitySearchNode(ActionNode):
             response.raise_for_status()
             data = response.json()
 
+        # A request that came back is billed, so it is booked here: at the
+        # charge Perplexity reports (usage.cost.total_cost, request fee plus
+        # tokens) when the response has one, else at the price list's fee.
+        from services.usage import record_api_usage
+
+        reported = (data.get("usage") or {}).get("cost") or {}
+        await record_api_usage(
+            "perplexity",
+            "sonar_search",
+            node_id=ctx.node_id,
+            session_id=ctx.session_id,
+            workflow_id=ctx.workflow_id,
+            cost=reported.get("total_cost"),
+        )
+
         choices = data.get("choices") or []
         answer = ""
         if choices:

@@ -66,9 +66,9 @@ flowchart TD
   C --> D[ctx.connection 'brave_search'<br/>injects X-Subscription-Token header]
   D --> F[GET api.search.brave.com/res/v1/web/search]
   F -- raise_for_status fails --> Estat[Exception -> success=false envelope]
-  F -- 2xx --> G[data.web.results -> map first max_results to title/snippet/url]
-  G --> H[Operation cost spec: service=brave_search action=web_search count=1]
-  H --> I[Return BraveSearchOutput]
+  F -- 2xx --> H[record_api_usage: service=brave_search action=web_search]
+  H --> G[data.web.results -> map first max_results to title/snippet/url]
+  G --> I[Return BraveSearchOutput]
 ```
 
 ## Decision Logic
@@ -80,7 +80,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none. `@Operation("search", cost={...})` (`service='brave_search'`, `action='web_search'`, `count=1`) is metadata nothing reads, so a search books no `api_usage_metrics` row.
+- **Database writes**: one `api_usage_metrics` row for each request that came back, booked through `record_api_usage("brave_search", "web_search", ...)` at the price list's per-query figure. A failed request books nothing. The `cost={...}` block on `@Operation("search", ...)` is metadata nothing reads.
 - **Broadcasts**: per-node status via `BaseNode.execute` (`update_node_status` executing/success/error); no plugin-specific broadcasts.
 - **External API calls**: `GET https://api.search.brave.com/res/v1/web/search` via `ctx.connection`.
 - **File I/O**: none.
@@ -89,7 +89,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `BraveSearchCredential` (`ApiKeyCredential`, id `brave_search`, header `X-Subscription-Token`) - resolved by the Connection facade at execution time; stored in `EncryptedAPIKey`.
-- **Services**: `ctx.connection` (Connection facade), framework cost tracking.
+- **Services**: `ctx.connection` (Connection facade), `services.usage.record_api_usage`.
 - **Python packages**: `httpx` (via Connection facade).
 - **Environment variables**: none.
 

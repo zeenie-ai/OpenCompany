@@ -303,6 +303,20 @@ TikHub prices each endpoint (most cost $0.001 a successful request, the `instagr
 
 treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` books one `resource_count=1` row through `record_api_usage(..., cost=<the charge>)`, with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. The recorder never raises, and the credential entry sets `"usage_services": ["treg"]`. See [treg_service.md](./treg_service.md).
 
+### Example: Search Plugins (one call in the operation)
+
+The three search plugins (`server/nodes/search/{serper_search,brave_search,perplexity_search}`) have no helper: each `search` operation calls `record_api_usage` once, after the response came back, so a failed request books nothing.
+
+```python
+# server/nodes/search/serper_search/__init__.py, inside search()
+
+from services.usage import record_api_usage
+
+await record_api_usage("serper", "web_search", node_id=ctx.node_id, session_id=ctx.session_id, workflow_id=ctx.workflow_id)
+```
+
+Serper and Brave are booked at the price list's per-query figure (`web_search`). Perplexity is booked at the charge its response reports in `usage.cost.total_cost` (the request fee plus the tokens) when there is one, passed as `cost=`; a response without it is booked at the price list's request fee (`sonar_search`), which leaves the tokens out.
+
 ### `@Operation(cost=...)` records nothing
 
 Many operations across the plugins declare a `cost=` block on their `@Operation` decorator:
@@ -316,7 +330,7 @@ async def search(self, ctx, params): ...
 
 The decorator copies the block onto the operation's `OperationSpec` (`server/services/plugin/operation.py`), and nothing reads it: no framework code prices it or writes a row. A plugin's calls are booked only if the plugin calls `record_api_usage` itself, as the examples above do.
 
-So the search plugins (`server/nodes/search/{brave_search,serper_search,perplexity_search}`) book nothing today, although `pricing.json` prices them; the `_track_search_usage()` helper they once called is gone. The same holds for every other plugin whose only cost code is the `cost=` block (WhatsApp Business, Discord, Telegram, email, the CLI nodes). Reading `cost=` at one point in the framework, or removing it, is an open follow-up.
+So every plugin whose only cost code is the `cost=` block books nothing (WhatsApp Business, Discord, Telegram, email, the CLI nodes). The search plugins were in that group until they got a recorder call of their own (the example above); their `cost=` blocks are still there and still unread. Reading `cost=` at one point in the framework, or removing it, is an open follow-up.
 
 ## Database Storage
 
@@ -657,7 +671,7 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/nodes/twitter/_base.py` | Twitter tracker (`track_twitter_usage`) |
 | `server/nodes/google/_base.py` | Google Workspace tracker (`track_google_usage`, cost $0) |
 | `server/nodes/proxy/_usage.py` | Proxy tracker (`track_proxy_usage`, per-GB) |
-| `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins: an `@Operation(cost={...})` block and no recorder call, so nothing is booked |
+| `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins: one `record_api_usage` call in each `search` operation, after the response came back |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost`, metadata nothing reads |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
 | `server/services/usage/recording.py` | `record_api_usage()` and `record_llm_usage()`: one usage row per call; neither raises |

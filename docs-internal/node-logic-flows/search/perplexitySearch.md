@@ -78,12 +78,12 @@ flowchart TD
   I --> J
   J --> K[POST api.perplexity.ai/chat/completions]
   K -- raise_for_status fails --> Estat[Exception -> success=false envelope]
-  K -- 2xx --> L[answer = data.choices 0 .message.content or empty]
+  K -- 2xx --> P[record_api_usage: service=perplexity action=sonar_search<br/>cost = data.usage.cost.total_cost when reported]
+  P --> L[answer = data.choices 0 .message.content or empty]
   L --> M[citations = data.citations or empty list]
   M --> N[results = list of url-only objects]
   N --> O[images/related_questions = data.get verbatim]
-  O --> P[Operation cost spec: service=perplexity action=sonar_search count=1]
-  P --> Q[Return PerplexitySearchOutput]
+  O --> Q[Return PerplexitySearchOutput]
 ```
 
 ## Decision Logic
@@ -95,7 +95,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none. The `@Operation` cost spec (`service='perplexity'`, `action='sonar_search'`, `count=1`) is metadata nothing reads, so a search books no `api_usage_metrics` row.
+- **Database writes**: one `api_usage_metrics` row for each request that came back, booked through `record_api_usage("perplexity", "sonar_search", ...)`. When the response reports its own charge (`usage.cost.total_cost`, the request fee plus the tokens), that figure is booked; otherwise the price list's request fee is, which leaves the tokens out. A failed request books nothing. The `cost={...}` block on `@Operation("search", ...)` is metadata nothing reads.
 - **Broadcasts**: per-node status via `BaseNode.execute`; no plugin-specific broadcasts.
 - **External API calls**: `POST https://api.perplexity.ai/chat/completions` via `ctx.connection`.
 - **File I/O**: none.
@@ -104,7 +104,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `PerplexityCredential` (`ApiKeyCredential`, id `perplexity`, bearer auth). Its `_probe` short-circuits to `ProbeResult(valid=True)` - Perplexity has no cheap auth-gated validation endpoint, so a bad key only surfaces as a runtime 401.
-- **Services**: `ctx.connection`, framework cost tracking.
+- **Services**: `ctx.connection`, `services.usage.record_api_usage`.
 - **Python packages**: `httpx` (via Connection facade).
 
 ## Edge cases & known limits
@@ -112,6 +112,7 @@ flowchart TD
 - Sonar Reasoning models can be slow; the Connection facade's default timeout governs (no per-call override in the plugin body, unlike the old handler's explicit 60s).
 - Citations field shape can vary across Perplexity response versions (`list[str]` historically). The plugin assumes `list[str]`; a list-of-objects response passes through to the output unchanged but breaks the `results` mapping (`{'url': <obj>}`).
 - The `results` list is purely a citations remap; downstream nodes expecting `title` / `snippet` will not find them - use `braveSearch` or `serperSearch` for those.
+- Perplexity ended support for Sonar Chat Completions, the endpoint this node calls, on 2026-09-27. Its migration page (read 2026-11-20) says synchronous requests keep working and are being answered by its Agent API, model by model. The node has not been moved to the Agent API.
 
 ## Related
 

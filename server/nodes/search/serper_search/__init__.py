@@ -112,6 +112,11 @@ class SerperSearchNode(ActionNode):
             response.raise_for_status()
             data = response.json()
 
+        # Serper bills each request that comes back, so it is booked here.
+        from services.usage import record_api_usage
+
+        await record_api_usage("serper", "web_search", node_id=ctx.node_id, session_id=ctx.session_id, workflow_id=ctx.workflow_id)
+
         results: List[SerperSearchResult] = []
         if params.search_type == "search":
             for item in (data.get("organic") or [])[: params.max_results]:

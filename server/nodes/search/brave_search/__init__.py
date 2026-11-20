@@ -115,6 +115,11 @@ class BraveSearchNode(ActionNode):
             response.raise_for_status()
             data = response.json()
 
+        # Brave bills each request that comes back, so it is booked here.
+        from services.usage import record_api_usage
+
+        await record_api_usage("brave_search", "web_search", node_id=ctx.node_id, session_id=ctx.session_id, workflow_id=ctx.workflow_id)
+
         web_results = (data.get("web") or {}).get("results") or []
         items = [
             BraveSearchResult(

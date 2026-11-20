@@ -76,7 +76,8 @@ flowchart TD
   F --> D[ctx.connection 'serper'<br/>injects X-API-KEY header]
   D --> G[POST endpoint]
   G -- raise_for_status fails --> Estat[Exception -> success=false envelope]
-  G -- 2xx --> H{search_type branch}
+  G -- 2xx --> L[record_api_usage: service=serper action=web_search]
+  L --> H{search_type branch}
   H -- search --> J1[Map data.organic -> title/snippet/url/position]
   H -- news --> J2[Map data.news -> title/snippet/url]
   H -- images --> J3[Map data.images -> title/url]
@@ -85,8 +86,7 @@ flowchart TD
   J2 --> K
   J3 --> K
   J4 --> K
-  K --> L[Operation cost spec: service=serper action=web_search count=1]
-  L --> M[Return SerperSearchOutput]
+  K --> M[Return SerperSearchOutput]
 ```
 
 ## Decision Logic
@@ -99,7 +99,7 @@ flowchart TD
 
 ## Side Effects
 
-- **Database writes**: none. The `@Operation` cost spec (`service='serper'`, `action='web_search'`, `count=1`) is metadata nothing reads, so a search books no `api_usage_metrics` row.
+- **Database writes**: one `api_usage_metrics` row for each request that came back, booked through `record_api_usage("serper", "web_search", ...)` at the price list's per-query figure, whichever of the four endpoints was called. A failed request books nothing. The `cost={...}` block on `@Operation("search", ...)` is metadata nothing reads.
 - **Broadcasts**: per-node status via `BaseNode.execute`; no plugin-specific broadcasts.
 - **External API calls**: `POST` to one of `https://google.serper.dev/{search,news,images,places}` via `ctx.connection`.
 - **File I/O**: none.
@@ -108,7 +108,7 @@ flowchart TD
 ## External Dependencies
 
 - **Credentials**: `SerperCredential` (`ApiKeyCredential`, id `serper`, header `X-API-KEY`) - resolved by the Connection facade.
-- **Services**: `ctx.connection`, framework cost tracking.
+- **Services**: `ctx.connection`, `services.usage.record_api_usage`.
 - **Python packages**: `httpx` (via Connection facade).
 
 ## Edge cases & known limits

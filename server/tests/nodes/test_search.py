@@ -19,6 +19,11 @@ from tests.nodes._mocks import patched_container, patched_pricing
 
 pytestmark = pytest.mark.node_contract
 
+#: The node a booked search names, and the session and workflow the harness runs it in.
+NODE = "wf:search:1"
+SESSION = "test_session"
+WORKFLOW = "test_workflow"
+
 
 # ============================================================================
 # braveSearch
@@ -113,6 +118,24 @@ class TestBraveSearch:
         # Post-refactor: Params tightens max_results with le=20 upper bound; 500 is rejected at validation.
         harness.assert_envelope(result, success=False)
         assert "invalid parameters" in result["error"].lower()
+
+    @respx.mock
+    async def test_a_search_is_booked(self, harness, api_usage):
+        respx.get(self.URL).mock(return_value=httpx.Response(200, json={"web": {"results": []}}))
+
+        with patched_container(auth_api_keys={"brave_search": "tk"}):
+            await harness.execute("braveSearch", {"query": "x"}, node_id=NODE)
+
+        api_usage.assert_awaited_once_with("brave_search", "web_search", node_id=NODE, session_id=SESSION, workflow_id=WORKFLOW)
+
+    @respx.mock
+    async def test_a_failed_request_books_nothing(self, harness, api_usage):
+        respx.get(self.URL).mock(return_value=httpx.Response(429, text="rate limited"))
+
+        with patched_container(auth_api_keys={"brave_search": "tk"}):
+            await harness.execute("braveSearch", {"query": "x"})
+
+        api_usage.assert_not_awaited()
 
 
 # ============================================================================
@@ -217,6 +240,24 @@ class TestSerperSearch:
         harness.assert_envelope(result, success=False)
         assert "500" in result["error"]
 
+    @respx.mock
+    async def test_a_search_is_booked(self, harness, api_usage):
+        respx.post(f"{self.BASE}/search").mock(return_value=httpx.Response(200, json={"organic": []}))
+
+        with patched_container(auth_api_keys={"serper": "tk"}):
+            await harness.execute("serperSearch", {"query": "x"}, node_id=NODE)
+
+        api_usage.assert_awaited_once_with("serper", "web_search", node_id=NODE, session_id=SESSION, workflow_id=WORKFLOW)
+
+    @respx.mock
+    async def test_a_failed_request_books_nothing(self, harness, api_usage):
+        respx.post(f"{self.BASE}/search").mock(return_value=httpx.Response(500, text="boom"))
+
+        with patched_container(auth_api_keys={"serper": "tk"}):
+            await harness.execute("serperSearch", {"query": "x"})
+
+        api_usage.assert_not_awaited()
+
 
 # ============================================================================
 # perplexitySearch
@@ -319,3 +360,32 @@ class TestPerplexitySearch:
 
         harness.assert_envelope(result, success=False)
         assert "401" in result["error"]
+
+    @respx.mock
+    async def test_a_search_is_booked_at_the_charge_perplexity_reports(self, harness, api_usage):
+        respx.post(self.URL).mock(return_value=httpx.Response(200, json={"choices": [], "usage": {"cost": {"total_cost": 0.012}}}))
+
+        with patched_container(auth_api_keys={"perplexity": "tk"}):
+            await harness.execute("perplexitySearch", {"query": "x"}, node_id=NODE)
+
+        api_usage.assert_awaited_once_with(
+            "perplexity", "sonar_search", node_id=NODE, session_id=SESSION, workflow_id=WORKFLOW, cost=0.012
+        )
+
+    @respx.mock
+    async def test_a_search_with_no_reported_charge_leaves_the_price_to_the_price_list(self, harness, api_usage):
+        respx.post(self.URL).mock(return_value=httpx.Response(200, json={"choices": []}))
+
+        with patched_container(auth_api_keys={"perplexity": "tk"}):
+            await harness.execute("perplexitySearch", {"query": "x"})
+
+        assert api_usage.await_args.kwargs["cost"] is None
+
+    @respx.mock
+    async def test_a_failed_request_books_nothing(self, harness, api_usage):
+        respx.post(self.URL).mock(return_value=httpx.Response(401, text="bad key"))
+
+        with patched_container(auth_api_keys={"perplexity": "tk"}):
+            await harness.execute("perplexitySearch", {"query": "x"})
+
+        api_usage.assert_not_awaited()
