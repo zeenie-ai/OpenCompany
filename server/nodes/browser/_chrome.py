@@ -436,7 +436,6 @@ class ChromeProcess(BaseProcessSupervisor):
             parts.append(f"The profile is open in {holder}.")
         elif early_exit:
             parts.append("Another Chrome may have this profile open.")
-        parts.append("Run the browser 'diagnose' operation for details.")
         logger.warning("[browser] Chrome did not start for profile %s: %s Stderr: %s", self.profile_id, summary, " | ".join(tail) or "(nothing)")
         return NodeUserError(" ".join(parts))
 

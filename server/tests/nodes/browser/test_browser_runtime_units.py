@@ -298,10 +298,35 @@ async def test_a_chrome_that_exits_while_starting_says_why(tmp_path, monkeypatch
     assert await _start_error(chrome) == (
         "Chrome exited while starting (exit code 21). "
         'Chrome\'s last message: "Opening in existing browser session." '
-        "The profile is open in chrome.exe (pid 99). "
-        "Run the browser 'diagnose' operation for details."
+        "The profile is open in chrome.exe (pid 99)."
     )
     holder.assert_called_once_with(tmp_path / "profile", 4321)
+
+
+async def test_a_child_that_really_exits_reports_its_code_and_last_line(tmp_path, monkeypatch):
+    import sys
+    from unittest.mock import Mock
+
+    from nodes.browser import _chrome
+
+    monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
+    monkeypatch.setattr(_chrome, "sweep_orphan", Mock(return_value=False))
+    monkeypatch.setattr(_chrome.ChromeProcess, "pidfile", tmp_path / "oc-chrome.json")
+    chrome = _chrome.ChromeProcess(profile_id="test", exe=Path(sys.executable), profile_root=tmp_path, user_data_dir=tmp_path / "profile", proxy_port=1, major=154, no_sandbox=False, small_shm=False)
+    script = "import sys; sys.stderr.write('starting\\nthe profile is locked\\n'); sys.exit(21)"
+    monkeypatch.setattr(chrome, "argv", lambda: [sys.executable, "-c", script])
+
+    await chrome.start()
+    try:
+        message = await _start_error(chrome)
+    finally:
+        await chrome._abort()
+
+    assert message == (
+        "Chrome exited while starting (exit code 21). "
+        'Chrome\'s last message: "the profile is locked" '
+        "Another Chrome may have this profile open."
+    )
 
 
 async def test_an_early_exit_with_no_holder_found_keeps_the_guess(tmp_path, monkeypatch):
@@ -310,11 +335,7 @@ async def test_an_early_exit_with_no_holder_found_keeps_the_guess(tmp_path, monk
     monkeypatch.setattr(_chrome, "profile_holder", lambda user_data_dir, own_pid: None)
     chrome = _spawned_chrome(tmp_path, returncode=1)
 
-    assert await _start_error(chrome) == (
-        "Chrome exited while starting (exit code 1). "
-        "Another Chrome may have this profile open. "
-        "Run the browser 'diagnose' operation for details."
-    )
+    assert await _start_error(chrome) == "Chrome exited while starting (exit code 1). Another Chrome may have this profile open."
 
 
 async def test_a_chrome_that_never_opens_its_port_says_what_it_last_wrote(tmp_path, monkeypatch):
@@ -326,9 +347,7 @@ async def test_a_chrome_that_never_opens_its_port_says_what_it_last_wrote(tmp_pa
     chrome.stderr_log("[browser-chrome:test] Failed to bind the debugging port.")
 
     assert await _start_error(chrome) == (
-        "Chrome did not open its debugging port within 0 s. "
-        'Chrome\'s last message: "Failed to bind the debugging port." '
-        "Run the browser 'diagnose' operation for details."
+        'Chrome did not open its debugging port within 0 s. Chrome\'s last message: "Failed to bind the debugging port."'
     )
 
 
