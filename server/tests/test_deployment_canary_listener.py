@@ -364,13 +364,16 @@ class TestStartCanaryListener:
         # The listener's input is Temporal history: the webhook's expected
         # header value stays out of it (the router checks it at the edge).
         assert call["args"][0]["filter_params"] == {"path": "hook", "authentication": "header"}
-        # New listeners freeze the Coding runtime before later graph firings.
+        # New listeners freeze the Coding runtime and the agent lifecycle
+        # before later graph firings (capture_temporal_routing_input).
         assert call["args"][0]["_temporal_routing_v1"] == {
             "version": 1,
             "agent_workflow_enabled": True,
             "per_type_dispatch_enabled": False,
             "worker_pool_enabled": False,
             "pi_harness_version": 1,
+            "agent_lifecycle_version": 1,
+            "agent_protocol_version": 1,
         }
 
     @pytest.mark.asyncio

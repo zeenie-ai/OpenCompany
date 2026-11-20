@@ -21,6 +21,7 @@ def _control(
     revision: int,
     *,
     terminal_reason: str | None = None,
+    resource_manifest: dict | None = None,
 ):
     return SimpleNamespace(
         id="workflow-control:wf:1",
@@ -36,6 +37,9 @@ def _control(
         created_at=None,
         updated_at=None,
         terminal_reason=terminal_reason,
+        # The selections Start froze for the generation. None by default: a
+        # generation from before any of them existed.
+        resource_manifest=resource_manifest or {},
     )
 
 
@@ -1139,6 +1143,53 @@ async def test_reset_retry_resumes_cleanup_before_marking_ready(monkeypatch):
     assert final_transition.kwargs["expected_revision"] == 3
     assert final_transition.kwargs["from_statuses"] == {"resetting"}
     assert final_transition.kwargs["status"] == "reset"
+
+
+@pytest.mark.asyncio
+async def test_reset_closes_reusable_agents_before_the_termination_sweep(monkeypatch):
+    """A generation Start admitted with reusable agents
+    (``agent_lifecycle_version`` 1, every new Start) has its agent instances
+    closed, and the busy ones told to stop, before the sweep that ends its
+    runs: a closed instance cannot be woken into a run the sweep never saw.
+    The generations in the tests above record no such selection and close
+    nothing."""
+    resetting = _control("resetting", 3, resource_manifest={"agent_lifecycle_version": 1})
+    database = SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=resetting))
+    service = SimpleNamespace(database=database, transition=AsyncMock())
+    closed = {"closed": 2, "instance_stop": ["instance-1"]}
+    steps: list[str] = []
+    closed_for: list[tuple] = []
+
+    async def close_agents(agents, workflow_id, generation):
+        steps.append("close_agents")
+        closed_for.append((agents.database, workflow_id, generation))
+        return closed
+
+    async def stop_agents(_result):
+        steps.append("stop_agents")
+
+    # The sweep fails so the Reset ends here, as in the cleanup-failure test.
+    async def terminate(*_args, **_kwargs):
+        steps.append("terminate")
+        raise RuntimeError("workflow_termination_failed:1")
+
+    stop = AsyncMock(side_effect=stop_agents)
+    monkeypatch.setattr(handlers, "_control_service", lambda: service)
+    monkeypatch.setattr(handlers, "_broadcast_control", AsyncMock(return_value={}))
+    monkeypatch.setattr(handlers, "_signal_controller", AsyncMock())
+    monkeypatch.setattr(handlers, "_delete_cron_schedules", AsyncMock(return_value=0))
+    monkeypatch.setattr(handlers, "handle_cancel_deployment", AsyncMock(return_value={"success": True}))
+    monkeypatch.setattr(handlers, "_terminate_generation_workflows", AsyncMock(side_effect=terminate))
+    monkeypatch.setattr("services.agent_instances.service.AgentInstanceService.reset_generation", close_agents)
+    monkeypatch.setattr("services.agent_instances.runtime.wake_instances", stop)
+
+    result = await handlers.handle_reset_workflow({"workflow_id": "wf"}, None)
+
+    assert result == {"success": False, "error": "workflow_termination_failed:1"}
+    assert steps == ["close_agents", "stop_agents", "terminate"]
+    assert closed_for == [(database, "wf", 1)]
+    stop.assert_awaited_once_with(closed)
+    service.transition.assert_not_awaited()
 
 
 def test_generation_fanout_uses_temporal_root_tree():

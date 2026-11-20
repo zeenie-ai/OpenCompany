@@ -13,7 +13,7 @@ def control(status="reset", revision=4):
     return SimpleNamespace(
         id="control-wf-2", workflow_id="wf", generation=2, execution_id="execution-2",
         root_execution_id="execution-2", data_scope_id="scope-2", status=status, revision=revision,
-        controller_workflow_id="workflow-control-wf-g2",
+        controller_workflow_id="workflow-control-wf-g2", resource_manifest={},
     )
 
 
