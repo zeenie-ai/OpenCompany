@@ -326,7 +326,9 @@ For third-party API services (Twitter, Google Maps). A row booked while a
 plugin works for a chat run carries that run's id in `chat_run_id`, as a
 `TokenUsageMetric` row does, so a chat run's cost is the sum of its rows in
 both tables. `record_api_usage` takes the run from the log context, which
-`BaseNode.execute` binds for every plugin operation; no plugin passes it.
+`BaseNode.execute` binds for every plugin operation; no plugin passes it. A row
+booked while a plugin works for an employee job carries the job's id in
+`employee_job_id`, read from the same log context.
 
 ```python
 class APIUsageMetric(SQLModel, table=True):
@@ -338,6 +340,7 @@ class APIUsageMetric(SQLModel, table=True):
     node_id: str
     workflow_id: Optional[str]
     chat_run_id: Optional[str]  # the chat run the call worked for (indexed)
+    employee_job_id: Optional[str]  # the employee job the call worked for (indexed)
     service: str           # 'twitter', 'google_maps'
     operation: str         # 'content_create', 'geocode'
     endpoint: str          # Handler action name
@@ -369,7 +372,9 @@ It prices the call, writes the row and returns the cost breakdown. It never
 raises, because the call it books is already paid for: a failed price returns
 a zero cost and writes nothing, and a failed write still returns the price.
 A row booked while an agent works for a chat run carries that run's id in
-`chat_run_id`.
+`chat_run_id`. A row booked while an agent works for an employee job carries
+the job's id in `employee_job_id`: the recorder reads it from the log context,
+where the model step and the summarizer bind it, so no caller passes it.
 
 ```python
 class TokenUsageMetric(SQLModel, table=True):
@@ -378,6 +383,7 @@ class TokenUsageMetric(SQLModel, table=True):
     session_id: str
     node_id: str
     chat_run_id: Optional[str]  # the chat run the call worked for
+    employee_job_id: Optional[str]  # the employee job the call worked for
     provider: str          # 'openai', 'anthropic'
     model: str
     input_tokens: int

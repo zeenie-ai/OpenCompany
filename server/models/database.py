@@ -419,6 +419,9 @@ class TokenUsageMetric(SQLModel, table=True):
     # The chat run the call worked for (models/chat.py ChatRun.run_id), when
     # it worked for one. A run's cost is the sum of its rows.
     chat_run_id: Optional[str] = Field(default=None, index=True, max_length=64)
+    # The employee job the call worked for (models/employees.py EmployeeJob.id),
+    # when it worked for one.
+    employee_job_id: Optional[str] = Field(default=None, index=True, max_length=255)
     created_at: Optional[datetime] = Field(default=None)
     # Cost fields (USD)
     input_cost: float = Field(default=0.0)
@@ -488,6 +491,8 @@ class APIUsageMetric(SQLModel, table=True):
     # The chat run the call worked for (models/chat.py ChatRun.run_id), when
     # it worked for one. A run's cost is its rows here plus its token rows.
     chat_run_id: Optional[str] = Field(default=None, index=True, max_length=64)
+    # The employee job the call worked for, when it worked for one.
+    employee_job_id: Optional[str] = Field(default=None, index=True, max_length=255)
 
     # Service identification
     service: str = Field(index=True, max_length=50)  # twitter, google_maps, etc.

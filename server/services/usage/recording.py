@@ -59,6 +59,9 @@ async def record_llm_usage(
     all zeros when the price lookup failed, the real price when only the
     write failed. ``chat_run_id`` is the chat run the call worked for, when
     it worked for one. With no ``database`` the container's is used.
+
+    The row also takes the employee job bound in the log context: the model
+    step and the summarizer bind it for a call made for a job.
     """
     cost = dict(NO_COST)
     try:
@@ -72,6 +75,7 @@ async def record_llm_usage(
             workflow_id=workflow_id,
             execution_id=execution_id,
             chat_run_id=chat_run_id,
+            employee_job_id=structlog.contextvars.get_contextvars().get("employee_job_id"),
             provider=provider,
             model=model,
             iteration=iteration,
@@ -110,10 +114,11 @@ async def record_api_usage(
     failed and the real cost when only the write failed. With no
     ``database`` the container's is used.
 
-    The row also takes the chat run bound in the log context. ``BaseNode.execute``
-    binds it for every plugin operation (``services/plugin/base.py``), so a
-    tool call an agent makes while it answers a chat run counts for that run,
-    and no plugin has to pass it. A call outside a chat run stores none.
+    The row also takes the chat run and the employee job bound in the log
+    context. ``BaseNode.execute`` binds them for every plugin operation
+    (``services/plugin/base.py``), so a tool call an agent makes while it
+    answers a chat run counts for that run, one it makes for a job counts for
+    that job, and no plugin has to pass either. A call outside both stores none.
     """
     if endpoint is None:
         endpoint = action
@@ -127,11 +132,13 @@ async def record_api_usage(
             operation = price["operation"]
             cost = price["total_cost"]
         total = cost
+        bound = structlog.contextvars.get_contextvars()
         row = APIUsageMetric(
             session_id=session_id,
             node_id=node_id,
             workflow_id=workflow_id,
-            chat_run_id=structlog.contextvars.get_contextvars().get("chat_run_id"),
+            chat_run_id=bound.get("chat_run_id"),
+            employee_job_id=bound.get("employee_job_id"),
             service=service,
             operation=operation,
             endpoint=endpoint,

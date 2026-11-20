@@ -99,6 +99,19 @@ async def test_a_call_outside_a_chat_run_keeps_none(database, prices):
     assert (await api_rows(database))[0].chat_run_id is None
 
 
+async def test_a_call_made_for_a_job_keeps_the_job(database, prices):
+    with structlog.contextvars.bound_contextvars(employee_job_id="job-1"):
+        await record_api_usage("twitter", "tweet", node_id=NODE, database=database)
+
+    assert (await api_rows(database))[0].employee_job_id == "job-1"
+
+
+async def test_a_call_outside_a_job_keeps_none(database, prices):
+    await record_api_usage("twitter", "tweet", node_id=NODE, database=database)
+
+    assert (await api_rows(database))[0].employee_job_id is None
+
+
 async def test_a_fractional_count_is_priced_as_given(database, prices):
     await record_api_usage("deepgram", "speech_to_text", 12.5, node_id=NODE, database=database)
 

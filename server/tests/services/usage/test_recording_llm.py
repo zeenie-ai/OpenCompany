@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+import structlog
+
 from services.usage import record_llm_usage
 from services.usage.recording import NO_COST
 from tests.services.usage._helpers import model_rows, unavailable
@@ -86,6 +88,21 @@ async def test_a_call_outside_a_chat_run_keeps_none(database, prices):
     await book(database)
 
     assert (await model_rows(database))[0].chat_run_id is None
+
+
+async def test_a_call_made_for_a_job_keeps_the_job(database, prices):
+    # The model step binds the job in the log context; the test conftest
+    # replaces core.logging.log_context, so it is bound through structlog here.
+    with structlog.contextvars.bound_contextvars(employee_job_id="job-1"):
+        await book(database)
+
+    assert (await model_rows(database))[0].employee_job_id == "job-1"
+
+
+async def test_a_call_outside_a_job_keeps_none(database, prices):
+    await book(database)
+
+    assert (await model_rows(database))[0].employee_job_id is None
 
 
 async def test_the_row_is_stamped_when_it_is_booked(database, prices):
