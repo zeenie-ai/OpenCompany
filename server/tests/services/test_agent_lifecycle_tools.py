@@ -44,11 +44,15 @@ def test_names_do_not_retarget_when_labels_change_and_peers_cannot_review():
     assert not any(binding.name.startswith("spawn_") for binding in build_bindings(runtime=peer_template))
 
 
-def test_talk_can_only_admit_a_job_and_cannot_select_a_template():
-    bindings = build_bindings(runtime={"agent_lifecycle_version": 1, "role": "talk", "teammates": runtime()["teammates"]})
-    assert [binding.name for binding in bindings] == ["submit_job"]
+@pytest.mark.parametrize("instance", [None, "contact-instance"])
+def test_talk_can_admit_and_read_jobs_without_selecting_a_template(instance):
+    bindings = build_bindings(runtime={"agent_lifecycle_version": 1, "role": "talk", "agent_instance_id": instance,
+                                       "teammates": runtime()["teammates"]})
+    assert [binding.name for binding in bindings] == ["submit_job", "get_job_status"]
     assert bindings[0].schema["required"] == ["instructions"]
     assert set(bindings[0].schema["properties"]) == {"instructions"}
+    assert set(bindings[1].schema["properties"]) == {"job_id"}
+    assert not bindings[1].execution_traits
 
 
 def test_instance_capture_excludes_parent_history_services_and_secrets():
@@ -89,6 +93,19 @@ async def test_talk_submission_reaches_existing_job_authorization_without_an_ins
             "workflow_id": "wf", "parent_node_id": "talk", "tool_call_id": "call"})
     assert result == {"job_id": "job"}
     assert dispatch.await_args.args[0:2] == ("submit_job", {"instructions": "Research"})
+    assert dispatch.await_args.args[2]["parent_node_id"] == "talk"
+
+
+@pytest.mark.asyncio
+async def test_talk_status_reaches_existing_job_authorization_without_an_instance():
+    from services.temporal.agent_instance_workflow import execute_instance_tool
+    config = {"name": "get_job_status", "agent_operation": "get_job_status", "tool_node_id": "manager",
+              "agent_runtime": {"role": "talk", "agent_lifecycle_version": 1}}
+    with patch("services.handlers.tools.execute_tool", new_callable=AsyncMock, return_value={"job": None}) as dispatch:
+        result = await execute_instance_tool({"agent_tool_config": config, "tool_args": {},
+            "workflow_id": "wf", "parent_node_id": "talk", "tool_call_id": "call"})
+    assert result == {"job": None}
+    assert dispatch.await_args.args[0:2] == ("get_job_status", {})
     assert dispatch.await_args.args[2]["parent_node_id"] == "talk"
 
 

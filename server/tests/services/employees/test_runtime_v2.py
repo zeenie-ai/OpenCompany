@@ -58,7 +58,9 @@ async def test_admission_preserves_original_outputs_and_review_reuses_job(monkey
     create.assert_awaited_once()
 
 
-async def test_intrinsic_talk_submission_ignores_model_destinations(monkeypatch):
+@pytest.mark.parametrize("state,message", [("running", "Admitted, no teammate assigned."),
+    ("failed", "The runtime payload exceeded the size limit."), ("cancelled", "This request was stopped.")])
+async def test_intrinsic_talk_submission_ignores_model_destinations(monkeypatch, state, message):
     context, plan = admitted()
     scope = {**context, "parent_node_id": "talk", "node_id": "builtin_task_manager_talk"}
     create = AsyncMock(return_value=SimpleNamespace(id="job", state="queued"))
@@ -67,12 +69,31 @@ async def test_intrinsic_talk_submission_ignores_model_destinations(monkeypatch)
     monkeypatch.setattr("services.agent_team.get_agent_team_service", lambda: object())
     monkeypatch.setattr("services.employees.jobs.create_job", create)
     monkeypatch.setattr("services.employees.jobs.dispatch_job", dispatch)
+    monkeypatch.setattr("services.employees.job_status.get_job_status", AsyncMock(return_value={"job": {
+        "job_id": "job", "state": state, "message": message, "task_count": 0}}))
     result = await _execute_task_manager({"operation": "submit_job", "mission": "Do research", "lead_node_id": "forged", "delivery_node_ids": ["forged"]}, scope)
     assert result["job_id"] == "job"
+    assert result["state"] == state and result["acknowledgement"] == message
+    assert result["task_count"] == 0
     assert create.await_args.kwargs["lead_node_id"] == "lead"
     assert create.await_args.kwargs["delivery_node_ids"] == ["chat"]
     assert create.await_args.args[1].raw["generation"] == 4
     assert create.await_args.args[1].raw["data_scope_id"] == "original-scope"
+
+
+async def test_talk_job_status_uses_only_admitted_workflow_and_lead(monkeypatch):
+    context, _ = admitted()
+    scope = {**context, "parent_node_id": "talk", "node_id": "builtin_task_manager_talk"}
+    database = generation(context)
+    read = AsyncMock(return_value={"success": True, "job": None})
+    monkeypatch.setattr("services.plugin.deps.get_database", lambda: database)
+    monkeypatch.setattr("services.agent_team.get_agent_team_service", lambda: object())
+    monkeypatch.setattr("services.employees.job_status.get_job_status", read)
+    await _execute_task_manager({"operation": "get_job_status", "job_id": "job", "workflow_id": "foreign", "lead_node_id": "foreign"}, scope)
+    read.assert_awaited_once_with(database, workflow_id="wf", lead_node_id="lead", job_id="job")
+    from services.plugin import NodeUserError
+    with pytest.raises(NodeUserError, match="conversational contact"):
+        await _execute_task_manager({"operation": "get_job_status"}, {**scope, "parent_node_id": "child"})
 
 
 def test_trusted_tool_scope_carries_managed_job_and_original_generation():

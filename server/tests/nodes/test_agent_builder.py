@@ -258,11 +258,11 @@ class TestInspectCanvas:
         names = {entry["name"] for entry in result.available_skills}
         assert "http-request-skill" not in names and "memory-skill" in names
 
-    def test_task_manager_is_intrinsic_not_palette_addable(self):
+    def test_hire_can_assign_task_manager_and_agent_builder_cannot_add_it_as_an_arbitrary_tool(self):
         from services.node_allowlist import get_node_allowlist_service
 
         config = get_node_allowlist_service().get_config()
-        assert "taskManager" not in config["enabled_nodes"]
+        assert "taskManager" in config["enabled_nodes"]
         assert "taskManager" not in config["disabled_nodes"]
         assert "taskManager" not in ab._allowed_tool_types()
 

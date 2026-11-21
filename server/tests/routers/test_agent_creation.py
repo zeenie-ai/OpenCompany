@@ -76,16 +76,36 @@ async def test_coding_agent_has_connected_pi_tools_and_idempotent_creation(datab
 
 
 @pytest.mark.asyncio
-async def test_coding_agent_disabled_tool_rejects_whole_bundle(database, creation, monkeypatch):
+async def test_editor_ai_employee_has_one_persisted_task_manager_after_a_retry(database, creation):
+    await save_graph(database, {"nodes": [], "edges": [], "owner_id": "owner"})
+    body = agents.CreateAgent(workflow_id="7", node_type="ai_employee", mutation_id=uuid4())
+    first, retry = await agents.create_agent(body, request()), await agents.create_agent(body, request())
+    assert first["node_ids"] == retry["node_ids"] and first["applied"] and not retry["applied"]
+    graph = await saved(database)
+    lead, manager = first["node_ids"]["agent"], first["node_ids"]["task_manager"]
+    assert [n["id"] for n in graph["nodes"] if n["type"] == "taskManager"] == [manager]
+    assert [(e["sourceHandle"], e["targetHandle"], e["target"]) for e in graph["edges"]
+            if e["source"] == manager] == [("output-tool", "input-tools", lead)]
+    skills = first["node_ids"]["lead_skills"]
+    assert [(e["sourceHandle"], e["targetHandle"], e["target"]) for e in graph["edges"]
+            if e["source"] == skills] == [("output-tool", "input-skill", lead)]
+    assert "team-delegation" in (await database.get_node_parameters(skills))["skills_config"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("agent_type", "tool_type", "label"), [
+    ("coding_agent", "piBash", "Pi Bash"), ("ai_employee", "taskManager", "Task Manager"),
+])
+async def test_disabled_tool_rejects_whole_agent_bundle(database, creation, monkeypatch, agent_type, tool_type, label):
     from services import node_allowlist
     monkeypatch.setattr(node_allowlist, "get_node_allowlist_service", lambda: SimpleNamespace(get_config=lambda: {
-        "disabled_nodes": ["piBash"], "disabled_groups": [],
+        "disabled_nodes": [tool_type], "disabled_groups": [],
     }))
     await save_graph(database, {"nodes": [], "edges": [], "owner_id": "owner"})
     with pytest.raises(HTTPException) as caught:
-        await agents.create_agent(agents.CreateAgent(workflow_id="7", node_type="coding_agent", mutation_id=uuid4()), request())
+        await agents.create_agent(agents.CreateAgent(workflow_id="7", node_type=agent_type, mutation_id=uuid4()), request())
     assert caught.value.status_code == 403
-    assert "Pi Bash" in caught.value.detail
+    assert label in caught.value.detail
     assert (await saved(database))["nodes"] == []
     assert creation.frames == []
 

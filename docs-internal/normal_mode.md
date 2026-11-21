@@ -631,13 +631,17 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    (`BaseNode.app_field`), and the card reads it. Apps nobody knows are
    recorded as unsupported, named in the instructions, and never block a
    start;
-3. builds the graph ([builder.py](../server/services/employees/builder.py),
-   pure): one trigger (an app event, a schedule on `cronScheduler`, or manual
-   chat), one `aiAgent` whose system message comes from
-   [prompt.py](../server/services/employees/prompt.py), always-on tools (web
-   search, todos, clock, a Canvas, plus memory when the owner allows it) and
-   the apps' tools, the owner's skill library, delivery, an "Activity
-   log" console node, and Talk ([the talk line](#the-talk-line)). Which tools
+3. builds the graph for an app event, schedule or manual chat. With managed
+   teams enabled, Hire connects an `aiAgent` Talk contact to an `ai_employee`
+   lead and connects one to three specialist nodes to the lead's Teammates
+   input. Talk and the lead each get their own Task Manager node. Talk submits
+   jobs, the lead assigns work and reviews results, and each specialist owns
+   the tools for its responsibility. Hire returns `teams_disabled` when team
+   hiring is disabled. Existing single-worker hires keep their saved graph.
+   The recipe uses the hire's instructions, approved apps, delivery settings,
+   activity log and Talk line.
+   See [managed AI employee teams](./employee_teams.md) and the
+   [graph builder](../server/services/employees/builder.py). Which tools
    and skills a hire may have is
    [policy.py](../server/services/employees/policy.py)'s rule, the same one
    the Agent Builder applies later. A schedule is recorded as it will run, in
@@ -650,21 +654,21 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    (`UPDATE_BUILDER_SNAPSHOT=1` rewrites it). The instructions ask the
    employee to put finished
    work the owner will want to look at later on its Canvas, and to leave
-   routine replies off it. The library is every skill that is on in Settings > Skills. It goes
-   on one Skills node (`masterSkill`) with each skill's text copied in, so a
-   later change to the library never alters an employee already hired. A
+   routine replies off it. The builder copies enabled library skills from
+   Settings > Skills into the graph at hire time. On a managed team, Talk,
+   the lead and each specialist get separate Master Skill nodes. Talk keeps
+   the owner's library selections, the lead gets delegation instructions,
+   and specialist skills follow the role. A
    skill named `skill`, or one ending in `-personality`, is left out: it would
    take over the Skill tool, or replace the whole system message. The rule is
    live (builder version 3, `LIVE_RULE_BUILDER_VERSION`): every app reply goes
-   through `approvalGate`, which reads it each time; the apps' tools are all
-   attached, and while the owner asks first a call that sends is held for
-   them, Stripe is refused and the browser reads only, per call. The talk
-   agent alone also gets its talk tools: generated UI in the chat (`chatUi`,
-   "Show in chat", bound only while the owner has Generated UI on) and a way
-   to send through each of the hire's apps (the
-   registry's `talk_send`: WhatsApp, WhatsApp Business, Telegram, Discord,
-   Gmail, Outlook, email), so the owner can ask it to send something; never on
-   a worker strangers write to. The instructions read the same with the rule
+   through `approvalGate`, which reads it each time. While the owner asks
+   first, a call that sends is held for them, Stripe is refused and the browser
+   reads only, per call. The Talk contact gets generated UI in chat (`chatUi`,
+   "Show in chat", bound only while the owner has Generated UI on). On a
+   managed team, the responsible specialist owns the app tools, including
+   the registry's `talk_send` tools. On a single-worker hire, Talk can use
+   those tools directly. The instructions read the same with the rule
    on or off (a test holds them byte for byte). An older tool that declares
    `ask_first_params` and no approval spec would still be attached in that
    form. The Web browser app has nothing to connect
@@ -1017,25 +1021,25 @@ sending and drafts belong to the chat (wire and client rules in
 
 ### The talk line
 
-A run keeps only the firing trigger's downstream nodes plus their tools and
-config, so a line started by the owner's messages runs on those alone and
-never disturbs the work path ([talk.py](../server/services/employees/talk.py)):
+A chat run follows the owner's message through the Talk contact to its reply.
 
 ```
 chatTrigger (session_id = workflow id) -> agent -> chatReply ("Reply in Chat")
 ```
 
-- **A chat hire** (the owner gives them work by messaging them): its own
-  "Chat" trigger and agent are the line, and Hire adds Reply in Chat after the
-  agent. No second chat trigger is added: two on one session would start two
-  runs per message.
-- **App-event and schedule hires** get a line beside the worker: a "Talk" chat
-  trigger on the workflow's session; a "Talk with {Name}" agent of the
-  worker's type, on its provider and model, with the prompt `{{talk.message}}`
-  and instructions written for Talk; its own Context (a conversation is never
-  shared); the worker's tools and Skills node, when it has one, wired to it
-  too (the same nodes, so Memory, the checklist, the Canvas and the skills are
-  shared); and its Reply in Chat.
+- **Managed hires** use an `aiAgent` as the conversational contact for every
+  trigger type. Its Team input (`input-employee-team`) connects to the
+  `ai_employee` lead's top output. This connection tells Talk's Task Manager
+  where to send a job. `submit_job` returns a receipt, and `get_job_status`
+  reads the saved job state. The lead's Task Manager starts the connected
+  specialists and tracks review. The Team edge carries no chat messages
+  or trigger events. [Managed AI employee teams](./employee_teams.md)
+- **Chat hires** reuse the original chat trigger and agent as the Talk line.
+  Team hiring adds the separate lead for work submitted from Talk.
+- **App-event and schedule hires** get a "Talk" chat trigger on the workflow's
+  session, a "Talk with {Name}" contact with its own conversation Context,
+  and Reply in Chat. Older single-worker graphs can share tools or Skills
+  between Talk and the worker. [Talk graph planning](../server/services/employees/talk.py)
 - **Schedule hires** also get "Post to Talk", a Reply in Chat fed by the
   worker, so its routine reports land in the thread. When the app the reports
   go out through can't be used yet, the hire's warning says they are in Talk
@@ -1049,9 +1053,10 @@ chatTrigger (session_id = workflow id) -> agent -> chatReply ("Reply in Chat")
   goes straight to the owner, and it may add tools and skills with
   `agent_builder` when the owner asks, but nothing that sends or spends while
   they ask to check first.
-- The parts join `node_roles`: `talk_trigger`, `talk_agent`, `talk_context`,
-  `talk_reply`, `builder`, `report_post`. A chat hire's talk trigger, agent
-  and Context are its `trigger`, `agent` and `context`.
+- The Talk line records `talk_trigger`, `talk_agent`, `talk_context`,
+  `talk_reply`, `builder` and, for schedule hires, `report_post` in
+  `node_roles`. Managed hires record the lead as `agent` and the contact as
+  `talk_agent`. A single-worker chat hire uses the same agent for both.
 - Labels are "Talk", "Talk with {Name}", "Reply in Chat", "Post to Talk" and
   "Agent Builder", numbered when a label is taken ("Talk 2"). A new trigger's
   label is also kept unique by `node_label_slug`, since a deployment registers
@@ -1136,8 +1141,8 @@ The agent that answers the owner extends the employee with the
 asks, within the rule Hire applies
 ([policy.py](../server/services/employees/policy.py)):
 
-- **Tools**: the ones every hire gets (web search, checklist, clock, Memory,
-  Canvas) and the apps' (`Connections.apps`: the registry's and the owner's
+- **Tools** include the built-in web search, checklist, clock, Memory and
+  Canvas tools and the apps' tools (`Connections.apps`: the registry's and the owner's
   own). A type several apps share, the Custom Connector node, is offered
   once per app with its `app_id`, which `add_tool` takes; the agent already
   has it only on a node naming the same app (its `app_field` parameter).
@@ -1150,20 +1155,22 @@ asks, within the rule Hire applies
 - **Skills**: from the owner's library (Settings > Skills, on or off for new
   hires) and the Discover folder (`server/skills/employee/`), with their text
   copied in; never `skill` or a `*-personality` skill.
-- **No teammates**: `add_subagent` is refused for a hired employee.
-- A new tool is wired to both the worker and the talk agent. A skill goes on
-  the Skills node they share, else on a new one wired to both.
+- On a managed team, an owner-authorized `add_subagent` connects the new
+  specialist to the lead. The lead can assign it a task when that connection
+  is active.
+- A new tool belongs to the selected member, defaulting to the caller. A
+  managed team's skill goes on the selected member's Master Skill.
 
 What goes live when:
 
-- A tool is callable at once in the conversation that asked for it: the agent
-  loop binds it for the rest of that run (`auto_rebind_tools_after_canvas_change`
-  in user settings, on by default).
+- A tool added to the caller can be callable in the same conversation when
+  `auto_rebind_tools_after_canvas_change` is enabled (the default). Builder
+  reports when the tool is ready. A tool added to a specialist belongs to
+  that specialist.
 - A skill added to an existing Skills node applies from the next message:
   node parameters are read live.
-- Everything else waits for a restart, because a live generation's runs take
-  their nodes and edges from its snapshot: the worker gets a new tool, and a
-  new Skills node starts working, after Apply. Meanwhile `pending_changes`
+- New nodes and edges are available to future runs after Apply because a live
+  generation takes them from its snapshot. Meanwhile `pending_changes`
   shows the notice. On a later message the talk agent can ask for the tool
   again, which binds the saved node without adding a second one.
 
@@ -1481,10 +1488,10 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
   hires can share Memory, Canvas, checklist and skills between Talk and the
   worker, and custom wiring can intentionally share Memory. Inspect the
   saved bindings before assuming sender or member isolation.
-- A tool added from Talk works at once only in the talk agent's current run.
-  The next message is a new run from the live generation's snapshot, which
-  lacks it until the agent asks the Agent Builder for it again (that binds
-  the saved node, bind-only). The worker gets it only after Apply.
+- A tool added to Talk can work at once in its current run. The next message
+  starts from the live generation's snapshot. Until Apply, Talk can ask
+  Agent Builder to bind its saved tool again for that conversation. A tool
+  added for another member becomes available to that member after Apply.
 - A queued message whose Signal reached the controller starts its pending
   execution on Resume; a suspended run continues its existing execution.
   The lane permits one nonterminal run, including a stopped controlled run.

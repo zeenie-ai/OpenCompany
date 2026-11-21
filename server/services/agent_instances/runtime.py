@@ -43,7 +43,7 @@ async def wake_instance(instance_id: str, *, client=None, context=None, database
         "workflow_id", "generation", "execution_id", "root_execution_id", "execution_control_version",
         "controller_workflow_id", "execution_control_state", "execution_control_revision",
         "execution_control_producers_held") if key in admitted}
-    from services.temporal.search_attributes import event_workflow_search_attributes
+    from services.temporal.trigger_listener_workflow import event_workflow_search_attributes
     search_attributes = event_workflow_search_attributes(instance.get("workflow_id"))
     return await client.start_workflow(
         "AgentInstanceSessionWorkflow", {**control, **(context or {}), "instance_id": instance_id},

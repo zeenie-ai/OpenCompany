@@ -12,18 +12,22 @@ version 0 path documented later in this file.
 
 ```mermaid
 sequenceDiagram
-    participant Talk
+    participant Talk as Talk contact
     participant Store as Durable job and inbox store
     participant Lead as Lead instance owner
     participant Worker as Teammate instance owner
     participant Runtime as Native / Pi / CLI / RLM
-    Talk->>Store: submit_job(instructions), trusted source context
-    Store-->>Talk: acknowledgement and job ID
+    Talk->>Store: Talk Task Manager calls submit_job(instructions)
+    Store-->>Talk: job ID and saved status
     Store->>Lead: explicit handoff, isolated conversation
-    Lead->>Store: spawn_<teammate>(instructions, after?)
+    Lead->>Store: Lead Task Manager calls spawn_<teammate>(instructions, after?)
     Note over Store: Commit instance, task, attempt and input together
     Store-->>Lead: agent ID and current task_ref
     Store->>Worker: wake hint; inbox remains authoritative
+    opt Owner asks for progress
+        Talk->>Store: get_job_status(job_id)
+        Store-->>Talk: saved job state and task counts
+    end
     Worker->>Store: claim one fenced run
     Worker->>Runtime: execute with instance history and frozen template
     Runtime->>Store: checkpoint transcript and consumed receipts
@@ -37,8 +41,12 @@ sequenceDiagram
 ### Admission and one execution owner
 
 `AgentWorkflow.run` bootstraps a version 1 `ai_employee` or
-`orchestrator_agent` lead into `AgentInstanceSessionWorkflow`. The Talk agent
-keeps its chat execution and only receives `submit_job` for team work.
+`orchestrator_agent` lead into `AgentInstanceSessionWorkflow`. Hire uses the
+`ai_employee` as its lead. Its top output connects to the `aiAgent` Talk
+contact's Team input. This edge identifies the destination for a job.
+Talk keeps its chat execution and uses its own Task Manager for
+`submit_job` and `get_job_status`. The lead's separate Task Manager binds a
+spawn operation for each specialist connected to its `input-teammates`.
 `bootstrap_instance` captures the admitted graph and configuration, and
 `turn_context` projects each claimed run from that durable snapshot.
 
@@ -74,6 +82,12 @@ interrupted owners, completed-job retirement and recorded permit cleanup.
 | Runtime authority | Trusted workflow, generation, job, team, lead and run metadata supplied by the runtime |
 | Peer messages | Ordered inbox deliveries labelled as another agent's input, never owner approval |
 | Final destination | Original durable job source and approval policy; not the instance's session ID |
+
+Temporal preparation captures the shared graph and runtime context once for
+the instance or Talk turn. Each lifecycle tool binding carries a compact
+identity. Dispatch attaches the shared context to the selected tool call.
+This keeps the prepare result from repeating the full graph for every
+connected specialist's spawn and reassignment tools.
 
 Instance turns strip Talk's live chat run scope. Their output/session IDs are
 `agent-instance:<id>`, while generation control and original delivery provenance

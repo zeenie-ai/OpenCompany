@@ -4,7 +4,7 @@ description: How to use the Agent Builder tool (agent_builder) to inspect your c
 allowed-tools: "agentBuilder"
 metadata:
   author: opencompany
-  version: "5.2"
+  version: "5.3"
   category: autonomous
 ---
 
@@ -68,9 +68,9 @@ you are one of the owner's AI employees. Then:
   Different members may use the same tool type, but each needs a separate
   concrete node and its own configuration; never share one tool node among
   agents or forward its work through extra nodes.
-- `available_tools` lists only what you may be given: the tools every hire
-  has (web search, checklist, clock, memory, canvas) and the tools of the
-  apps in the app registry. An app tool shows `connected: false` until the
+- `available_tools` lists the tools permitted for this hire, including
+  built-in tools and tools from the app registry. An app tool shows
+  `connected: false` until the
   owner connects that app, and `read_only: true` when it is given in a safe,
   read-only form (the browser, while the owner asks to be asked first).
 - While `asks_first` is true, nothing that can send messages or spend money
@@ -112,8 +112,9 @@ No other fields. Returns:
 }
 ```
 
-- `you.incoming`: what is wired to your handles (tools on `input-tools`,
-  skills on `input-skill`, teammates on `input-teammates`).
+- `you.incoming`: tools on `input-tools`, skills on `input-skill`, teammates on
+  the lead's `input-teammates`, and the AI Employee lead on Talk's
+  `input-employee-team`.
 - `key_params` shows only planner-relevant fields (`provider`, `model`,
   `operation`, `url`, `query`), never secrets.
 - `employee` is present only for a hired employee.
@@ -133,34 +134,38 @@ for that member; it does not become your tool.
 
 ### `add_skill`
 
-Field: `skill_name`. Adds the skill to the Skills node wired to you, or to
-a new one when you have none. An already enabled skill changes nothing.
+Pass `skill_name` and, for a managed team, an optional `target_member_id`.
+Builder enables the skill on that member's Master Skill, defaulting to yours.
+An already enabled skill changes nothing.
 
 ### `add_subagent`
 
 Fields: `agent_type`, optional `purpose`, `tool_types`, `tool_parameters`,
 and `skill_names`. Team leads only (`orchestrator_agent`, `ai_employee`),
 and never another team lead. Adds a specialized agent with its own Context
-and wires it to your `input-teammates`. Assign it work with
-`task_manager(operation="assign_task", assignee_node_id=...)`; never call a
-`delegate_to_*` tool directly. Supply a mission, context, dependencies and
-acceptance criteria on each task. The lead reviews submitted results, retries
-or reassigns rejected work, and delivers the accepted answer once. Assignment
-acknowledgements are progress, never the final answer. The specialist inherits
-the lead's configured model and receives only its selected tools and skills,
-with its own managed Context. Never add a second Task Manager: team leads get
-the intrinsic tool. Custom `aiAgent` specialists may have distinct purposes;
-registered specialist types reuse their existing teammate binding.
+and wires it to the lead's `input-teammates`. On a managed hire, Talk can
+request a specialist for the employee's lead. The lead assigns the first
+task through its Task Manager with the advertised
+`spawn_<teammate>(instructions, after?)` tool. Include the mission, context
+and acceptance criteria in `instructions` and any prerequisite task references
+in `after`. For a new task on an existing instance, call `assign_task` with
+its agent ID. Review the submitted result, accept it or request changes, and
+deliver the accepted answer once. A legacy run exposing only `task_manager`
+uses its `assign_task` operation. The specialist inherits the lead's configured
+model and receives its selected tools and skills and its own Context.
+Custom `aiAgent` specialists may have distinct purposes. Registered specialist
+types reuse their existing teammate binding.
 
 ### `create_workflow`
 
-Use the shared employee-team recipe for a trusted owner request. Follow the
-shipped AI Employee template: an `ai_employee` lead, canonical teammate
-connections, separate Context and scoped skills. Managed teams have intrinsic
-Task Manager bindings: Talk uses `submit_job`, and the lead assigns and reviews
-specialist tasks. Do not construct additional forwarding nodes or duplicate
-Task Manager bindings. Durable admission and reviewed delivery are handled by
-the runtime; keep the actual app outputs and existing approval gates.
+Use the shared employee-team recipe for a trusted owner request. It saves
+an `ai_employee` lead connected to Talk's Team input and specialists connected
+to the lead's Teammates input. Talk and the lead each get a connected Task
+Manager. Every role gets its own Context and Master Skill. Talk submits
+substantive work once with `submit_job` and uses `get_job_status` before
+reporting progress. The lead uses its manager to assign and review specialist
+tasks. The runtime admits jobs and delivers reviewed results through the
+saved outputs and approval gates.
 
 ### Documentation operations
 

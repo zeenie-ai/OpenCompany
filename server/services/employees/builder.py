@@ -91,7 +91,7 @@ from services.graph_build import (
     tool_edge,
 )
 
-BUILDER_VERSION = 6
+BUILDER_VERSION = 9
 #: The first builder whose graphs follow the live Ask first rule (every app
 #: reply behind a gate, sending tools attached and held per call). Older
 #: graphs need Apply for a changed rule to take full effect.
@@ -741,6 +741,7 @@ def _build_single_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     sends = any(tool.type != CHAT_UI_TYPE for tool in talk_tools)
 
     def instructions(delivery_mode: Delivery, *, delivery_app: Optional[str] = None, has_builder: bool = False) -> str:
+        team_contact = inputs.team and delivery_mode == "talk"
         return build_system_message(
             PromptInputs(
                 request=request,
@@ -749,11 +750,12 @@ def _build_single_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
                 delivery_app=delivery_app,
                 unsupported_apps=list(inputs.unsupported_apps),
                 has_memory=inputs.memory,
-                has_canvas=True,
-                has_browser=bool(browser_tools),
+                has_todos=not team_contact,
+                has_canvas=not team_contact,
+                has_browser=bool(browser_tools) and not inputs.team,
                 browser_read_only=bool(browser_tools) and all(plan.read_only for plan in browser_tools),
                 has_builder=has_builder,
-                has_send_tools=delivery_mode == "talk" and sends,
+                has_send_tools=delivery_mode == "talk" and sends and not team_contact,
             )
         )
 

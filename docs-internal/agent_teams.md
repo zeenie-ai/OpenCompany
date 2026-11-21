@@ -19,9 +19,18 @@ not replace its tool contract. Employee recipe version, graph version and
 | Task | A reviewed work item, retained through changes, retries and reassignment |
 | Task attempt | One execution contract, including instructions, feedback, dependencies and configuration |
 
-The employee's Talk agent retains the owner conversation. Its
-`submit_job(instructions)` admits a durable job and returns an acknowledgement.
-Each job has an isolated lead and team; its handoff contains the request and
+Hire creates an `ai_employee` lead and an `aiAgent` Talk contact. The lead's
+`output-top` connects to Talk's `input-employee-team` to identify the job
+destination. Each role has its own Task Manager on `input-tools` and its own
+Master Skill on `input-skill`. The admitted team plan records their node IDs.
+
+Talk retains the owner conversation. Its Task Manager's
+`submit_job(instructions)` admits a durable job and returns its ID and current
+saved status. A queued receipt confirms that the request is saved. Talk can
+look up that ID with `get_job_status(job_id)` to see the task count and counts
+by status before reporting progress. Omitting the ID reads the most recently
+updated job for the same employee.
+Each job has an isolated lead and team. Its handoff contains the request and
 captured source context. A job admitted while its agent answers a chat run
 records that run (`EmployeeJob.chat_run_id`), so the usage service can add the
 job's cost to the reply that started it; see
@@ -49,7 +58,7 @@ the transcript.
 
 | Available to | Tools |
 |---|---|
-| Talk | `submit_job(instructions)` |
+| Talk | `submit_job(instructions)`, `get_job_status(job_id?)` |
 | Job lead | Bound `spawn_<teammate>(instructions, after?)` and `reassign_<teammate>(task_ref)`; `assign_task`, review and instance controls; all peer tools below |
 | Lead and teammates | `send_message`, `list_agents`, `get_agent`, `wait_for_agents`, `list_tasks`, `get_task`, `inspect_task` |
 
@@ -268,8 +277,8 @@ reusable instances and is not the lifecycle version 1 ownership diagram.
    its own Skill tool for a teammate's skill by name). Skill
    blurbs come from the skill loader's last scan (`get_available_skills()`),
    not a rescan per teammate. Locked by `tests/test_team_topology.py`.
-2. Task Manager is intrinsically and non-removably bound to every team lead.
-   It is not a palette node or an Agent Builder-addable tool.
+2. A legacy lead with no connected Task Manager receives a built-in binding.
+   Agent Builder reserves Task Manager for the employee creation path.
 3. The lead delegates only by calling `task_manager` with
    `operation="assign_task"`, a title, a bounded mission, context, acceptance criteria,
    and an exact connected `assignee_node_id`. Its locked Pydantic ToolInput

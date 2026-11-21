@@ -14,6 +14,7 @@ def no_workspace_tasks(monkeypatch):
     # admission and cleanup are covered in test_workspace_task_reset.py.
     monkeypatch.setattr(handlers, "_workspace_runtime_status", AsyncMock(return_value={}))
     monkeypatch.setattr(handlers, "_reset_workspace_tasks", AsyncMock(return_value={"present": False}))
+    monkeypatch.setattr("services.employees.store.get_by_workflow", AsyncMock(return_value=None))
 
 
 def _control(
@@ -1528,8 +1529,8 @@ async def test_start_admits_the_employee_team_plan_on_its_lead(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
-    """Start and the restart re-arm deploy through here, which sanitizes the graph again (#148)."""
+async def test_deploy_preserves_captured_employee_plan_after_saved_plan_upgrade(monkeypatch):
+    """Re-arming a generation keeps its plan, including legacy routes without a visible link."""
     plan = {"version": 2, "lead_node_id": "wf:ai_employee:1", "talk_node_id": "wf:aiAgent:1"}
     workflow_service = SimpleNamespace(
         is_workflow_deployed=lambda _workflow_id: False,
@@ -1541,9 +1542,9 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
     )
     live = SimpleNamespace(generation=1, status="running", graph_snapshot={
         "nodes": [
-            # A plan already on the lead is dropped; the employee's is deployed.
+            # This generation predates the visible link upgrade on the saved employee.
             {"id": "wf:ai_employee:1", "type": "ai_employee",
-             "data": {"label": "Lead", "employee_recipe_version": 2, "employee_team_plan": {"version": 2, "lead_node_id": "forged"}}},
+             "data": {"label": "Lead", "employee_recipe_version": 2, "employee_team_plan": plan}},
             {"id": "wf:aiAgent:1", "type": "aiAgent", "data": {"label": "Talk"}},
         ],
         "edges": [],
@@ -1554,7 +1555,8 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
                                                                     database=lambda: database))
     monkeypatch.setattr("services.status_broadcaster.get_status_broadcaster", lambda: broadcaster)
     monkeypatch.setattr("services.workflow_validator.validate_workflow", AsyncMock(return_value={"errors": []}))
-    monkeypatch.setattr("services.employees.store.get_by_workflow", AsyncMock(return_value=SimpleNamespace(team_plan=plan)))
+    saved_employee = AsyncMock(return_value=SimpleNamespace(team_plan={**plan, "talk_connection_version": 1}))
+    monkeypatch.setattr("services.employees.store.get_by_workflow", saved_employee)
     monkeypatch.setattr(handlers, "_deployment_tasks", {})
 
     result = await handlers.handle_deploy_workflow({"workflow_id": "wf", "generation": 1}, None)
@@ -1564,6 +1566,7 @@ async def test_deploy_admits_the_employee_team_plan_on_its_lead(monkeypatch):
     deployed = {node["id"]: node["data"] for node in workflow_service.deploy_workflow.await_args.kwargs["nodes"]}
     assert deployed["wf:ai_employee:1"] == {"label": "Lead", "employee_recipe_version": 2, "employee_team_plan": plan}
     assert deployed["wf:aiAgent:1"] == {"label": "Talk"}
+    saved_employee.assert_not_awaited()
 
 
 @pytest.mark.asyncio

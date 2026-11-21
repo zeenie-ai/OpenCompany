@@ -264,10 +264,10 @@ async def execute_instance_tool(payload: dict) -> dict:
     # Name and public arguments are preserved; only the execution projection
     # carries the trusted manifest binding and authenticated scope.
     config["node_id"] = config.get("tool_node_id") or payload.get("node_id")
-    if config.get("agent_operation") == "submit_job":
+    if config.get("agent_operation") in {"submit_job", "get_job_status"}:
         # Talk has its own conversation. The existing job admission validates
         # its authenticated graph role before creating an independent lead.
-        return await execute_tool(config.get("name") or "submit_job", payload.get("tool_args") or {}, config)
+        return await execute_tool(config.get("name") or config["agent_operation"], payload.get("tool_args") or {}, config)
     runtime = config.get("agent_runtime") or config
     admitted = await admit_instance_operation({"instance_id": runtime["agent_instance_id"], "run_id": runtime["agent_run_id"]})
     if not admitted["allowed"]:
@@ -446,8 +446,14 @@ class AgentInstanceSessionWorkflow:
                     if is_workflow_bug(exc):
                         workflow_bug = True
                         raise
-                    error = str(exc)
-                    last = {"success": False, "error": error}
+                    if (claim.get("instance") or {}).get("role") == "lead" and context.get("employee_job_id") and workflow.patched("agent-instance-lead-failures-v1"):
+                        from services.employees.failures import lead_failure
+                        failure = lead_failure(exc)
+                        error = failure["message"]
+                        last = {"success": False, "error": error, "error_type": failure["code"]}
+                    else:
+                        error = str(exc)
+                        last = {"success": False, "error": error}
                 except asyncio.CancelledError:
                     error = "interrupted"
                     last = {"success": False, "error": error, "error_type": "agent_turn_halted"}
@@ -469,8 +475,11 @@ class AgentInstanceSessionWorkflow:
                 if error and (claim.get("instance") or {}).get("role") == "lead" and context.get("employee_job_id"):
                     # This transaction refuses to fail a job with any child
                     # tasks. Those jobs remain recoverable through review.
-                    await workflow.execute_activity("employee.job.failed", {
-                        **context, "failure_code": "lead_no_assignments", "correction_count": 3},
+                    failure_payload = {"failure_code": "lead_no_assignments", "correction_count": 3}
+                    if workflow.patched("agent-instance-lead-failures-v1"):
+                        from services.employees.failures import lead_failure
+                        failure_payload = {"failure_code": lead_failure(last)["code"]}
+                    await workflow.execute_activity("employee.job.failed", {**context, **failure_payload},
                         start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING)
                 if last.get("success", True) and (claim.get("instance") or {}).get("role") == "lead" and context.get("employee_job_id"):
                     delivery = {**context, "outputs": {**(context.get("outputs") or {}), context["node_id"]: {

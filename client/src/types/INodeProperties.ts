@@ -40,7 +40,8 @@ export type NodeConnectionType =
   | 'tool'
   | 'skill'
   | 'task'
-  | 'teammates';
+  | 'teammates'
+  | 'employee-team';
 
 /** Lossless mirror of one backend NodeSpec handle.
  *

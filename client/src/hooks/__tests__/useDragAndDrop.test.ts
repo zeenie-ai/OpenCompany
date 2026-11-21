@@ -38,6 +38,8 @@ describe('useDragAndDrop.onDrop', () => {
     ['aiAgent', { creationParameters: { runtime_behavior_version: 1 as const } }, true],
     ['coding_agent', { createsAgentBundle: true }, true],
     ['coding_agent', { createsAgentBundle: true }, false],
+    ['ai_employee', { createsAgentBundle: true }, true],
+    ['ai_employee', { createsAgentBundle: true }, false],
   ])('creates %s through the authoritative API (cached=%s) without speculative nodes or parameter writes', async (nodeType, uiHints, cached) => {
     const saveWorkflowWithinMutation = vi.fn().mockResolvedValue(true);
     const adoptSavedOperations = vi.fn();

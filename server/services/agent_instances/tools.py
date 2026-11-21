@@ -78,6 +78,10 @@ class TaskListInput(Input):
     status: Literal["blocked", "queued", "running", "submitted", "accepted", "failed", "cancelled"] | None = None
 
 
+class JobStatusInput(Input):
+    job_id: Reference | None = Field(default=None, description="The job_id returned by submit_job. Omit to read the latest job for this employee.")
+
+
 class InspectInput(TaskReadInput):
     detail: Literal["summary", "failures", "timeline", "search"] = "summary"
     query: Annotated[str, StringConstraints(max_length=200)] | None = None
@@ -108,6 +112,7 @@ OPERATIONS: dict[str, tuple[type[Input], str, frozenset[str]]] = {
     "close_agent": (AgentInput, "Close an idle agent only after its outstanding tasks and messages are resolved.", frozenset({"mutates_lifecycle"})),
     "finish_team": (EmptyInput, "Finish this job after required work has passed the review and delivery gates.", frozenset({"mutates_lifecycle"})),
     "submit_job": (InstructionsInput, "Give substantive work to the employee's team and receive an acknowledgement; the reviewed result follows.", frozenset({"mutates_lifecycle"})),
+    "get_job_status": (JobStatusInput, "Read the actual saved status of this employee's job before reporting progress or submitting it again. Queued is not started, and a failed job will not finish by waiting.", frozenset()),
 }
 
 PEER_OPERATIONS = ("send_message", "list_agents", "get_agent", "wait_for_agents", "list_tasks", "get_task", "inspect_task")
@@ -132,8 +137,8 @@ def build_bindings(parameters: dict | None = None, runtime: dict | None = None) 
     role = runtime.get("role") or (runtime.get("agent_instance_scope") or {}).get("role")
     is_lead = role in {"lead", "team_lead"} if role is not None else bool(templates)
     operations = LEAD_OPERATIONS if is_lead else PEER_OPERATIONS
-    if not instance_id:
-        operations = ("submit_job",)
+    if role == "talk" or not instance_id:
+        operations = ("submit_job", "get_job_status")
     bindings = []
 
     def add(operation: str, name: str | None = None, template: dict | None = None):
@@ -227,9 +232,10 @@ async def execute_lifecycle_tool(tool_name: str, arguments: dict, config: dict) 
         return {"success": False, "error_type": "invalid_tool_input", "error": f"{tool_name}: {'; '.join(issues)}", "retryable": True}
     if operation == "inspect_task" and args.get("detail") == "search" and not (args.get("query") or "").strip():
         return {"success": False, "error_type": "invalid_tool_input", "error": "Trace search requires a nonblank query."}
-    if operation == "submit_job":
+    if operation in {"submit_job", "get_job_status"}:
         from nodes.tool.task_manager import _execute_task_manager
-        return await _execute_task_manager({"operation": "submit_job", "mission": args["instructions"]}, config)
+        public = {"mission": args["instructions"]} if operation == "submit_job" else args
+        return await _execute_task_manager({"operation": operation, **public}, config)
 
     from services.agent_instances.service import AgentInstanceService, InstanceError
     from services.plugin.deps import get_database

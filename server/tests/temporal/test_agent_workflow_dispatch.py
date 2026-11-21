@@ -58,7 +58,8 @@ def test_admitted_generation_routes_to_child_workflow_but_missing_metadata_stays
 
 
 @pytest.mark.asyncio
-async def test_task_manager_preflight_rejects_invalid_call_then_starts_one_corrected_task(monkeypatch):
+@pytest.mark.parametrize("assigned_manager", [False, True])
+async def test_task_manager_preflight_rejects_invalid_call_then_starts_one_corrected_task(monkeypatch, assigned_manager):
     from nodes.tool.task_manager import TaskManagerNode
     from services import agent_team
     from services.llm.protocol import Message, ToolCall, message_to_wire
@@ -93,6 +94,10 @@ async def test_task_manager_preflight_rejects_invalid_call_then_starts_one_corre
             "operation": "assign_task", "title": "Research", "mission": "Find verified sources", "assignee_node_id": "worker",
         }),
     ]
+    if assigned_manager:
+        prepared.update(node_type="ai_employee", max_iterations=4,
+                        employee_team_plan={"lead_node_id": "lead", "task_manager_node_id": "task-manager"})
+        calls.insert(0, ToolCall(id="direct", name="delegate_to_worker", args={"task": "Bypass the manager"}))
     inputs, preflight_results, queued = [], [], []
     runner = AsyncMock(return_value=SimpleNamespace(id="runner-1"))
 
@@ -147,6 +152,8 @@ async def test_task_manager_preflight_rejects_invalid_call_then_starts_one_corre
     runner.assert_awaited_once()
     assert runner.await_args.args == ("DelegatedTaskWorkflow",)
     assert runner.await_args.kwargs["args"][0]["lifecycle"]["team_task_id"] == "task-1"
-    feedback = [message for message in inputs[1]["messages"] if message["role"] == "tool"]
-    assert len(feedback) == 1 and feedback[0]["tool_call_id"] == "invalid"
-    assert "Extra inputs are not permitted" in feedback[0]["content"]
+    feedback = {message["tool_call_id"]: message["content"] for message in inputs[-1]["messages"]
+                if message["role"] == "tool"}
+    assert "Extra inputs are not permitted" in feedback["invalid"]
+    if assigned_manager:
+        assert feedback["direct"] == "Use your Task Manager to assign work to this teammate."

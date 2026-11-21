@@ -34,7 +34,7 @@ from services.employees.hire_request import HireEmployeeRequest
 MAX_CHARS = 8000
 
 
-Delivery = Literal["reply", "report", "talk"]
+Delivery = Literal["reply", "report", "talk", "review"]
 
 
 def neutralize_templates(text: str) -> str:
@@ -172,6 +172,8 @@ def _rules(inputs: PromptInputs, owner: str) -> List[str]:
         )
     elif inputs.delivery == "talk":
         out.append(f"- You cannot send anything to other people yourself. When something should go out, write it for {owner} to send.")
+    elif inputs.delivery == "review":
+        out.append("- Only submit reviewed work for delivery. The employee's delivery process applies the owner's approval rules.")
     elif inputs.delivery == "reply":
         out.append(
             f"- Write every answer ready to send. While {owner} asks to check first, it is shown to them as a draft, "
@@ -196,6 +198,8 @@ def _rules(inputs: PromptInputs, owner: str) -> List[str]:
             "- If a message needs no reply (spam, an automated notice, a thank-you that ends the conversation), "
             f"answer exactly {NO_REPLY} and nothing else."
         )
+    elif inputs.delivery == "review":
+        out.append(f"- Prepare one reviewed result for {owner} after the team's work is complete.")
     elif inputs.delivery == "talk":
         out.append(f"- {subject} talks to you in Talk. Your answer goes straight to them, so answer them directly.")
     else:

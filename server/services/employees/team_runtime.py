@@ -230,7 +230,7 @@ def validate_managed_assignment(args, scope):
         raise ValueError("Employee job assignment depends_on must be a list of resolved task IDs")
 
 
-async def admit_team_plan(database, workflow_id: str, nodes: list) -> list:
+async def admit_team_plan(database, workflow_id: str, nodes: list, edges: list | None = None, *, captured_plan: dict | None = None) -> list:
     """Put the employee's team plan on its lead in a graph being admitted.
 
     The saved graph cannot hold it (``workflow_sanitizer`` keeps node data to
@@ -238,15 +238,18 @@ async def admit_team_plan(database, workflow_id: str, nodes: list) -> list:
     (``store.commit_hire``, ``workflow_storage.mutate``). Start and Apply copy
     it into the generation, which then runs the plan it was admitted with.
     """
-    from services.employees.team_recipe import TEAM_LEAD_TYPE
-    if not any(node.get("type") == TEAM_LEAD_TYPE for node in nodes):
-        return nodes
     from copy import deepcopy
-    from services.employees.store import get_by_workflow
-    employee = await get_by_workflow(database, str(workflow_id))
-    plan = (employee.team_plan if employee else None) or {}
+    if captured_plan is None:
+        from services.employees.store import get_by_workflow
+        employee = await get_by_workflow(database, str(workflow_id))
+        plan = (employee.team_plan if employee else None) or {}
+    else:
+        # Re-arming an admitted generation must never adopt later saved edits.
+        plan = captured_plan
     if plan.get("version") != 2:
         return nodes
+    from services.employee_team_connection import validate_employee_team_connection
+    validate_employee_team_connection({"nodes": nodes, "edges": edges or []}, plan)
     return [{**node, "data": {**(node.get("data") or {}), "employee_recipe_version": 2, "employee_team_plan": deepcopy(plan)}}
             if node.get("id") == plan.get("lead_node_id") else node for node in nodes]
 
@@ -278,6 +281,8 @@ def team_plan_in(graph, node_id):
     referenced = {plan.get("lead_node_id"), plan.get("talk_node_id"), *plan.get("delivery_node_ids", []), *plan.get("talk_delivery_node_ids", []), *(member.get("node_id") for member in plan.get("members", []))}
     if not referenced <= ids or plan.get("lead_node_id") != lead.get("id"):
         raise ValueError("Employee runtime plan references nodes outside its admitted graph")
+    from services.employee_team_connection import validate_employee_team_connection
+    validate_employee_team_connection(graph, plan)
     return plan
 
 

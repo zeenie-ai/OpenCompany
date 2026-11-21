@@ -31,8 +31,9 @@ Tool/member reuse is checked again inside the graph mutation transaction.
 Concurrent requests cannot bind duplicate same-type callable identities;
 intentional custom `aiAgent` teammates remain repeatable. Added specialists
 inherit the lead's model and receive purpose, private Context, validated scoped
-tools and selected skills. Use the intrinsic Task Manager for durable mission,
-context, dependencies, acceptance criteria, and lead review.
+tools and selected skills. On a managed hire, the lead's assigned Task Manager
+exposes a bound `spawn_<teammate>` for each connected specialist. The lead
+supplies instructions and optional task dependencies, then reviews the result.
 
 A new Coding Agent also receives its connected Pi tool nodes through the same
 [`coding_agent_additions`](../../../server/services/coding_agent_recipe.py)
@@ -206,9 +207,12 @@ flowchart TD
   is disabled. The employee grant request includes default and explicit tool
   types; mutation authorization and child grants cover the resulting nodes.
   The optional [Write Todos](./writeTodos.md) tool is not a Pi default.
-- **create_workflow**: independently switchable with `_CREATE_WORKFLOW_ENABLED`;
-  enabled creation calls the shared owner-verified Hire pipeline and saves a
-  configured team, never a Start-only placeholder.
+- **`create_workflow`** calls the shared owner-verified Hire pipeline when
+  `_CREATE_WORKFLOW_ENABLED` is enabled. Hire connects the `ai_employee`
+  lead's top output to the Talk contact's Team input. It assigns each role a
+  separate Task Manager and Master Skill. Talk uses its manager to submit a
+  job and check its status. Agent Builder excludes `taskManager` from
+  `add_tool`, so callers obtain these connections through Hire.
 - **Authority**: employee changes require reusable owner grants scoped to the
   target member and complete configuration. Grant scope and revocation are
   rechecked inside the graph mutation transaction. Public app messages cannot

@@ -389,7 +389,7 @@ async def test_an_apply_cancelled_while_it_waited_claims_nothing(harness, monkey
 async def test_an_apply_that_read_the_control_before_reset_creates_no_request(harness, monkeypatch):
     # Reset runs all the way through its cancel while the call checks the graph,
     # before the call saves its request: the next Start would apply that one.
-    async def reset_meanwhile(_database, _workflow_id, nodes):
+    async def reset_meanwhile(_database, _workflow_id, nodes, _edges=None):
         async with harness.database.reserved_session() as session:
             (await session.get(WorkflowControlExecution, "control")).status = "resetting"
             await session.commit()

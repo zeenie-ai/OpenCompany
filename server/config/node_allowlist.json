@@ -6,6 +6,7 @@
     "chatReply",
     "chatUi",
     "taskTrigger",
+    "taskManager",
     "console",
 
     "aiAgent",

@@ -7,12 +7,13 @@ decide which registered specialist may be instantiated.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 from services.graph_build import (
-    CONTEXT_TYPE, Edge, Labels, NodeIds, context_data, context_edge,
+    CONTEXT_TYPE, Edge, GraphAdditions, Labels, NewNode, NodeIds, add_to_graph, context_data, context_edge,
     graph_node, label_key, main_edge, ref, skill_edge, tool_edge,
 )
 
@@ -38,11 +39,22 @@ RESPONSIBILITIES = (
 )
 DEFAULT_RESPONSIBILITY = RESPONSIBILITIES[-1]
 
+# A website can be either a research source or the requested deliverable.
+# Match construction of an artifact within one clause of the reviewed brief.
+_WEB_ARTIFACT = r"(?:web[ -]?sites?|sites?|web[ -]?apps?|web applications?|dashboards?|landing pages?)"
+_BUILD_WEB_ARTIFACT = re.compile(
+    rf"\b(?:build|create|implement|redesign|develop|make)\b"
+    rf"(?:[ \t]+(?!(?:on|from|for|about|using|with|of|and|to)\b)[\w-]+){{0,8}}[ \t]+{_WEB_ARTIFACT}\b"
+    rf"|\b{_WEB_ARTIFACT}[ \t]+(?:builder|developer)\b",
+    re.IGNORECASE,
+)
+
 
 def select_responsibilities(job: str, apps: Iterable[str] = ()) -> list[Responsibility]:
     """One to three relevant responsibilities, in stable recipe order."""
     text = " ".join((job, *apps)).lower()
-    selected = [role for role in RESPONSIBILITIES if any(word in text for word in role.words)]
+    selected = [role for role in RESPONSIBILITIES if any(word in text for word in role.words)
+                or (role.key == "coding" and _BUILD_WEB_ARTIFACT.search(job))]
     return (selected or [DEFAULT_RESPONSIBILITY])[:3]
 
 
@@ -62,7 +74,7 @@ def preview_from_reply(job: str, raw_reply: str) -> list[dict[str, str]]:
             text.append(str(props.get("role") or ""))
         elif element["type"] == "Plan":
             text.extend(str(step.get("title") or "") for step in props.get("steps", []) if isinstance(step, dict))
-    return team_preview(" ".join(text), app_names(raw_reply))
+    return team_preview("\n".join(text), app_names(raw_reply))
 
 
 def _repoint(value: Any, old: str, new: str) -> Any:
@@ -71,6 +83,56 @@ def _repoint(value: Any, old: str, new: str) -> Any:
     if isinstance(value, list):
         return [_repoint(item, old, new) for item in value]
     return new if value == old else value
+
+
+def _connect_lead_and_talk_tools(built: Any, workflow_id: str, lead: str, talk: str) -> None:
+    from services.employee_team_connection import employee_skill_parameters, task_manager_additions
+    from services.employees.builder import BuildError
+
+    by_id = {node["id"]: node for node in built.nodes}
+    talk_position = by_id[talk]["position"]
+    talk_x, talk_y = talk_position["x"], talk_position["y"]
+    lead_manager = task_manager_additions(lead, (360, -240))
+    talk_manager = task_manager_additions(talk, (talk_x - 220, talk_y + 180),
+                                          ref="talk_task_manager", label="Talk Task Manager")
+    nodes = [*lead_manager.nodes, *talk_manager.nodes]
+    edges = [*lead_manager.edges, *talk_manager.edges]
+    # A base app/schedule hire shares its library holder between both roles.
+    # Separate the lead first so Talk keeps the original library node and ID.
+    for role, owner, label, position in (
+        ("lead", lead, "Lead instructions", (120, -240)),
+        ("talk", talk, "Talk instructions", (talk_x + 220, talk_y + 180)),
+    ):
+        key = f"{role}_skills"
+        links = [edge for edge in built.edges if edge["target"] == owner and edge["targetHandle"] == "input-skill"
+                 and by_id[edge["source"]]["type"] == "masterSkill"]
+        if len(links) > 1:
+            raise BuildError("invalid_skill_ownership", f"Choose one Skills node for the {role} before creating this team")
+        parameters = {}
+        private_holder = None
+        if links:
+            holder = links[0]["source"]
+            shared = any(edge["source"] == holder and edge["target"] != owner for edge in built.edges)
+            if not shared or role == "talk":
+                parameters = deepcopy(built.parameters.get(holder) or {})
+            if shared:
+                built.edges.remove(links[0])
+            else:
+                private_holder = holder
+        config = parameters.get("skills_config") or {}
+        if not (config.keys() - {"skill"}):
+            defaults = employee_skill_parameters(role)
+            parameters = {**defaults, **parameters, "skills_config": {**defaults["skills_config"], **config}}
+        if private_holder:
+            built.parameters[private_holder] = parameters
+            built.node_roles[key] = private_holder
+        else:
+            nodes.append(NewNode(key, "masterSkill", label, parameters, position))
+            edges.append(skill_edge(key, owner))
+    placed = add_to_graph(workflow_id, {"nodes": built.nodes, "edges": built.edges}, GraphAdditions(nodes=nodes, edges=edges))
+    built.nodes, built.edges = placed.graph["nodes"], placed.graph["edges"]
+    built.parameters.update(placed.parameters)
+    built.node_roles.update(placed.node_ids)
 
 
 def build_team(built: Any, inputs: Any) -> Any:
@@ -82,12 +144,16 @@ def build_team(built: Any, inputs: Any) -> Any:
     """
     from services.employees.builder import BuildError
     from services.employees.policy import SKILL_TOOL_ENTRY, SKILL_TOOL_NAME
-    from services.employees.prompt import neutralize_templates
+    from services.employees.prompt import PromptInputs, build_system_message, neutralize_templates
     from services.node_registry import get_node_class
 
     built = deepcopy(built)
     if not inputs.allowed(TEAM_LEAD_TYPE):
         raise BuildError("not_allowed", "Team-based employees are not available")
+    if get_node_class("taskManager") is None or not inputs.allowed("taskManager"):
+        raise BuildError("not_allowed", "The Task Manager required for a team-based employee is not available")
+    if get_node_class("masterSkill") is None or not inputs.allowed("masterSkill"):
+        raise BuildError("not_allowed", "Team instructions are not available")
     roles = built.node_roles
     original = roles["agent"]
     manual = built.trigger.get("kind") == "manual"
@@ -99,7 +165,7 @@ def build_team(built: Any, inputs: Any) -> Any:
     # separately triggered employee already has a distinct Talk line.
     if manual:
         lead = ids.next(TEAM_LEAD_TYPE)
-        lead_label = labels.take(f"{inputs.request.name}'s work")
+        lead_label = labels.take(f"{inputs.request.name} team lead")
         built.nodes.append(graph_node(lead, TEAM_LEAD_TYPE, lead_label, (360, -420)))
         built.parameters[lead] = {**original_parameters, **model}
         roles["agent"] = lead
@@ -118,21 +184,31 @@ def build_team(built: Any, inputs: Any) -> Any:
         built.edges.append(context_edge(context_id, lead).to_dict())
         roles["context"] = context_id
     talk = roles["talk_agent"]
+    from services.employee_team_connection import TALK_CONNECTION_VERSION, employee_team_edge
+    built.edges.append(employee_team_edge(lead, talk).to_dict())
     built.parameters[talk]["system_message"] += (
         "\nYou are the owner's conversational contact. For substantive work, use submit_job(instructions) to give one mission to your team, "
         "acknowledge promptly, and explain that the reviewed result will arrive here later. "
         "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval. "
+        "Use get_job_status before claiming work has started, reporting progress, or submitting the same request again. "
+        "A queued job has not started, and an acknowledgement is not completed work. "
         "Specialist tools belong to their specialist; ask the team to perform that work rather than attaching their tools to yourself."
     )
+    lead_instructions = original_parameters["system_message"]
+    if manual:
+        lead_instructions = build_system_message(PromptInputs(
+            request=inputs.request, owner=inputs.owner, delivery="review",
+            unsupported_apps=inputs.unsupported_apps, has_memory=inputs.memory, has_canvas=True,
+        ))
     built.parameters[lead]["system_message"] = (
-        original_parameters["system_message"] + "\nYou coordinate and review this employee's specialist team. "
-        "Use spawn_<teammate>(instructions, after?) to create independent agents and reviewed tasks. Explain success "
+        lead_instructions + "\nYou coordinate and review this employee's specialist team. "
+        "Use your connected Task Manager's spawn_<teammate>(instructions, after?) to create independent agents and reviewed tasks. Explain success "
         "in the instructions and declare dependencies explicitly. Review submitted results with get_task or inspect_task; "
         "accept_task only when the instructions are satisfied, otherwise request_changes with feedback or reassign. "
         "Use assign_task to reuse an agent and retry_task to retry existing work. Finish the team only after all required work is accepted. Then provide one reviewed result. "
         "Do not present an assignment acknowledgement as completed work. Do not independently publish through apps."
     )
-    selected = select_responsibilities(" ".join((inputs.request.job, inputs.request.role, *(step.title for step in inputs.request.steps))), (app.name for app in inputs.apps))
+    selected = select_responsibilities("\n".join((inputs.request.job, inputs.request.role, *(step.title for step in inputs.request.steps))), (app.name for app in inputs.apps))
     members: list[dict[str, Any]] = []
     for index, responsibility in enumerate(selected, 1):
         node_type = responsibility.node_type
@@ -140,6 +216,8 @@ def build_team(built: Any, inputs: Any) -> Any:
                                          or any(word in inputs.request.job.lower() for word in ("browser", "website"))):
             node_type = "browser_agent"
         if get_node_class(node_type) is None or not inputs.allowed(node_type):
+            if node_type == "coding_agent":
+                raise BuildError("not_allowed", "The coding specialist required to build this software is not available")
             node_type = "aiAgent"
         if not inputs.allowed(node_type):
             raise BuildError("not_allowed", f"A teammate for {responsibility.description.lower()} is not available")
@@ -173,8 +251,6 @@ def build_team(built: Any, inputs: Any) -> Any:
 
                 if check_skill(skill.name).allowed and skill.instructions.strip():
                     config[skill.name] = {"enabled": True, "instructions": skill.instructions, "description": skill.description, "isCustomized": False}
-        if not inputs.allowed("masterSkill"):
-            raise BuildError("not_allowed", "Team instructions are not available")
         built.nodes.append(graph_node(skill_id, "masterSkill", labels.take(f"{responsibility.label} instructions"), (360 + 360 * index, -240)))
         built.parameters[skill_id] = {"skill_folder": "assistant", "skills_config": config}
         built.edges.append(skill_edge(skill_id, member).to_dict())
@@ -189,9 +265,6 @@ def build_team(built: Any, inputs: Any) -> Any:
     app_types.update({app.talk_send.type: app.name for app in inputs.apps if app.talk_send is not None})
     movable = {"duckduckgoSearch", *app_types}
     original_tools = [edge["source"] for edge in built.edges if edge.get("target") in {lead, talk} and edge.get("targetHandle") == "input-tools" and nodes[edge["source"]]["type"] in movable]
-    # The lead reviews work rather than consuming every library instruction.
-    # Talk's existing library remains intact for conversational requests.
-    built.edges = [edge for edge in built.edges if not (edge.get("target") == lead and edge.get("targetHandle") == "input-skill")]
     built.edges = [edge for edge in built.edges if not (edge.get("source") in original_tools and edge.get("target") in {lead, talk} and edge.get("targetHandle") == "input-tools")]
     for tool in dict.fromkeys(original_tools):
         node_type = nodes[tool]["type"]
@@ -203,7 +276,6 @@ def build_team(built: Any, inputs: Any) -> Any:
     # Complete Browser specialists through the same recipe as canvas/Builder,
     # reusing the private Browser tool already assigned from the saved app.
     from services.browser_agent_recipe import browser_agent_additions
-    from services.graph_build import add_to_graph
     for member in members:
         if member["node_type"] != "browser_agent":
             continue
@@ -319,9 +391,15 @@ def build_team(built: Any, inputs: Any) -> Any:
     # Replaced canonical lead IDs must also be reflected in edge identities.
     for edge in built.edges:
         edge["id"] = f'e-{edge["source"]}-{edge["sourceHandle"]}-{edge["target"]}-{edge["targetHandle"]}'
+    _connect_lead_and_talk_tools(built, inputs.workflow_id, lead, talk)
     for node in built.nodes:
         if node["id"] == lead:
             node.setdefault("data", {})["employee_recipe_version"] = RECIPE_VERSION
-    built.team_plan = {"version": RECIPE_VERSION, "recipe": "ai_employee", "lead_node_id": lead, "talk_node_id": talk, "members": members, "model": model, "requires": ["temporal", "agent_workflow"], "delivery_node_ids": delivery_ids, "talk_delivery_node_ids": [final_reply]}
+    built.team_plan = {"version": RECIPE_VERSION, "recipe": "ai_employee", "lead_node_id": lead, "talk_node_id": talk,
+                       "task_manager_node_id": roles["task_manager"], "talk_task_manager_node_id": roles["talk_task_manager"],
+                       "lead_skill_node_id": roles["lead_skills"], "talk_skill_node_id": roles["talk_skills"],
+                       "talk_connection_version": TALK_CONNECTION_VERSION, "members": members,
+                       "model": model, "requires": ["temporal", "agent_workflow"], "delivery_node_ids": delivery_ids,
+                       "talk_delivery_node_ids": [final_reply]}
     next(node for node in built.nodes if node["id"] == lead)["data"]["employee_team_plan"] = deepcopy(built.team_plan)
     return built

@@ -208,6 +208,11 @@ async def collect_agent_connections(
     nodes = context.get("nodes")
     edges = context.get("edges")
     workflow_id = context.get("workflow_id")
+    plan = context.get("employee_team_plan") or {}
+    if plan:
+        from services.employee_team_connection import validate_employee_role_connections
+
+        validate_employee_role_connections({"nodes": nodes or [], "edges": edges or []}, plan, node_id)
 
     context_data: Optional[Dict[str, Any]] = None
     skill_data: List[Dict[str, Any]] = []
@@ -306,10 +311,9 @@ async def collect_agent_connections(
                 log_prefix,
             )
 
-    # A team lead must always be able to manage the durable work it delegates.
-    # This is an intrinsic, non-removable team-lead capability.  It is present
-    # before the first teammate is connected so the lead and its human panel
-    # have one stable control surface for the whole execution lifecycle.
+    # Unmanaged leads and historical generations without a saved manager use
+    # the built-in capability. A new managed lead has already resolved its own
+    # connected Task Manager above.
     current_node = next(
         (node for node in (context.get("nodes") or []) if node.get("id") == node_id),
         None,
@@ -317,7 +321,6 @@ async def collect_agent_connections(
     # An employee's Talk contact submits jobs to its team. Prepare resolved the
     # plan from the generation's admitted graph: a Talk run never holds the lead
     # that carries it.
-    plan = context.get("employee_team_plan") or {}
     if node_id == plan.get("talk_node_id") and not any(entry.get("node_type") == "taskManager" for entry in tool_data):
         tool_data.append({"node_id": f"builtin_task_manager_{node_id}", "node_type": "taskManager", "parameters": {}, "label": "Task Manager", "builtin": True})
     if (current_node or {}).get("type") in TEAM_LEAD_TYPES and not any(

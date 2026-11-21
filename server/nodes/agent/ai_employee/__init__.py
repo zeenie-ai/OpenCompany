@@ -13,7 +13,7 @@ class AIEmployeeNode(SpecializedAgentBase):
     # exclusive, so the hint would replace the agent's parameter form
     # (prompt / provider / model) with the task board. The board lives on
     # the taskManager tool node connected to this lead's input-tools.
-    # ui_hints inherits STD_AGENT_HINTS from SpecializedAgentBase.
+    ui_hints = {**SpecializedAgentBase.ui_hints, "createsAgentBundle": True}
     tool_description = (
         "ONE-SHOT delegation to AI Employee. Call ONCE per task, returns task_id. Coordinates multiple agents - do NOT re-call."
     )

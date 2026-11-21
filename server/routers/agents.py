@@ -10,7 +10,7 @@ from sqlmodel import select
 from core.container import container
 from models.database import Workflow
 from services.agent_runtime_policy import AgentRuntimeParams, new_agent_parameters
-from services.graph_build import GraphAdditions, NewNode
+from services.graph_build import GraphAdditions, NewNode, skill_edge
 from services.workflow_storage.mutate import apply_graph_additions
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -62,16 +62,26 @@ async def create_agent(body: CreateAgent, request: Request):
     if body.node_type == "coding_agent":
         from services.coding_agent_recipe import coding_agent_additions
         additions = coding_agent_additions(agent_parameters=parameters, position=body.position)
-        for node in additions.nodes:
-            node_cls = get_node_class(node.type)
-            if (node_cls is None or node.type in policy["disabled_nodes"]
-                    or set(node_cls.group).intersection(policy["disabled_groups"])):
-                raise HTTPException(status_code=403, detail=f"Coding Agent requires the enabled {node.label} node")
     else:
         nodes = [NewNode("agent", body.node_type, cls.display_name, parameters, body.position)]
         if getattr(cls, "requires_context", False):
             nodes.append(NewNode("context", "context", "Context", position=(body.position[0], body.position[1] + 180), context_of="agent"))
-        additions = GraphAdditions(nodes=nodes)
+        if body.node_type == "ai_employee":
+            from services.employee_team_connection import employee_skill_parameters, task_manager_additions
+            x, y = body.position
+            manager = task_manager_additions("agent", (x - 220, y + 180))
+            skills = NewNode("lead_skills", "masterSkill", "Lead instructions", employee_skill_parameters("lead"),
+                             position=(x + 220, y + 180))
+            additions = GraphAdditions(nodes=[*nodes, *manager.nodes, skills],
+                                       edges=[*manager.edges, skill_edge(skills.ref, "agent")])
+        else:
+            additions = GraphAdditions(nodes=nodes)
+    if body.node_type in {"ai_employee", "coding_agent"}:
+        for node in additions.nodes:
+            node_cls = get_node_class(node.type)
+            if (node_cls is None or node.type in policy["disabled_nodes"]
+                    or set(node_cls.group).intersection(policy["disabled_groups"])):
+                raise HTTPException(status_code=403, detail=f"{cls.display_name} requires the enabled {node.label} node")
     result = await apply_graph_additions(database, body.workflow_id, additions,
         mutation_id=f"create-agent:{principal}:{body.mutation_id}", authorize=authorize)
     if result is None:

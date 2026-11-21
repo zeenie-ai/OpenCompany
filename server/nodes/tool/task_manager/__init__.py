@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from services.plugin import NodeContext, NodeUserError, Operation, TaskQueue, ToolNode
 
 TaskOperation = Literal[
-    "submit_job",
+    "submit_job", "get_job_status",
     "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
     "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
     "inspect_task_trace",
@@ -19,6 +19,7 @@ TaskOperation = Literal[
 class TaskManagerParams(BaseModel):
     operation: TaskOperation = "list_tasks"
     task_id: Optional[str] = None
+    job_id: Optional[str] = Field(default=None, max_length=255)
     title: Optional[str] = Field(default=None, max_length=500)
     mission: Optional[str] = Field(default=None, max_length=10000)
     context: Optional[Dict[str, Any]] = None
@@ -223,30 +224,40 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
     service = get_agent_team_service()
     operation = str(args.get("operation") or "list_tasks")
     allowed_operations = {
-        "submit_job",
+        "submit_job", "get_job_status",
         "assign_task", "list_tasks", "get_task", "modify_task", "cancel_task",
         "retry_task", "reassign_task", "accept_task", "finish_team", "mark_done",
         "inspect_task_trace",
     }
     if operation not in allowed_operations:
         raise NodeUserError(f"Unknown Task Manager operation: {operation}")
-    if operation == "submit_job":
+    if operation in {"submit_job", "get_job_status"}:
         from services.plugin.deps import get_database
         from services.employees.team_runtime import employee_runtime_plan
-        from services.employees.jobs import create_job, dispatch_job
         database = get_database()
         talk_id = str(config.get("parent_node_id") or "")
         plan = await employee_runtime_plan(database, {**config, "node_id": talk_id})
         if not plan or plan.get("talk_node_id") != talk_id:
-            raise NodeUserError("submit_job is available only to this employee's conversational contact")
+            raise NodeUserError(f"{operation} is available only to this employee's conversational contact")
+        if operation == "get_job_status":
+            from services.employees.job_status import get_job_status
+            return await get_job_status(database, workflow_id=str(config.get("workflow_id") or ""),
+                lead_node_id=plan["lead_node_id"], job_id=args.get("job_id"))
         mission = str(args.get("mission") or "").strip()
         if not mission:
             raise NodeUserError("submit_job requires the substantive mission and expected result")
+        from services.employees.jobs import create_job, dispatch_job
         job = await create_job(database, NodeContext.from_legacy(talk_id, "chatAgent", config), mission=mission,
             lead_node_id=plan["lead_node_id"], delivery_node_ids=plan["talk_delivery_node_ids"], dispatch=True)
         await dispatch_job(database, job.id)
-        return {"success": True, "operation": operation, "job_id": job.id, "state": job.state,
-            "acknowledgement": "I've given this to the team. I'll share their checked result here."}
+        from services.employees.job_status import get_job_status
+        current = (await get_job_status(database, workflow_id=str(config.get("workflow_id") or ""),
+            lead_node_id=plan["lead_node_id"], job_id=job.id)).get("job")
+        if current is None:
+            return {"success": True, "operation": operation, "job_id": job.id, "state": "unknown",
+                "acknowledgement": "The request was saved, but its current status could not be confirmed. Check get_job_status before reporting progress or resubmitting."}
+        return {"success": True, "operation": operation, **current,
+            "acknowledgement": current["message"]}
     scope = _scope(config)
 
     if operation == "list_tasks":

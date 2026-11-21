@@ -38,6 +38,9 @@ from typing import Any, Dict, List, Optional
 from core.logging import get_logger
 from constants import AI_AGENT_TYPES
 from services.node_registry import get_node_class
+from services.employee_team_connection import (
+    EmployeeTeamValidationError, employee_team_connection_issues, is_employee_team_edge, validate_employee_team_connection,
+)
 from services.plugin.edge_walker import (
     TEAM_LEAD_TYPES,
     TEAMMATE_HANDLE,
@@ -78,6 +81,14 @@ async def validate_workflow(
     nodes = nodes or []
     edges = edges or []
     parameters_by_id = parameters_by_id or {}
+    errors.extend(employee_team_connection_issues(nodes, edges))
+    for node in nodes:
+        plan = (node.get("data") or {}).get("employee_team_plan") or {}
+        if plan.get("version") == 2:
+            try:
+                validate_employee_team_connection({"nodes": nodes, "edges": edges}, plan)
+            except EmployeeTeamValidationError as exc:
+                errors.extend(exc.issues)
 
     node_by_id: Dict[str, Dict[str, Any]] = {n["id"]: n for n in nodes if n.get("id")}
 
@@ -391,7 +402,8 @@ async def validate_workflow(
     #    pattern in execution/executor.py._compute_execution_layers but
     #    promotes the warning to an error (validator's job is to block).
     in_degree: Dict[str, int] = {n["id"]: 0 for n in nodes if n.get("id")}
-    for e in edges:
+    flow_edges = [edge for edge in edges if not is_employee_team_edge(edge)]
+    for e in flow_edges:
         tgt = e.get("target")
         if tgt in in_degree:
             in_degree[tgt] += 1
@@ -400,7 +412,7 @@ async def validate_workflow(
     while queue:
         nid = queue.pop()
         seen += 1
-        for e in edges:
+        for e in flow_edges:
             if e.get("source") == nid and e.get("target") in in_degree:
                 in_degree[e["target"]] -= 1
                 if in_degree[e["target"]] == 0:

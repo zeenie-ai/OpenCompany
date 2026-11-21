@@ -31,6 +31,7 @@ from .execution_control import ExecutionControl
 # pass-through keeps the sandbox from re-importing the chain per workflow.
 with workflow.unsafe.imports_passed_through():
     from services.execution.conditions import evaluate_condition
+    from services.employee_team_connection import is_employee_team_edge
 
 # Conditional edges were not evaluated on this path at all before this patch --
 # a condition set in the editor rendered a label and did nothing once execution
@@ -1181,6 +1182,9 @@ class MachinaWorkflow:
             Tuple of (executable_nodes, executable_edges)
         """
         node_map = {n["id"]: n for n in nodes}
+        # A Talk team link is routing metadata, not a dependency or a reason
+        # to remove the lead from scheduled/app-triggered execution.
+        edges = [edge for edge in edges if not is_employee_team_edge(edge)]
         config_ids = set()
 
         for edge in edges:

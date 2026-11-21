@@ -239,9 +239,16 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
         parameters_by_id,
     )
     safe_graph = sanitize_workflow_graph(normalization.graph_data())
-    # A hired team's plan is saved beside the graph, not in it. Start and the
-    # restart re-arm deploy through here, so their listeners carry it too.
-    nodes = await admit_team_plan(container.database(), str(workflow_id or ""), list(safe_graph["nodes"]))
+    # Preserve the generation's captured plan when re-arming. A newer saved
+    # employee plan (including visible-link upgrades) belongs to Start/Apply.
+    captured_plan = next(((node.get("data") or {}).get("employee_team_plan")
+                          for node in nodes if ((node.get("data") or {}).get("employee_team_plan") or {}).get("version") == 2), None)
+    from services.employee_team_connection import EmployeeTeamValidationError
+    try:
+        nodes = await admit_team_plan(container.database(), str(workflow_id or ""), list(safe_graph["nodes"]),
+                                      list(safe_graph["edges"]), captured_plan=captured_plan)
+    except EmployeeTeamValidationError as exc:
+        return {"success": False, "error": "validation_failed", "report": {"errors": exc.issues, "warnings": []}}
     edges = list(safe_graph["edges"])
     normalized_parameters = normalization.node_parameters
     await import_legacy_context_receipts(
@@ -2178,7 +2185,12 @@ async def _run_start(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, An
     )
     safe_graph = sanitize_workflow_graph(normalization.graph_data())
     # A hired team's plan is saved beside the graph, not in it.
-    admitted_nodes = await admit_team_plan(service.database, workflow_id, list(safe_graph["nodes"]))
+    from services.employee_team_connection import EmployeeTeamValidationError
+    try:
+        admitted_nodes = await admit_team_plan(service.database, workflow_id, list(safe_graph["nodes"]), list(safe_graph["edges"]))
+    except EmployeeTeamValidationError as exc:
+        return {"success": False, "error": "validation_failed", "report": {"errors": exc.issues, "warnings": []},
+                "graph": safe_graph, "aliases": normalization.aliases, "migration_warnings": normalization.warnings}
     admitted_edges = list(safe_graph["edges"])
     from services.workflow_validator import validate_workflow
 

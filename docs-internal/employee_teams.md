@@ -3,15 +3,27 @@
 Normal hiring remains describe the job, review the routine/apps/hours/approval
 rule, then Hire. Optional “Their team” lists one to three responsibilities;
 models, nodes and topology stay in Dev mode. Talk is the conversational
-contact. The lead delegates substantive tasks through the intrinsic durable
+contact. The lead delegates substantive tasks through its connected
 Task Manager and reviews submitted results before delivery.
 
-Recipe v2 follows the shipped `AI_Employee.json` template's canonical teammate,
-Context and skill connections. That template shows an explicit Task Manager
-tool; managed employees use the equivalent intrinsic binding without a duplicate
-tool node. Talk uses its `submit_job` operation, while the lead uses `assign_task`
-and the existing review operations. Each managed assignment supplies mission,
-context, acceptance criteria and resolved dependency IDs.
+Hire saves a Task Manager for the AI Employee lead and connects its
+`output-tool` to the lead's `input-tools`. The team plan records the manager's
+node ID. Opening that node in the editor shows the lead's task board.
+Talk gets its own Task Manager for submitting jobs and checking their status.
+Each role also gets a dedicated Master Skill node. Talk keeps its selected
+library skills. The lead's default instructions cover assignment and review.
+Hire connects the AI Employee's
+top output to the Talk agent's Team input (`input-employee-team`). This edge
+identifies the lead that receives `submit_job`. The submission starts a durable
+job and returns a receipt. Talk can call `get_job_status` to check whether the
+lead has assigned work or the job failed. The lead uses `spawn_<teammate>` to
+assign work to a new specialist instance, then reviews the submitted result.
+
+Start and Apply upgrade older v2 hires using their recorded lead and contact.
+The upgrade adopts each role's existing managers and skill holders and adds
+missing ones. Each admitted generation retains its own graph until Apply.
+The Team input is excluded from ordinary graph execution, so a chat reply or
+a scheduled lead run cannot trigger a second job through this edge.
 
 Each concrete tool node has exactly one owning agent. Business capabilities
 belong to the specialist responsible for the work; the lead and Talk request

@@ -18,13 +18,14 @@ STD_AGENT_HINTS = {
 }
 
 
-def std_agent_handles() -> tuple:
+def std_agent_handles(*, employee_team: bool = False) -> tuple:
     """Skill + Tool + Context + Task + Input + Output — shared by 18
     of the 20 agent variants. Returned as a tuple so the BaseNode
     `handles` class attribute is immutable."""
     return (
-        {"name": "input-skill", "kind": "input", "position": "bottom", "offset": "25%", "label": "Skill", "role": "skill"},
-        {"name": "input-tools", "kind": "input", "position": "bottom", "offset": "75%", "label": "Tool", "role": "tools"},
+        {"name": "input-skill", "kind": "input", "position": "bottom", "offset": "20%" if employee_team else "25%", "label": "Skill", "role": "skill"},
+        {"name": "input-tools", "kind": "input", "position": "bottom", "offset": "50%" if employee_team else "75%", "label": "Tool", "role": "tools"},
+        *(({"name": "input-employee-team", "kind": "input", "position": "bottom", "offset": "80%", "label": "Team", "role": "employee-team"},) if employee_team else ()),
         {"name": "input-main", "kind": "input", "position": "left", "offset": "25%", "label": "Input", "role": "main"},
         {"name": "input-context", "kind": "input", "position": "left", "offset": "50%", "label": "Context", "role": "context"},
         {"name": "input-task", "kind": "input", "position": "left", "offset": "75%", "label": "Task", "role": "task"},

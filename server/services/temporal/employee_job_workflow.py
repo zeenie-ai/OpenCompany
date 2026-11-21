@@ -32,9 +32,12 @@ async def deliver_employee_job(context: dict[str, Any]) -> dict:
 async def fail_employee_job(context: dict[str, Any]) -> dict:
     from core.container import container
     from models.employees import EmployeeJob
-    from services.employees.jobs import fail_no_assignments, no_assignments_failed, protected_job_outcome, job_has_approval, _now
+    from services.employees.jobs import fail_no_assignments, fail_before_assignment, preassignment_failed, protected_job_outcome, job_has_approval, _now
+    from services.employees.failures import FAILURE_MESSAGES
     if context.get("failure_code") == "lead_no_assignments":
         return await fail_no_assignments(container.database(), context)
+    if context.get("failure_code") in FAILURE_MESSAGES:
+        return await fail_before_assignment(container.database(), context)
     changed = False
     async with container.database().reserved_session() as session:
         job = await session.get(EmployeeJob, str(context.get("employee_job_id")))
@@ -57,7 +60,7 @@ async def fail_employee_job(context: dict[str, Any]) -> dict:
                 job = candidates[0]  # Unambiguous legacy admission without run evidence.
             if candidates and job is None:
                 return {"saved": False, "reason": "ambiguous_admission"}
-        if job and not no_assignments_failed(job) and not protected_job_outcome(job) and not await job_has_approval(session, job):
+        if job and not preassignment_failed(job) and not protected_job_outcome(job) and not await job_has_approval(session, job):
             job.state = "cancelled" if context.get("cancelled") else "failed"
             job.updated_at = _now()
             await session.commit()

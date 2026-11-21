@@ -60,8 +60,11 @@ schema, typed validator and trusted execution traits. `agent_bindings.node_tools
 expands every binding from a connected node for native/Pi, CLI/MCP and RLM.
 Lifecycle bindings use the same manifest as the instance service. Required
 fields such as `spawn_<teammate>(instructions)` and unknown-field rejection
-remain identical across adapters. Instance tools are supplied even when the
-template has no explicit Task Manager connection.
+remain identical across adapters. On a managed hire, Talk's connected Task
+Manager exposes `submit_job` and `get_job_status`. The lead's connected
+manager exposes assignment and review tools for its specialist team. A CLI
+agent instance whose template has no connected manager still receives the
+lifecycle tools allowed for its runtime role.
 
 MCP `tools/list` exposes the authenticated batch's schema. Its `call_tool`
 boundary validates lifecycle arguments before FastMCP signature binding, so

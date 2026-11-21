@@ -15,18 +15,19 @@ from typing import Any
 from sqlmodel import select
 from models.employees import EmployeeJob
 from models.database import AgentTeam, TeamTask
+from services.employees.failures import FAILURE_MESSAGES, NO_ASSIGNMENTS_CODE, NO_ASSIGNMENTS_MESSAGE
 
 
 def _now():
     return datetime.now(timezone.utc)
 
 
-NO_ASSIGNMENTS_CODE = "lead_no_assignments"
-NO_ASSIGNMENTS_MESSAGE = "The lead completed without assigning work to a teammate."
-
-
 def no_assignments_failed(job: EmployeeJob) -> bool:
     return job.state == "failed" and (job.delivery.get("failure") or {}).get("code") == NO_ASSIGNMENTS_CODE
+
+
+def preassignment_failed(job: EmployeeJob) -> bool:
+    return job.state == "failed" and (job.delivery.get("failure") or {}).get("code") in {NO_ASSIGNMENTS_CODE, *FAILURE_MESSAGES}
 
 
 def protected_job_outcome(job: EmployeeJob) -> bool:
@@ -62,8 +63,8 @@ async def check_lead_assignments(database: Any, payload: dict) -> dict:
         if not job:
             return {"team_id": team_id, "managed": False}
         result = {"team_id": team_id, "managed": True, "job_id": job.id, "status": "active", "state": job.state}
-        if no_assignments_failed(job) or protected_job_outcome(job) or await job_has_approval(session, job):
-            return {**result, "protected": True, "status": "failed" if no_assignments_failed(job) else "active"}
+        if preassignment_failed(job) or protected_job_outcome(job) or await job_has_approval(session, job):
+            return {**result, "protected": True, "status": "failed" if preassignment_failed(job) else "active"}
         assigned = (await session.execute(select(TeamTask.id).where(TeamTask.team_id == team_id).limit(1))).first()
         if not assigned:
             team = await session.get(AgentTeam, team_id)
@@ -76,6 +77,10 @@ async def check_lead_assignments(database: Any, payload: dict) -> dict:
 
 
 async def fail_no_assignments(database: Any, payload: dict) -> dict:
+    return await fail_before_assignment(database, {**payload, "failure_code": NO_ASSIGNMENTS_CODE})
+
+
+async def fail_before_assignment(database: Any, payload: dict) -> dict:
     """Serialize failure with task insertion and preserve every prior send intent."""
     changed = False
     async with database.reserved_session() as session:
@@ -88,14 +93,19 @@ async def fail_no_assignments(database: Any, payload: dict) -> dict:
             ("workflow_id", job.workflow_id), ("node_id", job.lead_node_id), ("team_id", job.team_id),
         )):
             raise ValueError("The employee job does not belong to this lead and team")
-        if no_assignments_failed(job) or protected_job_outcome(job) or await job_has_approval(session, job):
+        if preassignment_failed(job) or protected_job_outcome(job) or await job_has_approval(session, job):
             return {"saved": False, "job_id": job.id, "state": job.state, "reason": "protected_outcome"}
         assigned = (await session.execute(select(TeamTask.id).where(TeamTask.team_id == job.team_id).limit(1))).first() if job.team_id else None
         if assigned:
             return {"saved": False, "job_id": job.id, "state": job.state, "reason": "assignments_exist"}
         job.state = "failed"
-        job.delivery = {**job.delivery, "failure": {"code": NO_ASSIGNMENTS_CODE, "message": NO_ASSIGNMENTS_MESSAGE,
-            "correction_count": int(payload.get("correction_count") or 0)}}
+        code = str(payload.get("failure_code") or "lead_execution_failed")
+        if code not in {NO_ASSIGNMENTS_CODE, *FAILURE_MESSAGES}:
+            code = "lead_execution_failed"
+        failure = {"code": code, "message": NO_ASSIGNMENTS_MESSAGE if code == NO_ASSIGNMENTS_CODE else FAILURE_MESSAGES[code]}
+        if code == NO_ASSIGNMENTS_CODE:
+            failure["correction_count"] = int(payload.get("correction_count") or 0)
+        job.delivery = {**job.delivery, "failure": failure}
         job.updated_at = _now()
         team = await session.get(AgentTeam, job.team_id) if job.team_id else None
         if team:
@@ -200,7 +210,7 @@ async def bind_job_team(database: Any, *, workflow_id: str, lead_node_id: str, e
             if job.team_id and job.team_id != team_id:
                 raise RuntimeError("The job already belongs to another team")
             job.team_id = team_id
-            if not no_assignments_failed(job) and not protected_job_outcome(job) and not await job_has_approval(session, job):
+            if not preassignment_failed(job) and not protected_job_outcome(job) and not await job_has_approval(session, job):
                 job.state = "working"
             job.updated_at = _now()
             await session.commit()
@@ -490,20 +500,14 @@ async def job_progress(database: Any, workflow_id: str) -> dict | None:
         job = (await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == workflow_id).order_by(EmployeeJob.updated_at.desc()).limit(1))).scalar_one_or_none()
     if not job or job.state == "delivered":
         return None
-    inflight = job.delivery.get("inflight")
-    node_types = {node["id"]: node["type"] for node in job.source.get("nodes", [])}
-    lease = job.delivery.get("lease_until")
-    expired = not lease or datetime.fromisoformat(lease) <= _now()
-    state = "delivery_needs_review" if inflight and expired and node_types.get(inflight) not in {"approvalGate", "chatReply"} else job.state
-    # A terminal job answers its own state even with a gate mark left behind.
-    if inflight and node_types.get(inflight) == "approvalGate" and job.state not in {"failed", "cancelled"}:
-        return {"request_id": job.id, "state": "waiting_for_approval", "message": "Their result is ready for you to check before sending."}
-    messages = {"queued": "Your request is saved. The team will start when they are ready.",
-                "running": "The team is starting your request.", "working": "The team is working on your request and checking the result.",
-                "delivering": "Their checked result is ready to send.", "failed": "The team could not finish this request. Ask them to try again.",
-                "cancelled": "This request was stopped.", "delivery_needs_review": "The send was interrupted. Check whether it arrived before trying again.",
-                "review_blocked": "The lead needs another review turn. Completed work is saved."}
-    if no_assignments_failed(job):
-        messages["failed"] = "The lead did not assign work to a teammate, so this request could not finish."
-    return {"request_id": job.id, "state": state, "message": messages.get(state, "The team is checking your request."),
-            **({"revision": job.updated_at.isoformat()} if state == "review_blocked" else {})}
+    return _job_progress(job)
+
+
+def _job_progress(job: EmployeeJob) -> dict:
+    from services.employees.job_status import _job_progress as project
+    return project(job)
+
+
+async def get_job_status(database: Any, *, workflow_id: str, lead_node_id: str, job_id: str | None = None) -> dict:
+    from services.employees.job_status import get_job_status as read
+    return await read(database, workflow_id=workflow_id, lead_node_id=lead_node_id, job_id=job_id)

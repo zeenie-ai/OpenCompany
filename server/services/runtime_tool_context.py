@@ -96,7 +96,7 @@ def bind_runtime_context(info: dict, context: dict, agent_id: str) -> dict:
     if context.get("runtime_behavior_version") != 1:
         return info
     result = deepcopy(info)
-    result["agent_runtime"] = {"runtime_behavior_version": 1,
+    result["agent_runtime"] = {**(result.get("agent_runtime") or {}), "runtime_behavior_version": 1,
         "workspace_dir": context.get("workspace_dir") or "", "agent_node_id": agent_id}
     return result
 

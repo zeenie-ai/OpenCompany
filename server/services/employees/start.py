@@ -124,8 +124,12 @@ async def handle_start_employee(data: Dict[str, Any], websocket: WebSocket) -> D
     # An employee an older builder made comes up to the live Ask first rule
     # before it runs (services/employees/upgrade.py).
     from services.employees.upgrade import upgrade_employee
+    from services.employee_team_connection import EmployeeTeamValidationError
 
-    await upgrade_employee(database, auth_service, workflow_id)
+    try:
+        await upgrade_employee(database, auth_service, workflow_id)
+    except EmployeeTeamValidationError as exc:
+        return {"success": False, "error": "validation_failed", "report": {"errors": exc.issues, "warnings": []}}
     expected = data.get("expected_revision")
     expected_revision = int(expected) if expected is not None else None
     latest = await database.get_latest_workflow_control(workflow_id)

@@ -51,9 +51,11 @@ An explicitly halted agent needs recovery; automatic messages cannot restart it.
 
 ## Employee contact
 
-Talk uses `submit_job(instructions)` for substantive work and acknowledges the
-receipt. The team reviews and delivers the result in the original conversation.
-Do not treat the acknowledgement as the completed answer.
+Talk uses its connected Task Manager to call `submit_job(instructions)` for
+substantive work. Keep the returned job ID. When the owner asks for progress,
+call `get_job_status(job_id)` and report the saved state. A queued job with zero
+tasks is waiting for assignment. If it failed, report the failure. The lead
+reviews specialist submissions before the result is delivered.
 
 ## Legacy runs
 

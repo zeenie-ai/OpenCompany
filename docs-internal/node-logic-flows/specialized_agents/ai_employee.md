@@ -13,8 +13,12 @@ Team-lead agent identical in behaviour to `orchestrator_agent`. Distinct
 only in frontend presentation (display name "AI Employee", subtitle
 "Team Orchestration"). Backend routing is the same:
 `SpecializedAgentBase.execute_op` -> `prepare_agent_call`
-(`collect_teammate_connections`) -> internal teammate descriptors plus the
-intrinsic Task Manager -> `execute_chat_agent`.
+(`collect_teammate_connections`) -> internal teammate descriptors and the
+lead's Task Manager -> `execute_chat_agent`. Hire and editor creation
+save a dedicated Task Manager connected to the AI Employee's tools input and
+a Master Skill node connected to its skills input. A managed hire also gives
+its Talk contact separate nodes for intake. Older admitted graphs can use
+their original runtime binding.
 
 ## What is unique to this node
 

@@ -35,7 +35,7 @@ References:
 
 from __future__ import annotations
 
-from services.agent_bindings import is_runtime_tool, node_tools, unique_node_bindings, rebind_allowed, ParameterSnapshotDatabase, extend_runtime_graph
+from services.agent_bindings import is_runtime_tool, node_tools, unique_node_bindings, rebind_allowed, ParameterSnapshotDatabase, extend_runtime_graph, compact_temporal_binding
 
 import asyncio
 from dataclasses import asdict
@@ -1692,8 +1692,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
 
     effective_tool_data = _without_web_tools(chat_options, list(tool_data or []))
     from services.agent_instances.protocol import enabled as instance_protocol_enabled
-    instance_talk = bool(instance_protocol_enabled(context) and employee_plan
-                         and node_id == employee_plan.get("talk_node_id"))
+    talk_manager = ((employee_plan or {}).get("talk_task_manager_node_id")
+                    if node_id == (employee_plan or {}).get("talk_node_id") else None)
+    instance_talk = bool(talk_manager or
+                         (instance_protocol_enabled(context) and employee_plan and node_id == employee_plan.get("talk_node_id")))
     if context.get("agent_instance_id") and not any(item.get("node_type") == "taskManager" for item in effective_tool_data):
         effective_tool_data.append({"node_type": "taskManager", "node_id": f"{node_id}:instance_tools", "parameters": {}})
     try:
@@ -1767,6 +1769,20 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
+    if talk_manager:
+        operations = {tool.get("agent_operation") for tool in tools_payload if tool["tool_node_id"] == talk_manager}
+        if operations != {"submit_job", "get_job_status"}:
+            raise ApplicationError("The contact's assigned Task Manager could not bind its job submission and status tools.",
+                                   type="EmployeeTaskManagerUnavailable", non_retryable=True)
+    if (employee_plan and node_id == employee_plan.get("lead_node_id")
+            and employee_plan.get("task_manager_node_id") and context.get("agent_instance_role") == "lead"):
+        assigned = {member["node_id"] for member in employee_plan["members"]}
+        available = {tool["agent_template"]["node_id"] for tool in tools_payload
+                     if tool["tool_node_id"] == employee_plan["task_manager_node_id"] and tool.get("agent_operation") == "spawn"}
+        if not assigned <= available:
+            raise ApplicationError("The lead's assigned Task Manager could not bind its connected specialists.",
+                                   type="EmployeeTaskManagerUnavailable", non_retryable=True)
+
     if node_type == "coding_agent" and context.get("pi_harness_version") == 1:
         from services.coding_workspace_tools import build_workspace_tools, validate_tool_names
         validate_tool_names(tools_payload)
@@ -1779,7 +1795,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             raise ApplicationError("Invalid Coding Agent tool mode", type="CodingToolModeInvalid", non_retryable=True)
 
     if instance_talk:
-        system_message += "\n\nFor substantive team work, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. Keep this conversation with the owner."
+        system_message += ("\n\nFor substantive team work, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. "
+                           "Use get_job_status before reporting progress or retrying a job. Queued does not mean started or completed. "
+                           "If the job failed, report its failure instead of telling the owner to keep waiting. Keep this conversation with the owner.")
     elif context.get("agent_instance_id"):
         from services.agent_instances.tools import orchestration_prompt
         system_message = f"{system_message}\n\n{orchestration_prompt()}"
@@ -2019,6 +2037,12 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             or ""
         ),
     }
+    if context.get("agent_instance_id") or instance_talk:
+        from services.agent_instances.protocol import capture_runtime_context
+        # One graph/snapshot per preparation, not four copies per lifecycle
+        # function. A two-member team already has 21 lifecycle bindings.
+        prepared["agent_tool_runtime"] = capture_runtime_context(context)
+        prepared["tools"] = [compact_temporal_binding(tool) for tool in tools_payload]
     if context.get("pi_harness_version") == 1:
         return _strip_pi_credentials(prepared)
     if browser_runtime_version == 1 or context.get("native_workspace_version") == 1:
@@ -2164,6 +2188,27 @@ async def refresh_agent_tools(payload: Dict[str, Any]) -> Dict[str, Any]:
                 parameter_updates[str(identifier)] = await database.get_node_parameters(str(identifier)) or {}
     old_snapshot = payload.get("graph_snapshot") or {}
     runtime_graph = extend_runtime_graph(old_snapshot, graph, operations) if old_snapshot else graph
+    identity = payload.get("agent_tool_identity") or {}
+    if payload.get("agent_tool_runtime") is not None and identity.get("role") in {"lead", "team_lead"}:
+        from services.plugin.edge_walker import collect_teammate_connections
+        runtime_context = {**payload["agent_tool_runtime"], **runtime_graph,
+                           "parameter_snapshot": {**(payload.get("parameter_snapshot") or {}), **parameter_updates}}
+        teammates = await collect_teammate_connections(str(invoking_agent_id), runtime_context, database)
+        manager_info = {"node_id": payload["agent_task_manager_node_id"], "node_type": "taskManager", "parameters": {},
+                        "agent_runtime": {**identity, "runtime_context": runtime_context, "teammates": teammates}}
+        known_bindings = set(payload.get("bound_binding_keys") or [])
+        manager_cls = get_node_class("taskManager")
+        for tool, config in await node_tools(ai_service, manager_info):
+            if config.get("binding_key") in known_bindings:
+                continue
+            new_tools_payload.append(compact_temporal_binding({
+                "name": tool.name, "definition": _native_tool_definition(tool), "node_type": "taskManager",
+                "version": getattr(manager_cls, "version", 1), "task_queue": getattr(manager_cls, "task_queue", "machina-default"),
+                "tool_node_id": manager_info["node_id"], "binding_key": config["binding_key"],
+                "parameters": config.get("parameters") or {}, "tool_info": manager_info,
+                **{key: config[key] for key in ("agent_operation", "agent_template", "agent_runtime", "execution_traits") if key in config},
+                "activity_policy": _tool_activity_policy(manager_cls), "needs_canvas": True, "llm_hidden": False,
+            }))
     result = {"tools": new_tools_payload, "graph_snapshot": runtime_graph, "parameter_updates": parameter_updates}
     browser_runtime = payload.get("browser_runtime_version") == 1 or payload.get("browser_routing_version") == 1
     if browser_runtime:

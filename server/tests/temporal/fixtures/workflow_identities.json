@@ -969,6 +969,12 @@
         "agent_protocol_version"
       ],
       "reason": "Reusable agents: new instance/session and reconciler types have no N-1 histories. Added AgentWorkflow bootstrap, mailbox, admission, checkpoint and wait commands are entered only with lifecycle version 1 captured at generation admission or its trusted instance context. Existing generations keep the legacy command path. Native/Pi replay and the immutable previous-release corpus remain mandatory."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "8f8d1e84ac3df9ffbe59da042bbd4ff00472b7a30eb226bccb1fe028bdf04ed5",
+      "patch": "agent-instance-lead-failures-v1",
+      "reason": "Preserve safe typed failure reasons for managed employee lead jobs while retaining the historical failure commands for histories without this patch; replay N-1 fixtures and isolated employee-job histories."
     }
   ],
   "handlers": {

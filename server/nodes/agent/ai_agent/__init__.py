@@ -104,7 +104,7 @@ class AIAgentNode(ActionNode):
     component_kind = "agent"
     requires_context = True
     tool_name = "delegate_to_ai_agent"
-    handles = std_agent_handles()
+    handles = std_agent_handles(employee_team=True)
     ui_hints = STD_AGENT_HINTS
     annotations = {"destructive": False, "readonly": False, "open_world": True}
     task_queue = TaskQueue.AI_HEAVY

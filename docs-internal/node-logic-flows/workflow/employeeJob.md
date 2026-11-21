@@ -33,8 +33,8 @@ failed job `running`.
 
 `operation`, `lead_node_id` and `delivery_node_ids` are server-controlled
 configuration. Models can supply only the mission when this node is a tool.
-Specialists never connect directly to delivery sinks. Task Manager is
-intrinsic to the lead; do not add a duplicate binding.
+The lead reviews specialist work before delivery. Hire connects one Task
+Manager to that lead for assignment and review.
 
 Chat results have a stable message UID. An interrupted external send retains
 its durable intent for reconciliation and is not blindly repeated. New teams

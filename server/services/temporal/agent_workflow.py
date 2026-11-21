@@ -58,7 +58,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy, WorkflowIDReusePolicy  # RetryPolicy kept for type hints
 from temporalio.workflow import ActivityCancellationType, ChildWorkflowCancellationType, ParentClosePolicy
 
-from services.agent_bindings import unique_node_bindings
+from services.agent_bindings import unique_node_bindings, hydrate_temporal_binding
 from services.coding_agent_runtime import agent_workflow_name, uses_pi
 from services.node_registry import get_node_class
 from services.plugin.base import BaseNode
@@ -448,6 +448,21 @@ def _inherited_scope(context: Dict[str, Any], *, delegation: bool = False) -> Di
         # share a parent's claim token or release its still-active profile.
         inherited.pop("_browser_task_id", None)
     return inherited
+
+
+def _lifecycle_binding(tool: dict, context: dict, payload: dict) -> dict:
+    """Hydrate only new manifests, at the single tool's execution boundary.
+
+    Refreshed admitted graph and parameters override the original shared
+    snapshot; old Temporal histories retain their recorded inline bindings.
+    """
+    if tool.get("agent_runtime_ref") != 1:
+        return tool
+    runtime = {**(payload.get("agent_tool_runtime") or {}), **_inherited_scope(context)}
+    for key in ("nodes", "edges", "outputs"):
+        if key in context:
+            runtime[key] = context[key]
+    return hydrate_temporal_binding(tool, runtime)
 
 
 def _attribution_ids(
@@ -1259,7 +1274,7 @@ class AgentWorkflow:
         # A node that gives several tools (ToolNode.tool_bindings) has one
         # entry per tool, told apart by ``binding_key``.
         tool_key = "binding_key" if workflow.patched("agent-tool-binding-key-v1") else "tool_node_id"
-        tools = (resume.get("tools") if self._execution_control.enabled and "tools" in resume else payload.get("tools")) or []
+        tools = (resume.get("tools") if (self._execution_control.enabled or "agent_tool_runtime" in payload) and "tools" in resume else payload.get("tools")) or []
         if binding_refresh_v2:
             tools = unique_node_bindings(tools, id_key=tool_key)
         duplicate_tool_error = _duplicate_visible_tool_name_error(tools)
@@ -1356,6 +1371,15 @@ class AgentWorkflow:
         # parameters} so the workflow can schedule the right activity
         # when the LLM emits a tool_call.
         tool_index: Dict[str, Dict[str, Any]] = {t["name"]: t for t in tools}
+        employee_plan = payload.get("employee_team_plan") or {}
+        assigned_manager = employee_plan.get("task_manager_node_id") if employee_plan.get("lead_node_id") == agent_node_id else None
+
+        def _model_tool(name: str) -> Optional[Dict[str, Any]]:
+            # The manager uses hidden teammate descriptors to dispatch an
+            # authorized assignment. Only its visible tools are model-callable.
+            # Older generations replay with the tool surface they recorded.
+            tool = tool_index.get(name)
+            return None if assigned_manager and tool and tool.get("llm_hidden") else tool
 
         compaction_threshold = payload.get("compaction_threshold")
 
@@ -1722,7 +1746,7 @@ class AgentWorkflow:
                 index
                 for index, candidate in enumerate(calls)
                 if str(candidate.get("name", "")).startswith("delegate_to_")
-                and (tool_index.get(candidate.get("name", "")) or {}).get("node_type")
+                and (_model_tool(candidate.get("name", "")) or {}).get("node_type")
                 in AGENT_WORKFLOW_TYPES
                 and self._runtime_tool_call_allowed(index, candidate)
                 and (
@@ -1844,7 +1868,7 @@ class AgentWorkflow:
                 or own_logical_permit_id
             )
             instance_waits = self._instance_context and any(
-                "waits_for_child" in ((tool_index.get(call.get("name")) or {}).get("execution_traits") or ())
+                "waits_for_child" in ((_model_tool(call.get("name", "")) or {}).get("execution_traits") or ())
                 for call in calls)
             if (delegation_call_indices or instance_waits) and own_permit_id:
                 await workflow.execute_activity(
@@ -2188,7 +2212,7 @@ class AgentWorkflow:
             preflight_action_active = False
             recorded_tool_results: set[int] = set()
             for preflight_index, preflight_call in enumerate(calls):
-                preflight_tool = tool_index.get(preflight_call.get("name", ""))
+                preflight_tool = _model_tool(preflight_call.get("name", ""))
                 preflight_args = preflight_call.get("args") or {}
                 if (
                     preflight_tool
@@ -2315,7 +2339,7 @@ class AgentWorkflow:
             blocked_error = None
             for call_index, call in enumerate(calls):
                 pi_media_result = None
-                tool_info = tool_index.get(call.get("name", ""))
+                tool_info = _model_tool(call.get("name", ""))
                 if self._instance_context and self._instance_invalid_count >= 3:
                     blocked_error = {"error": "Three invalid orchestration requests; explicit retry is required.",
                                      "error_type": "agent_turn_halted", "review_blocked": True}
@@ -2359,12 +2383,12 @@ class AgentWorkflow:
                     continue
                 if tool_info is None:
                     workflow.logger.warning(f"AgentWorkflow: LLM called unknown tool {call.get('name')!r}; " "returning error to model")
+                    feedback = ("Use your Task Manager to assign work to this teammate."
+                                if assigned_manager and (tool_index.get(call.get("name", "")) or {}).get("llm_hidden")
+                                else f"Error: tool {call.get('name')!r} is not connected to this agent.")
                     _append_tool_result_message(
                         messages,
-                        content=(
-                            f"Error: tool {call.get('name')!r} is not "
-                            "connected to this agent."
-                        ),
+                        content=feedback,
                         tool_call_id=call.get("id", ""),
                         name=call.get("name", ""),
                     )
@@ -2466,7 +2490,7 @@ class AgentWorkflow:
                     call=call,
                 )
                 tool_payload = {
-                    **({"agent_tool_config": {**tool_info, **_inherited_scope(context),
+                    **({"agent_tool_config": {**_lifecycle_binding(tool_info, context, payload), **_inherited_scope(context),
                         "parent_node_id": agent_node_id, "tool_call_id": str(call.get("id") or f"{iteration + 1}:{call_index + 1}"),
                         "operation_id": _instance_operation_id(context, call, iteration, call_index)}}
                        if tool_info.get("agent_operation") else {}),
@@ -2840,6 +2864,15 @@ class AgentWorkflow:
                                     refresh_payload["bound_node_ids"] = [tool.get("tool_node_id") for tool in tools if tool.get("tool_node_id")]
                                     refresh_payload["graph_snapshot"] = {"nodes": context.get("nodes") or [], "edges": context.get("edges") or []}
                                     refresh_payload["parameter_snapshot"] = context.get("parameter_snapshot") or {}
+                                if "agent_tool_runtime" in payload:
+                                    manager = next((tool for tool in tools if tool.get("agent_operation") and tool.get("agent_runtime_ref") == 1), None)
+                                    if manager:
+                                        refresh_payload.update(
+                                            agent_tool_runtime=_lifecycle_binding(manager, context, payload)["agent_runtime"]["runtime_context"],
+                                            agent_tool_identity=manager.get("agent_runtime") or {},
+                                            agent_task_manager_node_id=manager["tool_node_id"],
+                                            bound_binding_keys=[tool.get("binding_key") for tool in tools],
+                                        )
                                 await self._wait_until_resumed()
                                 async with self._execution_control.action():
                                     refresh_result = await workflow.execute_activity(

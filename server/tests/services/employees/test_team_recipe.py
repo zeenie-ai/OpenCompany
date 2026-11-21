@@ -13,12 +13,12 @@ from services.graph_build import label_key
 from services.workflow_validator import validate_workflow
 
 
-def build(*, manual=True, allowed=lambda _: True, skills=(), job="Research customers and book appointments", memory=True, timezone="UTC"):
+def build(*, manual=True, trigger=None, allowed=lambda _: True, skills=(), job="Research customers and book appointments", memory=True, timezone="UTC"):
     request = HireEmployeeRequest.model_validate({
         "idempotency_key": "team-test", "job": job, "name": "Maya", "role": "Receptionist",
         "apps": ["Google Calendar"] if manual else ["WhatsApp", "Google Calendar"],
         "steps": [{"title": "Research information"}, {"title": "Book appointments"}],
-        "trigger": {"kind": "manual"} if manual else {"kind": "app_event", "app": "WhatsApp"},
+        "trigger": trigger or ({"kind": "manual"} if manual else {"kind": "app_event", "app": "WhatsApp"}),
     })
     return build_employee_graph(BuildInputs(
         workflow_id="71", request=request, apps=[get_app("google_calendar")] if manual else [get_app("whatsapp"), get_app("google_calendar")],
@@ -76,11 +76,12 @@ def test_browser_employee_respects_companion_node_policy():
         build(job="Use the browser to read website accounts", allowed=lambda kind: kind != "visionAnalyze")
 
 
-async def test_new_coding_employee_gets_its_own_connected_pi_tools():
+@pytest.mark.parametrize("job", ["Develop software", "Create a dynamic interactive weather report site", "Build a web app"])
+async def test_new_coding_employee_gets_its_own_connected_pi_tools(job):
     from services.coding_agent_recipe import default_pi_tool_types
     from services.node_registry import get_node_class
 
-    built = build(job="Develop software")
+    built = build(job=job)
     member = next(member for member in built.team_plan["members"] if member["node_type"] == "coding_agent")
     tools = [item for item in built.nodes if item["type"] in default_pi_tool_types()]
     assert {item["type"] for item in tools} == set(default_pi_tool_types())
@@ -99,6 +100,22 @@ async def test_new_coding_employee_gets_its_own_connected_pi_tools():
 def test_coding_employee_respects_companion_node_policy():
     with pytest.raises(BuildError, match="Pi coding tools"):
         build(job="Develop software", allowed=lambda kind: kind != "piBash")
+    with pytest.raises(BuildError, match="coding specialist"):
+        build(job="Build a website", allowed=lambda kind: kind != "coding_agent")
+
+
+def test_researching_an_existing_website_does_not_grant_coding_tools():
+    roles = select_responsibilities("Read a website and create a report about that website", ["Web browser"])
+    assert [role.key for role in roles] == ["research"]
+
+
+def test_role_prompts_describe_the_tools_the_contact_and_lead_own():
+    built = build()
+    contact = built.parameters[built.node_roles["talk_agent"]]["system_message"]
+    lead = built.parameters[built.node_roles["agent"]]["system_message"]
+    assert "submit_job" in contact and "write_todos" not in contact
+    assert "spawn_" in lead and "write_todos" in lead
+    assert "agent_builder" not in lead and "goes straight to" not in lead
 
 
 def test_shipped_hire_allowlist_allows_the_complete_coding_bundle():
@@ -146,7 +163,6 @@ def test_manual_team_has_separate_contact_and_scoped_specialists():
         assert len(contexts) == 1
     all_contexts = [edge["source"] for edge in built.edges if edge["targetHandle"] == "input-context"]
     assert len(set(all_contexts)) == len(all_contexts)
-    assert not any(node["type"] == "taskManager" for node in built.nodes)
     calendar = next(member for member in members if member["role"] == "calendar")
     assert "calendar-care" in calendar["skills"]
     assert "software-style" not in calendar["skills"]
@@ -186,7 +202,47 @@ def test_unavailable_registered_specialist_uses_configured_custom_agent():
     assert "Researches information" in built.parameters[researcher["node_id"]]["system_message"]
 
 
-@pytest.mark.parametrize("kind", ["ai_employee", "taskTrigger", "masterSkill"])
+@pytest.mark.parametrize("trigger", [{"kind": "manual"}, {"kind": "schedule", "every": "weekday", "at": "08:15"},
+                                    {"kind": "app_event", "app": "WhatsApp"}], ids=["talk", "schedule", "app"])
+@pytest.mark.parametrize("library", [False, True])
+def test_lead_and_talk_own_their_tools_and_instructions_under_default_hire_policy(trigger, library):
+    from services.graph_build import skill_edge, tool_edge
+    from services.node_allowlist import get_node_allowlist_service
+
+    selected = [LibrarySkill("report-style", "Custom format", "Use the owner's saved report format.")] if library else []
+    built = build(manual=trigger["kind"] == "manual", trigger=trigger, skills=selected,
+                  allowed=get_node_allowlist_service().is_hire_allowed)
+    plan, roles = built.team_plan, built.node_roles
+    assert built.trigger["kind"] == trigger["kind"]
+    assert {node["id"] for node in built.nodes if node["type"] == "taskManager"} == {
+        roles["task_manager"], roles["talk_task_manager"],
+    }
+    assigned = set()
+    for owner, manager, holder in (
+        (plan["lead_node_id"], plan["task_manager_node_id"], plan["lead_skill_node_id"]),
+        (plan["talk_node_id"], plan["talk_task_manager_node_id"], plan["talk_skill_node_id"]),
+    ):
+        assert [edge for edge in built.edges if edge["source"] == manager] == [tool_edge(manager, owner).to_dict()]
+        assert [edge for edge in built.edges if edge["source"] == holder] == [skill_edge(holder, owner).to_dict()]
+        assert [edge["source"] for edge in built.edges if edge["target"] == owner and edge["targetHandle"] == "input-skill"] == [holder]
+        assert built.parameters[manager] == {}
+        assert built.parameters[holder]["skill_folder"] == "assistant"
+        assigned.update((manager, holder))
+    assert len(assigned) == 4
+    assert roles["task_manager"] == plan["task_manager_node_id"] and roles["talk_task_manager"] == plan["talk_task_manager_node_id"]
+    assert roles["lead_skills"] == plan["lead_skill_node_id"] and roles["talk_skills"] == plan["talk_skill_node_id"]
+    lead_skills = built.parameters[roles["lead_skills"]]["skills_config"]
+    talk_skills = built.parameters[roles["talk_skills"]]["skills_config"]
+    assert set(lead_skills) == {"skill", "team-delegation"} and lead_skills["team-delegation"]["instructions"]
+    if library:
+        assert roles["skills"] == roles["talk_skills"]
+        assert set(talk_skills) == {"skill", "report-style"}
+        assert talk_skills["report-style"]["instructions"] == selected[0].instructions
+    else:
+        assert set(talk_skills) == {"skill", "team-intake"} and talk_skills["team-intake"]["instructions"]
+
+
+@pytest.mark.parametrize("kind", ["ai_employee", "taskManager", "taskTrigger", "masterSkill"])
 def test_required_team_capabilities_fail_closed(kind):
     with pytest.raises(BuildError):
         build(allowed=lambda candidate: candidate != kind)

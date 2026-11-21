@@ -7,6 +7,47 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+def compact_temporal_binding(binding: dict) -> dict:
+    """Transport one tool's identity, never a copy of its whole agent graph.
+
+    Preparation carries the shared trusted context once. The marker makes
+    dispatch hydration opt-in, so historical manifests keep their old shape.
+    Native/in-process bindings are deliberately unaffected.
+    """
+    keys = (
+        "agent_lifecycle_version", "agent_protocol_version", "agent_instance_id", "agent_run_id",
+        "workflow_id", "generation", "team_id", "job_id", "employee_job_id", "execution_id",
+        "root_execution_id", "lead_node_id", "team_lead_node_id", "user_id", "role",
+        "runtime_behavior_version", "workspace_dir", "agent_node_id",
+    )
+
+    def compact(runtime):
+        result = {key: runtime[key] for key in keys if key in runtime}
+        scope = runtime.get("agent_instance_scope")
+        if scope:
+            result["agent_instance_scope"] = {key: scope[key] for key in keys if key in scope}
+        return result
+
+    result = dict(binding)
+    if result.get("agent_runtime"):
+        result["agent_runtime"] = compact(result["agent_runtime"])
+    info = result.get("tool_info")
+    if info and info.get("agent_runtime"):
+        result["tool_info"] = {**info, "agent_runtime": compact(info["agent_runtime"])}
+    if result.get("agent_operation"):
+        result["agent_runtime_ref"] = 1
+    return result
+
+
+def hydrate_temporal_binding(binding: dict, runtime_context: dict) -> dict:
+    """Attach shared scope only to the actual lifecycle activity being called."""
+    if binding.get("agent_runtime_ref") != 1:
+        return binding
+    return {**binding, "agent_runtime": {
+        **(binding.get("agent_runtime") or {}), "runtime_context": runtime_context,
+    }}
+
+
 async def node_tools(ai_service: Any, tool_info: Mapping[str, Any]) -> list:
     """The tools a connected node gives an agent, as ``(tool, config)``: the
     one ``ai_service._build_tool_from_node`` builds, or one per binding of a

@@ -231,6 +231,9 @@ async def test_repeated_reads_are_stable(patched_handlers):
 def live_generation(database, monkeypatch, nodes, parameters=None):
     """A deploy arms only a live controlled generation (1b.46), with the
     graph and settings the generation recorded."""
+    # These editor-created workflows have no hired team. Preserve production
+    # admission/normalization while modeling the absence of Employee metadata.
+    monkeypatch.setattr("services.employees.store.get_by_workflow", AsyncMock(return_value=None))
     snapshot = {"nodes": nodes, "edges": [], "parameters": parameters or {}}
     monkeypatch.setattr(database, "get_latest_workflow_control",
                         AsyncMock(return_value=SimpleNamespace(generation=1, status="running", graph_snapshot=snapshot)),

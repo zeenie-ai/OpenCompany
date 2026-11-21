@@ -302,7 +302,8 @@ async def test_session_programming_error_does_not_complete_or_clean_up_owner(mon
 
 
 @pytest.mark.asyncio
-async def test_halted_lead_uses_atomic_no_assignment_failure_gate(monkeypatch):
+@pytest.mark.parametrize("patched", [False, True])
+async def test_halted_lead_uses_atomic_failure_gate(monkeypatch, patched):
     import services.temporal.agent_instance_workflow as module
     claimed = [claim(role="lead", job=True), None]
     events = []
@@ -317,12 +318,68 @@ async def test_halted_lead_uses_atomic_no_assignment_failure_gate(monkeypatch):
         return result()
     monkeypatch.setattr(module.workflow, "execute_activity", execute)
     monkeypatch.setattr(module.workflow, "start_child_workflow", start)
+    monkeypatch.setattr(module.workflow, "patched", lambda _: patched)
     monkeypatch.setattr(module.workflow, "info", lambda: SimpleNamespace(
         first_execution_run_id="chain", workflow_id="owner", run_id="physical"))
     await AgentInstanceSessionWorkflow({}).run({"instance_id": "instance"})
     failed = next(payload for name, payload in events if name == "employee.job.failed")
-    assert failed["failure_code"] == "lead_no_assignments"
+    assert failed["failure_code"] == ("lead_turn_halted" if patched else "lead_no_assignments")
     assert failed["employee_job_id"] == "job"
+
+
+@pytest.mark.asyncio
+async def test_nested_payload_failure_keeps_safe_cause_and_never_claims_no_assignments(monkeypatch):
+    from temporalio.exceptions import ApplicationError
+    import services.temporal.agent_instance_workflow as module
+    claimed = [claim(role="lead", job=True), None]
+    events = []
+    async def execute(name, payload, **kwargs):
+        events.append((name, payload))
+        if name == "agent.instance.claim": return claimed.pop(0)
+        if name == "agent.instance.admit": return {"allowed": True}
+        return {}
+    async def start(*args, **kwargs):
+        async def result():
+            cause = ApplicationError("secret prompt must not leak", type="PayloadsTooLarge")
+            raise ApplicationError("Child Workflow execution failed", type="Wrapper") from cause
+        return result()
+    monkeypatch.setattr(module.workflow, "execute_activity", execute)
+    monkeypatch.setattr(module.workflow, "start_child_workflow", start)
+    monkeypatch.setattr(module.workflow, "patched", lambda _: True)
+    monkeypatch.setattr(module.workflow, "info", lambda: SimpleNamespace(first_execution_run_id="chain", workflow_id="owner", run_id="physical"))
+    result = await AgentInstanceSessionWorkflow({}).run({"instance_id": "instance"})
+    assert result["error_type"] == "lead_payload_too_large"
+    completed = next(payload for name, payload in events if name == "agent.instance.complete")
+    assert "size limit" in completed["error"] and "secret" not in completed["error"]
+    failed = next(payload for name, payload in events if name == "employee.job.failed")
+    assert failed["failure_code"] == "lead_payload_too_large"
+    assert "correction_count" not in failed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role,job", [("teammate", False), ("lead", False)])
+async def test_unmanaged_and_teammate_failures_are_not_misclassified_as_employee_lead(monkeypatch, role, job):
+    from temporalio.exceptions import ApplicationError
+    import services.temporal.agent_instance_workflow as module
+    claimed = [claim(role=role, job=job), None]
+    events = []
+    async def execute(name, payload, **kwargs):
+        events.append((name, payload))
+        if name == "agent.instance.claim": return claimed.pop(0)
+        if name == "agent.instance.admit": return {"allowed": True}
+        return {}
+    async def start(*args, **kwargs):
+        async def result():
+            raise ApplicationError("Specialist execution failed", type="PayloadsTooLarge")
+        return result()
+    monkeypatch.setattr(module.workflow, "execute_activity", execute)
+    monkeypatch.setattr(module.workflow, "start_activity", lambda name, payload, **kwargs: __import__("asyncio").create_task(execute(name, payload, **kwargs)))
+    monkeypatch.setattr(module.workflow, "start_child_workflow", start)
+    monkeypatch.setattr(module.workflow, "patched", lambda _: pytest.fail("Unmanaged failures must not enter the employee failure patch"))
+    monkeypatch.setattr(module.workflow, "info", lambda: SimpleNamespace(first_execution_run_id="chain", workflow_id="owner", run_id="physical"))
+    result = await AgentInstanceSessionWorkflow({}).run({"instance_id": "instance"})
+    assert "team lead" not in result["error"] and "error_type" not in result
+    assert not any(name == "employee.job.failed" for name, _ in events)
 
 
 @pytest.mark.asyncio

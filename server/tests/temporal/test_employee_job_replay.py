@@ -1,6 +1,7 @@
 """Real Temporal SDK histories for reviewed jobs, failure and cancellation."""
 from __future__ import annotations
 import asyncio
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,10 @@ async def replay_gate():
         return {"saved": True}
     histories = []
     queue = "employee-job-replay"
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    cli = os.environ.get("TEMPORAL_TEST_CLI")
+    environment = (WorkflowEnvironment.start_local(dev_server_existing_path=cli, ip="127.0.0.1")
+                   if cli else WorkflowEnvironment.start_time_skipping())
+    async with await environment as env:
         async with Worker(env.client, task_queue=queue, workflows=[EmployeeJobWorkflow, StubLead], activities=[deliver, fail]):
             for mode in ("success", "failure", "cancel"):
                 identifier = "job-replay-" + uuid4().hex

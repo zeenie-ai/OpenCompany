@@ -78,6 +78,7 @@ async def apply_graph_additions(
     mutation_id: str,
     caller_node_id: Optional[str] = None,
     prepare: Optional[Callable[[Mapping[str, Any]], Tuple[GraphAdditions, Mapping[str, str]]]] = None,
+    prepare_employee_resources: Optional[Callable[[Mapping, Mapping, Mapping, Mapping], Tuple[GraphAdditions, Mapping[str, str]]]] = None,
     authorize: Optional[Callable[[Any], Awaitable[None]]] = None,
     authorization_grant_ids: Sequence[str] = (),
 ) -> Optional[GraphAdditionsResult]:
@@ -85,7 +86,8 @@ async def apply_graph_additions(
     announce them. None when the workflow does not exist (nothing is
     written). ``caller_node_id`` names the agent that asked, if one did.
     Raises ValueError, with nothing written, for a batch that does not fit
-    the graph (see ``add_to_graph``)."""
+    the graph (see ``add_to_graph``). Employee resource upgrades read holder
+    parameters and assign the lead and contact's nodes in this transaction."""
 
     async def mutate(session: Any) -> Dict[str, Any]:
         workflow = (await session.execute(select(Workflow).where(Workflow.id == workflow_id))).scalar_one_or_none()
@@ -93,10 +95,21 @@ async def apply_graph_additions(
             raise _WorkflowMissing()
         if authorize:
             await authorize(session)
+        from models.employees import Employee, EmployeeGrant
+        employee = (await session.execute(select(Employee).where(Employee.workflow_id == workflow_id))).scalar_one_or_none()
         # Reuse decisions must observe the graph under the mutation lock.
         # A preflight read alone permits concurrent calls to bind duplicate
         # callable identities to the same agent.
-        batch, reused = prepare(workflow.data or {}) if prepare else (additions, {})
+        graph = workflow.data or {}
+        if prepare_employee_resources:
+            if employee is None or (employee.team_plan or {}).get("version") != 2:
+                raise ValueError("The managed employee changed before its tool connections could be saved")
+            holders = [node["id"] for node in graph.get("nodes", []) if node.get("type") == "masterSkill"]
+            rows = (await session.execute(select(NodeParameter).where(NodeParameter.node_id.in_(holders)))).scalars()
+            batch, reused = prepare_employee_resources(graph, {row.node_id: row.parameters or {} for row in rows},
+                                                       employee.team_plan, employee.node_roles or {})
+        else:
+            batch, reused = prepare(graph) if prepare else (additions, {})
         placed = add_to_graph(workflow_id, workflow.data or {}, batch)
         from services.browser_resources import allocate_new_browser_resources, validate_browser_resource_bindings
         resource_parameters = {}
@@ -155,9 +168,6 @@ async def apply_graph_additions(
         # Team membership is part of the same saved change as the graph and
         # parameter rows. Summaries/model/permission paths must see every
         # specialist immediately after commit, including Builder additions.
-        from models.employees import Employee, EmployeeGrant
-
-        employee = (await session.execute(select(Employee).where(Employee.workflow_id == workflow_id))).scalar_one_or_none()
         if employee is not None and employee.team_plan and (placed.nodes or placed.edges):
             from services.node_registry import get_node_class
 
@@ -216,6 +226,21 @@ async def apply_graph_additions(
             employee.team_plan = team
             employee.node_roles = roles
             employee.updated_at = datetime.now(timezone.utc)
+        if employee is not None and (employee.team_plan or {}).get("version") == 2:
+            from services.employee_team_connection import (
+                EMPLOYEE_TEAM_INPUT, EMPLOYEE_TEAM_RESOURCE_FIELDS, TALK_CONNECTION_VERSION, validate_employee_team_connection,
+            )
+
+            if any(edge.target_handle == EMPLOYEE_TEAM_INPUT for edge in batch.edges):
+                connected = {**employee.team_plan, "talk_connection_version": TALK_CONNECTION_VERSION}
+                if prepare_employee_resources:
+                    resources = {**reused, **placed.node_ids}
+                    roles = {role: resources[role] for role in EMPLOYEE_TEAM_RESOURCE_FIELDS}
+                    connected.update({field: roles[role] for role, field in EMPLOYEE_TEAM_RESOURCE_FIELDS.items()})
+                    employee.node_roles = {**(employee.node_roles or {}), **roles}
+                validate_employee_team_connection(placed.graph, connected)
+                employee.team_plan = connected
+                employee.updated_at = datetime.now(timezone.utc)
         reused_labels = {
             ref: str((node.get("data") or {}).get("label") or node.get("type"))
             for ref, node_id in reused.items()

@@ -84,9 +84,14 @@ Android service nodes are enabled and connect directly to an agent's
 bundled Android skills are also visible. The former `androidTool` aggregator
 is obsolete; legacy workflows are normalized to direct service-to-agent edges.
 
-Task Manager is an intrinsic, non-removable capability of Orchestrator and AI
-Employee nodes. It is intentionally absent from the normal palette and Agent
-Builder catalogue; historical explicit nodes remain compatible.
+The shipped `enabled_nodes` includes `taskManager` and `masterSkill`.
+Managed Hire requires both types so it can save a separate Task Manager and
+Master Skill for each of the Talk contact and the AI Employee lead. Each
+specialist also gets a Master Skill. If either type is unavailable, Hire
+returns `not_allowed`. Agent Builder excludes Task Manager from `add_tool`
+because the team recipe owns the binding. Unmanaged team leads and historical
+generations can still receive a runtime binding when their graph has no
+connected manager. See [managed AI employee teams](./employee_teams.md).
 
 ## agentBuilder integration
 

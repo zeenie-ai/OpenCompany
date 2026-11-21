@@ -21,7 +21,7 @@ export const useReactFlowNodes = ({ setNodes, setEdges, clearNodeStatus }: UseRe
     const normalized = role === 'tools' ? 'tool' : role;
     const known = new Set<NodeConnectionType>([
       'main', 'trigger', 'ai', 'file', 'binary', 'webhook',
-      'context', 'memory', 'tool', 'skill', 'task', 'teammates',
+      'context', 'memory', 'tool', 'skill', 'task', 'teammates', 'employee-team',
     ]);
     if (known.has(normalized as NodeConnectionType)) {
       return normalized as NodeConnectionType;
@@ -83,6 +83,12 @@ export const useReactFlowNodes = ({ setNodes, setEdges, clearNodeStatus }: UseRe
     if (!sourceNode || !targetNode) {
       console.warn('Connection validation: Source or target node not found');
       return false;
+    }
+    // The visible team route submits jobs asynchronously. Only an employee
+    // lead can supply that destination; it is never an ordinary data edge.
+    if (connection.targetHandle === 'input-employee-team') {
+      return sourceNode.type === 'ai_employee' && targetNode.type === 'aiAgent'
+        && connection.sourceHandle === 'output-top';
     }
 
     const sourceOutputs = getNodeOutputs(sourceNode.type || '');

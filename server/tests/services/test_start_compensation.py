@@ -48,6 +48,9 @@ def _control(status, revision=0, *, generation=1):
 
 def start_plane(monkeypatch, *, forward_error=None, setup=None):
     """Patch every step of a Start and of its undo, and record the order they run in."""
+    # This ordinary editor workflow has no Employee row. Keep real team
+    # admission in the Start path; only its persisted-row lookup is modeled.
+    monkeypatch.setattr("services.employees.store.get_by_workflow", AsyncMock(return_value=None))
     order = []
     starting, reread = _control("starting"), _control("starting", 1)
 

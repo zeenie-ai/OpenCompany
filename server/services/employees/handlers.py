@@ -66,6 +66,7 @@ from services.employees.prompt import (
 from services.employees.summaries import employee_owner, employee_usage, get_employee_detail, get_employee_summary, list_employee_summaries
 from services.employees.talk import TalkAgent, TalkState, TalkTool, plan_talk_line, sources, talk_agent_label, talk_state
 from services.employees.upgrade import upgrade_employee
+from services.employee_team_connection import EmployeeTeamValidationError
 from services.graph_build import TOOLS_INPUT
 from services.plugin.base import NodeUserError
 from services.plugin.ws import ws_response
@@ -175,7 +176,11 @@ async def _enable_talk(database: Any, auth_service: Any, workflow_id: str, *, ke
         return {"success": False, "error": "not_found", "workflow_id": workflow_id}
     if serialize_control(await database.get_latest_workflow_control(workflow_id))["state"] in _TRANSITIONAL_STATES:
         return await _answer(database, auth_service, workflow_id, "conflict")
-    if await upgrade_employee(database, auth_service, workflow_id):
+    try:
+        upgraded = await upgrade_employee(database, auth_service, workflow_id)
+    except EmployeeTeamValidationError as exc:
+        return {"success": False, "error": "invalid_changes", "validation_issues": exc.issues}
+    if upgraded:
         workflow = await database.get_workflow(workflow_id) or workflow
     row = await store.get_by_workflow(database, workflow_id)
     roles = dict(row.node_roles or {}) if row is not None else {}
@@ -225,11 +230,16 @@ async def _enable_talk(database: Any, auth_service: Any, workflow_id: str, *, ke
     return await _answer(database, auth_service, workflow_id)
 
 
-async def _apply_changes(database: Any, auth_service: Any, workflow_id: str, *, key: str, owner: str) -> Dict[str, Any]:
+async def _apply_changes(database: Any, auth_service: Any, workflow_id: str, *, key: str, owner: str, stop_work: bool) -> Dict[str, Any]:
     if await database.get_workflow(workflow_id) is None:
         return {"success": False, "error": "not_found", "workflow_id": workflow_id}
-    await upgrade_employee(database, auth_service, workflow_id)
+    try:
+        await upgrade_employee(database, auth_service, workflow_id)
+    except EmployeeTeamValidationError as exc:
+        return {"success": False, "error": "invalid_changes", "validation_issues": exc.issues}
     from services.employees.safe_apply import apply_saved_changes
+    if stop_work:
+        return await apply_saved_changes(database, workflow_id, owner_id=owner, key=key, stop_work=True)
     applied = await apply_saved_changes(database, workflow_id, owner_id=owner, key=key)
     return {**await _answer(database, auth_service, workflow_id, applied.get("error")), **applied}
 
@@ -272,11 +282,9 @@ async def handle_apply_employee_changes(data: Dict[str, Any], websocket: WebSock
     async with _lock(workflow_id):
         if not await _owns(container.database(), websocket, workflow_id):
             return {"success": False, "error": "not_found"}
-        if data.get("stop_work") is True:
-            from services.employees.safe_apply import apply_saved_changes
-            return await apply_saved_changes(container.database(), workflow_id, owner_id=execution_principal(data, websocket), key=key, stop_work=True)
         return await _apply_changes(
-            container.database(), container.auth_service(), workflow_id, key=key, owner=execution_principal(data, websocket)
+            container.database(), container.auth_service(), workflow_id, key=key, owner=execution_principal(data, websocket),
+            stop_work=data.get("stop_work") is True,
         )
 
 

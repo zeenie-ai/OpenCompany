@@ -19,18 +19,13 @@ Lifecycle version is separate from employee recipe version and graph version.
 | **Skill (if any)** | [`server/skills/assistant/task-manager/SKILL.md`](../../../server/skills/assistant/task-manager/SKILL.md) |
 | **Tool surface** | Version 1: typed bound tools below; version 0: `task_manager` |
 
-Task Manager is the durable control plane intrinsically bound to
-`orchestrator_agent` and `ai_employee`. It is hidden from the palette and Agent
-Builder, so users cannot remove the lead's task capability. Historical explicit
-nodes remain readable and protected from deletion.
-
-Version 2 employee recipes also bind this capability to the separate Talk
-agent. In lifecycle version 1, Talk receives only `submit_job(instructions)`
-for team work. Its acknowledgement is followed by a separately reviewed result.
-Specialists connect through the lead's canonical `input-teammates` handle and
-retain their own configured tools and skills. Instance history is built in;
-it does not require a Context edge. The recipe does not add job-forwarding
-nodes or a duplicate Task Manager.
+Hire creates two Task Manager nodes. One connects to the AI Employee lead and
+opens its task board in the editor. The other connects to Talk and exposes job
+submission and status. Each role also owns a separate Master Skill node. The
+lead connects to Talk's `input-employee-team`. Each specialist connects to the
+lead's `input-teammates`. Start and Apply adopt existing role-owned nodes or
+create missing ones for older managed v2 hires. Unmanaged team leads and older
+running snapshots retain their built-in binding when needed. [Managed AI employee teams](../../employee_teams.md)
 
 ## Inputs (handles)
 
@@ -38,8 +33,8 @@ nodes or a duplicate Task Manager.
 |--------|-----------------|----------|---------|
 | `input-main` | main | no | Declared (left, role `main`); the `manage` op reads scope from `ctx.raw`, not from upstream data |
 
-`output-tool` (top, role `tools`) is the only output handle; connect it to a
-team lead's `input-tools`. `ui_hints` = `isTaskManagerPanel`,
+`output-tool` (top, role `tools`) connects to its owning agent's `input-tools`.
+`ui_hints` = `isTaskManagerPanel`,
 `hideInputSection`, `hideOutputSection`, `hideRunButton` (all `True`);
 `needs_canvas = True`.
 
@@ -51,8 +46,8 @@ reject unknown fields. Saved node settings or a custom tool schema cannot fill
 missing model arguments. Execution scope, template selection, provider settings
 and sender identity are supplied by the runtime.
 
-Talk receives `submit_job`. Lead instances receive assignment, review,
-instance-control, messaging and observation tools; teammates receive only
+Talk receives `submit_job` and `get_job_status`. Lead instances receive assignment, review,
+instance-control, messaging and observation tools. Teammates receive only
 messaging and observation tools. The actual bound
 `<teammate>` suffix combines node type and a stable node-ID hash. Use the
 published tool name; there is no model-supplied template argument.
@@ -60,6 +55,7 @@ published tool name; there is no model-supplied template argument.
 | Tool | Required arguments | Optional arguments | Effect / valid source state |
 |---|---|---|---|
 | `submit_job` | `instructions` | — | Talk only: admit work for the configured employee lead |
+| `get_job_status` | — | `job_id` | Talk reads the saved job state, task counts and any recorded failure. Omit the ID for this employee's most recently updated job. |
 | `spawn_<teammate>` | `instructions` | `after` | Lead: fresh instance, task, first attempt and inbox obligation in one commit |
 | `assign_task` | `agent`, `instructions` | `after` | Lead: new reviewed work on an existing teammate instance |
 | `send_message` | `agent`, `message` | — | Same-job coordination; return a delivery receipt |
@@ -233,7 +229,8 @@ The table lists saved parameter defaults; model calls must always provide
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `operation` | `submit_job` / `assign_task` / `list_tasks` / `get_task` / `modify_task` / `cancel_task` / `retry_task` / `reassign_task` / `accept_task` / `finish_team` / `mark_done` / `inspect_task_trace` | `list_tasks` | no | - | Operation to run; `mark_done` is a deprecated alias for `accept_task` |
+| `operation` | `submit_job` / `get_job_status` / `assign_task` / `list_tasks` / `get_task` / `modify_task` / `cancel_task` / `retry_task` / `reassign_task` / `accept_task` / `finish_team` / `mark_done` / `inspect_task_trace` | `list_tasks` | no | - | Operation to run. `mark_done` is a deprecated alias for `accept_task`. |
+| `job_id` | string (max 255) | `None` | no | - | Job to inspect with `get_job_status`. Defaults to the most recently updated job for this employee. |
 | `task_id` | string | `None` | no | - | Target task. Required by `get_task`, `inspect_task_trace`, `modify_task`, `cancel_task`, `retry_task`, `reassign_task`; `accept_task` / `mark_done` may omit it when exactly one submitted task exists |
 | `title` | string (max 500) | `None` | no | - | Task title; required by `assign_task`, editable via `modify_task` |
 | `mission` | string (max 10000) | `None` | no | - | Mission and expected result; required by `submit_job` and `assign_task`, editable via `modify_task` |
@@ -295,6 +292,7 @@ the persisted execution membership snapshot.
 | Operation | Required fields | Valid source state |
 |---|---|---|
 | `submit_job` | `mission`; trusted version 2 employee Talk context | new job or idempotent existing admission |
+| `get_job_status` | trusted employee Talk context, optional `job_id` | read the job state and task counts for this employee |
 | `assign_task` | `title`, `mission`, connected `assignee_node_id` or exact delegate name | new |
 | `list_tasks` | optional `status_filter`, `include_history` | any |
 | `get_task` | `task_id` | any |
@@ -382,8 +380,9 @@ lead in the deployed listeners, which a deploy sanitizes again
 reaches, so the runtime reads the plan, and a job takes its graph, from that
 whole snapshot (`team_runtime.admitted_graph`).
 
-The acknowledgement confirms assignment only. Specialists submit work through
-Task Manager, and the lead reviews and accepts it. The runtime delivers the
+The submission receipt reports the saved job state. Talk can use `get_job_status`
+to see whether any specialist tasks have been assigned. Specialists submit
+work through Task Manager, and the lead reviews and accepts it. The runtime delivers the
 reviewed result once to the original conversation or app, preserving approval
 gates. Scheduled and app-triggered lead work uses the same server job boundary.
 Existing employee recipe version 1 graphs keep their compatible execution

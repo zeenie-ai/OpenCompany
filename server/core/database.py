@@ -3428,8 +3428,9 @@ class Database:
 
     @staticmethod
     async def _team_failed_without_assignments(session: AsyncSession, team_id: str) -> bool:
+        from services.employees.jobs import preassignment_failed
         jobs = (await session.execute(select(EmployeeJob).where(EmployeeJob.team_id == team_id))).scalars()
-        return any(job.state == "failed" and (job.delivery.get("failure") or {}).get("code") == "lead_no_assignments" for job in jobs)
+        return any(preassignment_failed(job) for job in jobs)
 
     async def get_durable_team_task(self, team_id: str, task_id: str) -> Optional[Dict[str, Any]]:
         async with self.get_session() as session:

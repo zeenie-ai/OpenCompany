@@ -8,6 +8,7 @@ main flow does not. Both Temporal and local deployments use this collector.
 from typing import Any
 
 from constants import WORKFLOW_TRIGGER_TYPES
+from services.employee_team_connection import is_employee_team_edge
 
 
 def collect_downstream_node_ids(
@@ -27,6 +28,10 @@ def collect_downstream_node_ids(
     outgoing: dict[str, list[str]] = {}
     dependencies: dict[str, list[str]] = {}
     for edge in edges:
+        # This visible route is dispatched by submit_job, never by graph flow.
+        # Do not pull the lead (or its other triggers) into a Talk run either.
+        if is_employee_team_edge(edge):
+            continue
         source, target = edge.get("source"), edge.get("target")
         if source not in node_types or target not in node_types:
             continue

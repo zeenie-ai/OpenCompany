@@ -784,10 +784,11 @@ class WorkflowExecutor:
         adjacency: Dict[str, List[str]] = defaultdict(list)
         node_ids = {node["id"] for node in nodes if node["id"] not in excluded_ids}
 
+        from services.employee_team_connection import is_employee_team_edge
         for edge in edges:
             source = edge.get("source")
             target = edge.get("target")
-            if source in node_ids and target in node_ids:
+            if source in node_ids and target in node_ids and not is_employee_team_edge(edge):
                 adjacency[source].append(target)
                 in_degree[target] += 1
 
@@ -884,7 +885,10 @@ class WorkflowExecutor:
         dependencies: Dict[str, Set[str]] = defaultdict(set)
         conditional_edges: Dict[str, List[Dict]] = defaultdict(list)  # target -> edges with conditions
 
+        from services.employee_team_connection import is_employee_team_edge
         for edge in ctx.edges:
+            if is_employee_team_edge(edge):
+                continue
             target = edge.get("target")
             source = edge.get("source")
             if target and source:
@@ -995,8 +999,9 @@ class WorkflowExecutor:
             Dict of upstream outputs keyed by source node type
         """
         inputs = {}
+        from services.employee_team_connection import is_employee_team_edge
         for edge in ctx.edges:
-            if edge.get("target") == node_id:
+            if edge.get("target") == node_id and not is_employee_team_edge(edge):
                 source_id = edge.get("source")
                 if source_id in ctx.outputs:
                     # Find source node type

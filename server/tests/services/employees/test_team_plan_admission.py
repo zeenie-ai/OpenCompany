@@ -96,6 +96,17 @@ async def test_start_admits_the_plan_the_saved_graph_cannot_hold(started):
         assert admitted["employee_recipe_version"] == 2 and admitted["employee_team_plan"] == started.plan
 
 
+async def test_role_runs_load_skills_from_their_own_admitted_master_skill(started):
+    from services.plugin.edge_walker import collect_agent_connections
+
+    for trigger, agent, skill_key in [("talk_trigger", "talk_agent", "talk_skill_node_id"),
+                                     ("trigger", "agent", "lead_skill_node_id")]:
+        owner = started.roles[agent]
+        context = {**run(started, started.roles[trigger], owner), "employee_team_plan": started.plan}
+        _, skills, _, _, _ = await collect_agent_connections(owner, context, started.database)
+        assert {item["master_skill_node_id"] for item in skills} == {started.plan[skill_key]}
+
+
 async def test_a_trigger_run_resolves_the_plan_and_its_job_holds_the_delivery_nodes(started):
     roles, plan = started.roles, started.plan
     context = run(started, roles["trigger"], roles["agent"])
@@ -127,6 +138,109 @@ async def test_a_talk_run_resolves_the_plan_and_submits_a_job_that_holds_the_lea
 async def test_a_run_outside_a_started_generation_has_no_plan(started):
     context = {**run(started, started.roles["trigger"], started.roles["agent"]), "generation": 0}
     assert await employee_runtime_plan(started.database, context) is None
+
+
+@pytest.mark.parametrize("manager_available", [True, False])
+async def test_chat_job_reaches_the_connected_lead_and_specialist(started, monkeypatch, manager_available):
+    """Exercise the production job, binding and task stores without paying for inference."""
+    from models.database import TeamTask
+    from services.agent_instances.service import AgentInstanceService
+    from services.agent_team import AgentTeamService
+    from services.temporal.agent_activities import prepare_agent_payload
+    from services.temporal.agent_instance_workflow import bootstrap_instance, execute_instance_tool, turn_context
+    from services.temporal.agent_workflow import _inherited_scope, _lifecycle_binding
+
+    db = started.database
+    # Capture the exact job dispatched to Temporal. Run its bootstrap and
+    # tool activities below; the external worker and LLM are unnecessary.
+    dispatch = AsyncMock()
+    settings = SimpleNamespace(temporal_task_queue="employees", max_concurrent_subagents=3,
+                               max_delegation_depth=2, agent_recursion_limit=20, tool_result_max_chars=100_000)
+    resolver = AsyncMock(side_effect=lambda parameters, *args, **kwargs: parameters)
+    monkeypatch.setattr("core.container.container", SimpleNamespace(
+        database=lambda: db, settings=lambda: settings, ai_service=lambda: SimpleNamespace(),
+        temporal_client=lambda: SimpleNamespace(client=SimpleNamespace(start_workflow=dispatch)),
+        auth_service=lambda: SimpleNamespace(has_valid_key=AsyncMock(return_value=True)),
+        workflow_service=lambda: SimpleNamespace(_param_resolver=SimpleNamespace(resolve=resolver))))
+    monkeypatch.setattr("core.config.Settings", lambda: settings)
+    monkeypatch.setattr("services.plugin.deps.get_database", lambda: db)
+    monkeypatch.setattr("services.agent_team._service", AgentTeamService(db))
+    monkeypatch.setattr("services.employees.team_runtime.team_runtime_error", lambda: None)
+    monkeypatch.setattr("services.employees.events.employee_changed_now", lambda _: None)
+    monkeypatch.setattr("services.llm.config.is_model_valid_for_provider", lambda *_: True)
+    monkeypatch.setattr("services.llm.config.resolve_max_tokens", lambda *_: 1000)
+    monkeypatch.setattr("services.llm.config.resolve_temperature", lambda *_: 0.2)
+    monkeypatch.setattr("services.compaction.get_compaction_service", lambda: None)
+    wake = AsyncMock()
+    monkeypatch.setattr("services.agent_instances.runtime.wake_instances", wake)
+
+    contact = started.roles["talk_agent"]
+    talk = {**run(started, started.roles["talk_trigger"], contact), "node_type": "aiAgent",
+            "agent_lifecycle_version": 1, "agent_protocol_version": 1}
+    talk_tools = await prepare_agent_payload(talk)
+    contact_manager = started.plan["talk_task_manager_node_id"]
+    assert contact_manager == started.roles["talk_task_manager"]
+    assert contact_manager != started.plan["task_manager_node_id"]
+    assert {(tool["tool_node_id"], tool.get("agent_operation")) for tool in talk_tools["tools"]
+            if tool["node_type"] == "taskManager"} == {(contact_manager, "submit_job"), (contact_manager, "get_job_status")}
+    async def call_contact_tool(operation, arguments):
+        binding = next(tool for tool in talk_tools["tools"] if tool.get("agent_operation") == operation)
+        return await execute_instance_tool({
+            "agent_tool_config": {**_lifecycle_binding(binding, talk, talk_tools), **_inherited_scope(talk)},
+            "parent_node_id": contact, "workflow_id": talk["workflow_id"], "execution_id": talk["execution_id"],
+            "nodes": talk["nodes"], "edges": talk["edges"], "tool_call_id": f"contact-{operation}",
+            "tool_args": arguments,
+        })
+
+    receipt = await call_contact_tool("submit_job", {"instructions": "Draft a response"})
+    assert receipt["success"]
+    dispatch.assert_awaited_once()
+    workflow_type, context = dispatch.await_args.args
+    assert workflow_type == "EmployeeJobWorkflow" and context["node_id"] == started.plan["lead_node_id"]
+    bootstrap = await bootstrap_instance(context)
+    store = AgentInstanceService(db)
+    claimed = await store.claim_run(bootstrap["instance_id"], request_id="first-turn")
+    turn = turn_context(claimed)
+    if not manager_available:
+        from temporalio.exceptions import ApplicationError
+        from services.employees.failures import lead_failure
+
+        # Node adapters can fail to build their bindings. Report that failure
+        # before the lead can tell the owner it delegated work.
+        monkeypatch.setattr("services.agent_instances.tools.build_bindings", lambda *args, **kwargs: [])
+        with pytest.raises(ApplicationError, match="assigned Task Manager") as caught:
+            await prepare_agent_payload(turn)
+        assert lead_failure(caught.value)["code"] == "lead_task_manager_unavailable"
+        return
+    prepared = await prepare_agent_payload(turn)
+    manager = started.roles["task_manager"]
+    assert started.plan["task_manager_node_id"] == manager
+    management = [tool for tool in prepared["tools"] if tool["node_type"] == "taskManager"]
+    assert {tool["tool_node_id"] for tool in management} == {manager}
+    spawns = [tool for tool in management if tool.get("agent_operation") == "spawn"]
+    assert sorted(tool["agent_template"]["node_id"] for tool in spawns) == sorted(
+        member["node_id"] for member in started.plan["members"]
+    )
+    spawn = spawns[0]
+    result = await execute_instance_tool({
+        "agent_tool_config": _lifecycle_binding(spawn, turn, prepared),
+        "workflow_id": talk["workflow_id"], "execution_id": context["execution_id"],
+        "root_execution_id": context["root_execution_id"], "parent_node_id": context["node_id"],
+        "nodes": turn["nodes"], "edges": turn["edges"], "tool_call_id": "call-1",
+        "tool_args": {"instructions": "Draft the customer's reply for review"},
+    })
+    assert result.get("success", True), result
+    async with db.get_session() as session:
+        task = await session.get(TeamTask, result["task"]["id"])
+        assert task.assigned_instance_id == result["agent"]["id"]
+        assert task.assigned_to == spawn["agent_template"]["node_id"]
+    wake.assert_awaited_once()
+    child = await store.claim_run(result["agent"]["id"], request_id="specialist-turn")
+    assert child["instance"]["job_id"] == receipt["job_id"]
+    assert child["run_id"] and child["messages"]
+    status = await call_contact_tool("get_job_status", {"job_id": receipt["job_id"]})
+    assert status["job"]["task_count"] == 1
+    assert status["job"]["tasks_by_status"] == {"running": 1}
 
 
 async def test_talk_gets_submit_job_from_the_plan_prepare_resolved():

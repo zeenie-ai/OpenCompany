@@ -27,6 +27,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from core.logging import get_logger
 from services.approvals.contract import APPROVAL_GATE_TYPE, approved_edge_condition, send_condition
+from services.employee_team_connection import EMPLOYEE_TEAM_RESOURCE_FIELDS, EmployeeTeamValidationError
 from services.employees import store
 from services.employees.apps import AppSpec, get_app
 from services.employees.builder import (
@@ -42,13 +43,17 @@ from services.employees.policy import check_tool
 from services.employees.talk import find_talk_line, plan_talk_tools, sources
 from services.graph_build import (
     TOOLS_INPUT,
+    SKILL_INPUT,
+    TOOL_OUTPUT,
     EdgeRemoval,
     GraphAdditions,
+    Labels,
     NewNode,
     ParamMerge,
     label_key,
     main_edge,
     ref,
+    skill_edge,
     template_key,
     tool_edge,
 )
@@ -181,17 +186,83 @@ def plan_upgrade(
 
 async def upgrade_employee(database: Any, auth_service: Any, workflow_id: str, *, allowed: Optional[Callable[[str], bool]] = None) -> bool:
     """Upgrade the employee behind ``workflow_id`` when an older builder made
-    it. Returns whether it was upgraded. A failure is logged, and the
-    employee keeps its graph and version (the next Apply tries again): an
-    upgrade never stops a start."""
+    it. A conflicting team configuration is returned to the owner by Start
+    or Apply. Other upgrade failures are logged for a subsequent retry."""
     try:
         upgraded = await _upgrade(database, auth_service, workflow_id, allowed)
+    except EmployeeTeamValidationError:
+        raise
     except Exception:
-        logger.warning("Could not upgrade an employee to the live Ask first rule", workflow_id=workflow_id, exc_info=True)
+        logger.warning("Could not upgrade employee graph", workflow_id=workflow_id, exc_info=True)
         return False
     if upgraded:
-        logger.info("Upgraded an employee to the live Ask first rule", workflow_id=workflow_id)
+        logger.info("Upgraded employee graph", workflow_id=workflow_id)
     return upgraded
+
+
+def _plan_team_resources(graph: Mapping[str, Any], parameters: Mapping[str, Mapping], team: Mapping[str, Any],
+                         roles: Mapping[str, str]):
+    from services.employee_team_connection import (
+        connected_master_skill_ids, connected_task_manager_ids, employee_skill_parameters, employee_team_edge, task_manager_additions,
+    )
+
+    lead, talk = team["lead_node_id"], team["talk_node_id"]
+    nodes = _nodes(graph)
+    if nodes.get(lead, {}).get("type") != "ai_employee" or nodes.get(talk, {}).get("type") != "aiAgent":
+        raise EmployeeTeamValidationError("Restore the saved AI Employee lead and Talk contact before assigning their tools.",
+                                          code="INVALID_EMPLOYEE_TEAM_CONNECTION", node_id=lead)
+    labels = Labels((node.get("data") or {}).get("label") or "" for node in nodes.values())
+    new_nodes, removed, reused = [], [], {}
+    edges = [employee_team_edge(lead, talk)]
+
+    for role, owner in (("lead", lead), ("talk", talk)):
+        x, y = _position(nodes[owner])
+        manager_ref = "task_manager" if owner == lead else "talk_task_manager"
+        managers = connected_task_manager_ids(graph, owner)
+        recorded_manager = team.get(EMPLOYEE_TEAM_RESOURCE_FIELDS[manager_ref]) or roles.get(manager_ref)
+        if len(managers) > 1 or (recorded_manager and managers != [recorded_manager]):
+            raise EmployeeTeamValidationError("Connect exactly one assigned Task Manager to this agent.",
+                                              code="INVALID_EMPLOYEE_TASK_MANAGER", node_id=owner)
+        if managers:
+            reused[manager_ref] = managers[0]
+        else:
+            label = "Task Manager" if owner == lead else "Talk Task Manager"
+            batch = task_manager_additions(owner, (x, y + 180), ref=manager_ref, label=labels.take(label))
+            new_nodes.extend(batch.nodes)
+            edges.extend(batch.edges)
+
+        skill_ref = role + "_skills"
+        holders = connected_master_skill_ids(graph, owner)
+        holder = team.get(EMPLOYEE_TEAM_RESOURCE_FIELDS[skill_ref]) or roles.get(skill_ref)
+        if len(set(holders)) != len(holders) or (holder and holder not in holders):
+            raise EmployeeTeamValidationError("Restore the assigned Master Skill connection for this agent.",
+                                              code="INVALID_EMPLOYEE_MASTER_SKILL", node_id=owner)
+        # Additional editor-added skill bundles remain attached. With no
+        # recorded role and multiple bundles, allocate an unambiguous one.
+        if not holder and len(holders) == 1:
+            holder = holders[0]
+        if holder:
+            links = [edge for edge in graph.get("edges", []) if edge.get("source") == holder]
+            # Legacy graphs sometimes gave two agents the same skills. Keep
+            # one original; copy its saved instructions for every owner we
+            # detach. A third owner retains the original when it uses it too.
+            owners = {edge.get("target") for edge in links}
+            if len(links) == 1 or (owner == lead and owners == {lead, talk}):
+                reused[skill_ref] = holder
+                continue
+            if (nodes[holder].get("disabled") or (nodes[holder].get("data") or {}).get("disabled")
+                    or any((edge.get("sourceHandle") or edge.get("source_handle")) != TOOL_OUTPUT
+                           or (edge.get("targetHandle") or edge.get("target_handle")) != SKILL_INPUT for edge in links)):
+                raise EmployeeTeamValidationError("Check the shared Master Skill's connections before assigning a private copy.",
+                                                  code="INVALID_EMPLOYEE_MASTER_SKILL", node_id=owner)
+            removed.append(EdgeRemoval(holder, owner, SKILL_INPUT))
+            params = parameters.get(holder, {})
+        else:
+            params = employee_skill_parameters(role)
+        label = labels.take("Team lead skills" if owner == lead else "Talk skills")
+        new_nodes.append(NewNode(skill_ref, "masterSkill", label, params, (x - 180, y + 180)))
+        edges.append(skill_edge(skill_ref, owner))
+    return GraphAdditions(nodes=new_nodes, edges=edges, removed_edges=removed), reused
 
 
 async def _upgrade(database: Any, auth_service: Any, workflow_id: str, allowed: Optional[Callable[[str], bool]]) -> bool:
@@ -200,7 +271,31 @@ async def _upgrade(database: Any, auth_service: Any, workflow_id: str, allowed: 
     from services.workflow_storage.mutate import apply_graph_additions
 
     employee = await store.get_by_workflow(database, workflow_id)
-    if employee is None or getattr(employee, "team_plan", None) or int(employee.builder_version or 1) >= LIVE_RULE_BUILDER_VERSION:
+    if employee is None:
+        return False
+    team = getattr(employee, "team_plan", None) or {}
+    if team:
+        if team.get("version") != 2 or (team.get("talk_connection_version")
+                                        and all(team.get(key) for key in EMPLOYEE_TEAM_RESOURCE_FIELDS.values())):
+            return False
+        lead = team["lead_node_id"]
+        policy = allowed or is_hire_allowed
+        if not policy("taskManager") or not policy("masterSkill"):
+            raise EmployeeTeamValidationError("Enable Task Manager and Master Skill for this employee before starting work.",
+                                              code="EMPLOYEE_TEAM_TOOLS_UNAVAILABLE", node_id=lead)
+
+        try:
+            result = await apply_graph_additions(database, workflow_id, GraphAdditions(),
+                                                 prepare_employee_resources=_plan_team_resources,
+                                                 mutation_id=f"upgrade:{workflow_id}:lead-talk-managers-skills-v1")
+        except EmployeeTeamValidationError:
+            raise
+        except Exception as exc:
+            logger.warning("Could not save employee Task Manager and Master Skill connections", workflow_id=workflow_id, exc_info=True)
+            raise EmployeeTeamValidationError("The employee's tool connections could not be saved. Try the employee upgrade again.",
+                                              code="EMPLOYEE_TEAM_TOOLS_UPGRADE_FAILED", node_id=lead) from exc
+        return bool(result and result.applied)
+    if int(employee.builder_version or 1) >= LIVE_RULE_BUILDER_VERSION:
         return False
     workflow = await database.get_workflow(workflow_id)
     if workflow is None:

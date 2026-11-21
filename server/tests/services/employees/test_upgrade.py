@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 import nodes  # noqa: F401 - the plugin registry, for the policy's lookups
 from services.approvals.contract import approved_edge_condition, send_condition
 from services.employees.apps import get_app
@@ -116,3 +117,110 @@ def test_an_up_to_date_graph_gets_nothing_more():
     params = {**PARAMS, "7:browser:1": {"interaction": "full"}}
     again = _plan(placed.graph, roles, params)
     assert not again.additions, again.additions
+
+
+@pytest.mark.parametrize("existing", ["legacy", "connected", "other_lead", "shared", "shared_skills"])
+async def test_existing_team_connects_its_assigned_lead_once(real_database, monkeypatch, existing):
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    from models.database import NodeParameter, Workflow
+    from models.employees import Employee
+    from services.employees.store import get_by_workflow
+    from services.employees.summaries import _team_setup_pending
+    from services.employee_team_connection import EMPLOYEE_TEAM_RESOURCE_FIELDS, EmployeeTeamValidationError, employee_skill_parameters, employee_team_edge
+    from services.employees.upgrade import upgrade_employee
+    from services.graph_build import skill_edge, tool_edge
+
+    lead, contact, spare = "7:ai_employee:1", "7:aiAgent:1", "7:ai_employee:2"
+    specialist = "7:tool_agent:1"
+    teammate = _edge(specialist, lead, "input-teammates", "output-top")
+    graph = {"nodes": [_node(lead, "ai_employee", "Work"), _node(contact, "aiAgent", "Maya"),
+                       _node(spare, "ai_employee", "Other team"), _node(specialist, "tool_agent", "Operations")],
+             "edges": [teammate]}
+    plan = {"version": 2, "talk_node_id": contact, "lead_node_id": lead,
+            "members": [{"node_id": specialist, "node_type": "tool_agent", "tools": []}]}
+    existing_manager = "7:taskManager:4"
+    contact_manager = "7:taskManager:5"
+    original_skill, contact_skill = "7:masterSkill:2", "7:masterSkill:3"
+    lead_params = {"skill_folder": "assistant", "skills_config": {"owner-edited": {"isCustomized": True, "instructions": "Keep {{taskmanager.output}} verbatim."}}}
+    talk_params = {"skill_folder": "assistant", "skills_config": {"custom-chat": {"enabled": False, "instructions": "My exact words"}}}
+    route = employee_team_edge(lead, contact).to_dict()
+    if existing != "legacy":
+        plan["talk_connection_version"] = 1
+        graph["edges"].append(route)
+        graph["nodes"].append(_node(existing_manager, "taskManager", "My assignments"))
+        owner = spare if existing == "other_lead" else lead
+        graph["edges"].append(tool_edge(existing_manager, owner).to_dict())
+        if existing == "connected":
+            # An intermediate builder already recorded the lead manager.
+            plan["task_manager_node_id"] = existing_manager
+            graph["nodes"].append(_node(contact_manager, "taskManager", "Chat requests"))
+            graph["edges"].append(tool_edge(contact_manager, contact).to_dict())
+        if existing in {"connected", "shared_skills"}:
+            graph["nodes"].append(_node(original_skill, "masterSkill", "My role instructions"))
+            graph["edges"].append(skill_edge(original_skill, lead).to_dict())
+            if existing == "connected":
+                graph["nodes"].append(_node(contact_skill, "masterSkill", "Private chat skills"))
+            graph["edges"].append(skill_edge(contact_skill if existing == "connected" else original_skill, contact).to_dict())
+        if existing == "shared":
+            graph["edges"].append(tool_edge(existing_manager, spare).to_dict())
+    async with real_database.reserved_session() as session:
+        session.add(Workflow(id="7", name="Maya", slug="maya", data=graph))
+        session.add(Employee(id="hire", workflow_id="7", owner_id="owner", builder_version=6 if existing == "legacy" else 7,
+                             team_plan=plan, node_roles={"agent": lead, "talk_agent": contact}))
+        if existing != "legacy":
+            session.add(NodeParameter(node_id=existing_manager, parameters={"description": "Owner's instructions"}))
+        if existing in {"connected", "shared_skills"}:
+            session.add(NodeParameter(node_id=original_skill, parameters=lead_params))
+        if existing == "connected":
+            session.add(NodeParameter(node_id=contact_skill, parameters=talk_params))
+        await session.commit()
+    monkeypatch.setattr("services.workflow_ops.broadcast_workflow_ops", AsyncMock())
+
+    if existing == "shared":
+        with pytest.raises(EmployeeTeamValidationError):
+            await upgrade_employee(real_database, None, "7")
+        assert (await real_database.get_workflow("7")).data == graph
+        assert (await get_by_workflow(real_database, "7")).team_plan == plan
+        return
+
+    results = await asyncio.gather(*(upgrade_employee(real_database, None, "7") for _ in range(2)))
+    assert sorted(results) == [False, True]
+    assert not await upgrade_employee(real_database, None, "7")
+    saved = await real_database.get_workflow("7")
+    employee = await get_by_workflow(real_database, "7")
+    manager = employee.node_roles["task_manager"]
+    roles = employee.node_roles
+    assigned = {field: roles[role] for role, field in EMPLOYEE_TEAM_RESOURCE_FIELDS.items()}
+    assert len(set(assigned.values())) == 4
+    assert employee.team_plan == {**plan, "talk_connection_version": 1, **assigned}
+    assert saved.data["edges"].count(route) == 1
+    assert saved.data["edges"].count(tool_edge(manager, lead).to_dict()) == 1
+    assert saved.data["edges"].count(tool_edge(roles["talk_task_manager"], contact).to_dict()) == 1
+    assert saved.data["edges"].count(skill_edge(roles["lead_skills"], lead).to_dict()) == 1
+    assert saved.data["edges"].count(skill_edge(roles["talk_skills"], contact).to_dict()) == 1
+    assert len([n for n in saved.data["nodes"] if n["type"] == "taskManager"]) == (3 if existing == "other_lead" else 2)
+    assert len([n for n in saved.data["nodes"] if n["type"] == "masterSkill"]) == 2
+    if existing == "connected":
+        assert manager == existing_manager and saved.data == graph
+        assert roles["lead_skills"] == original_skill and roles["talk_skills"] == contact_skill
+        assert await real_database.get_node_parameters(contact_skill) == talk_params
+    if existing == "shared_skills":
+        assert roles["lead_skills"] == original_skill and roles["talk_skills"] != original_skill
+        assert await real_database.get_node_parameters(roles["talk_skills"]) == lead_params
+    if existing in {"shared_skills", "connected"}:
+        assert await real_database.get_node_parameters(original_skill) == lead_params
+    else:
+        for role in ("lead", "talk"):
+            assert await real_database.get_node_parameters(roles[role + "_skills"]) == employee_skill_parameters(role)
+    if existing != "legacy":
+        assert await real_database.get_node_parameters(existing_manager) == {"description": "Owner's instructions"}
+    if existing == "other_lead":
+        assert manager != existing_manager
+        assert tool_edge(existing_manager, spare).to_dict() in saved.data["edges"]
+    live_plan = dict(plan)
+    control = SimpleNamespace(status="running", graph_snapshot={"nodes": [{"id": lead, "data": {"employee_team_plan": live_plan}}]})
+    assert _team_setup_pending(employee, control)
+    live_plan.update(employee.team_plan)
+    assert not _team_setup_pending(employee, control)
