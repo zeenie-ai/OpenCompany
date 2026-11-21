@@ -9,6 +9,7 @@ For how OpenCompany works today, start from the documentation table in [CLAUDE.m
 | [dynamic-workflow/](dynamic-workflow/README.md) | 2026-11-12, extended 2026-11-19 | How a dynamic workflow (a script the model writes, which runs sub-agents) could be built on the Temporal engine. Six digests of other projects, among them Claude Code's Code Mode; six maps of the code; a cross-reference; a plan | Research complete, nothing built. Six questions wait for the owner ([PLAN.md](dynamic-workflow/PLAN.md)) |
 | [treg-reels-run.md](treg-reels-run.md) | 2026-11-17 | One treg search job of 2026-11-13: why it cost $2.41 of model time for $0.05 of data, and why it found 9 reels where the owner counted 11 | Two of five fixes built, one built in part |
 | [three-js-weather-app-run.md](three-js-weather-app-run.md) | 2026-11-17 | One day of building a three.js site: where $10.74 of model cost went, and what in the product let it | Two of ten fixes built, four built in part |
+| [cache-rewrites.md](cache-rewrites.md) | 2026-11-21 | Two sessions of 2026-11-20, one on the older agent lifecycle and one on the reusable agents: how much of what an agent writes to the prompt cache it had already written, and why | Measured only, nothing built (2026-11-21). A cache marker for the fixed prefix waits for the owner |
 | [noodle/](noodle/README.md) | 2026-10-08 | Five notes from a review of the Noodle app's interface and runtime | Reference only |
 
 ## How these notes are kept
