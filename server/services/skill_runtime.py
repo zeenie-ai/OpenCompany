@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 import time
@@ -228,7 +229,7 @@ async def execute_skill_tool(args: Dict[str, Any], config: Dict[str, Any]) -> Di
     started = time.monotonic()
     await _event(config, descriptor, action, "loading")
     try:
-        instructions, skill = _load_authoritative(descriptor)
+        instructions, skill = await asyncio.to_thread(_load_authoritative, descriptor)
         content_hash = hashlib.sha256(instructions.encode()).hexdigest()
         scope = (str(config.get("workflow_id") or ""), str(config.get("execution_id") or ""),
                  str(config.get("parent_node_id") or ""), name)
@@ -245,14 +246,16 @@ async def execute_skill_tool(args: Dict[str, Any], config: Dict[str, Any]) -> Di
                 raise SkillRuntimeError("SKILL_NOT_LOADED", "Load the skill before reading its resources")
             content = _resource(skill, str(args.get("path") or ""))
             if action == "read_resource":
-                cursor = max(0, int(args.get("cursor") or 0)); limit = min(MAX_RESOURCE_CHARS, max(1, int(args.get("limit") or 4000)))
+                cursor = max(0, int(args.get("cursor") or 0))
+                limit = min(MAX_RESOURCE_CHARS, max(1, int(args.get("limit") or 4000)))
                 result = {"skill_name": name, "path": args.get("path"), "content": content[cursor:cursor + limit],
                           "cursor": cursor, "next_cursor": cursor + limit if cursor + limit < len(content) else None}
             elif action == "search_resource":
                 query = str(args.get("query") or "")
                 if not query: raise SkillRuntimeError("INVALID_SKILL_QUERY", "query is required")
                 matches = [{"line": i, "text": line[:500]} for i, line in enumerate(content.splitlines(), 1) if query.lower() in line.lower()]
-                cursor = max(0, int(args.get("cursor") or 0)); limit = min(MAX_SEARCH_MATCHES, max(1, int(args.get("limit") or 20)))
+                cursor = max(0, int(args.get("cursor") or 0))
+                limit = min(MAX_SEARCH_MATCHES, max(1, int(args.get("limit") or 20)))
                 result = {"skill_name": name, "path": args.get("path"), "matches": matches[cursor:cursor + limit],
                           "next_cursor": cursor + limit if cursor + limit < len(matches) else None}
             else:

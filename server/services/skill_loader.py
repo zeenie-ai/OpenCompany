@@ -5,7 +5,10 @@ Skills are modular capabilities defined in Markdown files that Zeenie
 can discover and use on demand.
 """
 
+import asyncio
+import json
 import re
+import threading
 import yaml
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -51,6 +54,20 @@ class Skill:
     assets: Dict[str, bytes] = field(default_factory=dict)  # filename -> binary content
 
 
+def _user_skill_metadata(row: Dict[str, Any], name: str) -> SkillMetadata:
+    """Read the public row returned by the database's user-skill methods."""
+    allowed_tools = row.get("allowed_tools") or []
+    if isinstance(allowed_tools, str):
+        allowed_tools = [tool.strip() for tool in allowed_tools.split(",") if tool.strip()]
+    metadata = row.get("metadata") or {}
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except json.JSONDecodeError:
+            metadata = {}
+    return SkillMetadata(name=name, description=row.get("description", ""), allowed_tools=allowed_tools, metadata=metadata)
+
+
 class SkillLoader:
     """Loads and manages Agent Skills from filesystem and database.
 
@@ -72,10 +89,23 @@ class SkillLoader:
             skill_dirs: List of directories to scan for skills
             database: Database instance for loading user-created skills
         """
-        self._skill_dirs = skill_dirs or []
+        self._skill_dirs = [folder.resolve() for folder in (skill_dirs or [])]
         self._database = database
         self._registry: Dict[str, SkillMetadata] = {}
+        self._files_by_path: Dict[Path, SkillMetadata] = {}
+        self._database_overrides: Dict[str, SkillMetadata] = {}
         self._cache: Dict[str, Skill] = {}  # Cache loaded skills
+        self._refresh_lock = threading.Lock()
+        self._state_lock = threading.Lock()
+        self._cache_generation = 0
+
+    def get_registry(self) -> Dict[str, SkillMetadata]:
+        """Return cached metadata; call ``scan_skills`` explicitly to refresh.
+
+        Refreshes replace the registry rather than modifying it, so readers
+        can keep using the last complete snapshot while a scan is in flight.
+        """
+        return dict(self._registry)
 
     def scan_skills(self) -> Dict[str, SkillMetadata]:
         """Scan all skill directories and load metadata.
@@ -83,10 +113,57 @@ class SkillLoader:
         Returns:
             Dict mapping skill name to SkillMetadata
         """
-        self._registry.clear()
+        return self._scan_and_publish({})
+
+    def _scan_and_publish(self, overrides: Dict[str, SkillMetadata]) -> Dict[str, SkillMetadata]:
+        # Serialize filesystem refreshes without holding the state lock during
+        # I/O. Metadata readers continue to see the previous complete registry.
+        with self._refresh_lock:
+            files = self._scan_filesystem()
+            self._database_overrides = overrides
+            return self._publish_files(files)
+
+    def _directory_priority(self, path: Path) -> int:
+        # Explicit imports outside the configured directories overlay them.
+        return max((i for i, root in enumerate(self._skill_dirs) if path.is_relative_to(root)),
+                   default=len(self._skill_dirs))
+
+    def _publish_files(self, files: Dict[Path, SkillMetadata]) -> Dict[str, SkillMetadata]:
+        # Keep shadowed sources so a folder refresh can reveal a lower-priority
+        # copy even when it only scans the folder that removed its override.
+        registry = {}
+        for path in sorted(files, key=self._directory_priority):
+            metadata = files[path]
+            registry[metadata.name] = metadata
+        registry.update(self._database_overrides)
+        self._files_by_path = files
+        with self._state_lock:
+            self._registry = registry
+            self._cache = {}
+            self._cache_generation += 1
+        return dict(registry)
+
+    def scan_skill_folder(self, folder: Path) -> Dict[str, SkillMetadata]:
+        """Refresh an explicit folder while preserving unrelated cached metadata.
+
+        This one-off import does not change the default refresh directories.
+        Async callers should offload the method with ``asyncio.to_thread``.
+        """
+        with self._refresh_lock:
+            folder = folder.resolve()
+            discovered = self._scan_directories([folder])
+            retained = {path: meta for path, meta in self._files_by_path.items() if not path.is_relative_to(folder)}
+            self._publish_files({**retained, **discovered})
+            return {meta.name: meta for meta in discovered.values()}
+
+    def _scan_filesystem(self) -> Dict[Path, SkillMetadata]:
+        return self._scan_directories(self._skill_dirs)
+
+    def _scan_directories(self, skill_dirs: List[Path]) -> Dict[Path, SkillMetadata]:
+        registry: Dict[Path, SkillMetadata] = {}
 
         # Scan filesystem directories (recursive - finds SKILL.md in any subdirectory)
-        for skill_dir in self._skill_dirs:
+        for skill_dir in skill_dirs:
             if not skill_dir.exists():
                 logger.debug(f"[SkillLoader] Skill directory not found: {skill_dir}")
                 continue
@@ -96,13 +173,13 @@ class SkillLoader:
                     metadata = self._parse_skill_metadata(skill_md)
                     if metadata:
                         metadata.path = skill_md.parent
-                        self._registry[metadata.name] = metadata
+                        registry[skill_md.parent] = metadata
                         logger.debug(f"[SkillLoader] Loaded skill: {metadata.name}")
                 except Exception as e:
                     logger.error(f"[SkillLoader] Failed to parse {skill_md}: {e}")
 
-        logger.info(f"[SkillLoader] Loaded {len(self._registry)} skills from filesystem")
-        return self._registry
+        logger.info(f"[SkillLoader] Loaded {len(registry)} skills from filesystem")
+        return registry
 
     async def scan_skills_with_database(self) -> Dict[str, SkillMetadata]:
         """Scan skills from filesystem and database.
@@ -110,36 +187,19 @@ class SkillLoader:
         Returns:
             Dict mapping skill name to SkillMetadata
         """
-        # First scan filesystem
-        self.scan_skills()
-
-        # Then load from database (overrides filesystem if same name)
+        # Build database overrides without mutating the published registry.
+        # No threading lock is held while awaiting database I/O.
+        overrides: Dict[str, SkillMetadata] = {}
         if self._database:
             try:
                 user_skills = await self._database.get_all_user_skills()
-                for skill in user_skills:
-                    allowed_tools = []
-                    if skill.allowed_tools:
-                        allowed_tools = [t.strip() for t in skill.allowed_tools.split(",")]
-
-                    metadata_dict = {}
-                    if skill.metadata_json:
-                        import json
-
-                        metadata_dict = json.loads(skill.metadata_json)
-
-                    self._registry[skill.name] = SkillMetadata(
-                        name=skill.name,
-                        description=skill.description,
-                        allowed_tools=allowed_tools,
-                        metadata=metadata_dict,
-                        path=None,  # Database skills have no path
-                    )
+                for row in user_skills:
+                    overrides[row["name"]] = _user_skill_metadata(row, row["name"])
                 logger.info(f"[SkillLoader] Loaded {len(user_skills)} skills from database")
             except Exception as e:
                 logger.error(f"[SkillLoader] Failed to load skills from database: {e}")
 
-        return self._registry
+        return await asyncio.to_thread(self._scan_and_publish, overrides)
 
     def _parse_skill_metadata(self, skill_md_path: Path) -> Optional[SkillMetadata]:
         """Parse SKILL.md frontmatter to extract metadata.
@@ -236,16 +296,16 @@ class SkillLoader:
         Returns:
             Skill with full content or None if not found
         """
-        # Check cache first
-        if name in self._cache:
-            return self._cache[name]
+        with self._state_lock:
+            if name in self._cache:
+                return self._cache[name]
+            metadata = self._registry.get(name)
+            generation = self._cache_generation
 
         # Check registry (filesystem skills only - use load_skill_async for user skills)
-        if name not in self._registry:
+        if metadata is None:
             logger.debug(f"[SkillLoader] Skill not in registry: {name}")
             return None
-
-        metadata = self._registry[name]
 
         # Database skills have no path - load from database
         if metadata.path is None:
@@ -294,7 +354,11 @@ class SkillLoader:
         skill = Skill(metadata=metadata, instructions=instructions, scripts=scripts, references=references)
 
         # Cache the loaded skill
-        self._cache[name] = skill
+        with self._state_lock:
+            # A refresh or editor invalidation may have completed while the
+            # files were being read. Never repopulate its cache with old data.
+            if generation == self._cache_generation:
+                self._cache[name] = skill
         logger.debug(f"[SkillLoader] Loaded full skill: {name} ({len(instructions)} chars)")
 
         return skill
@@ -307,7 +371,7 @@ class SkillLoader:
         return None
 
     async def load_skill_async(self, name: str) -> Optional[Skill]:
-        """Async version of load_skill for database skills.
+        """Load database or filesystem content without blocking the event loop.
 
         Args:
             name: Skill name to load
@@ -315,45 +379,28 @@ class SkillLoader:
         Returns:
             Skill with full content or None if not found
         """
-        # Check cache first
-        if name in self._cache:
-            return self._cache[name]
+        with self._state_lock:
+            if name in self._cache:
+                return self._cache[name]
+            metadata = self._registry.get(name)
+            generation = self._cache_generation
 
         # Try filesystem first
-        if name in self._registry and self._registry[name].path is not None:
-            return self.load_skill(name)
+        if metadata is not None and metadata.path is not None:
+            return await asyncio.to_thread(self.load_skill, name)
 
         # Load from database
         if self._database:
             try:
                 user_skill = await self._database.get_user_skill(name)
                 if user_skill:
-                    # user_skill is a dict from _skill_to_dict()
-                    allowed_tools = user_skill.get("allowed_tools", [])
-                    if isinstance(allowed_tools, str):
-                        allowed_tools = [t.strip() for t in allowed_tools.split(",") if t.strip()]
-
-                    metadata_dict = user_skill.get("metadata", {})
-                    if isinstance(metadata_dict, str):
-                        import json
-
-                        try:
-                            metadata_dict = json.loads(metadata_dict) if metadata_dict else {}
-                        except json.JSONDecodeError:
-                            metadata_dict = {}
-
-                    metadata = SkillMetadata(
-                        name=user_skill.get("name", name),
-                        description=user_skill.get("description", ""),
-                        allowed_tools=allowed_tools,
-                        metadata=metadata_dict,
-                        path=None,
-                    )
-
+                    metadata = _user_skill_metadata(user_skill, user_skill.get("name", name))
                     skill = Skill(metadata=metadata, instructions=user_skill.get("instructions", ""), scripts={}, references={})
 
                     logger.info(f"[SkillLoader] Loaded user skill from database: {name}")
-                    self._cache[name] = skill
+                    with self._state_lock:
+                        if generation == self._cache_generation:
+                            self._cache[name] = skill
                     return skill
             except Exception as e:
                 logger.error(f"[SkillLoader] Failed to load skill {name} from database: {e}")
@@ -370,7 +417,8 @@ class SkillLoader:
         Returns:
             Formatted string listing available skills
         """
-        skills_to_include = skill_names or list(self._registry.keys())
+        registry = self._registry
+        skills_to_include = skill_names or list(registry.keys())
 
         if not skills_to_include:
             return ""
@@ -380,8 +428,8 @@ class SkillLoader:
         lines.append("")
 
         for name in skills_to_include:
-            if name in self._registry:
-                metadata = self._registry[name]
+            if name in registry:
+                metadata = registry[name]
                 lines.append(f"- **{name}**: {metadata.description}")
                 if metadata.allowed_tools:
                     tools_str = ", ".join(metadata.allowed_tools)
@@ -423,12 +471,15 @@ class SkillLoader:
 
     def clear_cache(self):
         """Clear the skill cache."""
-        self._cache.clear()
+        with self._state_lock:
+            self._cache = {}
+            self._cache_generation += 1
         logger.debug("[SkillLoader] Cache cleared")
 
 
 # Global skill loader instance
 _skill_loader: Optional[SkillLoader] = None
+_skill_loader_lock = threading.Lock()
 
 
 def _resolve_database():
@@ -452,14 +503,22 @@ def get_skill_loader() -> SkillLoader:
     agent path, and the editor reports "Skill '<name>' not found".
     """
     global _skill_loader
-    if _skill_loader is None:
-        _skill_loader = SkillLoader(skill_dirs=_default_skill_dirs(), database=_resolve_database())
-        _skill_loader.scan_skills()
-    elif _skill_loader._database is None:
-        # Created before the container was wired -- bind the DB now so
-        # user-skill lookups stop failing.
-        _skill_loader._database = _resolve_database()
-    return _skill_loader
+    with _skill_loader_lock:
+        if _skill_loader is None:
+            loader = SkillLoader(skill_dirs=_default_skill_dirs(), database=_resolve_database())
+            loader.scan_skills()
+            # Publish only after the initial metadata scan is complete.
+            _skill_loader = loader
+        elif _skill_loader._database is None:
+            # Created before the container was wired -- bind the DB now so
+            # user-skill lookups stop failing.
+            _skill_loader._database = _resolve_database()
+        return _skill_loader
+
+
+async def get_skill_loader_async() -> SkillLoader:
+    """Get the singleton without running its cold filesystem scan on the loop."""
+    return await asyncio.to_thread(get_skill_loader)
 
 
 def init_skill_loader(database=None) -> SkillLoader:
@@ -472,6 +531,8 @@ def init_skill_loader(database=None) -> SkillLoader:
         Initialized SkillLoader
     """
     global _skill_loader
-    _skill_loader = SkillLoader(skill_dirs=_default_skill_dirs(), database=database)
-    _skill_loader.scan_skills()
-    return _skill_loader
+    with _skill_loader_lock:
+        loader = SkillLoader(skill_dirs=_default_skill_dirs(), database=database)
+        loader.scan_skills()
+        _skill_loader = loader
+        return loader

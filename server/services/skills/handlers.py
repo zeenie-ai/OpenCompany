@@ -18,6 +18,7 @@ untouched — frontend handlers keep working without modification.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any, Dict, List
 
@@ -41,16 +42,16 @@ async def handle_get_skill_content(data: Dict[str, Any], websocket: WebSocket) -
 
     Works for both built-in skills (from SKILL.md files) and user skills (from database).
     """
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
     skill_name = data["skill_name"]
-    skill_loader = get_skill_loader()
+    skill_loader = await get_skill_loader_async()
 
     skill = await skill_loader.load_skill_async(skill_name)
     if data.get("master_skill_node_id"):
         from services.skill_defaults import scoped_defaults_version, v1_default
         if await scoped_defaults_version(container.database(), websocket, data["master_skill_node_id"]) == 1:
-            skill = v1_default(skill_name, skill)
+            skill = await asyncio.to_thread(v1_default, skill_name, skill)
     if skill:
         return {
             "success": True,
@@ -72,31 +73,20 @@ async def handle_save_skill_content(data: Dict[str, Any], websocket: WebSocket) 
     For built-in skills, writes to the SKILL.md file.
     For user skills, updates the database.
     """
-    import re
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
     skill_name = data["skill_name"]
     new_instructions = data["instructions"]
-    skill_loader = get_skill_loader()
+    skill_loader = await get_skill_loader_async()
 
-    if skill_name in skill_loader._registry:
-        metadata = skill_loader._registry[skill_name]
+    registry = skill_loader.get_registry()
+    if skill_name in registry:
+        metadata = registry[skill_name]
         if metadata.path is not None:
             skill_md_path = metadata.path / "SKILL.md"
 
-            if not skill_md_path.exists():
+            if not await asyncio.to_thread(_save_builtin_skill, skill_loader, skill_md_path, new_instructions):
                 return {"success": False, "error": f"SKILL.md not found for '{skill_name}'"}
-
-            content = skill_md_path.read_text(encoding="utf-8")
-
-            frontmatter_match = re.match(r"^(---\s*\n.*?\n---\s*\n)", content, re.DOTALL)
-            if frontmatter_match:
-                new_content = frontmatter_match.group(1) + new_instructions
-            else:
-                new_content = new_instructions
-
-            skill_md_path.write_text(new_content, encoding="utf-8")
-            skill_loader.clear_cache()
 
             from nodes.skill.master_skill._events import broadcast_skill_lifecycle
 
@@ -124,6 +114,7 @@ async def handle_save_skill_content(data: Dict[str, Any], websocket: WebSocket) 
         if updated:
             from nodes.skill.master_skill._events import broadcast_skill_lifecycle
 
+            skill_loader.clear_cache()
             await broadcast_skill_lifecycle(
                 "content_saved",
                 name=skill_name,
@@ -139,6 +130,20 @@ async def handle_save_skill_content(data: Dict[str, Any], websocket: WebSocket) 
             }
 
     return {"success": False, "error": f"Skill '{skill_name}' not found"}
+
+
+def _save_builtin_skill(skill_loader, path, instructions: str) -> bool:
+    """Publish complete content and invalidate even if the async caller exits."""
+    import re
+    from nodes.filesystem._backend import atomic_write_text
+
+    if not path.exists():
+        return False
+    content = path.read_text(encoding="utf-8")
+    frontmatter = re.match(r"^(---\s*\n.*?\n---\s*\n)", content, re.DOTALL)
+    atomic_write_text(path, (frontmatter.group(1) if frontmatter else "") + instructions)
+    skill_loader.clear_cache()
+    return True
 
 
 @ws_handler("action", "source_type", "target_type", "target_handle")
@@ -179,6 +184,10 @@ async def handle_list_skill_folders(data: Dict[str, Any], websocket: WebSocket) 
 
     Returns folder names for the skill folder dropdown in MasterSkillEditor.
     """
+    return await asyncio.to_thread(_list_skill_folders)
+
+
+def _list_skill_folders() -> Dict[str, Any]:
     from pathlib import Path
 
     server_dir = Path(__file__).parent.parent.parent
@@ -208,30 +217,21 @@ async def handle_scan_skill_folder(data: Dict[str, Any], websocket: WebSocket) -
     Also registers discovered skills in the global registry for get_skill_content.
     """
     from pathlib import Path
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
     folder = data["folder"]
     server_dir = Path(__file__).parent.parent.parent
     target_dir = server_dir / "skills" / folder
 
-    if not target_dir.exists():
+    if not await asyncio.to_thread(target_dir.exists):
         return {"success": False, "error": f"Folder not found: skills/{folder}"}
 
-    skill_loader = get_skill_loader()
-    skills = []
-    for skill_md in target_dir.rglob("SKILL.md"):
-        metadata = skill_loader._parse_skill_metadata(skill_md)
-        if metadata:
-            metadata.path = skill_md.parent
-            skill_loader._registry[metadata.name] = metadata
-
-            skills.append(
-                {
-                    "name": metadata.name,
-                    "description": metadata.description,
-                    "metadata": metadata.metadata,
-                }
-            )
+    skill_loader = await get_skill_loader_async()
+    registry = await asyncio.to_thread(skill_loader.scan_skill_folder, target_dir)
+    skills = [
+        {"name": metadata.name, "description": metadata.description, "metadata": metadata.metadata}
+        for metadata in registry.values()
+    ]
 
     return {"success": True, "skills": skills, "folder": folder}
 
@@ -250,19 +250,18 @@ async def handle_lookup_skill_metadata(
     currently-selected folder. `scan_skill_folder` is folder-scoped;
     this handler is name-scoped and queries the shared registry.
     """
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
     names = data.get("names") or []
     if not isinstance(names, list):
         return {"success": False, "error": "names must be a list", "skills": []}
 
-    skill_loader = get_skill_loader()
-    if not skill_loader._registry:
-        skill_loader.scan_skills()
+    skill_loader = await get_skill_loader_async()
+    registry = skill_loader.get_registry()
 
     skills: List[Dict[str, Any]] = []
     for name in names:
-        meta = skill_loader._registry.get(name)
+        meta = registry.get(name)
         if meta:
             skills.append(
                 {
@@ -329,8 +328,10 @@ async def handle_create_user_skill(data: Dict[str, Any], websocket: WebSocket) -
 async def handle_update_user_skill(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Update an existing user skill."""
     from nodes.skill.master_skill._events import broadcast_skill_lifecycle
+    from services.skill_loader import get_skill_loader_async
 
     database = container.database()
+    skill_loader = await get_skill_loader_async()
 
     skill = await database.update_user_skill(
         name=data["name"],
@@ -346,6 +347,7 @@ async def handle_update_user_skill(data: Dict[str, Any], websocket: WebSocket) -
     )
 
     if skill:
+        skill_loader.clear_cache()
         await broadcast_skill_lifecycle("updated", name=data["name"], skill=skill)
         return {"skill": skill, "timestamp": time.time()}
     return {"success": False, "error": f"Skill '{data['name']}' not found"}
@@ -355,12 +357,15 @@ async def handle_update_user_skill(data: Dict[str, Any], websocket: WebSocket) -
 async def handle_delete_user_skill(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Delete a user skill."""
     from nodes.skill.master_skill._events import broadcast_skill_lifecycle
+    from services.skill_loader import get_skill_loader_async
 
     database = container.database()
+    skill_loader = await get_skill_loader_async()
 
     deleted = await database.delete_user_skill(data["name"])
 
     if deleted:
+        skill_loader.clear_cache()
         await broadcast_skill_lifecycle("deleted", name=data["name"])
         logger.info(f"[Skills] Deleted user skill: {data['name']}")
         return {"success": True, "deleted": True, "name": data["name"], "timestamp": time.time()}
@@ -413,20 +418,21 @@ async def handle_clear_memory(data: Dict[str, Any], websocket: WebSocket) -> Dic
 async def handle_reset_skill(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Get original SKILL.md content for resetting a built-in skill."""
     import re
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
     skill_name = data["skill_name"]
-    skill_loader = get_skill_loader()
+    skill_loader = await get_skill_loader_async()
+    registry = skill_loader.get_registry()
 
-    if skill_name not in skill_loader._registry:
+    if skill_name not in registry:
         return {"success": False, "error": f"Skill '{skill_name}' not found"}
 
-    metadata = skill_loader._registry[skill_name]
+    metadata = registry[skill_name]
 
     if data.get("master_skill_node_id"):
         from services.skill_defaults import scoped_defaults_version, v1_default
         if await scoped_defaults_version(container.database(), websocket, data["master_skill_node_id"]) == 1:
-            variant = v1_default(skill_name)
+            variant = await asyncio.to_thread(v1_default, skill_name)
             if variant:
                 return {"success": True, "skill_name": skill_name, "original_content": variant.instructions, "is_builtin": variant.metadata.path is not None}
 
@@ -434,10 +440,10 @@ async def handle_reset_skill(data: Dict[str, Any], websocket: WebSocket) -> Dict
         return {"success": False, "error": f"Cannot reset user skill '{skill_name}' - no default exists"}
 
     skill_md_path = metadata.path / "SKILL.md"
-    if not skill_md_path.exists():
+    if not await asyncio.to_thread(skill_md_path.exists):
         return {"success": False, "error": f"SKILL.md not found for '{skill_name}'"}
 
-    content = skill_md_path.read_text(encoding="utf-8")
+    content = await asyncio.to_thread(skill_md_path.read_text, encoding="utf-8")
 
     frontmatter_match = re.match(r"^---\s*\n.*?\n---\s*\n", content, re.DOTALL)
     if frontmatter_match:

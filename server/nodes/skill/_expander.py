@@ -41,9 +41,10 @@ async def expand_master_skill(
         label}`` dicts matching the shape ``edge_walker._append_skill_entries``
         produces for non-master skills.
     """
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
-    registry = get_skill_loader().scan_skills()
+    loader = await get_skill_loader_async()
+    registry = loader.get_registry()
     entries: List[Dict[str, Any]] = []
 
     for skill_key, skill_cfg in skills_config.items():
@@ -54,7 +55,7 @@ async def expand_master_skill(
         metadata = registry.get(skill_key)
         if skill_key.endswith("-personality") and not instructions:
             try:
-                personality = get_skill_loader().load_skill(skill_key)
+                personality = await loader.load_skill_async(skill_key)
                 instructions = personality.instructions if personality else ""
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[MasterSkill] Failed to load personality skill %s: %s", skill_key, exc)

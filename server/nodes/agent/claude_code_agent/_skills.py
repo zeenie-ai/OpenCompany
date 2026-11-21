@@ -160,9 +160,9 @@ async def materialise_skills(
     # Add: parallelise with asyncio.gather since each skill write is
     # CPU- and disk-bound and independent of the others. Scales to
     # the 1000-skill masterSkill case without serial slow-down.
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
-    loader = get_skill_loader()
+    loader = await get_skill_loader_async()
     add_tasks = [
         asyncio.create_task(
             _materialise_one(loader, skills_dir, name, log_label),

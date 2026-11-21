@@ -447,7 +447,7 @@ Tools exposed (mirror OpenCompany capabilities; deferred ones marked):
 | Tool | Maps to | Returns |
 |---|---|---|
 | `mcp__opencompany__getWorkspaceFiles` | `Path.rglob` over `workspace_dir` | `{files: [{path, size, mtime, content?}]}` |
-| `mcp__opencompany__listSkills` | `SkillLoader.scan_skills()` filtered to `BatchContext.connected_skill_names` | `{skills: [{name, description, allowed_tools, category}]}` (~100 tokens each) |
+| `mcp__opencompany__listSkills` | Reads the loader's cached metadata for `BatchContext.connected_skill_names` | `{skills: [{name, description, allowed_tools, category}]}` (~100 tokens each) |
 | `mcp__opencompany__getSkill` | `skill_runtime.execute_skill_tool(action="load")` for a skill in `BatchContext.connected_skill_names` | Skill `load` result: instructions + resource manifest |
 | `mcp__opencompany__readSkillResource` | `execute_skill_tool(action="read_resource", path, cursor, limit=4000)` | Bounded page of a declared resource from a loaded skill |
 | `mcp__opencompany__searchSkillResource` | `execute_skill_tool(action="search_resource", path, query, cursor, limit=20)` | Line-numbered matches in a declared text resource |

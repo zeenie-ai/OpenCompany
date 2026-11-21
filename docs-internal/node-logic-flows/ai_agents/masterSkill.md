@@ -80,9 +80,9 @@ flowchart TD
   B --> C{expander registered by nodes.skill?}
   C -- no --> C1[warning: skipping expansion - agent runs without skills]
   C -- yes --> D[skills_config from DB params; skill_folder assistant -> force skill enabled+required]
-  D --> E[expand_master_skill: for each enabled key]
+  D --> E[expand_master_skill reads cached metadata for each enabled key]
   E --> F{key ends with -personality and no instructions?}
-  F -- yes --> F1[skill_loader.load_skill -> instructions from SKILL.md, failure logged]
+  F -- yes --> F1[load_skill_async reads personality instructions, failure logged]
   F -- no --> G
   F1 --> G[description = config.description or registry metadata or Instructions for key]
   G --> H[entry node_id source_key, master_skill_node_id, parameters instructions/skillName/description]

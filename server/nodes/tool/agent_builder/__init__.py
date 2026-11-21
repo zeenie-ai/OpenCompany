@@ -45,6 +45,7 @@ restart.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass
@@ -423,7 +424,7 @@ def _offered_builtins(*, employee: bool) -> Dict[str, Any]:
 
     blocked = set(_allowlist_config().get("disabled_skill_folders") or [])
     offered: Dict[str, Any] = {}
-    for name, meta in sorted(get_skill_loader()._registry.items()):
+    for name, meta in sorted(get_skill_loader().get_registry().items()):
         if meta.path is None:
             continue
         if employee:
@@ -449,8 +450,9 @@ async def _catalogue_skills(database: Any, *, employee: bool) -> List[Dict[str, 
     library = await _library(database)
     names = {str(row["name"]) for row in library}
     catalogue = [{"name": str(row["name"]), "description": str(row.get("description") or "")} for row in library]
+    offered = await asyncio.to_thread(_offered_builtins, employee=employee)
     catalogue += [
-        {"name": name, "description": meta.description or ""} for name, meta in _offered_builtins(employee=employee).items() if name not in names
+        {"name": name, "description": meta.description or ""} for name, meta in offered.items() if name not in names
     ]
     if employee:
         from services.employees.policy import check_skill
@@ -545,14 +547,16 @@ async def _find_skill(database: Any, name: str, *, employee: bool) -> Optional[_
     row = await database.get_user_skill(name)
     if row and str(row.get("instructions") or "").strip():
         return _Skill(name=name, description=str(row.get("description") or ""), instructions=str(row["instructions"]))
-    meta = _offered_builtins(employee=employee).get(name)
+    offered = await asyncio.to_thread(_offered_builtins, employee=employee)
+    meta = offered.get(name)
     if meta is None:
         return None
     if not employee:
         return _Skill(name=name, description=meta.description or "", instructions="")
-    from services.skill_loader import get_skill_loader
+    from services.skill_loader import get_skill_loader_async
 
-    skill = get_skill_loader().load_skill(name)
+    loader = await get_skill_loader_async()
+    skill = await loader.load_skill_async(name)
     if skill is None or not skill.instructions.strip():
         return None
     return _Skill(name=name, description=meta.description or "", instructions=skill.instructions)

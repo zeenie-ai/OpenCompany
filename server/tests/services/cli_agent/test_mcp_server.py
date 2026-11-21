@@ -362,6 +362,44 @@ class TestOpenCompanyToolBridge:
         )
 
     @pytest.mark.asyncio
+    async def test_list_skills_reuses_metadata_and_respects_batch_scope(self, monkeypatch, tmp_path):
+        from unittest.mock import Mock
+
+        import services.skill_loader as loader_module
+        from services.cli_agent import mcp_server
+
+        for name in ("connected-skill", "other-skill"):
+            directory = tmp_path / name
+            directory.mkdir()
+            (directory / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: Description for {name}\n---\nInstructions\n",
+                encoding="utf-8",
+            )
+        loader = loader_module.SkillLoader(skill_dirs=[tmp_path])
+        loader.scan_skills()
+        scan = Mock(side_effect=AssertionError("Listing must not rescan skills"))
+        monkeypatch.setattr(loader, "scan_skills", scan)
+        monkeypatch.setattr(loader_module, "get_skill_loader", lambda: loader)
+        get_mcp_app()
+        ctx = BatchContext(
+            workflow_id="wf_test", node_id="agent", workspace_dir=tmp_path,
+            connected_skill_names={"connected-skill", "missing-skill"},
+        )
+        token = mcp_server._current_batch.set(ctx)
+        try:
+            for _ in range(2):
+                output = await mcp_server._mcp_singleton.call_tool("listSkills", {})
+                # FastMCP wraps a typed dict in the structured result field.
+                assert isinstance(output, tuple)
+                assert output[1]["result"] == {"skills": [{
+                    "name": "connected-skill", "description": "Description for connected-skill",
+                    "allowed_tools": [], "category": None,
+                }]}
+        finally:
+            mcp_server._current_batch.reset(token)
+        scan.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_register_batch_exposes_tool_on_fastmcp(self):
         """The connected workflow node must surface in ``list_tools`` so
         claude sees ``mcp__opencompany__<node_type>`` on first

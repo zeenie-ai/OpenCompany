@@ -433,13 +433,13 @@ def _build_tools(mcp: Any) -> None:  # FastMCP type
             "to fetch the full instructions."
         ),
     )
-    def list_skills() -> Dict[str, Any]:
+    async def list_skills() -> Dict[str, Any]:
         ctx = _require_batch()
         try:
-            from services.skill_loader import get_skill_loader
+            from services.skill_loader import get_skill_loader_async
 
-            loader = get_skill_loader()
-            registry = loader.scan_skills()
+            loader = await get_skill_loader_async()
+            registry = loader.get_registry()
             results = []
             for name in sorted(ctx.connected_skill_names):
                 meta = registry.get(name)

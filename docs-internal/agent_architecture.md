@@ -451,10 +451,12 @@ SkillLoader
 └── get_skill_instructions()# Shortcut for load_skill().instructions
 ```
 
-**`scan_skills()`** (`skill_loader.py:80-105`):
-- Iterates `_skill_dirs`, uses `rglob("SKILL.md")` for recursive discovery
-- Parses YAML frontmatter for each file (`_parse_skill_metadata`)
-- Populates `_registry` with `SkillMetadata` (name, description, allowed_tools, path)
+`scan_skills()` reads `SKILL.md` frontmatter across the configured directories
+and publishes a complete metadata snapshot. Master Skill expansion, teammate
+rosters and the CLI's `listSkills` read that snapshot. Async callers use
+`get_skill_loader_async()` so the first filesystem scan runs on a worker thread.
+The editor's folder refresh picks up added, renamed or deleted skill files.
+A refresh invalidates cached instructions so the next load reads current content.
 
 **`load_skill(name)`** (`skill_loader.py:228-298`):
 1. Check `_cache` -- return immediately if cached

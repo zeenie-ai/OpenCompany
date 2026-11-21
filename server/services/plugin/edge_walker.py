@@ -650,16 +650,15 @@ async def _teammate_child_skills(
                 if skill_key in _ROSTER_SKIPPED_SKILLS or skill_key.endswith("-personality"):
                     continue
                 if registry is None:
-                    from services.skill_loader import get_skill_loader
+                    from services.skill_loader import get_skill_loader_async
 
-                    # The descriptions from the loader's last scan: it scans
-                    # when created and on every Master Skill expansion. A
-                    # rescan here re-read every SKILL.md on the event loop
-                    # once per teammate.
+                    # Use the last metadata snapshot. Cold initialization is
+                    # off-loop; roster reads never trigger a filesystem refresh.
                     try:
+                        loader = await get_skill_loader_async()
                         registry = {
                             skill["name"]: skill["description"]
-                            for skill in get_skill_loader().get_available_skills()
+                            for skill in loader.get_available_skills()
                         }
                     except Exception as exc:  # noqa: BLE001 - a roster must never fail a run
                         logger.warning("[Teams] skill registry unavailable for roster: %s", exc)
