@@ -301,16 +301,19 @@ written to memory or Temporal history.
 
 `reported_cost` is the provider's own charge for the call, for a provider
 that reports one. Only OpenRouter does: every response carries `usage.cost`,
-the amount taken from the account, and on a bring-your-own-key call, where
-that is only OpenRouter's fee, the provider's charge sits beside it in
-`usage.cost_details.upstream_inference_cost`
-([usage accounting](https://openrouter.ai/docs/use-cases/usage-accounting)).
-`OpenRouterProvider._reported_cost` adds the two, except on a call marked
-`is_byok: false`, which reports `cost` alone: the guide says a call paid with
-credits has no upstream charge, one of its examples lists one, and a charge
-must never be counted twice. A cost of another shape reports nothing. The base
-`OpenAIProvider._reported_cost` returns `None`, so no other provider reports
-one even if its usage has a `cost` field. No request parameter asks for it.
+the cost of the call
+([chat completion reference](https://openrouter.ai/docs/api-reference/chat-completion)).
+`OpenRouterProvider._reported_cost` returns it. `usage.cost_details` is a
+breakdown of what the upstream provider charged for the same call, and on a
+call paid with OpenRouter credits it is the same money: on 2026-11-20 every
+such response carried an `upstream_inference_cost` equal to `cost` (the usage
+guide says the field is empty there), and adding the two booked each call at
+exactly twice its charge. So the upstream charge is added only on a
+bring-your-own-key call (`usage.is_byok` true), where `cost` is only
+OpenRouter's fee and the provider bills the key's owner directly. A cost of
+another shape reports nothing. The base `OpenAIProvider._reported_cost`
+returns `None`, so no other provider reports one even if its usage has a
+`cost` field. No request parameter asks for it.
 The model step, the summarizer and the hire screen's setup call pass it to
 `record_llm_usage(cost=...)`, which books it as the row's total in place of
 the priced estimate (see [pricing_service.md](pricing_service.md)). It is not

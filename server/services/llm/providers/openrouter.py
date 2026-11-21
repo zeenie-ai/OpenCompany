@@ -79,27 +79,29 @@ class OpenRouterProvider(OpenAIProvider):
     def _reported_cost(self, usage: Any) -> Optional[float]:
         """What OpenRouter charged for the call, in USD (its credits).
 
-        Every response carries ``usage.cost``, the amount taken from the
-        account. On a bring-your-own-key call that is only OpenRouter's fee,
-        and the provider's own charge is beside it in
-        ``usage.cost_details.upstream_inference_cost``, so the two are added.
-        (openrouter.ai/docs/use-cases/usage-accounting)
+        Every response carries ``usage.cost``, the cost of the call.
+        ``usage.cost_details`` breaks down what the upstream provider charged
+        for it. On a call paid with OpenRouter credits that is the same money,
+        so it is not added: measured on 2026-11-20, adding it booked every
+        call at exactly twice its charge, although the usage guide says the
+        field is empty on such calls.
 
-        The guide says a call paid with credits has no upstream charge, but
-        one of its examples lists one, so a call marked ``is_byok: false``
-        reports ``cost`` alone and is never counted twice.
+        On a bring-your-own-key call (``usage.is_byok`` true) ``cost`` is only
+        OpenRouter's fee and the provider bills the key's owner directly, so
+        ``cost_details.upstream_inference_cost`` is added there, and only
+        there. (openrouter.ai/docs/api-reference/chat-completion)
 
-        Anything but those shapes reports nothing: this runs after the call
-        was paid for, and an error here would make the step send it again.
+        Anything but those shapes reports nothing more: this runs after the
+        call was paid for, and an error here would make the step send it again.
         """
         cost = getattr(usage, "cost", None)
         if not isinstance(cost, (int, float)):
             return None
+        if getattr(usage, "is_byok", None) is not True:
+            return cost
         details = getattr(usage, "cost_details", None)
         upstream = details.get("upstream_inference_cost") if isinstance(details, dict) else None
-        if getattr(usage, "is_byok", None) is False or not isinstance(upstream, (int, float)):
-            return cost
-        return cost + upstream
+        return cost + upstream if isinstance(upstream, (int, float)) else cost
 
     async def fetch_models(self, api_key: str) -> List[str]:
         import httpx
