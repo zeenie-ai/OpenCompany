@@ -71,7 +71,7 @@ An employee takes a job through the steps needed to complete it: browsing websit
 - **Memory:** With memory enabled, employees can save useful facts, preferences, and decisions for later work.
 - **Coaching:** Give feedback in chat and refine the employee's instructions as you see results.
 - **Skills:** A skill is a written playbook, such as how to answer customers or prepare your weekly report. **Settings > Skills** manages the library used by new hires; existing employees can be given skills through chat.
-- **New abilities:** Ask an employee to add a tool or skill within its access rules. Use **Apply** to activate saved changes for future work; the change takes effect once its current work finishes.
+- **New abilities.** Ask in Talk, “Add a Coding Agent to my team and give it web search.” Talk can add a specialist or equip one you already have. With **Ask first** off, your request saves the permitted change directly. If new access needs review, choose **Allow and add** on the employee page. Once **Apply** activates the saved team, the lead can assign the specialist work through its Task Manager. [How employee teams work](docs-internal/employee_teams.md)
 
 This is how employees improve: saved knowledge, clearer instructions, and better tools. OpenCompany does not retrain the underlying AI model.
 

@@ -32,10 +32,11 @@ New Coding Agents added from the editor, creation API, Agent Builder or Hire
 include these nodes connected to their Tools input. PowerShell is included on
 Windows hosts only; it also requires a Windows execution worker. The
 [shared creation recipe](../server/services/coding_agent_recipe.py) preserves
-explicitly supplied Pi tool parameters and does not modify existing agents or
-recreate removed tools. Operator restrictions apply to the whole new bundle;
-creation fails if a required tool is disabled. API retries reuse the saved
-creation receipt instead of adding duplicate nodes. The editor carries creation
+explicitly supplied Pi tool parameters at creation. On a managed team, asking
+for the Coding Agent again reuses its saved node. Tools or skills named in
+that request are applied to the existing agent. The default Pi bundle is
+installed only at creation. If a required tool is disabled, creation fails.
+API retries reuse the saved creation receipt. The editor carries creation
 metadata through a registry refresh so a drop cannot lose its companion nodes.
 
 The nodes execute the pinned SDK tools in a separate Bun leaf host through

@@ -284,7 +284,19 @@ Result Limit. See [memory_compaction.md](memory_compaction.md) and
 
 ### Hot rebind after canvas mutation
 
-When `agentBuilder` (the only canvas-mutating tool today) adds a tool (`add_tool`) or a teammate (`add_subagent`) mid-run, it saves the change (`apply_graph_additions`) and returns the saved `workflow_ops` batch in its result's `operations` field. The loop detects the field, calls `rebind_from_operations(ops)`, and extends the bound tool surface so the LLM can invoke the new tool in the very next iteration — no Run-stop-Run cycle. A deployed run starts from the generation's frozen snapshot, so a tool saved in an earlier run can be missing from a later one; `add_tool` then returns that saved node alone (a bind-only batch, nothing saved) for the loop to bind. `add_skill` returns no operations: a skill is not bound as a tool, and a merge into an existing Skills node applies from the next run.
+Agent Builder saves graph edits through `apply_graph_additions`. Only tools and
+teammates bound to the calling agent are eligible for rebinding from the returned
+`operations`. With automatic rebinding enabled, the loop calls
+`rebind_from_operations(ops)` so the caller can use a newly attached tool on
+its next iteration. If the deployed generation's
+snapshot predates an existing tool, `add_tool` can return that binding again.
+An `add_skill` merge updates the Skills node for the next run.
+
+When an owner asks Talk to add a Coding Agent, Builder connects the specialist
+to the employee lead and the coding tools to the specialist. Talk continues to
+use its own Task Manager. After Safe Apply activates the saved team, a new job
+gives the lead a `spawn_<teammate>` binding for that Coding Agent on the lead's
+Task Manager. [Managed AI employee teams](employee_teams.md)
 
 Closure responsibilities:
 

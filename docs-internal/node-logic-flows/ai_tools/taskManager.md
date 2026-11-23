@@ -54,7 +54,7 @@ published tool name; there is no model-supplied template argument.
 
 | Tool | Required arguments | Optional arguments | Effect / valid source state |
 |---|---|---|---|
-| `submit_job` | `instructions` | — | Talk only: admit work for the configured employee lead |
+| `submit_job` | `instructions` | — | Talk submits work to the configured employee lead. A request to add a missing Coding or Browser Agent can return a team-change status before admission. |
 | `get_job_status` | — | `job_id` | Talk reads the saved job state, task counts and any recorded failure. Omit the ID for this employee's most recently updated job. |
 | `spawn_<teammate>` | `instructions` | `after` | Lead: fresh instance, task, first attempt and inbox obligation in one commit |
 | `assign_task` | `agent`, `instructions` | `after` | Lead: new reviewed work on an existing teammate instance |
@@ -124,6 +124,22 @@ attempt zero. `after` becomes satisfied only when every prerequisite is
 accepted; cancelled prerequisites cannot satisfy it.
 
 ### Results and delivery receipts
+
+Talk uses Agent Builder when the owner asks to change the team. A work order
+can also include an explicit staffing instruction, such as “If no teammate
+can write code, add a coding specialist.” In that case `submit_job` checks the
+active team before admitting the job. If the team needs that specialist, the
+response contains `job_created: false`. Its `state` tells Talk what to do next.
+
+| `state` | Next action |
+|---|---|
+| `awaiting_approval` | Show the pending access request. **Allow and add** saves the reviewed specialist. |
+| `pending_apply` | Use Safe Apply to activate the saved team. Submit the original work once the specialist is active. |
+| `team_change_blocked` | Report the returned `message`, such as a missing Builder connection or revoked access, so the owner can resolve it. |
+
+With **Ask first** off, the authenticated owner's request can go straight to
+`pending_apply`. Use `get_job_status` once a submission returns a job ID.
+[Agent Builder](agentBuilder.md)
 
 Version 1 results can include `agent`, `agents`, `runs`, `task`, `tasks`,
 `attempts`, `delivery`, `status`, `trace` and `result_excerpt`. Public result

@@ -55,9 +55,13 @@ explicitly requested tool parameters and omits a duplicate default of the same
 type. Its employee permission scope includes the complete tool bundle. Required
 tools must pass operator policy, and Hire also enforces its positive allowlist.
 
-This recipe runs only when creating a new agent. Loading, importing or saving
-an existing graph does not add tools or recreate deleted connections. An
-existing Agent Builder teammate is reused unchanged.
+The default Pi bundle is installed at creation. Loading or importing an
+existing graph preserves its saved connections, including any removals.
+On a managed team, the owner can later ask Talk to equip the same Coding
+Agent. Builder reuses its node ID
+and applies the requested tools, settings or skills. For example, asking for
+web search on the coder adds a private search node. After Apply the lead can
+assign work to the equipped coder through its Task Manager.
 
 For an optional planning checklist, connect the existing
 [Write Todos](../ai_tools/writeTodos.md) node (`write_todos`). It uses the same

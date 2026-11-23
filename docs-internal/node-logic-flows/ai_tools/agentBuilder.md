@@ -3,7 +3,7 @@
 | Field | Value |
 |------|-------|
 | **Category** | ai_tools (dedicated AI tool, group `("tool", "ai")`) |
-| **Backend handler** | [`server/nodes/tool/agent_builder/__init__.py`](../../../server/nodes/tool/agent_builder/__init__.py) — `AgentBuilderNode`, dispatched via `BaseNode.execute()` + one `@Operation` per action (`inspect_canvas` / `add_tool` / `add_skill` / `add_subagent` / `create_workflow`) |
+| **Backend handler** | `BaseNode.execute()` dispatches each operation to a method on [`AgentBuilderNode`](../../../server/nodes/tool/agent_builder/__init__.py). |
 | **Tests** | [`test_agent_builder.py`](../../../server/tests/nodes/test_agent_builder.py) (editor-built workflows), [`test_agent_builder_employee.py`](../../../server/tests/nodes/test_agent_builder_employee.py) (hired employees), [`test_agent_builder_atomic_ops.py`](../../../server/tests/nodes/test_agent_builder_atomic_ops.py) (ledger, retries), [`test_rebind_filters.py`](../../../server/tests/services/test_rebind_filters.py) |
 | **Skill (if any)** | [`server/skills/assistant/agent-builder-skill/SKILL.md`](../../../server/skills/assistant/agent-builder-skill/SKILL.md) |
 | **Dual-purpose tool** | tool-only — `ToolNode` exposed to the LLM as `agent_builder` (`tool_name` class attr) |
@@ -40,10 +40,10 @@ A new Coding Agent also receives its connected Pi tool nodes through the same
 [`coding_agent_additions`](../../../server/services/coding_agent_recipe.py)
 recipe used by the editor/API and Hire: Read File, Write File, Edit File, Bash,
 Search Text, Find Files and List Directory, plus PowerShell on Windows.
-Explicit `tool_types` entries keep their validated `tool_parameters` and take
-the place of same-type defaults. Existing Coding Agent teammates are reused
-without adding or restoring tools. See [Coding Agent](../specialized_agents/coding_agent.md)
-for tool names and the separate legacy `workspace` mode.
+An explicitly configured Pi tool uses the same default node. On a managed
+team, repeating `add_subagent` for the Coding Agent returns its existing
+`member_id`. Supplying `tool_types` or `skill_names` equips that member with
+the requested capabilities. See [Coding Agent](../specialized_agents/coding_agent.md).
 
 Every change is saved through
 [`services/workflow_storage/mutate.py`](../../../server/services/workflow_storage/mutate.py)
@@ -66,19 +66,27 @@ which is how an employee extends itself from Talk.
 
 ## Parameters
 
-The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
-`model_config = ConfigDict(extra="ignore")`.
+The model supplies `AgentBuilderParams` as tool arguments. The
+`displayOptions.show` column gives the editor's field visibility. The
+description gives the operations that read the field.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
 | `operation` | enum | `inspect_canvas` | no | - | `inspect_canvas`, `inspect_node`, `search_docs`, `read_doc`, `plan_update`, `apply_update`, `add_tool`, `add_skill`, `add_subagent`, `create_workflow` |
-| `node_type` | string | `""` | no | `operation == add_tool` | Tool node type, from `available_tools` |
+| `node_type` | string | `""` | no | `operation == add_tool` | Tool type from `available_tools` for `add_tool`, or plugin type for `inspect_node` |
+| `node_id` | string | `""` | no | - | Saved node to inspect with `inspect_node` |
+| `query`, `limit` | string, integer | `""`, `12` | no | - | Search terms and result limit (1–50) for `search_docs` |
+| `document_id`, `offset`, `max_chars` | string, integer, integer | `""`, `0`, `12000` | no | - | Manifest ID, starting character and character limit (1–24000) for `read_doc` |
 | `app_id` | string | `""` | no | `operation == add_tool` | The tool's app, when its `available_tools` entry names one: required for a type several apps share (each custom connector is its own app) |
-| `target_member_id` | string | `""` | no | - | Employee member receiving the tool; defaults to the caller. Must belong to this employee, including legacy employees. |
+| `target_member_id` | string | `""` | no | - | Employee member receiving a tool, or a managed team member receiving a skill. Defaults to the caller. |
 | `skill_name` | string | `""` | no | `operation == add_skill` | Skill name (SKILL.md frontmatter `name`, or a library skill's name), from `available_skills` |
 | `agent_type` | string | `""` | no | `operation == add_subagent` | Specialist type to add to the lead. A managed Talk contact can request this for its lead. |
-| `tool_types` | string array | `[]` | no | `operation == add_subagent` | Explicit scoped tools; Coding Agent also receives its default Pi tools without duplicate same-type nodes |
-| `tool_parameters` | object | `{}` | no | `operation == add_subagent` | Initial configuration by tool type, validated against its plugin contract |
+| `purpose` | string | `""` | no | - | Responsibility and acceptance criteria for a new specialist |
+| `tool_types`, `skill_names` | string arrays | `[]` each | no | - | Tools and skills to assign with `add_subagent`, up to 20 entries per list |
+| `tool_parameters` | object | `{}` | no | - | Settings keyed by tool type. For `add_tool` the key is `node_type`. For `add_subagent` each key must appear in `tool_types`. Builder validates settings against the plugin contract. |
+| `change_operation` | enum | `apply_saved` | no | - | Change for `plan_update` or `apply_update`. Accepts `add_tool`, `add_skill`, `add_subagent` or `apply_saved`. |
+| `dry_run` | boolean | `false` | no | - | Preview a tool, skill or specialist addition before saving the graph |
+| `stop_work` | boolean | `false` | no | - | Interrupt current work during `apply_saved` when the owner explicitly requests it |
 | `workflow_name` | string | `""` | no | `operation == create_workflow` | Employee display name for the shared Hire pipeline |
 | `workflow_description` | string | `""` | no | `operation == create_workflow` | Optional one-line description |
 
@@ -95,6 +103,13 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
   operation?: string;
   // One plain sentence on an employee refusal: the agent passes it on.
   summary?: string;
+  member_id?: string;            // add_subagent: node ID of the specialist
+  request_id?: string;
+  required_access?: Array<{ request_id: string; app: string; action: string; member_id: string }>;
+  validation_issues?: Array<Record<string, unknown>>;
+  activation_state?: string;     // planned, blocked or saved for staffing changes
+  saved_revision?: string;
+  binding_results?: Array<{ node_id: string; saved: boolean; available_in_run: boolean }>;
   // add_tool / add_subagent: saved ops scoped to the caller's bindings,
   // plus a saved tool the caller's run lacks. Specialist-owned tool nodes
   // are announced to editors but excluded from the caller's tool rebind.
@@ -105,7 +120,7 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
   edges?: Array<{ source; target; source_handle; target_handle }>;
   you?: { node_id: string; incoming: unknown[]; outgoing: unknown[] } | null;
   employee?: { asks_first: boolean; agents: string[] };   // hired employees only
-  available_tools?: Array<{ type; display_name; description; app?; connected?; read_only? }>;
+  available_tools?: Array<{ type; display_name; description; app?; app_id?; connected?; read_only? }>;
   available_agents?: Array<{ type; display_name; description }>;
   available_skills?: Array<{ name; description }>;
   // create_workflow extras:
@@ -160,12 +175,13 @@ flowchart TD
   `disabled_groups`); skills from the SkillLoader registry outside
   `disabled_skill_folders`, plus the owner's library. The target is the
   caller.
-- **Hired employee**: tools go to one selected member, with no fanout to
-  other workers or Talk. `check_tool` decides tools
-  (the apps' tools, the registry's and the owner's own through
-  `Connections.apps`, and the tools every hire gets; nothing that sends or
-  spends while asking first, the browser read-only then; hire allowlist;
-  connected apps); the Clock gets the owner's `profile_timezone`. A type
+- **Hired employee**: each tool belongs to one selected member. `check_tool`
+  checks the hire allowlist and the connection for the selected app. With
+  Ask first on, a tool with a runtime approval policy can hold a send, refuse
+  a payment or restrict the browser to reading. For a tool that can send or
+  spend and has no runtime policy, Builder uses the app's `ask_first_params`
+  when available and otherwise declines the addition. The Clock gets the
+  owner's `profile_timezone`. A type
   whose app a parameter names (`app_field`: the Custom Connector) is listed
   once per app with its `app_id`, needs it in `add_tool`, and counts as the
   target's tool only on a node naming the same app.
@@ -175,7 +191,10 @@ flowchart TD
   `add_subagent` to the existing lead. An authenticated owner can request
   a specialist directly when Ask first is off. When the configured rule
   requires review, Builder returns `required_access` and the employee
-  page offers **Allow and add**. A saved change can proceed to safe Apply.
+  page offers **Allow and add**. This saves the reviewed change. Talk can
+  activate it with `apply_update` using `change_operation: "apply_saved"`,
+  or the owner can select **Apply**. Once active, the lead can assign work
+  to the specialist through its Task Manager.
 - **One concrete tool owner**: a same-type tool on another member is never
   attached to this target. The target reuses its private node or receives a
   fresh node. Ownership and parameter rows are read inside the mutation
@@ -200,8 +219,8 @@ flowchart TD
 - **When it works**: a tool is bound for the rest of the calling agent's run
   (`auto_rebind_tools`, on by default; summary "Available immediately" / "You
   can use it now", else "Available on your next turn"). A skill merged into an
-  existing Skills node applies from the next run; a new node or edge after a
-  restart (Apply, on an employee's page).
+  existing Skills node applies from the next message. On a managed team,
+  **Apply** activates new graph connections for future assignments.
 - **`add_subagent`** connects a new specialist to the existing team lead.
   Managed Talk can make the call from the authenticated owner conversation.
   Registered specialist types have one teammate each. Custom `aiAgent` types can repeat.
@@ -247,9 +266,10 @@ flowchart TD
 
 ## Edge cases & known limits
 
-- A saved change reaches the current run only through the rebind (tools),
-  and other runs of a deployed workflow only after a restart; skills merged
-  into an existing Skills node apply from the next run.
+- A running employee uses its admitted team until Safe Apply activates the
+  saved graph. Talk can immediately use its own newly bound tools when
+  rebind is enabled. A skill merged into an existing Skills node applies
+  from the next message.
 - Both native and Temporal paths deduplicate existing node IDs before tool
   name checks. Specialist-scoped tools are excluded from the caller's rebind.
 - Managed team members, tools, skills and Context roles are refreshed in the
