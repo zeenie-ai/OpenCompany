@@ -67,6 +67,15 @@ waits are pending. Standalone workers initialize the shared native compactor
 before polling. See [Pi Coding Agent](pi_coding_agent.md) for protocol, checkpoint,
 distribution and validation details.
 
+**Pi instance message wire (`pi-instance-message-wire-v1`).** Before each model
+step, `PiCodingAgentWorkflow` evaluates this marker when the transcript holds a
+compact text message (only `role`, `content` and an optional `ts`, as an agent
+instance's inbox and chat text are stored). With the marker, those messages are
+expanded in place to the MessageWire form, keeping the Context timestamp; a
+history without it keeps them compact, so recorded Pi updates and checkpoints
+replay against their original digest. A step with no compact message does not
+evaluate the marker. It is not in `DORMANT_PATCHES`, so it records at once.
+
 **Browser owner routing (`browser_routing_version: 1`).** Distributed starts
 also capture server-resolved `browser_bindings`, including profile, principal,
 owner, runtime epoch and physical queue. The Browser queue overrides the
@@ -535,6 +544,12 @@ values in the routing input and generation resource manifest; restored generatio
 keep their recorded choice. Histories without the marker retain the original
 Task Manager/delegation path. This is additive storage and a new runtime path,
 not a rewrite of existing histories or node-scoped conversations.
+
+New generations also record `task_review_routing_version: 1`. Only with it does an
+employee team's taskTrigger listen as `task-review:<workflow>:<node>` with its owner
+binding (`DeploymentManager._start_canary_listener`); a generation admitted before it
+keeps its `<slug>-<label>` listener on re-arm, so its controller never holds two
+listeners for one node.
 
 | Identity | Owner and lifetime |
 |---|---|

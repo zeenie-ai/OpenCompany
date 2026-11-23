@@ -975,6 +975,20 @@
       "after": "8f8d1e84ac3df9ffbe59da042bbd4ff00472b7a30eb226bccb1fe028bdf04ed5",
       "patch": "agent-instance-lead-failures-v1",
       "reason": "Preserve safe typed failure reasons for managed employee lead jobs while retaining the historical failure commands for histories without this patch; replay N-1 fixtures and isolated employee-job histories."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "efef6dec708a526dd7814541bddafdc07e01fe97bc9f4cc6b79e552214294f08",
+      "flags": [
+        "task_review_routing_version"
+      ],
+      "reason": "Employee task review routing. TriggerListenerWorkflow names a run child '<task_trigger_identity>:<event_id>' (and skips the hot graph lookup), and WorkflowControlWorkflow binds node_id = spec['trigger_node_id'] in replace_graph and _spawn_push_run, only for a listener whose input carries task_trigger_identity. DeploymentManager._start_canary_listener sets that field, the 'task-review:<workflow>:<node>' listener id and the owner binding only for a taskTrigger of a recipe-v3 team in a generation whose control row records task_review_routing_version 1, written at Start. Release histories never carry the field, and a generation admitted before the flag keeps its '<slug>-<label>' listener on re-arm, so its controller never holds a second listener for one node (tests/test_deployment_canary_listener.py)."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "efef6dec708a526dd7814541bddafdc07e01fe97bc9f4cc6b79e552214294f08",
+      "patch": "pi-instance-message-wire-v1",
+      "reason": "PiCodingAgentWorkflow expands compact text messages (role, content and an optional ts) to the MessageWire form before a model step only behind pi-instance-message-wire-v1; a history without the marker keeps them compact and replays against its recorded digests. It ships active, not dormant: message_to_wire always writes the full wire keys, so compact messages reach a Pi step only from agent-instance transcripts, whose workflow types (AgentInstanceSessionWorkflow, AgentInstanceReconcilerWorkflow) are new since the release. The release can run none of those generations, so a dormant marker would protect no rollback and would switch the fix off for a release. The lead_id = reviewer.id binding in this digest is activity code (route_instance_task_event), not a command."
     }
   ],
   "handlers": {

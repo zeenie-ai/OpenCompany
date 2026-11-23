@@ -308,13 +308,18 @@ class TestStartCanaryListener:
         lead = {"id": "lead", "type": "ai_employee", "data": {"employee_team_plan": {"version": 3}}}
         first = {"id": "employee-review", "type": "taskTrigger", "data": {"label": "Review"}}
         second = {"id": "observer", "type": "taskTrigger", "data": {"label": "Review"}}
+        from dataclasses import replace
+
         manager, _ = _build_manager_with_state("wf", [lead, first, second],
             [{"source": first["id"], "target": lead["id"], "targetHandle": "input-task"}])
+        # A generation Start admitted: its manifest carries the routing flag.
+        manager._deployments["wf"] = replace(manager._deployments["wf"], generation=1)
         handle = MagicMock(signal=AsyncMock())
         client = MagicMock()
         client.get_workflow_handle.return_value = handle
         manager.database.get_latest_workflow_control = AsyncMock(return_value=MagicMock(
-            generation=1, status="running", controller_workflow_id="controller", resource_manifest={}))
+            generation=1, status="running", controller_workflow_id="controller",
+            resource_manifest={"task_review_routing_version": 1}))
         monkeypatch.setattr(container, "temporal_client", lambda: MagicMock(client=client))
         event = {"id": "event-1", "data": {"parent_node_id": "lead"}}
         monkeypatch.setattr(workflow, "patched", lambda _key: True)
@@ -332,6 +337,72 @@ class TestStartCanaryListener:
         assert ids[0] != observer[0] and ids[1] != observer[1]
         first["data"]["label"] = "Renamed"
         assert await fire(first) == ids
+
+    @staticmethod
+    async def _rearm_v3_review(monkeypatch, manifest):
+        """Re-arm a running v3 team generation's taskTrigger the way
+        ``_rearm_generation`` does: the generation's own state and control row."""
+        from dataclasses import replace
+
+        from core.container import container
+
+        lead = {"id": "lead", "type": "ai_employee", "data": {"employee_team_plan": {"version": 3}}}
+        review = {"id": "employee-review", "type": "taskTrigger", "data": {"label": "Review"}}
+        manager, _ = _build_manager_with_state("wf", [lead, review],
+            [{"source": review["id"], "target": lead["id"], "targetHandle": "input-task"}])
+        manager._deployments["wf"] = replace(manager._deployments["wf"], generation=1, workflow_slug="Team_1")
+        handle = MagicMock(signal=AsyncMock())
+        client = MagicMock()
+        client.get_workflow_handle.return_value = handle
+        manager.database.get_latest_workflow_control = AsyncMock(return_value=MagicMock(
+            generation=1, status="running", controller_workflow_id="controller", resource_manifest=manifest))
+        monkeypatch.setattr(container, "temporal_client", lambda: MagicMock(client=client))
+        listener_id = await manager._start_canary_listener(review, "wf", {})
+        signal_name, spec = handle.signal.await_args.args
+        assert signal_name == "register_trigger" and spec["listener_id"] == listener_id
+        return review, spec
+
+    @pytest.mark.asyncio
+    async def test_rearm_of_a_generation_admitted_before_the_routing_flag_keeps_its_listener(self, monkeypatch):
+        """Its Start registered ``<slug>-<label>`` with the controller. A
+        ``task-review:`` id on re-arm would add a second listener beside it,
+        and every task event would start two runs."""
+        from services.deployment.manager import DeploymentManager
+        from services.workflow_naming import node_label_slug
+
+        manifest = {"execution_control_version": 1, "pi_harness_version": 1,
+                    "agent_lifecycle_version": 1, "agent_protocol_version": 1}
+        review, spec = await self._rearm_v3_review(monkeypatch, manifest)
+        assert spec["listener_id"] == DeploymentManager._listener_workflow_id("Team_1", node_label_slug(review))
+        args = spec["listener_args"]
+        assert "task_trigger_identity" not in args and "task_review_owner" not in args
+
+    @pytest.mark.asyncio
+    async def test_rearm_of_a_generation_with_the_routing_flag_keeps_its_task_review_listener(self, monkeypatch):
+        _review, spec = await self._rearm_v3_review(monkeypatch, {"task_review_routing_version": 1})
+        assert spec["listener_id"] == "task-review:wf:employee-review"
+        args = spec["listener_args"]
+        assert args["task_trigger_identity"] == spec["listener_id"] and args["task_review_owner"] == "lead"
+
+    @pytest.mark.asyncio
+    async def test_start_writes_the_routing_flag_into_the_generation_manifest(self):
+        """What the re-arm reads is what Start froze."""
+        from types import SimpleNamespace
+
+        from services.deployment.control import WorkflowControlService
+        from services.temporal.workflow import GENERATION_FLAGS
+
+        database = MagicMock()
+        database.get_workflow_control_by_idempotency_key = AsyncMock(return_value=None)
+        database.get_latest_workflow_control = AsyncMock(return_value=None)
+        database.allocate_execution_id = AsyncMock(return_value="exec-1")
+        database.get_workflow = AsyncMock(return_value=SimpleNamespace(slug="Team_1"))
+        database.create_workflow_control = AsyncMock(side_effect=lambda control: control)
+        control, created = await WorkflowControlService(database).begin_generation(
+            workflow_id="wf", nodes=[], edges=[], session_id="sess", idempotency_key="start-1")
+        assert created and control.generation == 1
+        assert control.resource_manifest["task_review_routing_version"] == 1
+        assert "task_review_routing_version" in GENERATION_FLAGS
 
     @pytest.mark.asyncio
     async def test_starts_with_deterministic_id_and_use_existing_policy(self, monkeypatch):

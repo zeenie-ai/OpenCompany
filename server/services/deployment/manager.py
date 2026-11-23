@@ -911,8 +911,21 @@ class DeploymentManager:
             **capture_temporal_routing_input(),
             **(await capture_browser_routing_input(workflow_id, state.nodes, state.user_id)),
         }
+        # Resolve control state through this manager's injected database.
+        # Reading the process-global container here made listener routing
+        # depend on whichever database happened to be installed globally,
+        # rather than the database that owns this deployment. Besides making
+        # parallel/test managers bleed into one another, that could register a
+        # listener under a controller from a different application database.
+        control_lookup = self.database.get_latest_workflow_control(workflow_id)
+        control = await control_lookup if inspect.isawaitable(control_lookup) else None
         from services.task_trigger_routing import hierarchical_team, task_trigger_binding
-        if node_type == "taskTrigger" and hierarchical_team(state.nodes):
+        # Frozen at Start: a generation admitted before the flag keeps the
+        # listener id its Start registered. Re-armed under a new id, its
+        # controller would hold two listeners and each event start two runs.
+        task_review_routing = (control is not None and control.generation == state.generation
+                               and (control.resource_manifest or {}).get("task_review_routing_version") == 1)
+        if node_type == "taskTrigger" and hierarchical_team(state.nodes) and task_review_routing:
             # Names may be changed, and different employees often use the
             # same label. The graph node identifies both listener and firing.
             listener_id = f"task-review:{workflow_id}:{node_id}"
@@ -948,14 +961,6 @@ class DeploymentManager:
         event_workflow_id_key = SearchAttributeKey.for_keyword("EventWorkflowId")
         event_trigger_kind_key = SearchAttributeKey.for_keyword("EventTriggerKind")
 
-        # Resolve control state through this manager's injected database.
-        # Reading the process-global container here made listener routing
-        # depend on whichever database happened to be installed globally,
-        # rather than the database that owns this deployment. Besides making
-        # parallel/test managers bleed into one another, that could register a
-        # listener under a controller from a different application database.
-        control_lookup = self.database.get_latest_workflow_control(workflow_id)
-        control = await control_lookup if inspect.isawaitable(control_lookup) else None
         if control is not None and control.generation == state.generation:
             from services.coding_agent_runtime import freeze_generation_harness
             freeze_generation_harness(listener_args, control.resource_manifest)

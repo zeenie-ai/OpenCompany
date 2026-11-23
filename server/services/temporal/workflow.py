@@ -184,8 +184,11 @@ def _agent_child_workflow_id(root_workflow_id: str, agent_node_id: str) -> str:
 #: behind one replays older histories without a patch marker
 #: (tests/temporal/test_workflow_identity_golden.py). ``approval_wait_version``:
 #: what asks is the mode and the class, and the agent answering a chat run
-#: waits for the owner (RFC-0007).
-GENERATION_FLAGS = ("pi_harness_version", "approval_wait_version", "agent_lifecycle_version", "agent_protocol_version")
+#: waits for the owner (RFC-0007). ``task_review_routing_version``: an
+#: employee team's taskTrigger listens as ``task-review:<workflow>:<node>``,
+#: with its owner binding (``DeploymentManager._start_canary_listener``).
+GENERATION_FLAGS = ("pi_harness_version", "approval_wait_version", "agent_lifecycle_version", "agent_protocol_version",
+                    "task_review_routing_version")
 
 
 def _frozen_routing_from_input(
