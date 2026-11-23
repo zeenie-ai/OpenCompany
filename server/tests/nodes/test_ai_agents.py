@@ -182,9 +182,12 @@ class TestAIAgent:
             }
         )
 
-        # Stub skill loader so the fallback path isn't taken (instructions are present in DB)
+        # Stub skill loader so the fallback path isn't taken (instructions are present in DB).
+        # The expander reads it through the off-loop accessor, get_skill_loader_async.
+        fake_loader = MagicMock()
         fake_loader_mod = types.ModuleType("services.skill_loader")
-        fake_loader_mod.get_skill_loader = MagicMock(return_value=MagicMock())
+        fake_loader_mod.get_skill_loader = MagicMock(return_value=fake_loader)
+        fake_loader_mod.get_skill_loader_async = AsyncMock(return_value=fake_loader)
 
         nodes = [_node(agent_id, "aiAgent"), _node(skill_id, "masterSkill")]
         edges = [_edge(skill_id, agent_id, "input-skill")]
