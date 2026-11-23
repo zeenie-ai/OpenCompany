@@ -288,6 +288,10 @@ dev = [
     "pytest-cov>=6.0.0",
     "respx>=0.21.0",
     "ruff>=0.8.0",
+    # starlette.testclient (FastAPI's TestClient) uses httpx2 and warns with
+    # StarletteDeprecationWarning when it falls back to httpx; Starlette's own
+    # "full" extra asks for httpx2>=2.0.0. Tests only: httpx stays a runtime dep.
+    "httpx2>=2.0.0",
 ]
 
 [tool.pytest.ini_options]
