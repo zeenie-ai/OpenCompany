@@ -1,0 +1,39 @@
+{
+  "_description": "System One judgment providers (services/judgment). The service tries them in `order` and uses the first one that is registered, answers every question type asked, is calibrated when the caller needs that, takes images when there are some, and has a key; a `keyless` provider says itself whether it can run. That provider gets one attempt: a failure is final. `calibrated` means the probabilities were measured on real outcomes, not guessed by a chat model, and only a calibrated judgment may accept a teammate's work. A provider takes images when it names an `image_model`. `image_min_side` and `image_max_side` are the smallest and largest width or height in pixels. `timeout_seconds` is the time one call may take.",
+  "order": ["typesafe", "openrouter", "llm"],
+  "providers": {
+    "typesafe": {
+      "_source": "https://docs.typesafe.ai/api/system-one.md and https://docs.typesafe.ai/images.md, read 2026-11-23. jev-latest points to the newest Jev; images and box are a preview of jev-1.14.0, which needs the image header.",
+      "credential_id": "typesafe",
+      "calibrated": true,
+      "question_types": ["choice", "score", "noul", "box"],
+      "timeout_seconds": 15,
+      "base_url": "https://api.typesafe.ai/v1",
+      "model": "jev-latest",
+      "image_model": "jev-1.14.0",
+      "image_headers": {"TypeSafe-Danger-Zone-Images": "true"},
+      "image_min_side": 280,
+      "image_max_side": 1568
+    },
+    "openrouter": {
+      "_source": "https://openrouter.ai/docs/api/api-reference/systemone/submit-a-system-one-request.md and https://openrouter.ai/docs/guides/community/jev.md, read 2026-11-23. The same request as TypeSafe's, with the owner's OpenRouter key; ~typesafe/jev-latest tracks the newest Jev. OpenRouter documents no image header.",
+      "credential_id": "openrouter",
+      "calibrated": true,
+      "question_types": ["choice", "score", "noul", "box"],
+      "timeout_seconds": 15,
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "~typesafe/jev-latest",
+      "image_model": "typesafe/jev-1.14",
+      "image_headers": {},
+      "image_min_side": 280,
+      "image_max_side": 1568
+    },
+    "llm": {
+      "_description": "A connected chat model answering as JSON, used when no Jev key is connected. Its probabilities are the model's own guess, so it is not calibrated, and it is not shown images.",
+      "keyless": true,
+      "calibrated": false,
+      "question_types": ["choice", "score", "noul"],
+      "timeout_seconds": 30
+    }
+  }
+}

@@ -182,32 +182,18 @@ class LlmTextProvider:
 
 
 def _parse_json_object(content: str, provider: str) -> Dict[str, Any]:
-    """Parse the model's reply, tolerating a code fence.
+    """The model's reply as a JSON object, tolerating a code fence
+    (``services.llm.json_reply``); a reply that is not one is a TranslateError."""
+    from services.llm.json_reply import parse_json_object
 
-    Models still occasionally wrap JSON in ```json despite being told not to,
-    and failing the workflow over a fence would be needlessly brittle.
-    """
-    text = (content or "").strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1]
-        if text.endswith("```"):
-            text = text[: -3]
-        text = text.strip()
     try:
-        parsed = json.loads(text)
+        return parse_json_object(content)
     except ValueError as exc:
         raise TranslateError(
-            message=f"model did not return JSON: {text[:200]}",
+            message=str(exc),
             provider=provider,
             category=TranslateErrorCategory.SERVER,
         ) from exc
-    if not isinstance(parsed, dict):
-        raise TranslateError(
-            message=f"model returned {type(parsed).__name__}, expected an object",
-            provider=provider,
-            category=TranslateErrorCategory.SERVER,
-        )
-    return parsed
 
 
 def _as_float(value: Any) -> Optional[float]:
