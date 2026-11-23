@@ -19,6 +19,14 @@ const isAgentType = (nodeType: string): boolean => {
   return nodeType === 'aiAgent' || nodeType === 'chatAgent';
 };
 
+// Team roles come off the NodeSpec, as the editor's Team input connection
+// rule reads them (useReactFlowNodes): a team lead declares a Team input
+// (input-teammates), and an employee lead also declares leadsEmployeeTeam.
+const isTeamLead = (nodeType: string | undefined): boolean =>
+  Boolean(getCachedNodeSpec(nodeType || '')?.handles?.some((handle) => handle.name === 'input-teammates'));
+const leadsEmployeeTeam = (nodeType: string | undefined): boolean =>
+  getCachedNodeSpec(nodeType || '')?.uiHints?.leadsEmployeeTeam === true;
+
 interface UseDragAndDropProps {
   nodes: Node[];
   setNodes: (nodes: Node[] | ((nodes: Node[]) => Node[])) => void;
@@ -97,9 +105,11 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
         // A registry refresh can invalidate the cache between drag and drop.
         // Carry the palette's creation recipe with the drag as a fallback.
         const uiHints = spec?.uiHints ?? nodeData.uiHints;
-        const orchestrator = nodes.find(node => node.type === 'orchestrator_agent');
+        // A managed team: its Orchestrator (a team lead that is not an
+        // employee lead) is wired into an employee lead's Team input.
+        const orchestrator = nodes.find(node => isTeamLead(node.type) && !leadsEmployeeTeam(node.type));
         const managedTeam = orchestrator && edges.some(edge => edge.source === orchestrator.id
-          && edge.targetHandle === 'input-teammates' && nodes.some(node => node.id === edge.target && node.type === 'ai_employee'));
+          && edge.targetHandle === 'input-teammates' && nodes.some(node => node.id === edge.target && leadsEmployeeTeam(node.type)));
         const authoritativeAgent = uiHints?.createsAgentBundle || (
           spec?.componentKind === 'agent' && uiHints?.creationParameters?.runtime_behavior_version === 1
         ) || (managedTeam && isAgentType(nodeData.type));
@@ -110,7 +120,7 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
             return;
           }
           const mutationId = crypto.randomUUID();
-          const manager = nodes.find(node => node.selected && (node.type === 'ai_employee' || node.type === 'orchestrator_agent'));
+          const manager = nodes.find(node => node.selected && isTeamLead(node.type));
           const parent = manager ? { parent_node_id: manager.id } : {};
           const create = async () => {
             try {

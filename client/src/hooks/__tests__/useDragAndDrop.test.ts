@@ -16,6 +16,7 @@ import { useDragAndDrop } from '../useDragAndDrop';
 import { snapToGrid } from '../../utils/workflow';
 import { theme } from '../../styles/theme';
 import * as nodeSpecs from '../../lib/nodeSpec';
+import type { NodeSpec } from '../../adapters/nodeSpecToDescription';
 import * as browserAgents from '../../services/browserAgentApi';
 import * as agentCreation from '../../services/agentCreationApi';
 import { useAppStore } from '../../store/useAppStore';
@@ -98,6 +99,42 @@ describe('useDragAndDrop.onDrop', () => {
       specSpy.mockRestore();
       stateSpy.mockRestore();
     }
+  });
+
+  // Fixture type names: the team roles must come off the NodeSpec alone.
+  const TEAM_INPUT = [{ name: 'input-teammates', kind: 'input' as const, position: 'bottom' as const }];
+  const TEAM_SPECS: Record<string, NodeSpec> = {
+    leadFixture: { type: 'leadFixture', displayName: 'Lead', icon: '', group: ['agent'], componentKind: 'agent', version: 1, uiHints: {}, handles: TEAM_INPUT },
+    employeeFixture: { type: 'employeeFixture', displayName: 'Employee', icon: '', group: ['agent'], componentKind: 'agent', version: 1, uiHints: { leadsEmployeeTeam: true }, handles: TEAM_INPUT },
+    workerFixture: { type: 'workerFixture', displayName: 'Worker', icon: '', group: ['agent'], componentKind: 'agent', version: 1, uiHints: {} },
+  };
+  it.each([
+    ['an Orchestrator wired into an employee lead', 'leadFixture', true],
+    ['an employee lead wired into another', 'employeeFixture', false],
+  ])('treats a canvas with %s as a managed team: %s', async (_case, sourceType, managed) => {
+    const state = { currentWorkflow: { id: 'wf' }, saveWorkflow: vi.fn().mockResolvedValue(true), saveWorkflowWithinMutation: vi.fn().mockResolvedValue(true), updateWorkflow: vi.fn(), adoptSavedOperations: vi.fn() };
+    const stateSpy = vi.spyOn(useAppStore, 'getState').mockReturnValue(state as unknown as ReturnType<typeof useAppStore.getState>);
+    const specSpy = vi.spyOn(nodeSpecs, 'getCachedNodeSpec').mockImplementation((type) => TEAM_SPECS[type] ?? null);
+    const createSpy = vi.spyOn(agentCreation, 'createAgent').mockResolvedValue({ node_ids: {}, operations: [] });
+    try {
+      const nodes: Node[] = [
+        { id: 'lead', type: sourceType, position: { x: 0, y: 0 }, data: {}, selected: true },
+        { id: 'chat', type: 'employeeFixture', position: { x: 0, y: 0 }, data: {} },
+      ];
+      const edges = [{ id: 'team', source: 'lead', target: 'chat', sourceHandle: 'output-top', targetHandle: 'input-teammates' }];
+      const setNodes = vi.fn(), setEdges = vi.fn(), saveNodeParameters = vi.fn().mockResolvedValue(true);
+      const { result } = renderHook(() => useDragAndDrop({ nodes, edges, setNodes, setEdges, saveNodeParameters, workflowId: 'wf', screenToFlowPosition: (point) => point }));
+      const event = dropEvent(100, 200);
+      event.dataTransfer.getData = () => JSON.stringify({ type: 'workerFixture', data: { system: 'Be useful' } });
+      await act(async () => { await result.current.onDrop(event); });
+      if (managed) {
+        expect(createSpy).toHaveBeenCalledOnce();
+        expect(createSpy.mock.calls[0][0]).toMatchObject({ node_type: 'workerFixture', parent_node_id: 'lead' });
+      } else {
+        expect(createSpy).not.toHaveBeenCalled();
+        expect(saveNodeParameters).toHaveBeenCalledOnce();
+      }
+    } finally { createSpy.mockRestore(); specSpy.mockRestore(); stateSpy.mockRestore(); }
   });
 
   it('places the node at the canvas point under the pointer, honouring pan and zoom', async () => {
