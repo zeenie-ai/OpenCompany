@@ -83,7 +83,7 @@ Approval waiting is implemented; activation for ordinary new generations remains
 | Folder | Contents |
 |---|---|
 | `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the AI models dialog, the Get started checklist (on the hire view only) and the orb's stage |
-| `sidebar/`, `header/` | The team list, New employee, the profile row; the view title, on an employee's page the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace button (opens and closes the dock), the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `sidebar/`, `header/` | The team list (each employee's role and what they cost this month), New employee, the profile row; the view title, on an employee's page New conversation, Usage (the shared `components/ui/UsageButton`, see [On the employee's page](#on-the-employees-page)) and the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace button (opens and closes the dock), the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
 | `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist (connect a model, hire, say hello, approve a first draft) until it is hidden, as a card in the hire view's corner (at the Workspace dock's left edge while the dock is open) and a header pill on an employee's page; and the AI models dialog, which opens whenever Home needs an AI model ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
@@ -816,7 +816,15 @@ will finish. The wire contract is [chat_protocol.md](./chat_protocol.md).
 is the page: the shared chat ([features/chat](../client/src/features/chat/),
 the same `ChatPane` the editor's console Chat pane uses) with Home around it.
 The header names the employee instead of the page (`HomeHeader`: avatar,
-name, role and apps, the status pill, and New conversation). The pencil beside
+name, role and apps, the status pill, New conversation and Usage). Usage
+opens what the employee cost this month, the model tokens they used and the
+tasks they finished
+([components/ui/UsageButton.tsx](../client/src/components/ui/UsageButton.tsx)
+around `EmployeeUsage`): the same button the editor's top toolbar shows for
+the open workflow, and the same figures an employee's row in the cost panel
+opens to ([Pricing Service](./pricing_service.md#one-employees-usage)). The
+team list shows each employee's cost this month beside their role, left out
+while it can't be read. The pencil beside
 the name renames them, and the avatar's menu uploads a photo for a hired
 employee or takes it away ([data/identity.ts](../client/src/features/home/data/identity.ts));
 the photo then stands in for their initial in the sidebar, the header, the
@@ -1271,8 +1279,9 @@ changing page clears it.
   ([components/ui/CostPanel.tsx](../client/src/components/ui/CostPanel.tsx)),
   the same component Dev's Settings panel mounts: an estimate of what model
   calls and paid tools cost this month (`get_workflow_costs`, from the usage
-  service), one row per employee and "Other" for calls that belong to none,
-  "Spend limit per reply", whose Save limit writes only
+  service), one row per employee, which opens to that employee's usage, and
+  "Other" for calls that belong to none, "Spend limit per reply", whose Save
+  limit writes only
   `chat_run_spend_limit_usd` (0 means no limit), and "Monthly budget per
   employee", whose Save budget writes only `employee_monthly_budget_usd` (0
   means no budget; an employee that reaches it pauses and shows as needing
@@ -1437,7 +1446,9 @@ chat's rollback), `lib/__tests__/workflowOps.test.ts` and
 `store/__tests__/deleteWorkflow.test.ts`,
 `features/home/__tests__/homeSidebar.test.tsx` and `employeesRemount.test.tsx`
 (deleting), `lib/__tests__/debouncedInvalidate.test.ts`,
-`components/ui/__tests__/CostPanel.test.tsx` (the cost panel) and
+`components/ui/__tests__/CostPanel.test.tsx` (the cost panel),
+`components/ui/__tests__/EmployeeUsage.test.tsx` (one employee's usage),
+`components/ui/__tests__/TopToolbar.test.tsx` (the toolbar's Usage) and
 `features/home/__tests__/homeSettings.test.tsx` (Billing mounts it).
 
 ## Known gaps

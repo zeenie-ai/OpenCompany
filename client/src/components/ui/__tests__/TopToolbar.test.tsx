@@ -43,6 +43,7 @@ const running: WorkflowControlStatus = {
 
 function toolbarProps(): ComponentProps<typeof TopToolbar> {
   return {
+    workflowId: 'workflow-1',
     workflowName: 'Browser workflow',
     onWorkflowNameChange: vi.fn(),
     onSave: vi.fn(),
@@ -136,6 +137,22 @@ describe('TopToolbar colour', () => {
     expect(workspace).toHaveClass('aria-pressed:bg-bg-active');
     fireEvent.click(workspace);
     expect(workspace).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('offers the open workflow’s Usage, the same button as Home’s header, in its neutral outline', async () => {
+    mocks.sendRequest.mockResolvedValue({});
+    render(<TopToolbar {...toolbarProps()} />);
+    await waitFor(() => expect(mocks.sendRequest).toHaveBeenCalled());
+    const usage = screen.getByRole('button', { name: 'Usage' });
+    expect(usage).toHaveAttribute('data-variant', 'quiet');
+    expect(usage).toHaveClass('border-border-default', 'text-fg-default');
+  });
+
+  it('offers no Usage without an open workflow', async () => {
+    mocks.sendRequest.mockResolvedValue({});
+    render(<TopToolbar {...toolbarProps()} workflowId={undefined} />);
+    await waitFor(() => expect(mocks.sendRequest).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Usage' })).not.toBeInTheDocument();
   });
 });
 

@@ -9,9 +9,9 @@
 
 import { CostPanel } from '@/components/ui/CostPanel';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useEmployeeUsageQuery } from '@/hooks/useUsageQueries';
 import { monthDay } from '@/lib/format';
 import { useEmployeesQuery } from '../data/employees';
-import { useEmployeeUsageQuery } from '../data/usage';
 import { MicroLabel } from '../ui/primitives';
 
 function Stat({ label, value, note, loading }: { label: string; value: number | null; note: string | null; loading: boolean }) {

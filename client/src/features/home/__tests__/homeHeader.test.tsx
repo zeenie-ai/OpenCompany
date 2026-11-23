@@ -1,14 +1,14 @@
 /**
  * The Home header: on an employee's page it says who they are (their face
  * on the accent disc, name, role and apps, status) and offers New
- * conversation, which asks first; the owner renames them and changes their
+ * conversation, which asks first, and Usage; the owner renames them and changes their
  * photo there; the Get started pill stands in for the checklist card there
  * only; the Normal/Dev switch opens that employee's workflow there, and
  * elsewhere what the editor last had.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -90,6 +90,25 @@ describe('HomeHeader', () => {
     await user.click(screen.getByRole('button', { name: 'New conversation' }));
     await waitFor(() => expect(sendRequest).toHaveBeenCalledWith('clear_chat_messages', { session_id: 'w1' }));
     await waitFor(() => expect(useHomeStore.getState().firstDays).toEqual({}));
+  });
+
+  it('shows what they cost this month, their tokens and their finished tasks from Usage', async () => {
+    const user = userEvent.setup();
+    sendRequest.mockImplementation(async (type: string) => {
+      if (type === 'get_workflow_costs') {
+        return { success: true, since: '2026-11-01', total_cost: 2.5, workflows: [{ workflow_id: 'w1', name: 'Maya', total_cost: 2.5, total_tokens: 48000 }] };
+      }
+      if (type === 'get_employee_usage') return { success: true, tasks_this_month: 4, since: '2026-11-01' };
+      return { success: true };
+    });
+    useHomeStore.setState({ view: { kind: 'employee', workflowId: 'w1' } });
+    wrap(<HomeHeader title="Maya" employee={maya} scrolled={false} />);
+    await user.click(screen.getByRole('button', { name: 'Usage' }));
+    const usage = await screen.findByLabelText('Usage this month');
+    expect(await within(usage).findByText('$2.50')).toBeInTheDocument();
+    expect(within(usage).getByText((48000).toLocaleString())).toBeInTheDocument();
+    expect(await within(usage).findByText('4')).toBeInTheDocument();
+    expect(sendRequest).toHaveBeenCalledWith('get_employee_usage', { workflow_id: 'w1' });
   });
 
   it('offers no new conversation without a talk line', () => {
@@ -269,6 +288,7 @@ describe('HomeHeader on a narrow page', () => {
   it.each([
     ['button', 'Guide'],
     ['button', 'New conversation'],
+    ['button', 'Usage'],
     ['radio', 'Normal'],
     ['radio', 'Dev'],
   ])('marks the word on the %s %s, so the icon and the name stay when the word goes', (role, name) => {

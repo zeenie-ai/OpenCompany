@@ -12,12 +12,15 @@
  * - `workflow_lifecycle` created / renamed / imported mean a workflow
  *   (every workflow is an employee) appeared or changed name: the list is
  *   refetched, debounced so a burst costs one request.
+ * Each of these also reads this month's usage again (`invalidateUsage`):
+ * a finished run, a rename and a removal change the costs and task counts.
  * CloudEvents duplicates are dropped by (source, id).
  */
 
 import { useEffect } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
+import { invalidateUsage } from '@/hooks/useUsageQueries';
 import { makeDebouncedInvalidator } from '@/lib/debouncedInvalidate';
 import { useNodeStatusStore } from '@/stores/nodeStatusStore';
 import { parseEmployeeDetail, parseEmployees, type EmployeeDetail, type EmployeeSummary } from './schemas';
@@ -144,6 +147,7 @@ export function applyEmployeeLifecycle(queryClient: QueryClient, event: Lifecycl
   const type = event.type ?? '';
   const workflowId = event.data?.workflow_id ?? event.subject ?? '';
   if (!workflowId) return;
+  invalidateUsage(queryClient);
   if (type.endsWith('.removed')) {
     removeEmployee(queryClient, workflowId);
     return;
@@ -157,9 +161,11 @@ export function applyWorkflowLifecycle(queryClient: QueryClient, event: Lifecycl
   const workflowId = event?.subject ?? '';
   if (type.endsWith('.deleted') && workflowId) {
     removeEmployee(queryClient, workflowId);
+    invalidateUsage(queryClient);
   } else if (['.created', '.renamed', '.imported'].some((stage) => type.endsWith(stage))) {
     if (workflowId) refreshEmployee(queryClient, workflowId);
     else invalidateEmployees(queryClient);
+    invalidateUsage(queryClient);
   }
 }
 

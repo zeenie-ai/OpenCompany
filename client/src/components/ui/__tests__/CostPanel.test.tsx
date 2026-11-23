@@ -1,8 +1,9 @@
 /**
  * The cost panel, shared by Home's Billing and Dev's Settings: this month's
- * cost by employee, a dash when it can't be read, and two limits (the spend
- * limit of a reply and the monthly budget of an employee), each with a Save
- * that sends its one setting and nothing else.
+ * cost by employee, each employee's row opening to its usage, a dash when it
+ * can't be read, and two limits (the spend limit of a reply and the monthly
+ * budget of an employee), each with a Save that sends its one setting and
+ * nothing else.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,9 +24,9 @@ const COSTS = {
   since: '2026-11-01',
   total_cost: 12.5,
   workflows: [
-    { workflow_id: 'wf_1', name: 'Mira', total_cost: 9.25 },
-    { workflow_id: 'wf_2', name: 'Theo', total_cost: 3 },
-    { workflow_id: null, name: null, total_cost: 0.25 },
+    { workflow_id: 'wf_1', name: 'Mira', total_cost: 9.25, total_tokens: 1840210 },
+    { workflow_id: 'wf_2', name: 'Theo', total_cost: 3, total_tokens: 52000 },
+    { workflow_id: null, name: null, total_cost: 0.25, total_tokens: 900 },
   ],
 };
 
@@ -85,6 +86,26 @@ describe('CostPanel', () => {
     const rows = within(await screen.findByRole('list', { name: 'Cost by employee' })).getAllByRole('listitem');
 
     expect(rows.map((row) => row.textContent)).toEqual(['Mira$9.25', 'Theo$3.00', 'Other$0.25']);
+  });
+
+  it('opens an employee’s row to their usage this month', async () => {
+    replies.get_employee_usage = { success: true, tasks_this_month: 7, since: '2026-11-01' };
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Mira/ }));
+
+    const usage = await screen.findByLabelText('Usage this month');
+    expect(within(usage).getByText('$9.25')).toBeInTheDocument();
+    expect(within(usage).getByText((1840210).toLocaleString())).toBeInTheDocument();
+    expect(await within(usage).findByText('7')).toBeInTheDocument();
+    expect(socket.sendRequest).toHaveBeenCalledWith('get_employee_usage', { workflow_id: 'wf_1' });
+  });
+
+  it('has nothing to open for calls that belong to no employee', async () => {
+    renderPanel();
+    await screen.findByRole('list', { name: 'Cost by employee' });
+
+    expect(screen.queryByRole('button', { name: /Other/ })).not.toBeInTheDocument();
   });
 
   it('shows a dash and no rows when the cost can’t be read', async () => {

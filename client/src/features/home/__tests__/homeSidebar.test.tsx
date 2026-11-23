@@ -15,6 +15,7 @@ vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 
 import { normalizeWorkflowControlStatus } from '@/contexts/WebSocketContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { WORKFLOW_COSTS_QUERY_KEY } from '@/hooks/useUsageQueries';
 import { queryClient } from '@/lib/queryClient';
 import { workflowApi } from '@/services/workflowApi';
 import { useAppStore } from '@/store/useAppStore';
@@ -85,6 +86,30 @@ describe('HomeSidebar portraits', () => {
     });
     await waitFor(() => expect(portrait('b')).toHaveAttribute('src', '/custom.png'));
     expect(portrait('a')).toHaveAttribute('src', getDefaultEmployeeAvatar('a'));
+  });
+});
+
+describe('HomeSidebar cost', () => {
+  const row = (container: HTMLElement, id: string) => container.querySelector(`[data-employee-row="${id}"]`) as HTMLElement;
+
+  it('shows what each employee cost this month beside their role', () => {
+    queryClient.setQueryData(WORKFLOW_COSTS_QUERY_KEY, {
+      since: '2026-11-01',
+      totalCost: 4.5,
+      workflows: [{ workflowId: 'a', name: 'Maya', totalCost: 4.5, totalTokens: 1000 }],
+    });
+
+    const { container } = mountSidebar();
+
+    expect(row(container, 'a')).toHaveTextContent('Receptionist · This month: $4.50');
+    // Nothing booked for Theo this month.
+    expect(row(container, 'b')).toHaveTextContent('Researcher · This month: $0.00');
+  });
+
+  it('leaves the cost out while it can’t be read', () => {
+    const { container } = mountSidebar();
+
+    expect(row(container, 'a')).toHaveTextContent(/Receptionist$/);
   });
 });
 

@@ -126,10 +126,13 @@ client/src/
 │   │   ├── SettingsPanel.tsx # Shadcn Switch + Slider + Input
 │   │   ├── CostPanel.tsx    # This month's cost by employee + two limits (per reply, and a monthly budget per
 │   │   │                    # employee). One component, mounted unchanged in Home's Settings > Billing and Dev's
-│   │   │                    # Settings panel
+│   │   │                    # Settings panel. An employee's row opens to EmployeeUsage
+│   │   ├── EmployeeUsage.tsx # One employee's month: cost, model tokens, finished tasks
+│   │   ├── UsageButton.tsx  # Usage: the same button in Home's header and the editor's top toolbar,
+│   │   │                    # opening EmployeeUsage
 │   │   ├── ConsolePanel.tsx # Chat (ConsoleChat, the shared chat) + console + terminal + output
 │   │   ├── ModelMenu.tsx    # The one model menu: Set Global Model and Home's chat picker
-│   │   └── TopToolbar.tsx   # File menu + Set Global Model (ModelMenu) + workflow controls
+│   │   └── TopToolbar.tsx   # File menu + Set Global Model (ModelMenu) + Usage + workflow controls
 │   │
 │   ├── Modal.tsx (src/components/ui/Modal.tsx)
 │   │                        # Thin wrapper over shadcn Dialog; preserves the pre-migration
@@ -205,8 +208,9 @@ client/src/
 │   ├── useNodeParamsQuery.ts       # Per-node parameter Query + save mutation
 │   ├── useUserSettingsQuery.ts     # user_settings row Query + save mutation
 │   ├── useUsageQueries.ts          # What calls cost, from the server's usage service: USD per chat run
-│   │                               # (the figure under a reply, in Home's chat and Dev's console chat)
-│   │                               # and this month's cost by employee (the cost panel)
+│   │                               # (the figure under a reply, in Home's chat and Dev's console chat),
+│   │                               # this month's cost and tokens by employee (the cost panel, the team
+│   │                               # list, Usage) and this month's finished tasks (Billing, Usage)
 │   ├── useApiKeys.ts               # WS-based API key CRUD
 │   ├── useApiKeyValidation.ts      # Provider-specific validation helpers
 │   ├── useComponentPalette.ts / useDragAndDrop.ts / useDragWorkspaceFile.ts

@@ -2,6 +2,8 @@
  * Normal mode's sidebar (design handoff "Sidebar"): the logo, "New
  * employee", the team, and the owner's profile. Collapses to nothing
  * (width + opacity); the header then shows the logo and an open button.
+ * Each employee's row shows their role and what they cost this month (the
+ * cost panel's figure, `get_workflow_costs`), left out while it can't be read.
  */
 
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -19,6 +21,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useWorkflowCostsQuery } from '@/hooks/useUsageQueries';
+import { usd } from '@/lib/format';
 import { animate, finished } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { getDefaultEmployeeAvatar } from '../data/avatars';
@@ -33,7 +37,8 @@ import { useWorkflowControlPending } from '@/stores/workflowControlStore';
 import { useAppStore } from '@/store/useAppStore';
 import { pillToast } from '../ui/pillToast';
 
-function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; selected: boolean }) {
+/** `cost` is this month's USD, or undefined while it can't be read. */
+function EmployeeRow({ employee, selected, cost }: { employee: EmployeeSummary; selected: boolean; cost: number | undefined }) {
   const showEmployee = useHomeStore((s) => s.showEmployee);
   const glow = useHomeStore((s) => (s.glow?.workflowId === employee.workflow_id ? s.glow.nonce : 0));
   const pending = useWorkflowControlPending(employee.workflow_id);
@@ -120,7 +125,18 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
         <Avatar name={employee.name} colorRole={employee.color_role} photo={employee.photo_url} fallbackPhoto={getDefaultEmployeeAvatar(employee.workflow_id)} status={view.pill.tone} pulse={view.pulse} />
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           <span className="truncate text-row font-medium">{employee.name}</span>
-          <span className="truncate text-xs text-fg-muted">{employee.role}</span>
+          <span className="truncate text-xs text-fg-muted">
+            {employee.role}
+            {cost !== undefined && (
+              <>
+                {employee.role && ' · '}
+                <span title="This month’s cost, an estimate" className="tabular-nums">
+                  <span className="sr-only">This month: </span>
+                  {usd(cost)}
+                </span>
+              </>
+            )}
+          </span>
         </span>
         {employee.pending_approvals > 0 && (
           <span
@@ -167,8 +183,12 @@ function EmployeeRow({ employee, selected }: { employee: EmployeeSummary; select
 
 function TeamList() {
   const { data: employees, isLoading, isError, refetch } = useEmployeesQuery();
+  const { data: costs } = useWorkflowCostsQuery();
   const view = useHomeStore((s) => s.view);
   const selectedId = view.kind === 'employee' ? view.workflowId : null;
+  // An employee with no row had nothing booked this month.
+  const costOf = (workflowId: string) =>
+    costs ? (costs.workflows.find((workflow) => workflow.workflowId === workflowId)?.totalCost ?? 0) : undefined;
 
   return (
     <>
@@ -196,7 +216,12 @@ function TeamList() {
           <p className="px-2.5 py-2 text-xs text-fg-faint">Nobody on the team yet. Describe a job to hire your first employee.</p>
         )}
         {employees?.map((employee) => (
-          <EmployeeRow key={employee.workflow_id} employee={employee} selected={employee.workflow_id === selectedId} />
+          <EmployeeRow
+            key={employee.workflow_id}
+            employee={employee}
+            selected={employee.workflow_id === selectedId}
+            cost={costOf(employee.workflow_id)}
+          />
         ))}
       </nav>
     </>

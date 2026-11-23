@@ -86,8 +86,20 @@ describe('applyEmployeeLifecycle', () => {
     expect(invalidate).toHaveBeenCalledTimes(1);
     expect(invalidate).toHaveBeenCalledWith({ queryKey: employeeDetailKey('d'), exact: true });
     vi.advanceTimersByTime(300);
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    // Once each: the team list, this month's costs and the task counts.
+    const later = invalidate.mock.calls.slice(1).map(([filters]) => filters?.queryKey);
+    expect(later).toHaveLength(3);
+    expect(later).toEqual(expect.arrayContaining([EMPLOYEES_QUERY_KEY, ['workflowCosts'], ['employeeUsage']]));
     expect(names()).toEqual(['a@5', 'b@5']);
+  });
+
+  it('reads this month’s usage again when an employee changes', () => {
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    applyEmployeeLifecycle(client, event('updated', summary('a', 6)));
+    vi.advanceTimersByTime(300);
+    const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+    expect(keys).toContainEqual(['workflowCosts']);
+    expect(keys).toContainEqual(['employeeUsage']);
   });
 
   it('removes a fired employee and their detail', () => {

@@ -1159,6 +1159,7 @@ const DashboardContent: React.FC = () => {
       <div className="flex min-h-0 w-full flex-1 flex-col">
         {/* Top Toolbar */}
         <TopToolbar
+          workflowId={currentWorkflow?.id}
           workflowName={currentWorkflow?.name || 'Untitled Workflow'}
           onWorkflowNameChange={handleWorkflowNameChange}
           // `withSound('save'|'run', ...)` fires the per-theme audio

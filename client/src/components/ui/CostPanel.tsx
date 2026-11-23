@@ -10,19 +10,24 @@
  * The figures come from the server's usage service (`get_workflow_costs`,
  * hooks/useUsageQueries.ts) and are estimates: the configured prices applied
  * to the usage each provider reported. A total that cannot be read shows a
- * dash, never a zero. Each limit is one of the owner's settings
- * (`chat_run_spend_limit_usd`, `employee_monthly_budget_usd`), and its Save
- * saves that one setting and nothing else.
+ * dash, never a zero. An employee's row opens to its usage this month
+ * (`EmployeeUsage`, the same component Home's Usage button shows). Each limit
+ * is one of the owner's settings (`chat_run_spend_limit_usd`,
+ * `employee_monthly_budget_usd`), and its Save saves that one setting and
+ * nothing else.
  */
 
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { EmployeeUsage } from '@/components/ui/EmployeeUsage';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import { useWorkflowCostsQuery } from '@/hooks/useUsageQueries';
+import { useWorkflowCostsQuery, type WorkflowCost } from '@/hooks/useUsageQueries';
 import { useSaveUserSettingsMutationCore, useUserSettingsQueryCore } from '@/hooks/useUserSettingsQuery';
 import { monthDay, usd } from '@/lib/format';
 
@@ -118,6 +123,38 @@ function LimitField({ setting, label, help, noun, saved }: Limit & { saved: numb
   );
 }
 
+/** One employee's cost this month, opening to its usage. The row of calls
+ *  that belong to no employee ("Other") has nothing to open. */
+function CostRow({ workflow }: { workflow: WorkflowCost }) {
+  if (!workflow.workflowId) {
+    return (
+      <li className="flex items-center justify-between gap-3 py-2 text-sm">
+        <span className="truncate text-fg-default">Other</span>
+        <span className="text-fg-muted tabular-nums">{usd(workflow.totalCost)}</span>
+      </li>
+    );
+  }
+  return (
+    <li>
+      <Collapsible>
+        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 py-2 text-left text-sm">
+          <span className="truncate text-fg-default">{workflow.name}</span>
+          <span className="flex shrink-0 items-center gap-1.5 text-fg-muted tabular-nums group-hover:text-fg-default">
+            {usd(workflow.totalCost)}
+            <ChevronDown
+              aria-hidden
+              className="size-3.5 transition-transform duration-(--dur-default) ease-(--ease-spring) group-data-[state=open]:rotate-180"
+            />
+          </span>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pb-3">
+          <EmployeeUsage workflowId={workflow.workflowId} />
+        </CollapsibleContent>
+      </Collapsible>
+    </li>
+  );
+}
+
 export function CostPanel() {
   const { sendRequest, isReady } = useWebSocketActions();
   const costs = useWorkflowCostsQuery();
@@ -149,10 +186,7 @@ export function CostPanel() {
       {costs.data && costs.data.workflows.length > 0 && (
         <ul aria-label="Cost by employee" className="flex flex-col divide-y divide-border-default border-t border-border-default">
           {costs.data.workflows.map((workflow) => (
-            <li key={workflow.workflowId ?? 'other'} className="flex items-center justify-between gap-3 py-2 text-sm">
-              <span className="truncate text-fg-default">{workflow.name ?? 'Other'}</span>
-              <span className="text-fg-muted tabular-nums">{usd(workflow.totalCost)}</span>
-            </li>
+            <CostRow key={workflow.workflowId ?? 'other'} workflow={workflow} />
           ))}
         </ul>
       )}

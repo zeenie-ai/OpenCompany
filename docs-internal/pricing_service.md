@@ -601,7 +601,8 @@ the same figures and the same limits.
   sends `get_workflow_costs` each time the panel opens, because calls are
   booked while it is closed. The panel shows the total, "Since {Mon D}" (the
   1st of the month in the owner's time zone), one row per employee, highest
-  first, and "Other" for the row with no workflow. A read that fails shows a
+  first, and "Other" for the row with no workflow. An employee's row opens to
+  their usage (below); "Other" has nothing to open. A read that fails shows a
   dash, never a zero.
 - **Spend limit per reply.** A number field and Save limit, which sends only
   `chat_run_spend_limit_usd` through `save_user_settings`. An empty box reads
@@ -619,6 +620,34 @@ An employee paused at its budget shows the reason on its page in Home
 shows), and a Resume the server refuses with `monthly_budget_reached` says to
 raise the budget (`CONTROL_ERRORS` in `useEmployeeControl.ts`). Dev's toolbar
 shows the refusal's code, as it does for its other control refusals.
+
+### One employee's usage
+
+`client/src/components/ui/EmployeeUsage.tsx` shows one employee's month: the
+cost, the model tokens and the tasks finished, with "Since {Mon D}". One
+component, in three places:
+
+- **Usage**, `client/src/components/ui/UsageButton.tsx`: the same button in
+  Home's header on an employee's page and in the editor's top toolbar for the
+  open workflow (`TopToolbar`'s `workflowId`), each in its bar's shape, as the
+  theme button is. It opens a popover holding `EmployeeUsage`; the popover is
+  modal, because the editor's canvas stops the press that would otherwise
+  close it.
+- An employee's row in the cost panel, which opens to it.
+
+The cost and tokens are that employee's row of `get_workflow_costs`, the
+query the cost panel reads, so the figures always agree; an employee with no
+row had nothing booked and shows $0.00 and 0 tokens. Tokens are the model
+calls' `total_tokens`, cached ones included. The tasks are
+`get_employee_usage {workflow_id}`, that employee's successful runs since the
+1st (see [Normal Mode](./normal_mode.md#done-today)). Each figure that can't
+be read shows a dash. Both queries are read again whenever the usage opens,
+and Home's employee broadcasts read them again while it is open
+(`invalidateUsage`, once per burst), since a finished run, a rename and a
+removal change them.
+
+Home's team list shows each employee's cost this month beside their role, from
+the same query, and leaves it out while it can't be read.
 
 ### The cost under a reply
 
@@ -699,5 +728,7 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `client/src/components/credentials/sections/ApiUsageSection.tsx` | Per-service API usage + cost display |
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |
 | `client/src/hooks/useApiKeys.ts` | `getAPIUsageSummary` / `getProviderUsageSummary` |
-| `client/src/hooks/useUsageQueries.ts` | `useChatRunCostsQuery` (a reply's cost) and `useWorkflowCostsQuery` (this month's cost by employee) |
-| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee, the spend limit of a reply and the monthly budget of an employee, in Home's Billing and Dev's Settings |
+| `client/src/hooks/useUsageQueries.ts` | `useChatRunCostsQuery` (a reply's cost), `useWorkflowCostsQuery` (this month's cost and tokens by employee), `useEmployeeUsageQuery` (this month's finished tasks, the team's or one employee's) and `invalidateUsage` |
+| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee, each employee's row opening to their usage, the spend limit of a reply and the monthly budget of an employee, in Home's Billing and Dev's Settings |
+| `client/src/components/ui/EmployeeUsage.tsx` | One employee's usage this month: cost, tokens, finished tasks |
+| `client/src/components/ui/UsageButton.tsx` | The Usage button, in Home's header and the editor's top toolbar |

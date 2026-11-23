@@ -49,6 +49,7 @@ import {
   type WorkflowControlStatus,
 } from '../../contexts/WebSocketContext';
 import { ThemeButton } from '@/components/ui/ThemeButton';
+import { UsageButton } from '@/components/ui/UsageButton';
 import { cn } from '@/lib/utils';
 import { featureFlags } from '@/lib/featureFlags';
 import { ModeToggle } from '@/components/shell/ModeToggle';
@@ -72,6 +73,8 @@ const ACTION_SHAPE = 'rounded-md px-3.5 text-[13px] font-semibold';
 const NEUTRAL_ACTION = `${NEUTRAL} ${ACTION_SHAPE}`;
 
 interface TopToolbarProps {
+  /** The open workflow; its Usage button shows while there is one. */
+  workflowId?: string;
   workflowName: string;
   onWorkflowNameChange: (name: string) => void;
   onSave: () => void;
@@ -101,6 +104,7 @@ interface TopToolbarProps {
 }
 
 const TopToolbar: React.FC<TopToolbarProps> = ({
+  workflowId,
   workflowName,
   onWorkflowNameChange,
   onSave,
@@ -399,6 +403,9 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
         </div>
 
         <Divider />
+
+        {/* The same Usage button as Home's header, in this toolbar's shape. */}
+        {workflowId && <UsageButton workflowId={workflowId} name={workflowName} size="sm" className={NEUTRAL} />}
 
         <Button variant="quiet" size="icon-sm" onClick={onOpenSettings} title="Settings" className={NEUTRAL}>
           <SettingsIcon />
