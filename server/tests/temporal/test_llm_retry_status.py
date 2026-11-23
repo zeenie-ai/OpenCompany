@@ -18,7 +18,11 @@ from services.temporal.agent_activities import execute_llm_step
 
 
 @pytest.fixture
-def step(monkeypatch):
+def step(monkeypatch, llm_usage):
+    """The step with its provider call mocked. Its usage booking is the
+    ``llm_usage`` stand-in, as in the other step tests: the real recorder
+    would write through the test container's mock database, whose session
+    makes ``add`` a coroutine nobody awaits."""
     import core.container as container_module
     import services.agent_runtime as runtime_module
     import services.status_broadcaster as status_module

@@ -231,12 +231,15 @@ async def test_terminate_then_kill_force_kills_after_grace():
     proc = MagicMock()
     proc.returncode = None  # appears alive
     proc.pid = 42
-    proc.wait = AsyncMock()
-    # First wait (in move_on_after) does nothing; then we force-kill.
-    proc.wait.side_effect = [
-        asyncio.sleep(10),  # exceeds grace
-        None,  # post-kill wait succeeds
-    ]
+    # The first wait (in move_on_after) exceeds the grace; the post-kill wait returns.
+    # Each sleep is awaited inside the call: an AsyncMock returns a coroutine
+    # listed in side_effect as its value without awaiting it.
+    delays = [10, 0]
+
+    async def wait():
+        await asyncio.sleep(delays.pop(0))
+
+    proc.wait = AsyncMock(side_effect=wait)
     proc.terminate = MagicMock()
 
     with patch("services._supervisor.util.kill_tree") as kill_tree_mock:
