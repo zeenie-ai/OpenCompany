@@ -28,13 +28,16 @@ export function JobProgress({ employee }: { employee: EmployeeSummary }) {
   }, onSuccess: () => refreshEmployee(cache, employee.workflow_id) });
   const progressKey = `${progress?.request_id}:${progress?.state}:${progress?.revision ?? ''}`;
   const previousProgress = useRef(progressKey);
+  // TanStack's MutationObserver binds reset once, so it is stable and the
+  // effect still runs only when the job's progress changes.
+  const resetResolve = resolve.reset;
   useEffect(() => {
     if (previousProgress.current !== progressKey) {
       previousProgress.current = progressKey;
       attempt.current = null;
-      resolve.reset();
+      resetResolve();
     }
-  }, [progressKey, resolve.reset]);
+  }, [progressKey, resetResolve]);
   if (!progress) return null;
   const needsReview = progress.state === 'delivery_needs_review';
   const reviewBlocked = progress.state === 'review_blocked';

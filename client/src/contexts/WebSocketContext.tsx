@@ -2117,7 +2117,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (error) {
       console.error('[WebSocket] Failed to parse message:', error);
     }
-  }, [applyWorkflowControlStatus, dispatchToListeners]);
+  }, [applyWorkflowControlStatus, dispatchToListeners, sendOnSocket]);
 
   // Drain queued sends after a successful reconnect. Each queued send gets a
   // fresh request_id and the remaining timeout budget; responses correlate via the
