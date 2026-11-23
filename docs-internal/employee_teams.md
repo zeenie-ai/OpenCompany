@@ -1,12 +1,65 @@
 # Managed AI employee teams
 
-Normal hiring remains describe the job, review the routine/apps/hours/approval
-rule, then Hire. Optional “Their team” lists one to three responsibilities;
-models, nodes and topology stay in Dev mode. Talk is the conversational
-contact. The lead delegates substantive tasks through its connected
-Task Manager and reviews submitted results before delivery.
+## New hires (recipe v3)
 
-Hire saves a Task Manager for the AI Employee lead and connects its
+Hire shows editable reporting lines before saving the workflow. The same
+recipe serves Hire, Agent Builder and the editor's **File → Hire an employee**.
+The Chat Employee owns the conversation. Its direct report is the Orchestrator.
+The initial team can have up to two additional roles, including a manager with a worker.
+For example, a research team can look like this in the Hire preview.
+
+```text
+Chat Employee (ai_employee)                 talks with the user
+└── Orchestrator (orchestrator_agent)       reviews the research
+    └── Research manager (ai_employee)     reviews the sources
+        └── Research specialist           gathers the sources
+```
+
+In the saved graph, each report's `output-top` connects to its immediate
+manager's `input-teammates`. These edges describe who can assign work.
+Chat and the Orchestrator each own their instructions, Context, Task Manager
+and Task Completed trigger. The chat input and ordinary reply connect to Chat.
+
+A greeting, clarification or status check stays with Chat. For substantive
+work, Chat's Task Manager opens a job and assigns its outer board task to
+the Orchestrator. Each manager assigns work to its direct reports through
+its own Task Manager. Submitting a task returns it to the employee instance
+that assigned that attempt. A manager can request changes on the same task,
+or accept the submission and use it to finish its own assignment. Replaying
+the initial chat submission reuses the job and outer task. Each delegated
+task records the assigning node and agent run, which identify the immediate
+manager and its upstream attempt even when jobs use the same canvas nodes.
+A manager waiting for child work saves its turn and releases its execution
+slot. Child submission or failure wakes that manager through its durable inbox.
+
+Chat reviews the Orchestrator's submission and writes the final answer on
+the originating chat branch. A busy chat receives the answer when its current
+turn finishes. After the conversation is cleared, open the original assignment
+on Chat's Task Manager board to read the final answer. App jobs keep the
+destination and approval gate captured at intake.
+
+Each manager's Task Completed node connects to its `input-task`. The event matches the assigning
+employee before the node's status, worker and task filters are evaluated.
+Standalone Task Completed nodes can observe matching events across employees.
+Separate success and error filters can share an employee. Validation flags
+overlapping filters on that employee. Redelivery uses the trigger node and
+committed event identity to recognize the same firing.
+
+Builder can add a specialist under a selected manager. Apply activates the
+reviewed reporting lines for future work. If an assignment needs a missing
+role, the owner can approve the change, apply it and start fresh work.
+The configured delegation depth counts levels below the Orchestrator.
+
+For regression coverage, the [single-slot Temporal test](../server/tests/temporal/test_employee_single_slot_integration.py)
+runs the nested handoff with a scripted model and replays the recorded
+histories. Set `TEMPORAL_TEST_CLI` to the local Temporal executable to run
+it. The [hierarchy runtime tests](../server/tests/temporal/test_employee_hierarchy_runtime.py)
+cover job and chat delivery, and the [app intake tests](../server/tests/temporal/test_employee_app_hierarchy.py)
+exercise the captured app destination.
+
+## Earlier hires
+
+Recipe v2 saves a Task Manager for the AI Employee lead and connects its
 `output-tool` to the lead's `input-tools`. The team plan records the manager's
 node ID. Opening that node in the editor shows the lead's task board.
 Talk gets its own Task Manager for submitting jobs and checking their status.
@@ -30,8 +83,10 @@ AI Employee) to a node whose spec declares an `input-employee-team` handle
 (`useReactFlowNodes`); `employee_team_connection_issues` checks the same at
 save.
 
+## Shared runtime and editing
+
 Each concrete tool node has exactly one owning agent. Business capabilities
-belong to the specialist responsible for the work; the lead and Talk request
+belong to the specialist responsible for the work. Its manager requests
 that work through Task Manager. Private utilities such as clocks, memory and
 checklists may use the same node type with separate configured instances.
 Builder additions target one selected member, and never broadcast the same
@@ -73,12 +128,12 @@ remain authoritative. Capability grants are scoped and revocable in Settings
 and checked again inside the graph mutation. Public app messages cannot
 approve expanded access. Execution approval for sending remains separate.
 
-When the owner asks Talk to add a specialist, Talk uses Agent Builder to
-connect that specialist to the lead. With **Ask first** off, the owner's
+When the owner asks Chat to add a specialist, Agent Builder connects it to
+the selected manager. With **Ask first** off, the owner's
 request saves the specialist and its scoped tools directly. The same rule
 applies when the owner equips an existing specialist. With **Ask first**
 on, **Allow and add** in Access saves the reviewed change. Apply activates
-the saved team for future work, after which the lead can assign the task.
+the saved team for future work, after which that manager can assign a task.
 
 Safe Apply pauses producer admission while allowing existing work and its reviews
 to finish when generation execution admission is open. It cannot reopen a
@@ -122,7 +177,7 @@ agents cannot choose another job through tool arguments.
 
 New admitted jobs have separate team identities even when email arrivals share
 one deployment generation. Saved recipe v1 graphs retain their nodes, while
-recipe v2 admits jobs off canvas. Existing bound teams and original recipients
+recipes v2 and v3 admit jobs off canvas. Existing bound teams and original recipients
 remain attached across worker retries and resumes.
 
 Upgrade workers normally. The polling payload correction changes child input

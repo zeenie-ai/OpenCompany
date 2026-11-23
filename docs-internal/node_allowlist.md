@@ -84,11 +84,12 @@ Android service nodes are enabled and connect directly to an agent's
 bundled Android skills are also visible. The former `androidTool` aggregator
 is obsolete; legacy workflows are normalized to direct service-to-agent edges.
 
-The shipped `enabled_nodes` includes `taskManager` and `masterSkill`.
-Managed Hire requires both types so it can save a separate Task Manager and
-Master Skill for each of the Talk contact and the AI Employee lead. Each
-specialist also gets a Master Skill. If either type is unavailable, Hire
-returns `not_allowed`. Agent Builder excludes Task Manager from `add_tool`
+The shipped `enabled_nodes` includes `ai_employee`, `orchestrator_agent`,
+`taskManager`, `taskTrigger` and `masterSkill`. Managed Hire checks the
+installation's allowlist before creating the reviewed team. Chat and its
+Orchestrator each need their own Task Manager, Task Completed trigger and
+Master Skill. A restricted installation can deny a required type. Agent
+Builder excludes Task Manager from `add_tool`
 because the team recipe owns the binding. Unmanaged team leads and historical
 generations can still receive a runtime binding when their graph has no
 connected manager. See [managed AI employee teams](./employee_teams.md).

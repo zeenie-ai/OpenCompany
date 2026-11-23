@@ -632,10 +632,12 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    recorded as unsupported, named in the instructions, and never block a
    start;
 3. builds the graph for an app event, schedule or manual chat. With managed
-   teams enabled, Hire connects an `aiAgent` Talk contact to an `ai_employee`
-   lead and connects one to three specialist nodes to the lead's Teammates
-   input. Talk and the lead each get their own Task Manager node. Talk submits
-   jobs, the lead assigns work and reviews results, and each specialist owns
+   teams enabled, Hire saves the reporting lines reviewed by the owner. The
+   Chat Employee (`ai_employee`) has one direct report, the Orchestrator
+   (`orchestrator_agent`). Up to two additional roles can report to the
+   Orchestrator or form a manager–worker pair. Chat's Task Manager assigns
+   the outer task to the Orchestrator. The Orchestrator and nested managers
+   use their own boards to assign work and review results. Each specialist owns
    the tools for its responsibility. Hire returns `teams_disabled` when team
    hiring is disabled. Existing single-worker hires keep their saved graph.
    The recipe uses the hire's instructions, approved apps, delivery settings,
@@ -655,9 +657,9 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    employee to put finished
    work the owner will want to look at later on its Canvas, and to leave
    routine replies off it. The builder copies enabled library skills from
-   Settings > Skills into the graph at hire time. On a managed team, Talk,
-   the lead and each specialist get separate Master Skill nodes. Talk keeps
-   the owner's library selections, the lead gets delegation instructions,
+   Settings > Skills into the graph at hire time. On a managed team, Chat,
+   the Orchestrator and each specialist get separate Master Skill nodes. Chat keeps
+   the owner's library selections, the Orchestrator gets delegation instructions,
    and specialist skills follow the role. A
    skill named `skill`, or one ending in `-personality`, is left out: it would
    take over the Skill tool, or replace the whole system message. The rule is
@@ -1035,15 +1037,14 @@ A chat run follows the owner's message through the Talk contact to its reply.
 chatTrigger (session_id = workflow id) -> agent -> chatReply ("Reply in Chat")
 ```
 
-- **Managed hires** use an `aiAgent` as the conversational contact for every
-  trigger type. Its Team input (`input-employee-team`) connects to the
-  `ai_employee` lead's top output. This connection tells Talk's Task Manager
-  where to send a job. `submit_job` returns a receipt, and `get_job_status`
-  reads the saved job state. The lead's Task Manager starts the connected
-  specialists and tracks review. The Team edge carries no chat messages
-  or trigger events. [Managed AI employee teams](./employee_teams.md)
+- **Managed hires** use the Chat Employee for owner conversations.
+  `submit_job` returns a receipt for substantive work and `get_job_status`
+  reads its saved state. Chat reviews its Orchestrator's outer submission
+  and writes the final answer to the original conversation branch. Recipe v2
+  keeps its `aiAgent` Talk contact connected to the lead through
+  `input-employee-team`. [Managed AI employee teams](./employee_teams.md)
 - **Chat hires** reuse the original chat trigger and agent as the Talk line.
-  Team hiring adds the separate lead for work submitted from Talk.
+  A v3 hire delegates work submitted from Chat to its Orchestrator.
 - **App-event and schedule hires** get a "Talk" chat trigger on the workflow's
   session, a "Talk with {Name}" contact with its own conversation Context,
   and Reply in Chat. Older single-worker graphs can share tools or Skills
@@ -1163,11 +1164,11 @@ asks, within the rule Hire applies
 - **Skills**: from the owner's library (Settings > Skills, on or off for new
   hires) and the Discover folder (`server/skills/employee/`), with their text
   copied in; never `skill` or a `*-personality` skill.
-- On a managed team, Talk uses `add_subagent` to connect a specialist to
-  the lead. When **Ask first** is off, the owner's request saves the change
+- On a managed team, Chat uses `add_subagent` to connect a specialist to
+  the selected manager. When **Ask first** is off, the owner's request saves the change
   directly. When it is on, **Allow and add** saves the reviewed change.
   These rules also cover adding tools or skills to an existing specialist.
-  After Apply, the lead can assign the specialist a task through Task Manager.
+  After Apply, the selected manager can assign work to the specialist.
 - A new tool belongs to the selected member, defaulting to the caller. A
   managed team's skill goes on the selected member's Master Skill.
 

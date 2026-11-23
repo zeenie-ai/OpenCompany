@@ -19,26 +19,27 @@ not replace its tool contract. Employee recipe version, graph version and
 | Task | A reviewed work item, retained through changes, retries and reassignment |
 | Task attempt | One execution contract, including instructions, feedback, dependencies and configuration |
 
-Hire creates an `ai_employee` lead and an `aiAgent` Talk contact. The lead's
-`output-top` connects to Talk's `input-employee-team` to identify the job
-destination. Each role has its own Task Manager on `input-tools` and its own
-Master Skill on `input-skill`. The admitted team plan records their node IDs.
+Recipe v3 creates a Chat Employee (`ai_employee`) with a dedicated
+Orchestrator (`orchestrator_agent`) as its direct report. Each role's
+`output-top` connects to its immediate manager's `input-teammates`. The
+admitted team plan records role IDs and reporting lines. Earlier recipe v2
+graphs identify the lead through the Talk contact's `input-employee-team`.
 
-Talk retains the owner conversation. Its Task Manager's
-`submit_job(instructions)` admits a durable job and returns its ID and current
-saved status. A queued receipt confirms that the request is saved. Talk can
-look up that ID with `get_job_status(job_id)` to see the task count and counts
-by status before reporting progress. Omitting the ID reads the most recently
-updated job for the same employee.
-Each job has an isolated lead and team. Its handoff contains the request and
+Chat retains the owner conversation. Its Task Manager's
+`submit_job(instructions)` admits a durable job for substantive work. In v3
+the outer task appears on Chat's board with the Orchestrator as assignee.
+`get_job_status(job_id)` returns the saved job state and task counts. Omitting
+the ID reads the most recently updated job for the same employee.
+Each job has isolated agent instances. Its handoff contains the request and
 captured source context. A job admitted while its agent answers a chat run
 records that run (`EmployeeJob.chat_run_id`), so the usage service can add the
 job's cost to the reply that started it; see
 [Pricing Service](./pricing_service.md). Instance transcripts do not replace
 Talk history.
-Reviewed final output appends to the original conversation with a stable
-delivery identity, or goes through the captured app destination and approval
-gate.
+Chat reviews the outer submission and authors the final reply on the original
+conversation branch. A busy conversation queues delivery. After a clear,
+the result is available on the original assignment. App jobs use their
+captured destination and approval gate. [Managed team workflow](employee_teams.md)
 
 The canonical `input-teammates` connections authorize templates. A bound spawn
 tool selects one of those templates; model arguments cannot select another
@@ -58,9 +59,11 @@ the transcript.
 
 | Available to | Tools |
 |---|---|
-| Talk | `submit_job(instructions)`, `get_job_status(job_id?)` |
-| Job lead | Bound `spawn_<teammate>(instructions, after?)` and `reassign_<teammate>(task_ref)`; `assign_task`, review and instance controls; all peer tools below |
-| Lead and teammates | `send_message`, `list_agents`, `get_agent`, `wait_for_agents`, `list_tasks`, `get_task`, `inspect_task` |
+| Chat intake (Talk) | `submit_job(instructions)`, `get_job_status(job_id?)` |
+| Manager with connected reports | Bound `spawn_<teammate>` and `reassign_<teammate>`, assignment, review and peer tools |
+| Chat's job reviewer | Peer tools, `request_changes`, `accept_task`, `retry_task`, `cancel_task`, `finish_team` |
+| Job lead in earlier recipes | Manager tools, `stop_agent`, `resume_agent`, `close_agent`, `finish_team` |
+| All job roles | `send_message`, `list_agents`, `get_agent`, `wait_for_agents`, `list_tasks`, `get_task`, `inspect_task` |
 
 `<teammate>` is the exposed binding suffix, derived from node type and a stable
 node-ID hash. Use the published name. Labels do not retarget a binding.
@@ -128,10 +131,13 @@ does not bypass those gates.
 `AgentInstanceSessionWorkflow` owns the instance's turns. Assignments, peer
 messages, review notices and follow-ups enter its inbox. One active run owns
 the transcript; revision and run-fence checks prevent concurrent or late writes.
-Submission and its lead-review notification commit together. For version 1,
-an external `taskTrigger` event validates the persisted task, owning instance,
-lead, job and generation and only wakes the original lead. It never creates a
-competing review invocation or a replacement lead after Reset.
+The outcome and its assigner's inbox notification commit together. In recipe
+v3 the task's assigning run identifies the parent instance and upstream attempt.
+A manager with pending children checkpoints its turn and releases its slot.
+A child submission or failure wakes that manager. After accepting its children,
+the manager submits its own result for review one level up. A scoped
+`taskTrigger` validates the persisted task, job, generation and assigner before
+waking the owner. Reset fences stale attempts and review notifications.
 
 | Delivery state | Meaning |
 |---|---|

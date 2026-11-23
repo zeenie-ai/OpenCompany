@@ -9,23 +9,19 @@
 
 ## Purpose
 
-The AI Employee is the lead of a managed employee team. It shares the
-orchestration runtime with `orchestrator_agent`. Its `leadsEmployeeTeam` hint
-also lets its `output-top` connect to a Talk contact's `input-employee-team`.
-Talk is an `aiAgent` that holds the conversation with the owner. This connection
-identifies the AI Employee that receives jobs submitted through Talk.
+In recipe v3 the Chat Employee uses this node to converse with the owner,
+assign work to its Orchestrator and review the outer task. The same node
+type can serve as a nested manager. The admitted role and reporting lines
+determine which tools its instance receives. In recipe v2 the AI Employee
+is the job lead identified by the Talk contact's `input-employee-team`.
 
 ## Staffing and assignment
 
-Hire gives Talk and the lead their own Task Manager and Master Skill nodes.
-When the owner requests a specialist, Talk uses its connected Agent Builder
-to wire the specialist's `output-top` to the lead's `input-teammates`.
-The specialist's tools connect to its own `input-tools`.
-
-Once the updated team is active, Talk submits the job through its Task Manager.
-The lead uses its own manager's `spawn_<teammate>` tool to create an instance
-of the connected specialist and assign its first task. The lead reviews the
-result before delivery. [Managed AI employee teams](../../employee_teams.md)
+Chat and the Orchestrator own separate Context, instructions, Task Managers
+and Task Completed triggers. Chat's board displays its assignment to the
+Orchestrator. The Orchestrator and nested managers assign work to connected
+reports and review each returned submission. Only the outer submission
+returns to Chat for review and the user-facing answer. [Managed team workflow](../../employee_teams.md)
 
 ## Behaviour
 

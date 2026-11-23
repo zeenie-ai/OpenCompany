@@ -4,7 +4,7 @@ description: How to use the Agent Builder tool (agent_builder) to inspect your c
 allowed-tools: "agentBuilder"
 metadata:
   author: opencompany
-  version: "5.4"
+  version: "5.5"
   category: autonomous
 ---
 
@@ -21,7 +21,7 @@ You are connected to an **Agent Builder** node. It gives you ONE tool,
 | `read_doc` | Read a bounded section by manifest document ID; follow the returned relative links by document ID. |
 | `add_tool` | Wire a tool from `available_tools` to the selected employee member or the caller. |
 | `add_skill` | Give a skill from `available_skills` to the selected employee member or the caller. |
-| `add_subagent` | Add a specialist from `available_agents` to the existing lead. Managed Talk can do this on its lead's behalf. |
+| `add_subagent` | Add a teammate from `available_agents` under the Orchestrator or a selected manager. Earlier managed hires use their saved lead. |
 | `plan_update` | Validate a complete scoped change and report required owner access without mutating the graph. |
 | `apply_update` | Apply the same authorized configuration, or apply saved capabilities at a safe point. |
 | `create_workflow` | Create a fully configured employee team using the shared Hire pipeline, from a trusted owner request. |
@@ -42,7 +42,10 @@ Pick values only from its catalogues: `available_tools[].type`,
 
 ## When a change works
 
-Every change is saved at once and shows on the canvas.
+An authorized change with `activation_state="saved"` is visible on the canvas.
+For a hire with `employee.reporting_lines`, use **Apply** to activate saved
+changes for future jobs. Current assignments keep their original team and tools.
+For other canvases, use the returned binding details to determine availability.
 
 - **A tool** is callable in this same run, in your next response, when the
   summary says *"Available immediately"* or *"You can use it now"*. Call it
@@ -60,8 +63,10 @@ Every change is saved at once and shows on the canvas.
 
 ## If you are a hired employee
 
-`inspect_canvas` returns an `employee` block (`{asks_first, agents}`) when
-you are one of the owner's AI employees. Then:
+`inspect_canvas` returns an `employee` block with `asks_first` and `agents`
+when you are one of the owner's AI employees. On a new managed hire,
+`employee.reporting_lines` names each member's node ID, parent node ID and
+responsibility.
 
 - A tool goes only to the selected member (`target_member_id`), or to you
   when no target is supplied. Choose a member from `employee.agents`.
@@ -90,9 +95,11 @@ you are one of the owner's AI employees. Then:
 - After Builder saves the specialist, call `apply_update` with
   `change_operation="apply_saved"` for safe activation, or the owner can
   press **Apply**. Report the returned activation state. If activation
-  is waiting, keep any job that needs the new specialist pending until
-  Apply completes. Only interrupt current work when the owner explicitly
-  approves **Stop work and apply**.
+  is waiting, tell the owner when the new role will be available. When an
+  existing job reports a missing capability, return that gap through the
+  assigning employee to Chat. The owner can start fresh work after Apply.
+  Only interrupt current work when the owner explicitly approves **Stop work
+  and apply**.
 - **When a change is refused, the summary is one plain sentence meant for
   the owner.** Pass it on as it is, for example: *"Google Calendar can send
   things on your behalf, so it stays off while "Ask me before sending
@@ -112,16 +119,16 @@ No other fields. Returns:
   "nodes": [{ "id", "type", "label", "key_params" }],
   "edges": [{ "source", "target", "source_handle", "target_handle" }],
   "you": { "node_id", "incoming": [...], "outgoing": [...] },
-  "employee": { "asks_first": true, "agents": ["..."] },
+  "employee": { "asks_first": true, "agents": ["..."], "reporting_lines": [{ "node_id", "parent_node_id", "responsibility" }] },
   "available_tools": [{ "type", "display_name", "description" }],
   "available_agents": [{ "type", "display_name", "description" }],
   "available_skills": [{ "name", "description" }]
 }
 ```
 
-- `you.incoming`: tools on `input-tools`, skills on `input-skill`, teammates on
-  the lead's `input-teammates`, and the AI Employee lead on Talk's
-  `input-employee-team`.
+- `you.incoming` includes tools on `input-tools`, skills on `input-skill`, and
+  direct reports on the managing agent's `input-teammates`. Earlier managed
+  hires expose their AI Employee lead on Talk's `input-employee-team`.
 - `key_params` shows only planner-relevant fields (`provider`, `model`,
   `operation`, `url`, `query`), never secrets.
 - `employee` is present only for a hired employee.
@@ -148,34 +155,51 @@ An already enabled skill changes nothing.
 ### `add_subagent`
 
 Supply `agent_type`, `purpose`, and any `tool_types`, `tool_parameters` or
-`skill_names` the request needs. On a managed hire, Talk can do this for
-the existing AI Employee lead. An editor team lead can call it directly.
+`skill_names` the request needs. On a hire with `employee.reporting_lines`,
+Chat can omit `target_member_id` to add a direct report to the Orchestrator.
+To put the new worker under an existing manager, pass that manager's saved
+node ID as `target_member_id`. To create a manager, use `agent_type="ai_employee"`
+when the catalogue offers it. The manager gets a private Task Manager and
+Task Completed trigger. The configured delegation depth counts levels below
+the Orchestrator. On an earlier managed hire, Talk adds to its saved AI
+Employee lead. An editor team lead can also add its own direct reports.
 Use `coding_agent` for software development and `browser_agent` for a
 specialist with its own Browser and Vision tools. For a specialist already
 on the team, give additional tools or skills to its `target_member_id`.
-Builder connects new specialists to the lead's `input-teammates` and gives
-each a private Context. The lead assigns the first
-task through its Task Manager with the advertised
+Builder connects a new teammate to its immediate manager's `input-teammates`
+and gives it a private Context. The manager assigns the first task through
+its Task Manager with the advertised
 `spawn_<teammate>(instructions, after?)` tool. Include the mission, context
 and acceptance criteria in `instructions` and any prerequisite task references
 in `after`. For a new task on an existing instance, call `assign_task` with
-its agent ID. Review the submitted result, accept it or request changes, and
-deliver the accepted answer once. A legacy run exposing only `task_manager`
-uses its `assign_task` operation. The specialist inherits the lead's configured
-model and receives its selected tools and skills and its own Context.
+its agent ID. Each submission goes back to the employee that assigned the
+task. That employee can request changes on the same task or accept the work
+and submit its own result one level up. In the Chat/Orchestrator hierarchy,
+Chat reviews the outer task and writes the final reply. A legacy run exposing
+only `task_manager` uses its `assign_task` operation. The specialist inherits the selected manager's
+configured model and receives its selected tools and skills.
 Custom `aiAgent` specialists may have distinct purposes. Registered specialist
 types reuse their existing teammate binding.
 
 ### `create_workflow`
 
-Use the shared employee-team recipe for a trusted owner request. It saves
-an `ai_employee` lead connected to Talk's Team input and specialists connected
-to the lead's Teammates input. Talk and the lead each get a connected Task
-Manager. Every role gets its own Context and Master Skill. Talk submits
-substantive work once with `submit_job` and uses `get_job_status` before
-reporting progress. The lead uses its manager to assign and review specialist
-tasks. The runtime admits jobs and delivers reviewed results through the
-saved outputs and approval gates.
+Use `workflow_name` and an optional `workflow_description` for a trusted
+owner request. Call `create_workflow` with `dry_run=true` first. Show the
+owner the Chat Employee, its permanent Orchestrator, and the proposed
+`team`. Save with `create_workflow` using the reviewed `team` list. An
+empty list hires just the two permanent roles. Each of the zero to two
+optional entries has a distinct draft `key`, a `name`, a `responsibility`,
+a `kind` of `employee` or `specialist`, and `reports_to` set to
+`orchestrator` or a manager's draft key.
+
+The shared Hire recipe saves one workflow. Chat uses `ai_employee` and its
+direct report uses `orchestrator_agent`. Each has its own Context, instructions,
+Task Manager and Task Completed trigger. For substantive work, Chat calls
+`submit_job` once to assign the Orchestrator a board task. For a status
+question, Chat uses `get_job_status`. The Orchestrator delegates and reviews
+through its own Task Manager, then submits the original task to Chat. A
+chat job returns to the originating branch. An app job keeps its captured
+destination and approval rule.
 
 ### Documentation operations
 
@@ -184,7 +208,7 @@ takes `document_id`, optional `offset` and `max_chars` (at most 24000).
 `inspect_node` takes `node_id` for this workflow or `node_type` for the live
 plugin contract. These operations never return stored credential secrets.
 
-## Example
+## Example for a canvas with immediate tool binding
 
 The owner says: "Search the web for today's weather in Tokyo."
 

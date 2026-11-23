@@ -11,7 +11,7 @@
 
 OpenCompany is an open-source operating system for AI employees. It gives employees browsers, apps, tools, integrations, and access to your computer to complete work. Hire them to build and ship software, grow your business, answer customers, run operations, or research a topic.
 
-Describe a job in plain words and connect the tools it needs. Each employee has a workspace, a routine, skills, and memory. A lead coordinates specialist AI agents to carry out the job, review their work, and bring you the result. You choose their access and ground rules, watch them work, and coach them as they gain experience and new abilities.
+Describe a job in plain words and connect the tools it needs. You work with a Chat Employee, who knows your request and brings you the result. Its Orchestrator assigns work to the team and reviews what comes back. You choose their access and ground rules and can follow their progress in the employee's workspace.
 
 **[Get started](#for-everyone)** · **[For technical readers](#for-technical-readers)** · **[Documentation](https://docs.opencompany.sh)** · **[Discord](https://discord.gg/c9pCJ7d8Ce)**
 
@@ -46,7 +46,7 @@ The app downloads its supporting software on first launch, then opens Home.
 
 1. **Connect an AI model.** Follow the prompt in Home or open **Settings > Connectors**. Use an AI provider account or connect a model running on your computer.
 2. **Describe the job.** For example: “Read my new emails, draft short replies in my style, and ask me before sending.”
-3. **Review the setup.** Check the employee's instructions, apps, routine, and ground rules. Ask for changes and connect any required apps.
+3. **Review the setup.** Check the instructions, apps, routine, and ground rules. Under **Their team**, choose each role's responsibilities and who it reports to. Connect any required apps.
 4. **Hire.** OpenCompany creates the employee and its team. Work starts once the required connections are ready; its page tells you if something is missing.
 5. **Work together.** Chat with the employee, follow its progress, review drafts, and open its Workspace to see reports and files.
 
@@ -60,7 +60,7 @@ The builds are not signed with an Apple or Microsoft developer certificate yet, 
 
 Jobs can arrive through Home chat, email (Gmail, Outlook, or IMAP), WhatsApp, Telegram, or Discord, or start on a schedule. Dev mode also supports webhook inputs.
 
-An employee takes a job through the steps needed to complete it: browsing websites, using connected apps, working with files, running code, and coordinating specialists. Its lead assigns work and reviews submissions. You can see progress, results, and requests for help on the employee's page.
+A status question stays in chat. When you ask for work, Chat opens a Task Manager assignment for its Orchestrator. Each worker returns its result to the employee who assigned it. That employee can accept it or request changes on the same task. After Chat accepts the Orchestrator's submission, it writes the final answer in the conversation where you asked. [Follow an assignment through a team](docs/employee-teams.md#follow-an-assignment)
 
 **You set the ground rules.** New hires ask before sending by default. Supported send actions appear as drafts for approval; browser use is restricted to reading while Ask first is on. You can review app-access requests, change access, and stop or resume the employee from Home. Keep the app running and your computer awake for background work.
 
@@ -71,7 +71,7 @@ An employee takes a job through the steps needed to complete it: browsing websit
 - **Memory:** With memory enabled, employees can save useful facts, preferences, and decisions for later work.
 - **Coaching:** Give feedback in chat and refine the employee's instructions as you see results.
 - **Skills:** A skill is a written playbook, such as how to answer customers or prepare your weekly report. **Settings > Skills** manages the library used by new hires; existing employees can be given skills through chat.
-- **New abilities.** Ask in Talk, “Add a Coding Agent to my team and give it web search.” Talk can add a specialist or equip one you already have. With **Ask first** off, your request saves the permitted change directly. If new access needs review, choose **Allow and add** on the employee page. Once **Apply** activates the saved team, the lead can assign the specialist work through its Task Manager. [How employee teams work](docs-internal/employee_teams.md)
+- **New abilities.** Ask in Talk, “Add a Coding Agent under my Orchestrator and give it web search.” With **Ask first** off, your request saves the permitted change directly. If new access needs review, choose **Allow and add** on the employee page. After **Apply**, request fresh work for the updated team.
 
 This is how employees improve: saved knowledge, clearer instructions, and better tools. OpenCompany does not retrain the underlying AI model.
 
@@ -151,9 +151,9 @@ Compose builds one container from source, persists state in the `opencompany-sel
 
 ### How the employee OS is built
 
-OpenCompany's employee OS brings together the runtime, workspaces, browser access, app integrations, tools, memory, and skills employees need to complete jobs. The React interface offers Home for hiring and daily work, plus a React Flow editor for configuring teams. The Python backend represents an employee as a workflow containing a lead, specialist agents, tools, conversation context, memory, and skills. Home's hiring flow creates this structure for you.
+The React interface offers Home for hiring and daily work, plus a React Flow editor for configuring teams. The Python backend saves a new managed hire as one workflow containing Chat, its Orchestrator, the reviewed reporting lines, and each role's tools and context.
 
-- **Delegation.** Hire connects the chat contact (Talk) to an AI Employee team lead. Each gets its own Task Manager and Master Skill node. Talk submits jobs and checks progress. The lead assigns work to connected specialists and reviews their results before delivery. [Employee teams](docs-internal/employee_teams.md) · [Agent delegation](docs-internal/agent_delegation.md)
+- **Delegation.** The Chat Employee (`ai_employee`) and Orchestrator (`orchestrator_agent`) have separate Task Managers and Task Completed triggers. A completion reaches the assigning employee's instance and task attempt, including when two jobs use the same canvas. Standalone triggers can still observe events that match their filters. [Managed employee runtime](docs-internal/employee_teams.md)
 - **Context and memory:** Stored conversations preserve working context; a separate memory tool holds facts an agent chooses to save. Team members have their own context and memory. See [agent context](docs-internal/agent_context_flow.md) and [compaction](docs-internal/memory_compaction.md).
 - **Execution:** Temporal supports durable background work, event handling, and schedules. Stop allows admitted work to finish; Resume releases pending work. See [Temporal architecture](docs-internal/TEMPORAL_ARCHITECTURE.md) and [Stop / Resume semantics](docs-internal/temporal-workflow-control.md).
 - **Models:** Native provider adapters support cloud services and local models, with named OpenAI-compatible endpoints for other servers. See the [LLM SDK](docs-internal/native_llm_sdk.md).

@@ -9,10 +9,12 @@
 
 ## Purpose
 
-Team-lead agent that coordinates agents wired through `input-teammates`.
-Task Manager is intrinsically bound and is the only model-facing delegation
-interface. Internal delegate descriptors resolve authorized assignees after a
-durable `assign_task` record exists.
+The Orchestrator coordinates agents wired through `input-teammates`. In a
+recipe v3 hire it receives the outer task on the Chat Employee's board. Its
+own Task Manager assigns work to its connected reports. A nested manager
+can delegate again under the same recorded assignment and review rules.
+The Orchestrator reviews its children's results before returning its own
+submission to Chat. [Managed team workflow](../../employee_teams.md)
 
 ## What is unique to this node
 
@@ -41,9 +43,10 @@ durable `assign_task` record exists.
 4. Loads `database.get_node_parameters(source_id)` for each teammate.
 5. Returns a list of `{node_id, node_type, label, parameters}` dicts.
 
-`prepare_agent_call` walks each teammate's own `input-tools` edges to populate
-capability descriptions. The LLM receives connected node IDs and calls
-`task_manager(operation="assign_task", ...)`; direct delegate tools are hidden.
+`prepare_agent_call` walks each teammate's `input-tools` edges to populate
+capability descriptions. Lifecycle version 1 exposes a bound
+`spawn_<teammate>` for each connected template and `assign_task` for existing
+instances. Version 0 uses `task_manager(operation="assign_task", ...)`.
 
 ## Behaviour
 
@@ -57,8 +60,8 @@ expansion above.
   skipped.
 - Concurrency is root-scoped and defaults to three active descendants.
   Additional durable assignments remain queued.
-- When zero teammates are connected, the node behaves identically to any
-  other specialized agent.
+- When a managed job needs a missing specialist, the owner can approve a
+  staffing change through Builder, apply it and start fresh work.
 
 ## Related
 

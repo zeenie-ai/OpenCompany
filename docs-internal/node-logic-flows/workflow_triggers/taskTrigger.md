@@ -10,22 +10,18 @@
 
 ## Purpose
 
-Fires when a child agent dispatched from a durable Task Manager assignment completes or
-errors. The Temporal `agent.finish_delegation` Activity in
-`server/services/temporal/agent_activities.py` and the legacy coordinator in
-`server/services/handlers/tools.py` persist the task outcome before calling
-`nodes.agent._events.broadcast_agent_task_completed` or
-`broadcast_agent_task_failed`. Both emit a CloudEvents `WorkflowEvent`
-(`type: com.opencompany.agent.task.completed`, with the success/error
-discriminator carried in `data.status`) via `dispatch.emit`. `taskTrigger` is
-canary-registered. In controlled deployments its definition and accepted
-Signals live in `WorkflowControlWorkflow`, which filters/queues the event and
-starts a child graph per match. A separate `TriggerListenerWorkflow` remains
-the legacy compatibility path. The assigning lead has already returned after
-receiving `queued`. When
-the detached runner submits or fails the task, this trigger starts the connected
-lead's separate review invocation. The event preserves the owning execution,
-so Task Manager reads the original durable task rather than the trigger run.
+Task Completed observes a submitted or failed Task Manager assignment. In
+recipe v3, a connection from `output-main` to an employee's `input-task`
+scopes the trigger to work that employee assigned. A worker finishing under
+the Orchestrator wakes the Orchestrator. Chat receives the event for its own
+outer assignment when the Orchestrator submits or fails it. A standalone
+automation receives events matching its configured filters.
+
+The instance service commits the task outcome and review notice together, and
+records pending event delivery on the mutation receipt. The controller uses
+the trigger node and event identity to deduplicate redelivery. Resuming a
+scoped review requires the persisted task, assigner, instance and generation.
+Earlier recipes retain their admitted routing. [Managed team workflow](../../employee_teams.md)
 
 ## Inputs (handles)
 
@@ -73,11 +69,13 @@ envelope.
 
 ```mermaid
 flowchart TD
-  P[Persist terminal task outcome] --> Q[broadcast_agent_task_completed or failed<br/>dispatch.emit com.opencompany.agent.task.completed]
-  Q --> R[Controlled controller receives on_event Signal]
-  R --> S[TaskTriggerNode.build_filter<br/>task_id / status / agent_name / parent_node_id]
-  S -- match --> T[spawn child MachinaWorkflow<br/>trigger pre-executed with event payload]
-  S -- no match --> R
+  P[Commit outcome and assigner notice] --> Q[Deliver event to controller]
+  Q --> R{Connected to an employee Task input?}
+  R -- yes --> W{Assigning employee matches?}
+  W -- yes --> S[Apply configured task, worker and status filters]
+  R -- no --> S
+  S -- match --> T[Fire this trigger once for this event]
+  T --> U[Follow configured execution connections]
 ```
 
 ## Decision Logic
@@ -93,7 +91,10 @@ flowchart TD
   - `all` -> no status restriction; other values fail the declared Literal schema
 - **parent_node_id**: exact match if non-empty.
 
-If any filter rejects, the event is skipped and the waiter stays blocked.
+For v3 employee triggers, the owner check precedes the configured filters.
+Validation flags overlapping filters on triggers connected to the same employee.
+Teammate connections describe reporting lines and are excluded from forward
+execution. If any filter rejects, this trigger keeps waiting.
 
 ## Side Effects
 
@@ -126,13 +127,10 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
 - Waiter has no timeout; if the child agent never dispatches a
   `task_completed` event (e.g. it is still running or died silently) the
   trigger blocks until cancelled.
-- Lead review requires a connected matching trigger path. External consumers
-  may use the event without receiving authority to mutate another team.
-- Terminal event IDs are stable (`terminal_event_id` when supplied, otherwise
-  task ID plus persisted terminal status), so Activity redelivery can use the
-  controller's per-trigger deduplication. This does not fix same-label/type
-  trigger Workflow-ID collisions or guarantee producer delivery before a
-  Signal is accepted.
+- Standalone consumers can observe a matching event. Job-scoped review tools
+  validate authority separately before accepting a change.
+- For v3, the event identifies the committed task attempt and revision, so
+  a later revised submission can trigger a fresh review.
 
 ## Related
 
@@ -140,9 +138,8 @@ If any filter rejects, the event is skipped and the waiter stays blocked.
   events while stopped and start the review graph after Resume. Detached
   delegation runners enroll as independent execution roots, so Stop controls
   them even after their assigning parent finishes. Safe Apply's producer-only
-  review drain cannot reopen a whole-generation Stop. Signal acceptance is
-  receipt, not completion; producer delivery remains best effort before
-  acceptance. See [Workflow control](../../temporal-workflow-control.md).
+  review drain cannot reopen a whole-generation Stop. Signal acceptance
+  acknowledges receipt. See [Workflow control](../../temporal-workflow-control.md).
 
 - **Skills using this as a tool**: none.
 - **Architecture docs**: [Event Waiter System](../../event_waiter_system.md),

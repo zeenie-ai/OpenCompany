@@ -8,10 +8,12 @@ conversation table stores a list, revision and owning run, not an event journal.
 A durable session owner serializes all turns. Saves are fenced and checkpoint
 delivery receipts transactionally; a failed save cannot acknowledge consumption.
 
-Talk retains owner-chat continuity. Each job starts from explicit handoff
-context and has independent lead/review/worker histories. Reviewed delivery
-appends to Talk through existing idempotent gates; job history never replaces
-Talk history. Context remains an optional viewer/configuration surface.
+Chat retains owner-chat continuity. Each job starts from explicit handoff
+context and has independent manager, reviewer and worker histories. In
+recipe v3 Chat reviews the outer task and authors the final answer for the
+captured conversation branch. A busy conversation queues the reply. After
+the conversation is cleared, its result remains on the original assignment.
+Context remains an optional viewer/configuration surface.
 Runtime output sessions also use the instance identity; two instances of one
 template cannot overwrite each other's parameter-resolution fallback. Frozen
 handoff outputs remain available, and delivery uses the original job source.
@@ -33,21 +35,22 @@ history or advance a receipt.
 
 ```mermaid
 sequenceDiagram
-    participant Talk
-    participant Lead as Job lead instance
+    participant Talk as Chat Employee
+    participant Lead as Orchestrator instance
     participant Store as Instance and task store
     participant Owner as Teammate session owner
     participant Runtime as Native, Pi or opaque adapter
-    Talk->>Lead: Explicit job handoff
+    Talk->>Lead: Assign outer board task with original request
     Lead->>Store: Spawn from connected template
     Store-->>Owner: Durable initial task and inbox obligation
     Owner->>Store: Claim run and transcript revision
     Owner->>Runtime: Execute with isolated instance context
     Runtime->>Store: Checkpoint transcript and consumed deliveries
-    Owner->>Store: Complete attempt and enqueue lead review atomically
-    Store-->>Lead: Review notification through the owning inbox
+    Owner->>Store: Submit attempt and enqueue immediate assigner review
+    Store-->>Lead: Resume through the assigning instance's inbox
     Lead->>Store: Accept or request changes using current task_ref
-    Lead-->>Talk: Reviewed result through idempotent delivery gate
+    Lead-->>Talk: Submit original assignment after accepting child work
+    Talk->>Store: Review outer submission and record original branch reply
 ```
 
 Native/Pi admit follow-ups only after all outstanding tool results are recorded.

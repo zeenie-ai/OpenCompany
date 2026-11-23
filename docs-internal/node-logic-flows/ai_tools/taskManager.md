@@ -19,13 +19,12 @@ Lifecycle version is separate from employee recipe version and graph version.
 | **Skill (if any)** | [`server/skills/assistant/task-manager/SKILL.md`](../../../server/skills/assistant/task-manager/SKILL.md) |
 | **Tool surface** | Version 1: typed bound tools below; version 0: `task_manager` |
 
-Hire creates two Task Manager nodes. One connects to the AI Employee lead and
-opens its task board in the editor. The other connects to Talk and exposes job
-submission and status. Each role also owns a separate Master Skill node. The
-lead connects to Talk's `input-employee-team`. Each specialist connects to the
-lead's `input-teammates`. Start and Apply adopt existing role-owned nodes or
-create missing ones for older managed v2 hires. Unmanaged team leads and older
-running snapshots retain their built-in binding when needed. [Managed AI employee teams](../../employee_teams.md)
+Recipe v3 gives Chat and its Orchestrator separate Task Managers. Chat's board
+shows the outer job task assigned to the Orchestrator. The Orchestrator's board
+shows the subtasks it assigns to its direct reports. A nested manager has its
+own board and reviews its children's submissions before submitting its own.
+Recipe v2 retains the Talk and lead boards selected by its admitted graph.
+[Managed team workflow](../../employee_teams.md)
 
 ## Inputs (handles)
 
@@ -46,18 +45,20 @@ reject unknown fields. Saved node settings or a custom tool schema cannot fill
 missing model arguments. Execution scope, template selection, provider settings
 and sender identity are supplied by the runtime.
 
-Talk receives `submit_job` and `get_job_status`. Lead instances receive assignment, review,
-instance-control, messaging and observation tools. Teammates receive only
-messaging and observation tools. The actual bound
+Chat intake receives `submit_job` and `get_job_status`. Chat's reviewer can
+inspect, accept, retry, cancel or request changes to its outer assignment and
+finish the job. Managers have assignment, review, messaging and observation
+tools for their reports. Leaf workers have messaging and observation tools.
+Full lead instances also receive instance controls. The actual bound
 `<teammate>` suffix combines node type and a stable node-ID hash. Use the
 published tool name; there is no model-supplied template argument.
 
 | Tool | Required arguments | Optional arguments | Effect / valid source state |
 |---|---|---|---|
-| `submit_job` | `instructions` | — | Talk submits work to the configured employee lead. A request to add a missing Coding or Browser Agent can return a team-change status before admission. |
+| `submit_job` | `instructions` | — | Chat submits substantive work. In v3, a retried admission reuses the same job and outer task. A missing specialist can produce a team-change status. |
 | `get_job_status` | — | `job_id` | Talk reads the saved job state, task counts and any recorded failure. Omit the ID for this employee's most recently updated job. |
-| `spawn_<teammate>` | `instructions` | `after` | Lead: fresh instance, task, first attempt and inbox obligation in one commit |
-| `assign_task` | `agent`, `instructions` | `after` | Lead: new reviewed work on an existing teammate instance |
+| `spawn_<teammate>` | `instructions` | `after` | A manager creates an instance, task, first attempt and inbox obligation in one commit |
+| `assign_task` | `agent`, `instructions` | `after` | A manager assigns new work to an existing teammate instance |
 | `send_message` | `agent`, `message` | — | Same-job coordination; return a delivery receipt |
 | `list_agents` | — | — | Instances, capabilities and execution state |
 | `get_agent` | `agent` | — | Instance and recent runs/results |
@@ -65,16 +66,16 @@ published tool name; there is no model-supplied template argument.
 | `list_tasks` | — | `status` | This job's tasks, current references and allowed actions |
 | `get_task` | `task_ref` | — | Read task and attempts; reads also accept a task ID in this field |
 | `inspect_task` | `task_ref` | `detail`, `query`, `cursor`, `limit` | Bounded stored result and Temporal trace evidence |
-| `modify_task` | `task_ref`, `instructions` | `after` | Lead: `blocked` or `queued`; omitted `after` preserves dependencies |
-| `request_changes` | `task_ref`, `feedback` | — | Lead: `submitted`; append feedback and queue another attempt on the same instance |
-| `accept_task` | `task_ref` | — | Lead: `submitted`; accept and unblock eligible dependents |
-| `retry_task` | `task_ref` | — | Lead: `failed`, `submitted` or `cancelled`; preserve requirements, feedback and history |
-| `cancel_task` | `task_ref` | `reason` | Lead: `blocked`, `queued` or `running`; fence/stop the attempt, keep instance reusable |
-| `reassign_<teammate>` | `task_ref` | — | Lead: `failed`, `submitted` or `cancelled`; move the same task to a fresh instance and attempt |
+| `modify_task` | `task_ref`, `instructions` | `after` | The manager edits a `blocked` or `queued` task. Omitting `after` preserves dependencies. |
+| `request_changes` | `task_ref`, `feedback` | — | Append feedback to a `submitted` task and queue another attempt on its instance |
+| `accept_task` | `task_ref` | — | Accept a `submitted` task and unblock eligible dependents |
+| `retry_task` | `task_ref` | — | Retry a `failed`, `submitted` or `cancelled` task with its requirements, feedback and history |
+| `cancel_task` | `task_ref` | `reason` | Cancel a `blocked`, `queued` or `running` task and fence its attempt. Its instance remains reusable. |
+| `reassign_<teammate>` | `task_ref` | — | The manager moves a `failed`, `submitted` or `cancelled` task to a fresh instance and attempt |
 | `stop_agent` | `agent` | — | Lead: halt admission and interrupt execution; no automatic task retry |
 | `resume_agent` | `agent` | — | Lead: reopen a drained, nonclosed instance and its held inbox |
 | `close_agent` | `agent` | — | Lead: require no active execution, unresolved tasks or pending inbox |
-| `finish_team` | — | — | Lead: apply reviewed completion gates; managed delivery remains separately gated |
+| `finish_team` | — | — | The Chat reviewer or legacy lead applies the reviewed completion gates. Managed delivery also checks the destination and approval. |
 
 `instructions` and `feedback` must contain nonblank text and are bounded to
 10,000 characters. Their whitespace is preserved in storage. `agent` and

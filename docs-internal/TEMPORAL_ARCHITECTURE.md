@@ -543,15 +543,17 @@ not a rewrite of existing histories or node-scoped conversations.
 | Agent run | One execution claimed by the session owner, with a run fence and the exact Temporal workflow/run identity. |
 | Task and attempt | Reviewed work and one execution of its snapshotted requirements, feedback, dependencies and configuration. |
 
-Talk keeps its own conversation. `submit_job(instructions)` passes an explicit
-handoff to an isolated job lead. Instance turns use `agent-instance:<id>` for
-both the session and output-store scope, so template-variable fallback cannot
-read another instance's or Talk's latest output. Peer messages stay within the
-job. A worker submission and its owning lead's review notification commit
-together; delivery to Talk runs only after the lead run commits, through the
-existing reviewed-delivery gates. A taskTrigger event addressed to that lead
-checks the persisted task, job and generation and only wakes the existing
-owner. Duplicate or old-generation events cannot create a replacement lead.
+Recipe v3 resolves Chat's intake role before generic agent bootstrap. On
+`submit_job(instructions)`, the admitted request identifies the job and the
+outer board assignment to its Orchestrator. Instance turns use
+`agent-instance:<id>` for session and output-store scope. Each task records
+its assigning node and logical agent run. Committing a submission or failure
+also queues its immediate assigner's review. Managers waiting on children
+checkpoint and release their execution slot. The Task Completed event checks
+the persisted owner, attempt, job and generation before waking that session.
+Chat reviews the Orchestrator's outer submission and authors the final answer.
+The existing delivery receipt preserves the captured destination across retries.
+Earlier recipes use their admitted topology. [Managed team workflow](employee_teams.md)
 
 **One execution owner.** The deterministic workflow ID is
 `agent-instance:<instance_id>`. Signal-with-start wakes that owner; it drains a
