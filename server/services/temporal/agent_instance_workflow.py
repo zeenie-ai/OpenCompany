@@ -220,7 +220,8 @@ async def dispatch_wait(payload: dict) -> dict:
 
 @activity.defn(name="agent.instance.claim")
 async def claim_instance(payload: dict) -> dict | None:
-    claim = await _store().claim_run(payload["instance_id"], request_id=payload["request_id"],
+    store = _store()
+    claim = await store.claim_run(payload["instance_id"], request_id=payload["request_id"],
         workflow_id=payload.get("workflow_id"), workflow_run_id=payload.get("workflow_run_id"))
     if claim:
         if claim.get("instance_wake"):
@@ -228,8 +229,31 @@ async def claim_instance(payload: dict) -> dict | None:
             await wake_instances(claim)
         if "instance" in claim:
             claim["context"] = turn_context(claim)
+            claim = await _auto_review(store, claim)
         await _notify_instance(payload["instance_id"])
     return claim
+
+
+async def _auto_review(store, claim: dict) -> dict:
+    """Settle a review the owner lets a calibrated judgment make
+    (services/agent_instances/auto_review.py). A settled claim comes back
+    completed, which the session loop already skips, so no model turn runs
+    and no patch is needed; any other claim comes back as it was."""
+    from services.agent_instances.auto_review import settle
+    try:
+        settled = await settle(store, claim)
+    except Exception:
+        from core.logging import get_logger
+        get_logger(__name__).warning("Review auto-accept failed; the reviewer takes its turn",
+                                     run_id=claim.get("run_id"), exc_info=True)
+        return claim
+    if settled is None:
+        return claim
+    from services.agent_instances.runtime import publish_task_event, wake_instances
+    await wake_instances(settled)
+    await publish_task_event(store, settled)
+    return {"run_id": claim["run_id"], "instance": claim["instance"], "status": settled.get("status", "completed"),
+            "result": settled.get("result")}
 
 
 @activity.defn(name="agent.instance.checkpoint")

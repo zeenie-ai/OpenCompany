@@ -1,7 +1,9 @@
 /**
  * The cost panel: what model calls and paid tools cost this month, by
- * employee, the most one chat reply may cost, and the most one employee may
- * cost in a month.
+ * employee, the most one chat reply may cost, the most one employee may
+ * cost in a month, and how sure a judgment must be to accept a teammate's
+ * work without waking its reviewer (server
+ * services/agent_instances/auto_review.py).
  *
  * One component for both modes. Home mounts it in Settings > Billing and Dev
  * in its Settings panel, unchanged, so the two always show the same figures
@@ -13,8 +15,8 @@
  * dash, never a zero. An employee's row opens to its usage this month
  * (`EmployeeUsage`, the same component Home's Usage button shows). Each limit
  * is one of the owner's settings (`chat_run_spend_limit_usd`,
- * `employee_monthly_budget_usd`), and its Save saves that one setting and
- * nothing else.
+ * `employee_monthly_budget_usd`, `review_auto_accept_percent`), and its Save
+ * saves that one setting and nothing else.
  */
 
 import { useState } from 'react';
@@ -30,6 +32,7 @@ import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { useWorkflowCostsQuery, type WorkflowCost } from '@/hooks/useUsageQueries';
 import { useSaveUserSettingsMutationCore, useUserSettingsQueryCore } from '@/hooks/useUserSettingsQuery';
 import { monthDay, usd } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 interface Limit {
   /** The setting the field shows and its Save writes. */
@@ -38,6 +41,8 @@ interface Limit {
   help: string;
   /** What its Save and a failed save call it. */
   noun: string;
+  /** What the amount counts: US dollars, or a whole percentage. */
+  unit: '$' | '%';
 }
 
 const LIMITS: Limit[] = [
@@ -46,20 +51,33 @@ const LIMITS: Limit[] = [
     label: 'Spend limit per reply',
     help: 'A chat reply that reaches this cost stops and says so, and your next message carries on. It covers the reply itself; work it hands to the team counts toward the monthly budget. 0 means no limit.',
     noun: 'limit',
+    unit: '$',
   },
   {
     setting: 'employee_monthly_budget_usd',
     label: 'Monthly budget per employee',
     help: 'An employee whose cost this month reaches this pauses and shows as needing attention, team and scheduled work included. Raise the amount, then resume them. 0 means no budget.',
     noun: 'budget',
+    unit: '$',
+  },
+  {
+    setting: 'review_auto_accept_percent',
+    label: 'Skip reviews when sure',
+    help: 'When a judgment model is at least this sure a teammate’s work completes its instructions, the work is accepted without waking its reviewer. Chat still checks the final answer. Needs a TypeSafe or OpenRouter key. 0 means off.',
+    noun: 'setting',
+    unit: '%',
   },
 ];
 
 /** An empty box reads as 0, which means off. */
-const amountSchema = z.coerce.number().min(0);
+const AMOUNTS = {
+  $: z.coerce.number().min(0),
+  '%': z.coerce.number().int().min(0).max(100),
+} as const;
+const INVALID = { $: 'Enter 0 or more.', '%': 'Enter a whole number from 0 to 100.' } as const;
 
 /** One limit's field and its Save. `saved` is the amount the settings hold. */
-function LimitField({ setting, label, help, noun, saved }: Limit & { saved: number }) {
+function LimitField({ setting, label, help, noun, unit, saved }: Limit & { saved: number }) {
   const { sendRequest } = useWebSocketActions();
   const save = useSaveUserSettingsMutationCore(sendRequest);
   // What the owner typed and has not saved yet. While there is none the box
@@ -67,7 +85,8 @@ function LimitField({ setting, label, help, noun, saved }: Limit & { saved: numb
   // save that failed keeps what was typed.
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? saved;
-  const parsed = amountSchema.safeParse(shown);
+  const parsed = AMOUNTS[unit].safeParse(shown);
+  const percent = unit === '%';
   const limit = parsed.success ? parsed.data : null;
   const fieldId = `cost-panel-${setting}`;
 
@@ -82,19 +101,26 @@ function LimitField({ setting, label, help, noun, saved }: Limit & { saved: numb
         </div>
         <div className="flex items-center gap-2">
           <div className="relative w-28">
-            <span aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sm text-fg-muted">
-              $
+            <span
+              aria-hidden
+              className={cn(
+                'pointer-events-none absolute top-1/2 -translate-y-1/2 text-sm text-fg-muted',
+                percent ? 'right-2.5' : 'left-2.5',
+              )}
+            >
+              {unit}
             </span>
             <Input
               id={fieldId}
               type="number"
-              inputMode="decimal"
+              inputMode={percent ? 'numeric' : 'decimal'}
               min={0}
-              step="any"
+              max={percent ? 100 : undefined}
+              step={percent ? 1 : 'any'}
               value={shown}
               aria-invalid={limit === null}
               onChange={(event) => setDraft(event.target.value)}
-              className="h-9 pl-6 tabular-nums"
+              className={cn('h-9 tabular-nums', percent ? 'pr-7' : 'pl-6')}
             />
           </div>
           <Button
@@ -111,7 +137,7 @@ function LimitField({ setting, label, help, noun, saved }: Limit & { saved: numb
       </div>
       {limit === null && (
         <p role="alert" className="text-xs text-destructive">
-          Enter 0 or more.
+          {INVALID[unit]}
         </p>
       )}
       {save.isError && (

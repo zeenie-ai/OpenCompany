@@ -15,6 +15,7 @@ const LABELS: Record<string, string> = {
   queued: 'Queued', waiting: 'Waiting', running: 'In progress', reviewing: 'Checking the result',
   done: 'Finished', failed: 'Needs attention', cancelled: 'Stopped', stopping: 'Stopping',
   reviewed_blocker: 'Blocked at review', parent_closed: 'Closed with parent task',
+  auto_accepted: 'Accepted automatically',
 };
 /** Refresh progress is a neutral outline: colour marks a state or a role,
  *  not a refresh. */

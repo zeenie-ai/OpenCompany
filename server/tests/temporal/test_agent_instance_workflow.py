@@ -695,3 +695,70 @@ async def test_permit_recovery_scan_rotates_without_rewriting_creation_time(real
     visits = [await store.list_pending_permit_runs(limit=1) for _ in range(3)]
     assert [batch[0]["id"] for batch in visits] == ["run-a", "run-b", "run-a"]
     assert all(batch[0]["created_at"].startswith("2000-01-01") for batch in visits)
+
+
+async def test_a_claim_settled_by_review_auto_accept_runs_no_turn(monkeypatch):
+    """agent_instances/auto_review.py settles a review inside the claim; the
+    loop schedules no permit, admission, child or completion for it."""
+    import services.temporal.agent_instance_workflow as module
+    settled = {"run_id": "r1", "instance": claim()["instance"], "status": "completed",
+               "result": {"response": "Gather evidence:\nThe retained evidence."}}
+    claimed = [settled, None]
+    names = []
+
+    async def execute(name, payload, **kwargs):
+        names.append(name)
+        return claimed.pop(0) if name == "agent.instance.claim" else {}
+
+    async def start(*args, **kwargs):
+        raise AssertionError("a settled claim must start no child")
+
+    monkeypatch.setattr(module.workflow, "execute_activity", execute)
+    monkeypatch.setattr(module.workflow, "start_activity", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("no permit")))
+    monkeypatch.setattr(module.workflow, "start_child_workflow", start)
+    monkeypatch.setattr(module.workflow, "info", lambda: SimpleNamespace(first_execution_run_id="owner-chain", workflow_id="owner", run_id="physical-run"))
+
+    result = await AgentInstanceSessionWorkflow({}).run({"instance_id": "instance"})
+
+    assert result == {"success": True, "result": settled["result"], "error": None}
+    assert names == ["agent.instance.claim", "agent.instance.claim"]
+
+
+@pytest.fixture
+def claim_activity(monkeypatch):
+    """The claim activity over a store that claims a fresh review, with the
+    post-commit wake and task event recorded."""
+    import services.agent_instances.runtime as runtime
+    import services.temporal.agent_instance_workflow as module
+    fresh = claim()
+    fresh.pop("context")
+    store = SimpleNamespace(claim_run=AsyncMock(return_value=fresh))
+    monkeypatch.setattr(module, "_store", lambda: store)
+    monkeypatch.setattr(module, "_notify_instance", AsyncMock())
+    state = SimpleNamespace(module=module, store=store, claim=fresh, woke=AsyncMock(), published=AsyncMock())
+    monkeypatch.setattr(runtime, "wake_instances", state.woke)
+    monkeypatch.setattr(runtime, "publish_task_event", state.published)
+    return state
+
+
+async def test_the_claim_activity_hands_a_settled_review_on(monkeypatch, claim_activity):
+    import services.agent_instances.auto_review as auto_review
+    receipt = {"status": "completed", "result": {"response": "done"}, "instance_wake": ["chat"]}
+    monkeypatch.setattr(auto_review, "settle", AsyncMock(return_value=receipt))
+
+    result = await claim_activity.module.claim_instance({"instance_id": "instance", "request_id": "r"})
+
+    assert result == {"run_id": "r1", "instance": claim_activity.claim["instance"], "status": "completed",
+                      "result": {"response": "done"}}
+    claim_activity.woke.assert_awaited_once_with(receipt)
+    claim_activity.published.assert_awaited_once_with(claim_activity.store, receipt)
+
+
+async def test_a_failed_auto_accept_leaves_the_turn_to_the_reviewer(monkeypatch, claim_activity):
+    import services.agent_instances.auto_review as auto_review
+    monkeypatch.setattr(auto_review, "settle", AsyncMock(side_effect=RuntimeError("a bug")))
+
+    result = await claim_activity.module.claim_instance({"instance_id": "instance", "request_id": "r"})
+
+    assert result["run_id"] == "r1" and "status" not in result and result["context"]
+    claim_activity.woke.assert_not_awaited()

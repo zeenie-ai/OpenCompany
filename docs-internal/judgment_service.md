@@ -199,6 +199,44 @@ the owner's chat model. With images, the images go too.
     - a probability at or above the threshold.
   - **Cost.** The judgment's usage row carries the workflow, so it counts in
     the employee's monthly cost.
+- **Review auto-accept** (`services/agent_instances/auto_review.py`). A
+  teammate's submitted work is accepted without waking its reviewer (the
+  Orchestrator, or an AI Employee managing specialists) for a model turn.
+  - **The setting.** "Skip reviews when sure" in the cost panel,
+    `UserSettings.review_auto_accept_percent`. It is 0 (off) by default and
+    is read live.
+  - **When it applies.** When the `agent.instance.claim` activity claims a
+    reviewer's run that was woken only by fresh review notices of submitted
+    work (`AgentInstanceService.review_candidates`).
+  - **The judgment.** One per task: the noul "The result fully completes
+    these instructions." It reads the task's instructions (with any review
+    feedback) and its result.
+    - It is asked with `calibrated_only`, so the chat-model fallback never
+      accepts anything.
+    - It runs inside the job's log context, so its cost counts toward the job,
+      the reply that started it and the employee's monthly budget.
+  - **Settling.** When every task is judged at least as sure as the setting,
+    `settle_auto_review` does what the reviewer's turn would:
+    - accepts each through `accept_task`, marking the task's
+      `context.auto_accepted` (`{attempt, confidence}`; a model's tool input
+      cannot carry the marker, because the review tools forbid extra
+      fields);
+    - writes one transcript line, for example `Accepted "Gather evidence"
+      automatically: 95% sure it completes the instructions.`;
+    - completes the run with the reviewer's accepted work as its result.
+
+    The review gate then hands the reviewer's task on. The settled claim
+    comes back `completed`, which the session loop already skips, so no
+    Temporal patch is needed. The Work view shows the task as "Accepted
+    automatically".
+  - **Never applies to:**
+    - Chat's review of the final answer (the lead's runs are never settled);
+    - a batch with anything else in it;
+    - no judgment available;
+    - any task judged below the setting.
+
+    Each of these leaves the review to the reviewer's turn, and so does a
+    failure while settling.
 
 ## Tests
 

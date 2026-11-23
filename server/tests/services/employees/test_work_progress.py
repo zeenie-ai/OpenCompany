@@ -95,6 +95,20 @@ async def test_blocked_review_identifies_the_assigner_decision_and_closed_childr
     assert "PRIVATE" not in json.dumps(result)
 
 
+async def test_work_accepted_automatically_says_so(real_database):
+    """A review auto-accept settled (agent_instances/auto_review.py), on the
+    task's current attempt only."""
+    from services.employees.jobs import job_progress
+    await add(real_database, AgentTeam(id="team", workflow_id="employee", team_lead_node_id="lead"),
+              job(state="running"),
+              task("auto", status="accepted", context={"auto_accepted": {"attempt": 0, "confidence": 0.95}}),
+              task("earlier", status="accepted", current_attempt=1, context={"auto_accepted": {"attempt": 0, "confidence": 0.95}}),
+              task("reviewed", status="accepted"))
+    result = await work_progress(real_database, workflow(), job_status=await job_progress(real_database, "employee"))
+    assert {step["id"]: step.get("outcome") for step in result["steps"]} == {
+        "task:auto": "auto_accepted", "task:earlier": None, "task:reviewed": None}
+
+
 async def test_legacy_team_without_job_uses_existing_task_manager(real_database):
     await add(real_database, AgentTeam(id="team", workflow_id="employee", team_lead_node_id="lead"),
               task(status="blocked"))

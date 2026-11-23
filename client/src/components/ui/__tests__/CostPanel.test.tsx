@@ -236,4 +236,32 @@ describe('CostPanel', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Enter 0 or more.');
     expect(saveBudgetButton()).toBeDisabled();
   });
+  it('shows Skip reviews when sure as a percentage, off by default', async () => {
+    renderPanel();
+
+    const box = await screen.findByLabelText('Skip reviews when sure');
+
+    expect(box).toHaveValue(0);
+    expect(box).toHaveAttribute('max', '100');
+  });
+
+  it('saves Skip reviews when sure and nothing else', async () => {
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText('Skip reviews when sure'), { target: { value: '90' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save setting' }));
+
+    await waitFor(() => expect(savedSettings()).toEqual([{ review_auto_accept_percent: 90 }]));
+  });
+
+  it('refuses a percentage that is not a whole number from 0 to 100', async () => {
+    renderPanel();
+    const box = await screen.findByLabelText('Skip reviews when sure');
+
+    for (const value of ['101', '-1', '92.5']) {
+      fireEvent.change(box, { target: { value } });
+      expect(screen.getByRole('alert')).toHaveTextContent('Enter a whole number from 0 to 100.');
+      expect(screen.getByRole('button', { name: 'Save setting' })).toBeDisabled();
+    }
+  });
 });

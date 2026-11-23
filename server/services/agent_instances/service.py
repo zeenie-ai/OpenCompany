@@ -828,6 +828,12 @@ class AgentInstanceService:
             wake.append(instance.id)
         elif operation == "accept_task":
             task.status = "accepted"
+            if args.get("auto_confidence") is not None:
+                # Accepted by a calibrated judgment, not a model turn
+                # (auto_review.py). A model's tool input cannot carry this:
+                # the review tools forbid extra fields (tools.Input).
+                task.context = {**(task.context or {}), "auto_accepted": {
+                    "attempt": task.current_attempt, "confidence": round(float(args["auto_confidence"]), 4)}}
             dependents = (await session.execute(select(TeamTask).where(TeamTask.team_id == task.team_id,
                 TeamTask.status == "blocked"))).scalars().all()
             for dependent in dependents:
@@ -1145,6 +1151,86 @@ class AgentInstanceService:
             await self._refresh_member(session, instance)
             await session.commit()
             return result
+
+    async def review_candidates(self, instance_id: str, run_id: str, delivery_ids) -> list[dict] | None:
+        """The submitted work a claimed run was woken to review, when that is
+        all it was woken for (``auto_review.py``).
+
+        One entry per delivery: a review notice, not a reminder, about a task
+        that is still submitted on the attempt and revision the notice names,
+        with the task's instructions (and any review feedback) and its result.
+        None when the reviewer is the job's lead (Chat), when the run no
+        longer owns its instance, or when any delivery is something else; the
+        reviewer then takes an ordinary model turn.
+        """
+        async with self.database.get_session() as session:
+            instance = await session.get(AgentInstance, instance_id)
+            run = await session.get(AgentRun, run_id)
+            if (instance is None or run is None or instance.role == "lead" or not delivery_ids
+                    or instance.active_run_id != run_id or run.status != "running"):
+                return None
+            candidates = []
+            for identity in delivery_ids:
+                delivery = await session.get(AgentDelivery, identity)
+                payload = (delivery.payload or {}) if delivery else {}
+                if (delivery is None or delivery.kind != "task_review" or delivery.run_id != run_id
+                        or payload.get("review_reminder") or payload.get("status") != "submitted"):
+                    return None
+                task = await session.get(TeamTask, str(payload.get("task_id") or ""))
+                if (task is None or task.status != "submitted" or task.current_attempt != payload.get("attempt")
+                        or task.revision != payload.get("revision")):
+                    return None
+                candidates.append({"task_id": task.id, "task_ref": task_ref(task), "title": task.title or "the task",
+                                   "instructions": self._task_input(task), "result": deepcopy(task.result)})
+            return candidates
+
+    async def settle_auto_review(self, claim: dict, accepted: list[dict]) -> dict:
+        """End a review run with no model turn (``auto_review.py``).
+
+        Each entry of ``accepted`` (a ``review_candidates`` entry with its
+        judgment's ``confidence``) is accepted through ``accept_task``, as its
+        reviewer would, and marked as accepted automatically. The transcript
+        gets the review notices and one line saying what was accepted, and the
+        run completes with the reviewer's accepted work as its result, so the
+        review gate can submit the reviewer's own task. Returns the
+        completion's receipt, with what the accepts woke and the run's result.
+        """
+        from services.agent_instances.tools import _trusted_scope
+
+        instance_id, run_id = claim["instance"]["id"], claim["run_id"]
+        scope = _trusted_scope(claim["context"])
+        wake: list[str] = []
+        lines = []
+        for item in accepted:
+            receipt = await self.execute(
+                "accept_task", scope=dict(scope), request_id=f"{instance_id}:{run_id}:auto-review:{item['task_id']}",
+                arguments={"task_ref": item["task_ref"], "auto_confidence": item["confidence"]})
+            wake.extend(receipt.get("instance_wake") or [])
+            lines.append(f'Accepted "{item["title"]}" automatically: '
+                         f'{round(item["confidence"] * 100)}% sure it completes the instructions.')
+        transcript = [*(claim.get("transcript") or []), *(claim.get("messages") or []),
+                      message_to_wire(Message(role="assistant", content="\n".join(lines)))]
+        await self.checkpoint(instance_id, run_id, messages=transcript, expected_revision=int(claim.get("transcript_revision") or 0),
+                              delivery_ids=claim.get("deliveries") or [], request_id="auto-review")
+        result = {"response": await self._accepted_work(run_id)}
+        completed = await self.complete_run(instance_id, run_id, result=result, request_id=f"complete:{run_id}")
+        return {**completed, "result": result, "instance_wake": [*(completed.get("instance_wake") or []), *wake]}
+
+    async def _accepted_work(self, run_id: str) -> str:
+        """The accepted results of the work a run's task assigned, one block
+        each: what the reviewer hands on as its own result."""
+        async with self.database.get_session() as session:
+            run = await session.get(AgentRun, run_id)
+            task = await session.get(TeamTask, run.task_id) if run and run.task_id else None
+            children = await self._children_of_attempt(session, task) if task else []
+        blocks = []
+        for child in children:
+            if child.status != "accepted":
+                continue
+            response = child.result.get("response") if isinstance(child.result, dict) else child.result
+            text = response if isinstance(response, str) else json.dumps(response, default=str)
+            blocks.append(f"{child.title}:\n{text}")
+        return "\n\n".join(blocks)
 
     async def _owned_run(self, session, instance_id: str, run_id: str):
         instance = await self._instance(session, instance_id)

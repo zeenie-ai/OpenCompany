@@ -182,10 +182,14 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
                         _label(index.labels.get(node_id) or member_labels.get(node_id), "Team member"), status, node_id=node_id,
                         started_at=task.started_at or task.created_at, updated_at=task.completed_at or task.started_at or task.created_at,
                         finished_at=task.completed_at)
+                    auto = (task.context or {}).get("auto_accepted") or {}
                     if task.reviewed_blocker:
                         step["outcome"] = "reviewed_blocker"
                     elif status == "cancelled" and task.cancellation_reason == "parent_attempt_closed":
                         step["outcome"] = "parent_closed"
+                    elif status == "accepted" and auto.get("attempt") == task.current_attempt:
+                        # Accepted by a calibrated judgment (agent_instances/auto_review.py).
+                        step["outcome"] = "auto_accepted"
                     steps.append(step)
                     updates.append(_moment(task.completed_at or task.started_at or task.created_at))
             chats = (await session.execute(select(ChatRun.run_id, ChatRun.state, ChatRun.created_at, ChatRun.started_at, ChatRun.steps)

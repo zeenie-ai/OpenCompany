@@ -323,6 +323,7 @@ class UserSettings(SQLModel, table=True):
     tool_result_max_chars: int = Field(default=100000)  # Largest external tool result (characters) kept in an agent's conversation. Mirrors TOOL_RESULT_MAX_CHARS env default.
     chat_run_spend_limit_usd: float = Field(default=0.0)  # Most one chat reply may cost in USD; 0 = no limit. Mirrors CHAT_RUN_SPEND_LIMIT_USD env default.
     employee_monthly_budget_usd: float = Field(default=0.0)  # Most one employee may cost in a month in USD; 0 = no budget. Mirrors EMPLOYEE_MONTHLY_BUDGET_USD env default.
+    review_auto_accept_percent: int = Field(default=0)  # A teammate's submitted work is accepted without waking its reviewer when a calibrated judgment is at least this sure (%); 0 = off (services/agent_instances/auto_review.py).
     max_concurrent_subagents: int = Field(default=3)
     max_delegation_depth: int = Field(default=2)
     examples_loaded: bool = Field(default=False)  # Track if example workflows were imported
