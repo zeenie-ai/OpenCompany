@@ -122,6 +122,19 @@ async def harness(monkeypatch, real_database):
     FakeConnections.ai = True
 
 
+def test_a_hire_without_a_wake_rule_keeps_its_earlier_payload_hash():
+    """Keys issued before hires could carry a wake rule stay valid."""
+    import hashlib
+    import json
+
+    request = HireEmployeeRequest.model_validate(payload())
+    earlier = request.model_dump(mode="json", exclude={"idempotency_key", "team", "wake_rule"})
+    digest = hashlib.sha256(json.dumps(earlier, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+    assert hire.payload_hash(request) == digest
+    assert hire.payload_hash(HireEmployeeRequest.model_validate(payload(wake_rule="a customer asks"))) != digest
+
+
 def test_hire_and_start_are_registered():
     registered = get_ws_handlers()
     assert "hire_employee" in registered and "start_employee" in registered

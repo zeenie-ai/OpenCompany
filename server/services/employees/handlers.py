@@ -441,6 +441,34 @@ async def handle_set_employee_photo(data: Dict[str, Any], websocket: WebSocket) 
     return await _answer(database, auth_service, workflow_id)
 
 
+@ws_response
+async def handle_set_employee_wake_rule(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """Set or clear ("") which app events wake a team employee
+    (services/employees/triage.py). Only an employee an app event starts takes
+    one; any other answers ``unsupported``."""
+    workflow_id = str(data.get("workflow_id") or "").strip()
+    rule = data.get("wake_rule")
+    if not workflow_id or not isinstance(rule, str):
+        return {"success": False, "error": "invalid_request"}
+    from core.container import container
+    from services.employees.triage import RULE_MAX, takes_wake_rule
+
+    database, auth_service = container.database(), container.auth_service()
+    if not await _owns(database, websocket, workflow_id):
+        return {"success": False, "error": "not_found", "workflow_id": workflow_id}
+    async with _lock(workflow_id):
+        workflow = await database.get_workflow(workflow_id)
+        employee = await store.get_by_workflow(database, workflow_id)
+        if workflow is None or employee is None:
+            return {"success": False, "error": "not_found", "workflow_id": workflow_id}
+        if not takes_wake_rule(employee.team_plan, (workflow.data or {}).get("nodes") or []):
+            return {"success": False, "error": "unsupported", "workflow_id": workflow_id}
+        if await store.set_wake_rule(database, workflow_id, " ".join(rule.split())[:RULE_MAX]) is None:
+            return await _answer(database, auth_service, workflow_id, "save_failed")
+    employee_changed_now(workflow_id)
+    return await _answer(database, auth_service, workflow_id)
+
+
 from services.employees.hire import handle_hire_employee  # noqa: E402
 from services.employees.start import handle_start_employee  # noqa: E402
 
@@ -458,6 +486,7 @@ WS_HANDLERS: Dict[str, Any] = {
     "retry_employee_review": handle_retry_employee_review,
     "rename_employee": handle_rename_employee,
     "set_employee_photo": handle_set_employee_photo,
+    "set_employee_wake_rule": handle_set_employee_wake_rule,
 }
 
 

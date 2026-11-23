@@ -19,9 +19,10 @@
  * - is laid out as the setup card (onboarding handoff R2), the root's
  *   children in this order, named in `layout`: the agent card (the first
  *   one: who they are), the routine, everything else in the order written,
- *   then the footer strip's two: "Ask me before sending anything" bound to
- *   /rules/askFirst (on by default) and a row of one change button and one
- *   hire button;
+ *   then the footer strip: for an employee an app event starts, a "Wake me
+ *   when" field bound to /wakeRule (starting as the hire button's
+ *   wakeRule), "Ask me before sending anything" bound to /rules/askFirst (on
+ *   by default) and a row of one change button and one hire button;
  * - always says when they work: the routine is the first Plan, its When row
  *   bound to /trigger, else one Schedule bound to it. /trigger starts as
  *   the hire button's trigger (else the app the routine's first "When" step
@@ -60,6 +61,7 @@ import {
   LIMITS,
   PROP_SCHEMAS,
   STATE_PATHS,
+  WAKE_RULE_LABEL,
   actionOf,
   isComponentType,
   isContainer,
@@ -97,7 +99,10 @@ export interface CardLayout {
   identity: string | null;
   /** The routine, then everything else, in order. */
   body: string[];
-  /** The footer strip: the ask-first toggle on the left... */
+  /** The footer strip: for an employee an app event starts, the "Wake me
+   *  when" field bound to /wakeRule (null for any other)... */
+  wakeRule: string | null;
+  /** ...the ask-first toggle on the left... */
   askFirst: string;
   /** ...and on the right a row of the change button, then the hire button. */
   actions: string;
@@ -428,15 +433,40 @@ export function normalizeSpec(spec: unknown, core: JsonRenderCore): NormalizedSp
     elements.set(routine, { type: 'Schedule', props: { value: { $bindState: STATE_PATHS.trigger } }, children: [] });
   }
 
+  // "Wake me when": for an employee an app event starts, which events are
+  // worth their work (server services/employees/triage.py). One Input bound
+  // to /wakeRule, first holding the hire button's wakeRule; an input the
+  // model bound there itself goes.
+  depthFirst(elements, root)
+    .filter((id) => {
+      const element = elements.get(id)!;
+      return element.type === 'Input' && bindingPath(element.props.value) === STATE_PATHS.wakeRule;
+    })
+    .forEach((id) => removeEverywhere(elements, id));
+  let wakeRule: string | undefined;
+  if (readTrigger(readPath(state, STATE_PATHS.trigger))?.kind === 'app_event') {
+    if (typeof readPath(state, STATE_PATHS.wakeRule) !== 'string') {
+      const drafted = elements.get(hire)!.on?.press.params?.wakeRule;
+      const rule = typeof drafted === 'string' ? drafted.replace(/\s+/g, ' ').trim().slice(0, LIMITS.maxInput) : '';
+      state = writePath(state, STATE_PATHS.wakeRule, rule);
+    }
+    wakeRule = freshId(elements, '__wakeRule');
+    elements.set(wakeRule, {
+      type: 'Input',
+      props: { label: WAKE_RULE_LABEL, placeholder: 'Every event', value: { $bindState: STATE_PATHS.wakeRule } },
+      children: [],
+    });
+  }
+
   // The card: who they are, the routine, everything else as written, then
-  // the footer strip's toggle and buttons. All of these are leaves, so
-  // moving one never takes anything with it.
-  const pieces = [agent, routine, askFirst, change, hire].filter((id) => id !== undefined);
+  // the footer strip's field, toggle and buttons. All of these are leaves,
+  // so moving one never takes anything with it.
+  const pieces = [agent, routine, wakeRule, askFirst, change, hire].filter((id) => id !== undefined);
   pieces.forEach((id) => detach(elements, id));
   const actions = freshId(elements, '__actions');
   elements.set(actions, { type: 'Stack', props: { direction: 'horizontal', gap: 'sm' }, children: [change, hire] });
   const top = elements.get(root)!;
-  top.children = [...(agent ? [agent] : []), routine, ...top.children, askFirst, actions];
+  top.children = [...(agent ? [agent] : []), routine, ...top.children, ...(wakeRule ? [wakeRule] : []), askFirst, actions];
 
   // Cap the size, always keeping the root and the card's own pieces.
   const full = depthFirst(elements, root);
@@ -470,7 +500,8 @@ export function normalizeSpec(spec: unknown, core: JsonRenderCore): NormalizedSp
   for (const [id, element] of elements) record[id] = element;
   const layout: CardLayout = {
     identity: agent ?? null,
-    body: elements.get(root)!.children.filter((id) => id !== agent && id !== askFirst && id !== actions),
+    body: elements.get(root)!.children.filter((id) => id !== agent && id !== wakeRule && id !== askFirst && id !== actions),
+    wakeRule: wakeRule ?? null,
     askFirst,
     actions,
   };

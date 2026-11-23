@@ -169,6 +169,36 @@ the owner's chat model. With images, the images go too.
   It asks choice, score and noul questions about a text, and an agent can
   call it as a tool. A judgment that is not available is a `NodeUserError`,
   and `not_connected` asks the owner to act.
+- **Triage of app events** (`services/employees/triage.py`). It answers
+  whether an app, webhook or polling event is worth a job for a team
+  employee (recipe v3), before any model runs.
+  - **The rule.** It is the "Wake me when" text kept as the team plan's
+    `wake_rule`:
+    - drafted at hire for an employee an app event starts (the setup card's
+      field, the hire button's `wakeRule`, the request's `wake_rule`);
+    - edited from the Wake button in Home's header and the editor's toolbar
+      (`set_employee_wake_rule`; the summary's `wake_rule` is `null` for an
+      employee no app event starts).
+
+    `admit_team_plan` copies the plan into each generation at Start and
+    Apply, so a running employee takes an edited rule on Apply.
+  - **The judgment.** The agent's prepare step asks one noul right before it
+    would admit the event as a job: "This event calls for the employee's
+    work. The employee works on: <rule>". The state is the rendered intake
+    mission, and the limit is 15 s.
+  - **A drop.** Below `DROP_BELOW` (0.2) the event is dropped. The instance
+    bootstrap ends the run as `event_not_matched` (success), with no job, no
+    instance and no model run. The ending reuses the existing review-event
+    return, so no Temporal patch is needed.
+  - **Every doubt admits the event:**
+    - no rule;
+    - not the bootstrap of the lead for a fresh event;
+    - a job already admitted for this run, so a retried prepare never drops
+      what it admitted;
+    - no judgment available;
+    - a probability at or above the threshold.
+  - **Cost.** The judgment's usage row carries the workflow, so it counts in
+    the employee's monthly cost.
 
 ## Tests
 

@@ -36,11 +36,12 @@ def inbox_assistant():
     return SimpleNamespace(**json.loads(path.read_text(encoding="utf-8")))
 
 
-def hierarchical_inbox_assistant(trigger=None):
+def hierarchical_inbox_assistant(trigger=None, wake_rule=""):
     request = HireEmployeeRequest.model_validate({
         "idempotency_key": "inbox", "job": "Read new email, answer what you can and flag the rest",
         "name": "Leo", "role": "Inbox assistant", "apps": ["Gmail"], "trigger": trigger,
-        "steps": [{"title": "Read new email", "role": "trigger", "app": "Gmail"}], "rules": {"ask_first": True}})
+        "steps": [{"title": "Read new email", "role": "trigger", "app": "Gmail"}], "rules": {"ask_first": True},
+        "wake_rule": wake_rule})
     return build_employee_graph(BuildInputs(
         workflow_id="7", request=request, apps=[get_app("gmail")], connected_app_ids={"gmail"},
         owner=OwnerProfile(name="Alex", role="Owner", preferences=""), owner_values={"google_email": "alex@example.com"},

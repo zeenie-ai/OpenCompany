@@ -85,6 +85,9 @@ export const employeeSummarySchema = z.object({
     .catch({ state: 'unsupported', agent_node_id: null }),
   /** Replies wait for the owner's OK, and nothing that sends or spends runs unasked. */
   asks_first: z.boolean().catch(false),
+  /** "Wake me when": which app events are worth a job ("" for every one);
+   *  null when no app event starts them (server services/employees/triage.py). */
+  wake_rule: z.string().nullable().catch(null),
   /** Saved changes (a tool added in Talk, an edit in Dev mode) wait for a restart. */
   pending_changes: z.boolean().catch(false),
   has_team: z.boolean().catch(false),

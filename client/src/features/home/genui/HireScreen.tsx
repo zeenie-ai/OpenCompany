@@ -93,6 +93,7 @@ export default function HireScreen({ spec, busy, triggerApps, actions, discard, 
             {import.meta.env.DEV && devMode && <SpecInspector spec={uiSpec} />}
             <HireSpecContext.Provider value={footer}>
               <div className="-mx-4.5 -mb-4.5 flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-b-draft border-t border-border-default bg-bg-app px-4.5 py-3.5">
+                {layout.wakeRule && <div className="w-full">{part(layout.wakeRule)}</div>}
                 {part(layout.askFirst)}
                 <div className="ml-auto">{part(layout.actions)}</div>
               </div>

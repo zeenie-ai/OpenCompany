@@ -5,8 +5,8 @@ Reply ONLY with a JSON object, no code fences: {"text": string, "spec": UISpec}.
 2) Plan titled "Their routine" with 3-5 steps; the first step has role "trigger" (e.g. "When a message arrives", "Every weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app names it in "app".
 3) Card titled "Ground rules" containing 2-3 Toggles bound to state under "/rules" through "checked" (always include "Ask me before sending anything" bound to "/rules/askFirst", true in "state") and optionally one Choice bound under "/choices" (e.g. how often to report).
 4) If a needed app is not connected: a Card with tone "trigger" saying so, with a Button whose on.press runs connect_app.
-5) A horizontal Stack with Button "Hire {name}" (primary, on.press {"action": "hire_employee", "params": {name, role, apps, trigger, sendsVia, team}}) and Button "Change something" (secondary, on.press {"action": "refine"}).
-"trigger" is {"kind": "app_event"|"schedule"|"manual", "app"?, "every"?: "hour"|"day"|"weekday"|"week"|"month", "at"?: "00:00"|"02:00"|"04:00"|"06:00"|"08:00"|"09:00"|"10:00"|"12:00"|"14:00"|"16:00"|"18:00"|"20:00"|"22:00", "day"?}: "app_event" when a new message or email in an app starts the work, "schedule" for routine work at set times, "manual" when the owner gives them work by messaging them. "at" is the owner's local time; "day" is a weekday name for "week", or a day of the month from 1 to 28 for "month". "sendsVia" is the app they answer or report through.
+5) A horizontal Stack with Button "Hire {name}" (primary, on.press {"action": "hire_employee", "params": {name, role, apps, trigger, sendsVia, team, wakeRule}}) and Button "Change something" (secondary, on.press {"action": "refine"}).
+"trigger" is {"kind": "app_event"|"schedule"|"manual", "app"?, "every"?: "hour"|"day"|"weekday"|"week"|"month", "at"?: "00:00"|"02:00"|"04:00"|"06:00"|"08:00"|"09:00"|"10:00"|"12:00"|"14:00"|"16:00"|"18:00"|"20:00"|"22:00", "day"?}: "app_event" when a new message or email in an app starts the work, "schedule" for routine work at set times, "manual" when the owner gives them work by messaging them. "at" is the owner's local time; "day" is a weekday name for "week", or a day of the month from 1 to 28 for "month". "sendsVia" is the app they answer or report through. "wakeRule", only with an "app_event" trigger: which events are worth their work, as a short phrase the owner can edit (e.g. "a customer asks about an order"). Leave it out when every event is.
 UISpec is flat: {"root": id, "state": {initial values}, "elements": {id: {"type", "props", "children": [ids], "visible"?: condition, "on"?: {"press": {"action", "params"?}}}}}. Max 12 elements. Every child id must exist.
 Each element looks like {"type":"Text","props":{"text":"…"},"children":[]} — all component props go INSIDE "props". A Button's action goes in "on", beside "props": {"type":"Button","props":{"label":"…"},"on":{"press":{"action":"refine"}},"children":[]}.
 Every Stack and Card MUST list its child ids in "children" — elements not listed as someone's child are not shown.
@@ -33,7 +33,7 @@ Tones: agent, model, tool, trigger, workflow, neutral.
 Dynamic props: {"$state":"/path"}, {"$template":"Reports ${/freq}"}, {"$cond":{"$state":"/x","eq":"y"},"$then":a,"$else":b}. Conditions: {"$state":"/path"} with optional "eq" or "not":true.
 Actions (the "action" of a Button's on.press, with these "params"):
 - setState {statePath, value} — update UI state
-- hire_employee {name, role, apps:[string], trigger, sendsVia, team} — add this employee to the team and start them working
+- hire_employee {name, role, apps:[string], trigger, sendsVia, team, wakeRule} — add this employee to the team and start them working
 - refine {} — let the owner describe a change to this setup
 - connect_app {app} — connect an app by name
 - open_connectors {} — open the apps panel

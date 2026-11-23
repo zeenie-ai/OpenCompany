@@ -81,6 +81,8 @@ def payload_hash(request: HireEmployeeRequest) -> str:
     body = request.model_dump(mode="json", exclude={"idempotency_key"})
     if request.team is None:
         body.pop("team", None)  # Keep already-issued idempotency keys valid.
+    if not request.wake_rule:
+        body.pop("wake_rule", None)  # The same, for hires with no wake rule.
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 

@@ -111,6 +111,15 @@ function triggerRule(m: HireManifest): string {
   );
 }
 
+/** The "Wake me when" rule an employee an app event starts may come with
+ *  (server services/employees/triage.py), under the name each form uses. */
+function wakeRuleRule(name: string): string {
+  return (
+    `"${name}", only with an "app_event" trigger: which events are worth their work, as a short phrase the ` +
+    'owner can edit (e.g. "a customer asks about an order"). Leave it out when every event is.'
+  );
+}
+
 function hireText(m: HireManifest): string {
   const paths = m.state_paths;
   const components = Object.entries(m.components)
@@ -132,9 +141,9 @@ function hireText(m: HireManifest): string {
     '4) If a needed app is not connected: a Card with tone "trigger" saying so, with a Button whose on.press ' +
       'runs connect_app.',
     '5) A horizontal Stack with Button "Hire {name}" (primary, on.press {"action": "hire_employee", "params": ' +
-      '{name, role, apps, trigger, sendsVia, team}}) and Button "Change something" (secondary, on.press {"action": ' +
-      '"refine"}).',
-    `${triggerRule(m)} "sendsVia" is the app they answer or report through.`,
+      '{name, role, apps, trigger, sendsVia, team, wakeRule}}) and Button "Change something" (secondary, on.press ' +
+      '{"action": "refine"}).',
+    `${triggerRule(m)} "sendsVia" is the app they answer or report through. ${wakeRuleRule('wakeRule')}`,
     'UISpec is flat: {"root": id, "state": {initial values}, "elements": {id: {"type", "props", "children": ' +
       '[ids], "visible"?: condition, "on"?: {"press": {"action", "params"?}}}}}. Max 12 elements. Every child id ' +
       'must exist.',
@@ -166,7 +175,7 @@ function fieldsText(m: HireManifest): string {
       '"team": [{"key": string, "name": string, "responsibility": string, "kind": "specialist"|"employee", ' +
       '"reports_to": string}], ' +
       `"steps": [{"title": string, "detail": string, "role": ${quoted(m.step_roles)}, "app"?: string}], ` +
-      '"rules": [{"label": string, "value": boolean}], "trigger": {...}, "sends_via"?: string}.',
+      '"rules": [{"label": string, "value": boolean}], "trigger": {...}, "sends_via"?: string, "wake_rule"?: string}.',
     '"text": one short, warm sentence introducing the new employee by name.',
     '"name": a friendly first name. "role": a plain job title. "description": one sentence on what they do. ' +
       '"apps": the apps they use.',
@@ -174,7 +183,7 @@ function fieldsText(m: HireManifest): string {
       'weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app names it in "app".',
     '"rules": 1-3 ground rules the owner can turn on or off, each a short label and whether it starts on. ' +
       `Leave out "${m.ask_first_label}": it is always there, and the owner turns it on or off on the card.`,
-    `${triggerRule(m)} "sends_via" is the app they answer or report through.`,
+    `${triggerRule(m)} "sends_via" is the app they answer or report through. ${wakeRuleRule('wake_rule')}`,
     'Keep it compact: single-line minified JSON, every string under 70 characters, step details under 8 words.',
     'When asked to change the setup, return the full updated JSON in the same format.',
   ].join('\n');

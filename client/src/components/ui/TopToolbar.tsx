@@ -51,6 +51,7 @@ import {
 } from '../../contexts/WebSocketContext';
 import { ThemeButton } from '@/components/ui/ThemeButton';
 import { UsageButton } from '@/components/ui/UsageButton';
+import { WakeRuleButton } from '@/components/ui/WakeRuleButton';
 import { cn } from '@/lib/utils';
 import { featureFlags } from '@/lib/featureFlags';
 import { ModeToggle } from '@/components/shell/ModeToggle';
@@ -414,7 +415,8 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
 
         <Divider />
 
-        {/* The same Usage button as Home's header, in this toolbar's shape. */}
+        {/* The same Wake and Usage buttons as Home's header, in this toolbar's shape. */}
+        {workflowId && <WakeRuleButton workflowId={workflowId} size="sm" className={NEUTRAL} />}
         {workflowId && <UsageButton workflowId={workflowId} name={workflowName} size="sm" className={NEUTRAL} />}
 
         <Button variant="quiet" size="icon-sm" onClick={onOpenSettings} title="Settings" className={NEUTRAL}>

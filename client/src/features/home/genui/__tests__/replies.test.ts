@@ -117,9 +117,18 @@ describe('model reply corpus', () => {
     expect(spec.elements[spec.root].children).toEqual([
       ...(layout.identity ? [layout.identity] : []),
       ...layout.body,
+      ...(layout.wakeRule ? [layout.wakeRule] : []),
       layout.askFirst,
       layout.actions,
     ]);
+    // "Wake me when" is there exactly for an employee an app event starts.
+    const appEvent = (readPath(spec.state, STATE_PATHS.trigger) as { kind?: string }).kind === 'app_event';
+    expect(layout.wakeRule !== null).toBe(appEvent);
+    if (layout.wakeRule) {
+      expect(spec.elements[layout.wakeRule].type).toBe('Input');
+      expect(bindingPath(spec.elements[layout.wakeRule].props.value)).toBe(STATE_PATHS.wakeRule);
+      expect(typeof readPath(spec.state, STATE_PATHS.wakeRule)).toBe('string');
+    }
     expect(['Plan', 'Schedule']).toContain(spec.elements[layout.body[0]].type);
     expect(layout.askFirst).toBe(askFirst[0][0]);
     const footer = spec.elements[layout.actions].children.map((id) => spec.elements[id].on?.press.action);

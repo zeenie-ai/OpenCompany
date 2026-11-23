@@ -284,3 +284,28 @@ describe('starterHirePayload', () => {
     expect(starterHirePayload(receptionist, { idempotencyKey: 'k', taken: everyName }).name).toBe(`${first} 3`);
   });
 });
+
+describe('the wake rule', () => {
+  const spec = specOf('clean minified reply');
+  const hire = (state: typeof spec.state) =>
+    buildHirePayload({ spec, state, params: hireParams(spec, state), job: 'Answer WhatsApp', idempotencyKey: 'k', core });
+
+  it('sends what the owner wrote in "Wake me when" for an app-event hire, and not as an input', () => {
+    const payload = hire(writePath(spec.state, STATE_PATHS.wakeRule, '  a customer   asks to book '));
+    expect(payload.wake_rule).toBe('a customer asks to book');
+    expect(payload.inputs.map((input) => input.key)).not.toContain('wakeRule');
+  });
+
+  it('sends none while the field is empty', () => {
+    expect(hire(spec.state).wake_rule).toBeUndefined();
+  });
+
+  it('sends none once the owner makes it a scheduled hire', () => {
+    const state = writePath(
+      writePath(spec.state, STATE_PATHS.wakeRule, 'a customer asks to book'),
+      STATE_PATHS.trigger,
+      { kind: 'schedule', every: 'day', at: '09:00' },
+    );
+    expect(hire(state).wake_rule).toBeUndefined();
+  });
+});

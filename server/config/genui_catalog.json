@@ -80,7 +80,7 @@
   "control_types": ["Toggle", "Choice", "Input"],
   "actions": {
     "setState": "{statePath, value} — update UI state",
-    "hire_employee": "{name, role, apps:[string], trigger, sendsVia, team} — add this employee to the team and start them working",
+    "hire_employee": "{name, role, apps:[string], trigger, sendsVia, team, wakeRule} — add this employee to the team and start them working",
     "refine": "{} — let the owner describe a change to this setup",
     "connect_app": "{app} — connect an app by name",
     "open_connectors": "{} — open the apps panel"
@@ -95,9 +95,11 @@
     "askFirst": "/rules/askFirst",
     "choices": "/choices",
     "inputs": "/inputs",
-    "trigger": "/trigger"
+    "trigger": "/trigger",
+    "wakeRule": "/wakeRule"
   },
   "ask_first_label": "Ask me before sending anything",
+  "wake_rule_label": "Wake me when",
   "trigger": {
     "kinds": ["app_event", "schedule", "manual"],
     "every": ["hour", "day", "weekday", "week", "month"],

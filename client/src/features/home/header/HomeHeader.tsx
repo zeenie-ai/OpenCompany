@@ -2,9 +2,11 @@
  * Normal mode's header (design handoff "Main header"; chat "Header"): with
  * the sidebar collapsed, an open button and the logo. Then the view: while
  * hiring, its title; on an employee's page, who they are (avatar, name,
- * role and apps, their status), New conversation and Usage (what they cost
- * this month, their tokens and finished tasks; the same button as the
- * editor's toolbar, components/ui/UsageButton). The owner renames them
+ * role and apps, their status), New conversation, Wake (for an employee an
+ * app event starts, which events are worth their work;
+ * components/ui/WakeRuleButton) and Usage (what they cost this month, their
+ * tokens and finished tasks; components/ui/UsageButton). Both are the same
+ * buttons as the editor's toolbar. The owner renames them
  * with the pencil beside their name, and gives them a photo (or takes it
  * away) from their avatar's menu; an employee built in the editor uses its
  * assigned portrait. At the end the Guide pill, the Workspace button (it opens and
@@ -32,6 +34,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input';
 import { ThemeButton } from '@/components/ui/ThemeButton';
 import { UsageButton } from '@/components/ui/UsageButton';
+import { WakeRuleButton } from '@/components/ui/WakeRuleButton';
 import { cn } from '@/lib/utils';
 import { useWorkflowControlPending } from '@/stores/workflowControlStore';
 import { getDefaultEmployeeAvatar } from '../data/avatars';
@@ -216,6 +219,7 @@ export function HomeHeader({ title, employee, scrolled }: { title: string; emplo
         {employee ? <Identity employee={employee} /> : <h2 className="truncate px-1.5 text-lead font-semibold text-fg-default">{title}</h2>}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {employee && employee.talk.state === 'on' && <NewConversationButton employee={employee} />}
+          {employee && <WakeRuleButton workflowId={employee.workflow_id} />}
           {employee && <UsageButton workflowId={employee.workflow_id} name={employee.name} />}
           {employeeId && (
             <span className="contents @max-[1100px]:hidden">

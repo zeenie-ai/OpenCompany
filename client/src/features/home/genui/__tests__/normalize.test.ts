@@ -284,3 +284,50 @@ describe('when they work', () => {
     expect(actionsOf(spec)).toEqual(['refine', 'hire_employee']);
   });
 });
+
+describe('"Wake me when"', () => {
+  /** A card whose hire button has these params. */
+  function hireWith(params: Raw, extra: Record<string, Raw> = {}) {
+    return only({
+      a: { type: 'AgentCard', props: { name: 'Maya', role: 'Receptionist' } },
+      p: { type: 'Plan', props: { steps: [{ title: 'Answer', role: 'agent' }] } },
+      ...extra,
+      h: { type: 'Button', props: { label: 'Hire Maya' }, on: { press: { action: 'hire_employee', params } } },
+    });
+  }
+  const GMAIL = { kind: 'app_event', app: 'Gmail' };
+  const wakeFields = (spec: NormalizedSpec) =>
+    spec.order.filter((id) => bindingPath(spec.elements[id].props.value) === STATE_PATHS.wakeRule);
+
+  it("starts as the hire button's rule for an employee an app event starts, in the footer", () => {
+    const spec = hireWith({ trigger: GMAIL, wakeRule: '  a customer   asks about an order ' });
+    const field = spec.layout.wakeRule!;
+    expect(spec.elements[field]).toMatchObject({ type: 'Input', props: { label: 'Wake me when' } });
+    expect(bindingPath(spec.elements[field].props.value)).toBe(STATE_PATHS.wakeRule);
+    expect(readPath(spec.state, STATE_PATHS.wakeRule)).toBe('a customer asks about an order');
+    expect(spec.elements.r.children.slice(-3)).toEqual([field, spec.layout.askFirst, spec.layout.actions]);
+    expect(spec.layout.body).not.toContain(field);
+  });
+
+  it('starts empty when the hire button has no rule', () => {
+    const spec = hireWith({ trigger: GMAIL });
+    expect(readPath(spec.state, STATE_PATHS.wakeRule)).toBe('');
+  });
+
+  it('is not there for an employee the owner messages or a schedule starts', () => {
+    for (const trigger of [{ kind: 'manual' }, { kind: 'schedule', every: 'day', at: '09:00' }]) {
+      const spec = hireWith({ trigger, wakeRule: 'a customer asks' });
+      expect(spec.layout.wakeRule).toBeNull();
+      expect(wakeFields(spec)).toEqual([]);
+    }
+  });
+
+  it('replaces a field the model bound there itself', () => {
+    const spec = hireWith(
+      { trigger: GMAIL, wakeRule: 'a customer asks' },
+      { mine: { type: 'Input', props: { label: 'Only when', value: { $bindState: '/wakeRule' } } } },
+    );
+    expect(spec.elements.mine).toBeUndefined();
+    expect(wakeFields(spec)).toEqual([spec.layout.wakeRule]);
+  });
+});

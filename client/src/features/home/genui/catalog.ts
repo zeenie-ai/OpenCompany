@@ -26,6 +26,7 @@ import {
   state_paths,
   step_roles,
   tones,
+  wake_rule_label,
 } from '../../../../../server/config/genui_catalog.json';
 import type { RoutineRole } from '../ui/routine';
 
@@ -52,6 +53,9 @@ export const STEP_ROLES = step_roles as readonly StepRole[];
 export const STATE_PATHS = state_paths;
 
 export const ASK_FIRST_LABEL = ask_first_label;
+
+/** The label of the "Wake me when" field an app-event hire's card shows. */
+export const WAKE_RULE_LABEL = wake_rule_label;
 
 export const LIMITS = limits;
 

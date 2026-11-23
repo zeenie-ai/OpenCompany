@@ -35,6 +35,7 @@ export const HIRE_PAYLOAD_KEYS = [
   'sends_via',
   'source',
   'team',
+  'wake_rule',
 ] as const;
 
 export const TRIGGER_KINDS: readonly string[] = triggerLists.kinds;
@@ -57,6 +58,7 @@ export const HIRE_LIMITS = {
   key: 40,
   label: 120,
   value: 200,
+  wakeRule: 200,
 } as const;
 
 export interface HireStep {
@@ -88,6 +90,9 @@ export interface HireEmployeePayload {
   inputs: { key: string; label: string; value: string }[];
   trigger?: HireTrigger;
   sends_via?: string;
+  /** Which app events are worth their work ("Wake me when"), for an
+   *  app-event hire only (server services/employees/triage.py). */
+  wake_rule?: string;
   source: { spec_version: 1; provider?: string; model?: string };
 }
 
@@ -346,6 +351,8 @@ export function buildHirePayload({ spec, state, params, job, idempotencyKey, sou
         choices.push({ key, label: props.label.slice(0, HIRE_LIMITS.label), value: props.value.slice(0, HIRE_LIMITS.value) });
       }
     } else if (element.type === 'Input') {
+      // The "Wake me when" field is the hire's own wake_rule, sent below.
+      if (path === STATE_PATHS.wakeRule) continue;
       const key = keyUnder(path, STATE_PATHS.inputs) ?? (path ? path.replace(/^\//, '').replace(/\//g, '.').slice(0, HIRE_LIMITS.key) : null);
       const props = resolved('Input', element, state, core);
       const value = props?.value.trim() ?? '';
@@ -372,6 +379,8 @@ export function buildHirePayload({ spec, state, params, job, idempotencyKey, sou
   if (team !== undefined) payload.team = team;
   const sendsVia = clip(params.sendsVia ?? params.sends_via, 40);
   if (sendsVia) payload.sends_via = sendsVia;
+  const wakeRule = trigger?.kind === 'app_event' ? clip(readPath(state, STATE_PATHS.wakeRule), HIRE_LIMITS.wakeRule) : '';
+  if (wakeRule) payload.wake_rule = wakeRule;
   if (source?.provider) payload.source.provider = source.provider;
   if (source?.model) payload.source.model = source.model;
   return payload;

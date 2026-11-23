@@ -23,6 +23,8 @@ vi.mock('../../../contexts/AuthContext', () => ({
 }));
 vi.mock('../ThemeButton', () => ({ ThemeButton: () => null }));
 vi.mock('../../shell/ModeToggle', () => ({ ModeToggle: () => null }));
+// Reads the employee from the socket; tested in WakeRuleButton.test.tsx.
+vi.mock('../WakeRuleButton', () => ({ WakeRuleButton: () => null }));
 
 import TopToolbar from '../TopToolbar';
 import { useCanvasDockStore } from '../../../stores/canvasDockStore';

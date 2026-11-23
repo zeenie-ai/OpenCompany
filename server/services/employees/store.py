@@ -276,6 +276,26 @@ async def set_photo(database: Any, workflow_id: str, path: Optional[str]) -> Opt
         return row
 
 
+async def set_wake_rule(database: Any, workflow_id: str, rule: str) -> Optional[Employee]:
+    """Set the rule that decides which app events wake a team employee
+    (services/employees/triage.py), or clear it with "". It is saved on the
+    team plan, so a running generation takes it on Apply, as it takes any
+    other change to its team. None when the workflow has no employee row or
+    the employee has no team plan."""
+    async with database.get_session() as session:
+        result = await session.execute(select(Employee).where(Employee.workflow_id == workflow_id))
+        row = result.scalar_one_or_none()
+        if row is None or not row.team_plan:
+            return None
+        plan = {key: value for key, value in row.team_plan.items() if key != "wake_rule"}
+        if rule:
+            plan["wake_rule"] = rule
+        row.team_plan = plan
+        row.updated_at = _utcnow()
+        await session.commit()
+        return row
+
+
 async def delete_for_workflow(database: Any, workflow_id: str) -> int:
     """Remove the employee row of a deleted workflow. Returns rows removed."""
     from models.employees import EmployeeActivation, EmployeeGrant, EmployeeJob, EmployeeApply, WorkflowQueuedEvent

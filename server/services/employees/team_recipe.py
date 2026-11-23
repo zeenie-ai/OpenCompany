@@ -508,5 +508,8 @@ def build_team(built: Any, inputs: Any, *, legacy_conversion: bool = False) -> A
                        "talk_delivery_node_ids": [final_reply]}
     if not manual:
         built.team_plan.update(intake_trigger_node_id=roles["trigger"], app_intake_prompt=original_parameters.get("prompt", ""))
+        if inputs.request.wake_rule and built.trigger.get("kind") == "app_event":
+            # Which app events are worth a job (services/employees/triage.py).
+            built.team_plan["wake_rule"] = inputs.request.wake_rule
     next(node for node in built.nodes if node["id"] == talk)["data"]["employee_team_plan"] = deepcopy(built.team_plan)
     return built

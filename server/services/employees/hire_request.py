@@ -31,6 +31,9 @@ ITEMS_MAX = 8
 KEY_MAX = 40
 LABEL_MAX = 120
 VALUE_MAX = 200
+#: The "Wake me when" rule of an employee an app event starts; triage
+#: (services/employees/triage.py) and the settings command keep the same limit.
+WAKE_RULE_MAX = 200
 IDEMPOTENCY_KEY_MAX = 128
 
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -187,6 +190,14 @@ class HireEmployeeRequest(_Lenient):
     sends_via: Optional[str] = None
     source: HireSource = Field(default_factory=HireSource)
     team: Optional[List[HireTeamMember]] = Field(default=None, max_length=2)
+    #: Which app events are worth the employee's work ("Wake me when ...");
+    #: kept on the team plan of an app-event hire (team_recipe.build_team).
+    wake_rule: str = ""
+
+    @field_validator("wake_rule", mode="before")
+    @classmethod
+    def _wake_rule(cls, value: Any) -> str:
+        return _clip(value, WAKE_RULE_MAX)
 
     @field_validator("team")
     @classmethod

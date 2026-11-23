@@ -60,6 +60,20 @@ def test_the_card_holds_the_core_of_a_setup_screen():
     assert drawn["change"]["on"]["press"] == {"action": "refine"}
 
 
+def test_an_app_event_hire_carries_its_wake_rule_to_the_card_and_back():
+    card = fill_form(form(wake_rule="  a customer asks about   an order "), JOB)
+
+    assert elements(card)["hire"]["on"]["press"]["params"]["wakeRule"] == "a customer asks about an order"
+    assert fields_from_reply(card)["wake_rule"] == "a customer asks about an order"
+
+
+def test_a_wake_rule_without_an_app_event_is_left_off_the_card():
+    card = fill_form(form(wake_rule="a customer asks", trigger={"kind": "schedule", "every": "day", "at": "08:00"}), JOB)
+
+    assert "wakeRule" not in elements(card)["hire"]["on"]["press"]["params"]
+    assert "wake_rule" not in fields_from_reply(card)
+
+
 def test_a_form_that_names_no_one_draws_nothing():
     for unusable in ("", "Sorry, I can't help with that.", form(name=""), form(role=None), form(steps=[]), form(steps=[{"detail": "no title"}])):
         assert fill_form(unusable, JOB) == ""

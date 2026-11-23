@@ -1503,6 +1503,13 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         trigger_task_data = extract_task_event_payload(input_data)
     from services.employees.team_runtime import admit_employee_runtime_job
     if not chat_intake:
+        # An app event the employee's "Wake me when" rule says is not for it
+        # is dropped before it becomes a job (services/employees/triage.py);
+        # the instance bootstrap ends the run as event_not_matched.
+        from services.employees.triage import dropped_event
+        dropped = await dropped_event(database, context, employee_plan, prompt, trigger_task_data)
+        if dropped is not None:
+            return {"employee_event_dropped": dropped}
         await admit_employee_runtime_job(database, context, employee_plan, prompt, trigger_task_data)
     if trigger_task_data:
         await attach_employee_job(database, context, trigger_task_data)

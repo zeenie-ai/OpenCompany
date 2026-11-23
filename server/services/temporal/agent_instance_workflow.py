@@ -104,6 +104,14 @@ async def bootstrap_instance(context: dict) -> dict:
     if is_chat_intake((node.get("data") or {}).get("employee_team_plan"), context):
         return {"applicable": False}
     prepared = await prepare_agent_payload({**context, "_agent_instance_bootstrap": True})
+    dropped = prepared.get("employee_event_dropped")
+    if dropped:
+        # The wake rule judged the event not the employee's: no job, no
+        # instance, no model run. The workflow already returns a review
+        # event's result at once, so this ending needs no patch.
+        return {"applicable": False, "review_event": True, "result": {
+            "success": True, "status": "event_not_matched", "instance_managed": True,
+            "probability": dropped["probability"]}}
     team_id = prepared.get("team_id")
     if not team_id:
         return {"applicable": False}

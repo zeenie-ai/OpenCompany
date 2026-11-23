@@ -125,6 +125,7 @@ def fields_from_reply(raw: str) -> Dict[str, Any]:
             params = element["press"][1]
             fields.setdefault("trigger", params.get("trigger"))
             fields.setdefault("sends_via", params.get("sendsVia"))
+            fields.setdefault("wake_rule", params.get("wakeRule"))
             fields.setdefault("team", params.get("team"))
     if not fields.get("name"):
         return {}
@@ -152,6 +153,7 @@ def fill_form(raw: Any, job: str) -> str:
                 "rules": {"items": [{"label": rule.get("label"), "value": rule.get("value") is True} for rule in rules if isinstance(rule, dict)]},
                 "trigger": fields.get("trigger"),
                 "sends_via": fields.get("sends_via"),
+                "wake_rule": fields.get("wake_rule"),
                 "team": fields.get("team"),
             }
         )
@@ -176,6 +178,9 @@ def fill_form(raw: Any, job: str) -> str:
         }
     if hire.sends_via:
         params["sendsVia"] = hire.sends_via
+    if hire.wake_rule and hire.trigger is not None and hire.trigger.kind == "app_event":
+        # The card's "Wake me when" field starts with it (genui/normalize.ts).
+        params["wakeRule"] = hire.wake_rule
 
     elements: Dict[str, Any] = {
         "root": {"type": "Stack", "props": {"direction": "vertical", "gap": "md"}, "children": ["agent", "plan", "rules", "change", "hire"]},

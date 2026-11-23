@@ -284,6 +284,17 @@ def _talk(graph: GraphIndex, control_row: Any) -> TalkState:
     return graph.talk
 
 
+def _wake_rule(employee: Any, workflow: Any) -> Optional[str]:
+    """The rule that decides which app events wake a team employee
+    (services/employees/triage.py): "" when none is set; None when no app
+    event starts the employee, so there is nothing to decide."""
+    from services.employees.triage import takes_wake_rule, wake_rule
+
+    plan = getattr(employee, "team_plan", None)
+    nodes = (getattr(workflow, "data", None) or {}).get("nodes") or []
+    return wake_rule(plan) if takes_wake_rule(plan, nodes) else None
+
+
 def _team_setup_pending(employee: Any, control_row: Any) -> bool:
     from services.employee_team_connection import EMPLOYEE_TEAM_RESOURCE_FIELDS
     plan = getattr(employee, "team_plan", None) or {}
@@ -371,6 +382,9 @@ async def _summary(
         #: A hire's "ask me first" rule; built in the editor: whether its
         #: replies wait at an approval gate.
         "asks_first": asks_first(employee) if employee is not None else bool(graph.gate_ids),
+        #: "Wake me when": which app events are worth a job; null when no
+        #: app event starts them.
+        "wake_rule": _wake_rule(employee, workflow),
         "pending_changes": pending_changes(workflow, control_row) or _team_setup_pending(employee, control_row),
         "revision": _millis(
             getattr(workflow, "updated_at", None),
