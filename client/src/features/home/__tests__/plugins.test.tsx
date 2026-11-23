@@ -22,7 +22,10 @@ vi.mock('@/contexts/WebSocketContext', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/contexts/WebSocketContext')>()),
   useWebSocketActions: () => ({ sendRequest, isReady: true, addEventListener: () => () => {} }),
 }));
-vi.mock('../genui', () => ({ useStarterHire: () => starterHire }));
+vi.mock('../genui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../genui')>(),
+  useStarterHire: () => starterHire,
+}));
 vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 
 import { ThemeProvider } from '@/contexts/ThemeContext';

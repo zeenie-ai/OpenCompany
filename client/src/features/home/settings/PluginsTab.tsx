@@ -12,11 +12,10 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useStarterHire } from '../genui';
+import { useStarterHire, type HireTeamMember } from '../genui';
 import { useSkillLibrary } from '../data/skills';
 import { STARTERS, type Starter } from '../hire/templates';
 import { StarterTeamReview } from '../hire/StarterTeamReview';
-import type { HireTeamMember } from '../genui/hirePayload';
 import { useHomeStore } from '../state/homeStore';
 import { SPIKE, spikeOrb } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';

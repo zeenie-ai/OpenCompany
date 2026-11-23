@@ -6,8 +6,9 @@
  * exported here brings json-render with it.
  */
 
-export { HIRE_LIMITS } from './hirePayload';
+export { HIRE_LIMITS, type HireTeamMember } from './hirePayload';
 export { HireDraftPanel } from './HireDraftPanel';
+export { HireTeamEditor } from './HireTeamEditor';
 export { MessagePreview as DraftMessagePreview } from './MessagePreview';
 export { useHireComposer, useJobComposer, useSendJob } from './useHireComposer';
 export { useStarterHire } from './useStarterHire';

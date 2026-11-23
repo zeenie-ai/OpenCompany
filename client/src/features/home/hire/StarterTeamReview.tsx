@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { HireTeamEditor } from '../genui/HireTeamEditor';
-import type { HireTeamMember } from '../genui/hirePayload';
+import { HireTeamEditor, type HireTeamMember } from '../genui';
 import type { Starter } from './templates';
 
 export function StarterTeamReview({ starter, busy, onHire, onClose }: {
