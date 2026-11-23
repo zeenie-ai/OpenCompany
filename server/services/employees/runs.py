@@ -119,15 +119,25 @@ async def done_today(
         return {workflow_id: int(count) for workflow_id, count in result.all()}
 
 
-async def done_this_month(database: Any, *, zone: ZoneInfo, now: Optional[datetime] = None) -> int:
-    """Successful runs since the 1st of the month in the owner's zone, across every workflow."""
+async def done_this_month(
+    database: Any,
+    *,
+    zone: ZoneInfo,
+    now: Optional[datetime] = None,
+    workflow_id: Optional[str] = None,
+) -> int:
+    """Successful runs since the 1st of the month in the owner's zone: one
+    workflow's when ``workflow_id`` is given, else every workflow's."""
     since = start_of_month(now or _utcnow(), zone)
+    query = (
+        select(func.count())
+        .select_from(WorkflowRunRecord)
+        .where(WorkflowRunRecord.status == "success", WorkflowRunRecord.finished_at >= since)
+    )
+    if workflow_id is not None:
+        query = query.where(WorkflowRunRecord.workflow_id == workflow_id)
     async with database.get_session() as session:
-        result = await session.execute(
-            select(func.count())
-            .select_from(WorkflowRunRecord)
-            .where(WorkflowRunRecord.status == "success", WorkflowRunRecord.finished_at >= since)
-        )
+        result = await session.execute(query)
         return int(result.scalar_one() or 0)
 
 

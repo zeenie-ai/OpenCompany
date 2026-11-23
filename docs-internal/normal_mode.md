@@ -1238,9 +1238,10 @@ Every trigger-spawned run that finishes writes a `workflow_run_records` row
 from `DeploymentManager`. The count starts at local midnight in the owner's
 timezone, and rows are pruned after 35 days, which is longer than a month, so
 Billing's count of this month's tasks (from the 1st, in the owner's timezone,
-across the whole team) is always complete. `get_employee_usage` also returns
-that 1st as `since` (YYYY-MM-DD), so the page names the period in the owner's
-own terms.
+across the whole team) is always complete, and so is one employee's
+(`get_employee_usage {workflow_id}`). `get_employee_usage` also returns that
+1st as `since` (YYYY-MM-DD), so the page names the period in the owner's own
+terms.
 
 ## Settings
 
@@ -1361,7 +1362,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 |---|---|---|
 | `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
-| `get_employee_usage` | `{}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone, whole team; `since` is that 1st as YYYY-MM-DD) |
+| `get_employee_usage` | `{workflow_id?}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone; the whole team's, or one employee's with `workflow_id`, `not_found` when it is not the owner's; `since` is that 1st as YYYY-MM-DD) |
 | `get_workflow_costs` | `{}` | `{since, total_cost, workflows: [{workflow_id, name, total_cost, total_tokens}]}`: this month's estimated cost in USD and model tokens by employee, highest cost first, then one row with a null id and name for calls that belong to no employee. Answered by the usage service ([Pricing Service](./pricing_service.md)), read by the cost panel |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |

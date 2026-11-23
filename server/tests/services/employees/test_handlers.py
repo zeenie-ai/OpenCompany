@@ -71,6 +71,30 @@ async def test_usage_counts_this_months_successes(container, real_database, monk
     assert got["since"].endswith("-01")
 
 
+async def test_usage_counts_one_employees_successes(container, real_database, monkeypatch):
+    from services.employees import events, runs
+
+    monkeypatch.setattr(events, "employee_changed", lambda _workflow_id: None)
+
+    async def no_prune(_database):
+        return None
+
+    monkeypatch.setattr(runs, "_maybe_prune", no_prune)
+    assert await real_database.save_workflow(workflow_id="1", name="Maya", slug="Maya_1", data={"nodes": [], "edges": []})
+    await runs.record_run(real_database, workflow_id="1", run_id="r1", status="success", runtime="local")
+    await runs.record_run(real_database, workflow_id="2", run_id="r2", status="success", runtime="local")
+
+    got = await handlers.handle_get_employee_usage({"workflow_id": "1"}, None)
+
+    assert got == {"success": True, "tasks_this_month": 1, "since": got["since"]}
+
+
+async def test_usage_of_an_employee_not_found(container):
+    got = await handlers.handle_get_employee_usage({"workflow_id": "nope"}, None)
+
+    assert got == {"success": False, "error": "not_found", "workflow_id": "nope"}
+
+
 async def test_usage_month_starts_on_the_first_in_the_owners_zone(real_database, monkeypatch):
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo

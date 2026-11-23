@@ -80,6 +80,14 @@ async def test_done_this_month_counts_successes_across_the_team(real_database):
     assert await runs.done_this_month(real_database, zone=zone, now=now) == 2
 
 
+async def test_done_this_month_counts_one_workflow_when_given(real_database):
+    now = datetime(2026, 9, 25, 3, 0, tzinfo=timezone.utc)
+    for workflow_id, run_id in (("w", "w1"), ("w", "w2"), ("other", "o1")):
+        await runs.record_run(real_database, workflow_id=workflow_id, run_id=run_id, status="success", runtime="temporal", finished_at=now - timedelta(days=1))
+
+    assert await runs.done_this_month(real_database, zone=ZoneInfo("UTC"), now=now, workflow_id="w") == 2
+
+
 def test_the_month_starts_in_the_owner_zone():
     now = datetime(2026, 9, 1, 2, 0, tzinfo=timezone.utc)  # still 31 August in New York
     assert runs.start_of_month(now, ZoneInfo("America/New_York")) == datetime(2026, 8, 1, 4, 0, tzinfo=timezone.utc)

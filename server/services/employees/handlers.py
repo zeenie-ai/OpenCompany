@@ -3,7 +3,9 @@
 ``list_employees`` -> ``{employees: EmployeeSummary[]}``: the whole team for
 the Home sidebar. ``get_employee {workflow_id}`` -> ``{employee}``: one
 summary plus what the employee card and its setup screen show.
-``get_employee_usage {}`` -> ``{tasks_this_month, since}``: Settings > Billing.
+``get_employee_usage {workflow_id?}`` -> ``{tasks_this_month, since}``: the
+whole team's for Settings > Billing, or one employee's (``not_found`` when it
+is not the owner's) for its Usage.
 Shapes are documented in services/employees/summaries.py.
 
 Two change the employee, and answer with its fresh summary
@@ -110,7 +112,10 @@ async def handle_get_employee(data: Dict[str, Any], websocket: WebSocket) -> Dic
 async def handle_get_employee_usage(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     from core.container import container
 
-    return {"success": True, **await employee_usage(container.database())}
+    workflow_id = str(data.get("workflow_id") or "").strip() or None
+    if workflow_id is not None and not await _owns(container.database(), websocket, workflow_id):
+        return {"success": False, "error": "not_found", "workflow_id": workflow_id}
+    return {"success": True, **await employee_usage(container.database(), workflow_id=workflow_id)}
 
 
 # ----- Turn on Talk, Apply -----
