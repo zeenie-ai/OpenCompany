@@ -132,7 +132,7 @@ function hireText(m: HireManifest): string {
     '4) If a needed app is not connected: a Card with tone "trigger" saying so, with a Button whose on.press ' +
       'runs connect_app.',
     '5) A horizontal Stack with Button "Hire {name}" (primary, on.press {"action": "hire_employee", "params": ' +
-      '{name, role, apps, trigger, sendsVia}}) and Button "Change something" (secondary, on.press {"action": ' +
+      '{name, role, apps, trigger, sendsVia, team}}) and Button "Change something" (secondary, on.press {"action": ' +
       '"refine"}).',
     `${triggerRule(m)} "sendsVia" is the app they answer or report through.`,
     'UISpec is flat: {"root": id, "state": {initial values}, "elements": {id: {"type", "props", "children": ' +
@@ -163,6 +163,8 @@ function fieldsText(m: HireManifest): string {
   return [
     'Reply ONLY with a JSON object, no code fences, that describes the new employee:',
     '{"text": string, "name": string, "role": string, "description": string, "apps": [string], ' +
+      '"team": [{"key": string, "name": string, "responsibility": string, "kind": "specialist"|"employee", ' +
+      '"reports_to": string}], ' +
       `"steps": [{"title": string, "detail": string, "role": ${quoted(m.step_roles)}, "app"?: string}], ` +
       '"rules": [{"label": string, "value": boolean}], "trigger": {...}, "sends_via"?: string}.',
     '"text": one short, warm sentence introducing the new employee by name.',
