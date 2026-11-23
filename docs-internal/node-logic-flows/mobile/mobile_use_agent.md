@@ -40,7 +40,8 @@ Model selection defaults to `model_source="global"`, reading the toolbar’s cur
 3. Derive a scoped task identity and connect to the private loopback capability broker.
 4. Queue against the shared phone, claim a control lease, and start an isolated worker with the selected model and remaining budget.
 5. On manual takeover, revoke worker access and drain admitted device actions. Resume uses a fresh worker and the remaining budget.
-6. Return the result; revoke capability and clean up the worker on completion, cancellation or failure.
+6. When a tap by text matches nothing in the UI tree, the worker asks the broker to `locate` the element on a screenshot; a sure box from the judgment service is tapped at its centre, and anything else stays "Element not found" ([Mobile Workspace](../../../docs/mobile-workspace.md#engine-isolation-and-credentials)).
+7. Return the result; revoke capability and clean up the worker on completion, cancellation or failure.
 
 ## Decision Logic
 
@@ -48,7 +49,7 @@ Empty prompts, missing models, non-owner access and stopped devices fail explici
 
 ## Side Effects
 
-Model-provider requests, screenshot/hierarchy reads, phone mutations through the broker, task worker processes and operational logs. Apps and sign-ins persist in the AVD. No hosted Minitap account is required; no hosted run reports are produced.
+Model-provider requests, screenshot/hierarchy reads, phone mutations through the broker, task worker processes and operational logs. With a TypeSafe or OpenRouter key connected, a `locate` sends that screenshot to TypeSafe or OpenRouter and books a `judge` usage row ([Judgment Service](../../judgment_service.md#where-it-is-used)). Apps and sign-ins persist in the AVD. No hosted Minitap account is required; no hosted run reports are produced.
 
 ## External Dependencies
 

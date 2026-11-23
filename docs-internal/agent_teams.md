@@ -126,6 +126,24 @@ be resolved before delivery. A nonempty final lead response and the original
 delivery/approval gates still apply. A finish receipt or model response alone
 does not bypass those gates.
 
+**Review auto-accept.** With the owner's "Skip reviews when sure" set
+(`UserSettings.review_auto_accept_percent`, 0 and off by default), the
+`agent.instance.claim` activity may settle a reviewer's run before any model
+turn (`services/agent_instances/auto_review.py`). It applies only to a run
+woken by fresh review notices of submitted teammate work, never to the lead's
+runs, so Chat always reviews the final answer. Each task is judged with the
+calibrated noul "The result fully completes these instructions"
+([Judgment Service](./judgment_service.md#where-it-is-used)). When every task
+is judged at least as sure as the setting, `settle_auto_review` accepts each
+through the same `accept_task` with the trusted scope, marking the task's
+`context.auto_accepted` (`{attempt, confidence}`). It then checkpoints one
+transcript line and completes the run with the accepted work. The review tools
+forbid extra fields, so a model cannot send that marker. The review gate then
+submits the reviewer's own task as after a model turn. Anything short of that,
+or a failure while settling, leaves the review to the reviewer's turn. A
+settled claim comes back `completed`, which the session loop already skips,
+so no Temporal patch is involved.
+
 ### Serialized execution and durable messaging
 
 `AgentInstanceSessionWorkflow` owns the instance's turns. Assignments, peer
@@ -499,6 +517,9 @@ beside neutral words.
 - `server/services/agent_team.py` and `server/core/database.py` — authorized
   durable service and persistence.
 - `server/services/temporal/agent_workflow.py` — concurrent child orchestration.
+- `server/services/agent_instances/auto_review.py` — review auto-accept, called
+  from the `agent.instance.claim` activity; `AgentInstanceService.review_candidates`
+  and `settle_auto_review` in `server/services/agent_instances/service.py`.
 - `server/services/handlers/tools.py` — legacy execution bridge.
 - `client/src/components/parameterPanel/TaskManagerPanel.tsx` — operational UI
   (the opened task, the status mark and the task model are in

@@ -29,6 +29,14 @@ The runtime fixtures test representative malformed requests without invoking a
 paid provider. A successful unrelated tool call does not clear the orchestration
 error budget; automatic inbox wakeups do not recover a halted instance.
 
+Added on 2026-11-23, after this record, so not in the results below. Both
+replace the judgment service with a fake; no judgment provider is called.
+
+| Area | Primary regression files | Checked behavior |
+|---|---|---|
+| Review auto-accept | `server/tests/services/agent_instances/test_auto_review.py`, `server/tests/temporal/test_agent_instance_workflow.py` | A sure calibrated judgment settles the reviewer's claim with no model turn and hands the task on. The setting off, a judgment below it, no judgment, or only the chat-model fallback leave the review to the reviewer. A sibling still working keeps the parent running. Chat's review is never settled, and a repeated claim judges nothing again. A model cannot send the marker. The claim activity falls back to the plain claim when settling fails. |
+| Triage at admission | `server/tests/services/employees/test_triage.py`, `server/tests/temporal/test_employee_app_hierarchy.py` | An app event judged below the threshold ends `event_not_matched` with no job, instance or model run. A sure judgment, no judgment or no rule admits it. A retried prepare never drops a job it admitted, and a schedule is never judged. |
+
 ## Recorded results
 
 | Suite | Result |

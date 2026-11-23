@@ -303,6 +303,10 @@ TikHub prices each endpoint (most cost $0.001 a successful request, the `instagr
 
 treg reports what it charged for every call in the CLI's `--json` envelope (`_treg.charged_micro`, integer micro-USD), so OpenCompany records that figure instead of a price of its own, and `pricing.json` has no treg entry. `_record_cost(ctx, tool_id, micro, operation)` in `server/nodes/treg/treg_action.py` books one `resource_count=1` row through `record_api_usage(..., cost=<the charge>)`, with `service: "treg"`, `endpoint` the catalog tool id and `cost` the charge in USD. It runs before the answer is saved, and also for a failed call that treg charged. A generation tool's submission reports `reserved_micro` instead, an amount treg holds until the task ends (settled on success, refunded on failure); it is recorded with `operation: "task"`. No amount (a call served on the team's own provider key, which treg does not bill) and a zero amount write nothing, and `search`, `describe` and `balance` are free. The recorder never raises, and the credential entry sets `"usage_services": ["treg"]`. See [treg_service.md](./treg_service.md).
 
+### Example: Judgments (per input token, or OpenRouter's own charge)
+
+A System One judgment (TypeSafe's Jev, direct or through OpenRouter) is booked by its provider, `server/nodes/judgment/_providers/systemone.py`, right after the reply arrives and before its answers are read, since the call was paid for whatever they say. It makes one `record_api_usage` call under the provider's name (`typesafe` or `openrouter`), operation `judge`, `endpoint` `systemone`, with `resource_count` the call's input tokens. Output tokens are free, so `pricing.json` prices `api.typesafe.judge` and `api.openrouter.judge` at $0.042 per million input tokens (`4.2e-08` per token) and maps `operation_map.typesafe` / `operation_map.openrouter` `judge` to them. OpenRouter's reply carries its own charge, `usage.cost`, which is booked as `cost=` instead, by the rule its chat calls use: on a bring-your-own-key call that is only OpenRouter's fee, so `cost_details.upstream_inference_cost` is added (`reported_cost`). A judgment the chat-model fallback answers is an ordinary model call, booked with `record_llm_usage` in `token_usage_metrics`. TypeSafe's credential sets `"usage_services": ["typesafe"]` and OpenRouter's lists `"openrouter"`. Every row carries the workflow, so a judgment counts in the employee's month. The Classify node, review auto-accept and the Mobile element finder also run with the chat run and employee job bound, so theirs count for the reply and the job too; triage of an app event runs before any job exists. See [judgment_service.md](./judgment_service.md#cost).
+
 ### Example: Search Plugins (one call in the operation)
 
 The three search plugins (`server/nodes/search/{serper_search,brave_search,perplexity_search}`) have no helper: each `search` operation calls `record_api_usage` once, after the response came back, so a failed request books nothing.
@@ -613,6 +617,11 @@ the same figures and the same limits.
   per limit), with Save budget, which sends only
   `employee_monthly_budget_usd`. 0 means no budget. See "The monthly budget of
   an employee" above.
+- **Skip reviews when sure.** The same field in percent (`LimitField`'s
+  `unit`), with Save, which sends only `review_auto_accept_percent`. 0, the
+  default, means off. Above it a teammate's submitted work is accepted without
+  a model turn for its reviewer, which saves that turn's cost; see review
+  auto-accept in [judgment_service.md](./judgment_service.md#where-it-is-used).
 - The panel says what it leaves out: Claude Code and Codex agents.
 
 An employee paused at its budget shows the reason on its page in Home
@@ -720,6 +729,8 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `server/nodes/google/_base.py` | Google Workspace tracker (`track_google_usage`, cost $0) |
 | `server/nodes/proxy/_usage.py` | Proxy tracker (`track_proxy_usage`): books the cost `ProxyService.request_cost` gives, the bytes at the provider's own price per GB |
 | `server/nodes/search/{brave_search,serper_search,perplexity_search}/__init__.py` | Search plugins: one `record_api_usage` call in each `search` operation, after the response came back |
+| `server/nodes/judgment/_providers/systemone.py` | Judgment tracker (`SystemOneProvider._book`, `reported_cost`): a System One call's input tokens under `typesafe` or `openrouter`, or OpenRouter's own charge |
+| `server/nodes/judgment/_providers/llm.py` | The judgment's chat-model fallback, booked with `record_llm_usage` |
 | `server/services/plugin/operation.py` | `@Operation` decorator + `OperationSpec.cost`, metadata nothing reads |
 | `server/models/database.py` | `APIUsageMetric`, `TokenUsageMetric` models |
 | `server/services/usage/recording.py` | `record_api_usage()` and `record_llm_usage()`: one usage row per call; neither raises |
@@ -730,6 +741,6 @@ Nothing to add. `ApiUsageSection` renders whatever services come back from
 | `client/src/components/credentials/sections/LlmUsageSection.tsx` | Per-provider token usage + cost display |
 | `client/src/hooks/useApiKeys.ts` | `getAPIUsageSummary` / `getProviderUsageSummary` |
 | `client/src/hooks/useUsageQueries.ts` | `useChatRunCostsQuery` (a reply's cost), `useWorkflowCostsQuery` (this month's cost and tokens by employee), `useEmployeeUsageQuery` (this month's finished tasks, the team's or one employee's) and `invalidateUsage` |
-| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee, each employee's row opening to their usage, the spend limit of a reply and the monthly budget of an employee, in Home's Billing and Dev's Settings |
+| `client/src/components/ui/CostPanel.tsx` | The cost panel: this month's cost by employee, each employee's row opening to their usage, the spend limit of a reply, the monthly budget of an employee and Skip reviews when sure, in Home's Billing and Dev's Settings |
 | `client/src/components/ui/EmployeeUsage.tsx` | One employee's usage this month: cost, tokens, finished tasks |
 | `client/src/components/ui/UsageButton.tsx` | The Usage button, in Home's header and the editor's top toolbar |

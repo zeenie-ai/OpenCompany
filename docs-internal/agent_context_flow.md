@@ -33,6 +33,14 @@ with delivery consumption. The legacy best-effort save policy described below
 does not apply to this transaction. A stale or failed checkpoint cannot overwrite
 history or advance a receipt.
 
+One checkpoint is written without any runtime. When review auto-accept
+settles a reviewer's claimed run ([Agent Teams](./agent_teams.md#reviewed-task-lifecycle)),
+the `agent.instance.claim` activity checkpoints the reviewer's transcript
+itself, under the same revision and run fence, and then completes the run. It
+appends the claimed review notices and one assistant line, for example
+`Accepted "Gather evidence" automatically: 95% sure it completes the
+instructions.`. The reviewer's next turn reads that line like any other.
+
 ```mermaid
 sequenceDiagram
     participant Talk as Chat Employee

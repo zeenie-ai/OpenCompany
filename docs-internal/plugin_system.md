@@ -725,6 +725,7 @@ skips them. The two non-underscore `.py` files are the plugin classes
 | Short Terminal-UI log tag for a logger-name prefix (only when the `nodes.<plugin>` auto-rule yields an unwanted tag) | `core.logging` | `register_log_source_tag(prefix, tag)` |
 | Callback fired after a conversation durably saves (RFC-0002 Context live-view) | `services.agent_context.listeners` | `register_conversation_listener(listener)` — keyword-args only; a listener can never fail a save. |
 | Long-lived process supervisor (WhatsApp bridge, the JS executor sidecar on bun, Discord gateway) | `services._supervisor` | `register_supervisor(supervisor)` — idempotent per `supervisor.label`; a label collision raises `ValueError`. |
+| A judgment provider behind `services.judgment.judge` (TypeSafe's Jev, the same API through OpenRouter, the chat-model fallback) | `services.judgment.registry` | `register_judgment_provider(JudgmentProviderSpec(name, factory, sdk_exception_refs, client_kwargs))` — a `ProviderSpec`, so its exception refs are lazy `"module:Class"` strings. Which providers are tried, in what order, with which key and for which question types is data in `server/config/judgment_defaults.json`; the service never imports a plugin. Reference: `nodes/judgment/_providers/`; see [judgment_service.md](./judgment_service.md). |
 
 All accept idempotent re-imports (same callable / class for the
 same key is a no-op; conflicts raise `ValueError`).

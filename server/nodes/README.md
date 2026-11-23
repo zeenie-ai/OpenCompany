@@ -274,6 +274,10 @@ translate/   — Provider-abstracted translate / transliterate / detect_language
                DeepL translates only, Sarvam and LLM-backed providers do all three.
                (Sarvam's chat model remains a separate plugin at model/sarvam_chat_model/;
                nodes/sarvam/ itself was retired — every capability it served is now a provider.)
+judgment/    — classify (typed choice / score / noul questions about one text, answered in one call;
+               palette group "ai") + the judgment service's providers (TypeSafe's Jev, the same API
+               through OpenRouter, the chat-model fallback), registered into services/judgment
+               (docs-internal/judgment_service.md)
 ```
 
 ---
@@ -292,6 +296,7 @@ these first before writing new code:
 | `agent/` | `_specialized.SpecializedAgentBase` | Base for the specialized agents |
 | `model/` | `_base.ChatModelBase` | The chat models inherit → same `@Operation("chat")` body that calls `ai_service.execute_chat` |
 | `speech/` + `translate/` | `_config` / `_registry` / `_unifier` / `_providers/` | The multi-vendor shape. Capability data is JSON (`services/plugin/capabilities.CapabilityConfig`), registration is `services/provider_registry`, and each `_providers/<vendor>.py` owns that vendor's auth scheme, request transport and response shape |
+| `judgment/` | `_providers/` | The same shape with the service in core: `services/judgment` owns the protocol, the registry and `judgment_defaults.json`, so the employee runtime and the phone can judge without importing a plugin; the plugin only registers its providers |
 | `android/` | `_base.AndroidServiceBase` | The Android services inherit; payload translation + `SERVICE_ID_MAP` lives on this base |
 | `android/` | `_base.execute_android_service_tool` | Legacy AI-tool dispatcher. `services/handlers/tools.py` still has an `ANDROID_SERVICE_NODE_TYPES` branch that calls it, but the plugin fast path in `_dispatch_tool` runs first and sends every registered Android service through `BaseNode.execute_as_tool` (its `invoke` operation), so that branch is not reached today (the `androidTool` aggregator + `execute_android_toolkit` were retired) |
 | `code/` | `_base.CodeExecutorBase` + `_nodejs.NodeJSClient` | Python/JS/TS executors; `monty_executor/` is sandboxed Python via `pydantic-monty` (enforced limits + opt-in capabilities) |
@@ -335,6 +340,7 @@ from ._credentials import TwitterCredential              # shared with 3 sibling
 | `nodes/scraper/` | `ApifyCredential` (Bearer, SDK probe) + `TikHubCredential` (Bearer, declarative httpx probe against `tikhub/user/get_user_info` — kept SDK-free so the modal validates even if the `tikhub` import fails) | apify_actor / tikhub_action |
 | `nodes/model/` | 14 LLM credential classes: 11 cloud (`OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / xAI / Sarvam`), Ollama / LM Studio, and `OpenAICompatibleCredential` (any number of named endpoints, RFC-0003) | 13 chat models (xAI has no standalone chat-model node) **plus the `nodes/speech/` and `nodes/translate/` Sarvam providers**, which import `SarvamCredential` from here — one stored key serves Sarvam's OpenAI-compatible chat endpoint *and* its `api-subscription-key` REST APIs |
 | `nodes/search/` | `BraveSearch / Serper / Perplexity` inlined in each plugin file | single-use per plugin |
+| `nodes/judgment/` | `TypeSafeCredential` (Bearer; declarative probe that asks one noul) | classify, with `OpenRouterCredential` from `nodes/model/` |
 
 Declare inline only when genuinely single-use (see
 `nodes/search/brave_search/__init__.py` for the inline pattern). Declare in

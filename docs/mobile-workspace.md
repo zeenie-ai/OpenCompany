@@ -127,6 +127,8 @@ A maintained source patch injects the controller before mobile-use's normal devi
 
 The node resolves the selected provider's existing default-account credentials on the server and passes only that provider credential in the worker configuration. Credentials are not supplied by the browser and are not included in task status. Device processes receive a filtered environment. Agent telemetry and trace recording are disabled by this integration. Task screenshots and prompts still go to the configured model provider as part of inference. Custom provider base URLs are not currently exposed by the Mobile Agent configuration.
 
+**Finding an element on the screenshot.** mobile-use taps by text as its last resort, after the model's coordinates and the resource id. When that text matches nothing in the UI tree (a canvas, a web view, an icon drawn without a label), the injected controller's `find_element` asks the broker to `locate` it. The broker reads a screenshot under the task's lease and asks the judgment service whether the element is visible and where (`server/nodes/mobile/_locate.py`). Only a sure answer (at least 0.8) with a usable box is tapped, at the box's centre, through the same broker checks as any tap. Anything else is "Element not found", as before, and the phone never goes into recovery for it. Only Jev answers, through the owner's TypeSafe or OpenRouter key, since the chat-model fallback takes no images. With such a key connected, that screenshot also leaves the machine for TypeSafe or OpenRouter. See [Judgment Service](../docs-internal/judgment_service.md#where-it-is-used).
+
 ## Dependency pins and attribution
 
 The optional installer verifies downloaded artifacts before extraction or execution:

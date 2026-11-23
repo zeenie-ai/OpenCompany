@@ -40,11 +40,27 @@ and the reason progress needs owner action. Closing a blocked submission
 retains its evidence. An ordinary cancellation or a reset cannot authorize
 delivery. Each parent reviews the blocker before it reaches Chat.
 
+With the owner's "Skip reviews when sure" set, a teammate's submitted work
+that a calibrated judgment is at least that sure completes its instructions is
+accepted in its reviewer's claim, without a model turn, and the Work view
+shows it as "Accepted automatically". Chat's review of the final answer is
+never skipped ([Agent Teams](./agent_teams.md#reviewed-task-lifecycle),
+[Judgment Service](./judgment_service.md#where-it-is-used)).
+
 Chat reviews the Orchestrator's submission and writes the final answer on
 the originating chat branch. A busy chat receives the answer when its current
 turn finishes. After the conversation is cleared, open the original assignment
 on Chat's Task Manager board to read the final answer. App jobs keep the
 destination and approval gate captured at intake.
+
+An app, webhook, polling or schedule event skips Chat's model: it becomes a
+job at admission, and the Orchestrator is the first agent to call a model.
+When the team plan has a wake rule ("Wake me when", drafted at hire and edited
+from the Wake button), the prepare step that would admit an app, webhook or
+polling event first asks whether the event calls for the employee's work. An
+event judged below 0.2 ends as `event_not_matched`, with no job and no model
+run. An empty rule, a schedule, and any doubt admit the event
+([Judgment Service](./judgment_service.md#where-it-is-used)).
 
 For a reviewed blocker, the delivery receipt tracks the explanation. Home
 and `get_job_status` report `work_blocked`. A posted chat receipt directs
@@ -70,7 +86,9 @@ runs the nested handoff with a scripted model and replays the recorded
 histories. Set `TEMPORAL_TEST_CLI` to the local Temporal executable to run
 it. The [hierarchy runtime tests](../server/tests/temporal/test_employee_hierarchy_runtime.py)
 cover job and chat delivery, and the [app intake tests](../server/tests/temporal/test_employee_app_hierarchy.py)
-exercise the captured app destination.
+exercise the captured app destination and triage by the wake rule. The
+[auto-accept tests](../server/tests/services/agent_instances/test_auto_review.py)
+cover review auto-accept.
 
 ## Earlier hires
 

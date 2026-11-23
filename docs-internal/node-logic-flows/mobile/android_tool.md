@@ -37,7 +37,8 @@ Model selection defaults to `model_source="global"`, reading the toolbar’s cur
 2. The operation combines the prompt with saved limits and calls the shared Mobile Agent execution path.
 3. That path verifies local owner access, saved workflow/execution identity, and the model connector.
 4. The shared runtime queues the task and grants a fenced device lease before starting the isolated mobile-use worker.
-5. The worker returns its result; cleanup revokes capabilities and drains pending device operations.
+5. When a tap by text matches nothing in the UI tree, the worker asks the broker to `locate` the element on a screenshot; a sure box from the judgment service is tapped at its centre, and anything else stays "Element not found" ([Mobile Workspace](../../../docs/mobile-workspace.md#engine-isolation-and-credentials)).
+6. The worker returns its result; cleanup revokes capabilities and drains pending device operations.
 
 ## Decision Logic
 
@@ -45,7 +46,7 @@ Missing setup or a stopped phone produces an actionable error; execution never a
 
 ## Side Effects
 
-Model API requests, device reads and mutations through the broker, a task worker subprocess, and bounded operational logs. The plugin reads saved model configuration and provider credentials server-side. Prompts and screenshots reach the selected model provider but are excluded from diagnostic logs.
+Model API requests, device reads and mutations through the broker, a task worker subprocess, and bounded operational logs. The plugin reads saved model configuration and provider credentials server-side. Prompts and screenshots reach the selected model provider but are excluded from diagnostic logs. With a TypeSafe or OpenRouter key connected, a `locate` also sends that screenshot to TypeSafe or OpenRouter and books a `judge` usage row ([Judgment Service](../../judgment_service.md#where-it-is-used)).
 
 ## External Dependencies
 

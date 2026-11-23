@@ -331,6 +331,15 @@ produce an error instructing the lead to list/review tasks first.
 
 `mark_done` is a deprecated alias for `accept_task`; it does not remove records.
 
+In a managed employee team (lifecycle version 1), a submitted teammate task
+can also be accepted without the reviewer's model turn. With the owner's
+"Skip reviews when sure" set, the reviewer's claim runs the same `accept_task`
+when a calibrated judgment is at least that sure the result completes the
+instructions, and records `context.auto_accepted` (`{attempt, confidence}`) on
+the task. The tool's input forbids extra fields, so a model cannot set that
+marker. Chat's own review is never skipped
+([Agent Teams](../../agent_teams.md#reviewed-task-lifecycle)).
+
 Example (replace the assignee with an ID from the connected teammate list):
 
 ```json

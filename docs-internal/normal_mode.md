@@ -83,7 +83,7 @@ Approval waiting is implemented; activation for ordinary new generations remains
 | Folder | Contents |
 |---|---|
 | `HomeShell.tsx` | Sidebar, header, the current view (hire or one employee), the Workspace dock, Settings, the Welcome guide, the AI models dialog, the Get started checklist (on the hire view only) and the orb's stage |
-| `sidebar/`, `header/` | The team list (each employee's role and what they cost this month), New employee, the profile row; the view title, on an employee's page New conversation, Usage (the shared `components/ui/UsageButton`, see [On the employee's page](#on-the-employees-page)) and the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace button (opens and closes the dock), the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
+| `sidebar/`, `header/` | The team list (each employee's role and what they cost this month), New employee, the profile row; the view title, on an employee's page New conversation, Usage (the shared `components/ui/UsageButton`, see [On the employee's page](#on-the-employees-page)), Wake for an employee an app event starts (the shared `components/ui/WakeRuleButton`) and the Get started pill (standing in for the checklist's card), the Guide pill (opens the Welcome guide), the Workspace button (opens and closes the dock), the mode toggle (on an employee's page, Dev opens their workflow) and the theme button |
 | `onboarding/` | The Welcome guide: three steps (Welcome, Connect an AI model, Your first hire) that open on first launch and again from Guide or Settings > Help; then the Get started checklist (connect a model, hire, say hello, approve a first draft) until it is hidden, as a card in the hire view's corner (at the Workspace dock's left edge while the dock is open) and a header pill on an employee's page; and the AI models dialog, which opens whenever Home needs an AI model ([onboarding.md](./onboarding.md)) |
 | `hire/` | The hero, the composer, the template chips, the hire notice (`HireNotice.tsx`), and the starter bundles (`starters.json`), which the chips and Settings > Plugins both read |
 | `genui/` | The setup draft under the composer, and the hire itself, from a setup or a starter (below) |
@@ -568,9 +568,10 @@ normaliser lays the screen out one way and names the places in
 `NormalizedSpec.layout`: the first `AgentCard` is the identity row (avatar,
 name, "role · apps", the description in two lines, no status), then the
 routine (the first `Plan`, else the `Schedule`), then everything else in the
-order written, then the footer strip's two: the ask-first toggle, taken out of
-whatever card held it, and a row of the change button (secondary) and the Hire
-button (primary). Further agent cards and Plans are dropped. `HireScreen`
+order written, then the footer strip: for a hire an app event starts, the
+"Wake me when" field (below), then the ask-first toggle, taken out of whatever
+card held it, and a row of the change button (secondary) and the Hire button
+(primary). Further agent cards and Plans are dropped. `HireScreen`
 draws each place with its own `Renderer` over the same spec under one
 `JSONUIProvider`, so they share state and handlers and the reveal still runs
 element by element: the identity row with Discard beside it, the body, the
@@ -610,6 +611,18 @@ a schedule, or a new message in any app whose `can_trigger` is true, each a
 chip that reads as picked by a neutral fill and border. A change
 rewrites the When row as one sentence ("Every weekday at 08:00"), and the hire
 payload reads `/trigger` before the button's params.
+
+**Wake me when.** For a hire an app event starts (the trigger in state when
+the card is laid out), the footer holds one `Input` bound to `/wakeRule`
+(`state_paths.wakeRule`, `layout.wakeRule`), first holding the Hire button's
+`wakeRule`: the setup model drafts it from the job, and so does the fixed form
+(`setup_form.py`). An input the model bound there itself is removed. The rule
+says which events are worth the employee's work, and an empty one means every
+event. The hire payload sends it as `wake_rule` (at most 200 characters) only
+while the trigger is an app event. Hire keeps it as the team plan's
+`wake_rule`, which Start and Apply copy into the generation, and the agent's
+prepare step drops an event the rule says is not for them before any model
+runs ([Judgment Service](./judgment_service.md#where-it-is-used)).
 
 ### 2. Hire
 
@@ -823,13 +836,21 @@ will finish. The wire contract is [chat_protocol.md](./chat_protocol.md).
 is the page: the shared chat ([features/chat](../client/src/features/chat/),
 the same `ChatPane` the editor's console Chat pane uses) with Home around it.
 The header names the employee instead of the page (`HomeHeader`: avatar,
-name, role and apps, the status pill, New conversation and Usage). Usage
+name, role and apps, the status pill, New conversation, Usage and, for an
+employee an app event starts, Wake). Usage
 opens what the employee cost this month, the model tokens they used and the
 tasks they finished
 ([components/ui/UsageButton.tsx](../client/src/components/ui/UsageButton.tsx)
 around `EmployeeUsage`): the same button the editor's top toolbar shows for
 the open workflow, and the same figures an employee's row in the cost panel
-opens to ([Pricing Service](./pricing_service.md#one-employees-usage)). The
+opens to ([Pricing Service](./pricing_service.md#one-employees-usage)). Wake
+([components/ui/WakeRuleButton.tsx](../client/src/components/ui/WakeRuleButton.tsx),
+also in the editor's top toolbar) edits which app events wake them ("Wake
+{name} when"): an event the rule says is not for them is dropped before any
+model runs, and an empty rule means every event. Saving
+(`set_employee_wake_rule`) changes the saved team, so a running employee
+takes the rule on Apply. The summary's `wake_rule` is null for an employee no
+app event starts, which hides the button. The
 team list shows each employee's cost this month beside their role, left out
 while it can't be read. The pencil beside
 the name renames them, and the avatar's menu uploads a photo for a hired
@@ -1291,7 +1312,12 @@ changing page clears it.
   `chat_run_spend_limit_usd` (0 means no limit), and "Monthly budget per
   employee", whose Save budget writes only `employee_monthly_budget_usd` (0
   means no budget; an employee that reaches it pauses and shows as needing
-  attention). See
+  attention), and "Skip reviews when sure", whose Save writes only
+  `review_auto_accept_percent` (0, the default, means off). With it set, a
+  teammate's submitted work that a calibrated judgment is at least that sure
+  completes its instructions is accepted without waking its reviewer; Chat's
+  review of the final answer is never skipped
+  ([Judgment Service](./judgment_service.md#where-it-is-used)). See
   [Pricing Service](./pricing_service.md#the-cost-panel). A page picked in
   the nav slides in from 14px to the right (`slideSettingsPage`) before its
   blocks stagger in.
@@ -1375,7 +1401,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 
 | Type | Payload | Response |
 |---|---|---|
-| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
+| `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `wake_rule` is the rule that decides which app events wake a team employee (`""` when none is set), null when no app event starts them. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{workflow_id?}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone; the whole team's, or one employee's with `workflow_id`, `not_found` when it is not the owner's; `since` is that 1st as YYYY-MM-DD) |
 | `get_workflow_costs` | `{}` | `{since, total_cost, workflows: [{workflow_id, name, total_cost, total_tokens}]}`: this month's estimated cost in USD and model tokens by employee, highest cost first, then one row with a null id and name for calls that belong to no employee. Answered by the usage service ([Pricing Service](./pricing_service.md)), read by the cost panel |
@@ -1388,6 +1414,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `apply_employee_changes` | `{workflow_id, idempotency_key, stop_work?: boolean}` | Safe Apply result with `activation_state` (`saved`, `waiting`, `starting`, `running`, `paused` or failure state). Ordinary Apply also returns fresh `employee`; explicit `stop_work` returns the apply result directly. Paused employees stay paused; queued work and conversation state survive. Errors include `invalid_request`, `not_found`, `conflict`, `invalid_changes`, `safe_apply_disabled`, `safe_apply_runtime_required` and `apply_failed` |
 | `rename_employee` | `{workflow_id, name}` (spaces collapsed, at most 40 characters) | `{employee}`: renames the workflow (a new slug, the workspace folder moved, `workflow.renamed` sent), and each agent's instructions a hire wrote take the new name in their opening ("You are <name>, ..."); instructions the owner rewrote keep their words. Agents read them on every run, so nothing restarts. Errors: `invalid_request`, `not_found`, `save_failed` |
 | `set_employee_photo` | `{workflow_id, path \| null}` | `{employee}`: `path` is a PNG, JPEG, WebP or GIF the owner uploaded under `uploads/` (`POST /api/workspace/{workflow_id}/uploads`), at most 5 MB (`EMPLOYEE_PHOTO_MAX_BYTES`); `null` takes the photo away. Errors: `invalid_request`, `not_found`, `invalid_photo` (with `detail`), `unsupported` (a workflow built in the editor has no employee row to keep it on) |
+| `set_employee_wake_rule` | `{workflow_id, wake_rule}` (spaces collapsed, at most 200 characters; `""` clears it) | `{employee}`: writes the team plan's `wake_rule`; a running employee takes it on Apply (`pending_changes`). Errors: `invalid_request`, `not_found`, `unsupported` (no app event starts the employee), `save_failed` |
 | `send_chat_message` | `{message, role: "user", session_id: <workflow_id>, timestamp, client_message_id?, options?: {web?, model?, effort?}}` (`model_unavailable` with `detail` when the model chosen can't answer) | `{timestamp, delivery, message_id, run_id}`: `"now"` while running, starting or resuming; `"queued"` while paused or pausing (it runs on Resume). In any other state `not_running`, and nothing is saved or sent; `run_in_progress` (with the live `run_id`) while a run is live, unless its turn waits on the owner's answer to a call: then a plain message declines that call and answers `{message_id: null, run_id: null, declined: {run_id, approval_ids}, delivery}` ([chat_protocol.md](./chat_protocol.md#approvals)). `run_id` is null when no deployed chat trigger answers the session. Session `"default"` works as before, with no `delivery` |
 | `get_chat_messages` | `{session_id, limit?, all_generations?}` | `{protocol_version: 2, messages, thread, active_runs}`, messages oldest first, each `{id, role, message, timestamp, run_key, ...}` (the full shape is in [chat_protocol.md](./chat_protocol.md#messages)). Controlled active run snapshots also include their owning `workflow_control`. Timestamps carry their UTC offset; `run_key` is the generation the row was written in. Without `all_generations`, only the latest generation's rows (none after a Reset; every row when the workflow was never started). A failed read answers `read_failed`, never an empty thread |
 | `stop_chat_run` | `{run_id, expected_revision, idempotency_key}` for controlled runs; `{run_id}` for legacy | Controlled: generation Stop payload with `run_id` and `resumable: true`; the owning root is checked. Legacy: terminal chat `stopping` / `stopped`. Full acknowledgement and error contract: [chat_protocol.md](./chat_protocol.md#controlled-stop-acknowledgement) |
