@@ -20,6 +20,7 @@ class CreateAgent(BaseModel):
     workflow_id: str = Field(min_length=1, max_length=255)
     node_type: str = Field(min_length=1, max_length=255)
     mutation_id: UUID
+    parent_node_id: str | None = Field(default=None, max_length=255)
     position: tuple[float, float] = (0, 0)
     parameters: dict = Field(default_factory=dict)
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
@@ -66,24 +67,28 @@ async def create_agent(body: CreateAgent, request: Request):
         nodes = [NewNode("agent", body.node_type, cls.display_name, parameters, body.position)]
         if getattr(cls, "requires_context", False):
             nodes.append(NewNode("context", "context", "Context", position=(body.position[0], body.position[1] + 180), context_of="agent"))
-        if body.node_type == "ai_employee":
-            from services.employee_team_connection import employee_skill_parameters, task_manager_additions
+        if body.node_type in {"ai_employee", "orchestrator_agent"}:
+            from services.employee_team_connection import employee_skill_parameters, manager_review_additions
             x, y = body.position
-            manager = task_manager_additions("agent", (x - 220, y + 180))
+            manager = manager_review_additions("agent", (x, y))
             skills = NewNode("lead_skills", "masterSkill", "Lead instructions", employee_skill_parameters("lead"),
                              position=(x + 220, y + 180))
             additions = GraphAdditions(nodes=[*nodes, *manager.nodes, skills],
                                        edges=[*manager.edges, skill_edge(skills.ref, "agent")])
         else:
             additions = GraphAdditions(nodes=nodes)
-    if body.node_type in {"ai_employee", "coding_agent"}:
+    if body.node_type in {"ai_employee", "orchestrator_agent", "coding_agent"}:
         for node in additions.nodes:
             node_cls = get_node_class(node.type)
             if (node_cls is None or node.type in policy["disabled_nodes"]
                     or set(node_cls.group).intersection(policy["disabled_groups"])):
                 raise HTTPException(status_code=403, detail=f"{cls.display_name} requires the enabled {node.label} node")
-    result = await apply_graph_additions(database, body.workflow_id, additions,
-        mutation_id=f"create-agent:{principal}:{body.mutation_id}", authorize=authorize)
+    try:
+        result = await apply_graph_additions(database, body.workflow_id, additions,
+            mutation_id=f"create-agent:{principal}:{body.mutation_id}", authorize=authorize,
+            editor_team_parent=body.parent_node_id or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return {"node_ids": result.node_ids, "operations": result.operations, "applied": result.applied,

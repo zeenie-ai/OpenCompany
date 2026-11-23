@@ -97,9 +97,12 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
         // A registry refresh can invalidate the cache between drag and drop.
         // Carry the palette's creation recipe with the drag as a fallback.
         const uiHints = spec?.uiHints ?? nodeData.uiHints;
+        const orchestrator = nodes.find(node => node.type === 'orchestrator_agent');
+        const managedTeam = orchestrator && edges.some(edge => edge.source === orchestrator.id
+          && edge.targetHandle === 'input-teammates' && nodes.some(node => node.id === edge.target && node.type === 'ai_employee'));
         const authoritativeAgent = uiHints?.createsAgentBundle || (
           spec?.componentKind === 'agent' && uiHints?.creationParameters?.runtime_behavior_version === 1
-        );
+        ) || (managedTeam && isAgentType(nodeData.type));
         if (uiHints?.createsBrowserAgent || authoritativeAgent) {
           const store = useAppStore.getState();
           if (!setEdges || !store.currentWorkflow || store.currentWorkflow.id !== workflowId) {
@@ -107,13 +110,15 @@ export const useDragAndDrop = ({ nodes, setNodes, edges = [], setEdges, saveNode
             return;
           }
           const mutationId = crypto.randomUUID();
+          const manager = nodes.find(node => node.selected && (node.type === 'ai_employee' || node.type === 'orchestrator_agent'));
+          const parent = manager ? { parent_node_id: manager.id } : {};
           const create = async () => {
             try {
               const result = await createSavedGraphResource(workflowId,
                 flushCanvas ?? (() => useAppStore.getState().updateWorkflow({ nodes, edges })),
                 () => uiHints?.createsBrowserAgent
-                  ? createBrowserAgent({ workflow_id: workflowId, position: [position.x, position.y], ...(globalModelDefaults || {}) }, mutationId)
-                  : createAgent({ workflow_id: workflowId, node_type: nodeData.type, position: [position.x, position.y],
+                  ? createBrowserAgent({ workflow_id: workflowId, position: [position.x, position.y], ...parent, ...(globalModelDefaults || {}) }, mutationId)
+                  : createAgent({ workflow_id: workflowId, node_type: nodeData.type, position: [position.x, position.y], ...parent,
                     parameters: { ...(nodeData.data || {}), ...(globalModelDefaults || {}) } }, mutationId));
               if (!result) return;
               if (useAppStore.getState().currentWorkflow?.id === workflowId) {

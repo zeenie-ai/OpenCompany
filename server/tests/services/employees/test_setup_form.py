@@ -37,6 +37,18 @@ def test_the_card_is_the_one_the_client_corpus_holds():
     assert app_names(DRAWN["reply"]) == ["WhatsApp", "Google Calendar"]
 
 
+def test_proposed_reporting_lines_survive_the_generated_card_and_form_refinements():
+    from services.employees.team_recipe import preview_from_reply
+
+    roles = [
+        {"key": "editor", "name": "Editor", "responsibility": "Review sources", "kind": "employee", "reports_to": "orchestrator"},
+        {"key": "research", "name": "Researcher", "responsibility": "Find sources", "kind": "specialist", "reports_to": "editor"},
+    ]
+    card = fill_form(form(team=roles), JOB)
+    assert fields_from_reply(card)["team"] == roles
+    assert preview_from_reply(JOB, card) == roles
+
+
 def test_the_card_holds_the_core_of_a_setup_screen():
     drawn = elements(fill_form(DRAWN["fields"], JOB))
     assert sorted(element["type"] for element in drawn.values()) == ["AgentCard", "Button", "Button", "Card", "Plan", "Stack", "Toggle", "Toggle"]

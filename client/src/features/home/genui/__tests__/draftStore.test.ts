@@ -49,9 +49,10 @@ describe('submitDraft', () => {
       team: [{ responsibility: 'Checks your calendar', node_type: 'productivity_agent' }, { responsibility: '' }, null],
     });
     await submitDraft(send, 'Book my appointments');
-    expect(useDraftStore.getState().team).toEqual([{ responsibility: 'Checks your calendar' }]);
+    expect(useDraftStore.getState().team).toEqual([{ key: 'role-1', name: 'Specialist 1', responsibility: 'Checks your calendar',
+      reports_to: 'orchestrator', kind: 'specialist' }]);
     discardDraft(send);
-    expect(useDraftStore.getState().team).toEqual([]);
+    expect(useDraftStore.getState().team).toBeNull();
   });
 
   it('sends the job with a fresh draft token and shows the reply', async () => {

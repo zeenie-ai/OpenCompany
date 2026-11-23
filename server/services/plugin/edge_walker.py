@@ -67,9 +67,8 @@ def _delegate_slug(value: Any) -> str:
 def build_teammate_descriptors(node_id: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Build deterministic, LLM-visible identities for a lead's teammates.
 
-    Specialized agents retain their stable type-derived name. Custom
-    ``aiAgent`` nodes are label-addressable and receive a node-id suffix when
-    their label is empty or collides on the same lead surface.
+    A single specialist uses its type-derived name. Custom and repeated
+    roles use their labels, with a node-id suffix when labels collide.
     """
     nodes = context.get("nodes", []) or []
     edges = context.get("edges", []) or []
@@ -92,9 +91,11 @@ def build_teammate_descriptors(node_id: str, context: Dict[str, Any]) -> List[Di
             "_slug": _delegate_slug(raw_label),
         })
 
-    custom_counts = Counter(c["_slug"] for c in candidates if c["node_type"] == "aiAgent" and c["_raw_label"])
+    type_counts = Counter(item["node_type"] for item in candidates)
+    label_types = {"aiAgent", *(kind for kind, count in type_counts.items() if count > 1)}
+    custom_counts = Counter(c["_slug"] for c in candidates if c["node_type"] in label_types and c["_raw_label"])
     for item in candidates:
-        if item["node_type"] == "aiAgent":
+        if item["node_type"] in label_types:
             needs_suffix = not item["_raw_label"] or custom_counts[item["_slug"]] > 1
             stable_id = hashlib.sha1(str(item["node_id"]).encode("utf-8")).hexdigest()[:8]
             suffix = f"_{stable_id}" if needs_suffix else ""

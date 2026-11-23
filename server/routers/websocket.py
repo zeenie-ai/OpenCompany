@@ -874,6 +874,27 @@ async def handle_clear_node_output(data: Dict[str, Any], websocket: WebSocket) -
     }
 
 
+async def _validate_workflow_draft(data: dict, websocket: WebSocket) -> dict:
+    from services.employee_team_connection import EmployeeTeamValidationError
+    from services.employees.store import get_by_workflow
+    from services.employees.team_runtime import admit_team_plan
+    from services.workflow_validator import validate_workflow
+
+    nodes, edges = data.get("nodes", []), data.get("edges", [])
+    workflow_id = data.get("workflow_id")
+    if workflow_id and any(node.get("type") in {"ai_employee", "orchestrator_agent"} for node in nodes):
+        database = container.database()
+        employee = await get_by_workflow(database, str(workflow_id))
+        owner = str(getattr(getattr(websocket, "state", None), "user_id", None) or "owner")
+        plan = (employee.team_plan or {}) if employee and employee.owner_id == owner else {}
+        if plan.get("version") == 3:
+            try:
+                nodes = await admit_team_plan(database, workflow_id, nodes, edges, captured_plan=plan)
+            except EmployeeTeamValidationError as exc:
+                return {"errors": exc.issues, "warnings": []}
+    return await validate_workflow(nodes, edges, parameters_by_id=data.get("parameters_by_id"))
+
+
 @ws_handler()
 async def handle_validate_workflow(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     """Run pre-execution validation on a workflow graph.
@@ -891,14 +912,7 @@ async def handle_validate_workflow(data: Dict[str, Any], websocket: WebSocket) -
     Returns:
         ``{"success": True, "report": {"errors": [...], "warnings": [...]}}``.
     """
-    from services.workflow_validator import validate_workflow
-
-    report = await validate_workflow(
-        nodes=data.get("nodes", []),
-        edges=data.get("edges", []),
-        parameters_by_id=data.get("parameters_by_id"),
-    )
-    return {"report": report}
+    return {"report": await _validate_workflow_draft(data, websocket)}
 
 
 @ws_handler()
@@ -932,13 +946,7 @@ async def handle_execute_workflow(data: Dict[str, Any], websocket: WebSocket) ->
     # Pre-execute validation gate. force=True overrides errors (matches the
     # "Run anyway" UX in Windmill); warnings never block.
     if not force:
-        from services.workflow_validator import validate_workflow
-
-        report = await validate_workflow(
-            nodes=nodes,
-            edges=edges,
-            parameters_by_id=data.get("parameters_by_id"),
-        )
+        report = await _validate_workflow_draft(data, websocket)
         if report["errors"]:
             return {
                 "success": False,

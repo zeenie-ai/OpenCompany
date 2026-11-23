@@ -82,6 +82,24 @@ async def broadcast_agent_task_failed(
     )
 
 
+async def publish_instance_task_outcome(outcome: dict[str, Any]) -> None:
+    """Publish the receipt committed alongside a v3 instance review delivery."""
+    status = {"submitted": "completed", "failed": "error"}[outcome["status"]]
+    task_id = outcome["task_id"]
+    event_id = f"{task_id}:attempt:{outcome['attempt']}:revision:{outcome['revision']}:{status}"
+    lifecycle = {key: outcome[key] for key in (
+        "generation", "team_id", "job_id", "execution_id", "root_execution_id",
+        "attempt", "revision", "agent_instance_id", "assigning_run_id", "reviewer_instance_id",
+    ) if key in outcome}
+    await _broadcast_task_event(
+        task_id=task_id, status=status, agent_name=outcome["agent_name"],
+        agent_node_id=outcome["agent_node_id"], parent_node_id=outcome["parent_node_id"],
+        workflow_id=outcome["workflow_id"], result=outcome.get("result"),
+        error=outcome.get("error"), lifecycle_data=lifecycle, event_id=event_id,
+        controller_workflow_id=outcome.get("controller_workflow_id"),
+    )
+
+
 async def _broadcast_task_event(
     *,
     task_id: str,
@@ -94,6 +112,7 @@ async def _broadcast_task_event(
     error: Optional[str] = None,
     event_id: Optional[str] = None,
     lifecycle_data: Optional[dict[str, Any]] = None,
+    controller_workflow_id: Optional[str] = None,
 ) -> None:
     """Build the envelope and route it through
     :func:`services.events.dispatch.emit` to the consumers of
@@ -102,7 +121,7 @@ async def _broadcast_task_event(
     The envelope's ``data`` is exactly what the taskTrigger filter reads.
     It holds the child agent's answer or error, so it is not broadcast.
     """
-    from services.events.dispatch import emit
+    from services.events.dispatch import emit, signal_generation_event
     from services.events.envelope import WorkflowEvent
     from services.status_broadcaster import get_status_broadcaster
 
@@ -132,7 +151,11 @@ async def _broadcast_task_event(
     if event_id:
         envelope.id = event_id
     envelope.workflow_id = workflow_id
-    await emit(envelope, wire_routing_key=_WIRE_ROUTING_KEY, broadcast=False)
+    if controller_workflow_id:
+        if not await signal_generation_event(envelope, controller_workflow_id, payload["generation"]):
+            return
+    else:
+        await emit(envelope, wire_routing_key=_WIRE_ROUTING_KEY, broadcast=False)
 
     identity = WorkflowEvent.task_completed(
         task_id=task_id,
@@ -152,4 +175,5 @@ async def _broadcast_task_event(
 __all__ = [
     "broadcast_agent_task_completed",
     "broadcast_agent_task_failed",
+    "publish_instance_task_outcome",
 ]

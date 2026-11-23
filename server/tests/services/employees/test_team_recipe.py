@@ -13,12 +13,12 @@ from services.graph_build import label_key
 from services.workflow_validator import validate_workflow
 
 
-def build(*, manual=True, trigger=None, allowed=lambda _: True, skills=(), job="Research customers and book appointments", memory=True, timezone="UTC"):
+def build(*, manual=True, trigger=None, allowed=lambda _: True, skills=(), job="Research customers and book appointments", memory=True, timezone="UTC", team=None):
     request = HireEmployeeRequest.model_validate({
         "idempotency_key": "team-test", "job": job, "name": "Maya", "role": "Receptionist",
         "apps": ["Google Calendar"] if manual else ["WhatsApp", "Google Calendar"],
         "steps": [{"title": "Research information"}, {"title": "Book appointments"}],
-        "trigger": trigger or ({"kind": "manual"} if manual else {"kind": "app_event", "app": "WhatsApp"}),
+        "trigger": trigger or ({"kind": "manual"} if manual else {"kind": "app_event", "app": "WhatsApp"}), "team": team,
     })
     return build_employee_graph(BuildInputs(
         workflow_id="71", request=request, apps=[get_app("google_calendar")] if manual else [get_app("whatsapp"), get_app("google_calendar")],
@@ -29,6 +29,17 @@ def build(*, manual=True, trigger=None, allowed=lambda _: True, skills=(), job="
 
 def node(built, role):
     return next(node for node in built.nodes if node["id"] == built.node_roles[role])
+
+
+@pytest.mark.parametrize("manual", [True, False])
+async def test_reviewed_empty_roster_creates_only_the_two_permanent_roles(manual):
+    built = build(manual=manual, team=[])
+    [orchestrator] = built.team_plan["members"]
+    assert orchestrator["node_type"] == "orchestrator_agent"
+    assert orchestrator["parent_node_id"] == built.team_plan["talk_node_id"]
+    assert "report the missing capability" in built.parameters[orchestrator["node_id"]]["system_message"]
+    report = await validate_workflow(built.nodes, built.edges, parameters_by_id=built.parameters)
+    assert report["errors"] == []
 
 
 @pytest.mark.parametrize("manual", [True, False])
@@ -52,7 +63,8 @@ def test_each_tool_node_has_one_owner_and_private_clock(manual, memory):
 
 
 def test_selection_is_bounded_and_job_specific():
-    assert team_preview("Research competitors") == [{"responsibility": "Researches information"}]
+    assert team_preview("Research competitors") == [{"key": "research", "name": "Research", "kind": "specialist",
+                                                     "reports_to": "orchestrator", "responsibility": "Researches information"}]
     assert [role.key for role in select_responsibilities("Manage meetings and Gmail", ["Google Calendar"])] == ["calendar", "operations"]
     assert 1 <= len(select_responsibilities("Do a task")) <= 3
     assert len(select_responsibilities("Research software and social posts and email appointments")) == 3
@@ -112,7 +124,7 @@ def test_researching_an_existing_website_does_not_grant_coding_tools():
 def test_role_prompts_describe_the_tools_the_contact_and_lead_own():
     built = build()
     contact = built.parameters[built.node_roles["talk_agent"]]["system_message"]
-    lead = built.parameters[built.node_roles["agent"]]["system_message"]
+    lead = built.parameters[built.node_roles["orchestrator"]]["system_message"]
     assert "submit_job" in contact and "write_todos" not in contact
     assert "add_subagent" in contact and "target_member_id" in contact
     assert "'continue'" in contact and "required_access" in contact
@@ -140,7 +152,7 @@ def test_hire_refuses_a_recipe_that_reintroduces_shared_tools(monkeypatch):
         team = compose(built, inputs)
         tool = next(edge["source"] for edge in team.edges if edge.get("targetHandle") == "input-tools"
                     and edge.get("target") == team.node_roles["talk_agent"])
-        team.edges.append(tool_edge(tool, team.node_roles["agent"]).to_dict())
+        team.edges.append(tool_edge(tool, team.node_roles["orchestrator"]).to_dict())
         return team
 
     monkeypatch.setattr(team_recipe, "build_team", broken_recipe)
@@ -151,10 +163,11 @@ def test_hire_refuses_a_recipe_that_reintroduces_shared_tools(monkeypatch):
 
 def test_manual_team_has_separate_contact_and_scoped_specialists():
     built = build(skills=[LibrarySkill("calendar-care", "Book appointments", "Check for conflicts."), LibrarySkill("software-style", "Write software", "Prefer clear code.")])
-    lead, talk = built.node_roles["agent"], built.node_roles["talk_agent"]
+    lead, talk = built.node_roles["orchestrator"], built.node_roles["talk_agent"]
     assert lead != talk
     assert node(built, "agent")["type"] == "ai_employee"
-    assert node(built, "talk_agent")["type"] == "aiAgent"
+    assert node(built, "talk_agent")["type"] == "ai_employee"
+    assert node(built, "orchestrator")["type"] == "orchestrator_agent"
     assert built.team_plan["requires"] == ["temporal", "agent_workflow"]
     members = built.team_plan["members"]
     assert 1 <= len(members) <= 3
@@ -169,8 +182,8 @@ def test_manual_team_has_separate_contact_and_scoped_specialists():
     assert "calendar-care" in calendar["skills"]
     assert "software-style" not in calendar["skills"]
     for member in members:
-        assert any(edge["source"] == member["node_id"] and edge["sourceHandle"] == "output-top" and edge["target"] == lead and edge["targetHandle"] == "input-teammates" for edge in built.edges)
-    assert built.parameters[built.node_roles["task_trigger"]]["parent_node_id"] == lead
+        assert any(edge["source"] == member["node_id"] and edge["sourceHandle"] == "output-top" and edge["target"] == member["parent_node_id"] and edge["targetHandle"] == "input-teammates" for edge in built.edges)
+    assert built.parameters[built.node_roles["task_trigger"]]["parent_node_id"] == talk
 
 
 def test_submission_receipts_cannot_reach_reviewed_delivery():
@@ -180,7 +193,7 @@ def test_submission_receipts_cannot_reach_reviewed_delivery():
     assert built.parameters[roles["job_reply"]]["message"] == "{{" + label_key(node(built, "agent")["data"]["label"]) + ".response}}"
     assert not any(edge["target"] == roles["job_reply"] for edge in built.edges)
     assert not any(node["type"] == "employeeJob" for node in built.nodes)
-    assert built.team_plan["version"] == 2
+    assert built.team_plan["version"] == 3
     assert any(edge["source"] == roles["talk_agent"] and edge["target"] == roles["talk_reply"] for edge in built.edges)
 
 
@@ -217,11 +230,11 @@ def test_lead_and_talk_own_their_tools_and_instructions_under_default_hire_polic
     plan, roles = built.team_plan, built.node_roles
     assert built.trigger["kind"] == trigger["kind"]
     assert {node["id"] for node in built.nodes if node["type"] == "taskManager"} == {
-        roles["task_manager"], roles["talk_task_manager"],
+        roles["task_manager"], roles["orchestrator_task_manager"],
     }
     assigned = set()
     for owner, manager, holder in (
-        (plan["lead_node_id"], plan["task_manager_node_id"], plan["lead_skill_node_id"]),
+        (plan["orchestrator_node_id"], roles["orchestrator_task_manager"], roles["orchestrator_skills"]),
         (plan["talk_node_id"], plan["talk_task_manager_node_id"], plan["talk_skill_node_id"]),
     ):
         assert [edge for edge in built.edges if edge["source"] == manager] == [tool_edge(manager, owner).to_dict()]
@@ -233,7 +246,7 @@ def test_lead_and_talk_own_their_tools_and_instructions_under_default_hire_polic
     assert len(assigned) == 4
     assert roles["task_manager"] == plan["task_manager_node_id"] and roles["talk_task_manager"] == plan["talk_task_manager_node_id"]
     assert roles["lead_skills"] == plan["lead_skill_node_id"] and roles["talk_skills"] == plan["talk_skill_node_id"]
-    lead_skills = built.parameters[roles["lead_skills"]]["skills_config"]
+    lead_skills = built.parameters[roles["orchestrator_skills"]]["skills_config"]
     talk_skills = built.parameters[roles["talk_skills"]]["skills_config"]
     assert set(lead_skills) == {"skill", "team-delegation"} and lead_skills["team-delegation"]["instructions"]
     if library:
@@ -254,3 +267,22 @@ async def test_team_passes_real_live_contract_validation():
     built = build()
     report = await validate_workflow(nodes=built.nodes, edges=built.edges, parameters_by_id=built.parameters)
     assert report["errors"] == [], report["errors"]
+
+
+async def test_reviewed_hierarchy_is_the_saved_graph_even_when_worker_precedes_manager():
+    from services.employee_team_connection import validate_employee_team_connection, EmployeeTeamValidationError
+    built = build(team=[
+        {"key": "research", "name": "Researcher", "responsibility": "Collect evidence", "reports_to": "editor"},
+        {"key": "editor", "name": "Editor", "kind": "employee", "responsibility": "Review evidence"},
+    ])
+    plan = built.team_plan
+    workers = {member["role"]: member for member in plan["members"]}
+    assert workers["editor"]["parent_node_id"] == plan["orchestrator_node_id"]
+    assert workers["research"]["parent_node_id"] == workers["editor"]["node_id"]
+    assert workers["orchestrator"]["parent_node_id"] == plan["talk_node_id"]
+    assert built.parameters[workers["editor"]["task_trigger_node_id"]]["parent_node_id"] == workers["editor"]["node_id"]
+    assert not (await validate_workflow(built.nodes, built.edges, parameters_by_id=built.parameters))["errors"]
+    invalid = [dict(edge, target=plan["talk_node_id"]) if edge["source"] == workers["research"]["node_id"]
+               and edge["targetHandle"] == "input-teammates" else edge for edge in built.edges]
+    with pytest.raises(EmployeeTeamValidationError):
+        validate_employee_team_connection({"nodes": built.nodes, "edges": invalid}, plan)

@@ -111,6 +111,7 @@ const TaskManagerPanel: React.FC<Props> = ({ nodeId, workflowId, nodes, edges })
       const scope = {
         workflow_id: workflowId,
         team_lead_node_id: connectedLead.id,
+        task_board: true,
         ...(executionId !== 'active' ? { execution_id: executionId } : {}),
       };
       const response = await sendRequest<{ status?: TeamStatusView }>('get_team_status', scope);

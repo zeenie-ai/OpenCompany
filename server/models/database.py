@@ -673,6 +673,7 @@ class TeamTask(SQLModel, table=True):
     assigned_to: Optional[str] = Field(default=None, max_length=255)
     # Protocol 1 separates a graph template from its reusable conversation.
     assigned_instance_id: Optional[str] = Field(default=None, index=True, max_length=255)
+    assigning_run_id: Optional[str] = Field(default=None, index=True, max_length=255)
     assigned_run_id: Optional[str] = Field(default=None, max_length=255)
     protocol_version: int = Field(default=0)
     review_feedback: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))

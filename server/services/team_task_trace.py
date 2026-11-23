@@ -160,7 +160,7 @@ class TeamTaskTraceService:
             raise ValueError("invalid trace category filter")
         task = await self.team_service.get_durable_task(
             workflow_id=workflow_id, team_lead_node_id=team_lead_node_id,
-            execution_id=execution_id, task_id=task_id,
+            execution_id=execution_id, task_id=task_id, task_board=True,
         )
         attempts = task.get("attempts") or []
         attempt_number = task.get("current_attempt", 0) if attempt is None else int(attempt)

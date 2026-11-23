@@ -9,6 +9,7 @@ class OrchestratorAgentNode(SpecializedAgentBase):
     group = ("agent",)
     description = "Team lead that delegates to connected specialized agents"
     handles = team_lead_agent_handles()
+    ui_hints = {**SpecializedAgentBase.ui_hints, "createsAgentBundle": True}
     # No isTaskManagerPanel here: the panel dispatch in MiddleSection is
     # exclusive, so the hint would replace the agent's parameter form
     # (prompt / provider / model) with the task board. The board lives on

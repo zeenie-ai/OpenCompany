@@ -70,7 +70,7 @@ describe('TaskManagerPanel', () => {
     expect(screen.getByText('1m 5s')).toBeInTheDocument();
     expect(screen.getByText('70 in · 50 out')).toBeInTheDocument();
     expect(wsMock.sendRequest).toHaveBeenCalledWith('get_team_tasks', {
-      workflow_id: 'workflow-1', team_lead_node_id: 'lead', include_history: true,
+      workflow_id: 'workflow-1', team_lead_node_id: 'lead', task_board: true, include_history: true,
     });
   });
 
@@ -78,7 +78,7 @@ describe('TaskManagerPanel', () => {
     render(<TaskManagerPanel nodeId="lead" workflowId="workflow-1" nodes={nodes} edges={edges} />);
     expect(await screen.findByText('Implement feature')).toBeInTheDocument();
     expect(wsMock.sendRequest).toHaveBeenCalledWith('get_team_tasks', {
-      workflow_id: 'workflow-1', team_lead_node_id: 'lead', include_history: true,
+      workflow_id: 'workflow-1', team_lead_node_id: 'lead', task_board: true, include_history: true,
     });
   });
 
@@ -164,6 +164,14 @@ describe('TaskManagerPanel in the theme', () => {
     // Picking it again shows every task.
     await user.click(queued);
     expect(screen.getByText('Implement feature')).toBeInTheDocument();
+  });
+
+  it('shows Chat’s reviewed answer on the original board task', async () => {
+    serve([{ ...task, status: 'accepted', reviewed_job_result: 'Fourteen sources were verified.' }]);
+    renderPanel();
+    const dialog = await openTask();
+    expect(within(dialog).getByText('Chat Employee’s final answer')).toBeInTheDocument();
+    expect(within(dialog).getByText('Fourteen sources were verified.')).toBeInTheDocument();
   });
 
   it('opens a task in the editor’s modal, with Accept as its one strong button', async () => {

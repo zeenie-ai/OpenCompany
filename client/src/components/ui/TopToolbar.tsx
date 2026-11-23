@@ -7,6 +7,7 @@ import {
   FileText,
   ChevronDown,
   FilePlus,
+  UserPlus,
   FolderOpen,
   Upload,
   Download,
@@ -53,6 +54,8 @@ import { UsageButton } from '@/components/ui/UsageButton';
 import { cn } from '@/lib/utils';
 import { featureFlags } from '@/lib/featureFlags';
 import { ModeToggle } from '@/components/shell/ModeToggle';
+import { enterNormal } from '../../app/useShellActions';
+import { useHomeStore } from '../../features/home/state/homeStore';
 import { useCanvasDockStore } from '../../stores/canvasDockStore';
 import { useAuth } from '../../contexts/AuthContext';
 import { useApiKeys, GlobalModelState } from '../../hooks/useApiKeys';
@@ -252,6 +255,13 @@ const TopToolbar: React.FC<TopToolbarProps> = ({
               <FilePlus />
               New Workflow
             </DropdownMenuItem>
+            {featureFlags.normalMode && <DropdownMenuItem onSelect={() => {
+              useHomeStore.getState().showHire({ focus: true });
+              void enterNormal();
+            }}>
+              <UserPlus />
+              Hire an employee
+            </DropdownMenuItem>}
             <DropdownMenuItem onSelect={onOpen}>
               <FolderOpen />
               Open

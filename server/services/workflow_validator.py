@@ -82,9 +82,14 @@ async def validate_workflow(
     edges = edges or []
     parameters_by_id = parameters_by_id or {}
     errors.extend(employee_team_connection_issues(nodes, edges))
+    from services.task_trigger_routing import hierarchical_team, task_trigger_issues
+    review_issues = task_trigger_issues(nodes, edges, parameters_by_id)
+    # The editor's sanitized graph has no admitted plan. Surface conflicts
+    # there, and enforce them for new managed hires at Start and Apply.
+    (errors if hierarchical_team(nodes) else warnings).extend(review_issues)
     for node in nodes:
         plan = (node.get("data") or {}).get("employee_team_plan") or {}
-        if plan.get("version") == 2:
+        if plan.get("version") in (2, 3):
             try:
                 validate_employee_team_connection({"nodes": nodes, "edges": edges}, plan)
             except EmployeeTeamValidationError as exc:
@@ -241,13 +246,15 @@ async def validate_workflow(
 
     for lead_id in sorted({lead for lead, _ in team_edges}):
         descriptors = build_teammate_descriptors(lead_id, {"nodes": nodes, "edges": edges})
+        managed_lead = any((plan := (n.get("data") or {}).get("employee_team_plan") or {}).get("version") == 3
+                           and any(m.get("node_id") == lead_id for m in plan.get("members", [])) for n in nodes)
         by_type: Dict[str, List[Dict[str, Any]]] = {}
         by_name: Dict[str, List[Dict[str, Any]]] = {}
         for descriptor in descriptors:
             by_type.setdefault(descriptor["node_type"], []).append(descriptor)
             by_name.setdefault(descriptor["delegate_tool_name"], []).append(descriptor)
         for teammate_type, duplicates in sorted(by_type.items()):
-            if teammate_type != "aiAgent" and len(duplicates) > 1:
+            if not managed_lead and teammate_type != "aiAgent" and len(duplicates) > 1:
                 errors.append({
                     "code": "DUPLICATE_TEAMMATE_TYPE",
                     "node_id": lead_id,
@@ -278,7 +285,10 @@ async def validate_workflow(
             return
         next_path = [*path, node_id]
         # At most two delegated child layers beneath a root lead.
-        if len(next_path) - 1 > 2:
+        root_plan = (node_by_id[next_path[0]].get("data") or {}).get("employee_team_plan") or {}
+        depth_limit = 3 if root_plan.get("version") == 3 and (
+            len(next_path) > 1 and next_path[1] == root_plan.get("orchestrator_node_id")) else 2
+        if len(next_path) - 1 > depth_limit:
             depth_nodes.update(next_path)
             return
         for child_id in delegation_graph.get(node_id, []):

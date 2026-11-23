@@ -363,8 +363,11 @@ async def test_additive_upgrade_preserves_legacy_tasks(real_database):
         await session.commit()
     async with db.engine.begin() as connection:
         await connection.execute(text("DROP INDEX ix_team_tasks_assigned_instance_id"))
+        await connection.execute(text("DROP INDEX ix_team_tasks_assigning_run_id"))
+        await connection.execute(text("DROP INDEX ix_agent_instance_mutations_task_event_pending"))
         for table, columns in {
-            "team_tasks": ("assigned_instance_id", "assigned_run_id", "protocol_version", "review_feedback"),
+            "team_tasks": ("assigned_instance_id", "assigned_run_id", "assigning_run_id", "protocol_version", "review_feedback"),
+            "agent_instance_mutations": ("task_event_pending",),
             "team_task_attempts": ("assigned_instance_id", "assigned_run_id", "input_snapshot"),
         }.items():
             for column in columns:
@@ -374,6 +377,8 @@ async def test_additive_upgrade_preserves_legacy_tasks(real_database):
     async with db.get_session() as session:
         task = await session.get(TeamTask, "legacy")
         assert task.mission == "Keep this" and task.protocol_version == 0 and task.assigned_instance_id is None
+        assert task.assigning_run_id is None
+    assert await AgentInstanceService(db).pending_task_events(10) == []
 
 
 async def test_failed_lead_with_live_children_stays_halted_until_owner_retry(setup):

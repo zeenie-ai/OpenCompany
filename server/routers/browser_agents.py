@@ -18,6 +18,7 @@ class CreateBrowserAgent(BaseModel):
     workflow_id: str = Field(min_length=1, max_length=255)
     mutation_id: UUID
     browser_node_id: str | None = Field(default=None, max_length=255)
+    parent_node_id: str | None = Field(default=None, max_length=255)
     position: tuple[float, float] = (0, 0)
     provider: str | None = Field(default=None, max_length=255)
     model: str | None = Field(default=None, max_length=255)
@@ -76,8 +77,8 @@ async def create_browser_agent(body: CreateBrowserAgent, request: Request):
     try:
         result = await apply_graph_additions(database, body.workflow_id, browser_agent_additions(),
                                             mutation_id=f"browser-agent:{principal}:{body.mutation_id}",
-                                            prepare=prepare, authorize=authorize)
-    except NodeUserError as exc:
+                                            prepare=prepare, authorize=authorize, editor_team_parent=body.parent_node_id or "")
+    except (ValueError, NodeUserError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     if result is None:
         raise HTTPException(status_code=404, detail="Workflow not found")

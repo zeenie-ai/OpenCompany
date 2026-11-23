@@ -128,15 +128,26 @@ afterEach(() => {
 });
 
 describe('HireDraftPanel', () => {
-  it('keeps team details optional and allows hiring without choosing specialists', async () => {
-    useDraftStore.setState({ team: [{ responsibility: 'Checks your calendar' }, { responsibility: 'Researches information' }] });
+  it('shows the proposed hierarchy and lets the owner change reporting lines and roles', async () => {
+    useDraftStore.setState({ team: [
+      { key: 'calendar', name: 'Scheduler', responsibility: 'Checks your calendar', kind: 'specialist', reports_to: 'orchestrator' },
+      { key: 'research', name: 'Research', responsibility: 'Researches information', kind: 'employee', reports_to: 'orchestrator' },
+    ] });
     renderPanel();
     expect(await hireButton()).toBeEnabled();
     const summary = screen.getByText('Their team');
     const details = summary.closest('details');
-    expect(details).not.toHaveAttribute('open');
-    fireEvent.click(summary);
-    expect(screen.getByText('Checks your calendar')).toBeInTheDocument();
+    expect(details).toHaveAttribute('open');
+    expect(screen.getByDisplayValue('Checks your calendar')).toBeInTheDocument();
+    fireEvent.change(screen.getAllByLabelText('Reports to')[0], { target: { value: 'research' } });
+    expect(useDraftStore.getState().team?.[0].reports_to).toBe('research');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove role' })[1]);
+    expect(useDraftStore.getState().team?.[0].reports_to).toBe('orchestrator');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove role' }));
+    expect(useDraftStore.getState().team).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Add role' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add role' }));
+    expect(useDraftStore.getState().team).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Change something' })).toBeEnabled();
     expect(screen.queryByText('productivity_agent')).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: /specialist/i })).not.toBeInTheDocument();

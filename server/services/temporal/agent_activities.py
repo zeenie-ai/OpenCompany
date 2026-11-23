@@ -1332,6 +1332,9 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     employee_plan = await employee_runtime_plan(database, context)
     if employee_plan:
         context["employee_team_plan"] = employee_plan
+    from services.agent_instances.protocol import is_chat_intake
+    hierarchical = bool(employee_plan and employee_plan.get("version") == 3)
+    chat_intake = is_chat_intake(employee_plan, context)
 
     # Resolve {{node.field}} template variables — same step NodeExecutor
     # runs before dispatching to handlers in the legacy path. Without
@@ -1339,6 +1342,10 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     workflow_service = container.workflow_service()
     nodes = context.get("nodes") or []
     edges = context.get("edges") or []
+    if hierarchical and not chat_intake and not context.get("employee_job_id") and node_id == employee_plan["lead_node_id"]:
+        source_id = employee_plan.get("intake_trigger_node_id")
+        if source_id and source_id in {**(context.get("outputs") or {}), **(context.get("inputs") or {})}:
+            parameters["prompt"] = employee_plan["app_intake_prompt"]
     from services.employees.email_input import project_managed_gmail_parameters
     parameters, projected_context, email_projected = await project_managed_gmail_parameters(
         database, node_id, parameters, context, getattr(getattr(workflow_service, "_param_resolver", None), "resolve", None))
@@ -1495,7 +1502,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
     if not trigger_task_data and isinstance(input_data, dict):
         trigger_task_data = extract_task_event_payload(input_data)
     from services.employees.team_runtime import admit_employee_runtime_job
-    await admit_employee_runtime_job(database, context, employee_plan, prompt, trigger_task_data)
+    if not chat_intake:
+        await admit_employee_runtime_job(database, context, employee_plan, prompt, trigger_task_data)
     if trigger_task_data:
         await attach_employee_job(database, context, trigger_task_data)
         task_prompt = format_task_context(trigger_task_data)
@@ -1504,15 +1512,14 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         from services.employees.team_runtime import employee_lead_prompt
         prompt = await employee_lead_prompt(database, context, prompt)
     from services.employees.team_runtime import capture_employee_runtime
-    await capture_employee_runtime(database, context)
+    if not hierarchical or node_id == employee_plan["lead_node_id"]:
+        await capture_employee_runtime(database, context)
     from services.plugin.edge_walker import bind_employee_job_source
     await bind_employee_job_source(node_id, context, database, tool_data)
 
     # Team-handle edges are configuration edges and are intentionally not
-    # returned by collect_agent_connections.  Expand them here before tools
-    # are built, mirroring the legacy inline agent path.  Without this step
-    # Temporal removes teammates from graph scheduling but never exposes a
-    # delegate_to_* function to the lead LLM.
+    # returned by collect_agent_connections. Expand the direct reports for
+    # Task Manager bindings. Older canvases also use them as delegate tools.
     execution_team_id: Optional[str] = context.get("team_id")
     team_execution_id: Optional[str] = None
     if trigger_task_data:
@@ -1523,13 +1530,14 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             str(trigger_task_data.get("execution_id") or "") or None
         )
     owns_execution_team = False
-    if node_type in {"orchestrator_agent", "ai_employee"}:
+    teammates = []
+    if node_type in {"orchestrator_agent", "ai_employee"} and not chat_intake:
         # Each teammate comes with its own tools (``child_tools``), already
         # past the owner's Generated UI switch, as on the inline path.
         teammates = await collect_teammate_connections(
             node_id, walk_context, connection_database
         )
-        if teammates:
+        if teammates and not hierarchical:
             tool_data = [*(tool_data or []), *(dict(teammate) for teammate in teammates)]
         # A taskTrigger completion is a separate downstream automation run.
         # It must not mint a second empty "active" team for the same lead;
@@ -1548,7 +1556,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                     raise ValueError("The captured job team does not belong to this lead")
                 team = team or await get_agent_team_service().get_or_create_execution_team(
                     team_lead_node_id=node_id,
-                    teammates=teammates,
+                    teammates=employee_plan["members"] if hierarchical else teammates,
                     workflow_id=workflow_id,
                     execution_id=str(context.get("employee_job_id") or execution_id),
                     root_execution_id=root_execution_id,
@@ -1565,7 +1573,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         if context.get("agent_instance_id") and context.get("agent_instance_role") == "lead":
             owns_execution_team = True
 
-    if execution_team_id and workflow_id:
+    if execution_team_id and workflow_id and (not hierarchical or node_id == employee_plan["lead_node_id"]):
         from services.employees.jobs import bind_job_team
 
         await bind_job_team(
@@ -1692,10 +1700,22 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
 
     effective_tool_data = _without_web_tools(chat_options, list(tool_data or []))
     from services.agent_instances.protocol import enabled as instance_protocol_enabled
-    talk_manager = ((employee_plan or {}).get("talk_task_manager_node_id")
-                    if node_id == (employee_plan or {}).get("talk_node_id") else None)
-    instance_talk = bool(talk_manager or
-                         (instance_protocol_enabled(context) and employee_plan and node_id == employee_plan.get("talk_node_id")))
+    contact_turn = chat_intake if hierarchical else node_id == (employee_plan or {}).get("talk_node_id")
+    talk_manager = (employee_plan or {}).get("talk_task_manager_node_id") if contact_turn else None
+    instance_talk = bool(talk_manager or (instance_protocol_enabled(context) and employee_plan and contact_turn))
+    role = context.get("agent_instance_role") or "teammate"
+    manager_id = None
+    if hierarchical and context.get("agent_instance_id"):
+        if node_id == employee_plan["lead_node_id"]:
+            role, manager_id = "reviewer", employee_plan["task_manager_node_id"]
+        else:
+            member = next((m for m in employee_plan["members"] if m["node_id"] == node_id), {})
+            manager_id = member.get("task_manager_node_id")
+            if manager_id and teammates:
+                role = "manager"
+        # A background reviewer can act on its task and read tools explicitly
+        # assigned for the work. Only an owner chat turn can change the team.
+        effective_tool_data = [tool for tool in effective_tool_data if tool.get("node_type") not in {"agentBuilder", "chatUi"}]
     if context.get("agent_instance_id") and not any(item.get("node_type") == "taskManager" for item in effective_tool_data):
         effective_tool_data.append({"node_type": "taskManager", "node_id": f"{node_id}:instance_tools", "parameters": {}})
     try:
@@ -1713,8 +1733,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
                 "agent_instance_id": context.get("agent_instance_id"),
                 "agent_run_id": context.get("agent_run_id"),
                 "agent_lifecycle_version": 1, "agent_protocol_version": 1,
-                "teammates": teammates if context.get("agent_instance_role") == "lead" else [],
-                "role": "talk" if instance_talk else context.get("agent_instance_role") or "teammate",
+                "teammates": teammates if role in {"manager", "lead"} else [],
+                "role": "talk" if instance_talk else role,
                 "runtime_context": context,
             }}
         if frozen_runtime:
@@ -1774,7 +1794,15 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         if operations != {"submit_job", "get_job_status"}:
             raise ApplicationError("The contact's assigned Task Manager could not bind its job submission and status tools.",
                                    type="EmployeeTaskManagerUnavailable", non_retryable=True)
-    if (employee_plan and node_id == employee_plan.get("lead_node_id")
+    if hierarchical and manager_id and role in {"manager", "reviewer"}:
+        available = {tool["agent_template"]["node_id"] for tool in tools_payload
+                     if tool["tool_node_id"] == manager_id and tool.get("agent_operation") == "spawn"}
+        assigned = {m["node_id"] for m in employee_plan["members"] if m.get("parent_node_id") == node_id}
+        operations = {tool.get("agent_operation") for tool in tools_payload if tool["tool_node_id"] == manager_id}
+        if "accept_task" not in operations or (role == "manager" and assigned != available):
+            raise ApplicationError("The employee's assigned Task Manager does not match the admitted team.",
+                                   type="EmployeeTaskManagerUnavailable", non_retryable=True)
+    elif (not hierarchical and employee_plan and node_id == employee_plan.get("lead_node_id")
             and employee_plan.get("task_manager_node_id") and context.get("agent_instance_role") == "lead"):
         assigned = {member["node_id"] for member in employee_plan["members"]}
         available = {tool["agent_template"]["node_id"] for tool in tools_payload
@@ -1823,9 +1851,18 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         system_message += ("\nFor work the current team can perform, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. "
                            "Use get_job_status before reporting progress or retrying a job. Queued does not mean started or completed. "
                            "If the job failed, report its failure instead of telling the owner to keep waiting. Keep this conversation with the owner.")
+    elif hierarchical and role == "reviewer":
+        system_message += ("\nReview the Orchestrator's submission against the original request using get_task and inspect_task. "
+                           "Request changes on the same task when needed. After accepting the work, write the final answer "
+                           "to the user in your own words, including the evidence and artifact links they need. "
+                           "If a missing approved role prevents completion, tell the owner what is missing and what work "
+                           "was completed. The owner can update the team in Builder, Apply, and request a new job.")
     elif context.get("agent_instance_id"):
         from services.agent_instances.tools import orchestration_prompt
         system_message = f"{system_message}\n\n{orchestration_prompt()}"
+        if hierarchical:
+            system_message += ("\nIf an approved role or capability is missing, report the gap and its impact to "
+                               "your assigning employee in your task result. The owner can change the team for future work.")
     elif any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
         from services.plugin.edge_walker import TEAMMATE_ROSTER_NOTE, format_teammate_roster_line
 
@@ -2007,7 +2044,7 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "browser_runtime_version": browser_runtime_version,
         "employee_job_id": context.get("employee_job_id"),
         "employee_team_plan": employee_plan,
-        "employee_runtime_delivery": bool(employee_plan and node_id == employee_plan.get("lead_node_id")
+        "employee_runtime_delivery": bool(not hierarchical and employee_plan and node_id == employee_plan.get("lead_node_id")
                                           and not context.get("agent_instance_id")),
         "provider": provider,
         "model": model,
@@ -2049,13 +2086,15 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         "context_pressure_version": CONTEXT_PRESSURE_VERSION,
         # What the model reads when a tool fails, pinned the same way.
         "tool_error_version": TOOL_ERROR_VERSION,
-        "auto_rebind_tools": auto_rebind_tools,
+        "auto_rebind_tools": auto_rebind_tools and not hierarchical,
         "max_concurrent_subagents": max_concurrent_subagents,
         "max_delegation_depth": max_delegation_depth,
         "team_id": execution_team_id,
         "team_execution_id": team_execution_id,
         "team_task_id": context.get("team_task_id"),
-        "owns_execution_team": owns_execution_team,
+        # Hierarchical teams close with the accepted outer task's delivery.
+        # A previous subtask attempt may have failed and subsequently been replaced.
+        "owns_execution_team": owns_execution_team and not hierarchical,
         "root_execution_id": str(
             context.get("root_execution_id")
             or context.get("execution_id")

@@ -242,7 +242,7 @@ async def handle_deploy_workflow(data: Dict[str, Any], websocket: WebSocket) -> 
     # Preserve the generation's captured plan when re-arming. A newer saved
     # employee plan (including visible-link upgrades) belongs to Start/Apply.
     captured_plan = next(((node.get("data") or {}).get("employee_team_plan")
-                          for node in nodes if ((node.get("data") or {}).get("employee_team_plan") or {}).get("version") == 2), None)
+                          for node in nodes if ((node.get("data") or {}).get("employee_team_plan") or {}).get("version") in (2, 3)), None)
     from services.employee_team_connection import EmployeeTeamValidationError
     try:
         nodes = await admit_team_plan(container.database(), str(workflow_id or ""), list(safe_graph["nodes"]),

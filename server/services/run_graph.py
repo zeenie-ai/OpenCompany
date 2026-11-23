@@ -9,6 +9,7 @@ from typing import Any
 
 from constants import WORKFLOW_TRIGGER_TYPES
 from services.employee_team_connection import is_employee_team_edge
+from services.task_trigger_routing import hierarchical_team, task_trigger_owners
 
 
 def collect_downstream_node_ids(
@@ -25,6 +26,16 @@ def collect_downstream_node_ids(
     The firing node itself is excluded from the returned set.
     """
     node_types = {node["id"]: node.get("type", "") for node in nodes}
+    team = hierarchical_team(nodes)
+    # Review arrivals wake a durable employee instance. Its ordinary main
+    # output (in particular Chat's reply sink) belongs to its own turn.
+    ends = (task_trigger_owners(node_id, nodes, edges)
+            if team and node_types.get(node_id) == "taskTrigger" else set())
+    # App/schedule arrivals start durable jobs too. Their final deliveries
+    # use the job's captured destinations after acceptance. Only an actual
+    # conversation turn can use Chat's ordinary response edge.
+    if team.get("talk_node_id") and node_types.get(node_id) != "chatTrigger":
+        ends.add(team["talk_node_id"])
     outgoing: dict[str, list[str]] = {}
     dependencies: dict[str, list[str]] = {}
     for edge in edges:
@@ -35,8 +46,9 @@ def collect_downstream_node_ids(
         source, target = edge.get("source"), edge.get("target")
         if source not in node_types or target not in node_types:
             continue
-        outgoing.setdefault(source, []).append(target)
         handle = edge.get("targetHandle") or edge.get("target_handle") or ""
+        if source not in ends and not (team and handle == "input-teammates"):
+            outgoing.setdefault(source, []).append(target)
         if handle.startswith("input-") and handle != "input-main":
             dependencies.setdefault(target, []).append(source)
 

@@ -80,7 +80,7 @@
   "control_types": ["Toggle", "Choice", "Input"],
   "actions": {
     "setState": "{statePath, value} — update UI state",
-    "hire_employee": "{name, role, apps:[string], trigger, sendsVia} — add this employee to the team and start them working",
+    "hire_employee": "{name, role, apps:[string], trigger, sendsVia, team} — add this employee to the team and start them working",
     "refine": "{} — let the owner describe a change to this setup",
     "connect_app": "{app} — connect an app by name",
     "open_connectors": "{} — open the apps panel"

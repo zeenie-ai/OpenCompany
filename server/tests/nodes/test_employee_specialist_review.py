@@ -11,12 +11,12 @@ from services.employees.team_runtime import admit_team_plan
 from services.workflow_migrations import normalize_workflow_graph
 from services.workflow_sanitizer import sanitize_workflow_graph
 from tests.nodes._agent_builder_harness import builder_fixture, database_fixture, call, ctx, save_graph, saved
-from tests.services.employees.test_team_plan_admission import inbox_assistant
+from tests.services.employees.test_team_plan_admission import inbox_assistant, hierarchical_inbox_assistant
 
 
 @pytest.fixture
-async def team(builder, database):
-    built = inbox_assistant()
+async def team(builder, database, request):
+    built = hierarchical_inbox_assistant() if getattr(request, "param", None) == "v3" else inbox_assistant()
     normalized = normalize_workflow_graph('7', built.nodes, built.edges, built.parameters)
     await save_graph(database, sanitize_workflow_graph({**normalized.graph_data(), 'owner_id': 'owner'}), normalized.node_parameters)
     row, _ = await store.reserve(database, owner_id='owner', idempotency_key='marina', payload_hash='case',
@@ -28,6 +28,29 @@ async def team(builder, database):
     contact.node_id = built.node_roles['builder']
     return SimpleNamespace(contact=contact, lead=built.node_roles['agent'],
         socket=SimpleNamespace(scope={'path': '/ws/status'}, state=SimpleNamespace(user_id='owner')))
+
+
+@pytest.mark.parametrize("team", ["v3"], indirect=True)
+async def test_approved_nested_manager_then_worker_keeps_exact_parent_and_review_board(database, team):
+    proposed = await call("add_subagent", team.contact, agent_type="ai_employee", purpose="Review financial data")
+    [grant] = proposed.required_access
+    decision = {"access_request_id": grant["request_id"], "allow": True}
+    assert (await handle_decide_employee_access(decision, team.socket))["activation_state"] == "saved"
+    plan = (await store.get_by_workflow(database, "7")).team_plan
+    manager = next(member for member in plan["members"] if member["node_type"] == "ai_employee")
+    assert manager["parent_node_id"] == plan["orchestrator_node_id"]
+    assert (await database.get_node_parameters(manager["task_trigger_node_id"]))["parent_node_id"] == manager["node_id"]
+    contact = ctx(plan["talk_node_id"], call="add-analyst", run_scope=team.contact.raw["run_scope"])
+    contact.node_id = team.contact.node_id
+    proposed = await call("add_subagent", contact, agent_type="aiAgent", target_member_id=manager["node_id"], purpose="Check arithmetic")
+    [grant] = proposed.required_access
+    decision = {"access_request_id": grant["request_id"], "allow": True}
+    assert (await handle_decide_employee_access(decision, team.socket))["activation_state"] == "saved"
+    assert await handle_decide_employee_access(decision, team.socket) == {"success": True}
+    graph = await saved(database)
+    admitted = await admit_team_plan(database, "7", graph["nodes"], graph["edges"])
+    plan = next(node for node in admitted if node["id"] == plan["talk_node_id"])["data"]["employee_team_plan"]
+    assert [(m["node_type"], m["parent_node_id"]) for m in plan["members"] if m["node_type"] == "aiAgent"] == [("aiAgent", manager["node_id"])]
 
 
 async def test_allow_adds_and_registers_specialist_without_another_chat_turn(database, team):

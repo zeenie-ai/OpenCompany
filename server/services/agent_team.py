@@ -55,35 +55,26 @@ class AgentTeamService:
             team_id = f"team_{digest}"
             existing = await self.database.get_team(team_id)
             if existing:
+                if existing["workflow_id"] != workflow_id or existing["team_lead_node_id"] != team_lead_node_id:
+                    raise ValueError("Team identity already belongs to another execution")
                 return {"team_id": team_id, **existing}
         else:
             team_id = f"team_{uuid.uuid4().hex[:12]}"
 
-        # Create team
+        members = {team_lead_node_id: {"agent_node_id": team_lead_node_id, "agent_type": team_lead_type,
+                                      "agent_label": team_lead_label, "role": "team_lead"}}
+        for teammate in teammate_node_ids:
+            node_id = teammate["node_id"]
+            members[node_id] = {"agent_node_id": node_id, "agent_type": teammate.get("node_type", "agent"),
+                                "agent_label": teammate.get("label"), "role": "teammate",
+                                "capabilities": teammate.get("capabilities")}
         team = await self.database.create_team(
             team_id=team_id, workflow_id=workflow_id, team_lead_node_id=team_lead_node_id,
             config=config or {"mode": "parallel"}, execution_id=execution_id,
-            root_execution_id=root_execution_id or execution_id,
+            root_execution_id=root_execution_id or execution_id, members=list(members.values()),
         )
         if not team:
             return None
-
-        # Add team lead as member
-        await self.database.add_team_member(
-            team_id=team_id, agent_node_id=team_lead_node_id, agent_type=team_lead_type,
-            agent_label=team_lead_label, role="team_lead"
-        )
-
-        # Add teammates
-        for teammate in teammate_node_ids:
-            await self.database.add_team_member(
-                team_id=team_id,
-                agent_node_id=teammate["node_id"],
-                agent_type=teammate.get("node_type", "agent"),
-                agent_label=teammate.get("label"),
-                role="teammate",
-                capabilities=teammate.get("capabilities"),
-            )
 
         # Broadcast team creation
         if self.broadcaster:
@@ -129,15 +120,15 @@ class AgentTeamService:
 
     async def get_team_status(
         self, team_id: Optional[str] = None, *, workflow_id: Optional[str] = None,
-        team_lead_node_id: Optional[str] = None, execution_id: Optional[str] = None,
+        team_lead_node_id: Optional[str] = None, execution_id: Optional[str] = None, task_board: bool = False,
     ) -> Dict[str, Any]:
         """Get comprehensive team status."""
         if not team_id and workflow_id and team_lead_node_id:
-            team = await self.database.find_team(workflow_id, team_lead_node_id, execution_id)
+            team = await self.database.find_team(workflow_id, team_lead_node_id, execution_id, **({"task_board": True} if task_board else {}))
             team_id = team["id"] if team else None
         if not team_id:
             return {"error": "Team not found"}
-        status = await self.database.get_team_stats(team_id)
+        status = await self.database.get_team_stats(team_id, **({"board_owner": team_lead_node_id} if task_board else {}))
         if not status.get("error") and hasattr(self.database, "get_session"):
             from models.agent_instances import AgentInstance
             from sqlmodel import select
@@ -155,7 +146,7 @@ class AgentTeamService:
                     member["status"] = "working" if member["active_run_count"] else "idle"
         if workflow_id and team_lead_node_id and not status.get("error"):
             executions = await self.database.list_team_executions(
-                workflow_id, team_lead_node_id
+                workflow_id, team_lead_node_id, **({"task_board": True} if task_board else {})
             )
             status["archived_executions"] = [
                 {
@@ -171,14 +162,14 @@ class AgentTeamService:
 
     async def list_durable_task_history(
         self, *, workflow_id: str, team_lead_node_id: str,
-        status: Optional[str] = None,
+        status: Optional[str] = None, task_board: bool = False,
     ) -> List[Dict[str, Any]]:
         """Return tasks across this lead's executions without crossing authority scope."""
         history: List[Dict[str, Any]] = []
         for execution in await self.database.list_team_executions(
-            workflow_id, team_lead_node_id
+            workflow_id, team_lead_node_id, **({"task_board": True} if task_board else {})
         ):
-            tasks = await self.database.get_team_tasks(execution["team_id"], status)
+            tasks = await self.database.get_team_tasks(execution["team_id"], status, **({"board_owner": team_lead_node_id} if task_board else {}))
             history.extend(
                 {**task, "team_execution_id": execution.get("execution_id")}
                 for task in tasks
@@ -237,14 +228,25 @@ class AgentTeamService:
             await self.broadcaster.broadcast_team_event(team_id, "team.task.queued", task)
         return task
 
-    async def list_durable_tasks(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str], status: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def list_durable_tasks(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str], status: Optional[str] = None, task_board: bool = False) -> List[Dict[str, Any]]:
+        if task_board:
+            team = await self.database.find_team(workflow_id, team_lead_node_id, execution_id, task_board=True)
+            return await self.database.get_team_tasks(team["id"], status, board_owner=team_lead_node_id) if team else []
         team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
         return await self.database.get_team_tasks(team["id"], status)
 
-    async def get_durable_task(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str], task_id: str) -> Dict[str, Any]:
-        team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
+    async def get_durable_task(self, *, workflow_id: str, team_lead_node_id: str, execution_id: Optional[str],
+                               task_id: str, task_board: bool = False) -> Dict[str, Any]:
+        if task_board:
+            team = await self.database.find_team(workflow_id, team_lead_node_id, execution_id, task_board=True)
+            if not team:
+                raise ValueError("Task not found in this lead execution")
+        else:
+            team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id,
+                                                 execution_id=execution_id)
         task = await self.database.get_durable_team_task(team["id"], task_id)
-        if not task:
+        if not task or (task_board and team["team_lead_node_id"] != team_lead_node_id
+                        and task.get("parent_agent_id") != team_lead_node_id):
             raise ValueError("Task not found in this lead execution")
         return task
 

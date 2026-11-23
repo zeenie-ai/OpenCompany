@@ -57,7 +57,7 @@ def test_prompt_carries_the_additions():
     assert '"Ask me before sending anything" bound to "/rules/askFirst", true in "state"' in prompt
     assert 'Toggles bound to state under "/rules" through "checked"' in prompt
     assert 'one Choice bound under "/choices"' in prompt
-    assert 'on.press {"action": "hire_employee", "params": {name, role, apps, trigger, sendsVia}}' in prompt
+    assert 'on.press {"action": "hire_employee", "params": {name, role, apps, trigger, sendsVia, team}}' in prompt
     assert '"kind": "app_event"|"schedule"|"manual"' in prompt
     assert 'names it in "app"' in prompt
 

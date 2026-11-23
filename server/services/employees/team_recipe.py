@@ -17,8 +17,7 @@ from services.graph_build import (
     graph_node, label_key, main_edge, ref, skill_edge, tool_edge,
 )
 
-RECIPE_VERSION = 2
-TEAM_LEAD_TYPE = "ai_employee"
+RECIPE_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -60,7 +59,13 @@ def select_responsibilities(job: str, apps: Iterable[str] = ()) -> list[Responsi
 
 def team_preview(job: str, apps: Iterable[str] = ()) -> list[dict[str, str]]:
     """Only ordinary-language responsibilities cross the normal-mode UI."""
-    return [{"responsibility": role.description} for role in select_responsibilities(job, apps)]
+    selected = select_responsibilities(job, apps)
+    # Work explicitly requesting a software deliverable needs a coding
+    # specialist even when the routine also mentions research and a calendar.
+    if len(selected) > 2 and any(role.key == "coding" for role in selected):
+        selected = sorted(selected, key=lambda role: role.key != "coding")
+    return [{"key": role.key, "name": role.label, "responsibility": role.description,
+             "kind": "specialist", "reports_to": "orchestrator"} for role in selected[:2]]
 
 
 def preview_from_reply(job: str, raw_reply: str) -> list[dict[str, str]]:
@@ -70,7 +75,18 @@ def preview_from_reply(job: str, raw_reply: str) -> list[dict[str, str]]:
     text = [job]
     for element in usable_elements(parse_reply(raw_reply).spec):
         props = element["props"]
-        if element["type"] == "AgentCard":
+        if element["type"] == "Button" and element["press"][0] == "hire_employee":
+            from services.employees.hire_request import HireEmployeeRequest
+            from pydantic import ValidationError
+            proposed = element["press"][1].get("team")
+            if proposed is not None:
+                try:
+                    preview = HireEmployeeRequest(idempotency_key="preview", job=job, name="Setup", role="Setup",
+                                                  steps=[], team=proposed)
+                    return [entry.model_dump() for entry in preview.team]
+                except ValidationError:
+                    pass  # The owner sees the deterministic, registry-backed proposal instead.
+        elif element["type"] == "AgentCard":
             text.append(str(props.get("role") or ""))
         elif element["type"] == "Plan":
             text.extend(str(step.get("title") or "") for step in props.get("steps", []) if isinstance(step, dict))
@@ -85,16 +101,20 @@ def _repoint(value: Any, old: str, new: str) -> Any:
     return new if value == old else value
 
 
-def _connect_lead_and_talk_tools(built: Any, workflow_id: str, lead: str, talk: str) -> None:
-    from services.employee_team_connection import employee_skill_parameters, task_manager_additions
+def _connect_lead_and_talk_tools(built: Any, workflow_id: str, lead: str, talk: str, *, legacy_conversion: bool) -> None:
+    from services.employee_team_connection import employee_skill_parameters, manager_review_additions, task_manager_additions
     from services.employees.builder import BuildError
 
     by_id = {node["id"]: node for node in built.nodes}
     talk_position = by_id[talk]["position"]
     talk_x, talk_y = talk_position["x"], talk_position["y"]
-    lead_manager = task_manager_additions(lead, (360, -240))
-    talk_manager = task_manager_additions(talk, (talk_x - 220, talk_y + 180),
-                                          ref="talk_task_manager", label="Talk Task Manager")
+    if legacy_conversion:
+        lead_manager = manager_review_additions(lead, (360, -420), name="Lead")
+        talk_manager = task_manager_additions(talk, (talk_x - 220, talk_y + 180),
+                                              ref="talk_task_manager", label="Talk Task Manager")
+    else:
+        lead_manager = manager_review_additions(lead, (360, -420), prefix="orchestrator_", name="Orchestrator")
+        talk_manager = manager_review_additions(talk, (talk_x, talk_y), name="Chat")
     nodes = [*lead_manager.nodes, *talk_manager.nodes]
     edges = [*lead_manager.edges, *talk_manager.edges]
     # A base app/schedule hire shares its library holder between both roles.
@@ -135,7 +155,7 @@ def _connect_lead_and_talk_tools(built: Any, workflow_id: str, lead: str, talk: 
     built.node_roles.update(placed.node_ids)
 
 
-def build_team(built: Any, inputs: Any) -> Any:
+def build_team(built: Any, inputs: Any, *, legacy_conversion: bool = False) -> Any:
     """Compose configured specialists with isolated Context and a Talk contact.
 
     Delivery nodes and immutable recipient references are retained. The
@@ -148,7 +168,8 @@ def build_team(built: Any, inputs: Any) -> Any:
     from services.node_registry import get_node_class
 
     built = deepcopy(built)
-    if not inputs.allowed(TEAM_LEAD_TYPE):
+    manager_type = "ai_employee" if legacy_conversion else "orchestrator_agent"
+    if not inputs.allowed("ai_employee") or not inputs.allowed(manager_type):
         raise BuildError("not_allowed", "Team-based employees are not available")
     if get_node_class("taskManager") is None or not inputs.allowed("taskManager"):
         raise BuildError("not_allowed", "The Task Manager required for a team-based employee is not available")
@@ -161,31 +182,55 @@ def build_team(built: Any, inputs: Any) -> Any:
     labels = Labels(node["data"]["label"] for node in built.nodes)
     model = {"provider": inputs.llm.provider if inputs.llm else "openai", "model": inputs.llm.model if inputs.llm else ""}
     original_parameters = deepcopy(built.parameters[original])
+    # The existing Talk line keeps its Chat trigger, reply, Context and library
+    # skills; allocate a canonical ID of the new node type before persistence.
+    talk = roles["talk_agent"]
+    if not legacy_conversion:
+        new_talk = ids.next("ai_employee")
+        built.nodes = _repoint(built.nodes, talk, new_talk)
+        built.edges = _repoint(built.edges, talk, new_talk)
+        built.parameters[new_talk] = built.parameters.pop(talk)
+        built.node_roles = roles = _repoint(roles, talk, new_talk)
+        talk = new_talk
+    chat_node = next(node for node in built.nodes if node["id"] == talk)
+    if not legacy_conversion:
+        chat_node["type"] = "ai_employee"
+    chat_label = chat_node["data"]["label"]
     # A manual employee already has the desired conversational contact. A
     # separately triggered employee already has a distinct Talk line.
     if manual:
-        lead = ids.next(TEAM_LEAD_TYPE)
-        lead_label = labels.take(f"{inputs.request.name} team lead")
-        built.nodes.append(graph_node(lead, TEAM_LEAD_TYPE, lead_label, (360, -420)))
+        lead = ids.next(manager_type)
+        lead_label = labels.take(f"{inputs.request.name} team lead" if legacy_conversion else "Orchestrator")
+        built.nodes.append(graph_node(lead, manager_type, lead_label, (360, -420)))
         built.parameters[lead] = {**original_parameters, **model}
         roles["agent"] = lead
     else:
-        lead = ids.next(TEAM_LEAD_TYPE)
+        lead = ids.next("orchestrator_agent")
         built.nodes = _repoint(built.nodes, original, lead)
         built.edges = _repoint(built.edges, original, lead)
         built.parameters[lead] = built.parameters.pop(original)
         built.node_roles = roles = _repoint(roles, original, lead)
-        next(node for node in built.nodes if node["id"] == lead)["type"] = TEAM_LEAD_TYPE
-        lead_label = next(node for node in built.nodes if node["id"] == lead)["data"]["label"]
+        orchestrator = next(node for node in built.nodes if node["id"] == lead)
+        orchestrator["type"] = "orchestrator_agent"
+        original_label = orchestrator["data"]["label"]
+        lead_label = orchestrator["data"]["label"] = labels.take("Orchestrator")
+        # App delivery templates refer to the original agent's response.
+        # Chat now authors that result, including the draft at an approval gate.
+        from services.graph_build import repoint_template_labels
+        for role in ("gate", "reply", "notify", "report_post"):
+            if role in roles:
+                node_id = roles[role]
+                built.parameters[node_id] = repoint_template_labels(built.parameters.get(node_id, {}),
+                                                                     {label_key(original_label).lower(): label_key(chat_label)})
     # Every member owns its Context, including leads reached by public apps.
     if manual or "context" not in roles:
         context_id = ids.next(CONTEXT_TYPE)
         built.nodes.append(graph_node(context_id, CONTEXT_TYPE, labels.take("Work context"), (80, -420), context_data(lead)))
         built.edges.append(context_edge(context_id, lead).to_dict())
         roles["context"] = context_id
-    talk = roles["talk_agent"]
     from services.employee_team_connection import TALK_CONNECTION_VERSION, employee_team_edge
-    built.edges.append(employee_team_edge(lead, talk).to_dict())
+    team_edge = employee_team_edge(lead, talk) if legacy_conversion else Edge(lead, "output-top", talk, "input-teammates")
+    built.edges.append(team_edge.to_dict())
     built.parameters[talk]["system_message"] += (
         f"\nYou are the owner's conversational contact. {TALK_TEAM_CHANGES}\n"
         "For work the current team can perform, use submit_job(instructions) to give one mission to your team, "
@@ -193,26 +238,48 @@ def build_team(built: Any, inputs: Any) -> Any:
         "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval. "
         "Use get_job_status before claiming work has started, reporting progress, or submitting the same request again. "
         "A queued job has not started, and an acknowledgement is not completed work. "
-        "Specialist tools belong to their specialist; ask the team to perform that work rather than attaching their tools to yourself."
     )
+    if not legacy_conversion:
+        built.parameters[talk]["system_message"] += (
+            "The Orchestrator is your only direct report. During job review inspect its submission, accept it or request changes, "
+            "then write the final answer for the original request using the reviewed evidence. Answer greetings and status questions directly."
+        )
     lead_instructions = original_parameters["system_message"]
     if manual:
         lead_instructions = build_system_message(PromptInputs(
             request=inputs.request, owner=inputs.owner, delivery="review",
             unsupported_apps=inputs.unsupported_apps, has_memory=inputs.memory, has_canvas=True,
         ))
+    review_instruction = ("Finish the team after all required work is accepted. Then provide one reviewed result."
+                          if legacy_conversion else "After accepting the required subtasks, submit one reviewed result to the Chat Employee.")
     built.parameters[lead]["system_message"] = (
         lead_instructions + "\nYou coordinate and review this employee's specialist team. "
         "Use your connected Task Manager's spawn_<teammate>(instructions, after?) to create independent agents and reviewed tasks. Explain success "
         "in the instructions and declare dependencies explicitly. Review submitted results with get_task or inspect_task; "
         "accept_task only when the instructions are satisfied, otherwise request_changes with feedback or reassign. "
-        "Use assign_task to reuse an agent and retry_task to retry existing work. Finish the team only after all required work is accepted. Then provide one reviewed result. "
+        "Use assign_task to reuse an agent and retry_task to retry existing work. "
+        f"{review_instruction} "
         "Do not present an assignment acknowledgement as completed work. Do not independently publish through apps."
     )
-    selected = select_responsibilities("\n".join((inputs.request.job, inputs.request.role, *(step.title for step in inputs.request.steps))), (app.name for app in inputs.apps))
+    from services.employees.hire_request import HireTeamMember
+    brief = "\n".join((inputs.request.job, inputs.request.role, *(step.title for step in inputs.request.steps)))
+    apps = [app.name for app in inputs.apps]
+    if legacy_conversion:
+        reviewed = [HireTeamMember(key=role.key, name=role.label, responsibility=role.description)
+                    for role in select_responsibilities(brief, apps)]
+    else:
+        reviewed = inputs.request.team if inputs.request.team is not None else [
+            HireTeamMember(**entry) for entry in team_preview(brief, apps)]
+        built.parameters[lead]["system_message"] += (
+            " If no connected worker can perform the assignment, report the missing capability to the Chat Employee. "
+            "Ask the owner to approve the team change and start fresh work after applying it."
+        )
+    roles_by_key = {role.key: role for role in RESPONSIBILITIES}
+    selected = [roles_by_key.get(entry.key) or select_responsibilities(entry.responsibility)[0] for entry in reviewed]
+    member_ids: dict[str, str] = {"orchestrator": lead}
     members: list[dict[str, Any]] = []
-    for index, responsibility in enumerate(selected, 1):
-        node_type = responsibility.node_type
+    for index, (responsibility, entry) in enumerate(zip(selected, reviewed), 1):
+        node_type = "ai_employee" if entry.kind == "employee" else responsibility.node_type
         if node_type == "web_agent" and (any(tool.type == "browser" for app in inputs.apps for tool in app.tools)
                                          or any(word in inputs.request.job.lower() for word in ("browser", "website"))):
             node_type = "browser_agent"
@@ -223,19 +290,21 @@ def build_team(built: Any, inputs: Any) -> Any:
         if not inputs.allowed(node_type):
             raise BuildError("not_allowed", f"A teammate for {responsibility.description.lower()} is not available")
         member = ids.next(node_type)
-        member_label = labels.take(responsibility.label)
+        member_ids[entry.key] = member
+        member_label = labels.take(entry.name)
         instruction = neutralize_templates(
-            f"Your responsibility is: {responsibility.description}. You work for {inputs.request.name}, whose job is: {inputs.request.job}. "
+            f"Your responsibility is: {entry.responsibility}. You work for {inputs.request.name}, whose job is: {inputs.request.job}. "
             "Work only on the assigned mission and supplied context. Respect its dependencies and acceptance criteria. "
             "Return evidence, the result, and any unresolved limitations to the lead for review. "
             "Do not send final replies to the owner or app recipients. Sending or changing things still requires the employee's approval rule."
         )
-        built.nodes.append(graph_node(member, node_type, member_label, (360 + 360 * index, -420), {"responsibility": responsibility.description}))
+        if entry.kind == "employee":
+            instruction += " Delegate through your Task Manager to connected workers, review their results, then return your own submission."
+        built.nodes.append(graph_node(member, node_type, member_label, (360 + 360 * index, -420), {"responsibility": entry.responsibility}))
         built.parameters[member] = {"system_message": instruction, "prompt": "Complete your assigned task and submit the result for lead review.", **model}
         if node_type == "browser_agent":
             from services.browser_agent_recipe import BROWSER_AGENT_ROLE
             built.parameters[member]["system_message"] = BROWSER_AGENT_ROLE + "\n" + instruction
-        built.edges.append(Edge(member, "output-top", lead, "input-teammates").to_dict())
         context_id = ids.next(CONTEXT_TYPE)
         built.nodes.append(graph_node(context_id, CONTEXT_TYPE, labels.take(f"{responsibility.label} context"), (360 + 360 * index, -600), context_data(member)))
         built.edges.append(context_edge(context_id, member).to_dict())
@@ -256,7 +325,12 @@ def build_team(built: Any, inputs: Any) -> Any:
         built.parameters[skill_id] = {"skill_folder": "assistant", "skills_config": config}
         built.edges.append(skill_edge(skill_id, member).to_dict())
         roles[f"specialist_{index}_skills"] = skill_id
-        members.append({"node_id": member, "node_type": node_type, "responsibility": responsibility.description, "role": responsibility.key, "context_node_id": context_id, "tools": [], "skills": list(config)[1:]})
+        members.append({"node_id": member, "node_type": node_type, "responsibility": entry.responsibility,
+                        "role": entry.key, "context_node_id": context_id, "skill_node_id": skill_id, "tools": [], "skills": list(config)[1:]})
+    for member, entry in zip(members, reviewed):
+        parent = member_ids[entry.reports_to]
+        member["parent_node_id"] = parent
+        built.edges.append(Edge(member["node_id"], "output-top", parent, "input-teammates").to_dict())
     # Move app and research tools from the lead/contact to the relevant
     # specialist. The lead keeps coordination tools; Talk keeps Builder/UI
     # and submits jobs for app work. Per-member memory never shares a
@@ -267,6 +341,12 @@ def build_team(built: Any, inputs: Any) -> Any:
     movable = {"duckduckgoSearch", *app_types}
     original_tools = [edge["source"] for edge in built.edges if edge.get("target") in {lead, talk} and edge.get("targetHandle") == "input-tools" and nodes[edge["source"]]["type"] in movable]
     built.edges = [edge for edge in built.edges if not (edge.get("source") in original_tools and edge.get("target") in {lead, talk} and edge.get("targetHandle") == "input-tools")]
+    if not members:
+        unused = set(original_tools) - {edge[end] for edge in built.edges for end in ("source", "target")}
+        built.nodes = [node for node in built.nodes if node["id"] not in unused]
+        built.parameters = {key: value for key, value in built.parameters.items() if key not in unused}
+        built.node_roles = roles = {key: value for key, value in roles.items() if value not in unused}
+        original_tools = []
     for tool in dict.fromkeys(original_tools):
         node_type = nodes[tool]["type"]
         text = (app_types.get(node_type, "research") + " " + node_type).lower()
@@ -340,11 +420,6 @@ def build_team(built: Any, inputs: Any) -> Any:
     # Task events are scoped to this lead, and use the canonical task input.
     if not inputs.allowed("taskTrigger"):
         raise BuildError("not_allowed", "Team review is not available")
-    task_trigger = ids.next("taskTrigger")
-    built.nodes.append(graph_node(task_trigger, "taskTrigger", labels.take("Review completed work"), (0, -600)))
-    built.parameters[task_trigger] = {"parent_node_id": lead, "status_filter": "all"}
-    built.edges.append(Edge(task_trigger, "output-main", lead, "input-task").to_dict())
-    roles["task_trigger"] = task_trigger
     # A receipt and a reviewed result have different paths. Only the
     # durable job delivery node may enter the existing approval/delivery
     # subgraph. Captured trigger outputs, including recipients, are restored
@@ -352,7 +427,7 @@ def build_team(built: Any, inputs: Any) -> Any:
     delivery_ids = [roles[key] for key in ("gate", "reply", "notify", "report_post") if key in roles]
     final_reply = ids.next("chatReply")
     built.nodes.append(graph_node(final_reply, "chatReply", labels.take("Reviewed result"), (1080, -420)))
-    built.parameters[final_reply] = {"message": ref(label_key(lead_label), "response")}
+    built.parameters[final_reply] = {"message": ref(label_key(lead_label if legacy_conversion else chat_label), "response")}
     roles["job_reply"] = final_reply
     if manual:
         delivery_ids.append(final_reply)
@@ -368,7 +443,7 @@ def build_team(built: Any, inputs: Any) -> Any:
                 or edge.get("source") == roles["trigger"] and edge.get("target") == lead
             )
         )]
-        built.edges.append(main_edge(roles["trigger"], lead).to_dict())
+        built.edges.append(main_edge(roles["trigger"], talk).to_dict())
     built.edges = [edge for edge in built.edges if not (
         edge.get("target") == talk and edge.get("targetHandle") == "input-tools"
         and nodes.get(edge["source"], {}).get("type") in {"writeTodos", "canvas"}
@@ -392,15 +467,46 @@ def build_team(built: Any, inputs: Any) -> Any:
     # Replaced canonical lead IDs must also be reflected in edge identities.
     for edge in built.edges:
         edge["id"] = f'e-{edge["source"]}-{edge["sourceHandle"]}-{edge["target"]}-{edge["targetHandle"]}'
-    _connect_lead_and_talk_tools(built, inputs.workflow_id, lead, talk)
+    _connect_lead_and_talk_tools(built, inputs.workflow_id, lead, talk, legacy_conversion=legacy_conversion)
+    if legacy_conversion:
+        built.team_plan = {"version": 2, "recipe": "ai_employee", "lead_node_id": lead, "talk_node_id": talk,
+                           "task_manager_node_id": roles["task_manager"], "talk_task_manager_node_id": roles["talk_task_manager"],
+                           "lead_skill_node_id": roles["lead_skills"], "talk_skill_node_id": roles["talk_skills"],
+                           "talk_connection_version": TALK_CONNECTION_VERSION, "members": members,
+                           "model": model, "requires": ["temporal", "agent_workflow"], "delivery_node_ids": delivery_ids,
+                           "talk_delivery_node_ids": [final_reply]}
+        for member in members:
+            member.pop("parent_node_id")
+            member.pop("skill_node_id")
+        next(node for node in built.nodes if node["id"] == lead)["data"].update(
+            employee_recipe_version=2, employee_team_plan=deepcopy(built.team_plan))
+        return built
+    from services.employee_team_connection import manager_review_additions
+    for index, member in enumerate(members, 1):
+        if member["node_type"] == "ai_employee":
+            bundle = manager_review_additions(member["node_id"], (360 + 360 * index, -420), name=reviewed[index - 1].name)
+            placed = add_to_graph(inputs.workflow_id, {"nodes": built.nodes, "edges": built.edges}, bundle)
+            built.nodes, built.edges = placed.graph["nodes"], placed.graph["edges"]
+            built.parameters.update(placed.parameters)
+            member.update(task_manager_node_id=placed.node_ids["task_manager"], task_trigger_node_id=placed.node_ids["task_trigger"])
+            member["tools"].append(placed.node_ids["task_manager"])
+    members.insert(0, {"node_id": lead, "node_type": "orchestrator_agent", "parent_node_id": talk, "role": "orchestrator",
+                       "context_node_id": roles["context"], "skill_node_id": roles["lead_skills"],
+                       "task_manager_node_id": roles["orchestrator_task_manager"], "task_trigger_node_id": roles["orchestrator_task_trigger"],
+                       "responsibility": "Delegate work and review the team’s results.", "skills": ["team-delegation"],
+                       "tools": [edge["source"] for edge in built.edges if edge["target"] == lead and edge["targetHandle"] == "input-tools"]})
+    roles.update(orchestrator=lead, orchestrator_context=roles["context"], orchestrator_skills=roles["lead_skills"],
+                 agent=talk, context=roles["talk_context"], lead_skills=roles["talk_skills"], talk_task_manager=roles["task_manager"])
     for node in built.nodes:
-        if node["id"] == lead:
+        if node["id"] == talk:
             node.setdefault("data", {})["employee_recipe_version"] = RECIPE_VERSION
-    built.team_plan = {"version": RECIPE_VERSION, "recipe": "ai_employee", "lead_node_id": lead, "talk_node_id": talk,
+    built.team_plan = {"version": RECIPE_VERSION, "recipe": "ai_employee", "lead_node_id": talk, "talk_node_id": talk, "orchestrator_node_id": lead,
                        "task_manager_node_id": roles["task_manager"], "talk_task_manager_node_id": roles["talk_task_manager"],
                        "lead_skill_node_id": roles["lead_skills"], "talk_skill_node_id": roles["talk_skills"],
-                       "talk_connection_version": TALK_CONNECTION_VERSION, "members": members,
+                       "task_trigger_node_id": roles["task_trigger"], "members": members,
                        "model": model, "requires": ["temporal", "agent_workflow"], "delivery_node_ids": delivery_ids,
                        "talk_delivery_node_ids": [final_reply]}
-    next(node for node in built.nodes if node["id"] == lead)["data"]["employee_team_plan"] = deepcopy(built.team_plan)
+    if not manual:
+        built.team_plan.update(intake_trigger_node_id=roles["trigger"], app_intake_prompt=original_parameters.get("prompt", ""))
+    next(node for node in built.nodes if node["id"] == talk)["data"]["employee_team_plan"] = deepcopy(built.team_plan)
     return built

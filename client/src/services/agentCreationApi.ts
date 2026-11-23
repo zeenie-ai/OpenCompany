@@ -26,7 +26,7 @@ export async function postCreation(path: string, input: Record<string, unknown>,
   }
 }
 
-export function createAgent(input: { workflow_id: string; node_type: string; position: [number, number]; parameters?: Record<string, unknown> }, mutationId?: string) {
+export function createAgent(input: { workflow_id: string; node_type: string; position: [number, number]; parent_node_id?: string; parameters?: Record<string, unknown> }, mutationId?: string) {
   return postCreation('/api/agents', input, mutationId);
 }
 export function createPrivateBrowser(agentId: string, input: { workflow_id: string; position?: [number, number] }, mutationId?: string) {

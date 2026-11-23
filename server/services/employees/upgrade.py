@@ -354,7 +354,7 @@ def team_approval_topology_error(
     if any((edge.get("data") or {}).get("condition") != approved_edge_condition() for edge in incoming):
         return "team_approval_topology_invalid"
     delivery = roles.get("job_delivery")
-    runtime_delivery = bool(team_plan and team_plan.get("version") == 2)
+    runtime_delivery = bool(team_plan and team_plan.get("version") in (2, 3))
     if delivery or runtime_delivery:
         saved = (params or {}).get(delivery) or {}
         delivered = (team_plan or {}).get("delivery_node_ids", []) if runtime_delivery else saved.get("delivery_node_ids") or []

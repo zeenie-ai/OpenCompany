@@ -58,10 +58,12 @@ beforeEach(() => {
 });
 
 describe('PluginsTab', () => {
-  it('hires a bundle’s starter in one click, then closes Settings on them', async () => {
+  it('hires the reviewed starter team, then closes Settings on them', async () => {
     renderTab();
     fireEvent.click(await screen.findByRole('button', { name: 'Hire Inbox assistant' }));
-    await waitFor(() => expect(starterHire.hire).toHaveBeenCalledWith(inbox));
+    expect(starterHire.hire).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hire employee' }));
+    await waitFor(() => expect(starterHire.hire).toHaveBeenCalledWith(inbox, inbox.hire.team));
     await waitFor(() => expect(useHomeStore.getState().settingsOpen).toBe(false));
   });
 
@@ -69,6 +71,7 @@ describe('PluginsTab', () => {
     starterHire.hire.mockResolvedValue(false);
     renderTab();
     fireEvent.click(await screen.findByRole('button', { name: 'Hire Inbox assistant' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hire employee' }));
     await waitFor(() => expect(starterHire.hire).toHaveBeenCalled());
     expect(useHomeStore.getState().settingsOpen).toBe(true);
   });

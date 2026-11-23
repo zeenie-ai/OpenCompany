@@ -28,7 +28,7 @@ RUNTIME_CONTEXT_KEYS = (
     "native_workspace_version", "agent_harness_version", "approval_wait_version", "temporal_worker_pool_enabled",
     "browser_routing_version", "browser_runtime_version", "browser_bindings",
     "runtime_behavior_version", "credential_scope_version", "outputs",
-    "max_concurrent_subagents", "max_delegation_depth", "tool_result_max_chars",
+    "max_concurrent_subagents", "max_delegation_depth", "tool_result_max_chars", "employee_team_plan",
 )
 
 
@@ -56,3 +56,24 @@ def session_workflow_id(instance_id: str) -> str:
 def should_bootstrap(context: Mapping[str, Any]) -> bool:
     return (enabled(context) and not context.get("agent_instance_id")
             and context.get("node_type") in {"ai_employee", "orchestrator_agent"})
+
+
+def is_chat_intake(plan: Mapping[str, Any] | None, context: Mapping[str, Any]) -> bool:
+    """The v3 contact talks directly until it explicitly submits a job.
+
+    Scheduled and app-triggered missions still enter job admission. A review
+    from a task trigger is handled before intake at the bootstrap boundary.
+    """
+    if not plan or plan.get("version") != 3 or context.get("node_id") != plan.get("talk_node_id"):
+        return False
+    if context.get("employee_job_id") or context.get("agent_instance_id"):
+        return False
+    from constants import WORKFLOW_TRIGGER_TYPES
+    inputs = {**(context.get("outputs") or {}), **(context.get("inputs") or {})}
+    for node in context.get("nodes") or []:
+        if node.get("type") not in WORKFLOW_TRIGGER_TYPES or node.get("type") == "chatTrigger":
+            continue
+        value = inputs.get(node.get("id"), node.get("_trigger_output"))
+        if value is not None and not (isinstance(value, dict) and value.get("not_triggered")):
+            return False
+    return True

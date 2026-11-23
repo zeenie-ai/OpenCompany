@@ -1,6 +1,5 @@
 /**
- * Hire: turn the setup screen into an employee. (A starter hired in one
- * click goes through useStarterHire, which lands the same way.)
+ * Turn the setup screen into an employee. Preset hires use useStarterHire.
  *
  * One hire at a time. The idempotency key stays the same while the payload
  * does, so a retry after a lost response finds the employee the first
@@ -123,6 +122,7 @@ export function useHire(collapse: () => Promise<void>) {
         job: draft.job,
         idempotencyKey: '',
         source: draft.source,
+        team: draft.team ?? undefined,
         core,
       });
       const key = beginHire(`${draft.version}:${JSON.stringify(base)}`);

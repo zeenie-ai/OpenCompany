@@ -13,6 +13,7 @@ from temporalio.exceptions import ApplicationError, WorkflowAlreadyStartedError
 from services.temporal._exits import is_workflow_bug
 from services.temporal._retry_policies import DEFAULT_ACTIVITY_RETRY, QUEUE_PAGING_RETRY
 from services.temporal.execution_control import ExecutionControl
+from services.task_trigger_routing import accepts_task_owner, hierarchical_team, task_trigger_binding, task_trigger_issues
 
 
 # The controller is the ONE workflow expected to live for months, and it
@@ -80,6 +81,10 @@ class WorkflowControlWorkflow:
         self._revision = 0
         self._closed = False
         self._triggers: dict[str, Dict[str, Any]] = {}
+        # Only retain an old review graph if Apply overtakes an accepted
+        # task event. All its listeners and spilled events share one copy.
+        self._review_graph_revision = 0
+        self._pending_review_graphs: dict[str, dict] = {}
         self._events: list[tuple[str, Dict[str, Any]]] = []
         # Insertion-ordered so the carry across continue-as-new can keep
         # the newest entries when trimming to _MAX_CARRIED_SEEN_IDS.
@@ -303,6 +308,15 @@ class WorkflowControlWorkflow:
         """
         self.validate_graph(graph)
         node_ids = {node["id"] for node in graph["nodes"]}
+        current = self._pending_review_graphs.get(str(self._review_graph_revision))
+        if current:
+            for spec in self._triggers.values():
+                args = spec.get("listener_args", {})
+                if args.get("task_trigger_identity") and not spec.get("retired"):
+                    current["graph"] = {k: args[k] for k in
+                        ("nodes", "edges", "parameter_snapshot", "graphVersion") if k in args}
+                    break
+        self._review_graph_revision += 1
         for listener_id, spec in self._triggers.items():
             listener = spec.get("listener_args", {})
             if spec.get("trigger_node_id") not in node_ids:
@@ -319,6 +333,10 @@ class WorkflowControlWorkflow:
             listener["edges"] = graph["edges"]
             listener["parameter_snapshot"] = graph.get("parameters") or {}
             listener["graphVersion"] = graph.get("graphVersion", 2)
+            if listener.get("task_trigger_identity"):
+                node_id = spec["trigger_node_id"]
+                listener.update(task_trigger_binding(node_id, graph["nodes"], graph["edges"],
+                                                     listener["parameter_snapshot"].get(node_id, {})))
         self._revision += 1
         self._maybe_request_rollover_from_update()
         return {**self.status(), "applied": True}
@@ -336,6 +354,10 @@ class WorkflowControlWorkflow:
                 hash(node["id"])
             except TypeError as exc:
                 raise ApplicationError("Graph node ids must be hashable", type="InvalidWorkflowGraphSnapshot", non_retryable=True) from exc
+        if hierarchical_team(graph["nodes"]):
+            issues = task_trigger_issues(graph["nodes"], graph["edges"], graph.get("parameters") or {})
+            if issues:
+                raise ApplicationError(issues[0]["message"], type="InvalidWorkflowGraphSnapshot", non_retryable=True)
 
     @workflow.signal
     async def register_trigger(self, spec: Dict[str, Any]) -> None:
@@ -367,10 +389,19 @@ class WorkflowControlWorkflow:
                 continue
             if event_type not in set(spec.get("event_types") or [spec.get("event_type")]):
                 continue
+            args = spec.get("listener_args") or {}
+            if not accepts_task_owner(args, event):
+                continue
             dedup_key = f"{listener_id}:{event_id}"
             if not self._event_already_accepted(dedup_key):
                 self._remember_event_id(dedup_key)
-                self._events.append((listener_id, event))
+                queued = event
+                if args.get("task_trigger_identity"):
+                    revision = str(self._review_graph_revision)
+                    entry = self._pending_review_graphs.setdefault(revision, {"count": 0})
+                    entry["count"] += 1
+                    queued = {**event, "_review_graph_revision": revision}
+                self._events.append((listener_id, queued))
                 if self._event_accumulator_v1:
                     self._pending_event_ids.add(dedup_key)
         # A paused controller still receives matching signals; without this
@@ -555,6 +586,13 @@ class WorkflowControlWorkflow:
                         await workflow.sleep(timedelta(seconds=5))
             if accumulator_v1 and accepted:
                 self._finish_pending_event(listener_id, event)
+            if accepted and (spec.get("listener_args") or {}).get("task_trigger_identity"):
+                revision = event.get("_review_graph_revision")
+                if revision in self._pending_review_graphs:
+                    entry = self._pending_review_graphs[revision]
+                    entry["count"] -= 1
+                    if not entry["count"]:
+                        del self._pending_review_graphs[revision]
             self._maybe_request_rollover()
         return {"state": self._state, "generation": control_data.get("generation")}
 
@@ -575,6 +613,8 @@ class WorkflowControlWorkflow:
             })
             self._live_roots = {key: dict(value) for key, value in (control_data.get("live_roots") or {}).items()}
             self._membership_epoch = int(control_data.get("membership_epoch") or 0)
+            self._review_graph_revision = int(control_data.get("review_graph_revision") or 0)
+            self._pending_review_graphs = dict(control_data.get("pending_review_graphs") or {})
             for seen_id in control_data.get("seen_event_ids") or []:
                 self._seen_event_ids[str(seen_id)] = None
             for pending in control_data.get("pending_events") or []:
@@ -753,6 +793,9 @@ class WorkflowControlWorkflow:
             "seen_event_ids": list(self._seen_event_ids)[-_MAX_CARRIED_SEEN_IDS:],
         }
         if self._execution_control.enabled:
+            if self._pending_review_graphs or "pending_review_graphs" in control_data:
+                carried.update(review_graph_revision=self._review_graph_revision,
+                               pending_review_graphs=self._pending_review_graphs)
             carried.update({
                 **self._execution_control.carry(),
                 "participant_state": self._execution_control.state,
@@ -860,6 +903,14 @@ class WorkflowControlWorkflow:
         event = {key: value for key, value in event.items() if key not in _SPAWN_FIELDS}
         listener = TriggerListenerWorkflow()
         listener_args = spec["listener_args"]
+        if listener_args.get("task_trigger_identity"):
+            revision = event.pop("_review_graph_revision", None)
+            graph = self._pending_review_graphs.get(revision, {}).get("graph")
+            if graph:
+                node_id = spec["trigger_node_id"]
+                binding = task_trigger_binding(node_id, graph["nodes"], graph["edges"],
+                                               graph.get("parameter_snapshot", {}).get(node_id, {}))
+                listener_args = {**listener_args, **graph, **binding}
         if self._execution_control.enabled:
             listener_args = {**listener_args, **self._execution_control.carry()}
         await listener._spawn_child_run(

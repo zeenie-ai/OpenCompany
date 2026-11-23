@@ -62,7 +62,7 @@ async def route_talk_team_change(database, config: dict, plan: dict, mission: st
     if not employee or (employee.team_plan or {}).get("talk_node_id") != talk:
         return {**result, "state": "team_change_blocked", "message": "This employee's saved Talk connection changed. Review the employee's team."}
     saved_members = {m["node_id"] for m in (employee.team_plan or {}).get("members", []) if m.get("node_type") == kind}
-    if any(e.get("source") in saved_members and e.get("target") == plan["lead_node_id"]
+    if any(e.get("source") in saved_members and e.get("target") == (plan.get("orchestrator_node_id") or plan["lead_node_id"])
            and e.get("targetHandle") == "input-teammates" for e in saved.get("edges", [])):
         return {**result, "state": "pending_apply", "activation_state": "saved",
                 "message": "The specialist is already saved. Apply the employee's saved changes before submitting this job."}

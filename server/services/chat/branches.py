@@ -351,6 +351,30 @@ async def _keep_snapshot(session: Any, *, session_id: str, leaf_uid: str, agent:
     session.add(snapshot)
 
 
+async def remember_job_answer(session: Any, run: ChatRun, *, generation: int, agent: str,
+                              visible: bool, leaf_uid: str, text: str) -> None:
+    """Keep the Chat Employee's next turn consistent with its branch's visible conversation."""
+    cursor = (run.context_cursors or {}).get(agent)
+    if not cursor or cursor.get("generation") != generation:
+        return
+    moment = _utcnow()
+    message = {"role": "assistant", "content": text, "ts": moment.isoformat()}
+    if visible:
+        record = await session.scalar(select(AgentConversation).where(
+            AgentConversation.workflow_id == run.workflow_id, AgentConversation.generation == generation,
+            AgentConversation.agent_node_id == agent))
+        if record:
+            record.messages = [*record.messages, message]
+            record.updated_at = moment
+    else:
+        snapshot = await session.scalar(select(ChatBranchSnapshot).where(
+            ChatBranchSnapshot.session_id == run.session_id, ChatBranchSnapshot.leaf_uid == leaf_uid,
+            ChatBranchSnapshot.agent_node_id == agent, ChatBranchSnapshot.generation == generation))
+        if snapshot:
+            await _keep_snapshot(session, session_id=run.session_id, leaf_uid=leaf_uid, agent=agent,
+                                 generation=generation, messages=[*snapshot.messages, message])
+
+
 async def _evict_snapshots(session: Any, session_id: str) -> None:
     await session.flush()
     keep = branches_setting("max_snapshots_per_session")

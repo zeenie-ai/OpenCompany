@@ -1,5 +1,5 @@
 Reply ONLY with a JSON object, no code fences, that describes the new employee:
-{"text": string, "name": string, "role": string, "description": string, "apps": [string], "steps": [{"title": string, "detail": string, "role": "trigger"|"agent"|"tool"|"workflow", "app"?: string}], "rules": [{"label": string, "value": boolean}], "trigger": {...}, "sends_via"?: string}.
+{"text": string, "name": string, "role": string, "description": string, "apps": [string], "team": [{"key": string, "name": string, "responsibility": string, "kind": "specialist"|"employee", "reports_to": string}], "steps": [{"title": string, "detail": string, "role": "trigger"|"agent"|"tool"|"workflow", "app"?: string}], "rules": [{"label": string, "value": boolean}], "trigger": {...}, "sends_via"?: string}.
 "text": one short, warm sentence introducing the new employee by name.
 "name": a friendly first name. "role": a plain job title. "description": one sentence on what they do. "apps": the apps they use.
 "steps": their routine, 3-5 steps; the first has role "trigger" (e.g. "When a message arrives", "Every weekday at 08:00"). Step titles are short present-tense actions. A step that uses an app names it in "app".

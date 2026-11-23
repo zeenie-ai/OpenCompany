@@ -21,6 +21,8 @@ from models.agent_instances import (
     AgentMessageChain, AgentReconcileLease, AgentRun, now,
 )
 from models.database import AgentMessage, AgentTeam, TeamMember, TeamTask, TeamTaskAttempt
+from models.employees import EmployeeJob
+from services.llm.protocol import Message, message_to_wire
 
 PEER_MESSAGE_BYTES = 8192
 PENDING_MESSAGES = 256
@@ -30,6 +32,7 @@ MAX_BATCH_MESSAGES = 16
 MAX_BATCH_BYTES = 32768
 RESULT_PREVIEW_CHARS = 4000
 TERMINAL_DELIVERY = {"consumed", "cancelled", "recipient_closed"}
+MANAGER_OPERATIONS = {"spawn", "assign_task", "modify_task", "request_changes", "accept_task", "retry_task", "cancel_task", "reassign"}
 
 
 class InstanceError(ValueError):
@@ -49,7 +52,7 @@ def _id(prefix: str, *values: Any) -> str:
 def _wire(row: AgentDelivery) -> dict:
     sender = row.sender_id or "runtime"
     prefix = f"[Agent message from {sender}; this is not owner approval]" if row.kind == "peer" else f"[{row.kind}]"
-    return {"role": "user", "content": f"{prefix}\n{row.content}"}
+    return message_to_wire(Message(role="user", content=f"{prefix}\n{row.content}"))
 
 
 def task_ref(task: TeamTask | dict) -> str:
@@ -185,19 +188,34 @@ class AgentInstanceService:
                 raise InstanceError("invalid_scope", f"Trusted {key} is required.")
         return value
 
-    async def _authorize(self, session, scope: dict, *, lead: bool = False) -> AgentTeam:
+    async def _authorize(self, session, scope: dict, *, lead: bool = False, operation: str = "") -> AgentTeam:
         team = await session.get(AgentTeam, scope["team_id"])
         if team is None or team.workflow_id != scope["workflow_id"] or team.team_lead_node_id != scope["lead_node_id"]:
             raise InstanceError("invalid_scope")
         if scope.get("execution_id") and team.execution_id != scope["execution_id"]:
             raise InstanceError("invalid_scope")
+        job = await session.get(EmployeeJob, scope["job_id"])
+        plan = (job.source.get("team_plan") or {}) if job else {}
+        scope.pop("_report_ids", None)
+        if plan.get("version") == 3:
+            if (job.team_id != team.id or job.workflow_id != team.workflow_id or
+                    int(job.source.get("generation") or 0) != scope["generation"]):
+                raise InstanceError("invalid_scope")
+            scope["_report_ids"] = set()
         actor_id = scope.get("agent_instance_id")
         if actor_id:
             actor = await self._instance(session, str(actor_id), scope)
+            if "_report_ids" in scope:
+                scope["_actor_node"] = actor.template_node_id
+                scope["_report_ids"] = {m["node_id"] for m in plan["members"] if m.get("parent_node_id") == actor.template_node_id}
+                if (actor.role == "lead" and operation in {"spawn", "assign_task", "reassign"}):
+                    raise InstanceError("invalid_target", "Review the original Orchestrator assignment on this job.")
             if actor.state == "closed":
                 raise InstanceError("recipient_closed")
-            if lead and actor.role != "lead":
+            if lead and actor.role != "lead" and not (operation in MANAGER_OPERATIONS and scope.get("_report_ids")):
                 raise InstanceError("lead_required")
+        elif operation and "_report_ids" in scope:
+            raise InstanceError("invalid_scope", "An admitted employee instance is required.")
         return team
 
     async def _instance(self, session, instance_id: str, scope: dict | None = None) -> AgentInstance:
@@ -217,9 +235,23 @@ class AgentInstanceService:
         return None
 
     async def _commit(self, session, key: str, fingerprint: str, result: dict) -> dict:
-        session.add(AgentInstanceMutation(id=key, fingerprint=fingerprint, result=deepcopy(result)))
+        if result.get("task_outcome"):
+            result["task_event_receipt_id"] = key
+        session.add(AgentInstanceMutation(id=key, fingerprint=fingerprint, result=deepcopy(result),
+                                          task_event_pending=bool(result.get("task_outcome"))))
         await session.commit()
         return result
+
+    async def pending_task_events(self, limit: int) -> list[dict]:
+        async with self.database.get_session() as session:
+            query = select(AgentInstanceMutation.result).where(AgentInstanceMutation.task_event_pending.is_(True))
+            return list((await session.scalars(query.order_by(AgentInstanceMutation.created_at).limit(limit))).all())
+
+    async def acknowledge_task_event(self, receipt_id: str) -> None:
+        async with self.database.reserved_session() as session:
+            await session.execute(update(AgentInstanceMutation).where(
+                AgentInstanceMutation.id == receipt_id).values(task_event_pending=False))
+            await session.commit()
 
     async def _template(self, session, scope: dict, template: dict, *, lead: bool = False) -> dict:
         template = deepcopy(template)
@@ -233,6 +265,8 @@ class AgentInstanceService:
                 raise InstanceError("invalid_target")
         elif not any(member.role == "teammate" and member.status != "offline" for member in members):
             raise InstanceError("invalid_target", "Choose a connected teammate template.")
+        elif "_report_ids" in scope and node_id not in scope["_report_ids"]:
+            raise InstanceError("invalid_target", "Choose a direct report of the assigning employee.")
         return template
 
     async def _new_instance(self, session, scope: dict, template: dict, identity: str, *, role: str = "teammate") -> AgentInstance:
@@ -375,6 +409,8 @@ class AgentInstanceService:
                 await self._instance(session, task.assigned_instance_id, scope)
             else:
                 raise InstanceError("invalid_dependencies", "Dependencies must belong to this instance protocol job.")
+            if scope.get("_actor_node") and not await self._same_assigning_attempt(session, scope, task):
+                raise InstanceError("invalid_dependencies", "Depend only on work assigned for this task attempt.")
             if identity not in ids:
                 ids.append(identity)
             accepted = accepted and task.status == "accepted"
@@ -434,7 +470,7 @@ class AgentInstanceService:
             return {"delivery": delivery.model_dump(mode="json"), "instance_wake": [instance_id]}
 
     async def _attempt(self, session, task: TeamTask, instance: AgentInstance) -> TeamTaskAttempt:
-        snapshot = {"instructions": task.mission, "context": deepcopy(task.context or {}),
+        snapshot = {"instructions": (task.acceptance_criteria or {}).get("instructions", task.mission), "context": deepcopy(task.context or {}),
                     "feedback": deepcopy(task.review_feedback or []), "dependencies": _dependency_ids(task),
                     "acceptance_criteria": deepcopy(task.acceptance_criteria or {}), "revision": task.revision,
                     "configuration": deepcopy(instance.config)}
@@ -445,7 +481,7 @@ class AgentInstanceService:
         return attempt
 
     def _task_input(self, task: TeamTask) -> str:
-        content = str(task.mission or "")
+        content = str((task.acceptance_criteria or {}).get("instructions", task.mission) or "")
         for index, feedback in enumerate(task.review_feedback or [], 1):
             content += f"\n\nReview feedback {index}:\n{feedback}"
         return content
@@ -454,23 +490,27 @@ class AgentInstanceService:
         return await self._enqueue(session, instance, identity=_id("delivery_", task.id, task.current_attempt, task.revision),
             sender_id=None, kind="task_assignment", content=self._task_input(task), task=task, chain_id=chain_id)
 
-    async def _new_task(self, session, scope: dict, instance: AgentInstance, args: dict, key: str) -> TeamTask:
+    async def _new_task(self, session, scope: dict, instance: AgentInstance, args: dict, key: str, *, intake: bool = False) -> TeamTask:
         if instance.role != "teammate":
             raise InstanceError("invalid_target", "Assign reviewed work to a spawned teammate.")
         team = await session.get(AgentTeam, instance.team_id)
         if team and team.status == "completed":
             raise InstanceError("invalid_transition", "This team has already finished its reviewed work.")
         instructions = str(args.get("instructions") or "")
-        if not instructions.strip() or len(instructions) > 10000:
+        if not instructions.strip() or len(instructions) > (20000 if intake else 10000):
             raise InstanceError("invalid_tool_input", "instructions must contain between 1 and 10000 characters.")
         if instance.state in {"closed", "halted"}:
             raise InstanceError("agent_unavailable")
+        if "_report_ids" in scope and instance.template_node_id not in scope["_report_ids"]:
+            raise InstanceError("invalid_target", "Assign work only to a direct report.")
+        assigner = scope.get("_actor_node") or scope["lead_node_id"]
         dependencies, accepted = await self._dependencies(session, scope, list(args.get("after") or []))
         task = TeamTask(id=_id("task_", key), team_id=scope["team_id"], workflow_id=scope["workflow_id"],
             execution_id=scope.get("execution_id"), root_execution_id=scope.get("root_execution_id"),
-            parent_agent_id=scope["lead_node_id"], title=instructions.strip().splitlines()[0][:160],
-            description=instructions[:5000], mission=instructions, context={},
-            acceptance_criteria={"instructions": instructions}, created_by=scope["lead_node_id"],
+            parent_agent_id=assigner, title=instructions.strip().splitlines()[0][:160],
+            description=instructions[:5000], mission=instructions[:10000], context={},
+            acceptance_criteria={"instructions": instructions}, created_by=assigner,
+            assigning_run_id=scope.get("agent_run_id") if "_report_ids" in scope else None,
             assigned_to=instance.template_node_id, assigned_instance_id=instance.id,
             depends_on={"task_ids": dependencies}, status="queued" if accepted else "blocked", current_attempt=0,
             review_feedback=[], protocol_version=1, queue_sequence=instance.sequence + 1)
@@ -493,22 +533,84 @@ class AgentInstanceService:
             raise InstanceError("task_not_found")
         if mutate and ref[3:] != [task.revision, task.current_attempt, task.status]:
             raise InstanceError("stale_reference", "Task state changed; get_task and use its latest task_ref.")
+        if mutate and "_report_ids" in scope and not await self._same_assigning_attempt(session, scope, task):
+            raise InstanceError("invalid_target", "Review only work assigned by this employee for its current task.")
         return task
+
+    @staticmethod
+    async def _same_assigning_attempt(session, scope, task):
+        assigner = await session.get(AgentRun, task.assigning_run_id) if task.assigning_run_id else None
+        run = await session.get(AgentRun, scope["agent_run_id"])
+        return (assigner and run and assigner.instance_id == run.instance_id
+                and (assigner.task_id, assigner.attempt) == (run.task_id, run.attempt))
 
     async def _task_notice(self, session, task: TeamTask, *, chain_id: str | None = None) -> list[str]:
         owner = await self._instance(session, task.assigned_instance_id)
-        leads = (await session.execute(select(AgentInstance).where(AgentInstance.team_id == task.team_id,
-            AgentInstance.job_id == owner.job_id, AgentInstance.generation == owner.generation,
-            AgentInstance.role == "lead", AgentInstance.state != "closed"))).scalars().all()
+        parent_task = None
+        if task.assigning_run_id:
+            assigner = await session.get(AgentRun, task.assigning_run_id)
+            reviewer = await self._instance(session, assigner.instance_id)
+            if reviewer.state == "closed":
+                return []
+            if assigner.task_id:
+                parent_task = await session.get(TeamTask, assigner.task_id)
+                if (not parent_task or parent_task.current_attempt != assigner.attempt
+                        or parent_task.assigned_instance_id != reviewer.id or parent_task.status != "running"):
+                    return []
+            leads = [reviewer]
+        else:
+            leads = (await session.execute(select(AgentInstance).where(AgentInstance.team_id == task.team_id,
+                AgentInstance.job_id == owner.job_id, AgentInstance.generation == owner.generation,
+                AgentInstance.role == "lead", AgentInstance.state != "closed"))).scalars().all()
         wake = []
         for lead in leads:
             await self._enqueue(session, lead, identity=_id("delivery_", task.id, task.current_attempt, task.revision, task.status),
-                sender_id=task.assigned_instance_id, kind="task_review",
+                sender_id=task.assigned_instance_id, kind="task_review", task=parent_task,
                 content=f"Task {task.id} is {task.status}. Inspect its result and choose a review action.",
                 payload={"task_id": task.id, "attempt": task.current_attempt, "revision": task.revision,
                          "status": task.status, "task_ref": task_ref(task)}, chain_id=chain_id)
             wake.append(lead.id)
         return wake
+
+    async def _children_of_attempt(self, session, task):
+        query = select(TeamTask).join(AgentRun, TeamTask.assigning_run_id == AgentRun.id).where(
+            AgentRun.instance_id == task.assigned_instance_id, AgentRun.task_id == task.id,
+            AgentRun.attempt == task.current_attempt)
+        return (await session.execute(query)).scalars().all()
+
+    async def _cancel_branch(self, session, parent, stops):
+        """Fence all still-open work induced by the invalidated parent attempt."""
+        for task in await self._children_of_attempt(session, parent):
+            if task.status in {"accepted", "cancelled"}:
+                continue
+            await self._cancel_branch(session, task, stops)
+            task.status, task.cancellation_requested = "cancelled", True
+            task.cancellation_reason, task.completed_at = "parent_attempt_closed", now()
+            task.revision += 1
+            instance = await self._instance(session, task.assigned_instance_id)
+            if instance.active_run_id:
+                active = await session.get(AgentRun, instance.active_run_id)
+                if active and active.task_id == task.id and active.attempt == task.current_attempt:
+                    active.status, active.error = "draining", "parent_attempt_closed"
+                    instance.fence += 1
+                    stops.append(instance.id)
+            attempt = await session.get(TeamTaskAttempt, f"{task.id}:attempt:{task.current_attempt}")
+            if attempt:
+                attempt.status, attempt.error, attempt.completed_at = "cancelled", task.cancellation_reason, task.completed_at
+            await session.execute(update(AgentDelivery).where(AgentDelivery.task_id == task.id,
+                AgentDelivery.attempt == task.current_attempt, AgentDelivery.state.in_(["queued", "held"]))
+                .values(state="cancelled", hold_reason="parent_attempt_closed"))
+
+    @staticmethod
+    def _task_outcome(task, instance, reviewer_id):
+        runtime = instance.config.get("runtime_context") or {}
+        return {"task_id": task.id, "attempt": task.current_attempt, "revision": task.revision, "status": task.status,
+                "workflow_id": instance.workflow_id, "generation": instance.generation, "team_id": instance.team_id,
+                "job_id": instance.job_id, "controller_workflow_id": runtime.get("controller_workflow_id"),
+                "execution_id": task.execution_id, "root_execution_id": task.root_execution_id,
+                "agent_instance_id": instance.id, "agent_node_id": instance.template_node_id, "agent_name": instance.display_name,
+                "parent_node_id": task.parent_agent_id, "assigning_run_id": task.assigning_run_id,
+                "reviewer_instance_id": reviewer_id, "result": _result_preview(task.result, task.id), "error": task.error}
 
     async def _record_notice(self, session, instance: AgentInstance, reason: str, identity: str) -> None:
         """Visible outside the mailbox, so a halted lead can still report it."""
@@ -539,7 +641,7 @@ class AgentInstanceService:
         fingerprint = _hash([operation, arguments, template])
         reads = {"list_agents", "get_agent", "wait_for_agents", "list_tasks", "get_task", "inspect_task"}
         async with self.database.reserved_session() as session:
-            await self._authorize(session, scope, lead=operation not in reads | {"send_message"})
+            await self._authorize(session, scope, lead=operation not in reads | {"send_message"}, operation=operation)
             prior = await self._receipt(session, key, fingerprint) if operation not in reads else None
             if prior is not None:
                 return prior
@@ -548,12 +650,16 @@ class AgentInstanceService:
                 actor = await self._instance(session, scope["agent_instance_id"], scope)
                 if actor.state == "halted":
                     raise InstanceError("agent_halted", "This agent requires explicit recovery before admitting more work.")
+                if "_report_ids" in scope and not scope.get("agent_run_id"):
+                    raise InstanceError("stale_run")
                 if scope.get("agent_run_id"):
                     run = await session.get(AgentRun, str(scope["agent_run_id"]))
                     if (run is None or run.instance_id != actor.id or actor.active_run_id != run.id
                             or run.status != "running" or run.fence != actor.fence):
                         raise InstanceError("stale_run", "This execution no longer owns the agent.")
                     scope["_chain_id"] = run.chain_id
+                    if "_report_ids" in scope and actor.role != "lead" and operation in MANAGER_OPERATIONS and not run.task_id:
+                        raise InstanceError("invalid_target", "A manager can assign or review work only in its active task.")
             result: dict = {"success": True}
             if operation in {"spawn", "assign_task"}:
                 if operation == "spawn":
@@ -610,6 +716,11 @@ class AgentInstanceService:
                     AgentInstance.job_id == scope["job_id"], AgentInstance.generation == scope["generation"])
                     .order_by(TeamTask.created_at, TeamTask.id))).scalars().all()
                 status = arguments.get("status") or arguments.get("status_filter")
+                if "_report_ids" in scope:
+                    own_runs = select(AgentRun.id).where(AgentRun.instance_id == scope["agent_instance_id"])
+                    own_run_ids = set((await session.execute(own_runs)).scalars())
+                    tasks = [task for task in tasks if task.assigned_instance_id == scope["agent_instance_id"]
+                             or task.assigning_run_id in own_run_ids]
                 result["tasks"] = [_task_dict(task) for task in tasks if not status or task.status == status]
             elif operation in {"get_task", "inspect_task"}:
                 task = await self._read_task(session, scope, str(arguments.get("task_ref") or arguments.get("task") or arguments.get("task_id") or ""))
@@ -625,6 +736,10 @@ class AgentInstanceService:
                 tasks = (await session.execute(select(TeamTask).join(AgentInstance, TeamTask.assigned_instance_id == AgentInstance.id)
                     .where(TeamTask.team_id == scope["team_id"], AgentInstance.job_id == scope["job_id"],
                     AgentInstance.generation == scope["generation"]))).scalars().all()
+                if "_report_ids" in scope:
+                    outer = [task for task in tasks if task.parent_agent_id == scope["lead_node_id"]]
+                    if len(outer) != 1 or outer[0].status != "accepted":
+                        raise InstanceError("invalid_transition", "Accept the Orchestrator's result before finishing this job.")
                 if any(task.status not in {"accepted", "cancelled"} for task in tasks):
                     raise InstanceError("invalid_transition", "Review all outstanding tasks before finishing the team.")
                 result["status"] = "reviewed"
@@ -671,6 +786,8 @@ class AgentInstanceService:
             dependents = (await session.execute(select(TeamTask).where(TeamTask.team_id == task.team_id,
                 TeamTask.status == "blocked"))).scalars().all()
             for dependent in dependents:
+                if task.id not in _dependency_ids(dependent):
+                    continue
                 owner = await session.get(AgentInstance, dependent.assigned_instance_id) if dependent.assigned_instance_id else None
                 if owner is None or owner.job_id != scope["job_id"] or owner.generation != scope["generation"]:
                     continue
@@ -680,6 +797,8 @@ class AgentInstanceService:
                     dependent.revision += 1
                     wake.append(dependent.assigned_instance_id)
         elif operation == "cancel_task":
+            if task.assigning_run_id:
+                await self._cancel_branch(session, task, stops)
             task.status, task.cancellation_requested = "cancelled", True
             task.cancellation_reason = str(args.get("reason") or "Cancelled by lead")[:2000]
             if instance.active_run_id:
@@ -703,6 +822,8 @@ class AgentInstanceService:
                     raise InstanceError("agent_draining", "Wait for the interrupted execution to drain before retrying.")
             if task.current_attempt >= task.max_retries:
                 raise InstanceError("retry_limit", "Task attempt budget exhausted; create explicitly revised work.")
+            if task.assigning_run_id:
+                await self._cancel_branch(session, task, stops)
             if operation == "request_changes":
                 feedback = str(args.get("feedback") or "")
                 if not feedback.strip() or len(feedback) > 10000:
@@ -741,7 +862,7 @@ class AgentInstanceService:
                     run.status, run.error = "draining", "interrupted"
                     if run.task_id:
                         task = await session.get(TeamTask, run.task_id)
-                        if task and task.current_attempt == run.attempt and task.status == "running":
+                        if task and not task.assigning_run_id and task.current_attempt == run.attempt and task.status == "running":
                             task.status, task.error = "failed", "interrupted"
                             task.revision += 1
                             await self._task_notice(session, task, chain_id=run.chain_id)
@@ -851,7 +972,12 @@ class AgentInstanceService:
                     continue
                 if task.status == "blocked":
                     continue
-                if not allow_tasks or selected_task is not None:
+                if row.kind == "task_review":
+                    if not allow_tasks and (run.task_id, run.attempt) != (task.id, task.current_attempt):
+                        continue
+                    if selected_task and selected_task.id != task.id:
+                        continue
+                elif not allow_tasks or selected_task is not None:
                     break
                 row_task = task
             if len(admitted) >= MAX_BATCH_MESSAGES or (admitted and used + len(row.content.encode()) > MAX_BATCH_BYTES):
@@ -880,6 +1006,30 @@ class AgentInstanceService:
             used += len(row.content.encode())
         return admitted, selected_task
 
+    async def _assign_orchestrator(self, session, job, chat, run, handoff, plan):
+        """Admit the fixed handoff and the first assignment in a single transaction."""
+        template_id = plan["orchestrator_node_id"]
+        scope = {**chat.config["scope"], "agent_instance_id": chat.id, "agent_run_id": run.id,
+                 "runtime_context": chat.config["runtime_context"]}
+        await self._authorize(session, scope, lead=True)
+        descriptor = next((member for member in plan["members"] if member["node_id"] == template_id), {})
+        template = await self._template(session, scope, {
+            "node_id": template_id, "node_type": descriptor["node_type"], "label": descriptor.get("label") or "Orchestrator",
+            "parameters": job.source.get("parameters", {}).get(template_id, {}),
+        })
+        key = _id("intake_", job.id, chat.id)
+        orchestrator = await self._new_instance(session, scope, template, _id("agent_", key))
+        task = await self._new_task(session, scope, orchestrator, {"instructions": job.mission}, key, intake=True)
+        handoff.state, handoff.run_id, handoff.consumed_at = "consumed", run.id, now()
+        chat.fence, chat.updated_at = run.fence, now()
+        run.status, run.completed_at = "completed", now()
+        run.result = {"status": "queued", "task_id": task.id}
+        run.input_snapshot = {"instance_wake": [orchestrator.id]}
+        session.add(run)
+        await session.commit()
+        return {**run.input_snapshot, "run_id": run.id, "instance": chat.model_dump(mode="json"),
+                "result": run.result, "status": run.status}
+
     async def claim_run(self, instance_id: str, *, request_id: str, workflow_id: str | None = None,
                         workflow_run_id: str | None = None) -> dict | None:
         from models.employees import EmployeeJob
@@ -901,6 +1051,11 @@ class AgentInstanceService:
                 return None
             run = AgentRun(id=run_id, instance_id=instance_id, request_id=request_id,
                            fence=instance.fence + 1, temporal_workflow_id=workflow_id, temporal_run_id=workflow_run_id)
+            plan = (job.source.get("team_plan") or {}) if job else {}
+            if instance.role == "lead" and plan.get("version") == 3:
+                handoff = await session.get(AgentDelivery, _id("delivery_", instance.id, "initial"))
+                if handoff and handoff.state == "queued":
+                    return await self._assign_orchestrator(session, job, instance, run, handoff, plan)
             deliveries, task = await self._admit_deliveries(session, instance, run, allow_tasks=True)
             if not deliveries:
                 await session.commit()
@@ -908,14 +1063,16 @@ class AgentInstanceService:
             instance.fence, instance.active_run_id, instance.state = run.fence, run.id, "running"
             instance.updated_at = now()
             if task:
-                task.status, task.started_at, task.assigned_run_id = "running", now(), run.id
-                task.revision += 1
+                if task.status != "running":
+                    task.status, task.started_at = "running", now()
+                    task.revision += 1
+                task.assigned_run_id = run.id
                 task.runner_workflow_id = workflow_id
                 task.runner_run_id = workflow_run_id
                 run.task_id, run.attempt = task.id, task.current_attempt
                 attempt = await session.get(TeamTaskAttempt, f"{task.id}:attempt:{task.current_attempt}")
                 if attempt:
-                    attempt.status, attempt.started_at, attempt.assigned_run_id = "running", now(), run.id
+                    attempt.status, attempt.started_at, attempt.assigned_run_id = "running", task.started_at, run.id
                     attempt.runner_workflow_id = workflow_id
                     attempt.runner_run_id = workflow_run_id
             transcript = await session.get(AgentInstanceConversation, instance_id)
@@ -970,6 +1127,56 @@ class AgentInstanceService:
             conversation.messages, conversation.revision, conversation.updated_at = deepcopy(messages), expected_revision + 1, now()
             return await self._commit(session, key, fingerprint, {"revision": conversation.revision})
 
+    async def _review_gate(self, session, instance, task):
+        """Return whether a parked task can submit, or why it cannot finish."""
+        children = await self._children_of_attempt(session, task)
+        if not children:
+            job = await session.get(EmployeeJob, instance.job_id)
+            plan = job.source.get("team_plan", {}) if job else {}
+            if (instance.template_node_id == plan.get("orchestrator_node_id")
+                    and any(m.get("parent_node_id") == instance.template_node_id for m in plan["members"])):
+                # A revision can reuse accepted evidence from an earlier attempt.
+                accepted = await session.scalar(select(TeamTask.id).join(AgentRun, TeamTask.assigning_run_id == AgentRun.id)
+                    .where(AgentRun.task_id == task.id, AgentRun.attempt < task.current_attempt,
+                           TeamTask.status == "accepted").limit(1))
+                if not accepted:
+                    return False, "The Orchestrator finished without assigning work to a connected subagent."
+            return True, None
+        if all(child.status == "accepted" for child in children):
+            return True, None
+        if any(child.status in {"queued", "blocked", "running"} for child in children):
+            return False, None
+        # If a notice raced this turn, the session will pick it up on its next
+        # claim. A final answer after consuming all notices without resolving
+        # them must report a review failure instead of waiting forever.
+        pending = await session.scalar(select(AgentDelivery.id).where(AgentDelivery.kind == "task_review",
+            AgentDelivery.recipient_id == instance.id, AgentDelivery.task_id == task.id,
+            AgentDelivery.attempt == task.current_attempt, AgentDelivery.state.in_(["queued", "held"])).limit(1))
+        return (False, None) if pending else (False, "The manager ended its review with unresolved subtask results.")
+
+    async def _chat_review_error(self, session, instance, result) -> str | None:
+        job = await session.get(EmployeeJob, instance.job_id)
+        if not job or self._protected_job(job):
+            return None
+        plan = job.source.get("team_plan") or {}
+        if plan.get("version") != 3:
+            return None
+        outer = await session.scalar(select(TeamTask).where(
+            TeamTask.team_id == instance.team_id, TeamTask.parent_agent_id == instance.template_node_id,
+            TeamTask.assigned_to == plan["orchestrator_node_id"], TeamTask.assigning_run_id.is_not(None)))
+        if outer is None or outer.status in {"queued", "blocked", "running"}:
+            return None  # The requested revision is still with the Orchestrator.
+        if outer.status == "accepted":
+            if str((result or {}).get("response") or "").strip() in {"", "NO_REPLY"}:
+                return "Chat accepted the assignment and still needs to write the final answer."
+            return None
+        notice = await session.scalar(select(AgentDelivery.id).where(
+            AgentDelivery.recipient_id == instance.id, AgentDelivery.kind == "task_review",
+            AgentDelivery.state == "queued").limit(1))
+        if notice is None:
+            return "Chat finished its turn with the Orchestrator's assignment still awaiting review."
+        return None
+
     async def complete_run(self, instance_id: str, run_id: str, *, result: dict | None = None,
                            error: str | dict | None = None, request_id: str) -> dict:
         from models.employees import EmployeeJob
@@ -987,23 +1194,39 @@ class AgentInstanceService:
             if run.status not in {"running", "draining"}:
                 return {"status": run.status, "instance_wake": []}
             stale = instance.active_run_id != run_id or instance.fence != run.fence or run.status == "draining"
+            if instance.role == "lead" and not stale and not error:
+                error = await self._chat_review_error(session, instance, result)
             error_text = str(error.get("message") or error.get("code") or error) if isinstance(error, dict) else error
             run.result = deepcopy(result) if not stale else None
             run.error = run.error or error_text
             run.status = "interrupted" if stale else ("failed" if error else "completed")
             run.completed_at = now()
-            wake = []
+            wake, stops, receipt = [], [], {}
             if run.task_id:
                 task = await session.get(TeamTask, run.task_id)
                 if task and task.current_attempt == run.attempt and task.assigned_run_id == run_id:
                     attempt = await session.get(TeamTaskAttempt, f"{task.id}:attempt:{run.attempt}")
-                    if not stale and task.status == "running":
-                        task.status = "failed" if error else "submitted"
-                        task.result, task.error, task.completed_at = deepcopy(result), error_text[:2000] if error_text else None, now()
+                    interrupted = bool(task.assigning_run_id and stale and run.error == "interrupted")
+                    can_submit = True
+                    if task.assigning_run_id and not stale and not error and task.status == "running":
+                        can_submit, gate_error = await self._review_gate(session, instance, task)
+                        if gate_error:
+                            error_text, run.error, run.status = gate_error, gate_error, "failed"
+                    if (not stale or interrupted) and task.status == "running" and (can_submit or error_text):
+                        if interrupted:
+                            error_text = "interrupted"
+                        task.status = "failed" if error_text else "submitted"
+                        task.result = deepcopy(result) if not interrupted else None
+                        task.error, task.completed_at = error_text[:2000] if error_text else None, now()
                         task.revision += 1
                         wake.extend(await self._task_notice(session, task, chain_id=run.chain_id))
+                        if task.assigning_run_id:
+                            if error_text:
+                                await self._cancel_branch(session, task, stops)
+                            if wake:
+                                receipt["task_outcome"] = self._task_outcome(task, instance, wake[0])
                     if attempt:
-                        attempt.status, attempt.result, attempt.error, attempt.completed_at = task.status, deepcopy(task.result), task.error, now()
+                        attempt.status, attempt.result, attempt.error, attempt.completed_at = task.status, deepcopy(task.result), task.error, task.completed_at
             # A failed invocation must not immediately be restarted by its old input.
             pending = (await session.execute(select(AgentDelivery).where(AgentDelivery.run_id == run_id,
                 AgentDelivery.state == "admitted"))).scalars().all()
@@ -1033,7 +1256,9 @@ class AgentInstanceService:
                 team = await session.get(AgentTeam, instance.team_id)
                 if job is None and team and team.status == "completed":
                     retire_scope = deepcopy(instance.config.get("scope") or {})
-            completed = await self._commit(session, key, fingerprint, {"status": run.status, "instance_wake": wake})
+            if stops:
+                receipt["instance_stop"] = stops
+            completed = await self._commit(session, key, fingerprint, {"status": run.status, "instance_wake": wake, **receipt})
         if retire_scope:
             retirement = await self.close_job(scope=retire_scope, request_id=f"completed:{run_id}")
             completed["instance_stop"] = retirement.get("instance_stop", [])
@@ -1097,6 +1322,10 @@ class AgentInstanceService:
                     raise InstanceError("job_not_found")
                 if job.state not in {"delivered", "completed"}:
                     raise InstanceError("job_not_delivered")
+                if (job.source.get("team_plan") or {}).get("version") == 3:
+                    team = await session.get(AgentTeam, job.team_id)
+                    if team:
+                        team.status, team.completed_at = "completed", now()
             else:
                 team = await session.get(AgentTeam, scope["team_id"])
                 if not team or team.workflow_id != scope["workflow_id"] or team.team_lead_node_id != scope["lead_node_id"] or team.status != "completed":

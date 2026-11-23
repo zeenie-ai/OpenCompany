@@ -5,6 +5,7 @@ import { CreationError } from './agentCreationApi';
 export interface BrowserAgentCreation {
   workflow_id: string;
   browser_node_id?: string;
+  parent_node_id?: string;
   position?: [number, number];
   provider?: string;
   model?: string;

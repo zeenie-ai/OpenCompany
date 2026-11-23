@@ -41,6 +41,19 @@ def task_manager_additions(owner: str, position: tuple[float, float], *, ref: st
     return GraphAdditions(nodes=(manager,), edges=(tool_edge(manager.ref, owner),))
 
 
+def manager_review_additions(owner: str, position: tuple[float, float], *, prefix: str = "", name: str = ""):
+    """A manager's private task board and its completion listener, for all creation surfaces."""
+    from services.graph_build import Edge, GraphAdditions, NewNode
+
+    x, y = position
+    board = task_manager_additions(owner, (x - 200, y + 180), ref=prefix + "task_manager",
+                                   label=(name + " Task Manager").strip())
+    review = NewNode(prefix + "task_trigger", "taskTrigger", (name + " Task Completed").strip(),
+                     {"parent_node_id": owner, "status_filter": "all"}, (x - 280, y - 80))
+    return GraphAdditions(nodes=(*board.nodes, review),
+                          edges=(*board.edges, Edge(review.ref, "output-main", owner, "input-task")))
+
+
 def employee_skill_parameters(role: Literal["lead", "talk"]) -> dict:
     """Default editable skills for the employee's lead or conversational contact."""
     from services.employees.policy import SKILL_TOOL_ENTRY, SKILL_TOOL_NAME
@@ -141,6 +154,9 @@ def validate_employee_team_connection(graph: Mapping[str, Any], plan: Mapping[st
     Existing admitted generations have no marker or edge. A newly added link
     must agree with their plan too; it cannot silently redirect a job.
     """
+    if plan.get("version") == 3:
+        _validate_hierarchy(graph, plan)
+        return
     validate_employee_role_connections(graph, plan, plan.get("lead_node_id"))
     validate_employee_role_connections(graph, plan, plan.get("talk_node_id"))
     links = [edge for edge in graph.get("edges", [])
@@ -191,3 +207,45 @@ def _validate_managed_team_members(graph: Mapping[str, Any], plan: Mapping[str, 
     if any(node_id not in nodes for node_id in delivery_ids):
         raise EmployeeTeamValidationError("Restore this employee's reviewed result destination before starting work.",
                                           code="INVALID_EMPLOYEE_TEAM_DELIVERY", node_id=lead)
+
+
+def _validate_hierarchy(graph: Mapping[str, Any], plan: Mapping[str, Any]) -> None:
+    nodes = {node["id"]: node for node in graph.get("nodes", [])}
+    edges = graph.get("edges", [])
+    chat, orchestrator = plan.get("lead_node_id"), plan.get("orchestrator_node_id")
+    members = plan.get("members") or []
+    by_id = {member.get("node_id"): member for member in members}
+    if (not chat or chat != plan.get("talk_node_id") or nodes.get(chat, {}).get("type") != "ai_employee"
+            or nodes.get(orchestrator, {}).get("type") != "orchestrator_agent"
+            or len(by_id) != len(members) or chat in by_id or orchestrator not in by_id
+            or by_id[orchestrator].get("parent_node_id") != chat):
+        raise EmployeeTeamValidationError("Restore this team's Chat Employee and its assigned Orchestrator.", node_id=chat)
+    owners = {chat, *by_id}
+    expected = Counter((member["node_id"], member.get("parent_node_id")) for member in members)
+    actual = Counter((edge.get("source"), edge.get("target")) for edge in edges
+                     if (edge.get("targetHandle") or edge.get("target_handle")) == "input-teammates"
+                     and (edge.get("source") in owners or edge.get("target") in owners))
+    if expected != actual or any((edge.get("sourceHandle") or edge.get("source_handle")) != "output-top"
+            for edge in edges if edge.get("target") in owners and (edge.get("targetHandle") or edge.get("target_handle")) == "input-teammates"):
+        raise EmployeeTeamValidationError("Reconnect each approved team member to its recorded manager.", node_id=chat)
+    for member in members:
+        node_id, parent = member["node_id"], member.get("parent_node_id")
+        if nodes.get(node_id, {}).get("type") != member.get("node_type") or (
+            node_id != orchestrator and parent != orchestrator and not (
+                nodes.get(parent, {}).get("type") == "ai_employee" and by_id.get(parent, {}).get("parent_node_id") == orchestrator)):
+            raise EmployeeTeamValidationError("Choose an approved manager beneath the Orchestrator for this role.", node_id=node_id)
+    for owner, resource in [(chat, plan), *((member["node_id"], member) for member in members
+                                if member["node_type"] in {"ai_employee", "orchestrator_agent"})]:
+        manager, trigger = resource.get("task_manager_node_id"), resource.get("task_trigger_node_id")
+        _validate_assigned_node(graph, owner, manager, "taskManager", connected_task_manager_ids(graph, owner) == [manager],
+                                label="Task Manager", handle="Tools", code="INVALID_EMPLOYEE_TASK_MANAGER")
+        if (nodes.get(trigger, {}).get("type") != "taskTrigger" or nodes[trigger].get("disabled")
+                or (nodes[trigger].get("data") or {}).get("disabled") or not any(edge.get("source") == trigger
+                    and edge.get("target") == owner and (edge.get("targetHandle") or edge.get("target_handle")) == "input-task"
+                    for edge in edges)):
+            raise EmployeeTeamValidationError("Reconnect this manager’s Task Completed trigger to its Task input.", node_id=owner)
+        skill = resource.get("lead_skill_node_id") if owner == chat else resource.get("skill_node_id")
+        _validate_assigned_node(graph, owner, skill, "masterSkill", connected_master_skill_ids(graph, owner).count(skill) == 1,
+                                label="Master Skill", handle="Skill", code="INVALID_EMPLOYEE_MASTER_SKILL")
+    if any(node_id not in nodes for node_id in [*plan.get("delivery_node_ids", []), *plan.get("talk_delivery_node_ids", [])]):
+        raise EmployeeTeamValidationError("Restore the reviewed result destination.", node_id=chat)

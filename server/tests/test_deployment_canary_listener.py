@@ -300,6 +300,40 @@ class TestStartCanaryListener:
     WorkflowIDConflictPolicy.USE_EXISTING + TypedSearchAttributes."""
 
     @pytest.mark.asyncio
+    async def test_v3_task_triggers_with_same_label_have_distinct_stable_identities(self, monkeypatch):
+        from core.container import container
+        from services.temporal.trigger_listener_workflow import TriggerListenerWorkflow
+        from temporalio import workflow
+
+        lead = {"id": "lead", "type": "ai_employee", "data": {"employee_team_plan": {"version": 3}}}
+        first = {"id": "employee-review", "type": "taskTrigger", "data": {"label": "Review"}}
+        second = {"id": "observer", "type": "taskTrigger", "data": {"label": "Review"}}
+        manager, _ = _build_manager_with_state("wf", [lead, first, second],
+            [{"source": first["id"], "target": lead["id"], "targetHandle": "input-task"}])
+        handle = MagicMock(signal=AsyncMock())
+        client = MagicMock()
+        client.get_workflow_handle.return_value = handle
+        manager.database.get_latest_workflow_control = AsyncMock(return_value=MagicMock(
+            generation=1, status="running", controller_workflow_id="controller", resource_manifest={}))
+        monkeypatch.setattr(container, "temporal_client", lambda: MagicMock(client=client))
+        event = {"id": "event-1", "data": {"parent_node_id": "lead"}}
+        monkeypatch.setattr(workflow, "patched", lambda _key: True)
+        monkeypatch.setattr(workflow, "execute_activity", AsyncMock(return_value=True))
+        start_child = AsyncMock()
+        monkeypatch.setattr(workflow, "start_child_workflow", start_child)
+        monkeypatch.setattr(workflow, "logger", MagicMock())
+        async def fire(node):
+            registration = await manager._start_canary_listener(node, "wf", {})
+            args = handle.signal.await_args.args[1]["listener_args"]
+            await TriggerListenerWorkflow()._spawn_child_run(event, args)
+            return registration, start_child.await_args.kwargs["id"]
+        ids = await fire(first)
+        observer = await fire(second)
+        assert ids[0] != observer[0] and ids[1] != observer[1]
+        first["data"]["label"] = "Renamed"
+        assert await fire(first) == ids
+
+    @pytest.mark.asyncio
     async def test_starts_with_deterministic_id_and_use_existing_policy(self, monkeypatch):
         from temporalio.common import WorkflowIDConflictPolicy
         from types import SimpleNamespace

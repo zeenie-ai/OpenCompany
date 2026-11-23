@@ -26,7 +26,7 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -81,6 +81,7 @@ async def apply_graph_additions(
     prepare_employee_resources: Optional[Callable[[Mapping, Mapping, Mapping, Mapping], Tuple[GraphAdditions, Mapping[str, str]]]] = None,
     authorize: Optional[Callable[[Any], Awaitable[None]]] = None,
     authorization_grant_ids: Sequence[str] = (),
+    editor_team_parent: Optional[str] = None,
 ) -> Optional[GraphAdditionsResult]:
     """Add ``additions`` to the saved workflow in one transaction, then
     announce them. None when the workflow does not exist (nothing is
@@ -110,6 +111,22 @@ async def apply_graph_additions(
                                                        employee.team_plan, employee.node_roles or {})
         else:
             batch, reused = prepare(graph) if prepare else (additions, {})
+        plan = (employee.team_plan or {}) if employee else {}
+        editor_member = editor_team_parent is not None and plan.get("version") == 3 and bool(batch.nodes)
+        if editor_member:
+            from services.graph_build import Edge
+            from services.node_allowlist import is_hire_allowed
+
+            manager_id = editor_team_parent or plan["orchestrator_node_id"]
+            manager = next((member for member in plan["members"] if member["node_id"] == manager_id), None)
+            if not manager or manager["node_type"] not in {"orchestrator_agent", "ai_employee"}:
+                raise ValueError("Select the Orchestrator or an approved manager as the new employee's parent.")
+            agent = next(node for node in batch.nodes if node.ref == "agent")
+            if agent.type == "orchestrator_agent":
+                raise ValueError("This team already has its permanent Orchestrator. Choose AI Employee for another manager.")
+            if any(not is_hire_allowed(node.type) for node in batch.nodes):
+                raise ValueError("This employee or one of its required nodes is disabled for hires.")
+            batch = replace(batch, edges=(*batch.edges, Edge(agent.ref, "output-top", manager_id, "input-teammates")))
         placed = add_to_graph(workflow_id, workflow.data or {}, batch)
         from services.browser_resources import allocate_new_browser_resources, validate_browser_resource_bindings
         resource_parameters = {}
@@ -177,10 +194,14 @@ async def apply_graph_additions(
             graph_nodes = {node["id"]: node for node in placed.graph.get("nodes", [])}
             graph_edges = placed.graph.get("edges", [])
             lead = roles.get("agent")
+            hierarchy = team.get("version") == 3
+            managers = {member["node_id"] for member in members if member.get("node_type") in {"ai_employee", "orchestrator_agent"}} if hierarchy else {lead}
             next_index = max((int(role.split("_")[1]) for role in roles if role.startswith("specialist_") and role.split("_")[1].isdigit()), default=0)
             for node in placed.nodes:
                 cls = get_node_class(node["type"])
-                if not cls or getattr(cls, "component_kind", "") != "agent" or not any(edge.get("source") == node["id"] and edge.get("target") == lead and edge.get("targetHandle") == "input-teammates" for edge in graph_edges):
+                manager_id = next((edge["target"] for edge in graph_edges if edge.get("source") == node["id"] and
+                                   edge.get("target") in managers and edge.get("targetHandle") == "input-teammates"), None)
+                if not cls or getattr(cls, "component_kind", "") != "agent" or not manager_id:
                     continue
                 next_index += 1
                 context = next((candidate["id"] for candidate in graph_nodes.values() if candidate["type"] == "context" and (candidate.get("data") or {}).get("agentNodeId") == node["id"]), None)
@@ -189,16 +210,24 @@ async def apply_graph_additions(
                     roles[f"specialist_{next_index}_context"] = context
                 config = placed.parameters.get(node["id"], {})
                 members.append({"node_id": node["id"], "node_type": node["type"], "responsibility": config.get("system_message") or node["data"]["label"], "role": "custom", "context_node_id": context, "tools": [], "skills": []})
+                if hierarchy:
+                    members[-1]["parent_node_id"] = manager_id
+                    if node["type"] == "ai_employee":
+                        for key, kind, handle in (("task_manager_node_id", "taskManager", "input-tools"),
+                                                  ("task_trigger_node_id", "taskTrigger", "input-task"),
+                                                  ("skill_node_id", "masterSkill", "input-skill")):
+                            members[-1][key] = next((edge["source"] for edge in graph_edges if edge["target"] == node["id"] and
+                                edge["targetHandle"] == handle and graph_nodes[edge["source"]]["type"] == kind), None)
                 # Child execution and tool access remain linked to the exact
                 # owner-approved specialist bundle. Revoking that parent
                 # grant disables the entire expansion, including nested apps.
                 parent = None
                 for grant_id in authorization_grant_ids:
                     candidate = await session.get(EmployeeGrant, grant_id)
-                    if candidate and candidate.capability == node["type"] and candidate.member_id == lead:
+                    if candidate and candidate.capability == node["type"] and candidate.member_id == manager_id:
                         parent = candidate
                         break
-                if parent:
+                if parent or editor_member:
                     capabilities = [node["id"], *(edge["source"] for edge in graph_edges if edge.get("target") == node["id"] and edge.get("targetHandle") == "input-tools")]
                     for capability_id in capabilities:
                         capability_node = graph_nodes[capability_id]
@@ -206,10 +235,11 @@ async def apply_graph_additions(
                         if params is None:
                             parameter_row = await _row(session, capability_id)
                             params = dict(parameter_row.parameters or {}) if parameter_row else {}
-                        identity = hashlib.sha256(f"builder-child:{parent.id}:{node['id']}:{capability_id}".encode()).hexdigest()
+                        approval = {"parent_grant_id": parent.id} if parent else {"owner_edit": True}
+                        identity = hashlib.sha256(f"team-member:{workflow_id}:{mutation_id}:{node['id']}:{capability_id}".encode()).hexdigest()
                         session.add(EmployeeGrant(id=identity, workflow_id=workflow_id, owner_id=employee.owner_id,
                             capability=capability_node["type"], member_id=node["id"], account_id=str((params or {}).get("account_id") or ""),
-                            limits={"approved": True, "parent_grant_id": parent.id, "tool_node_id": capability_id, "parameters": params or {}}))
+                            limits={"approved": True, **approval, "tool_node_id": capability_id, "parameters": params or {}}))
             for member in members:
                 member["tools"] = [edge["source"] for edge in graph_edges if edge.get("target") == member["node_id"] and edge.get("targetHandle") == "input-tools"]
                 holder = next((edge["source"] for edge in graph_edges if edge.get("target") == member["node_id"] and edge.get("targetHandle") == "input-skill"), None)
@@ -223,6 +253,9 @@ async def apply_graph_additions(
                     if role:
                         roles[role + "_skills"] = holder
             team["members"] = members
+            if hierarchy:
+                from services.employee_team_connection import validate_employee_team_connection
+                validate_employee_team_connection(placed.graph, team)
             employee.team_plan = team
             employee.node_roles = roles
             employee.updated_at = datetime.now(timezone.utc)

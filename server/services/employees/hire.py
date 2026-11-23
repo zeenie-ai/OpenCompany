@@ -79,6 +79,8 @@ def _still_building(row: Any) -> bool:
 
 def payload_hash(request: HireEmployeeRequest) -> str:
     body = request.model_dump(mode="json", exclude={"idempotency_key"})
+    if request.team is None:
+        body.pop("team", None)  # Keep already-issued idempotency keys valid.
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 

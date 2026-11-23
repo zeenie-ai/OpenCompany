@@ -34,6 +34,7 @@ export const HIRE_PAYLOAD_KEYS = [
   'trigger',
   'sends_via',
   'source',
+  'team',
 ] as const;
 
 export const TRIGGER_KINDS: readonly string[] = triggerLists.kinds;
@@ -74,6 +75,7 @@ export interface HireTrigger {
 }
 
 export interface HireEmployeePayload {
+  team?: HireTeamMember[];
   idempotency_key: string;
   job: string;
   name: string;
@@ -87,6 +89,14 @@ export interface HireEmployeePayload {
   trigger?: HireTrigger;
   sends_via?: string;
   source: { spec_version: 1; provider?: string; model?: string };
+}
+
+export interface HireTeamMember {
+  key: string;
+  name: string;
+  responsibility: string;
+  kind: 'specialist' | 'employee';
+  reports_to: string;
 }
 
 function clip(value: unknown, max: number): string {
@@ -275,6 +285,7 @@ function uniqueStrings(values: unknown, max: number, each: number): string[] {
 }
 
 export interface HireInput {
+  team?: HireTeamMember[];
   spec: NormalizedSpec;
   state: StateModel;
   /** The hire button's params, resolved. */
@@ -285,7 +296,7 @@ export interface HireInput {
   core: JsonRenderCore;
 }
 
-export function buildHirePayload({ spec, state, params, job, idempotencyKey, source, core }: HireInput): HireEmployeePayload {
+export function buildHirePayload({ spec, state, params, job, idempotencyKey, source, team, core }: HireInput): HireEmployeePayload {
   const agent = resolved('AgentCard', elementsOf(spec, 'AgentCard')[0], state, core);
   const plan = resolved('Plan', elementsOf(spec, 'Plan')[0], state, core);
 
@@ -358,6 +369,7 @@ export function buildHirePayload({ spec, state, params, job, idempotencyKey, sou
     source: { spec_version: 1 },
   };
   if (trigger) payload.trigger = trigger;
+  if (team !== undefined) payload.team = team;
   const sendsVia = clip(params.sendsVia ?? params.sends_via, 40);
   if (sendsVia) payload.sends_via = sendsVia;
   if (source?.provider) payload.source.provider = source.provider;

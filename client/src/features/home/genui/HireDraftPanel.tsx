@@ -29,6 +29,7 @@ import { MicroLabel, StatusDot } from '../ui/primitives';
 import { pillToast } from '../ui/pillToast';
 import type { ConnectCandidate, HireActionContext } from './actions';
 import { triggerAppNames, useDraftActions, useDraftStore, type DraftFailure } from './draftStore';
+import { HireTeamEditor } from './HireTeamEditor';
 import { useHire } from './useHire';
 
 const loadHireScreen = () => import('./HireScreen');
@@ -267,15 +268,8 @@ export function HireDraftPanel({ onConnect }: { onConnect: (providerId: string) 
               actions={actionContext}
               discard={showHeader ? null : discardButton}
             >
-              {team.length > 0 && (
-                <details className="rounded-row border border-border-default px-3.5 py-3 text-sm text-fg-muted">
-                  <summary className="cursor-pointer font-semibold text-fg-default">Their team</summary>
-                  <p className="mt-2 mb-2">They can ask these helpers to do parts of the job, then check the result for you.</p>
-                  <ul className="m-0 list-disc space-y-1 pl-5">
-                    {team.map(({ responsibility }) => <li key={responsibility}>{responsibility}</li>)}
-                  </ul>
-                  <p className="mt-2 mb-0">Use Change something to adjust their responsibilities.</p>
-                </details>
+              {team !== null && (
+                <HireTeamEditor team={team} hiring={hiring} onChange={team => useDraftStore.setState({ team })} />
               )}
             </HireScreen>
           </Suspense>

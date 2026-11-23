@@ -911,6 +911,16 @@ class DeploymentManager:
             **capture_temporal_routing_input(),
             **(await capture_browser_routing_input(workflow_id, state.nodes, state.user_id)),
         }
+        from services.task_trigger_routing import hierarchical_team, task_trigger_binding
+        if node_type == "taskTrigger" and hierarchical_team(state.nodes):
+            # Names may be changed, and different employees often use the
+            # same label. The graph node identifies both listener and firing.
+            listener_id = f"task-review:{workflow_id}:{node_id}"
+            listener_args["task_trigger_identity"] = listener_id
+            admitted_params = (state.parameter_snapshot or {}).get(node_id, params)
+            listener_args.update(task_trigger_binding(
+                node_id, state.nodes, state.edges, sanitize_runtime_payload(admitted_params),
+            ))
         if state.graph_version > 0 and state.generation > 0:
             listener_args.update(
                 {

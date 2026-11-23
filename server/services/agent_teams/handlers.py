@@ -79,6 +79,7 @@ async def handle_get_team_status(data: Dict[str, Any], websocket: WebSocket) -> 
     status = await service.get_team_status(
         team_id, workflow_id=data.get("workflow_id"),
         team_lead_node_id=data.get("team_lead_node_id"), execution_id=data.get("execution_id"),
+        **({"task_board": True} if data.get("task_board") else {}),
     )
     if status.get("error") == "Team not found":
         status = {**empty_status, "message": "No active team yet"}
@@ -142,11 +143,13 @@ async def handle_get_team_tasks(data: Dict[str, Any], websocket: WebSocket) -> D
             tasks = await service.list_durable_task_history(
                 workflow_id=data["workflow_id"],
                 team_lead_node_id=data["team_lead_node_id"], status=data.get("status"),
+                **({"task_board": True} if data.get("task_board") else {}),
             )
         else:
             tasks = await service.list_durable_tasks(
                 workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
                 execution_id=data.get("execution_id"), status=data.get("status"),
+                **({"task_board": True} if data.get("task_board") else {}),
             )
     elif data.get("team_id"):
         # Compatibility read only; mutations never accept caller-selected team IDs.
@@ -174,7 +177,7 @@ async def handle_get_team_task(data: Dict[str, Any], websocket: WebSocket) -> Di
     from services.agent_team import get_agent_team_service
     task = await get_agent_team_service().get_durable_task(
         workflow_id=data["workflow_id"], team_lead_node_id=data["team_lead_node_id"],
-        execution_id=data.get("execution_id"), task_id=data["task_id"],
+        execution_id=data.get("execution_id"), task_id=data["task_id"], task_board=True,
     )
     return {"task": task}
 

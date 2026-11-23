@@ -117,6 +117,9 @@ function Details({ task, agentName }: { task: TeamTaskView; agentName: (nodeId?:
       ) : !isEmpty(task.result) && (
         <Section title="Result"><Value value={task.result} className="max-h-96" /></Section>
       )}
+      {task.reviewed_job_result && (
+        <Section title="Chat Employee’s final answer"><p className={PROSE}>{task.reviewed_job_result}</p></Section>
+      )}
 
       {attempts.length > 0 && (
         <Section title="Attempt history">

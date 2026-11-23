@@ -72,7 +72,7 @@ async def attach_employee_job(database: Any, context: dict, review: dict | None 
         # task/intake outputs remain authoritative for their own node IDs.
         captured = dict((job.source or {}).get("outputs") or {})
         intake_id = (job.source or {}).get("intake_node_id")
-        if not intake_id and (job.source or {}).get("team_plan", {}).get("version") != 2:
+        if not intake_id and (job.source or {}).get("team_plan", {}).get("version") not in (2, 3):
             snapshot = (job.source or {}).get("parameters") or {}
             possible = [node.get("id") for node in (job.source or {}).get("nodes", [])
                 if node.get("type") == "employeeJob"
@@ -98,7 +98,7 @@ async def employee_lead_prompt(database: Any, context: dict, prompt: str) -> str
     from services.employees.email_input import project_stored_mission
     source = job.source or {}
     plan = source.get("team_plan") or {}
-    if plan.get("version") == 2:
+    if plan.get("version") in (2, 3):
         return project_stored_mission(job.mission, source)
     if len(prompt) <= 20000:
         return prompt
@@ -246,11 +246,11 @@ async def admit_team_plan(database, workflow_id: str, nodes: list, edges: list |
     else:
         # Re-arming an admitted generation must never adopt later saved edits.
         plan = captured_plan
-    if plan.get("version") != 2:
+    if plan.get("version") not in (2, 3):
         return nodes
     from services.employee_team_connection import validate_employee_team_connection
     validate_employee_team_connection({"nodes": nodes, "edges": edges or []}, plan)
-    return [{**node, "data": {**(node.get("data") or {}), "employee_recipe_version": 2, "employee_team_plan": deepcopy(plan)}}
+    return [{**node, "data": {**(node.get("data") or {}), "employee_recipe_version": plan["version"], "employee_team_plan": deepcopy(plan)}}
             if node.get("id") == plan.get("lead_node_id") else node for node in nodes]
 
 
@@ -268,14 +268,17 @@ async def admitted_graph(database, context):
 
 
 def team_plan_in(graph, node_id):
-    """The v2 plan an admitted graph carries, for its lead or Talk contact."""
+    """Resolve the recorded plan for its contact, lead or v3 team member."""
     nodes = graph.get("nodes") or []
-    lead = next((node for node in nodes if (node.get("data") or {}).get("employee_recipe_version") == 2), None)
+    lead = next((node for node in nodes if (node.get("data") or {}).get("employee_recipe_version") in (2, 3)), None)
     if not lead:
         return None
     from copy import deepcopy
     plan = deepcopy((lead.get("data") or {}).get("employee_team_plan") or {})
-    if plan.get("version") != 2 or node_id not in {plan.get("lead_node_id"), plan.get("talk_node_id")}:
+    admitted = {plan.get("lead_node_id"), plan.get("talk_node_id")}
+    if plan.get("version") == 3:
+        admitted.update(member.get("node_id") for member in plan.get("members", []))
+    if plan.get("version") not in (2, 3) or node_id not in admitted:
         return None
     ids = {node.get("id") for node in nodes}
     referenced = {plan.get("lead_node_id"), plan.get("talk_node_id"), *plan.get("delivery_node_ids", []), *plan.get("talk_delivery_node_ids", []), *(member.get("node_id") for member in plan.get("members", []))}
@@ -288,6 +291,17 @@ def team_plan_in(graph, node_id):
 
 async def employee_runtime_plan(database, context):
     """Resolve the off-canvas boundary from the generation's admitted graph."""
+    if context.get("employee_job_id"):
+        from models.employees import EmployeeJob
+        async with database.get_session() as session:
+            job = await session.get(EmployeeJob, str(context["employee_job_id"]))
+        if job is None or job.workflow_id != context.get("workflow_id"):
+            raise ValueError("The admitted employee job is unavailable")
+        source = job.source or {}
+        plan = source.get("team_plan") or {}
+        if plan.get("version") == 3:
+            caller = context.get("node_id")
+            return plan if caller == job.lead_node_id or any(m.get("node_id") == caller for m in plan.get("members", [])) else None
     graph = await admitted_graph(database, context)
     return team_plan_in(graph, context.get("node_id")) if graph else None
 

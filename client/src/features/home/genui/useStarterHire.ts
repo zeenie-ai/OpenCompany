@@ -1,10 +1,6 @@
 /**
- * "Hire now": a starter (hire/starters.json) hired in one click, from its
- * chip under the composer or its card in Settings > Plugins, with no setup
- * screen. Its skills go into the library first (a new hire gets the
- * library's skills that are on), then its own setup is hired as it stands,
- * asking first (hirePayload's starterHirePayload), and the new employee
- * lands like any hire.
+ * Save a starter using its preset routine and the owner's reviewed team.
+ * Both Home and Settings install its library skills before hiring it.
  *
  * It shares the one hire slot with the setup screen, so the two never
  * overlap; `busy` is true while either is hiring.
@@ -21,7 +17,7 @@ import { DISCOVER_SKILL_FOLDER, useSkillActions } from '../data/skills';
 import type { Starter } from '../hire/templates';
 import { pillToast } from '../ui/pillToast';
 import { beginHire, endHire, setComposerInput, useDraftStore } from './draftStore';
-import { starterHirePayload } from './hirePayload';
+import { starterHirePayload, type HireTeamMember } from './hirePayload';
 import { HIRE_TIMEOUT_MS, hiredEmployee, hireFailureMessage, welcomeHire, type HireResponse } from './useHire';
 
 type Send = WebSocketActions['sendRequest'];
@@ -60,9 +56,9 @@ export function useStarterHire() {
 
   /** Resolves true once the starter is on the team. */
   const hire = useCallback(
-    async (starter: Starter): Promise<boolean> => {
+    async (starter: Starter, reviewed: HireTeamMember[] = starter.hire.team): Promise<boolean> => {
       const team = queryClient.getQueryData<EmployeeSummary[]>(EMPLOYEES_QUERY_KEY) ?? [];
-      const base = starterHirePayload(starter, { idempotencyKey: '', taken: team.map((employee) => employee.name) });
+      const base = { ...starterHirePayload(starter, { idempotencyKey: '', taken: team.map((employee) => employee.name) }), team: reviewed };
       const key = beginHire(`starter:${JSON.stringify(base)}`);
       if (!key) return false;
       try {

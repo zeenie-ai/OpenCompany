@@ -161,6 +161,17 @@ class HireSource(_Lenient):
         return _clip(value, 200) or None
 
 
+class HireTeamMember(BaseModel):
+    """Reviewed roles use draft-local keys; Hire allocates all graph identities."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    key: str = Field(min_length=1, max_length=KEY_MAX, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=NAME_MAX)
+    responsibility: str = Field(min_length=1, max_length=DESCRIPTION_MAX)
+    reports_to: str = Field(default="orchestrator", max_length=KEY_MAX)
+    kind: Literal["employee", "specialist"] = "specialist"
+
+
 class HireEmployeeRequest(_Lenient):
     idempotency_key: str
     job: str
@@ -175,6 +186,23 @@ class HireEmployeeRequest(_Lenient):
     trigger: Optional[HireTrigger] = None
     sends_via: Optional[str] = None
     source: HireSource = Field(default_factory=HireSource)
+    team: Optional[List[HireTeamMember]] = Field(default=None, max_length=2)
+
+    @field_validator("team")
+    @classmethod
+    def _reporting_lines(cls, team: Optional[List[HireTeamMember]]) -> Optional[List[HireTeamMember]]:
+        if team is None:
+            return None
+        by_key = {member.key: member for member in team}
+        if len(by_key) != len(team) or {"chat", "orchestrator"} & by_key.keys():
+            raise ValueError("Each proposed role needs a distinct role key.")
+        for member in team:
+            if member.reports_to == "orchestrator":
+                continue
+            manager = by_key.get(member.reports_to)
+            if manager is None or manager.kind != "employee" or manager.reports_to != "orchestrator":
+                raise ValueError("Choose the Orchestrator or a direct AI Employee as this role's manager.")
+        return team
 
     @field_validator("idempotency_key", mode="before")
     @classmethod

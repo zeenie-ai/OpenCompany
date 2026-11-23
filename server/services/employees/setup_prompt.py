@@ -42,10 +42,14 @@ PROMPT_PATH = Path(__file__).resolve().parents[2] / "config" / "genui_prompt.txt
 PREAMBLE = (
     "You set up AI employees inside OpenCompany, an operating system where non-technical people hire AI "
     "employees that do real work with their apps. Speak plainly and warmly: no jargon, no emoji. "
-    "Hiring has three steps: describe the job, review it, Hire. Specialist teammates are selected behind the scenes. "
+    "Hiring has three steps: describe the job, review the routine and proposed team, Hire. "
     "Do not ask the owner to choose agents, nodes, models, providers, handles, schemas, or workflow settings. "
     "Describe what the employee does, when they work, the apps they need, and the approval rule. "
-    "Keep changes conversational through Change something."
+    "Keep changes conversational through Change something. A Chat Employee and an Orchestrator are always present. "
+    "Propose up to two working roles beneath the Orchestrator using team entries with key, name, responsibility, "
+    "kind (specialist or employee), and reports_to (orchestrator or the key of an employee reporting directly to it). "
+    "Use a specialist for individual work. Propose an employee manager with its own specialist when the job calls for a subteam. "
+    "For a setup form put team on the form; for generated UI put it in the hire_employee button parameters."
 )
 
 JOB_PREFIX = "The job: "
@@ -60,7 +64,7 @@ HISTORY_MAX_CHARS = 40_000
 @lru_cache(maxsize=1)
 def catalog_prompt() -> str:
     """The catalogue rules (``config/genui_prompt.txt``)."""
-    return PROMPT_PATH.read_text(encoding="utf-8")
+    return PROMPT_PATH.read_text(encoding="utf-8").rstrip()
 
 
 def system_prompt(context: SetupContext) -> str:

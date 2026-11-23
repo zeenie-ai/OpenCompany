@@ -155,7 +155,13 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
     if len(mission) > 20000:
         from services.employees.email_input import EmployeeEmailInputLimit
         raise EmployeeEmailInputLimit()
-    identifier = _identity(ctx, original_mission)
+    from services.chat.stream import chat_run_id_of
+    chat_run_id = chat_run_id_of(ctx.raw)
+    if chat_run_id and dispatch and plan.get("version") == 3:
+        request = json.dumps([ctx.workflow_id, lead_node_id, chat_run_id])
+        identifier = "employee-job:" + hashlib.sha256(request.encode()).hexdigest()
+    else:
+        identifier = _identity(ctx, original_mission)
     # Persist the original graph/parameters rather than consulting mutable
     # recipients or templates when the review completes later. A team job
     # keeps its generation's whole admitted graph: the run that admits it
@@ -173,6 +179,8 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
               "parameters": parameters, "outputs": ctx.outputs, "user_id": employee.owner_id,
               "session_id": ctx.session_id, "generation": ctx.raw.get("generation", 0),
               "data_scope_id": ctx.raw.get("data_scope_id"), "graphVersion": (graph.data or {}).get("graphVersion", 2), "team_plan": plan}
+    if dispatch and plan.get("version") == 3:
+        source["origin_kind"] = "chat"
     source.update({key: ctx.raw[key] for key in ("agent_lifecycle_version", "agent_protocol_version", "execution_control_version", "controller_workflow_id", "pi_harness_version",
                   "pi_local_control_version", "pi_local_control_state", "pi_local_control_revision") if key in ctx.raw})
     if isinstance(email_input, dict):
@@ -183,14 +191,20 @@ async def create_job(database: Any, ctx: Any, *, mission: str, lead_node_id: str
     runtime = temporal_job_runtime(ctx.raw)
     if runtime:
         source["runtime"] = runtime
-    from services.chat.stream import chat_run_id_of
     async with database.reserved_session() as session:
         row = await session.get(EmployeeJob, identifier)
         if row is not None:
             return row
+        if chat_run_id and plan.get("version") == 3:
+            from models.chat import ChatRun
+            from services.chat.ledger import job_chat_context
+            origin = await session.get(ChatRun, chat_run_id)
+            if origin is None or origin.workflow_id != str(ctx.workflow_id):
+                raise ValueError("This job requires its originating employee conversation")
+            source["chat_context"] = await job_chat_context(session, origin)
         row = EmployeeJob(id=identifier, workflow_id=str(ctx.workflow_id),
             origin_execution_id=identifier if dispatch else str(ctx.execution_id),
-            lead_node_id=lead_node_id, chat_run_id=chat_run_id_of(ctx.raw), mission=mission, source=source,
+            lead_node_id=lead_node_id, chat_run_id=chat_run_id, mission=mission, source=source,
             state="queued" if dispatch else "running", delivery={"node_ids": delivery_node_ids, "completed": [], "inflight": None})
         session.add(row)
         await session.commit()
@@ -269,6 +283,8 @@ async def dispatch_job(database: Any, job_id: str) -> bool:
         "generation": job.source.get("generation", 0), "graphVersion": job.source.get("graphVersion", 2),
         "data_scope_id": job.source.get("data_scope_id"), "employee_job_id": job.id,
         "parameter_snapshot": job.source["parameters"]}
+    if job.source.get("chat_context"):
+        context["employee_review_history"] = job.source["chat_context"]
     context.update({key: job.source[key] for key in ("agent_lifecycle_version", "agent_protocol_version", "execution_control_version", "controller_workflow_id", "pi_harness_version",
                    "pi_local_control_version", "pi_local_control_state", "pi_local_control_revision") if key in job.source})
     try:
@@ -325,8 +341,8 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
             return {"delivered": False, "state": "waiting"}
         if no_assignments_failed(job):
             return {"delivered": False, "state": "failed", "job_id": job.id, "failure": job.delivery["failure"]}
-        if job.state == "delivered":
-            return {"delivered": True, "state": "delivered", "job_id": job.id}
+        if job.state == "delivered" or (job.state == "completed" and job.delivery.get("completed")):
+            return {"delivered": True, "state": job.state, "job_id": job.id}
         if job.state == "failed":
             # Never deliver a failed job again (a refused send ends it so).
             return {"delivered": False, "state": "failed", "job_id": job.id}
@@ -347,7 +363,16 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
             return {"delivered": False, "state": job.state, "job_id": job.id}
         # Task submissions are not reviewed work. Requiring at least one
         # accepted task also prevents an un-delegated acknowledgement leaking.
-        tasks = list((await session.execute(select(TeamTask).where(TeamTask.team_id == job.team_id))).scalars()) if job.team_id else []
+        plan = job.source.get("team_plan") or {}
+        task_query = select(TeamTask).where(TeamTask.team_id == job.team_id)
+        if plan.get("version") == 3:
+            # Each manager reviewed its own required work before submitting.
+            task_query = task_query.where(TeamTask.parent_agent_id == lead_node_id,
+                                          TeamTask.assigned_to == plan["orchestrator_node_id"],
+                                          TeamTask.assigning_run_id.is_not(None)).limit(2)
+        tasks = (await session.execute(task_query)).scalars().all() if job.team_id else []
+        if plan.get("version") == 3 and len(tasks) != 1:
+            return {"delivered": False, "state": "working", "job_id": job.id}
         if tasks and any(task.status in {"failed", "cancelled"} for task in tasks):
             if job.source.get("agent_lifecycle_version") == 1:
                 # A worker failure is input to the instance lead's review,
@@ -394,6 +419,7 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
     node_index = {node["id"]: node for node in source["nodes"]}
     restored = {**source.get("outputs", {}), lead_node_id: {**lead_output, "response": job.result}}
     completed = list(job.delivery.get("completed", []))
+    delivery_state = "delivered"
     pending = list(job.delivery["node_ids"])
     # Gate first, then its reply. Never replace the server-captured recipient.
     pending.sort(key=lambda node_id: 0 if node_index[node_id]["type"] == "approvalGate" else 1)
@@ -441,8 +467,22 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
         try:
             if node["type"] == "chatReply":
                 uid = hashlib.sha256(f"{job.id}:{node_id}".encode()).hexdigest()[:32]
-                saved = await record_chat_message(database, job.workflow_id, "assistant", job.result, uid=uid)
-                result = {"success": bool(saved), "result": {"posted": bool(saved)}}
+                if plan.get("version") == 3 and job.chat_run_id:
+                    from services.chat.ledger import post_job_reply
+                    receipt = await post_job_reply(database, run_id=job.chat_run_id, workflow_id=job.workflow_id,
+                                                   job_id=job.id, uid=uid, text=job.result, node_id=lead_node_id,
+                                                   generation=int(source.get("generation") or 0))
+                    if receipt.get("reason") == "conversation_cleared":
+                        delivery_state = "completed"
+                    result = {"success": True, "result": receipt}
+                elif source.get("origin_kind") == "chat":
+                    # A manual invocation without a tracked chat has no branch
+                    # to publish into. Its final answer stays on the board.
+                    delivery_state = "completed"
+                    result = {"success": True, "result": {"posted": False, "reason": "conversation_unavailable"}}
+                else:
+                    saved = await record_chat_message(database, job.workflow_id, "assistant", job.result, uid=uid)
+                    result = {"success": bool(saved), "result": {"posted": bool(saved)}}
             else:
                 # Fixed snapshot parameters, original outputs, stable per-job
                 # execution identity keep approval and recipient scoping intact.
@@ -485,20 +525,20 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
                 "outputs": {**current.delivery.get("outputs", {}), node_id: restored[node_id]}}
             cancelled = current.state == "cancelled"  # a Reset or an Apply ended it meanwhile
             if not cancelled:
-                current.state = "delivered" if len(completed) == len(pending) else "delivering"
-            if current.state == "delivered":
+                current.state = delivery_state if len(completed) == len(pending) else "delivering"
+            if current.state in {"delivered", "completed"}:
                 current.delivery = {**current.delivery, "claim_token": None, "lease_until": None}
             current.updated_at = _now()
             await session.commit()
         if cancelled:
             return {"delivered": False, "state": "cancelled", "job_id": job.id}
-    return {"delivered": True, "state": "delivered", "job_id": job.id}
+    return {"delivered": True, "state": delivery_state, "job_id": job.id}
 
 
 async def job_progress(database: Any, workflow_id: str) -> dict | None:
     async with database.get_session() as session:
         job = (await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == workflow_id).order_by(EmployeeJob.updated_at.desc()).limit(1))).scalar_one_or_none()
-    if not job or job.state == "delivered":
+    if not job or job.state in {"delivered", "completed"}:
         return None
     return _job_progress(job)
 

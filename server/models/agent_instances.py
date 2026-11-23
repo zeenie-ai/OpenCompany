@@ -112,6 +112,7 @@ class AgentInstanceMutation(SQLModel, table=True):
     __tablename__ = "agent_instance_mutations"
     id: str = Field(primary_key=True, max_length=255)
     fingerprint: str = Field(max_length=64)
+    task_event_pending: bool = Field(default=False, index=True)
     result: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(default_factory=now)
 

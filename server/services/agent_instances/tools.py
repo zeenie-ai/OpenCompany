@@ -116,7 +116,9 @@ OPERATIONS: dict[str, tuple[type[Input], str, frozenset[str]]] = {
 }
 
 PEER_OPERATIONS = ("send_message", "list_agents", "get_agent", "wait_for_agents", "list_tasks", "get_task", "inspect_task")
-LEAD_OPERATIONS = (*PEER_OPERATIONS, "assign_task", "modify_task", "request_changes", "accept_task", "retry_task", "cancel_task", "stop_agent", "resume_agent", "close_agent", "finish_team")
+MANAGER_OPERATIONS = (*PEER_OPERATIONS, "assign_task", "modify_task", "request_changes", "accept_task", "retry_task", "cancel_task")
+LEAD_OPERATIONS = (*MANAGER_OPERATIONS, "stop_agent", "resume_agent", "close_agent", "finish_team")
+REVIEWER_OPERATIONS = (*PEER_OPERATIONS, "request_changes", "accept_task", "retry_task", "cancel_task", "finish_team")
 
 
 def _template_suffix(template: dict) -> str:
@@ -137,6 +139,10 @@ def build_bindings(parameters: dict | None = None, runtime: dict | None = None) 
     role = runtime.get("role") or (runtime.get("agent_instance_scope") or {}).get("role")
     is_lead = role in {"lead", "team_lead"} if role is not None else bool(templates)
     operations = LEAD_OPERATIONS if is_lead else PEER_OPERATIONS
+    if role == "manager":
+        operations = MANAGER_OPERATIONS
+    if role == "reviewer":
+        operations = REVIEWER_OPERATIONS
     if role == "talk" or not instance_id:
         operations = ("submit_job", "get_job_status")
     bindings = []
@@ -153,7 +159,7 @@ def build_bindings(parameters: dict | None = None, runtime: dict | None = None) 
 
     for operation in operations:
         add(operation)
-    if instance_id and is_lead:
+    if instance_id and (is_lead or role == "manager"):
         seen = set()
         for template in templates:
             if not isinstance(template, dict) or not template.get("node_id") or template["node_id"] in seen:
@@ -252,7 +258,8 @@ async def execute_lifecycle_tool(tool_name: str, arguments: dict, config: dict) 
     if template:
         # Revalidate the binding against the admitted graph, never a model name.
         from services.plugin.edge_walker import build_teammate_descriptors
-        descriptors = build_teammate_descriptors(str(scope.get("lead_node_id") or ""), {**config, **scope["runtime_context"]})
+        actor_node = scope.get("template_node_id") or scope.get("lead_node_id")
+        descriptors = build_teammate_descriptors(str(actor_node or ""), {**config, **scope["runtime_context"]})
         if not any(d["node_id"] == template.get("node_id") for d in descriptors):
             return {"success": False, "error_type": "invalid_target", "error": "This teammate is no longer an authorized connected template."}
         template = dict(template)

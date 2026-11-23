@@ -1,8 +1,7 @@
 /**
  * Starter jobs (design handoff "Template chips" and Settings > Plugins).
  * One list, in starters.json, serves both: a chip puts a starter's job in
- * the composer, and "Hire now" (on the chip, or a Plugins card) hires the
- * starter as it stands, its skills into the library first.
+ * the composer, and "Hire now" opens its reporting lines for review.
  *
  * Each starter names the apps its job needs; the job text names them too,
  * since it is all the setup model reads. The skills are built-ins from the
@@ -21,6 +20,10 @@ import starters from './starters.json';
 const starterHireSchema = z.object({
   names: z.array(z.string().min(1)).min(1),
   role: z.string().min(1),
+  team: z.array(z.object({
+    key: z.string(), name: z.string(), responsibility: z.string(),
+    kind: z.enum(['employee', 'specialist']), reports_to: z.string(),
+  })).min(1).max(2),
   description: z.string().min(1),
   steps: z
     .array(z.object({ title: z.string().min(1), detail: z.string().optional(), role: z.string(), app: z.string().optional() }))

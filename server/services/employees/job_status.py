@@ -23,7 +23,8 @@ def _job_progress(job: EmployeeJob) -> dict:
                 "delivering": "Their checked result is ready to send.", "failed": "The team could not finish this request. Ask them to try again.",
                 "cancelled": "This request was stopped.", "delivery_needs_review": "The send was interrupted. Check whether it arrived before trying again.",
                 "review_blocked": "The lead needs another review turn. Completed work is saved.",
-                "delivered": "The reviewed result was delivered."}
+                "delivered": "The reviewed result was delivered.",
+                "completed": "The reviewed result is available on the original Task Manager assignment."}
     if job.state == "failed" and (job.delivery.get("failure") or {}).get("code") == NO_ASSIGNMENTS_CODE:
         messages["failed"] = "The lead did not assign work to a teammate, so this request could not finish."
     failure_code = (job.delivery.get("failure") or {}).get("code")

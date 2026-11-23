@@ -151,6 +151,14 @@ async def _retire_terminal_run_permits(store, run: dict, client, *, cancel_child
     return True
 
 
+async def publish_task_event(store, result: dict) -> None:
+    """Acknowledge the committed receipt after its stable event is dispatched."""
+    if result.get("task_outcome"):
+        from nodes.agent._events import publish_instance_task_outcome
+        await publish_instance_task_outcome(result["task_outcome"])
+        await store.acknowledge_task_event(result["task_event_receipt_id"])
+
+
 async def _recover_missing_owner(store, instance: dict, client) -> bool:
     """Only an exact terminal/missing Temporal run can release a DB owner.
 
@@ -179,6 +187,7 @@ async def _recover_missing_owner(store, instance: dict, client) -> bool:
             "employee_job_id": instance["job_id"], "workflow_id": instance.get("workflow_id"),
             "team_id": instance.get("team_id"), "node_id": instance.get("template_node_id")})
     await wake_instances(result, client=client, database=store.database)
+    await publish_task_event(store, result)
     return True
 
 
@@ -186,6 +195,11 @@ async def reconcile_pending(*, client=None, database=None, limit=100) -> int:
     from core.container import container
     from services.agent_instances.service import AgentInstanceService
     store = AgentInstanceService(database or container.database())
+    for receipt in await store.pending_task_events(limit):
+        try:
+            await publish_task_event(store, receipt)
+        except Exception:
+            logger.warning("Agent task event will be retried", exc_info=True)
     client = client or _client()
     count = 0
     for result in await store.close_completed_jobs(limit=limit):

@@ -8,6 +8,8 @@ plan, and a job its graph, from that whole snapshot.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -29,9 +31,15 @@ from services.workflow_sanitizer import sanitize_workflow_graph
 
 
 def inbox_assistant():
+    """Existing v2 Hire captured before the Chat/Orchestrator recipe shipped."""
+    path = Path(__file__).with_name("fixtures") / "inbox_team_v2.json"
+    return SimpleNamespace(**json.loads(path.read_text(encoding="utf-8")))
+
+
+def hierarchical_inbox_assistant(trigger=None):
     request = HireEmployeeRequest.model_validate({
         "idempotency_key": "inbox", "job": "Read new email, answer what you can and flag the rest",
-        "name": "Leo", "role": "Inbox assistant", "apps": ["Gmail"],
+        "name": "Leo", "role": "Inbox assistant", "apps": ["Gmail"], "trigger": trigger,
         "steps": [{"title": "Read new email", "role": "trigger", "app": "Gmail"}], "rules": {"ask_first": True}})
     return build_employee_graph(BuildInputs(
         workflow_id="7", request=request, apps=[get_app("gmail")], connected_app_ids={"gmail"},

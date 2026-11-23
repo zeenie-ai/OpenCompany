@@ -18,7 +18,7 @@ def compact_temporal_binding(binding: dict) -> dict:
         "agent_lifecycle_version", "agent_protocol_version", "agent_instance_id", "agent_run_id",
         "workflow_id", "generation", "team_id", "job_id", "employee_job_id", "execution_id",
         "root_execution_id", "lead_node_id", "team_lead_node_id", "user_id", "role",
-        "runtime_behavior_version", "workspace_dir", "agent_node_id",
+        "runtime_behavior_version", "workspace_dir", "agent_node_id", "template_node_id",
     )
 
     def compact(runtime):

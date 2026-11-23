@@ -417,6 +417,79 @@ async def post_reply(
 # ---- transitions -------------------------------------------------------
 
 
+async def job_chat_context(session: Any, run: ChatRun) -> list[dict]:
+    """Capture the conversation that led to a job while its admission is saved."""
+    history = []
+    uid = run.user_message_uid
+    remaining = 20_000
+    while uid and remaining and len(history) < 16:
+        row = (await session.execute(select(ChatMessage).where(
+            ChatMessage.session_id == run.session_id, ChatMessage.uid == uid))).scalar_one_or_none()
+        if row is None:
+            break
+        if row.role in {"user", "assistant"} and row.message:
+            content = row.message[:remaining]
+            history.append({"role": row.role, "content": content})
+            remaining -= len(content)
+        uid = row.parent_uid
+    return list(reversed(history))
+
+
+async def post_job_reply(database: Any, *, run_id: str, workflow_id: str, job_id: str,
+                         uid: str, text: str, node_id: str, generation: int) -> dict:
+    """Append a reviewed answer to its originating branch, once per job sink."""
+    from models.chat import ChatBranchSnapshot, ChatThread
+    from models.employees import EmployeeJob
+    from services.agent_context.conversation import conversation_lock
+    from services.chat.branches import active_path, newest_leaf_under, remember_job_answer
+    from services.chat_thread import announce_chat_updated
+
+    async with conversation_lock(workflow_id, generation, node_id), database.reserved_session() as session:
+        run = await session.get(ChatRun, run_id)
+        if run is None:
+            return {"posted": False, "reason": "conversation_cleared"}
+        if run.workflow_id != workflow_id:
+            raise ValueError("The originating chat does not belong to this employee")
+        query = select(ChatMessage).where(ChatMessage.session_id == run.session_id)
+        existing = (await session.execute(query.where(ChatMessage.uid == uid))).scalar_one_or_none()
+        if existing:
+            return {"posted": True, "message_id": uid}
+        cancelled = await session.scalar(select(EmployeeJob.id).where(
+            EmployeeJob.id == job_id, EmployeeJob.workflow_id == workflow_id, EmployeeJob.state == "cancelled"))
+        if cancelled:
+            return {"posted": False, "reason": "job_cancelled"}
+        # Yield to the current chat run. The existing reviewed-delivery Activity
+        # retains its claim and retries after the lane becomes free.
+        busy = (await session.execute(select(ChatRun).where(
+            ChatRun.session_id == run.session_id, ChatRun.state.in_(LIVE_STATES)).limit(1))).scalar_one_or_none()
+        if busy:
+            raise RunInProgress(busy)
+        thread = await session.get(ChatThread, run.session_id)
+        if thread is None:
+            return {"posted": False, "reason": "conversation_cleared"}
+        rows = (await session.execute(select(ChatMessage.id, ChatMessage.uid, ChatMessage.parent_uid)
+                                      .where(ChatMessage.session_id == run.session_id))).all()
+        ids = {row.uid for row in rows}
+        anchor = run.reply_message_uid if run.reply_message_uid in ids else run.user_message_uid
+        if not anchor or anchor not in ids:
+            return {"posted": False, "reason": "conversation_cleared"}
+        visible = any(row.uid == anchor for row in active_path(rows, thread.active_leaf_uid))
+        after = thread.active_leaf_uid if visible else newest_leaf_under(rows, anchor)
+        await database.append_chat_row(session, session_id=run.session_id, role="assistant", message=text,
+                                       uid=uid, after=after, activate=visible, run_id=run_id, execution_id=run.run_key,
+                                       meta={"node_id": node_id, "employee_job_id": job_id})
+        await remember_job_answer(session, run, generation=generation, agent=node_id, visible=visible,
+                                  leaf_uid=after, text=text)
+        if not visible:
+            await session.execute(update(ChatBranchSnapshot).where(
+                ChatBranchSnapshot.session_id == run.session_id, ChatBranchSnapshot.leaf_uid == after
+            ).values(leaf_uid=uid))
+        session_id = run.session_id
+        await session.commit()
+    await announce_chat_updated(session_id, "assistant")
+    return {"posted": True, "message_id": uid}
+
+
 def _publish(run: ChatRun, suffix: str, fields: Dict[str, Any], event_key: str) -> None:
     try:
         publish_run_event(

@@ -25,6 +25,7 @@ export interface TeamTaskAttempt {
 }
 
 export interface TeamTaskView {
+  reviewed_job_result?: string;
   id: string;
   title: string;
   mission?: string;

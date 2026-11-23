@@ -125,10 +125,11 @@ def fields_from_reply(raw: str) -> Dict[str, Any]:
             params = element["press"][1]
             fields.setdefault("trigger", params.get("trigger"))
             fields.setdefault("sends_via", params.get("sendsVia"))
+            fields.setdefault("team", params.get("team"))
     if not fields.get("name"):
         return {}
     form = {"text": parsed.text, **fields, "rules": rules}
-    return {key: value for key, value in form.items() if value not in (None, "", [])}
+    return {key: value for key, value in form.items() if value not in (None, "", []) or (key == "team" and value == [])}
 
 
 def fill_form(raw: Any, job: str) -> str:
@@ -151,6 +152,7 @@ def fill_form(raw: Any, job: str) -> str:
                 "rules": {"items": [{"label": rule.get("label"), "value": rule.get("value") is True} for rule in rules if isinstance(rule, dict)]},
                 "trigger": fields.get("trigger"),
                 "sends_via": fields.get("sends_via"),
+                "team": fields.get("team"),
             }
         )
     except ValidationError:
@@ -163,6 +165,8 @@ def fill_form(raw: Any, job: str) -> str:
     kept = [item for item in hire.rules.items if item.label and not _is_ask_first(item.label)][:MAX_RULES]
     toggles = {f"rule{n}": item for n, item in enumerate(kept, 1)}
     params: Dict[str, Any] = {"name": hire.name, "role": hire.role, "apps": hire.apps}
+    if hire.team is not None:
+        params["team"] = [member.model_dump() for member in hire.team]
     if hire.trigger is not None:
         trigger = fields["trigger"]
         params["trigger"] = {

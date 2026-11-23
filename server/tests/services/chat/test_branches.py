@@ -172,6 +172,37 @@ async def test_switching_back_restores_what_the_agent_remembered_there(chat):
     assert again["success"] is True and await path(chat) == ["Book Sunday", "Sunday is booked."]
 
 
+async def test_reviewed_jobs_finishing_in_reverse_order_follow_their_origin(chat):
+    first = await conversation(chat)
+    edited = await chat.handlers.handle_edit_chat_message(
+        {"session_id": "wf", "message_id": first["message_id"], "message": "Book Sunday",
+         "expected_revision": await revision(chat)}, None
+    )
+    async def deliver(run, uid, text):
+        return await ledger.post_job_reply(chat.database, run_id=run["run_id"], workflow_id="wf",
+                                          job_id=f"job-{uid}", uid=uid, text=text, node_id=AGENT, generation=1)
+
+    with pytest.raises(ledger.RunInProgress):
+        await deliver(first, "sat", "Saturday result")
+    await answer(chat.database, edited["run_id"], "Sunday acknowledged", before=[], after=turn("Book Sunday"))
+    await deliver(edited, "sun", "Sunday result")
+    assert (await deliver(first, "sat", "Saturday result"))["posted"]
+    assert (await deliver(first, "sat", "duplicate"))["message_id"] == "sat"
+    assert await path(chat) == ["Book Sunday", "Sunday acknowledged", "Sunday result"]
+    assert (await memory(chat.database))[-1] == {"role": "assistant", "content": "Sunday result"}
+    back = await chat.handlers.handle_switch_chat_branch(
+        {"session_id": "wf", "message_id": first["message_id"], "expected_revision": await revision(chat)}, None
+    )
+    assert back["success"]
+    assert await path(chat) == ["Book Saturday", "Saturday is booked.", "Saturday result"]
+    assert (await memory(chat.database))[-1] == {"role": "assistant", "content": "Saturday result"}
+    await chat.database.clear_chat_messages("wf")
+    sent = await chat.handlers.handle_send_chat_message({"session_id": "wf", "message": "New conversation"}, None)
+    assert sent["success"]
+    assert await deliver(first, "after-clear", "Late result") == {"posted": False, "reason": "conversation_cleared"}
+    assert await path(chat) == ["New conversation"]
+
+
 async def test_trying_again_answers_the_same_message_beside_the_old_answer(chat):
     first = await conversation(chat)
     shown = (await thread(chat))["messages"]

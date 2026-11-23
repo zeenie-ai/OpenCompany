@@ -257,13 +257,13 @@ def _label_slug(node_type: str, label: str) -> str:
     return node_label_slug({"type": node_type, "data": {"label": label}})
 
 
-def _repoint(value: Any, renamed: Mapping[str, str]) -> Any:
+def repoint_template_labels(value: Any, renamed: Mapping[str, str]) -> Any:
     """``value`` with every ``{{key...}}`` whose key was renamed pointed at
     the new key (keys compared the way the resolver compares them)."""
     if isinstance(value, Mapping):
-        return {key: _repoint(item, renamed) for key, item in value.items()}
+        return {key: repoint_template_labels(item, renamed) for key, item in value.items()}
     if isinstance(value, list):
-        return [_repoint(item, renamed) for item in value]
+        return [repoint_template_labels(item, renamed) for item in value]
     if not renamed or not isinstance(value, str) or "{{" not in value:
         return deepcopy(value)
 
@@ -344,7 +344,11 @@ def add_to_graph(workflow_id: str, graph: Mapping[str, Any], additions: GraphAdd
             wiring.append(context_edge(new.ref, new.context_of))
         node_id = node_ids[new.ref]
         placed_nodes.append(graph_node(node_id, new.type, taken_labels[new.ref], new.position, data))
-        parameters[node_id] = _repoint(dict(new.params), renamed)
+        parameters[node_id] = repoint_template_labels(dict(new.params), renamed)
+        # Manager bundles can create the employee and its completion listener
+        # together. Persist the minted employee ID in the listener's filter.
+        if new.type == "taskTrigger" and parameters[node_id].get("parent_node_id") in node_ids:
+            parameters[node_id]["parent_node_id"] = node_ids[parameters[node_id]["parent_node_id"]]
 
     placed_edges: List[Dict[str, Any]] = []
     for edge in [*wiring, *additions.edges]:
@@ -357,7 +361,7 @@ def add_to_graph(workflow_id: str, graph: Mapping[str, Any], additions: GraphAdd
     merges: Dict[str, Dict[str, Any]] = {}
     for merge in additions.merges:
         node_id = resolve(merge.node)
-        merges[node_id] = merge_params(merges.get(node_id, {}), _repoint(dict(merge.params), renamed))
+        merges[node_id] = merge_params(merges.get(node_id, {}), repoint_template_labels(dict(merge.params), renamed))
 
     return PlacedAdditions(
         graph={**graph, "nodes": [*nodes, *placed_nodes], "edges": [*edges, *placed_edges]},

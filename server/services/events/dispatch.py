@@ -258,6 +258,26 @@ async def _signal_one(client, workflow_id: str, event: WorkflowEvent) -> None:
     await handle.signal(_SIGNAL_NAME, event.model_dump(mode="json"))
 
 
+async def signal_generation_event(event: WorkflowEvent, controller_id: str, generation: int) -> bool:
+    """Address a recorded generation directly. A transient failure retries the publishing activity."""
+    from core.container import container
+    from temporalio.service import RPCError, RPCStatusCode
+
+    wrapper = container.temporal_client()
+    if wrapper is None or wrapper.client is None:
+        raise RuntimeError("Temporal is unavailable for a generation event")
+    try:
+        await _signal_one(wrapper.client, controller_id, event)
+    except RPCError as exc:
+        if exc.status != RPCStatusCode.NOT_FOUND:
+            raise
+        control = await container.database().get_workflow_control_generation(event.workflow_id, generation)
+        if control is None or control.status in {"reset", "resetting", "completed", "failed"}:
+            return False
+        raise
+    return True
+
+
 async def _broadcast_in_process(event: WorkflowEvent, wire_routing_key: str) -> None:
     """Direct in-process WS fan-out via the status broadcaster.
 

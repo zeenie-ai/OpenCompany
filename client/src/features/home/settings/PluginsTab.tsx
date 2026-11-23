@@ -4,7 +4,7 @@
  * needs and the skills that help with it (hire/starters.json).
  *
  * Hire puts the bundle's skills in the library (switching on any that are
- * off), then hires the bundle's starter as it stands, with no setup screen,
+ * off), then hires the preset routine with the owner's reviewed reporting lines,
  * and shows the new employee (genui's useStarterHire). A bundle can be
  * hired again, so Discover offers Hire on every card. Yours lists the
  * installed bundles, those with all their skills in the library; nothing
@@ -15,6 +15,8 @@ import { useMemo, useState } from 'react';
 import { useStarterHire } from '../genui';
 import { useSkillLibrary } from '../data/skills';
 import { STARTERS, type Starter } from '../hire/templates';
+import { StarterTeamReview } from '../hire/StarterTeamReview';
+import type { HireTeamMember } from '../genui/hirePayload';
 import { useHomeStore } from '../state/homeStore';
 import { SPIKE, spikeOrb } from '../orb/orb';
 import { pillToast } from '../ui/pillToast';
@@ -39,6 +41,7 @@ export function PluginsTab() {
   const library = useSkillLibrary();
   const { busy, hire } = useStarterHire();
   const [hiring, setHiring] = useState<string | null>(null);
+  const [review, setReview] = useState<Starter | null>(null);
 
   const discover = useMemo(
     () => STARTERS.map((starter) => toItem(starter, hiring === starter.id ? 'busy' : 'available')),
@@ -51,23 +54,23 @@ export function PluginsTab() {
     );
   }, [library.data]);
 
-  const hireStarter = async (item: CatalogItem) => {
-    const starter = STARTERS.find((candidate) => candidate.id === item.id);
-    if (!starter || hiring) return;
+  const hireStarter = async (starter: Starter, roles: HireTeamMember[]) => {
+    if (hiring) return false;
     if (busy) {
       pillToast('Another hire is still going through. Try again in a moment.', { tone: 'info' });
-      return;
+      return false;
     }
     setHiring(starter.id);
     spikeOrb(SPIKE.pluginInstall);
-    const hired = await hire(starter);
+    const hired = await hire(starter, roles);
     setHiring(null);
     // The new employee's page is already showing behind Settings.
     if (hired) useHomeStore.getState().closeSettings();
+    return hired;
   };
 
   return (
-    <CatalogLayout
+    <><CatalogLayout
       title="Plugins"
       searchPlaceholder="Search plugins"
       loading={library.isPending}
@@ -78,8 +81,13 @@ export function PluginsTab() {
       }}
       discover={{ items: discover, sectionTitle: 'Top plugins' }}
       verbs={{ add: 'Hire', busy: 'Hiring…' }}
-      onAdd={(item) => void hireStarter(item)}
+      onAdd={item => {
+        if (busy) pillToast('Another hire is still going through. Try again in a moment.', { tone: 'info' });
+        else setReview(STARTERS.find(starter => starter.id === item.id) ?? null);
+      }}
     />
+    {review && <StarterTeamReview key={review.id} starter={review} busy={busy || !!hiring}
+      onClose={() => setReview(null)} onHire={roles => hireStarter(review, roles)} />}</>
   );
 }
 

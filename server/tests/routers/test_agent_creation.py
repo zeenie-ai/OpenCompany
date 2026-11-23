@@ -16,6 +16,35 @@ def request(owner="owner"):
     return SimpleNamespace(state=SimpleNamespace(user_id=owner))
 
 
+@pytest.mark.asyncio
+async def test_editor_enrolls_a_manager_and_its_selected_worker_atomically(database, creation, monkeypatch):
+    from routers import websocket
+    from services.employees import store
+    from services.employees.team_runtime import admit_team_plan
+    from services.workflow_sanitizer import sanitize_workflow_graph
+    from tests.services.employees.test_team_plan_admission import hierarchical_inbox_assistant
+
+    built = hierarchical_inbox_assistant()
+    await save_graph(database, sanitize_workflow_graph({"nodes": built.nodes, "edges": built.edges, "owner_id": "owner"}), built.parameters)
+    employee, _ = await store.reserve(database, owner_id="owner", idempotency_key="review", payload_hash="case",
+                                      fields={"role": "Assistant", "team_plan": built.team_plan})
+    await store.mark_ready(database, employee.id, workflow_id="7", node_roles=built.node_roles)
+    manager = await agents.create_agent(agents.CreateAgent(workflow_id="7", node_type="ai_employee", mutation_id=uuid4()), request())
+    parent = manager["node_ids"]["agent"]
+    body = agents.CreateAgent(workflow_id="7", node_type="aiAgent", mutation_id=uuid4(), parent_node_id=parent)
+    first, retry = await agents.create_agent(body, request()), await agents.create_agent(body, request())
+    assert first["applied"] and not retry["applied"] and first["node_ids"] == retry["node_ids"]
+    graph = await saved(database)
+    admitted = await admit_team_plan(database, "7", graph["nodes"], graph["edges"])
+    plan = next(n["data"]["employee_team_plan"] for n in admitted if n["id"] == built.team_plan["talk_node_id"])
+    members = {m["node_id"]: m for m in plan["members"]}
+    assert members[parent]["parent_node_id"] == plan["orchestrator_node_id"]
+    assert members[first["node_ids"]["agent"]]["parent_node_id"] == parent
+    monkeypatch.setattr(websocket, "container", SimpleNamespace(database=lambda: database))
+    report = await websocket._validate_workflow_draft({**graph, "workflow_id": "7"}, request())
+    assert report["errors"] == []
+
+
 @pytest.fixture
 def creation(database, builder, monkeypatch):
     monkeypatch.setattr(agents, "container", SimpleNamespace(database=lambda: database))

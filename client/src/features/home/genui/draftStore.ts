@@ -34,7 +34,7 @@ import { isForbiddenSegment, readPath, writePath } from '@/lib/jsonRender/paths'
 import { appRefSchema } from '../data/schemas';
 import { SPIKE, spikeOrb } from '../orb/orb';
 import { STATE_PATHS } from './catalog';
-import { snapTrigger } from './hirePayload';
+import { snapTrigger, type HireTeamMember } from './hirePayload';
 import { normalizeSpec, type JsonRenderCore, type NormalizedSpec } from './normalize';
 import { parseReply } from './parse';
 
@@ -111,7 +111,7 @@ export interface DraftState {
   /** Apps the reply names, as the server resolved them: lower-cased name -> ref. */
   apps: Record<string, DraftApp>;
   /** Optional, ordinary-language description of the suggested helpers. */
-  team: { responsibility: string }[];
+  team: HireTeamMember[] | null;
   /** Bumped on every accepted reply, so the renderer restarts its reveal. */
   version: number;
   /** A hire request is in flight. */
@@ -134,7 +134,7 @@ const INITIAL: DraftState = {
   spec: null,
   uiState: {},
   apps: {},
-  team: [],
+  team: null,
   version: 0,
   hiring: false,
   hireKey: null,
@@ -195,14 +195,19 @@ function parseApps(raw: unknown): Record<string, DraftApp> {
   return out;
 }
 
-function parseTeam(raw: unknown): { responsibility: string }[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.slice(0, 3).flatMap((member) => {
+function parseTeam(raw: unknown): HireTeamMember[] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw.slice(0, 2).flatMap((member, index) => {
     if (!member || typeof member !== 'object' || typeof member.responsibility !== 'string') return [];
-    const responsibility = member.responsibility.trim().slice(0, 160);
-    return responsibility ? [{ responsibility }] : [];
+    const responsibility = member.responsibility.trim().slice(0, 280);
+    return responsibility ? [{
+      key: String(member.key || `role-${index + 1}`), name: String(member.name || `Specialist ${index + 1}`),
+      responsibility, kind: member.kind === 'employee' ? 'employee' : 'specialist',
+      reports_to: String(member.reports_to || 'orchestrator'),
+    }] : [];
   });
 }
+
 
 /** The apps that can start the work, by every name the reply used for them
  *  (lower-cased) and by their own: name -> the app's own name. */

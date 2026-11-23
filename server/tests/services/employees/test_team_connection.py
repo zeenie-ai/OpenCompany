@@ -17,9 +17,12 @@ from services.employee_team_connection import (
 from services.employees.team_runtime import admit_team_plan, team_plan_in
 from services.run_graph import collect_downstream_node_ids
 from services.workflow_validator import validate_workflow
+from tests.services.employees.test_team_plan_admission import inbox_assistant
 
 
-def built_team(kind="manual"):
+def built_team(kind=None):
+    if kind is None:
+        return inbox_assistant()
     trigger = {"kind": kind}
     if kind == "schedule":
         trigger.update(every="day", at="09:00")
@@ -42,19 +45,19 @@ def graph_of(built):
 async def test_new_hire_has_a_visible_validated_route_without_crossing_trigger_flows(kind):
     built = built_team(kind)
     roles, graph = built.node_roles, graph_of(built)
-    lead, talk = roles["agent"], roles["talk_agent"]
-    assert [edge for edge in built.edges if is_employee_team_edge(edge)] == [employee_team_edge(lead, talk).to_dict()]
-    assert built.team_plan["talk_connection_version"] == 1
+    lead, talk = roles["orchestrator"], roles["talk_agent"]
+    assert [edge["source"] for edge in built.edges if edge["target"] == talk and
+            edge["targetHandle"] == "input-teammates"] == [lead]
     assert team_plan_in(graph, talk) == built.team_plan
     report = await validate_workflow(nodes=built.nodes, edges=built.edges, parameters_by_id=built.parameters)
     assert report["errors"] == []
 
     talk_run = collect_downstream_node_ids(roles["talk_trigger"], built.nodes, built.edges)
-    assert talk in talk_run and lead not in talk_run
+    assert talk in talk_run and roles["talk_reply"] in talk_run
     assert roles["job_reply"] not in talk_run
     if kind != "manual":
         work_run = collect_downstream_node_ids(roles["trigger"], built.nodes, built.edges)
-        assert lead in work_run and talk not in work_run
+        assert talk in work_run
         assert roles["talk_reply"] not in work_run
 
 

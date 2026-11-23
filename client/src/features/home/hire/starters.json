@@ -10,6 +10,10 @@
     "hire": {
       "names": ["Maya", "Rosa", "Nina"],
       "role": "Receptionist",
+      "team": [
+        {"key": "calendar", "name": "Appointments", "responsibility": "Checks your calendar and appointments", "kind": "specialist", "reports_to": "orchestrator"},
+        {"key": "operations", "name": "App tasks", "responsibility": "Handles routine work in your apps", "kind": "specialist", "reports_to": "orchestrator"}
+      ],
       "description": "Answers customer messages on WhatsApp and writes down bookings for you.",
       "steps": [
         { "title": "A customer messages you", "detail": "On WhatsApp", "role": "trigger", "app": "WhatsApp" },
@@ -31,6 +35,9 @@
     "hire": {
       "names": ["Iris", "Ella", "Leo"],
       "role": "Inbox assistant",
+      "team": [
+        {"key": "operations", "name": "App tasks", "responsibility": "Handles routine work in your apps", "kind": "specialist", "reports_to": "orchestrator"}
+      ],
       "description": "Reads each new email in Gmail and drafts a reply for you to approve.",
       "steps": [
         { "title": "A new email arrives", "detail": "In your Gmail", "role": "trigger", "app": "Gmail" },
@@ -52,6 +59,9 @@
     "hire": {
       "names": ["Sam", "Zoe", "Kai"],
       "role": "Social media helper",
+      "team": [
+        {"key": "social", "name": "Content", "responsibility": "Prepares content for your channels", "kind": "specialist", "reports_to": "orchestrator"}
+      ],
       "description": "Drafts three posts about your business every week, for you to review.",
       "steps": [
         { "title": "Every Monday at 09:00", "role": "trigger" },
@@ -72,6 +82,9 @@
     "hire": {
       "names": ["Nora", "Theo", "Ivy"],
       "role": "Daily briefer",
+      "team": [
+        {"key": "research", "name": "Research", "responsibility": "Researches information", "kind": "specialist", "reports_to": "orchestrator"}
+      ],
       "description": "A short morning briefing on the news that matters to your business.",
       "steps": [
         { "title": "Every weekday at 08:00", "role": "trigger" },

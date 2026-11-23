@@ -62,7 +62,7 @@ def turn_context(claim: dict[str, Any]) -> dict[str, Any]:
         "session_id": f"agent-instance:{instance['id']}",
         "context_session_id": f"agent-instance:{instance['id']}",
         "agent_instance_role": instance.get("role"),
-        "agent_instance_scope": scope,
+        "agent_instance_scope": {**scope, "template_node_id": instance.get("template_node_id")},
         "agent_delivery_ids": claim.get("deliveries") or [],
         "agent_transcript_revision": claim.get("transcript_revision", 0),
         "agent_input_messages": claim.get("messages") or [],
@@ -74,10 +74,15 @@ def turn_context(claim: dict[str, Any]) -> dict[str, Any]:
     context["parameter_snapshot"] = {**(context.get("parameter_snapshot") or {}),
                                      context["node_id"]: template.get("parameters") or {}}
     task = claim.get("task") or {}
+    if instance.get("role") == "lead" and not claim.get("transcript") and "review_history" in template:
+        original_request = template["review_history"] or [
+            {"role": "user", "content": f"Original assignment for review:\n{template['initial_instructions']}"}
+        ]
+        context["agent_input_messages"] = [*original_request, *context["agent_input_messages"]]
     if task:
         context.update(team_task_id=task["id"], parent_task_id=task["id"],
                        task_attempt=task.get("current_attempt", 0),
-                       parent_node_id=scope.get("lead_node_id"))
+                       parent_node_id=task.get("parent_agent_id") or scope.get("lead_node_id"))
     context.pop("invocation", None)
     context.pop("chat_run_id", None)  # only Talk streams into the owner's chat
     context.pop("run_scope", None)  # chat_stream_for also derives identity here
@@ -89,12 +94,15 @@ def turn_context(claim: dict[str, Any]) -> dict[str, Any]:
 
 @activity.defn(name="agent.instance.bootstrap")
 async def bootstrap_instance(context: dict) -> dict:
-    from services.agent_instances.protocol import capture_runtime_context
+    from services.agent_instances.protocol import capture_runtime_context, is_chat_intake
     from services.workflow_sanitizer import sanitize_runtime_payload
     from services.temporal.agent_activities import prepare_agent_payload
     review = await route_instance_task_event(context)
     if review is not None:
         return {"applicable": False, "review_event": True, "result": review}
+    node = next((item for item in context.get("nodes") or [] if item.get("id") == context.get("node_id")), {})
+    if is_chat_intake((node.get("data") or {}).get("employee_team_plan"), context):
+        return {"applicable": False}
     prepared = await prepare_agent_payload({**context, "_agent_instance_bootstrap": True})
     team_id = prepared.get("team_id")
     if not team_id:
@@ -105,6 +113,7 @@ async def bootstrap_instance(context: dict) -> dict:
                  lead_node_id=context["node_id"])
     scope["execution_id"] = prepared.get("team_execution_id") or context.get("execution_id")
     captured = capture_runtime_context({**context, "parameter_snapshot": prepared.get("parameter_snapshot") or {},
+                "employee_team_plan": prepared.get("employee_team_plan"),
                 "employee_job_id": prepared.get("employee_job_id"),
                 "max_concurrent_subagents": prepared.get("max_concurrent_subagents", 3),
                 "max_delegation_depth": prepared.get("max_delegation_depth", 2)})
@@ -113,6 +122,8 @@ async def bootstrap_instance(context: dict) -> dict:
                     (prepared.get("parameter_snapshot") or {}).get(context["node_id"], context.get("node_data") or {})),
                 "runtime_context": captured,
                 "initial_instructions": prepared.get("user_prompt") or "Review the current job and coordinate its tasks."}
+    if (prepared.get("employee_team_plan") or {}).get("version") == 3:
+        template["review_history"] = context.get("employee_review_history") or []
     instance = await _store().ensure_lead(scope=scope, template=template,
         request_id=f"lead:{scope['job_id']}:{context['node_id']}")
     return {"applicable": True, "instance_id": instance["id"], "context": captured}
@@ -126,7 +137,7 @@ async def route_instance_task_event(context: dict) -> dict | None:
     """
     from sqlmodel import select
     from models.database import TeamTask
-    from models.agent_instances import AgentInstance
+    from models.agent_instances import AgentInstance, AgentRun
     from services.plugin.edge_walker import extract_task_event_payload
     from services.agent_instances.runtime import wake_instances
     nodes = {node.get("id"): node for node in context.get("nodes") or []}
@@ -161,13 +172,22 @@ async def route_instance_task_event(context: dict) -> dict | None:
                               ("revision", task.revision), ("generation", owner.generation)):
             if key in event and str(event[key]) != str(expected):
                 return ignored
-        leads = (await session.execute(select(AgentInstance).where(
-            AgentInstance.team_id == task.team_id, AgentInstance.job_id == owner.job_id,
-            AgentInstance.generation == owner.generation, AgentInstance.role == "lead",
-            AgentInstance.template_node_id == context["node_id"], AgentInstance.state != "closed"))).scalars().all()
-        if len(leads) != 1:
-            return ignored
-        lead_id = leads[0].id
+        if task.assigning_run_id:
+            issuer = await session.get(AgentRun, task.assigning_run_id)
+            reviewer = await session.get(AgentInstance, issuer.instance_id) if issuer else None
+            if (reviewer is None or reviewer.state == "closed" or reviewer.workflow_id != task.workflow_id
+                    or reviewer.team_id != task.team_id or reviewer.job_id != owner.job_id
+                    or reviewer.generation != owner.generation or reviewer.template_node_id != task.parent_agent_id):
+                return ignored
+            lead_id = reviewer.id
+        else:
+            leads = (await session.execute(select(AgentInstance).where(
+                AgentInstance.team_id == task.team_id, AgentInstance.job_id == owner.job_id,
+                AgentInstance.generation == owner.generation, AgentInstance.role == "lead",
+                AgentInstance.template_node_id == context["node_id"], AgentInstance.state != "closed"))).scalars().all()
+            if len(leads) != 1:
+                return ignored
+            lead_id = leads[0].id
     await wake_instances({"instance_wake": [lead_id]})
     return {"success": True, "status": "review_queued", "agent_instance_id": lead_id, "instance_managed": True}
 
@@ -195,7 +215,11 @@ async def claim_instance(payload: dict) -> dict | None:
     claim = await _store().claim_run(payload["instance_id"], request_id=payload["request_id"],
         workflow_id=payload.get("workflow_id"), workflow_run_id=payload.get("workflow_run_id"))
     if claim:
-        claim["context"] = turn_context(claim)
+        if claim.get("instance_wake"):
+            from services.agent_instances.runtime import wake_instances
+            await wake_instances(claim)
+        if "instance" in claim:
+            claim["context"] = turn_context(claim)
         await _notify_instance(payload["instance_id"])
     return claim
 
@@ -242,10 +266,12 @@ async def record_invalid_instance_request(payload: dict) -> dict:
 
 @activity.defn(name="agent.instance.complete")
 async def complete_instance(payload: dict) -> dict:
-    from services.agent_instances.runtime import wake_instances
-    result = await _store().complete_run(payload["instance_id"], payload["run_id"],
+    from services.agent_instances.runtime import publish_task_event, wake_instances
+    store = _store()
+    result = await store.complete_run(payload["instance_id"], payload["run_id"],
         result=payload.get("result"), error=payload.get("error"), request_id=payload["request_id"])
     await wake_instances(result)
+    await publish_task_event(store, result)
     await _notify_instance(payload["instance_id"])
     return result
 

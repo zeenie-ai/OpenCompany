@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Node, Edge } from 'reactflow';
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { useAppStore } from '../store/useAppStore';
 
 export interface ValidationIssue {
   code:
@@ -80,6 +81,7 @@ export function useWorkflowValidation(
       const result = await sendRequest<{ success: boolean; report?: ValidationReport }>(
         'validate_workflow',
         {
+          workflow_id: useAppStore.getState().currentWorkflow?.id,
           nodes: nodes.map(n => ({
             id: n.id,
             type: n.type ?? '',

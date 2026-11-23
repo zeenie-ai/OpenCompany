@@ -210,11 +210,12 @@ class Database:
                 # Portable additive fields run before shared-schema validation.
                 table_additions = {
                     "employee_grants": {"pending_change": "JSON"},
+                    "agent_instance_mutations": {"task_event_pending": "BOOLEAN NOT NULL DEFAULT FALSE"},
                     "agent_instance_runs": {"temporal_run_id": "VARCHAR(255)", "invalid_request_ids": "JSON NOT NULL DEFAULT '[]'",
                         "permit_leases": "JSON NOT NULL DEFAULT '[]'", "permits_pending": "BOOLEAN NOT NULL DEFAULT FALSE",
                         "last_permit_reconcile_at": "TIMESTAMP"},
                     "team_tasks": {
-                        "assigned_instance_id": "VARCHAR(255)", "assigned_run_id": "VARCHAR(255)",
+                        "assigned_instance_id": "VARCHAR(255)", "assigned_run_id": "VARCHAR(255)", "assigning_run_id": "VARCHAR(255)",
                         "protocol_version": "INTEGER NOT NULL DEFAULT 0", "review_feedback": "JSON",
                     },
                     "team_task_attempts": {
@@ -229,6 +230,8 @@ class Database:
                         if column_name not in names:
                             await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_assigned_instance_id ON team_tasks(assigned_instance_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_team_tasks_assigning_run_id ON team_tasks(assigning_run_id)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_mutations_task_event_pending ON agent_instance_mutations(task_event_pending)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_runs_permits_pending ON agent_instance_runs(permits_pending)"))
                 await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_instance_runs_last_permit_reconcile_at ON agent_instance_runs(last_permit_reconcile_at)"))
 
@@ -1725,6 +1728,7 @@ class Database:
         attachments: Optional[List[Dict[str, Any]]] = None,
         meta: Optional[Dict[str, Any]] = None,
         after: Any = FOLLOW_LEAF,
+        activate: bool = True,
     ) -> ChatMessage:
         """Append a message to the end of a session's shown path, inside the
         caller's :meth:`reserved_session` (the caller commits).
@@ -1767,7 +1771,8 @@ class Database:
             meta=meta or {},
         )
         session.add(row)
-        thread.active_leaf_uid = row.uid
+        if activate:
+            thread.active_leaf_uid = row.uid
         thread.revision = (thread.revision or 0) + 1
         thread.updated_at = datetime.now(timezone.utc)
         await session.flush()
@@ -3111,22 +3116,28 @@ class Database:
     async def create_team(
         self, team_id: str, workflow_id: str, team_lead_node_id: str, config: Optional[Dict[str, Any]] = None,
         execution_id: Optional[str] = None, root_execution_id: Optional[str] = None,
+        members: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Create a new agent team."""
+        """Commit the execution team and its admitted roster together."""
         try:
-            async with self.get_session() as session:
-                team = AgentTeam(
-                    id=team_id,
-                    workflow_id=workflow_id,
-                    team_lead_node_id=team_lead_node_id,
-                    execution_id=execution_id,
-                    root_execution_id=root_execution_id or execution_id,
-                    config=config or {},
-                    created_at=datetime.now(timezone.utc),
-                )
-                session.add(team)
-                await session.commit()
-                logger.info(f"[Teams] Created team {team_id}")
+            async with self.reserved_session() as session:
+                team = await session.get(AgentTeam, team_id)
+                if team:
+                    if (team.workflow_id, team.team_lead_node_id, team.execution_id) != (
+                        workflow_id, team_lead_node_id, execution_id
+                    ):
+                        raise ValueError("Team identity already belongs to another execution")
+                else:
+                    team = AgentTeam(
+                        id=team_id, workflow_id=workflow_id, team_lead_node_id=team_lead_node_id,
+                        execution_id=execution_id, root_execution_id=root_execution_id or execution_id,
+                        config=config or {}, created_at=datetime.now(timezone.utc),
+                    )
+                    session.add(team)
+                    for member in members or []:
+                        session.add(TeamMember(team_id=team_id, **member))
+                    await session.commit()
+                    logger.info(f"[Teams] Created team {team_id}")
                 return {"id": team.id, "workflow_id": team.workflow_id, "execution_id": team.execution_id,
                         "root_execution_id": team.root_execution_id, "status": team.status}
         except Exception as e:
@@ -3155,16 +3166,25 @@ class Database:
             logger.error(f"Failed to get team: {e}")
             return None
 
+    @staticmethod
+    def _team_for_reader(owner: str, task_board: bool):
+        lead = AgentTeam.team_lead_node_id == owner
+        if not task_board:
+            return lead
+        issued = select(TeamTask.id).where(TeamTask.team_id == AgentTeam.id,
+            TeamTask.parent_agent_id == owner, TeamTask.assigning_run_id.is_not(None)).exists()
+        return or_(lead, issued)
+
     async def find_team(
         self, workflow_id: str, team_lead_node_id: str,
-        execution_id: Optional[str] = None, active_first: bool = True,
+        execution_id: Optional[str] = None, active_first: bool = True, *, task_board: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """Resolve an execution team, or the latest team for a workflow lead."""
         try:
             async with self.get_session() as session:
                 query = select(AgentTeam).where(
                     AgentTeam.workflow_id == workflow_id,
-                    AgentTeam.team_lead_node_id == team_lead_node_id,
+                    self._team_for_reader(team_lead_node_id, task_board),
                 )
                 if execution_id:
                     query = query.where(AgentTeam.execution_id == execution_id)
@@ -3184,7 +3204,7 @@ class Database:
             return None
 
     async def list_team_executions(
-        self, workflow_id: str, team_lead_node_id: str
+        self, workflow_id: str, team_lead_node_id: str, *, task_board: bool = False,
     ) -> List[Dict[str, Any]]:
         """List every durable execution owned by a workflow lead, newest first."""
         try:
@@ -3193,7 +3213,7 @@ class Database:
                     select(AgentTeam)
                     .where(
                         AgentTeam.workflow_id == workflow_id,
-                        AgentTeam.team_lead_node_id == team_lead_node_id,
+                        self._team_for_reader(team_lead_node_id, task_board),
                     )
                     .order_by(AgentTeam.created_at.desc(), AgentTeam.id.desc())
                 )
@@ -3528,16 +3548,27 @@ class Database:
             await session.refresh(task)
             return self._team_task_dict(task, [attempt])
 
-    async def get_team_tasks(self, team_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_team_tasks(self, team_id: str, status: Optional[str] = None, *, board_owner: str | None = None) -> List[Dict[str, Any]]:
         """Get team tasks, optionally filtered by status."""
         try:
             async with self.get_session() as session:
                 query = select(TeamTask).where(TeamTask.team_id == team_id)
+                if board_owner:
+                    query = query.where(or_(TeamTask.assigning_run_id.is_(None), TeamTask.parent_agent_id == board_owner))
                 if status:
                     query = query.where(TeamTask.status == status)
                 query = query.order_by(TeamTask.queue_sequence.asc(), TeamTask.created_at.asc(), TeamTask.id.asc())
                 result = await session.execute(query)
-                tasks = [self._team_task_dict(t) for t in result.scalars().all()]
+                rows = result.scalars().all()
+                tasks = [self._team_task_dict(t) for t in rows]
+                if (board_owner and len(rows) == 1 and rows[0].assigning_run_id
+                        and rows[0].parent_agent_id == board_owner and rows[0].status == "accepted"):
+                    from models.employees import EmployeeJob
+                    answer = await session.scalar(select(EmployeeJob.result).where(
+                        EmployeeJob.team_id == team_id, EmployeeJob.lead_node_id == board_owner,
+                        EmployeeJob.state.in_(["completed", "delivered"])))
+                    if answer:
+                        tasks[0]["reviewed_job_result"] = answer
                 queue_position = 0
                 for task in tasks:
                     if task["status"] in {"blocked", "queued", "pending"}:
@@ -3955,7 +3986,7 @@ class Database:
             logger.error(f"Failed to mark messages read: {e}")
             return 0
 
-    async def get_team_stats(self, team_id: str) -> Dict[str, Any]:
+    async def get_team_stats(self, team_id: str, *, board_owner: str | None = None) -> Dict[str, Any]:
         """Get team statistics."""
         try:
             async with self.get_session() as session:
@@ -3968,7 +3999,10 @@ class Database:
                 members_result = await session.execute(select(TeamMember).where(TeamMember.team_id == team_id))
                 members = members_result.scalars().all()
 
-                tasks_result = await session.execute(select(TeamTask).where(TeamTask.team_id == team_id))
+                query = select(TeamTask).where(TeamTask.team_id == team_id)
+                if board_owner:
+                    query = query.where(or_(TeamTask.assigning_run_id.is_(None), TeamTask.parent_agent_id == board_owner))
+                tasks_result = await session.execute(query)
                 tasks = tasks_result.scalars().all()
 
                 counts = {

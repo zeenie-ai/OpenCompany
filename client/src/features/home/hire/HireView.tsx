@@ -21,11 +21,13 @@ import { useHomeStore } from '../state/homeStore';
 import { Composer } from './Composer';
 import { greetingFor } from './greeting';
 import { TemplateChips } from './TemplateChips';
-import { HIRE_TEMPLATES } from './templates';
+import { HIRE_TEMPLATES, type Starter } from './templates';
+import { StarterTeamReview } from './StarterTeamReview';
 
 export function HireView({ onConnect }: { onConnect: (providerId: string) => void }) {
   const composer = useHireComposer();
   const starterHire = useStarterHire();
+  const [starter, setStarter] = useState<Starter | null>(null);
   const { connectedApps } = useConnectors();
   const { data: employees } = useEmployeesQuery();
   const { data: settings } = useOwnerSettings();
@@ -106,11 +108,13 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
       <TemplateChips
         picked={picked}
         onPick={(template) => composer.pick(template.job)}
-        onHireNow={(template) => void starterHire.hire(template)}
+        onHireNow={setStarter}
         disabled={composer.working}
         className="mt-4"
       />
       <HireDraftPanel onConnect={onConnect} />
+      {starter && <StarterTeamReview key={starter.id} starter={starter} busy={starterHire.busy}
+        onClose={() => setStarter(null)} onHire={roles => starterHire.hire(starter, roles)} />}
     </div>
   );
 }

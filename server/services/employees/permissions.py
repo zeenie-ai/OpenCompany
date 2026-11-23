@@ -35,7 +35,8 @@ async def specialist_review_off(session: Any, workflow_id: str, caller: str, ope
     if not caller or caller != plan.get("talk_node_id"):
         return False
     if operation == "add_subagent":
-        if member_id != plan.get("lead_node_id"):
+        managers = {m.get("node_id") for m in plan.get("members", []) if m.get("node_type") in {"ai_employee", "orchestrator_agent"}} if plan.get("version") == 3 else {plan.get("lead_node_id")}
+        if member_id not in managers:
             return False
     elif member_id not in {m.get("node_id") for m in plan.get("members", [])}:
         return False
@@ -134,7 +135,7 @@ async def _settle_existing_specialist(session, row: EmployeeGrant, graph: dict, 
     """A second approval for the same singleton can only acknowledge its saved configuration."""
     from models.database import NodeParameter
 
-    if params.operation != "add_subagent" or row.capability == "aiAgent" or params.agent_type.strip() != row.capability:
+    if params.operation != "add_subagent" or row.capability in {"aiAgent", "ai_employee"} or params.agent_type.strip() != row.capability:
         return None
     nodes = {n["id"]: n for n in graph.get("nodes", [])}
     def enabled(node_id: str) -> bool:
@@ -172,7 +173,7 @@ async def _settle_existing_specialist(session, row: EmployeeGrant, graph: dict, 
         required_skills.add("browser-skill")
     satisfied = (len(members) == 1 and enabled(member_id) and member.get("node_type") == row.capability and
                  nodes.get(member.get("context_node_id"), {}).get("data", {}).get("agentNodeId") == member_id and
-                 plan.get("lead_node_id") == row.member_id and
+                 member.get("parent_node_id", plan.get("lead_node_id")) == row.member_id and
                  all(agent.get(k) == v for k, v in required_config.items()) and
                  all(has_tool(kind) for kind in limits.get("tool_types", [])) and required_skills <= skills)
     if row.pending_change:

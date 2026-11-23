@@ -287,14 +287,16 @@ def _talk(graph: GraphIndex, control_row: Any) -> TalkState:
 def _team_setup_pending(employee: Any, control_row: Any) -> bool:
     from services.employee_team_connection import EMPLOYEE_TEAM_RESOURCE_FIELDS
     plan = getattr(employee, "team_plan", None) or {}
-    if not control_row or control_row.status not in LIVE_STATES or plan.get("version") != 2:
+    if not control_row or control_row.status not in LIVE_STATES or plan.get("version") not in (2, 3):
         return False
-    if not plan.get("talk_connection_version") or not all(plan.get(key) for key in EMPLOYEE_TEAM_RESOURCE_FIELDS.values()):
-        return True
     # Reusing resources already on the canvas may change only the saved plan.
     live_lead = next((node for node in (control_row.graph_snapshot or {}).get("nodes", [])
                       if node.get("id") == plan.get("lead_node_id")), {})
     live_plan = (live_lead.get("data") or {}).get("employee_team_plan") or {}
+    if plan["version"] == 3:
+        return live_plan != plan
+    if not plan.get("talk_connection_version") or not all(plan.get(key) for key in EMPLOYEE_TEAM_RESOURCE_FIELDS.values()):
+        return True
     return any(live_plan.get(key) != plan[key] for key in EMPLOYEE_TEAM_RESOURCE_FIELDS.values())
 
 

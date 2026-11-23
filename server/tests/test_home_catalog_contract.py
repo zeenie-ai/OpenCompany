@@ -124,6 +124,7 @@ def _starter_request(starter: dict) -> HireEmployeeRequest:
             "description": hire["description"],
             "apps": starter["apps"],
             "steps": hire["steps"],
+            "team": hire["team"],
             "rules": {"ask_first": True, "items": []},
             "trigger": hire["trigger"],
             "sends_via": hire.get("sends_via"),

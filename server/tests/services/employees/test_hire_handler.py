@@ -137,7 +137,7 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
 
     workflow = await harness.database.get_workflow(workflow_id)
     types = {node["type"] for node in workflow.data["nodes"]}
-    assert {"chatTrigger", "aiAgent", "ai_employee", "taskTrigger", "context", "console", "writeTodos", "canvas"} <= types
+    assert {"chatTrigger", "orchestrator_agent", "ai_employee", "taskTrigger", "context", "console", "writeTodos", "canvas"} <= types
     # The first day's "Workflow built · N blocks".
     assert result["node_count"] == len(workflow.data["nodes"])
     assert "employeeJob" not in types
@@ -146,7 +146,8 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
     assert row.hire_state == "ready" and row.node_roles["agent"].startswith(f"{workflow_id}:ai_employee:")
     assert row.team_plan["lead_node_id"] == row.node_roles["agent"]
     assert row.team_plan["talk_node_id"] == row.node_roles["talk_agent"]
-    assert row.node_roles["talk_agent"] != row.node_roles["agent"]
+    assert row.node_roles["talk_agent"] == row.node_roles["agent"]
+    assert row.team_plan["orchestrator_node_id"] != row.node_roles["talk_agent"]
     assert employee["canvas_node_id"] == row.node_roles["canvas"]
     agent_params = await harness.database.get_node_parameters(row.node_roles["agent"])
     assert agent_params["provider"] == "openai" and "You are Ada" in agent_params["system_message"]

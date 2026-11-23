@@ -44,6 +44,7 @@ from temporalio.common import (
 from temporalio.workflow import ParentClosePolicy
 
 from services.run_graph import collect_downstream_node_ids
+from services.task_trigger_routing import accepts_task_owner
 
 from ._exits import is_workflow_bug
 from .workflow import TEMPORAL_ROUTING_INPUT_KEY
@@ -338,6 +339,8 @@ class TriggerListenerWorkflow:
         # Patch-gated: skipping a spawn changes the recorded command
         # sequence, so pre-patch histories must keep replaying the old
         # "spawn on every event" behaviour.
+        if not accepts_task_owner(listener_data, event):
+            return
         if workflow.patched(NODE_FILTER_PATCH):
             if not await self._event_passes_node_filter(event, listener_data):
                 workflow.logger.debug(
@@ -359,7 +362,7 @@ class TriggerListenerWorkflow:
         generation = int(listener_data.get("generation") or 0)
         # Controlled generations execute their immutable admitted snapshot.
         # Legacy deployments retain hot graph lookup for compatibility.
-        if bool(workflow_id) and not listener_data.get("data_scope_id"):
+        if bool(workflow_id) and not listener_data.get("data_scope_id") and not listener_data.get("task_trigger_identity"):
             try:
                 latest = await workflow.execute_activity(
                     "load_persisted_workflow_graph_activity",
@@ -417,6 +420,8 @@ class TriggerListenerWorkflow:
         # + trigger label (which conveys the kind) + per-firing event id.
         event_id = event.get("id") or workflow.uuid4().hex
         child_id = f"{workflow_slug}-{trigger_label}-{event_id}"
+        if listener_data.get("task_trigger_identity"):
+            child_id = f"{listener_data['task_trigger_identity']}:{event_id}"
 
         from services.temporal._retry_policies import QUICK_ACTIVITY_RETRY
 

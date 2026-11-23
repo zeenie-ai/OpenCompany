@@ -321,7 +321,7 @@ async def _permission(database: Any, ctx: NodeContext, params: "AgentBuilderPara
         # Persist only validated inputs for this operation. The replay checks
         # the same chat identity, saved connections and exact grant scope.
         fields = {
-            "add_subagent": {"operation", "agent_type", "purpose", "tool_types", "tool_parameters", "skill_names", "app_id"},
+            "add_subagent": {"operation", "agent_type", "purpose", "target_member_id", "tool_types", "tool_parameters", "skill_names", "app_id"},
             "add_tool": {"operation", "node_type", "app_id", "target_member_id", "tool_parameters"},
             "add_skill": {"operation", "skill_name", "target_member_id"},
         }[params.operation]
@@ -757,7 +757,7 @@ class AgentBuilderParams(BaseModel):
     limit: int = Field(default=12, ge=1, le=50, description="Maximum documentation search results.")
     max_chars: int = Field(default=12000, ge=1, le=24000, description="Maximum characters in a document read.")
     purpose: str = Field(default="", max_length=4000, description="Specialist responsibility and acceptance criteria for add_subagent.")
-    target_member_id: str = Field(default="", max_length=256, description="Target team member for a scoped tool or skill change; defaults to the caller. Must belong to this employee.")
+    target_member_id: str = Field(default="", max_length=256, description="Target member for tools/skills, or managing employee for a new teammate. New managed hires default to the Orchestrator.")
     change_operation: Literal["add_tool", "add_skill", "add_subagent", "apply_saved"] = Field(default="apply_saved", description="Change to validate or apply. The same complete configuration and grant scope must be supplied when applying.")
     stop_work: bool = Field(default=False, description="Only set when the owner explicitly requests Stop work and apply.")
     dry_run: bool = Field(default=False, description="Validate configuration and access without saving a graph change.")
@@ -791,13 +791,14 @@ class AgentBuilderParams(BaseModel):
         description=(
             "For add_subagent, choose a specialist from inspect_canvas.available_agents, such as "
             "'coding_agent' for software development or 'browser_agent' for browser work. "
-            "A managed employee's Talk contact can add a specialist to its existing lead. "
+            "Use target_member_id for the selected manager. New managed hires default to the Orchestrator. "
             "In an editor-built team the caller is the team lead."
         ),
         json_schema_extra={"displayOptions": {"show": {"operation": ["add_subagent"]}}},
     )
 
     # create_workflow
+    team: Optional[List[Dict[str, str]]] = Field(default=None, max_length=2, description="Optional reviewed roles for create_workflow. Each entry has key, name, responsibility, kind (employee or specialist), and reports_to (orchestrator or a manager's key).")
     workflow_name: str = Field(
         default="",
         description="For create_workflow: display name (non-empty).",
@@ -871,13 +872,14 @@ class AgentBuilderNode(ToolNode):
         "Inspect and grow the workflow canvas while you run. ALWAYS call "
         "inspect_canvas FIRST: it lists what you may add (available_tools, "
         "available_agents, available_skills) and the current canvas. "
-        "Managed employee Talk can call add_subagent to add a specialist to its existing lead. "
+        "Managed employee Talk can call add_subagent to add a specialist or manager to its Orchestrator or a selected manager. "
         "Supply its purpose and additional tool_types. To equip a connected specialist, use "
         "add_tool or add_skill with its target_member_id. inspect_node reads live contracts; search_docs and "
         "read_doc provide shipped documentation. plan_update validates a "
         "change and access; apply_update applies authorized changes. "
         "create_workflow creates a configured employee team through the shared "
-        "Hire pipeline, only from a trusted owner request. When a change is "
+        "Hire pipeline, only from a trusted owner request. Use dry_run to show the owner the proposed reporting lines, "
+        "then send the reviewed team in create_workflow. When a change is "
         "refused, the summary says why in one plain sentence: pass it on."
     )
     handles = (
@@ -1029,9 +1031,14 @@ class AgentBuilderNode(ToolNode):
             from services.node_allowlist import is_hire_allowed
 
             available_tools = await _employee_tools(employee)
-            available_agents = [entry for entry in _catalogue_agents() if not _is_team_lead(entry["type"])
+            plan = employee.row.team_plan or {}
+            available_agents = [entry for entry in _catalogue_agents() if (not _is_team_lead(entry["type"])
+                                or (plan.get("version") == 3 and entry["type"] == "ai_employee"))
                                 and is_hire_allowed(entry["type"])] if employee.row.team_plan else []
             rules = {"asks_first": asks_first(employee.row), "agents": employee.agents}
+            if plan.get("version") == 3:
+                rules["reporting_lines"] = [{"node_id": member["node_id"], "parent_node_id": member["parent_node_id"],
+                                             "responsibility": member["responsibility"]} for member in plan["members"]]
 
         parts = [f"{len(canvas.nodes)} nodes"]
         if tools:
@@ -1390,7 +1397,13 @@ class AgentBuilderNode(ToolNode):
         caller = _caller(ctx)
         canvas = await _load_canvas(ctx, database)
         employee = await _employee_of(database, canvas)
-        if employee is not None and employee.row.team_plan:
+        plan = (employee.row.team_plan or {}) if employee else {}
+        if plan.get("version") == 3:
+            caller = params.target_member_id or plan.get("orchestrator_node_id")
+            if not any(member["node_id"] == caller and member["node_type"] in _TEAM_LEAD_TYPES
+                       for member in plan.get("members", [])):
+                return _refused("add_subagent", "Select the Orchestrator or a connected team manager.")
+        elif plan:
             caller = (employee.row.node_roles or {}).get("agent") or caller
         caller_type = str((canvas.node(caller) or {}).get("type") or "")
         if not _is_team_lead(caller_type):
@@ -1405,7 +1418,7 @@ class AgentBuilderNode(ToolNode):
                 f"add_subagent: '{agent_type}' is not an allowed agent type. Allowed types: {', '.join(sorted(allowed))}. "
                 "Call inspect_canvas for the full catalogue with descriptions.",
             )
-        if _is_team_lead(agent_type):
+        if _is_team_lead(agent_type) and not (plan.get("version") == 3 and agent_type == "ai_employee"):
             return _refused("add_subagent", f"add_subagent: cannot spawn another team-lead ('{agent_type}'); pick a specialized agent instead.")
         if employee is not None:
             from services.node_allowlist import is_hire_allowed
@@ -1414,9 +1427,8 @@ class AgentBuilderNode(ToolNode):
         problem = _unsaved(canvas, [str(caller)])
         if problem:
             return _refused("add_subagent", problem)
-        # Custom aiAgent teammates are repeatable (their delegation identity
-        # is per node); every other type has one type-wide delegate name.
-        existing = None if agent_type == "aiAgent" else canvas.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
+        repeatable = agent_type == "aiAgent" or (agent_type == "ai_employee" and plan.get("version") == 3)
+        existing = None if repeatable else canvas.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
         if set(params.tool_parameters) - set(params.tool_types):
             return _refused("add_subagent", "Each configured tool must also appear in tool_types.")
         if existing and employee is not None and employee.row.team_plan and (params.tool_types or params.skill_names):
@@ -1432,6 +1444,16 @@ class AgentBuilderNode(ToolNode):
         nodes = [NewNode("agent", agent_type, label, specialist_params, position=(x + 300, y + 200)),
                  NewNode("context", _CONTEXT_TYPE, "Context", position=(x + 300, y + 20), context_of="agent")]
         edges = [Edge("agent", _TEAMMATE_OUTPUT, str(caller), _TEAMMATES_INPUT)]
+        if agent_type == "ai_employee":
+            from services.employee_team_connection import employee_skill_parameters, manager_review_additions
+            bundle = manager_review_additions("agent", (x + 300, y + 200), name=label)
+            if any(not is_hire_allowed(node.type) for node in bundle.nodes) or not is_hire_allowed("masterSkill"):
+                return _refused("add_subagent", "This manager requires enabled task, review, and skill nodes.")
+            nodes.extend(bundle.nodes)
+            edges.extend(bundle.edges)
+            nodes.append(NewNode("skills", "masterSkill", "Manager instructions", employee_skill_parameters("lead"),
+                                 (x + 500, y + 380)))
+            edges.append(skill_edge("skills", "agent"))
         bundled_tool_types: set[str] = set()
         allowed_tools = _allowed_tool_types()
         if agent_type == "browser_agent":
@@ -1475,7 +1497,7 @@ class AgentBuilderNode(ToolNode):
         nodes = [replace(node, params={**node.params, **tool_settings[node.type]})
                  if node.type in bundled_tool_types and node.type in tool_settings else node for node in nodes]
         skill_config = {}
-        if agent_type == "browser_agent":
+        if agent_type in {"browser_agent", "ai_employee"} and any(node.ref == "skills" for node in nodes):
             skill_config.update(next(node.params["skills_config"] for node in nodes if node.ref == "skills"))
         for name in dict.fromkeys(params.skill_names):
             if employee is not None:
@@ -1491,7 +1513,7 @@ class AgentBuilderNode(ToolNode):
             from services.employees.policy import SKILL_TOOL_ENTRY, SKILL_TOOL_NAME
 
             skill_config[SKILL_TOOL_NAME] = dict(SKILL_TOOL_ENTRY)
-            if agent_type == "browser_agent":
+            if agent_type in {"browser_agent", "ai_employee"}:
                 nodes = [replace(node, params={**node.params, "skills_config": skill_config}) if node.ref == "skills" else node for node in nodes]
             else:
                 nodes.append(NewNode("skills", _MASTER_SKILL_TYPE, "Specialist skills", {"skill_folder": "assistant", "skills_config": skill_config}, position=(x + 20, y + 200)))
@@ -1514,7 +1536,7 @@ class AgentBuilderNode(ToolNode):
             live = _Canvas(canvas.workflow_id, list(graph.get("nodes") or []), list(graph.get("edges") or []), True)
             if live.node(caller) is None:
                 raise ValueError("The lead was removed")
-            reused = None if agent_type == "aiAgent" else live.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
+            reused = None if repeatable else live.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
             if existing and existing != reused:
                 raise ValueError("The specialist was removed or replaced")
             return (GraphAdditions(), {"agent": reused}) if reused else (additions, {})
@@ -1569,8 +1591,11 @@ class AgentBuilderNode(ToolNode):
         from services.employees.control import builder_create
 
         request_id = _mutation_id(ctx, params, _caller(ctx))
-        result = await builder_create(ctx, name, params.workflow_description.strip(), request_id)
-        summary = "Employee saved with a configured team." if result.get("success") else result.get("summary") or "The employee could not be created. Ask the owner in Talk and check the required connections."
+        result = await builder_create(ctx, name, params.workflow_description.strip(), request_id,
+                                      **({"team": params.team} if params.team is not None else {}),
+                                      **({"dry_run": True} if params.dry_run else {}))
+        summary = result.get("summary") or ("Employee saved with a configured team." if result.get("success") else
+                    "The employee could not be created. Ask the owner in Talk and check the required connections.")
         return AgentBuilderOutput(
             operation="create_workflow",
             summary=summary, request_id=request_id, operations=[],
