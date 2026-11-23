@@ -627,13 +627,14 @@ shows the refusal's code, as it does for its other control refusals.
 cost, the model tokens and the tasks finished, with "Since {Mon D}". One
 component, in three places:
 
-- **Usage**, `client/src/components/ui/UsageButton.tsx`: the same button in
-  Home's header on an employee's page and in the editor's top toolbar for the
-  open workflow (`TopToolbar`'s `workflowId`), each in its bar's shape, as the
-  theme button is. It opens a popover holding `EmployeeUsage`; the popover is
-  modal, because the editor's canvas stops the press that would otherwise
-  close it.
-- An employee's row in the cost panel, which opens to it.
+- **Home's header**, on an employee's page: the Usage button
+  (`client/src/components/ui/UsageButton.tsx`), which opens a popover holding
+  `EmployeeUsage`.
+- **The editor's top toolbar**, for the open workflow (`TopToolbar`'s
+  `workflowId`): the same button in the toolbar's shape, the way the theme
+  button is shared. The popover is modal in both, because the editor's canvas
+  stops the press that would otherwise close it.
+- **The cost panel**: an employee's row opens to it.
 
 The cost and tokens are that employee's row of `get_workflow_costs`, the
 query the cost panel reads, so the figures always agree; an employee with no
