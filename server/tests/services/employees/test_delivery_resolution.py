@@ -119,6 +119,28 @@ async def test_retry_preserves_declined_approval_and_does_not_send(real_database
     delivery_runtime.execute.assert_not_awaited()
 
 
+async def test_only_a_reviewed_blocker_can_resume_its_original_delivery(real_database, delivery_runtime):
+    await install(real_database, tail=False, approval=False)
+    async with real_database.reserved_session() as session:
+        job = await session.get(EmployeeJob, "job")
+        job.source = {**job.source, "team_plan": {"version": 3, "orchestrator_node_id": "orch"}}
+        job.result = "The source requires owner approval."
+        task = await session.get(TeamTask, "task")
+        task.parent_agent_id, task.assigned_to, task.assigning_run_id = "lead", "orch", "assigner-run"
+        task.status, task.current_attempt = "cancelled", 1
+        task.context = {"reviewed_blocker_attempt": 0}
+        await session.commit()
+    assert (await decide(real_database))["error"] == "result_not_reviewed"
+    async with real_database.reserved_session() as session:
+        task = await session.get(TeamTask, "task")
+        task.context = {"reviewed_blocker_attempt": task.current_attempt}
+        await session.commit()
+    decision = await decide(real_database)
+    assert decision["success"]
+    assert (await continue_delivery(real_database, "job", decision["request_id"]))["delivered"]
+    delivery_runtime.execute.assert_not_awaited()
+
+
 async def test_retry_request_is_idempotent_and_has_stable_temporal_identity(real_database, delivery_runtime):
     await install(real_database)
     first = await decide(real_database)

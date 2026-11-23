@@ -66,13 +66,19 @@ async def test_empty_roster_gap_and_recoverable_chat_review(real_database, accep
     review = await service.claim_run(chat, request_id="review")
     if accept_first:
         await mutate(service, scope, review, outer, "accept_task")
-    await finish(service, review, "NO_REPLY" if accept_first else "I saw this.")
-    assert await service.claim_run(chat, request_id="automatic") is None
+    incomplete = "NO_REPLY" if accept_first else "I saw this."
+    await finish(service, review, incomplete)
+    correction = await restarted.claim_run(chat, request_id="automatic")
+    assert outer in correction["messages"][0]["content"]
+    assert ("final answer" if accept_first else "accept_task") in correction["messages"][0]["content"]
+    await finish(restarted, correction, incomplete)
+    assert await service.claim_run(chat, request_id="no-more-corrections") is None
     async with db.get_session() as session:
         assert (await session.get(EmployeeJob, "empty")).state == "review_blocked"
     recovery = await service.retry_review(scope=scope, request_id="owner-retry")
     assert recovery == await service.retry_review(scope=scope, request_id="owner-retry")
     recovered = await service.claim_run(chat, request_id="recovered")
+    assert outer in recovered["messages"][0]["content"]
     if not accept_first:
         await mutate(service, scope, recovered, outer, "accept_task")
     await finish(service, recovered, "We need an analyst before we can complete this work.")
@@ -100,6 +106,106 @@ async def test_retry_does_not_bypass_required_delegation(real_database):
     second = await service.claim_run(orch, request_id="second")
     result = await finish(service, second, "Finished without calling a worker again")
     assert result["task_outcome"]["status"] == "failed"
+
+
+@pytest.mark.parametrize("correct", [True, False])
+async def test_manager_gets_one_review_correction_without_repeating_worker(real_database, correct):
+    db = real_database
+    service, scope, chat, orch, outer = await admit(db, "missed-decision", reports=[("worker", "orch")])
+    assign = await service.claim_run(orch, request_id="assign")
+    worker = await service.execute("spawn", scope=as_actor(scope, assign), arguments={"instructions": "Gather evidence"},
+        request_id="spawn", template={"node_id": "worker", "node_type": "ai_employee"})
+    child = worker["task"]["id"]
+    await finish(service, assign, "Waiting for evidence.")
+    work = await service.claim_run(worker["agent"]["id"], request_id="work")
+    await finish(service, work, "The retained evidence.")
+    review = await service.claim_run(orch, request_id="review")
+    missed = await finish(service, review, "The evidence looks good.")
+    assert "task_outcome" not in missed
+    restarted = AgentInstanceService(db)
+    assert missed == await restarted.complete_run(orch, review["run_id"], result={"response": "The evidence looks good."},
+                                                 request_id="done")
+    assert await restarted.claim_run(chat, request_id="no-early-chat") is None
+    assert await restarted.claim_run(worker["agent"]["id"], request_id="no-repeated-work") is None
+    correction = await restarted.claim_run(orch, request_id="correction")
+    assert correction["task"]["id"] == outer and correction["task"]["current_attempt"] == 0
+    assert child in correction["messages"][0]["content"] and "accept_task" in correction["messages"][0]["content"]
+    async with db.get_session() as session:
+        submitted = await session.get(TeamTask, child)
+        assert submitted.status == "submitted" and submitted.current_attempt == 0
+        assert submitted.result["response"] == "The retained evidence."
+    if not correct:
+        assert "task_outcome" not in await finish(restarted, correction, "I read the evidence.")
+        assert await restarted.claim_run(orch, request_id="no-unbounded-correction") is None
+        assert await restarted.claim_run(chat, request_id="no-early-chat") is None
+        async with db.get_session() as session:
+            assert (await session.get(EmployeeJob, scope["job_id"])).state == "review_blocked"
+            assert (await session.get(TeamTask, child)).status == "submitted"
+        recovery = await restarted.retry_review(scope=scope, request_id="owner")
+        assert recovery == await restarted.retry_review(scope=scope, request_id="owner")
+        assert recovery["instance_wake"] == [orch]
+        correction = await restarted.claim_run(orch, request_id="resume-review")
+        assert correction["task"]["id"] == outer and correction["task"]["current_attempt"] == 0
+        assert child in correction["messages"][0]["content"]
+    await mutate(restarted, scope, correction, child, "accept_task")
+    outcome = (await finish(restarted, correction, "Reviewed the evidence."))["task_outcome"]
+    assert outcome["task_id"] == outer and outcome["reviewer_instance_id"] == chat
+    assert outcome["status"] == "submitted"
+    assert await restarted.claim_run(orch, request_id="no-more-corrections") is None
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+async def test_owner_retry_identifies_failed_outer_and_reuses_assignment(real_database, blocked):
+    service, scope, chat, orch, outer = await admit(real_database, "failed-review", reports=[("worker", "orch")])
+    first = await service.claim_run(orch, request_id="first")
+    await finish(service, first, "Nothing delegated.")
+    for request_id in ["missed", "still-missed"]:
+        review = await service.claim_run(chat, request_id=request_id)
+        assert "retry_task" in review["messages"][0]["content"]
+        await finish(service, review, "We should try again.")
+    recovery = await service.retry_review(scope=scope, request_id="owner-retry")
+    assert recovery == await service.retry_review(scope=scope, request_id="owner-retry")
+    review = await service.claim_run(chat, request_id="recovered")
+    instructions = review["messages"][0]["content"]
+    assert outer in instructions and "retry_task" in instructions and "cancel_task" in instructions
+    if blocked:
+        with pytest.raises(InstanceError, match="Give the reason"):
+            await mutate(service, scope, review, outer, "cancel_task", reason=" ")
+        closed = await mutate(service, scope, review, outer, "cancel_task", reason="The search requires approval.")
+        assert closed["task"]["status"] == "cancelled" and closed["task"]["current_attempt"] == 0
+        assert (await finish(service, review, "The search requires approval."))["status"] == "completed"
+        assert await service.claim_run(orch, request_id="no-repeat") is None
+        return
+    retried = await mutate(service, scope, review, outer, "retry_task")
+    assert retried["task"]["id"] == outer and retried["task"]["current_attempt"] == 1
+    await finish(service, review, "The Orchestrator is retrying.")
+    rerun = await service.claim_run(orch, request_id="second")
+    assert rerun["task"]["id"] == outer and rerun["task"]["current_attempt"] == 1
+
+
+async def test_owner_retry_resumes_both_parked_managers(real_database):
+    service, scope, chat, orch, _ = await admit(real_database, "parallel-review",
+        reports=[("manager", "orch"), ("worker", "manager")])
+    orch_turn = await service.claim_run(orch, request_id="assign")
+    managers = [await service.execute("spawn", scope=as_actor(scope, orch_turn), arguments={"instructions": brief},
+        request_id=brief, template={"node_id": "manager", "node_type": "ai_employee"}) for brief in ["east", "west"]]
+    await finish(service, orch_turn, "Waiting for both managers.")
+    for manager in managers:
+        manager_id = manager["agent"]["id"]
+        turn = await service.claim_run(manager_id, request_id="delegate")
+        worker = await service.execute("spawn", scope=as_actor(scope, turn), arguments={"instructions": "Collect evidence."},
+            request_id="collect", template={"node_id": "worker", "node_type": "ai_employee"})
+        await finish(service, turn, "Waiting for evidence.")
+        await finish(service, await service.claim_run(worker["agent"]["id"], request_id="work"), "The evidence.")
+        for review in ["initial-review", "reminder"]:
+            await finish(service, await service.claim_run(manager_id, request_id=review), "I have read it.")
+        assert await service.claim_run(manager_id, request_id="parked") is None
+    assert await service.claim_run(chat, request_id="no-early-chat") is None
+    resumed = await service.retry_review(scope=scope, request_id="owner")
+    assert set(resumed["instance_wake"]) == {manager["agent"]["id"] for manager in managers}
+    for manager in managers:
+        turn = await service.claim_run(manager["agent"]["id"], request_id="owner-retry")
+        assert turn["task"]["id"] == manager["task"]["id"] and turn["task"]["current_attempt"] == 0
 
 
 async def test_reversed_job_results_stay_with_original_assigner(real_database):

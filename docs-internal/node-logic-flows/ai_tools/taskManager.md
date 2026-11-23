@@ -70,7 +70,7 @@ published tool name; there is no model-supplied template argument.
 | `request_changes` | `task_ref`, `feedback` | — | Append feedback to a `submitted` task and queue another attempt on its instance |
 | `accept_task` | `task_ref` | — | Accept a `submitted` task and unblock eligible dependents |
 | `retry_task` | `task_ref` | — | Retry a `failed`, `submitted` or `cancelled` task with its requirements, feedback and history |
-| `cancel_task` | `task_ref` | `reason` | Cancel a `blocked`, `queued` or `running` task and fence its attempt. Its instance remains reusable. |
+| `cancel_task` | `task_ref` | `reason` | Stop blocked, queued or running work. In recipe v3 the assigner can also close a submitted or failed attempt by giving the reason it cannot proceed. |
 | `reassign_<teammate>` | `task_ref` | — | The manager moves a `failed`, `submitted` or `cancelled` task to a fresh instance and attempt |
 | `stop_agent` | `agent` | — | Lead: halt admission and interrupt execution; no automatic task retry |
 | `resume_agent` | `agent` | — | Lead: reopen a drained, nonclosed instance and its held inbox |
@@ -193,17 +193,18 @@ admitted operations may settle; no new provider request or effect is admitted.
 Child work is preserved. A recoverable lead failure with existing tasks exposes
 `review_blocked` and the owner-authenticated, idempotent
 `retry_employee_review` action / **Retry review** button. Recovery reuses the
-same lead, tasks and model without repeating accepted work.
+same reviewer and saved evidence. Recipe v3 gives each reviewer one reminder
+per missed decision before requiring owner recovery.
 
 Generation Stop preserves pending input and continuations. Resume continues
 that generation. `stop_agent` instead interrupts an instance; failed work needs
 an explicit retry. Reset fences old instances, cancels unfinished attempts and
 disposes pending deliveries. It never redirects them to a replacement agent.
 
-`finish_team` requires all tasks accepted or cancelled; managed employee teams
-must also have assigned work. Final employee delivery is stricter: at least one
-task, every task accepted, a nonempty final lead result and the original
-delivery/approval gates. A finish receipt alone does not authorize delivery.
+`finish_team` requires all tasks accepted or cancelled. Recipe v3 delivers
+Chat's final answer after Chat accepts the outer assignment or closes it with
+a blocker reason. Older managed teams require every task to be accepted. Both
+paths require a nonempty answer and use the original destination and approvals.
 
 ### Side effects
 

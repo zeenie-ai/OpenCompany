@@ -112,7 +112,7 @@ the required mutation reference.
 | `accept_task(task_ref)` | `submitted` | Accept the result and unblock eligible dependents |
 | `retry_task(task_ref)` | `failed`, `submitted`, `cancelled` | New attempt with the same requirements, feedback and instance history |
 | `reassign_<teammate>(task_ref)` | `failed`, `submitted`, `cancelled` | Fresh target instance, same task and retained contract, new attempt |
-| `cancel_task(task_ref, reason?)` | `blocked`, `queued`, `running` | Fence and stop its executor; leave the instance reusable |
+| `cancel_task(task_ref, reason?)` | `blocked`, `queued`, `running`. Recipe v3 also allows `submitted` and `failed` | Stop active work. Closing a submission or failure requires the assigner's blocker reason and retains the evidence. |
 
 Attempts snapshot the effective contract. Feedback is appended once under the
 mutation's request identity; it does not overwrite the original instructions.
@@ -194,7 +194,7 @@ chain another configured allowance. Automatic wakeups cannot clear a halt.
 | `close_agent(agent)` | Atomically require no active run, unresolved assigned work or pending inbox before closing |
 | Generation Stop / Resume | Preserve queues and continuations under the generation controller; resume existing work |
 | Generation Reset | Close/fence old instances, cancel queued/blocked/running tasks and explicitly dispose pending deliveries; never redirect them to replacement instances |
-| **Retry review** | Owner-authenticated, idempotent recovery of the same halted job lead and existing tasks |
+| **Retry review** | Resume the assigning employee's review of its saved task attempt |
 
 The third classified invalid orchestration request halts the logical run after
 the initial error and two correction opportunities. The counter and original
@@ -206,9 +206,9 @@ are fenced, including RLM root, nested and fallback calls.
 A failed/halted lead with existing child work leaves the employee job
 `review_blocked` when no protected delivery/approval outcome already exists.
 Valid child work remains available. `retry_employee_review` and the employee
-Work view's **Retry review** button resume the original lead without recreating
-assignments, changing models or rerunning accepted work. An automatic review
-notice cannot perform that recovery.
+Work view's **Retry review** button resume review of the existing assignment.
+In recipe v3, a missed decision first queues one reminder for the same task
+revision. A repeated omission leaves review available for the owner to resume.
 
 ### Observation and implementation
 

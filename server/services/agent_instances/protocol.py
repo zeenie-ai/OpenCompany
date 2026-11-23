@@ -58,6 +58,12 @@ def should_bootstrap(context: Mapping[str, Any]) -> bool:
             and context.get("node_type") in {"ai_employee", "orchestrator_agent"})
 
 
+def is_inbox_review_context(context: Mapping[str, Any]) -> bool:
+    """A hierarchical job instance receives task outcomes through its admitted inbox."""
+    plan = context.get("employee_team_plan") or {}
+    return bool(context.get("agent_instance_id") and context.get("employee_job_id") and plan.get("version") == 3)
+
+
 def is_chat_intake(plan: Mapping[str, Any] | None, context: Mapping[str, Any]) -> bool:
     """The v3 contact talks directly until it explicitly submits a job.
 

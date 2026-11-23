@@ -231,6 +231,8 @@ async def collect_agent_connections(
     if not edges or not nodes:
         return context_data, skill_data, tool_data, input_data, task_data
 
+    from services.agent_instances.protocol import is_inbox_review_context
+    inbox_turn = is_inbox_review_context(context)
     incoming_edges = [e for e in edges if e.get("target") == node_id]
     logger.info(f"{log_prefix} Incoming edges to {node_id}: {len(incoming_edges)}")
     if not incoming_edges:
@@ -242,14 +244,16 @@ async def collect_agent_connections(
     tool_incoming = [e for e in incoming_edges if edge_target_handle(e) == "input-tools"]
     logger.info(f"{log_prefix} Tool edges (input-tools handle): {len(tool_incoming)}")
 
-    for edge in edges:
-        if edge.get("target") != node_id:
-            continue
-
+    task_sources = []
+    for edge in incoming_edges:
         target_handle = edge_target_handle(edge)
         source_node_id = edge.get("source")
         source_node = next((n for n in nodes if n.get("id") == source_node_id), None)
         if not source_node:
+            continue
+        # An instance receives the submitted task through its own durable inbox.
+        # The same trigger node can be serving a different job on this canvas.
+        if inbox_turn and source_node.get("type") == "taskTrigger":
             continue
 
         if target_handle == "input-context":
@@ -305,12 +309,16 @@ async def collect_agent_connections(
                 )
 
         elif target_handle == "input-task":
-            task_data = await _resolve_task_payload(
-                source_node_id,
-                source_node,
-                context,
-                log_prefix,
-            )
+            task_sources.append(source_node)
+
+    if task_sources:
+        outputs = {**(context.get("inputs") or {}), **(context.get("outputs") or {})}
+        current_sources = [source for source in task_sources if source["id"] in outputs or "_trigger_output" in source]
+        allow_lookup = not current_sources and (context.get("employee_team_plan") or {}).get("version") != 3
+        for source in (task_sources if allow_lookup else current_sources):
+            task_data = await _resolve_task_payload(source, outputs, context, log_prefix, allow_lookup=allow_lookup)
+            if task_data is not None:
+                break
 
     # Unmanaged leads and historical generations without a saved manager use
     # the built-in capability. A new managed lead has already resolved its own
@@ -530,17 +538,20 @@ async def _append_tool_entry(
 
 
 async def _resolve_task_payload(
-    source_node_id: str,
     source_node: Dict[str, Any],
+    outputs: Dict[str, Any],
     context: Dict[str, Any],
     log_prefix: str,
+    *,
+    allow_lookup: bool,
 ) -> Optional[Dict[str, Any]]:
+    source_node_id = source_node["id"]
     logger.info(f"{log_prefix} Found input-task edge from {source_node_id} (type={source_node.get('type')})")
 
-    source_output = context.get("outputs", {}).get(source_node_id)
+    source_output = outputs.get(source_node_id, source_node.get("_trigger_output"))
     logger.info(f"{log_prefix} Context outputs check for {source_node_id}: {source_output is not None}")
 
-    if not source_output:
+    if not source_output and allow_lookup:
         get_output_fn = context.get("get_output_fn")
         session_id = context.get("session_id", "default")
         if get_output_fn:
@@ -559,7 +570,11 @@ async def _resolve_task_payload(
     if not source_output:
         return None
 
-    task_data = extract_task_event_payload(source_output) or source_output
+    task_data = extract_task_event_payload(source_output)
+    if task_data is None:
+        if source_node.get("type") == "taskTrigger":
+            return None
+        task_data = source_output
     if isinstance(task_data, dict):
         logger.info(
             f"{log_prefix} Task completion data: task_id={task_data.get('task_id')}, "

@@ -1,4 +1,4 @@
-"""Explicit owner recovery of a halted job lead, without repeating worker work."""
+"""Owner-requested recovery of the employee reviewing a saved task result."""
 from __future__ import annotations
 
 from models.employees import EmployeeJob

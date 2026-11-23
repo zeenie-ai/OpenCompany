@@ -38,7 +38,8 @@ async def resolve_delivery(database: Any, *, workflow_id: str, job_id: str, owne
         job = await session.get(EmployeeJob, job_id)
     if not job or job.workflow_id != workflow_id or job.source.get("user_id") != owner_id:
         return {"success": False, "error": "not_found"}
-    tasks = await database.get_team_tasks(job.team_id) if job.team_id else []
+    hierarchical = (job.source.get("team_plan") or {}).get("version") == 3
+    tasks = await database.get_team_tasks(job.team_id) if job.team_id and not hierarchical else []
     async with database.reserved_session() as session:
         current = await session.get(EmployeeJob, job_id)
         if not current or current.workflow_id != workflow_id or current.source.get("user_id") != owner_id:
@@ -50,7 +51,12 @@ async def resolve_delivery(database: Any, *, workflow_id: str, job_id: str, owne
             if earlier["decision"] != decision:
                 return {"success": False, "error": "request_conflict"}
             return {"success": True, "request_id": identifier, "state": earlier["state"], "message": "Your delivery decision is saved."}
-        if not tasks or any(task.get("status") != "accepted" for task in tasks) or current.team_id != job.team_id or not current.result or current.result.strip() == "NO_REPLY":
+        if hierarchical:
+            from services.employees.jobs import outer_review_decision
+            reviewed = await outer_review_decision(session, current) is not None
+        else:
+            reviewed = bool(tasks) and all(task.get("status") == "accepted" for task in tasks)
+        if not reviewed or current.team_id != job.team_id or not current.result or current.result.strip() == "NO_REPLY":
             return {"success": False, "error": "result_not_reviewed", "message": "The team must finish checking this result before it can be sent."}
         if any(item.get("state") in {"queued", "started"} for item in resolutions.values()):
             return {"success": False, "error": "busy", "message": "Your previous delivery decision is still being applied."}

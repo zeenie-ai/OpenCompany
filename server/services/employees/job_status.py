@@ -18,11 +18,14 @@ def _job_progress(job: EmployeeJob) -> dict:
     # A terminal job answers its own state even with a gate mark left behind.
     if inflight and node_types.get(inflight) == "approvalGate" and job.state not in {"failed", "cancelled"}:
         return {"request_id": job.id, "state": "waiting_for_approval", "message": "Their result is ready for you to check before sending."}
+    if job.state in {"delivered", "completed"} and job.delivery.get("work_blocked"):
+        return {"request_id": job.id, "state": "failed", "failure_code": "work_blocked",
+                "message": "The team could not complete the work. Chat's explanation is on the original assignment."}
     messages = {"queued": "Your request is saved. The team will start when they are ready.",
                 "running": "The team is starting your request.", "working": "The team is working on your request and checking the result.",
                 "delivering": "Their checked result is ready to send.", "failed": "The team could not finish this request. Ask them to try again.",
                 "cancelled": "This request was stopped.", "delivery_needs_review": "The send was interrupted. Check whether it arrived before trying again.",
-                "review_blocked": "The lead needs another review turn. Completed work is saved.",
+                "review_blocked": "The assigning employee needs another review turn. Completed work is saved.",
                 "delivered": "The reviewed result was delivered.",
                 "completed": "The reviewed result is available on the original Task Manager assignment."}
     if job.state == "failed" and (job.delivery.get("failure") or {}).get("code") == NO_ASSIGNMENTS_CODE:

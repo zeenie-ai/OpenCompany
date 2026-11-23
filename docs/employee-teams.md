@@ -60,6 +60,12 @@ manager submits its findings to the Orchestrator. The Orchestrator then submits
 its reviewed report to Chat. Chat accepts it or requests a revision and writes
 the final answer after acceptance.
 
+If a specialist needs an approval it cannot obtain, it can submit what it
+found and explain which step it could not take. Its manager can close the
+assignment with that reason. Chat reviews the Orchestrator's report and tells
+you what remains undone. The task board retains the evidence. A review retry
+asks the assigning employee to decide what to do with the saved result.
+
 Chat posts the answer in the branch where you made the request. If another
 chat turn is running, the answer waits for that turn to finish. If you cleared
 the conversation, open the original assignment on Chat's board and look for

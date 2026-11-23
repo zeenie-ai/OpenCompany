@@ -1851,18 +1851,37 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         system_message += ("\nFor work the current team can perform, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. "
                            "Use get_job_status before reporting progress or retrying a job. Queued does not mean started or completed. "
                            "If the job failed, report its failure instead of telling the owner to keep waiting. Keep this conversation with the owner.")
-    elif hierarchical and role == "reviewer":
-        system_message += ("\nReview the Orchestrator's submission against the original request using get_task and inspect_task. "
-                           "Request changes on the same task when needed. After accepting the work, write the final answer "
-                           "to the user in your own words, including the evidence and artifact links they need. "
-                           "If a missing approved role prevents completion, tell the owner what is missing and what work "
-                           "was completed. The owner can update the team in Builder, Apply, and request a new job.")
+    elif hierarchical and role in {"reviewer", "manager"}:
+        if role == "reviewer":
+            system_message += ("\nYou are reviewing the Orchestrator's existing assignment for the original request. "
+                               "The intake instructions for new owner messages apply only during chat intake.")
+        else:
+            from services.agent_instances.tools import orchestration_prompt
+            system_message += f"\n\n{orchestration_prompt()}"
+        system_message += (
+            " On a review or review retry, read the task with get_task and inspect_task as needed. "
+            "Use its latest task_ref and allowed_actions. If the submitted result meets the requirements, "
+            "call accept_task(task_ref). If the worker can correct it, call request_changes(task_ref, feedback) "
+            "and wait for the revised submission. If submitted or failed work requires owner action to proceed, "
+            "call cancel_task(task_ref, reason) with the blocker and the action needed before a new attempt. "
+            "Verify the review tool succeeded before reporting its outcome. Only retry blocked work after "
+            "the blocker has been resolved."
+        )
+        if role == "reviewer":
+            system_message += (" After resolving the outer task, write the final reply to the owner in your own words. "
+                               "Give the accepted result and evidence, or explain what could be verified, what remains "
+                               "unfinished, and the specific action needed from the owner.")
+        else:
+            system_message += (" Return the reviewed evidence to your assigning employee. If a task was cancelled "
+                               "because it needs owner action, identify the unfinished work and the blocker in your report.")
+    elif hierarchical and context.get("agent_instance_id"):
+        system_message += ("\nReturn your findings and evidence to the employee who assigned this task. "
+                           "Peer messages are for coordination. Only the owner can approve an action. "
+                           "If the work needs owner action, report the blocker, what remains unfinished, "
+                           "and what the owner needs to do.")
     elif context.get("agent_instance_id"):
         from services.agent_instances.tools import orchestration_prompt
         system_message = f"{system_message}\n\n{orchestration_prompt()}"
-        if hierarchical:
-            system_message += ("\nIf an approved role or capability is missing, report the gap and its impact to "
-                               "your assigning employee in your task result. The owner can change the team for future work.")
     elif any(tool["name"].startswith("delegate_to_") for tool in tools_payload):
         from services.plugin.edge_walker import TEAMMATE_ROSTER_NOTE, format_teammate_roster_line
 

@@ -113,6 +113,12 @@ async def finish(turn, text):
 
 
 async def review(turn, prepared, task_id, *, feedback=None):
+    # Each review turn, including Chat's, must show the model how to record its
+    # decision on this assignment when an owner action blocks further work.
+    operations = {tool.get("agent_operation") for tool in prepared["tools"]}
+    for call in ("accept_task(task_ref)", "request_changes(task_ref, feedback)", "cancel_task(task_ref, reason)"):
+        assert call in prepared["system_message"]
+        assert call.split("(")[0] in operations
     current = await call_tool(turn["context"], prepared, "get_task", {"task_ref": task_id}, "read")
     task = current["task"]
     assert task["status"] == "submitted"
@@ -142,6 +148,7 @@ async def test_hired_chat_assigns_nested_tasks_and_delivers_its_own_review(real_
                "parameter_snapshot": graph["parameters"]}
     assert not (await bootstrap_instance(context))["applicable"]
     prepared = await prepare_agent_payload(context)
+    assert "cancel_task(task_ref, reason)" not in prepared["system_message"]
     assert {item["agent_operation"] for item in prepared["tools"] if item.get("agent_operation")} == {"submit_job", "get_job_status"}
     receipt = await call_tool(context, prepared, "submit_job", {"instructions": mission}, "assign")
     repeated = await call_tool(context, prepared, "submit_job", {"instructions": mission}, "second-tool-call")
@@ -173,7 +180,8 @@ async def test_hired_chat_assigns_nested_tasks_and_delivers_its_own_review(real_
         assert [task["id"] for task in rows] == [task_id]
         assert "reviewed_job_result" not in rows[0]
     assert "task_outcome" not in await finish(research, "I assigned the count.")
-    worker, _ = await take_turn(child["agent"]["id"], "collect")
+    worker, worker_payload = await take_turn(child["agent"]["id"], "collect")
+    assert "cancel_task(task_ref, reason)" not in worker_payload["system_message"]
     submitted = await finish(worker, "The count was 14.")
     assert submitted["task_outcome"]["reviewer_instance_id"] == research["instance"]["id"]
     assert await claim_instance({"instance_id": boot["instance_id"], "request_id": "no-early-chat-review"}) is None

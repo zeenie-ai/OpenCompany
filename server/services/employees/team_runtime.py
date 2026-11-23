@@ -5,7 +5,10 @@ from typing import Any, Optional
 
 def employee_review_input(context: dict) -> dict | None:
     """Read a single current-run task event before consulting saved parameters."""
+    from services.agent_instances.protocol import is_inbox_review_context
     from services.plugin.edge_walker import extract_task_event_payload
+    if is_inbox_review_context(context):
+        return None
     trigger_ids = {node.get("id") for node in context.get("nodes", []) if node.get("type") == "taskTrigger"}
     outputs = {**(context.get("inputs") or {}), **(context.get("outputs") or {})}
     events = [event for node_id, output in outputs.items() if node_id in trigger_ids

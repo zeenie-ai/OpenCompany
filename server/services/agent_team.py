@@ -301,7 +301,7 @@ class AgentTeamService:
         team = await self.resolve_lead_scope(workflow_id=workflow_id, team_lead_node_id=team_lead_node_id, execution_id=execution_id)
         from models.database import AgentTeam, TeamTask
         from sqlmodel import select
-        from services.employees.jobs import managed_job_for_team, no_assignments_failed
+        from services.employees.jobs import managed_job_for_team, no_assignments_failed, outer_review_decision
         async with self.database.reserved_session() as session:
             job = await managed_job_for_team(session, team["id"], {"workflow_id": workflow_id, "node_id": team_lead_node_id})
             tasks = list((await session.execute(select(TeamTask).where(TeamTask.team_id == team["id"]))).scalars())
@@ -309,8 +309,15 @@ class AgentTeamService:
                 raise ValueError("Assign work to a connected teammate before finishing this employee team")
             if any(t.status not in {"accepted", "cancelled"} for t in tasks):
                 raise ValueError("Team has unresolved tasks")
+            status = "completed"
+            if job and (job.source.get("team_plan") or {}).get("version") == 3:
+                decision = await outer_review_decision(session, job)
+                if decision is None:
+                    raise ValueError("The Orchestrator's assignment still needs a review decision")
+                if decision == "blocked":
+                    status = "failed"
             row = await session.get(AgentTeam, team["id"])
-            row.status, row.completed_at = "completed", datetime.now(timezone.utc)
+            row.status, row.completed_at = status, datetime.now(timezone.utc)
             await session.commit()
         return await self.database.get_team_stats(team["id"])
 

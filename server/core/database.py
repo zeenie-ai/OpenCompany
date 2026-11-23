@@ -3562,7 +3562,8 @@ class Database:
                 rows = result.scalars().all()
                 tasks = [self._team_task_dict(t) for t in rows]
                 if (board_owner and len(rows) == 1 and rows[0].assigning_run_id
-                        and rows[0].parent_agent_id == board_owner and rows[0].status == "accepted"):
+                        and rows[0].parent_agent_id == board_owner
+                        and (rows[0].status == "accepted" or rows[0].reviewed_blocker)):
                     from models.employees import EmployeeJob
                     answer = await session.scalar(select(EmployeeJob.result).where(
                         EmployeeJob.team_id == team_id, EmployeeJob.lead_node_id == board_owner,

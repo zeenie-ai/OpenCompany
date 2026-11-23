@@ -74,16 +74,31 @@ def decode_task_ref(value: str) -> list:
         raise InstanceError("invalid_task_ref", "Use the task_ref returned by get_task or list_tasks.") from exc
 
 
+async def outer_assignment(session, job: EmployeeJob) -> TeamTask | None:
+    """Resolve Chat's unique assignment from the job's admitted hierarchy."""
+    query = select(TeamTask).where(TeamTask.team_id == job.team_id, TeamTask.parent_agent_id == job.lead_node_id,
+        TeamTask.assigned_to == job.source["team_plan"]["orchestrator_node_id"], TeamTask.assigning_run_id.is_not(None))
+    tasks = (await session.execute(query.limit(2))).scalars().all()
+    return tasks[0] if len(tasks) == 1 else None
+
+
+def _task_actions(task: TeamTask) -> list[str]:
+    actions = {
+        "blocked": ["modify_task", "cancel_task"], "queued": ["modify_task", "cancel_task"],
+        "running": ["cancel_task"], "submitted": ["accept_task", "request_changes", "retry_task", "reassign"],
+        "failed": ["retry_task", "reassign"], "cancelled": ["retry_task", "reassign"],
+    }.get(task.status, [])
+    if task.assigning_run_id and task.status in {"submitted", "failed"}:
+        actions.append("cancel_task")
+    return actions
+
+
 def _task_dict(task: TeamTask) -> dict:
     result = task.model_dump(mode="json")
     result["depends_on"] = _dependency_ids(task)
     result["task_ref"] = task_ref(task)
     result["result"] = _result_preview(task.result, task.id)
-    result["allowed_actions"] = {
-        "blocked": ["modify_task", "cancel_task"], "queued": ["modify_task", "cancel_task"],
-        "running": ["cancel_task"], "submitted": ["accept_task", "request_changes", "retry_task", "reassign"],
-        "failed": ["retry_task", "reassign"], "cancelled": ["retry_task", "reassign"],
-    }.get(task.status, [])
+    result["allowed_actions"] = _task_actions(task)
     return result
 
 
@@ -544,6 +559,38 @@ class AgentInstanceService:
         return (assigner and run and assigner.instance_id == run.instance_id
                 and (assigner.task_id, assigner.attempt) == (run.task_id, run.attempt))
 
+    @staticmethod
+    def _review_instructions(task: TeamTask) -> str:
+        prompt = f"Task {task.id} is {task.status}. Read get_task with this ID and inspect the retained result."
+        if task.status == "accepted" or task.reviewed_blocker:
+            return prompt + " The review decision is recorded. Write the final answer for the user, including any blocker and completed work."
+        if task.status in {"failed", "submitted"}:
+            if task.status == "submitted":
+                action = "Use accept_task for satisfactory work or request_changes with specific feedback."
+            elif task.current_attempt < task.max_retries:
+                action = "Use retry_task if the same assignment can succeed on another attempt."
+            else:
+                action = "This assignment has exhausted its retry budget."
+            return (f"{prompt} {action} If a blocker requires owner action, use cancel_task with the blocker as the reason. "
+                    "Make the decision with the current task_ref before ending your turn.")
+        if task.status == "cancelled" and task.current_attempt < task.max_retries:
+            return prompt + " Use retry_task with the current task_ref to resume this assignment if appropriate."
+        return prompt
+
+    async def _remind_review(self, session, reviewer, child, *, parent_task, chain_id):
+        # One corrective turn for this exact result, even across restarts.
+        # The session claims the queued notice after releasing its current slot.
+        identity = _id("delivery_", "review_reminder", reviewer.id, task_ref(child))
+        existing = await session.get(AgentDelivery, identity)
+        if existing:
+            return existing.state == "queued"
+        await self._enqueue(session, reviewer, identity=identity, sender_id=None, kind="task_review",
+            task=parent_task, chain_id=chain_id,
+            content=self._review_instructions(child),
+            payload={"task_id": child.id, "attempt": child.current_attempt, "revision": child.revision,
+                     "status": child.status, "task_ref": task_ref(child), "review_reminder": True})
+        return True
+
     async def _task_notice(self, session, task: TeamTask, *, chain_id: str | None = None) -> list[str]:
         owner = await self._instance(session, task.assigned_instance_id)
         parent_task = None
@@ -566,7 +613,8 @@ class AgentInstanceService:
         for lead in leads:
             await self._enqueue(session, lead, identity=_id("delivery_", task.id, task.current_attempt, task.revision, task.status),
                 sender_id=task.assigned_instance_id, kind="task_review", task=parent_task,
-                content=f"Task {task.id} is {task.status}. Inspect its result and choose a review action.",
+                content=(self._review_instructions(task) if task.assigning_run_id else
+                         f"Task {task.id} is {task.status}. Inspect its result and choose a review action."),
                 payload={"task_id": task.id, "attempt": task.current_attempt, "revision": task.revision,
                          "status": task.status, "task_ref": task_ref(task)}, chain_id=chain_id)
             wake.append(lead.id)
@@ -738,8 +786,8 @@ class AgentInstanceService:
                     AgentInstance.generation == scope["generation"]))).scalars().all()
                 if "_report_ids" in scope:
                     outer = [task for task in tasks if task.parent_agent_id == scope["lead_node_id"]]
-                    if len(outer) != 1 or outer[0].status != "accepted":
-                        raise InstanceError("invalid_transition", "Accept the Orchestrator's result before finishing this job.")
+                    if len(outer) != 1 or not (outer[0].status == "accepted" or outer[0].reviewed_blocker):
+                        raise InstanceError("invalid_transition", "Record a review decision on the Orchestrator's result before finishing.")
                 if any(task.status not in {"accepted", "cancelled"} for task in tasks):
                     raise InstanceError("invalid_transition", "Review all outstanding tasks before finishing the team.")
                 result["status"] = "reviewed"
@@ -751,10 +799,7 @@ class AgentInstanceService:
             return result if operation in reads else await self._commit(session, key, fingerprint, result)
 
     async def _mutate_task(self, session, scope, task, operation, args, template, key):
-        allowed = {"modify_task": {"blocked", "queued"}, "request_changes": {"submitted"},
-            "accept_task": {"submitted"}, "retry_task": {"failed", "submitted", "cancelled"},
-            "cancel_task": {"blocked", "queued", "running"}, "reassign": {"failed", "submitted", "cancelled"}}
-        if task.status not in allowed[operation]:
+        if operation not in _task_actions(task):
             raise InstanceError("invalid_transition", f"{operation} is unavailable while task is {task.status}.")
         instance = await self._instance(session, task.assigned_instance_id, scope)
         wake, stops = [], []
@@ -797,10 +842,15 @@ class AgentInstanceService:
                     dependent.revision += 1
                     wake.append(dependent.assigned_instance_id)
         elif operation == "cancel_task":
+            if task.assigning_run_id and task.status in {"submitted", "failed"}:
+                reason = str(args.get("reason") or "").strip()
+                if not reason:
+                    raise InstanceError("invalid_tool_input", "Give the reason this reviewed work cannot be completed.")
+                task.context = {**(task.context or {}), "reviewed_blocker_attempt": task.current_attempt}
             if task.assigning_run_id:
                 await self._cancel_branch(session, task, stops)
             task.status, task.cancellation_requested = "cancelled", True
-            task.cancellation_reason = str(args.get("reason") or "Cancelled by lead")[:2000]
+            task.cancellation_reason = str(args.get("reason") or "Cancelled by lead").strip()[:2000]
             if instance.active_run_id:
                 run = await session.get(AgentRun, instance.active_run_id)
                 if run and run.task_id == task.id:
@@ -814,7 +864,9 @@ class AgentInstanceService:
                 delivery.state = "cancelled"
             attempt = await session.get(TeamTaskAttempt, f"{task.id}:attempt:{task.current_attempt}")
             if attempt:
-                attempt.status, attempt.error, attempt.completed_at = "cancelled", task.cancellation_reason, now()
+                attempt.status = "cancelled"
+                attempt.error = attempt.error or task.cancellation_reason
+                attempt.completed_at = attempt.completed_at or now()
         else:
             if instance.active_run_id:
                 active = await session.get(AgentRun, instance.active_run_id)
@@ -875,6 +927,8 @@ class AgentInstanceService:
             held = (await session.execute(select(AgentDelivery).where(AgentDelivery.recipient_id == instance.id,
                 AgentDelivery.state == "held"))).scalars().all()
             for delivery in held:
+                if delivery.hold_reason == "owner_review":
+                    continue
                 delivery.state, delivery.hold_reason = "queued", None
                 if delivery.chain_id:
                     chain = await session.get(AgentMessageChain, delivery.chain_id)
@@ -964,6 +1018,11 @@ class AgentInstanceService:
             AgentDelivery.state == "queued").order_by(AgentDelivery.sequence))).scalars().all()
         admitted, used, selected_task = [], 0, None
         for row in rows:
+            if row.kind == "task_review" and row.payload.get("review_reminder"):
+                reviewed = await session.get(TeamTask, row.payload["task_id"])
+                if reviewed is None or task_ref(reviewed) != row.payload["task_ref"]:
+                    row.state = "cancelled"
+                    continue
             row_task = None
             if row.task_id:
                 task = await session.get(TeamTask, row.task_id)
@@ -1127,7 +1186,7 @@ class AgentInstanceService:
             conversation.messages, conversation.revision, conversation.updated_at = deepcopy(messages), expected_revision + 1, now()
             return await self._commit(session, key, fingerprint, {"revision": conversation.revision})
 
-    async def _review_gate(self, session, instance, task):
+    async def _review_gate(self, session, instance, task, *, chain_id):
         """Return whether a parked task can submit, or why it cannot finish."""
         children = await self._children_of_attempt(session, task)
         if not children:
@@ -1142,40 +1201,58 @@ class AgentInstanceService:
                 if not accepted:
                     return False, "The Orchestrator finished without assigning work to a connected subagent."
             return True, None
-        if all(child.status == "accepted" for child in children):
+        unresolved = [child for child in children if child.status != "accepted" and not child.reviewed_blocker]
+        if not unresolved:
             return True, None
-        if any(child.status in {"queued", "blocked", "running"} for child in children):
+        if any(child.status in {"queued", "blocked", "running"} for child in unresolved):
             return False, None
-        # If a notice raced this turn, the session will pick it up on its next
-        # claim. A final answer after consuming all notices without resolving
-        # them must report a review failure instead of waiting forever.
+        # An outcome can arrive after the current turn's last inbox drain.
         pending = await session.scalar(select(AgentDelivery.id).where(AgentDelivery.kind == "task_review",
             AgentDelivery.recipient_id == instance.id, AgentDelivery.task_id == task.id,
             AgentDelivery.attempt == task.current_attempt, AgentDelivery.state.in_(["queued", "held"])).limit(1))
-        return (False, None) if pending else (False, "The manager ended its review with unresolved subtask results.")
+        if pending:
+            return False, None
+        reminded = False
+        for child in unresolved:
+            if await self._remind_review(session, instance, child, parent_task=task, chain_id=chain_id):
+                reminded = True
+        if not reminded:
+            # Preserve the submitted evidence and this upstream attempt for an
+            # owner retry. The same manager can continue its other assignments.
+            for child in unresolved:
+                ref = task_ref(child)
+                notice = await self._enqueue(session, instance,
+                    identity=_id("delivery_", "owner_review", instance.active_run_id, ref),
+                    sender_id=None, kind="task_review", task=task, content=self._review_instructions(child),
+                    payload={"task_id": child.id, "task_ref": ref, "review_reminder": True})
+                notice.state, notice.hold_reason = "held", "owner_review"
+            job = await session.get(EmployeeJob, instance.job_id)
+            if job and not self._protected_job(job):
+                job.state, job.updated_at = "review_blocked", now()
+        return False, None
 
-    async def _chat_review_error(self, session, instance, result) -> str | None:
+    async def _chat_review_error(self, session, instance, result, *, chain_id) -> str | None:
         job = await session.get(EmployeeJob, instance.job_id)
         if not job or self._protected_job(job):
             return None
         plan = job.source.get("team_plan") or {}
         if plan.get("version") != 3:
             return None
-        outer = await session.scalar(select(TeamTask).where(
-            TeamTask.team_id == instance.team_id, TeamTask.parent_agent_id == instance.template_node_id,
-            TeamTask.assigned_to == plan["orchestrator_node_id"], TeamTask.assigning_run_id.is_not(None)))
+        outer = await outer_assignment(session, job)
         if outer is None or outer.status in {"queued", "blocked", "running"}:
             return None  # The requested revision is still with the Orchestrator.
-        if outer.status == "accepted":
-            if str((result or {}).get("response") or "").strip() in {"", "NO_REPLY"}:
-                return "Chat accepted the assignment and still needs to write the final answer."
-            return None
+        if outer.status == "accepted" or outer.reviewed_blocker:
+            if str((result or {}).get("response") or "").strip() not in {"", "NO_REPLY"}:
+                return None
+            error = "Chat reviewed the assignment and still needs to write the final answer."
+        else:
+            error = "Chat finished its turn with the Orchestrator's assignment still awaiting review."
         notice = await session.scalar(select(AgentDelivery.id).where(
             AgentDelivery.recipient_id == instance.id, AgentDelivery.kind == "task_review",
             AgentDelivery.state == "queued").limit(1))
-        if notice is None:
-            return "Chat finished its turn with the Orchestrator's assignment still awaiting review."
-        return None
+        if notice or await self._remind_review(session, instance, outer, parent_task=None, chain_id=chain_id):
+            return None
+        return error
 
     async def complete_run(self, instance_id: str, run_id: str, *, result: dict | None = None,
                            error: str | dict | None = None, request_id: str) -> dict:
@@ -1195,7 +1272,7 @@ class AgentInstanceService:
                 return {"status": run.status, "instance_wake": []}
             stale = instance.active_run_id != run_id or instance.fence != run.fence or run.status == "draining"
             if instance.role == "lead" and not stale and not error:
-                error = await self._chat_review_error(session, instance, result)
+                error = await self._chat_review_error(session, instance, result, chain_id=run.chain_id)
             error_text = str(error.get("message") or error.get("code") or error) if isinstance(error, dict) else error
             run.result = deepcopy(result) if not stale else None
             run.error = run.error or error_text
@@ -1209,7 +1286,7 @@ class AgentInstanceService:
                     interrupted = bool(task.assigning_run_id and stale and run.error == "interrupted")
                     can_submit = True
                     if task.assigning_run_id and not stale and not error and task.status == "running":
-                        can_submit, gate_error = await self._review_gate(session, instance, task)
+                        can_submit, gate_error = await self._review_gate(session, instance, task, chain_id=run.chain_id)
                         if gate_error:
                             error_text, run.error, run.status = gate_error, gate_error, "failed"
                     if (not stale or interrupted) and task.status == "running" and (can_submit or error_text):
@@ -1287,25 +1364,44 @@ class AgentInstanceService:
             from services.employees.jobs import job_has_approval
             if await job_has_approval(session, job):
                 raise InstanceError("review_not_retryable")
+            # Several managers may have stopped at independent reviews. Release
+            # only their saved review notices, leaving other held inputs alone.
+            held = (await session.execute(select(AgentDelivery).join(AgentInstance,
+                AgentDelivery.recipient_id == AgentInstance.id).where(
+                AgentInstance.job_id == job.id, AgentDelivery.team_id == job.team_id,
+                AgentDelivery.generation == scope["generation"], AgentDelivery.state == "held",
+                AgentDelivery.hold_reason == "owner_review"))).scalars().all()
+            wake = set()
+            for notice in held:
+                notice.state, notice.hold_reason = "queued", None
+                wake.add(notice.recipient_id)
             leads = (await session.execute(select(AgentInstance).where(AgentInstance.team_id == scope["team_id"],
                 AgentInstance.job_id == scope["job_id"], AgentInstance.generation == scope["generation"],
                 AgentInstance.role == "lead"))).scalars().all()
             if len(leads) != 1:
                 raise InstanceError("agent_not_found")
             instance = leads[0]
-            if instance.active_run_id or instance.state == "closed":
-                raise InstanceError("agent_draining")
-            tasks = (await session.execute(select(TeamTask.id).join(AgentInstance, TeamTask.assigned_instance_id == AgentInstance.id)
-                .where(AgentInstance.team_id == scope["team_id"], AgentInstance.job_id == scope["job_id"]).limit(1))).first()
-            if not tasks:
-                raise InstanceError("review_not_retryable")
-            instance.state, instance.halt_reason = "idle", None
-            instance.revision += 1
-            await self._enqueue(session, instance, identity=_id("delivery_", key), sender_id=None, kind="review_retry",
-                content="Resume review of this job's existing tasks. Inspect current task states and results; do not repeat accepted work.")
+            if not wake or instance.state == "halted":
+                if instance.active_run_id or instance.state == "closed":
+                    raise InstanceError("agent_draining")
+                tasks = (await session.execute(select(TeamTask.id).join(AgentInstance, TeamTask.assigned_instance_id == AgentInstance.id)
+                    .where(AgentInstance.team_id == scope["team_id"], AgentInstance.job_id == scope["job_id"]).limit(1))).first()
+                if not tasks:
+                    raise InstanceError("review_not_retryable")
+                instance.state, instance.halt_reason = "idle", None
+                instance.revision += 1
+                content = "Resume review of this job's existing tasks. Inspect current task states and results; do not repeat accepted work."
+                plan = job.source.get("team_plan") or {}
+                if plan.get("version") == 3:
+                    outer = await outer_assignment(session, job)
+                    if outer:
+                        content = self._review_instructions(outer)
+                await self._enqueue(session, instance, identity=_id("delivery_", key), sender_id=None, kind="review_retry",
+                    content=content)
+                wake.add(instance.id)
             job.state, job.updated_at = "running", now()
             job.delivery = {key: value for key, value in job.delivery.items() if key != "review_blocked"}
-            return await self._commit(session, key, fingerprint, {"success": True, "job_id": job.id, "instance_wake": [instance.id]})
+            return await self._commit(session, key, fingerprint, {"success": True, "job_id": job.id, "instance_wake": sorted(wake)})
 
     async def close_job(self, *, scope: dict, request_id: str) -> dict:
         """Retire a delivered job's instances after the delivery transaction."""
@@ -1325,7 +1421,8 @@ class AgentInstanceService:
                 if (job.source.get("team_plan") or {}).get("version") == 3:
                     team = await session.get(AgentTeam, job.team_id)
                     if team:
-                        team.status, team.completed_at = "completed", now()
+                        team.status = "failed" if job.delivery.get("work_blocked") else "completed"
+                        team.completed_at = now()
             else:
                 team = await session.get(AgentTeam, scope["team_id"])
                 if not team or team.workflow_id != scope["workflow_id"] or team.team_lead_node_id != scope["lead_node_id"] or team.status != "completed":

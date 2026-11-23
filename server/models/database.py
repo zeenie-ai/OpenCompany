@@ -709,6 +709,12 @@ class TeamTask(SQLModel, table=True):
     started_at: Optional[datetime] = Field(default=None)
     completed_at: Optional[datetime] = Field(default=None)
 
+    @property
+    def reviewed_blocker(self) -> bool:
+        """The assigner explicitly closed this submitted or failed attempt with a blocker."""
+        return (self.status == "cancelled" and bool(self.assigning_run_id)
+                and (self.context or {}).get("reviewed_blocker_attempt") == self.current_attempt)
+
 
 class TeamTaskAttempt(SQLModel, table=True):
     """Immutable execution history for a durable team task."""

@@ -32,11 +32,23 @@ manager and its upstream attempt even when jobs use the same canvas nodes.
 A manager waiting for child work saves its turn and releases its execution
 slot. Child submission or failure wakes that manager through its durable inbox.
 
+A review reads the current task and records a decision with its `task_ref`.
+If a reviewer reads the result and replies in prose without deciding, its inbox
+queues one reminder for that revision. The reviewer can accept the work,
+request a revision, or close a submitted or failed task with `cancel_task`
+and the reason progress needs owner action. Closing a blocked submission
+retains its evidence. An ordinary cancellation or a reset cannot authorize
+delivery. Each parent reviews the blocker before it reaches Chat.
+
 Chat reviews the Orchestrator's submission and writes the final answer on
 the originating chat branch. A busy chat receives the answer when its current
 turn finishes. After the conversation is cleared, open the original assignment
 on Chat's Task Manager board to read the final answer. App jobs keep the
 destination and approval gate captured at intake.
+
+For a reviewed blocker, the delivery receipt tracks the explanation. Home
+and `get_job_status` report that the work failed with `work_blocked`. The
+outer assignment keeps Chat's explanation even if the chat was cleared.
 
 Each manager's Task Completed node connects to its `input-task`. The event matches the assigning
 employee before the node's status, worker and task filters are evaluated.

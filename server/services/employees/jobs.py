@@ -319,6 +319,18 @@ async def deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
     return result
 
 
+async def outer_review_decision(session, job: EmployeeJob) -> str | None:
+    from services.agent_instances.service import outer_assignment
+
+    outer = await outer_assignment(session, job)
+    if outer:
+        if outer.reviewed_blocker:
+            return "blocked"
+        if outer.status == "accepted":
+            return "accepted"
+    return None
+
+
 async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
     """Review eligibility and deliver to the origin's configured sinks once."""
     outputs = ctx.outputs or {}
@@ -361,45 +373,43 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
             return {"delivered": False, "state": "cancelled", "job_id": job.id}
         if job.state == "delivery_needs_review":
             return {"delivered": False, "state": job.state, "job_id": job.id}
-        # Task submissions are not reviewed work. Requiring at least one
-        # accepted task also prevents an un-delegated acknowledgement leaking.
+        # Chat must decide the outer assignment before its answer can leave the job.
         plan = job.source.get("team_plan") or {}
-        task_query = select(TeamTask).where(TeamTask.team_id == job.team_id)
+        review_decision = None
         if plan.get("version") == 3:
-            # Each manager reviewed its own required work before submitting.
-            task_query = task_query.where(TeamTask.parent_agent_id == lead_node_id,
-                                          TeamTask.assigned_to == plan["orchestrator_node_id"],
-                                          TeamTask.assigning_run_id.is_not(None)).limit(2)
-        tasks = (await session.execute(task_query)).scalars().all() if job.team_id else []
-        if plan.get("version") == 3 and len(tasks) != 1:
-            return {"delivered": False, "state": "working", "job_id": job.id}
-        if tasks and any(task.status in {"failed", "cancelled"} for task in tasks):
-            if job.source.get("agent_lifecycle_version") == 1:
-                # A worker failure is input to the instance lead's review,
-                # not permission to abandon its siblings or fail the job.
+            review_decision = await outer_review_decision(session, job)
+            if review_decision is None:
                 return {"delivered": False, "state": "working", "job_id": job.id}
-            if protected_job_outcome(job) or await job_has_approval(session, job):
+        else:
+            task_query = select(TeamTask).where(TeamTask.team_id == job.team_id)
+            tasks = (await session.execute(task_query)).scalars().all() if job.team_id else []
+            if any(task.status in {"failed", "cancelled"} for task in tasks):
+                if job.source.get("agent_lifecycle_version") == 1:
+                    # A worker failure is input to the instance lead's review,
+                    # not permission to abandon its siblings or fail the job.
+                    return {"delivered": False, "state": "working", "job_id": job.id}
+                if protected_job_outcome(job) or await job_has_approval(session, job):
+                    return {"delivered": False, "state": job.state, "job_id": job.id}
+                job.state = "failed" if any(task.status == "failed" for task in tasks) else "cancelled"
+                job.updated_at = _now()
+                await session.commit()
                 return {"delivered": False, "state": job.state, "job_id": job.id}
-            job.state = "failed" if any(task.status == "failed" for task in tasks) else "cancelled"
-            job.updated_at = _now()
-            await session.commit()
-            return {"delivered": False, "state": job.state, "job_id": job.id}
-        if not tasks:
-            if protected_job_outcome(job) or await job_has_approval(session, job):
-                return {"delivered": False, "state": job.state, "job_id": job.id}
-            job.state = "failed"
-            job.delivery = {**job.delivery, "failure": {"code": NO_ASSIGNMENTS_CODE, "message": NO_ASSIGNMENTS_MESSAGE,
-                "correction_count": int(ctx.raw.get("correction_count") or 0)}}
-            job.updated_at = _now()
-            team = await session.get(AgentTeam, job.team_id) if job.team_id else None
-            if team:
-                team.status, team.completed_at = "failed", _now()
-            await session.commit()
-            from services.employees.events import employee_changed_now
-            employee_changed_now(job.workflow_id)
-            return {"delivered": False, "state": "failed", "job_id": job.id, "failure": job.delivery["failure"]}
-        if any(task.status != "accepted" for task in tasks):
-            return {"delivered": False, "state": "working", "job_id": job.id}
+            if not tasks:
+                if protected_job_outcome(job) or await job_has_approval(session, job):
+                    return {"delivered": False, "state": job.state, "job_id": job.id}
+                job.state = "failed"
+                job.delivery = {**job.delivery, "failure": {"code": NO_ASSIGNMENTS_CODE, "message": NO_ASSIGNMENTS_MESSAGE,
+                    "correction_count": int(ctx.raw.get("correction_count") or 0)}}
+                job.updated_at = _now()
+                team = await session.get(AgentTeam, job.team_id) if job.team_id else None
+                if team:
+                    team.status, team.completed_at = "failed", _now()
+                await session.commit()
+                from services.employees.events import employee_changed_now
+                employee_changed_now(job.workflow_id)
+                return {"delivered": False, "state": "failed", "job_id": job.id, "failure": job.delivery["failure"]}
+            if any(task.status != "accepted" for task in tasks):
+                return {"delivered": False, "state": "working", "job_id": job.id}
         response = str(lead_output.get("response") or "").strip()
         if not response or response == "NO_REPLY":
             return {"delivered": False, "state": "reviewing", "job_id": job.id}
@@ -408,6 +418,7 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
         # as an uncertain external send.
         job.result = job.result or response
         job.delivery = {**job.delivery, "inflight": None, "claim_token": claim, "lease_holder": holder,
+                        **({"work_blocked": True} if review_decision == "blocked" else {}),
                         "lease_until": (_now() + timedelta(minutes=2)).isoformat()}
         job.state = "delivering"
         job.updated_at = _now()
@@ -538,7 +549,7 @@ async def _deliver_job(database: Any, ctx: Any, *, lead_node_id: str) -> dict:
 async def job_progress(database: Any, workflow_id: str) -> dict | None:
     async with database.get_session() as session:
         job = (await session.execute(select(EmployeeJob).where(EmployeeJob.workflow_id == workflow_id).order_by(EmployeeJob.updated_at.desc()).limit(1))).scalar_one_or_none()
-    if not job or job.state in {"delivered", "completed"}:
+    if not job or (job.state in {"delivered", "completed"} and not job.delivery.get("work_blocked")):
         return None
     return _job_progress(job)
 

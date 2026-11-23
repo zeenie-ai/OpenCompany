@@ -29,7 +29,8 @@ from tests.temporal.test_agent_workflow_replay import _broadcast_progress, _clea
 from tests.temporal.test_employee_hierarchy_runtime import call_tool, hierarchy, hierarchy_graph
 
 
-async def test_nested_job_releases_single_slot_and_chat_delivers_once(real_database, hierarchy, monkeypatch):
+@pytest.mark.parametrize("blocked", [False, True], ids=["accepted", "approval-blocker"])
+async def test_nested_job_releases_single_slot_and_chat_delivers_once(real_database, hierarchy, monkeypatch, blocked):
     from core.container import container
 
     cli = os.environ.get("TEMPORAL_TEST_CLI")
@@ -61,6 +62,10 @@ async def test_nested_job_releases_single_slot_and_chat_delivers_once(real_datab
     final_text = "I verified your quarterly sample contains 14 observations."
     replies = {chat: final_text, orch: "The research manager verified the evidence.",
                manager: "I checked the analyst's observations.", analyst: "I counted 14 observations."}
+    if blocked:
+        final_text = "Your search needs approval. The team could not get the sample."
+        replies = {chat: final_text, orch: "The search could not run.", manager: "The source requires approval.",
+                   analyst: "The search was blocked by the owner's approval setting. No observations were collected."}
 
     @activity.defn(name="agent.execute_llm_step")
     async def model(step: dict) -> dict:
@@ -79,7 +84,18 @@ async def test_nested_job_releases_single_slot_and_chat_delivers_once(real_datab
                 arguments = {"instructions": "Check the sample evidence."}
         elif last["role"] == "tool" and last["name"] == "get_task":
             task = json.loads(last["content"])["task"]
-            tool_name, arguments = "accept_task", {"task_ref": task["task_ref"]}
+            if not blocked:
+                tool_name, arguments = "accept_task", {"task_ref": task["task_ref"]}
+            elif not ((node == manager and model_turns.count(manager) == 2)
+                      or (node == chat and model_turns.count(chat) == 1)):
+                # On the first review the manager and Chat read the evidence and
+                # give only a prose answer, as in the reported incident.
+                tool_name = "cancel_task"
+                arguments = {"task_ref": task["task_ref"], "reason": "The search requires owner approval."}
+        elif node == chat and last.get("name") == "cancel_task":
+            tool_name = "finish_team"
+        elif node == chat and last.get("name") == "finish_team":
+            assert json.loads(last["content"])["success"]
         if tool_name:
             call = {"id": f"call-{step['iteration']}", "name": tool_name, "args": arguments}
             return {"kind": "tool_calls", "calls": [call],
@@ -116,20 +132,32 @@ async def test_nested_job_releases_single_slot_and_chat_delivers_once(real_datab
                             break
                     await asyncio.sleep(.1)
             assert job.result == final_text, job
-            assert model_turns == [orch, manager, analyst, manager, orch, chat]
+            expected_turns = ([orch, manager, analyst, manager, manager, orch, chat, chat] if blocked
+                              else [orch, manager, analyst, manager, orch, chat])
+            assert model_turns == expected_turns
             assert [(call.args[0]["agent_node_id"], call.args[0]["parent_node_id"])
                     for call in publish.await_args_list] == [(analyst, manager), (manager, orch), (orch, chat)]
             async with db.get_session() as session:
                 tasks = (await session.execute(select(TeamTask).where(TeamTask.team_id == job.team_id))).scalars().all()
-                assert len(tasks) == 3 and all(task.status == "accepted" for task in tasks)
+                assert len(tasks) == 3
+                assert all(task.current_attempt == 0 and task.result for task in tasks)
+                assert {task.status for task in tasks} == ({"cancelled"} if blocked else {"accepted"})
                 messages = (await session.execute(select(ChatMessage).where(ChatMessage.message == final_text))).scalars().all()
                 assert len(messages) == 1 and messages[0].session_id == "7"
                 leases = (await session.execute(select(SubagentConcurrencyPermit).where(
                     SubagentConcurrencyPermit.root_execution_id == job.id).order_by(SubagentConcurrencyPermit.acquired_at))).scalars().all()
-                assert len(leases) == 5 and all(lease.status == "released" for lease in leases)
+                assert len(leases) == expected_turns.count(orch) + expected_turns.count(manager) + 1
+                assert all(lease.status == "released" for lease in leases)
                 for earlier, later in zip(leases, leases[1:]):
                     assert earlier.released_at <= later.acquired_at
                 runs = (await session.execute(select(AgentRun))).scalars().all()
+            if blocked:
+                from services.employees.jobs import get_job_status
+                status = await get_job_status(db, workflow_id="7", lead_node_id=chat, job_id=job.id)
+                assert status["job"]["state"] == "failed"
+                assert status["job"]["failure_code"] == "work_blocked"
+                outer, = await db.get_team_tasks(job.team_id, board_owner=chat)
+                assert outer["reviewed_job_result"] == final_text
             # Replay both the real instance session and the child model workflow from this execution.
             worker_run, = [row for row in runs if row.task_id and row.task_id == next(
                 task.id for task in tasks if task.parent_agent_id == manager)]
