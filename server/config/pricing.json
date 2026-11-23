@@ -1,11 +1,11 @@
 {
   "version": "2026.11",
-  "last_updated": "2026-11-19",
-  "_llm_note": "LLM prices follow the OpenRouter registry (model_registry.json, 2026-11-19) for every model it lists, USD per MTok: input, output and, since that snapshot, cache_read (the registry's input_cache_read). A row with no cache_read bills cached tokens at its input price. cache_write is listed only where the provider's usage reports cache writes, which among these blocks is Anthropic. The hosts (groq, cerebras, sarvam) are not in the registry and keep their own documented prices.",
+  "last_updated": "2026-11-23",
+  "_llm_note": "LLM prices follow the OpenRouter registry (model_registry.json, 2026-11-23) for every model it lists except DeepSeek's, which follow DeepSeek's own price list (see its note), USD per MTok: input, output and, since the 2026-11-19 snapshot, cache_read (the registry's input_cache_read). A row with no cache_read bills cached tokens at its input price. cache_write is listed only where the provider's usage reports cache writes, which among these blocks is Anthropic. The hosts (groq, cerebras, sarvam) are not in the registry and keep their own documented prices.",
 
   "llm": {
     "openai": {
-      "_note": "OpenRouter registry, 2026-11-19. cache_read is the registry's cached-input price: 5% of input on GPT-6.2 and GPT-6.1, 10% on GPT-6 and GPT-5.x, 25% on gpt-4.1. OpenAI's own API reports no cache writes, so no row lists cache_write.",
+      "_note": "OpenRouter registry, 2026-11-23. cache_read is the registry's cached-input price: 5% of input on GPT-6.2 and GPT-6.1, 10% on GPT-6 and GPT-5.x, 25% on gpt-4.1. OpenAI's own API reports no cache writes, so no row lists cache_write.",
       "gpt-6.2-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.10},
       "gpt-6.2-sol-pro": {"input": 2.00, "output": 10.00, "cache_read": 0.10},
       "gpt-6.2-astra": {"input": 8.00, "output": 40.00, "cache_read": 0.40},
@@ -34,7 +34,7 @@
       "_default": {"input": 2.50, "output": 15.00}
     },
     "anthropic": {
-      "_note": "OpenRouter registry, 2026-11-19, which now lists both cache prices for every row here and agrees with them. cache_read is Anthropic's cache-read rate: 10% of input, except 5% on claude-opus-5-5 and claude-sonnet-5-5 and 2.5% on claude-fable-5-2 and claude-fable-5-1. claude-fable-5-2, claude-fable-5-1 and claude-sonnet-5-5 are listed before claude-fable-5 and claude-sonnet-5 because a lookup that misses the exact key takes the first key the id starts with. claude-haiku-5-5 bills prompts over 100K tokens at $0.50/$2.50, which this flat price under-reports. claude-sonnet-4 left the registry; claude-sonnet-4-5, which its prefix used to price, has its own row. cache_write is Anthropic's 5-minute cache-write rate, 1.25x input.",
+      "_note": "OpenRouter registry, 2026-11-23, which now lists both cache prices for every row here and agrees with them. cache_read is Anthropic's cache-read rate: 10% of input, except 5% on claude-opus-5-5 and claude-sonnet-5-5 and 2.5% on claude-fable-5-2 and claude-fable-5-1. claude-fable-5-2, claude-fable-5-1 and claude-sonnet-5-5 are listed before claude-fable-5 and claude-sonnet-5 because a lookup that misses the exact key takes the first key the id starts with. claude-haiku-5-5 bills prompts over 100K tokens at $0.50/$2.50, which this flat price under-reports. claude-sonnet-4 left the registry; claude-sonnet-4-5, which its prefix used to price, has its own row. cache_write is Anthropic's 5-minute cache-write rate, 1.25x input.",
       "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write": 5.00},
       "claude-opus-5": {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write": 6.25},
       "claude-fable-5-2": {"input": 8.00, "output": 40.00, "cache_read": 0.20, "cache_write": 10.00},
@@ -54,7 +54,7 @@
       "_default": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75}
     },
     "gemini": {
-      "_note": "OpenRouter registry, 2026-11-19. cache_read is the registry's cached-input price: a tenth of input on Gemini 2.5 and 3.x, a twentieth on Gemini 4. The registry's cache-write figure for Gemini is below the input price (gemini-2.5-pro: $0.375 against $1.25), so it is not a price per written token, and Gemini's usage reports no cache writes: no row lists cache_write. For Gemma these are the registry's paid-route prices (it lists no cache price for gemma-4-31b-it); Google's own API serves Gemma free, so Gemma usage through it is over-reported.",
+      "_note": "OpenRouter registry, 2026-11-23. cache_read is the registry's cached-input price: a tenth of input on Gemini 2.5 and 3.x, a twentieth on Gemini 4. The registry's cache-write figure for Gemini is below the input price (gemini-2.5-pro: $0.375 against $1.25), so it is not a price per written token, and Gemini's usage reports no cache writes: no row lists cache_write. For Gemma these are the registry's paid-route prices (it lists no cache price for gemma-4-31b-it); Google's own API serves Gemma free, so Gemma usage through it is over-reported.",
       "gemini-3.8-flash": {"input": 0.825, "output": 4.125, "cache_read": 0.0825},
       "gemini-4-neon": {"input": 3.00, "output": 15.00, "cache_read": 0.15},
       "gemini-4-hydrogen": {"input": 1.50, "output": 7.50, "cache_read": 0.075},
@@ -85,7 +85,7 @@
       "_default": {"input": 0.15, "output": 0.60}
     },
     "xai": {
-      "_note": "OpenRouter registry, 2026-11-19, cache_read included.",
+      "_note": "OpenRouter registry, 2026-11-23, cache_read included.",
       "grok-4.7": {"input": 2.00, "output": 6.00, "cache_read": 0.50},
       "grok-4.6": {"input": 2.00, "output": 6.00, "cache_read": 0.50},
       "grok-4.5": {"input": 2.00, "output": 6.00, "cache_read": 0.30},
@@ -105,24 +105,25 @@
       "_default": {"input": 1.00, "output": 5.00}
     },
     "deepseek": {
-      "_note": "OpenRouter registry, 2026-11-19, cache_read included. Until that snapshot the registry had no cache price and these rows applied DeepSeek's published cache-hit ratio instead (deepseek-v4-flash $0.0018, deepseek-v4-pro $0.0297); the registry's own figures are ten and eight times those, and deepseek-v4.1-flash is unchanged. deepseek-flash is not a registry model and falls to _default.",
-      "deepseek-v4.1-flash": {"input": 0.30, "output": 1.20, "cache_read": 0.006},
-      "deepseek-v4-flash": {"input": 0.09, "output": 0.18, "cache_read": 0.018},
-      "deepseek-v4-pro": {"input": 0.90, "output": 1.50, "cache_read": 0.25},
-      "_default": {"input": 0.15, "output": 0.60}
+      "_note": "DeepSeek's own price list (api-docs.deepseek.com/quick_start/pricing, 2026-11-23), not the OpenRouter registry, whose DeepSeek rows carry other hosts' prices (deepseek-v4.1-flash at $0.0507/$0.2028 on 2026-11-20). These are DeepSeek's peak rates. It bills half of them off-peak, which is everything outside 01:00-04:00 and 06:00-10:00 UTC on weekdays, so an off-peak call is booked at up to twice what it cost. deepseek-flash serves DeepSeek-V4.1-Flash-1017 and deepseek-v4-pro serves DeepSeek-V4-Pro-0813. OpenRouter's row for V4.1-Flash-1017 follows the same hours ($0.15/$0.60 in the refresh at 14:04 UTC on 2026-11-20, $0.30/$1.20 at 06:33 UTC on 2026-11-23), so the registry's figure depended on when it was refreshed. The legacy names deepseek-v4-flash and deepseek-v4-flash-vision-exp are billed at the Flash price, which the deepseek-v4-flash row gives both (the second by prefix). _default is the Flash price too, so an id without a row, such as OpenRouter's deepseek-v4.1-flash, is never booked below it.",
+      "deepseek-flash": {"input": 0.30, "output": 1.20, "cache_read": 0.006},
+      "deepseek-v4-pro": {"input": 1.32, "output": 3.96, "cache_read": 0.044},
+      "deepseek-v4-flash": {"input": 0.30, "output": 1.20, "cache_read": 0.006},
+      "_default": {"input": 0.30, "output": 1.20, "cache_read": 0.006}
     },
     "kimi": {
-      "_note": "OpenRouter registry (under moonshotai/), 2026-11-19, cache_read included. Until that snapshot the registry had no cache price and these rows applied Moonshot's published cache-hit ratio instead; the registry's own figures are higher (kimi-k3: $0.182 against an input price of $0.192, where the ratio gave $0.02). kimi-k3.1-pro was $2/$10 in the 2026-11-13 registry. kimi-k3.1-pro is listed before kimi-k3 because a lookup that misses the exact key takes the first key the id starts with. kimi-k2.7-code-highspeed and the moonshot-v1 models are not registry models; the highspeed id matches kimi-k2.7-code by prefix.",
-      "kimi-k3.1-pro": {"input": 0.253, "output": 8.80, "cache_read": 0.18},
+      "_note": "OpenRouter registry (under moonshotai/), 2026-11-23, cache_read included. Until the 2026-11-19 snapshot the registry had no cache price and these rows applied Moonshot's published cache-hit ratio instead; the registry's own figures are higher (kimi-k3: $0.182 against an input price of $0.192, where the ratio gave $0.02). kimi-k3.1-pro was $2/$10 in the 2026-11-13 registry and $0.253/$8.80 in the 2026-11-19 and 2026-11-20 ones. kimi-k3.1-pro is listed before kimi-k3 because a lookup that misses the exact key takes the first key the id starts with. kimi-k2.7-code-highspeed and the moonshot-v1 models are not registry models; the highspeed id matches kimi-k2.7-code by prefix.",
+      "kimi-k3.1-pro": {"input": 0.2403, "output": 8.4023, "cache_read": 0.20},
       "kimi-k3": {"input": 0.192, "output": 16.00, "cache_read": 0.182},
-      "kimi-k2.7-code": {"input": 0.60, "output": 3.50, "cache_read": 0.16},
+      "kimi-k2.7-code": {"input": 0.60, "output": 3.00, "cache_read": 0.12},
       "kimi-k2.6": {"input": 0.65, "output": 3.41, "cache_read": 0.15},
       "kimi-k2-thinking": {"input": 0.60, "output": 2.50, "cache_read": 0.15},
       "_default": {"input": 0.95, "output": 4.00}
     },
     "mistral": {
-      "_note": "OpenRouter registry (under mistralai/), 2026-11-19, cache_read included. Each -latest alias takes the prices of the model it names: mistral-large-2512, mistral-medium-3-5, mistral-small-2603 and codestral-2508. The registry lists no cache price for mistral-medium-3-5 or mistral-nemo. mistral-nemo also prices Mistral's open-mistral-nemo id, which contains it.",
-      "mistral-large-latest": {"input": 0.50, "output": 1.50, "cache_read": 0.05},
+      "_note": "OpenRouter registry (under mistralai/), 2026-11-23, cache_read included. mistral-large-4-0 is Mistral Large 4, and Mistral's own page gives the same prices. Each -latest alias takes the prices of the model it names: mistral-large-latest those of Large 4 since 2026-11-23 (Large 3, mistral-large-2512, was $0.50/$1.50), the others mistral-medium-3-5, mistral-small-2603 and codestral-2508. The registry lists no cache price for mistral-medium-3-5 or mistral-nemo. mistral-nemo also prices Mistral's open-mistral-nemo id, which contains it.",
+      "mistral-large-4-0": {"input": 0.70, "output": 2.10, "cache_read": 0.07},
+      "mistral-large-latest": {"input": 0.70, "output": 2.10, "cache_read": 0.07},
       "mistral-medium-latest": {"input": 1.50, "output": 7.50},
       "mistral-small-latest": {"input": 0.15, "output": 0.60, "cache_read": 0.015},
       "codestral-latest": {"input": 0.30, "output": 0.90, "cache_read": 0.03},

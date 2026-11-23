@@ -11,7 +11,7 @@
 
 ## Purpose
 
-Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest`). Up to 256K context, 131K output. No thinking/reasoning support. Uses OpenAI-compatible Mistral endpoint via native path. `MistralChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
+Mistral AI models (`mistral-large-4-0`, the default, Mistral Large 4 with 1M context; and the aliases `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest`, up to 256K context). Up to 131K output. No thinking/reasoning support. Uses OpenAI-compatible Mistral endpoint via native path. `MistralChatModelNode` uses the shared `ChatModelParams` unchanged. The `ChatModelBase.chat` operation calls `AIService.execute_chat`.
 
 ## Inputs (handles)
 
@@ -25,7 +25,7 @@ Mistral AI models (`mistral-large-latest`, `mistral-medium-latest`, `mistral-sma
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `system_prompt` | string | `""` | no | - | System prompt |
-| `model` | string | `""` (injected) | no | - | `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest` |
+| `model` | string | `""` (injected) | no | - | `mistral-large-4-0` (default), `mistral-large-latest`, `mistral-medium-latest`, `mistral-small-latest`, `codestral-latest` |
 | `temperature` | number\|null | `null` | no | - | Narrower range than OpenAI (0-1.5) |
 | `max_tokens` | number\|null | `null` (up to 131K) | no | - | 1-200000 |
 | `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |

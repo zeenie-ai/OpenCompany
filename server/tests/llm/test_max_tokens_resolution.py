@@ -149,6 +149,66 @@ class TestRegistryAliasNormalization:
         assert info.max_output_tokens == 65536
 
 
+class TestRegistryLookupOptOut:
+    """A provider block with ``"registry_lookup": false`` is sized by its own
+    curated maps, never by the OpenRouter snapshot. DeepSeek sets it: a bare
+    ``deepseek-flash`` (DeepSeek's API name) prefix-matched OpenRouter's
+    ``deepseek-flash-latest`` alias row and sent max_tokens=943718, above the
+    393,216 DeepSeek accepts."""
+
+    @staticmethod
+    def _service():
+        from services.model_registry import ModelInfo, ModelRegistryService
+
+        svc = ModelRegistryService()
+        svc._llm_defaults = {
+            "providers": {
+                "own": {
+                    "registry_lookup": False,
+                    "max_output_tokens": {"m": 100, "_default": 8},
+                    "context_length": {"m": 1000, "_default": 10},
+                },
+                "routed": {},
+            }
+        }
+        for provider in ("own", "routed"):
+            svc._models[f"{provider}/m-latest"] = ModelInfo(
+                id=f"{provider}/m-latest",
+                name="alias row",
+                provider=provider,
+                local_id="m-latest",
+                context_length=9999,
+                max_output_tokens=999,
+            )
+        return svc
+
+    def test_opted_out_provider_uses_its_curated_maps(self):
+        svc = self._service()
+        assert svc.get_model_info("m", "own") is None
+        assert svc.get_max_output_tokens("m", "own") == 100
+        assert svc.get_context_length("m", "own") == 1000
+
+    def test_other_providers_still_read_the_registry(self):
+        svc = self._service()
+        info = svc.get_model_info("m", "routed")
+        assert info is not None and info.max_output_tokens == 999
+
+    @pytest.mark.parametrize("model", ["deepseek-flash", "deepseek-v4-pro"])
+    def test_deepseek_sends_its_own_output_limit(self, model):
+        """Reads the real llm_defaults.json and model_registry.json."""
+        from services.llm.config import resolve_max_tokens
+        from services.model_registry import ModelRegistryService
+
+        svc = ModelRegistryService()
+        svc._load_llm_defaults()
+        svc._load_cache()
+        assert svc._models, "the registry snapshot did not load"
+        with patch("services.model_registry.get_model_registry", return_value=svc):
+            assert resolve_max_tokens({}, model, "deepseek") == 393216
+            assert resolve_max_tokens({"max_tokens": 900_000}, model, "deepseek") == 393216
+        assert svc.get_context_length(model, "deepseek") == 1048576
+
+
 class TestSarvamSubscriptionTierCap:
     """Sarvam's output ceiling is set by the ACCOUNT tier, not the model.
 

@@ -99,9 +99,9 @@ Source of truth for this list: `server/config/llm_defaults.json` (the `providers
 
 ### Provider / model reference table
 
-`ModelRegistryService` (`server/services/model_registry.py`) manages the per-model constraints below — fetching from OpenRouter for cloud models and from the user's running local server (`ollama.AsyncClient.ps()` / `lmstudio.AsyncClient.llm.list_loaded()`) for Ollama / LM Studio, and — for a named endpoint — from the server itself or LiteLLM's model table at save time (see [Named OpenAI-compatible endpoints](#named-openai-compatible-endpoints)). Falls back to `llm_defaults.json` only when none of these has a figure. Kimi and Mistral always use the fallback: the registry files their models under `moonshotai/` and `mistralai/`, which never match those provider names, so their `llm_defaults.json` maps are what requests are sized by.
+`ModelRegistryService` (`server/services/model_registry.py`) manages the per-model constraints below — fetching from OpenRouter for cloud models and from the user's running local server (`ollama.AsyncClient.ps()` / `lmstudio.AsyncClient.llm.list_loaded()`) for Ollama / LM Studio, and — for a named endpoint — from the server itself or LiteLLM's model table at save time (see [Named OpenAI-compatible endpoints](#named-openai-compatible-endpoints)). Falls back to `llm_defaults.json` only when none of these has a figure. Kimi, Mistral and DeepSeek always use the fallback: the registry files Kimi's and Mistral's models under `moonshotai/` and `mistralai/`, which never match those provider names, and DeepSeek's block sets `"registry_lookup": false` (`ModelRegistryService._uses_registry`), because OpenRouter's DeepSeek rows describe other hosts. Their `llm_defaults.json` maps are what requests are sized by.
 
-The curated lists and figures in `llm_defaults.json` and `pricing.json` take the OpenRouter snapshot (`config/model_registry.json`) as their ground truth for every provider it lists, with two exceptions noted in those files: Kimi and Mistral keep max-output budgets below the registry's caps, since those caps (about 80-90% of each window) are what `resolve_max_tokens` would send, and Mistral keeps its `-latest` aliases as keys. The hosts (Groq, Cerebras, Sarvam) are not in the snapshot.
+The curated lists and figures in `llm_defaults.json` and `pricing.json` take the OpenRouter snapshot (`config/model_registry.json`) as their ground truth for every provider it lists, with three exceptions noted in those files: Kimi and Mistral keep max-output budgets below the registry's caps, since those caps (about 80-90% of each window) are what `resolve_max_tokens` would send; Mistral keeps its `-latest` aliases as keys; and DeepSeek follows DeepSeek's own API docs (its model names, limits and peak-hour prices) since 2026-11-23, because OpenRouter names its models differently and prices them at other hosts' rates. The hosts (Groq, Cerebras, Sarvam) are not in the snapshot.
 
 | Provider | Key Models | Context | Max Output | Thinking | Temp Range |
 |----------|-----------|---------|-----------|----------|------------|
@@ -113,9 +113,9 @@ The curated lists and figures in `llm_defaults.json` and `pricing.json` take the
 | **Anthropic** | Claude Haiku 4.5 | 200K | 64K | budget | 0-1 |
 | **Google** | Gemini 3.8-flash (default), 4-neon/hydrogen/carbon/argon, 3.7/3.6/3.5-flash, 3.5-flash-lite, 3.1-pro-preview/flash-lite, 3-flash-preview, 2.5-pro/flash/flash-lite | 1M | 64K; ~944K (Gemini 4) | budget (`thinking_level` on 3.x when set explicitly; Gemini 4 runs its default thinking until it is verified) | 0-2 |
 | **xAI** | Grok 4.20/4.20-multi-agent, 4.3, 4.7, 4.6, 4.5 | 500K-2M | 450K-1.8M | model/provider dependent | 0-2 |
-| **DeepSeek** | deepseek-v4.1-flash (default), deepseek-v4-pro, deepseek-v4-flash | 1M | ~944K (V4.1 Flash); ~393K (V4 Pro, V4 Flash) | thinking modes | 0-2 |
+| **DeepSeek** | deepseek-flash (default; V4.1 Flash), deepseek-v4-pro, deepseek-v4-flash (legacy name, served by V4.1 Flash) | 1M | 384K | thinking modes | 0-2 |
 | **Kimi** | kimi-k3.1-pro (default), kimi-k3, kimi-k2.6, kimi-k2.7-code (+ `-highspeed`) | 1M (K3, K3.1 Pro); 256K (K2) | 131K (K3, K3.1 Pro); 32K/96K (K2) | K2.6 default explicitly disabled unless requested; K2.7 Code always on; K3 always reasons | omitted (Moonshot fixes every model's value; any other is a 400) |
-| **Mistral** | mistral-large/medium/small-latest (Large 3 / Medium 3.5 / Small 4), codestral-latest | 256K | 32K-131K | none | 0-1.5 |
+| **Mistral** | mistral-large-4-0 (default; Large 4), mistral-large/medium/small-latest (Large 4 / Medium 3.5 / Small 4), codestral-latest | 1M (Large 4); 256K (the aliases) | 32K-131K | none | 0-1.5 |
 | **Groq** | GPT-OSS-120b/20b, Llama 3.x tiers, qwen3.8-27b + minimax-m2.7 (preview) | 131K-196K | 16K-131K | effort (GPT-OSS), format (Qwen3) | 0-2 |
 | **OpenRouter** | 400+ models from multiple providers | varies | varies | varies | 0-2 |
 | **Cerebras** | GPT-OSS-120b (default), qwen-3.8-27b — the only two public-endpoint models | 131K | 40K | none (`thinking_models` empty since zai-glm-4.7 left the public endpoints) | 0-1.5 |
@@ -487,7 +487,7 @@ Adding a new OpenAI-compatible provider requires a config entry:
 
 ```json
 "deepseek": {
-  "default_model": "deepseek-v4.1-flash",
+  "default_model": "deepseek-flash",
   "detection_patterns": ["deepseek"],
   "models_endpoint": "https://api.deepseek.com/models",
   "base_url": "https://api.deepseek.com",

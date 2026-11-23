@@ -78,7 +78,7 @@ It applies only while the gateway serves Gemini, and the owner's own choice alwa
 
 OpenAI, Anthropic, Gemini, Groq, Cerebras, xAI, Moonshot (OpenCompany's `kimi`) and Mistral for chat (a `"gateway"` block in `server/config/llm_defaults.json`). Gemini runs on Vertex AI express mode with an Agent Platform key (`GOOGLE_AGENT_API_KEY`, an `AQ.` key billed to its Google Cloud project): the Gemini Developer API refuses these keys, so `gateway/litellm/config.yaml` points the `gemini` provider's `api_base` at `https://aiplatform.googleapis.com/v1/publishers/google`, keeping Gemini's request format and price-list entries. OpenAI speech (`"gateway": true` in `server/config/speech_defaults.json`); OpenAI embeddings. `test_pins.py` checks each one's default models against the pinned price list, counting any `cost_per` field as a price, as LiteLLM does when it refuses unpriced models.
 
-Not served: OpenRouter, DeepSeek and Sarvam (no price for their default models), Groq speech (1.103.4 bills its transcription at $0), ElevenLabs and Deepgram (OpenCompany speaks their native formats), and every tool API.
+Not served: OpenRouter and Sarvam (no price for their default models), DeepSeek (no route, key or `"gateway"` block; since 2026-11-23 its default, `deepseek-flash`, is priced in the pinned list), Groq speech (1.103.4 bills its transcription at $0), ElevenLabs and Deepgram (OpenCompany speaks their native formats), and every tool API.
 
 **Price override:** `gpt-4o-mini-tts`, OpenCompany's Text to Speech default.
 - **Why:** the speech route returns no usage for the audio, so LiteLLM would bill the input text only, roughly 1% of the cost.

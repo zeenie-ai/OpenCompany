@@ -102,9 +102,9 @@ sections below. Backend graph normalization, registered plugin schemas and
 - `openrouterChatModel` - OpenRouter unified API (200+ models)
 - `groqChatModel` - Groq ultra-fast inference (Llama, Qwen3, GPT-OSS)
 - `cerebrasChatModel` - Cerebras custom AI hardware (Llama, Qwen)
-- `deepseekChatModel` - DeepSeek V4 (deepseek-v4.1-flash, the default / deepseek-v4-pro / deepseek-v4-flash)
+- `deepseekChatModel` - DeepSeek (deepseek-flash, the default / deepseek-v4-pro / deepseek-v4-flash)
 - `kimiChatModel` - Moonshot Kimi K3.1 Pro (the default) / K3 / K2.6 / K2.7-code
-- `mistralChatModel` - Mistral Large / Small / Codestral
+- `mistralChatModel` - Mistral Large 4 (mistral-large-4-0, the default) / Medium / Small / Codestral
 - `ollamaChatModel` - Local Ollama server (OpenAI-compat via `{provider}_proxy` URL)
 - `lmstudioChatModel` - Local LM Studio server (OpenAI-compat via `{provider}_proxy` URL)
 - `sarvamChatModel` - Sarvam AI, Indic-first (OpenAI-compat; ships no model-list route, so `supports_model_listing: false`)

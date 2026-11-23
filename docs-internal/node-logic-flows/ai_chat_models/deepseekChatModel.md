@@ -11,7 +11,7 @@
 
 ## Purpose
 
-DeepSeek V4 models: `deepseek-v4.1-flash` (the default), `deepseek-v4-pro` and the earlier `deepseek-v4-flash`. Uses the OpenAI-compatible DeepSeek endpoint via the `services/llm/providers` layer (native path). The `ChatModelBase.chat` operation calls `AIService.execute_chat`. `llm_defaults.json` holds the curated ids, which follow the OpenRouter snapshot (`model_registry.json`); `deepseek-flash`, another name DeepSeek's API accepts for V4.1-Flash, left the list on 2026-09-26 because the snapshot does not list it.
+DeepSeek's API models: `deepseek-flash` (the default, served by DeepSeek-V4.1-Flash-1017), `deepseek-v4-pro` (DeepSeek-V4-Pro-0813) and the legacy name `deepseek-v4-flash`, which DeepSeek still accepts and serves with V4.1 Flash. Uses the OpenAI-compatible DeepSeek endpoint via the `services/llm/providers` layer (native path). The `ChatModelBase.chat` operation calls `AIService.execute_chat`. Since 2026-11-23 `llm_defaults.json` and `pricing.json` follow DeepSeek's own docs, not the OpenRouter snapshot: the default until then, `deepseek-v4.1-flash`, is OpenRouter's name for V4.1 Flash and appears nowhere in DeepSeek's docs, and OpenRouter's DeepSeek rows carry other hosts' limits and prices.
 
 ## Inputs (handles)
 
@@ -25,7 +25,7 @@ DeepSeek V4 models: `deepseek-v4.1-flash` (the default), `deepseek-v4-pro` and t
 |------|------|---------|----------|---------------------|-------------|
 | `prompt` | string | `""` | yes | - | User message |
 | `system_prompt` | string | `""` | no | - | System prompt |
-| `model` | string | `""` (injected) | no | - | `deepseek-v4.1-flash` (default) / `deepseek-v4-pro` / `deepseek-v4-flash` |
+| `model` | string | `""` (injected) | no | - | `deepseek-flash` (default) / `deepseek-v4-pro` / `deepseek-v4-flash` |
 | `temperature` | number\|null | `null` | no | - | 0-2 |
 | `max_tokens` | number\|null | `null` (8-64K) | no | - | 1-200000 |
 | `top_p` | number\|null | `1.0` | no | - | Declared schema field; not forwarded by the standalone chat path |
@@ -103,7 +103,8 @@ flowchart TD
 
 - **`thinking_enabled=false` does not suppress a trace**: it only means the UI will not highlight one. If the model returns `reasoning_content`, the response still carries it.
 - **`thinking_budget` has no effect**: DeepSeek reasoning is not budget-configurable; the field is silently ignored.
-- **Context and output**: all three curated models have a 1,048,576-token context window. The output ceiling is 943,718 tokens for `deepseek-v4.1-flash` and 393,216 for `deepseek-v4-pro` and `deepseek-v4-flash` (OpenRouter snapshot, 2026-11-19). A node that leaves `max_tokens` unset requests the whole ceiling (`resolve_max_tokens`).
+- **Context and output**: all three curated models have a 1,048,576-token context window and a 393,216-token output ceiling, as DeepSeek's List Models gives them. The provider block sets `"registry_lookup": false`, so these figures are what requests use, never the OpenRouter snapshot's. A node that leaves `max_tokens` unset requests the whole ceiling (`resolve_max_tokens`); one that names `deepseek-v4.1-flash` gets the 8,192-token `_default`, and should name `deepseek-flash` instead.
+- **Cost**: booked at DeepSeek's peak-hour prices (`deepseek-flash` $0.30/$1.20 per MTok, cache hit $0.006; `deepseek-v4-pro` $1.32/$3.96, cache hit $0.044). DeepSeek bills half of that off-peak, so an off-peak call is booked at up to twice its cost.
 - **OpenAI-compatible but not OpenAI**: features like `response_format: json_object` have subtly different behavior.
 - **Error boundary**: typed OpenAI SDK failures become user-safe `NodeUserError` values in `ChatUnifier` and are re-raised to `BaseNode.execute()`, which produces the standard failure envelope. Unexpected failures are logged and returned by `execute_chat`.
 

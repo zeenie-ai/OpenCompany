@@ -277,8 +277,10 @@ class ModelRegistryService:
         model = model.replace("[FREE] ", "")
         variants = self._model_variants(model)
         # Models registered from the user's own servers go first: they
-        # carry the context the server actually loaded.
-        sources = (self._local_models, self._models)
+        # carry the context the server actually loaded. A provider whose
+        # llm_defaults.json block sets registry_lookup false skips the
+        # OpenRouter snapshot, so its curated maps are what requests use.
+        sources = (self._local_models, self._models) if self._uses_registry(provider) else (self._local_models,)
 
         # 1. Exact match (try all dot/hyphen variants)
         for source in sources:
@@ -831,6 +833,17 @@ class ModelRegistryService:
         from services.llm.config import split_provider_ref
 
         return self._llm_defaults.get("providers", {}).get(split_provider_ref(provider)[0], {})
+
+    def _uses_registry(self, provider: str) -> bool:
+        """Whether the OpenRouter snapshot sizes this provider's models.
+
+        False only for a block that sets ``"registry_lookup": false``: one
+        whose own API names, limits and prices differ from OpenRouter's rows
+        for the same models (DeepSeek, whose ``deepseek-flash`` would match
+        OpenRouter's ``deepseek-flash-latest`` alias and its 943,718-token
+        output, above the 393,216 DeepSeek accepts).
+        """
+        return self._provider_defaults(provider).get("registry_lookup", True) is not False
 
     def _get_default_max_output_tokens(self, provider: str, model: str) -> int:
         """Fallback: get max output tokens from llm_defaults.json."""
