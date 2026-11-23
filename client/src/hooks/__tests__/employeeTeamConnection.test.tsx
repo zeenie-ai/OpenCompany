@@ -4,16 +4,29 @@ import { ReactFlowProvider, type Edge, type Node } from 'reactflow';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useReactFlowNodes } from '../useReactFlowNodes';
 import { useAppStore } from '../../store/useAppStore';
+import * as nodeSpecs from '../../lib/nodeSpec';
+import type { INodeTypeDescription } from '../../types/INodeProperties';
 
 const node = (id: string, type: string): Node => ({ id, type, position: { x: 0, y: 0 }, data: {} });
 const nodes = [node('lead', 'ai_employee'), node('talk', 'aiAgent'), node('worker', 'web_agent')];
 const wrapper = ({ children }: PropsWithChildren) => <ReactFlowProvider>{children}</ReactFlowProvider>;
 
+// What the backend specs declare: the lead carries leadsEmployeeTeam, and only
+// the Talk agent has a Team input. The rule reads these, never the type names.
+const specs: Record<string, Partial<INodeTypeDescription>> = {
+  ai_employee: { uiHints: { leadsEmployeeTeam: true }, handles: [{ name: 'output-top', kind: 'output', position: 'top' }] },
+  aiAgent: { uiHints: {}, handles: [{ name: 'output-top', kind: 'output', position: 'top' }, { name: 'input-employee-team', kind: 'input', position: 'bottom' }] },
+  web_agent: { uiHints: {}, handles: [{ name: 'output-top', kind: 'output', position: 'top' }] },
+};
+
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.spyOn(nodeSpecs, 'resolveNodeDescription').mockImplementation(
+    (type: string) => (specs[type] as INodeTypeDescription | undefined) ?? null,
+  );
   useAppStore.setState({ currentWorkflow: { id: 'wf', nodes, edges: [] } as any });
 });
-afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
+afterEach(() => { vi.restoreAllMocks(); vi.clearAllTimers(); vi.useRealTimers(); });
 
 it('connects the employee top output to the visible Talk Team input', () => {
   let edges: Edge[] = [];

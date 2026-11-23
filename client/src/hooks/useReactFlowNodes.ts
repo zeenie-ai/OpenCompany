@@ -86,8 +86,13 @@ export const useReactFlowNodes = ({ setNodes, setEdges, clearNodeStatus }: UseRe
     }
     // The visible team route submits jobs asynchronously. Only an employee
     // lead can supply that destination; it is never an ordinary data edge.
+    // Both ends are read off the NodeSpec (the backend's
+    // employee_team_connection_issues is the authority at save).
     if (connection.targetHandle === 'input-employee-team') {
-      return sourceNode.type === 'ai_employee' && targetNode.type === 'aiAgent'
+      const lead = resolveNodeDescription(sourceNode.type || '');
+      const talk = resolveNodeDescription(targetNode.type || '');
+      return lead?.uiHints?.leadsEmployeeTeam === true
+        && Boolean(talk?.handles?.some((handle) => handle.name === 'input-employee-team'))
         && connection.sourceHandle === 'output-top';
     }
 

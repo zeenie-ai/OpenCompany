@@ -215,6 +215,8 @@ export interface INodeUIHints {
   createsBrowserAgent?: boolean;
   /** Create the agent and connected companion nodes through the saved-graph API. */
   createsAgentBundle?: boolean;
+  /** Canvas: this node's top output may connect to a Talk agent's Team input (`input-employee-team`). */
+  leadsEmployeeTeam?: boolean;
   /** Graph capability: this node must own one system-managed Context node. */
   requiresContext?: boolean;
   /** The graph lifecycle owns this node; it is not directly palette-created. */

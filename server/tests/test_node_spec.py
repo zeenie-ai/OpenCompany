@@ -932,6 +932,9 @@ class TestNodeSpecContractInvariants:
             "creationParameters",
             "createsBrowserAgent",
             "createsAgentBundle",
+            # ai_employee: the only source the canvas accepts for a Talk
+            # agent's Team input (useReactFlowNodes).
+            "leadsEmployeeTeam",
             "hideInputSection",
             "hideOutputSection",
             "hideRunButton",
