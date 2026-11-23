@@ -2,8 +2,9 @@
 
 `server/services/judgment/` answers typed questions about one input with
 probabilities instead of text. It is for decisions where a yes, a no or a
-label is enough, so that a full model run is not spent on them. Today the
-Classify node uses it.
+label is enough, so that a full model run is not spent on them. The
+Classify node, triage of app events, review auto-accept and the Mobile
+element finder use it ([Where it is used](#where-it-is-used)).
 
 ## Questions and answers
 
@@ -161,7 +162,8 @@ Both Connectors list the service: TypeSafe's `usage_services` is
 ## Privacy
 
 A judgment sends its input and questions to TypeSafe or OpenRouter, or to
-the owner's chat model. With images, the images go too.
+the owner's chat model. With images, the images go too: the Mobile element
+finder sends the phone's screenshot.
 
 ## Where it is used
 
@@ -237,6 +239,32 @@ the owner's chat model. With images, the images go too.
 
     Each of these leaves the review to the reviewer's turn, and so does a
     failure while settling.
+- **The Mobile element finder** (`server/nodes/mobile/_locate.py`). When the
+  phone engine's tap by text finds nothing in the UI tree (a canvas, a web
+  view, an icon drawn without a label), the element is looked for on the
+  screenshot instead.
+  - **When.** The engine tries a tap by text last, after a tap at the model's
+    coordinates and one by resource id. The worker's `find_element`
+    (`nodes/mobile/runtime/worker.py`) asks the broker to `locate` the element
+    only when a text lookup of the first match matches nothing. A lookup by
+    resource id alone never does.
+  - **The judgment.** The broker reads a screenshot under the run's lease,
+    like any read, and then, outside the device lock, asks two questions
+    about it: the noul `An element showing "<text>" is visible on this
+    screen`, and a box for that element. The limit is 15 s. Only Jev can
+    answer, since the chat-model fallback takes no images. The Workspace
+    shows "Finding it on the screen" meanwhile.
+  - **A tap.** Only a noul of at least `ON_SCREEN_AT_LEAST` (0.8) with ordered
+    edges inside the image counts. The box becomes pixels with the
+    screenshot's own size, the space the driver taps in, and the engine taps
+    its centre, which still passes the driver's range and geometry checks.
+  - **Anything else is "Element not found", as before:** no judgment, an
+    unsure one, an unusable box, or any failure. None of these puts the phone
+    into recovery, and a locate is not a step in the Workspace's step log.
+  - **Cost.** The broker answers in the log context of whichever run started
+    it, so each run keeps its own principal, chat run and employee job
+    (`MobileRuntime._run_attribution`), and the judgment binds them. Its row
+    counts for the phone task's reply and job.
 
 ## Tests
 
@@ -246,3 +274,11 @@ the owner's chat model. With images, the images go too.
   fallback's reading and the Classify node.
 - `server/tests/llm/test_json_reply.py`: the JSON reader the fallback and
   translate share.
+- `server/tests/services/employees/test_triage.py`,
+  `server/tests/services/employees/test_wake_rule.py` and
+  `server/tests/temporal/test_employee_app_hierarchy.py`: the wake rule and
+  triage at job admission.
+- `server/tests/services/agent_instances/test_auto_review.py`: review
+  auto-accept.
+- `server/tests/test_mobile_locate.py`: the element finder's gates, the
+  broker's `locate`, each run's attribution and the worker's fallback.

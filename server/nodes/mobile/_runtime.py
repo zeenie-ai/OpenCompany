@@ -9,6 +9,7 @@ import secrets
 import socket
 import time
 from pathlib import Path
+import structlog
 from services.process_environment import without_onepassword_environment
 from ._control import DeviceControl, Lease, MobileError
 from ._install import AVD_NAME, DEVICE_NAME, VIDEO_MAX_FPS, install_engine, create_device, engine_ready, sdk_tool, sdk_root
@@ -16,6 +17,7 @@ from ._paths import mobile_root, runtime_python
 from ._process import command, hidden_options
 from ._diagnostics import event, recent
 from ._emulator import DeviceLock, recover_emulator, boot_error, owned_children, stop_children
+from ._locate import locate_on_screen
 from .runtime.progress import plan_summary, summary
 
 READS = frozenset({"geometry", "observe", "screenshot", "date", "packages", "foreground"})
@@ -73,6 +75,9 @@ class MobileRuntime:
         self._reset_runs: set[str] = set()
         self._draining_runs: set[str] = set()
         self._retired_generations: dict[tuple[str, str], int] = {}
+        # Whose each run's judgments are (``locate``): the broker answers in
+        # the context of whichever run started it. Never public.
+        self._run_attribution: dict[str, dict] = {}
         self.capabilities: dict[str, tuple[str, Lease]] = {}
         self.resume_event = asyncio.Event()
         self.viewer: str | None = None
@@ -103,7 +108,9 @@ class MobileRuntime:
                     parameters = data.get("parameters", {})
                     if not isinstance(parameters, dict):
                         raise MobileError("invalid_action", "Expected command parameters")
-                    if operation in READS:
+                    if operation == "locate":
+                        result = await self.locate(run_id, lease, data.get("operation_id"), parameters)
+                    elif operation in READS:
                         # Reads are fenced too: a paused task cannot keep observing passwords.
                         result = await self.control.perform(
                             lease, data.get("operation_id"), lambda: self.driver_call(operation, parameters), cache_result=False
@@ -467,6 +474,22 @@ class MobileRuntime:
             parameters = {**parameters, "geometry": geometry}
         return await self.control.perform(lease, operation_id, lambda: self.driver_call(operation, parameters))
 
+    async def locate(self, run_id: str, lease: Lease, operation_id: str, parameters: dict) -> dict:
+        """Where an element the UI tree does not name is on the screen, for
+        the active run's engine (``_locate.py``). The screenshot is a read
+        under the lease like any other; the judgment runs after the device
+        lock is released, so a slow or failed one neither holds the phone nor
+        puts it into recovery. It is not a step of the task."""
+        text = parameters.get("text")
+        if not self.active or self.active.get("run_id") != run_id or not isinstance(text, str) or not text.strip():
+            raise MobileError("invalid_action", "Expected the text of an element on the screen")
+        shot = await self.control.perform(lease, operation_id, lambda: self.driver_call("screenshot"), cache_result=False)
+        started = time.monotonic()
+        result = await locate_on_screen(shot["base64"], text.strip()[:200], self._run_attribution.get(run_id, {}))
+        event("element_located" if result["found"] else "element_not_located", run_id=run_id,
+              code=result.get("reason"), duration_ms=round((time.monotonic() - started) * 1000))
+        return result
+
     async def install_apk(self, path: Path, lease: Lease, operation_id: str):
         if not lease.owner.startswith("viewer:"):
             raise MobileError("not_controller", "Take manual control before installing an APK")
@@ -598,6 +621,12 @@ class MobileRuntime:
         entry = {"run_id": run_id, "workflow_id": workflow_id, "node_id": node_id, "execution_id": execution_id, "generation": generation, "status": "queued", "steps": 0, "max_steps": params["max_steps"]}
         done = asyncio.Event()
         self._run_tasks[run_id] = (entry, asyncio.current_task(), done)
+        # Both ids are always bound, so the broker's own context, from the run
+        # that started it, never lends this run its chat run or its job.
+        self._run_attribution[run_id] = {
+            "principal": principal, "workflow_id": workflow_id, "node_id": node_id,
+            "log": {"chat_run_id": None, "employee_job_id": None, **structlog.contextvars.get_contextvars()},
+        }
         self.queue.append(entry)
         event("task_queued", run_id=run_id, workflow_id=workflow_id, node_id=node_id)
         try:
@@ -714,6 +743,7 @@ class MobileRuntime:
             if entry in self.queue:
                 self.queue.remove(entry)
             self._run_tasks.pop(run_id, None)
+            self._run_attribution.pop(run_id, None)
             self._draining_runs.discard(run_id)
             done.set()
 
@@ -841,7 +871,8 @@ class MobileRuntime:
                               "tap": "Tapping screen", "swipe": "Scrolling", "text": "Typing text",
                               "key": "Pressing navigation key", "launch": "Opening app", "terminate": "Closing app",
                               "url": "Opening link", "erase": "Erasing text", "packages": "Listing apps",
-                              "foreground": "Checking current app", "date": "Checking device time"}
+                              "foreground": "Checking current app", "date": "Checking device time",
+                              "locate": "Finding it on the screen"}
                     label = labels.get(message.get("operation"))
                     state = message.get("state")
                     if label and state in {"started", "completed", "failed"}:

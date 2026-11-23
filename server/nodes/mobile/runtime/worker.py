@@ -124,12 +124,31 @@ class Controller:
             if (resource_id and e.get("resource-id") == resource_id)
             or (text and (e.get("text") == text or e.get("accessibilityText") == text))
         ]
+        if not matches and text and index == 0:
+            return self._locate(text, Bounds)
         if index < 0 or index >= len(matches):
             return None, None, "Element not found"
         element = matches[index]
         points = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", element.get("bounds", ""))
         bounds = Bounds(**dict(zip(("x1", "y1", "x2", "y2"), map(int, points.groups())))) if points else None
         return element, bounds, None
+
+    def _locate(self, text, Bounds):
+        """An element the UI tree does not name (a canvas, a web view, an icon
+        drawn without a label), found on the screenshot by the broker's
+        ``locate`` (``nodes/mobile/_locate.py``); the engine taps the centre
+        of its bounds. Anything short of a found, ordered box is "Element not
+        found", as before. It blocks, since ``find_element`` answers at once."""
+        try:
+            found = self.read_sync("locate", text=text)
+            x1, y1, x2, y2 = (found["bounds"][edge] for edge in ("x1", "y1", "x2", "y2"))
+        except Exception:
+            return None, None, "Element not found"
+        usable = found.get("found") is True and all(type(edge) is int for edge in (x1, y1, x2, y2))
+        if not usable or not (0 <= x1 < x2 and 0 <= y1 < y2):
+            return None, None, "Element not found"
+        element = {"text": text, "bounds": f"[{x1},{y1}][{x2},{y2}]", "located": True}
+        return element, Bounds(x1=x1, y1=y1, x2=x2, y2=y2), None
 
     def get_compressed_b64_screenshot(self, image_base64, quality=50):
         from PIL import Image
