@@ -14,6 +14,7 @@ const ACTIVE = new Set(['queued', 'running', 'working', 'waiting', 'reviewing', 
 const LABELS: Record<string, string> = {
   queued: 'Queued', waiting: 'Waiting', running: 'In progress', reviewing: 'Checking the result',
   done: 'Finished', failed: 'Needs attention', cancelled: 'Stopped', stopping: 'Stopping',
+  reviewed_blocker: 'Blocked at review', parent_closed: 'Closed with parent task',
 };
 /** Refresh progress is a neutral outline: colour marks a state or a role,
  *  not a refresh. */
@@ -64,9 +65,11 @@ function WorkPanel({ progress, connected, failed, refresh }: {
   const elapsed = age(progress.started_at, now);
   const updated = age(progress.updated_at, now);
   const finished = progress.steps.filter((step) => step.status === 'done').length;
+  const stopped = progress.state === 'failed' || progress.state === 'cancelled';
+  const count = progress.steps.length;
   const slow = connected && !failed && active && !['waiting', 'queued', 'stopping'].includes(progress.state) && updated !== null && updated >= 60;
   const meta = [
-    progress.steps.length > 0 ? `${finished}/${progress.steps.length}` : null,
+    count > 0 ? (stopped ? `${count}${progress.truncated ? '+' : ''} ${count === 1 ? 'step' : 'steps'}` : `${finished}/${count}`) : null,
     elapsed !== null ? (active ? duration(elapsed) : `${duration(elapsed)} ago`) : null,
   ].filter(Boolean).join(' · ');
   return (
@@ -76,9 +79,9 @@ function WorkPanel({ progress, connected, failed, refresh }: {
           aria-label="Employee work progress"
           className="flex max-w-full flex-col overflow-hidden rounded-card border border-border-default bg-bg-panel"
         >
-          <CollapsibleTrigger className="flex h-8.5 max-w-full items-center gap-2 pr-2.5 pl-3 text-xs font-medium text-fg-default hover:bg-bg-hover focus-visible:-outline-offset-2">
+          <CollapsibleTrigger className={cn('flex max-w-full items-center gap-2 pr-2.5 pl-3 text-left text-xs font-medium text-fg-default hover:bg-bg-hover focus-visible:-outline-offset-2', open ? 'min-h-8.5 py-1' : 'h-8.5')}>
             <StateMark state={progress.state} />
-            <span role="status" className="min-w-0 truncate">{progress.message}</span>
+            <span role="status" className={cn('min-w-0', open ? 'break-words' : 'truncate')}>{progress.message}</span>
             {/* Out of the button's name, which would otherwise change every second. */}
             {meta && <span aria-hidden className="shrink-0 text-fg-muted tabular-nums">{meta}</span>}
             <ChevronDown
@@ -89,18 +92,17 @@ function WorkPanel({ progress, connected, failed, refresh }: {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="flex max-h-40 flex-col gap-1 overflow-y-auto border-t border-border-default px-3 pt-2 pb-2.5 text-xs text-fg-muted">
-              <p className="m-0 break-words text-fg-default">{progress.message}</p>
               {elapsed !== null && <p className="m-0">{active ? 'Elapsed' : 'Started'} {duration(elapsed)}{!active && ' ago'}</p>}
               {connected && !failed && updated !== null && <p className="m-0">Last activity {updated < 5 ? 'just now' : `${duration(updated)} ago`}</p>}
               {slow && <p className="m-0">This is taking longer. The last reported step is shown below; no new activity has been reported yet.</p>}
               {progress.steps.length > 0 && <>
-                <p className="m-0">{finished} of {progress.steps.length}{progress.truncated ? ' shown' : ''} steps finished</p>
+                {!stopped && <p className="m-0">{finished} of {count}{progress.truncated ? ' shown' : ''} steps finished</p>}
                 <ol aria-label="Steps" className="m-0 flex list-none flex-col gap-0.5 p-0">
                   {progress.steps.map((step) => (
                     <li key={step.id} className={cn('flex min-h-6 items-center gap-2', WORKING.includes(step.status) && 'text-fg-default')}>
                       <StateMark state={step.status} />
                       <span className="min-w-0 truncate">{step.label}</span>
-                      <span className="shrink-0">{step.member ? `${step.member} · ` : ''}{LABELS[step.status] ?? 'Waiting'}</span>
+                      <span className="shrink-0">{step.member ? `${step.member} · ` : ''}{LABELS[step.outcome ?? step.status] ?? 'Waiting'}</span>
                     </li>
                   ))}
                 </ol>
@@ -131,13 +133,16 @@ export function EmployeeWork({ employee }: { employee: EmployeeSummary }) {
   // LiveWork); the employee's own snapshot describes it too.
   const progress = lane ? null : saved ?? null;
   const job = detail.data ? detail.data.job_progress : employee.job_progress;
-  const delivery = job && ['delivery_needs_review', 'review_blocked', 'waiting_for_approval', 'failed', 'cancelled'].includes(job.state);
+  const decision = job && ['delivery_needs_review', 'review_blocked'].includes(job.state);
+  const sameStatus = progress?.request_id === job?.request_id && progress?.message === job?.message;
+  const approval = job?.state === 'waiting_for_approval' && !sameStatus && (!progress?.request_id || progress.request_id === job.request_id);
+  const fallback = !lane && (!saved || saved.state === 'unavailable');
   return <>
     {progress && <WorkPanel progress={progress} connected={isReady} failed={detail.isError || progress.state === 'unavailable'} refresh={() => void detail.refetch()} />}
     {!saved && !lane && detail.isError && <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
       <span>Work progress is unavailable.</span>
       <Button variant="quiet" size="sm" onClick={() => void detail.refetch()} className={REFRESH_BUTTON}>Refresh progress</Button>
     </div>}
-    {(delivery || (!saved && !lane && job)) && <JobProgress key={`${job.request_id}:${job.state}`} employee={{ ...employee, job_progress: job }} />}
+    {job && (decision || approval || fallback) && <JobProgress key={`${job.request_id}:${job.state}`} employee={{ ...employee, job_progress: job }} showStatus={!sameStatus} />}
   </>;
 }

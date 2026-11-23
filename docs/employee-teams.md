@@ -66,6 +66,16 @@ assignment with that reason. Chat reviews the Orchestrator's report and tells
 you what remains undone. The task board retains the evidence. A review retry
 asks the assigning employee to decide what to do with the saved result.
 
+In Home, expand the work status to see which assignment was **Blocked at
+review**. A step marked **Closed with parent task** ended when its manager's
+assignment closed.
+
+For research through treg, a specialist can read the full saved search page
+in its workspace, even when the preview shows only one record. It can check
+dates and view counts across that page and report zero matches when none
+qualify. Reading the saved page is free. Fetching additional pages from the
+provider is a separate call.
+
 Chat posts the answer in the branch where you made the request. If another
 chat turn is running, the answer waits for that turn to finish. If you cleared
 the conversation, open the original assignment on Chat's board and look for

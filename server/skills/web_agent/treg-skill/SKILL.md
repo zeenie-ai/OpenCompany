@@ -25,8 +25,8 @@ Three facts shape how you use it:
   for data you already have.
 - **The owner caps each call.** A call that would cost more than the
   ceiling on the node is refused before anything is charged.
-- **Answers can be huge.** A large answer is saved to a file in your
-  workspace and you get a preview; read the fields you need from the file.
+- **Large JSON answers stay in your workspace.** The preview shows one item
+  per list. Use `read_result` on the same tool to read the remaining items for free.
 
 ## Tool: treg_action
 
@@ -35,6 +35,7 @@ Three facts shape how you use it:
 | `search` | Find tools for a job, with prices | `query` (the job in plain words), `limit` | no |
 | `describe` | One tool's parameters, where each goes, its price, an example request | `tool_id` | no |
 | `call` | Run one tool | `tool_id`, `params` (the tool's parameters by name), `body` (rarely) | yes |
+| `read_result` | Inspect a saved JSON answer | `file_path`, `result_path`, `fields`, `offset`, `limit` | no |
 | `balance` | The team's balance in USD, and money held for running tasks | - | no |
 
 ## Find, describe, call
@@ -106,13 +107,21 @@ Never guess a tool id or a parameter name.
 
 ## Large answers
 
-A small answer comes back whole in `data`. A large one is saved to the
-workspace: `file.path` is where, `preview` shows its shape with real values
-(only the first element of each list, long strings clipped) and `note`
-says so. Read the fields you need from that file with a file, shell or
-code tool. Do not call the tool again to see more of an answer you already
-have. A binary answer (an image, an audio file) is saved as a file the same
-way.
+A small answer comes back whole in `data`. For a large JSON answer, copy
+`file.path` into `read_result`. Use the preview to find the list and the
+field names. For example, if the preview contains `output.reels`, a local
+read might look like this:
+
+```json
+{"operation":"read_result","file_path":"treg/example.json","result_path":"output.reels","fields":["createdUtc","views","url"],"offset":0,"limit":10}
+```
+
+Read `data`, then use each returned `next_offset` as the next local
+`offset` until the answer has no next offset. Apply the requested filters
+across all those records. If none qualify, report how many records you
+checked and the outcome. A provider's next-page cursor refers to additional
+remote data and may require another paid call. Binary answers such as images
+are delivered as files.
 
 ## Generation tasks
 
@@ -130,7 +139,7 @@ refunded) and `task`:
 ## When the owner asks first
 
 While the owner asks to approve everything first, `call` is refused with a
-message saying so; search, describe and balance still work. Tell the owner
+message saying so. Search, describe, balance and local reads of saved results still work. Tell the owner
 which tool you would call, with its price, and why.
 
 ## Errors

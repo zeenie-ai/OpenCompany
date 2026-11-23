@@ -19,8 +19,14 @@ def _job_progress(job: EmployeeJob) -> dict:
     if inflight and node_types.get(inflight) == "approvalGate" and job.state not in {"failed", "cancelled"}:
         return {"request_id": job.id, "state": "waiting_for_approval", "message": "Their result is ready for you to check before sending."}
     if job.state in {"delivered", "completed"} and job.delivery.get("work_blocked"):
+        outputs = job.delivery.get("outputs") or {}
+        posted_to_chat = any(
+            node_types.get(node_id) == "chatReply" and (outputs.get(node_id) or {}).get("posted")
+            for node_id in job.delivery.get("completed", [])
+        )
         return {"request_id": job.id, "state": "failed", "failure_code": "work_blocked",
-                "message": "The team could not complete the work. Chat's explanation is on the original assignment."}
+                "message": "Work blocked. Read Chat's reply in the original conversation." if posted_to_chat else
+                           "Work blocked. Read Chat's review on the original Task Manager assignment."}
     messages = {"queued": "Your request is saved. The team will start when they are ready.",
                 "running": "The team is starting your request.", "working": "The team is working on your request and checking the result.",
                 "delivering": "Their checked result is ready to send.", "failed": "The team could not finish this request. Ask them to try again.",

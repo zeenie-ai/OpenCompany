@@ -18,12 +18,12 @@ the connected marker. OpenCompany never imports or ships treg's code (see
 | | |
 |---|---|
 | Node type | `tregAction` (palette group `api`, dual-purpose AI tool `treg_action`; in the Hire allowlist) |
-| Operations | `search` (default) / `describe` / `call` / `balance` |
+| Operations | `search` (default) / `describe` / `call` / `read_result` / `balance` |
 | CLI pin | `tools-registry==0.30.0` (`SPEC` in [`_install.py`](../server/nodes/treg/_install.py)), in its own uv tool environment |
 | Auth | `TregCredential` (`auth = "custom"`) is a marker; the CLI keeps the team key in its own config file under `<DATA_DIR>/treg` |
 | Task queue | `TaskQueue.REST_API` |
 | Cost | What treg says it charged (`_treg.charged_micro`, or `reserved_micro` for a task): one `api_usage_metrics` row per billed call. No `pricing.json` entry |
-| Approvals | `search`, `describe` and `balance` are `read`; `call` is `money` and is refused while the owner asks first |
+| Approvals | `search`, `describe`, `balance` and `read_result` are `read`. Paid `call` uses the workflow's money approval policy. |
 | Tests | [`server/tests/test_treg_plugin.py`](../server/tests/test_treg_plugin.py) (`pytest --collect-only -q` for the count) |
 | Paired skill | [`server/skills/web_agent/treg-skill/SKILL.md`](../server/skills/web_agent/treg-skill/SKILL.md) |
 | Node card | [`tregAction.md`](./node-logic-flows/web_automation/tregAction.md): parameters, output shapes and the flow |
@@ -41,7 +41,7 @@ server/nodes/treg/
 ├── _handlers.py       # treg_login / treg_status / treg_logout (the sign-in relay), shutdown hook
 ├── _request.py        # check_tool_id, parameters_of, build_request: parameter placement (pure)
 ├── _result.py         # deliver / preview_of: large answers to <workspace>/treg/
-├── treg_action.py     # TregActionParams / TregActionOutput / TregActionNode (4 @Operations)
+├── treg_action.py     # TregActionParams / TregActionOutput / TregActionNode
 ├── icon.svg           # node mark
 ├── treg.svg           # credential icon -> /api/schemas/credentials/treg/icon
 └── meta.json          # {"color": "#d7875f"}
@@ -231,7 +231,7 @@ figure; `pricing.json` has no treg entry.
 ## Approvals
 
 - [`classes.py`](../server/services/approvals/classes.py): `search`,
-  `describe` and `balance` are `read`; `call` is `money`. Every call
+  `describe`, `balance` and `read_result` are `read`. `call` is `money`. Every call
   spends the balance, and some catalog tools post or change things
   through accounts connected in treg.
 - [`repeats.py`](../server/services/approvals/repeats.py): the three reads
@@ -272,6 +272,14 @@ treg's or the provider's words.
   `file`, `preview` and `note` ([`_result.py`](../server/nodes/treg/_result.py),
   the rule in [Media Transport](./media_transport.md#large-data-results-are-files-too)).
 - Anything else is returned whole as `data`.
+
+A specialist with the treg node can inspect any page of its saved JSON
+answer using `operation=read_result` and the returned `file.path`.
+Choose a list such as `output.reels` with `result_path` and request just
+the `fields` needed for the assignment. Follow `next_offset` through
+the saved list. These reads use the workflow workspace, require no CLI
+or sign-in, and incur no charge. A provider pagination cursor inside the
+file describes the next remote page.
 
 A generation tool answers with a task. `task` carries its id and `check`,
 the `call` that reads its state, built from the catalog's descriptor,

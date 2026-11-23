@@ -964,6 +964,80 @@ async def test_a_large_answer_goes_to_the_workspace(node_cli, api_usage, tmp_pat
     assert "data" not in out
 
 
+async def test_a_later_tool_turn_can_read_every_saved_row_without_another_call(node_cli, api_usage, tmp_path):
+    reels = [
+        {"id": i, "views": i * 1000, "stats": {"createdUtc": i}, "raw": "x" * 4000} for i in range(14)
+    ]
+    calls = node_cli(_ok(GET_ANSWER), _call_ok({"output": {"reels": reels, "next_cursor": "abc"}}, charged_micro=1880))
+    saved = await TregActionNode().call(_node_ctx(tmp_path), _call_params(params={"q": "test"}))
+    assert "read_result" in saved["note"]
+    args = {"operation": "read_result", "file_path": saved["file"]["path"], "result_path": "output.reels"}
+    page = await TregActionNode().execute_as_tool({**args, "fields": ["id", "stats.createdUtc"]}, {}, _node_ctx(tmp_path))
+    assert (page["total"], page["count"], page["next_offset"]) == (14, 10, 10)
+    rest = await TregActionNode().execute_as_tool(
+        {**args, "fields": ["id", "stats.createdUtc"], "offset": page["next_offset"]}, {}, _node_ctx(tmp_path)
+    )
+    assert page["data"] + rest["data"] == [{"id": i, "stats.createdUtc": i} for i in range(14)]
+    assert "next_offset" not in rest
+    cursor = await TregActionNode().execute_as_tool({**args, "result_path": "output.next_cursor"}, {}, _node_ctx(tmp_path))
+    assert cursor["data"] == "abc"
+    assert len(calls) == 2  # the original catalog lookup and paid provider call
+    api_usage.assert_awaited_once()
+
+
+async def test_saved_result_pages_stay_bounded_and_do_not_skip_large_rows(tmp_path):
+    from nodes.treg._result import INLINE_LIMIT_CHARS, deliver
+
+    rows = [{"id": i, "text": "x" * (INLINE_LIMIT_CHARS // 2)} for i in range(2)]
+    rows.append({"id": 2, "text": "x" * (INLINE_LIMIT_CHARS + 1)})
+    path = deliver(_node_ctx(tmp_path), "provider", rows)["file"]["path"]
+    args = {"operation": "read_result", "file_path": path}
+    node = TregActionNode()
+    for offset in range(2):
+        page = await node.execute_as_tool({**args, "offset": offset}, {}, _node_ctx(tmp_path))
+        assert page["data"] == [rows[offset]]
+        assert page["next_offset"] == offset + 1
+        assert len(json.dumps(page["data"])) <= INLINE_LIMIT_CHARS
+    with pytest.raises(NodeUserError, match="narrower result_path"):
+        await node.read_result(_node_ctx(tmp_path), TregActionParams(**args, offset=2))
+    last = await node.execute_as_tool({**args, "offset": 2, "fields": ["id"]}, {}, _node_ctx(tmp_path))
+    assert last["data"] == [{"id": 2}]
+    assert "next_offset" not in last
+
+
+async def test_saved_result_paths_belong_to_this_workflows_treg_folder(tmp_path):
+    from nodes.treg._result import deliver
+
+    ctx = _node_ctx(tmp_path / "one")
+    path = deliver(ctx, "provider", {"items": ["x" * 22_000]})["file"]["path"]
+    node = TregActionNode()
+    with pytest.raises(NodeUserError, match="not found"):
+        await node.read_result(_node_ctx(tmp_path / "two"), TregActionParams(file_path=path))
+    for invalid in ("other.json", "../" + path, str(tmp_path / "one" / path), "treg/../other.json", r"treg/..\other.json", "treg/tool.mp3"):
+        with pytest.raises(NodeUserError, match="file.path"):
+            await node.read_result(ctx, TregActionParams(file_path=invalid))
+    with pytest.raises(NodeUserError, match="result_path was not found"):
+        await node.read_result(ctx, TregActionParams(file_path=path, result_path="items.99"))
+
+
+@pytest.mark.parametrize("link_folder", [False, True])
+async def test_saved_result_cannot_follow_links_outside_its_folder(tmp_path, link_folder):
+    private = tmp_path / "unrelated"
+    private.mkdir()
+    (private / "other.json").write_text("123")
+    if not link_folder:
+        (tmp_path / "treg").mkdir()
+    try:
+        if link_folder:
+            (tmp_path / "treg").symlink_to(private, target_is_directory=True)
+        else:
+            (tmp_path / "treg" / "other.json").symlink_to(private / "other.json")
+    except OSError:
+        pytest.skip("symlinks unavailable on this platform")
+    with pytest.raises(NodeUserError):
+        await TregActionNode().read_result(_node_ctx(tmp_path), TregActionParams(file_path="treg/other.json"))
+
+
 async def test_the_cost_is_recorded_even_when_saving_the_answer_fails(node_cli, api_usage):
     from services.plugin import NodeContext
 
@@ -1075,7 +1149,7 @@ async def test_a_model_cannot_raise_the_ceiling(node_cli, api_usage, tmp_path):
 def test_only_a_call_asks_and_it_is_refused_not_held():
     spec = TregActionNode.approval
     assert spec.refuse_while_asking is True
-    for operation in ("search", "describe", "balance"):
+    for operation in ("search", "describe", "balance", "read_result"):
         assert spec.sends({"operation": operation}) is False
     assert spec.sends({"operation": "call", "tool_id": "x"}) is True
     card = spec.preview({"operation": "call", "tool_id": "serper.web.search", "max_cost_usd": 0.1})
@@ -1087,7 +1161,7 @@ def test_a_call_is_money_and_only_the_reads_may_run_again():
     from services.approvals.repeats import repeatable
 
     assert class_of(TregActionNode, {"operation": "call"}, tool_call=True) == "money"
-    for operation in ("search", "describe", "balance"):
+    for operation in ("search", "describe", "balance", "read_result"):
         assert class_of(TregActionNode, {"operation": operation}, tool_call=True) == "read"
         assert repeatable(TregActionNode, {"operation": operation})
     assert not repeatable(TregActionNode, {"operation": "call"})

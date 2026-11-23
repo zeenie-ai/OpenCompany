@@ -47,8 +47,11 @@ on Chat's Task Manager board to read the final answer. App jobs keep the
 destination and approval gate captured at intake.
 
 For a reviewed blocker, the delivery receipt tracks the explanation. Home
-and `get_job_status` report that the work failed with `work_blocked`. The
-outer assignment keeps Chat's explanation even if the chat was cleared.
+and `get_job_status` report `work_blocked`. A posted chat receipt directs
+the owner to the original conversation. The outer assignment retains
+Chat's explanation even after a conversation is cleared. Home distinguishes
+a reviewed blocker from child tasks closed by the parent and displays the
+status once for that request. The workflow-wide status carries no chat text.
 
 Each manager's Task Completed node connects to its `input-task`. The event matches the assigning
 employee before the node's status, worker and task filters are evaluated.

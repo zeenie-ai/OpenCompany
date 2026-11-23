@@ -111,11 +111,13 @@ const workStepSchema = z.object({
   label: z.string(),
   member: z.string().nullable().catch(null),
   status: z.enum(['queued', 'waiting', 'running', 'reviewing', 'done', 'failed', 'cancelled', 'stopping']).catch('waiting'),
+  outcome: z.enum(['reviewed_blocker', 'parent_closed']).optional().catch(undefined),
   started_at: z.string().nullable().catch(null),
   updated_at: z.string().nullable().catch(null),
 });
 
 export const workProgressSchema = z.object({
+  request_id: z.string().optional().catch(undefined),
   state: z.string(),
   message: z.string(),
   started_at: z.string().nullable().catch(null),

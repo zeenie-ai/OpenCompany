@@ -71,10 +71,28 @@ async def test_current_job_tasks_and_labels_are_scoped_and_redacted(real_databas
 async def test_active_job_wins_over_newer_completed_job_and_new_job_never_reuses_old_team(real_database):
     await add(real_database, AgentTeam(id="old", workflow_id="employee", team_lead_node_id="lead"),
               job("working", None, updated_at=NOW - timedelta(minutes=10)),
-              job("done", "old", state="delivered", updated_at=NOW), task("old-task", "old"))
-    result = await work_progress(real_database, workflow())
+              job("done", "old", state="delivered", delivery={"work_blocked": True}, updated_at=NOW), task("old-task", "old"))
+    from services.employees.jobs import job_progress
+    result = await work_progress(real_database, workflow(), job_status=await job_progress(real_database, "employee"))
+    assert result["request_id"] == "working"
     assert result["state"] == "running"
     assert result["steps"] == []
+
+
+async def test_blocked_review_identifies_the_assigner_decision_and_closed_children(real_database):
+    from services.employees.jobs import job_progress
+    await add(real_database, AgentTeam(id="team", workflow_id="employee", team_lead_node_id="lead"),
+              job(state="delivered", delivery={"work_blocked": True}, result="PRIVATE final answer"),
+              task("outer", status="cancelled", assigning_run_id="chat-run", current_attempt=2,
+                   cancellation_reason="PRIVATE reason", context={"reviewed_blocker_attempt": 2}),
+              task("child", status="cancelled", cancellation_reason="parent_attempt_closed"),
+              task("stopped", status="cancelled", assigning_run_id="chat-run", current_attempt=3,
+                   context={"reviewed_blocker_attempt": 2}))
+    result = await work_progress(real_database, workflow(), job_status=await job_progress(real_database, "employee"))
+    assert result["state"] == "failed"
+    assert {step["id"]: step.get("outcome") for step in result["steps"]} == {
+        "task:outer": "reviewed_blocker", "task:child": "parent_closed", "task:stopped": None}
+    assert "PRIVATE" not in json.dumps(result)
 
 
 async def test_legacy_team_without_job_uses_existing_task_manager(real_database):
@@ -181,7 +199,7 @@ async def test_terminal_job_is_not_overwritten_by_stale_live_cache(real_database
 async def test_uncertain_delivery_remains_waiting_despite_cached_activity(real_database, phase_cache):
     await add(real_database, job(state="delivering", team_id=None))
     phase_cache["lead"] = {"workflow_id": "employee", "status": "executing", "data": {}}
-    result = await work_progress(real_database, workflow(), job_status={"state": "delivery_needs_review", "message": "Check whether the result arrived."})
+    result = await work_progress(real_database, workflow(), job_status={"request_id": "job", "state": "delivery_needs_review", "message": "Check whether the result arrived."})
     assert result["state"] == "waiting"
     assert result["message"] == "Check whether the result arrived."
 

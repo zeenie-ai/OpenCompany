@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 from sqlalchemy import case
+from sqlalchemy.orm import load_only
 from sqlmodel import select
 
 from core.logging import get_logger
@@ -145,7 +146,7 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
     unavailable = False
     try:
         async with database.get_session() as session:
-            job = (await session.execute(select(EmployeeJob.team_id, EmployeeJob.state, EmployeeJob.updated_at).where(EmployeeJob.workflow_id == workflow.id)
+            job = (await session.execute(select(EmployeeJob.id, EmployeeJob.team_id, EmployeeJob.state, EmployeeJob.updated_at).where(EmployeeJob.workflow_id == workflow.id)
                 .order_by(case((EmployeeJob.state.in_(ACTIVE_JOBS), 0), else_=1), EmployeeJob.updated_at.desc()).limit(1))).first()
             team = None
             if job and job.team_id:
@@ -166,19 +167,26 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
                 members = (await session.execute(select(TeamMember.agent_node_id, TeamMember.agent_label)
                     .where(TeamMember.team_id == team.id).limit(100))).all()
                 member_labels = {member.agent_node_id: member.agent_label for member in members}
-                tasks = (await session.execute(select(TeamTask.id, TeamTask.title, TeamTask.assigned_to, TeamTask.status,
-                    TeamTask.cancellation_requested, TeamTask.created_at, TeamTask.started_at, TeamTask.completed_at).where(TeamTask.team_id == team.id)
+                tasks = (await session.execute(select(TeamTask).options(load_only(
+                    TeamTask.id, TeamTask.title, TeamTask.assigned_to, TeamTask.status, TeamTask.cancellation_requested,
+                    TeamTask.cancellation_reason, TeamTask.assigning_run_id, TeamTask.current_attempt, TeamTask.context,
+                    TeamTask.created_at, TeamTask.started_at, TeamTask.completed_at)).where(TeamTask.team_id == team.id)
                     .where((TeamTask.workflow_id == workflow.id) | (TeamTask.workflow_id.is_(None)))
                     .order_by(case((TeamTask.status.in_(ACTIVE_TASKS), 0), else_=1), TeamTask.created_at)
-                    .limit(MAX_STEPS + 1))).all()
+                    .limit(MAX_STEPS + 1))).scalars().all()
                 truncated = len(tasks) > MAX_STEPS
                 for task in tasks[:MAX_STEPS]:
                     node_id = task.assigned_to
                     status = "stopping" if task.cancellation_requested and task.status in ACTIVE_TASKS else task.status
-                    steps.append(_step(f"task:{task.id}", _label(task.title, "Assigned task"),
+                    step = _step(f"task:{task.id}", _label(task.title, "Assigned task"),
                         _label(index.labels.get(node_id) or member_labels.get(node_id), "Team member"), status, node_id=node_id,
                         started_at=task.started_at or task.created_at, updated_at=task.completed_at or task.started_at or task.created_at,
-                        finished_at=task.completed_at))
+                        finished_at=task.completed_at)
+                    if task.reviewed_blocker:
+                        step["outcome"] = "reviewed_blocker"
+                    elif status == "cancelled" and task.cancellation_reason == "parent_attempt_closed":
+                        step["outcome"] = "parent_closed"
+                    steps.append(step)
                     updates.append(_moment(task.completed_at or task.started_at or task.created_at))
             chats = (await session.execute(select(ChatRun.run_id, ChatRun.state, ChatRun.created_at, ChatRun.started_at, ChatRun.steps)
                 .where(ChatRun.workflow_id == workflow.id, ChatRun.state.in_(LIVE_STATES))
@@ -220,7 +228,9 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
         state = "waiting"
         steps.insert(0, _step("browser", "Waiting for your help in the browser", "Employee", "waiting", node_id=browser_request.get("node_id")))
     job_message = None
-    if job_status and job_status.get("state") in {"failed", "cancelled", "waiting_for_approval", "delivery_needs_review", "review_blocked"}:
+    if job and job_status and job_status.get("request_id") == job.id and job_status.get("state") in {
+        "failed", "cancelled", "waiting_for_approval", "delivery_needs_review", "review_blocked"
+    }:
         state = _state(job_status["state"]) if job_status["state"] in {"failed", "cancelled"} else "waiting"
         job_message = job_status.get("message")
     paused = getattr(control, "status", None) in {"paused", "pausing"} and (steps or state in {"queued", "running", "waiting", "reviewing", "stopping"})
@@ -248,7 +258,8 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
     updates.extend(datetime.fromisoformat(step["updated_at"]) for step in live_steps if step["updated_at"])
     if not any(starts):
         starts.extend(datetime.fromisoformat(step["started_at"]) for step in live_steps if step["started_at"])
-    return {"state": state, "message": "Work is paused. Resume when you are ready." if paused else job_message or
+    return {**({"request_id": job.id} if job else {}),
+            "state": state, "message": "Work is paused. Resume when you are ready." if paused else job_message or
             (messages["unavailable"] if unavailable and not steps else
             "Waiting for your approval before sending." if pending_approvals else
             "Waiting for your help in the browser." if browser_request else messages[state]),

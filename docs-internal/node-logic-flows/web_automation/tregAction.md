@@ -3,12 +3,12 @@
 | Field | Value |
 |------|-------|
 | **Category** | web_automation / api / tool (dual-purpose) |
-| **Backend handler** | [`server/nodes/treg/treg_action.py::TregActionNode`](../../../server/nodes/treg/treg_action.py) - dispatch via `BaseNode.execute()` -> `@Operation("search" / "describe" / "call" / "balance")`; the CLI's environment and runs in [`_service.py`](../../../server/nodes/treg/_service.py), its install in [`_install.py`](../../../server/nodes/treg/_install.py), parameter placement in [`_request.py`](../../../server/nodes/treg/_request.py), large answers in [`_result.py`](../../../server/nodes/treg/_result.py) |
+| **Backend handler** | [`TregActionNode`](../../../server/nodes/treg/treg_action.py) dispatches operations. [`_service.py`](../../../server/nodes/treg/_service.py) runs the CLI, [`_install.py`](../../../server/nodes/treg/_install.py) installs it, [`_request.py`](../../../server/nodes/treg/_request.py) places parameters, and [`_result.py`](../../../server/nodes/treg/_result.py) handles saved JSON. |
 | **Tests** | [`server/tests/test_treg_plugin.py`](../../../server/tests/test_treg_plugin.py) |
 | **Skill (if any)** | [`server/skills/web_agent/treg-skill/SKILL.md`](../../../server/skills/web_agent/treg-skill/SKILL.md) |
 | **Dual-purpose tool** | yes - tool name `treg_action` (`usable_as_tool = True`; both canvas handles explicitly kept visible) |
-| **Direct Run** | supported; `search` and `describe` work before sign-in, `call` and `balance` need the treg sign-in (Credentials -> treg) |
-| **Controlled execution** | ActionNode defaults on the `rest-api` queue; a broken-off `search`, `describe` or `balance` may run again (`repeats.py`), a `call` never (it may already have been charged) |
+| **Direct Run** | `read_result` reads saved JSON locally. `search` and `describe` work before sign-in. `call` and `balance` need the treg sign-in (Credentials → treg). |
+| **Controlled execution** | ActionNode defaults on the `rest-api` queue. A broken-off `search`, `describe`, `balance` or `read_result` may run again. A paid `call` may already have been charged and is excluded from automatic replay. |
 | **Workspace task** | not applicable |
 
 ## Purpose
@@ -21,7 +21,7 @@ PyPI package `tools-registry`, pinned and installed by OpenCompany with uv
 into its own tool folder. `search` finds tools for a job with their
 prices, `describe` lists one tool's parameters and where each goes,
 `call` runs a tool within the owner's price ceiling and records what it
-cost, and `balance` reads the team balance.
+cost. `read_result` pages through a saved JSON answer. `balance` reads the team balance.
 
 ## Inputs (handles)
 
@@ -38,13 +38,17 @@ parsed as JSON, and an empty one is no body.)
 
 | Name | Type | Default | Required | displayOptions.show | Description |
 |------|------|---------|----------|---------------------|-------------|
-| `operation` | options | `search` | no | - | `search` / `describe` / `call` / `balance` |
+| `operation` | options | `search` | no | - | `search` / `describe` / `call` / `read_result` / `balance` |
 | `query` | string | `""` | yes for `search` | `operation` = `search` | The job in plain words; may not start with `-` |
-| `limit` | int (`ge=1, le=100`) | `10` | no | `operation` = `search` | The most tools to list |
+| `limit` | int (1–100) | `10` | no | `search`, `read_result` | Maximum number of catalog tools or saved rows to return. |
 | `tool_id` | string | `""` | yes for `describe` and `call` | `operation` in [`describe`, `call`] | A catalog id; must match `[A-Za-z0-9][A-Za-z0-9._@-]*` |
 | `params` | object (JSON editor) | `{}` | no | `operation` = `call` | The tool's parameters by name; placed where the catalog declares them |
 | `body` | any JSON (JSON editor) | none | no | `operation` = `call` | A whole request body, sent as given; refused together with body fields in `params` |
 | `max_cost_usd` | float (`ge=0`) | `0.10` | no | `operation` = `call` | The most one call may cost; in `server_controlled_fields`, so a model's value is ignored |
+| `file_path` | string | | yes for `read_result` | `operation` = `read_result` | Copy `file.path` from the saved answer. |
+| `result_path` | string | | no | `operation` = `read_result` | Dotted path inside the JSON, such as `output.reels`. |
+| `fields` | array of strings | | no | `operation` = `read_result` | Fields to extract from each item. |
+| `offset` | integer ≥ 0 | `0` | no | `operation` = `read_result` | Page through the saved items using the returned `next_offset`. |
 
 ## Outputs (handles)
 
@@ -117,6 +121,15 @@ parsed as JSON, and an empty one is no body.)
   balance_usd: number;
   holds: Array<{ tool_id: string; reserved_usd: number; call_id: string }>;
 }
+
+// operation = "read_result" on a list
+{
+  operation: 'read_result';
+  data: unknown[];
+  total: number;
+  count: number;
+  next_offset?: number;
+}
 ```
 
 ## Logic Flow
@@ -124,6 +137,7 @@ parsed as JSON, and an empty one is no body.)
 ```mermaid
 flowchart TD
   A[BaseNode.execute -> TregActionNode.&lt;operation&gt;] --> I[get_installer.ensure: pinned tools-registry via uv, waits up to 300 s]
+  A -- read_result --> R[Read saved workspace JSON and return the selected fields and next offset]
   I -- uv missing / install failed / still installing --> Ei[NodeUserError]
   I -- ok --> B{operation}
   B -- search --> S1{query given and not starting with -?}
@@ -147,7 +161,7 @@ flowchart TD
 
 ## Decision Logic
 
-- **Every run** goes through `_service.run_treg`: `treg --json <argv>`
+- **Remote operations** go through `_service.run_treg`: `treg --json <argv>`
   with the environment `treg_env` builds (`TREG_CONFIG` under
   `<DATA_DIR>/treg`, inherited `TREG_*` removed, analytics off,
   `TREG_CLIENT=opencompany`, a `BROWSER` that opens nothing), stdin a
@@ -178,7 +192,7 @@ flowchart TD
   was charged. A call whose answer did not come back may have gone
   through and is never repeated.
 - **Approval class** (`services/approvals/classes.py`): `search`,
-  `describe` and `balance` are `read` and may run again after a broken-off
+  `describe`, `balance` and `read_result` are `read` and may run again after a broken-off
   attempt (`repeats.py`); `call` is `money` and never repeats. The
   node's `ApprovalSpec` holds only `call`, with `refuse_while_asking`:
   while the owner asks first, an agent's call is refused (an approved

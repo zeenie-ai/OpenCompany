@@ -9,7 +9,7 @@ import type { EmployeeSummary } from '../data/schemas';
  *  role, not a decision. */
 const DECIDE_BUTTON = 'rounded-md border-border-default px-3.5 font-semibold text-fg-default';
 
-export function JobProgress({ employee }: { employee: EmployeeSummary }) {
+export function JobProgress({ employee, showStatus = true }: { employee: EmployeeSummary; showStatus?: boolean }) {
   const { sendRequest } = useWebSocketActions();
   const cache = useQueryClient();
   const attempt = useRef<{ jobId: string; decision: string; key: string } | null>(null);
@@ -42,7 +42,7 @@ export function JobProgress({ employee }: { employee: EmployeeSummary }) {
   const needsReview = progress.state === 'delivery_needs_review';
   const reviewBlocked = progress.state === 'review_blocked';
   return <div className="flex flex-col gap-3 rounded-card border border-border-default bg-bg-panel p-4">
-    <p role="status" className="m-0 text-sm text-fg-muted">{resolve.isSuccess ? resolve.data?.message || 'Your delivery decision is saved.' : progress.message}</p>
+    {(showStatus || resolve.isSuccess) && <p role="status" className="m-0 text-sm text-fg-muted">{resolve.isSuccess ? resolve.data?.message || 'Your delivery decision is saved.' : progress.message}</p>}
     {needsReview && !resolve.isSuccess && <div className="flex flex-wrap gap-2">
       <Button variant="quiet" disabled={resolve.isPending} onClick={() => resolve.mutate('arrived')} className={DECIDE_BUTTON}>It arrived</Button>
       <Button variant="quiet" disabled={resolve.isPending} onClick={() => resolve.mutate('retry')} className={DECIDE_BUTTON}>It did not arrive; retry</Button>

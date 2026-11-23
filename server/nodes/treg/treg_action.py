@@ -14,6 +14,8 @@ shell. Operations:
   call before charging. What it charged is recorded in
   ``api_usage_metrics`` before the answer is saved.
 - ``balance``: ``treg balance`` reads the team's prepaid balance.
+- ``read_result``: reads selected fields or rows from a JSON answer saved
+  in this workflow's treg folder. Runs locally without signing in or charging.
 
 Search and describe read treg's open catalog, so they work before the
 owner signs in; call and balance need the sign-in (Credentials -> treg).
@@ -29,13 +31,14 @@ repeated: a broken-off one may already have been charged.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import mimetypes
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from services.media import write_media
 from services.plugin import ActionNode, NodeContext, NodeUserError, Operation, TaskQueue, coerce_blank_params
@@ -44,12 +47,13 @@ from services.plugin.approval import ApprovalSpec
 from ._credentials import TregCredential
 from ._install import get_installer
 from ._request import build_request, check_tool_id, parameters_of
-from ._result import RESULT_SUBDIR, deliver, preview_of
+from ._result import RESULT_SUBDIR, deliver, preview_of, read_saved_result, value_at
 from ._service import run_treg
 
 _SEARCH ={"displayOptions": {"show": {"operation": ["search"]}}}
 _TOOL = {"displayOptions": {"show": {"operation": ["describe", "call"]}}}
 _CALL = {"displayOptions": {"show": {"operation": ["call"]}}}
+_READ_RESULT = {"displayOptions": {"show": {"operation": ["read_result"]}}}
 
 #: How long an operation waits for a first install of the CLI.
 _INSTALL_WAIT_SECONDS = 300.0
@@ -67,14 +71,31 @@ _SIGN_IN_HINT = "If treg says the sign-in is missing or rejected, sign in under 
 
 
 class TregActionParams(BaseModel):
-    operation: Literal["search", "describe", "call", "balance"] = "search"
+    operation: Literal["search", "describe", "call", "balance", "read_result"] = "search"
 
     query: str = Field(
         default="",
         description="The job a tool should do, in plain words (e.g. 'instagram reels by keyword').",
         json_schema_extra={"placeholder": "google search results", **_SEARCH},
     )
-    limit: int = Field(default=10, ge=1, le=100, description="The most tools to list.", json_schema_extra=_SEARCH)
+    limit: int = Field(
+        default=10, ge=1, le=100, description="The most tools or saved result rows to return.",
+        json_schema_extra={"displayOptions": {"show": {"operation": ["search", "read_result"]}}},
+    )
+    file_path: str = Field(
+        default="", description="The saved JSON answer's workspace-relative file.path, such as treg/example.json.",
+        json_schema_extra=_READ_RESULT,
+    )
+    result_path: str = Field(
+        default="", max_length=512, description="Dotted path from the preview, e.g. output.reels or output.next_cursor. Empty selects the root.",
+        json_schema_extra=_READ_RESULT,
+    )
+    fields: List[Annotated[str, Field(min_length=1, max_length=512)]] = Field(
+        default_factory=list, max_length=32,
+        description="Properties to return from each selected object, e.g. [\"createdUtc\", \"views\", \"url\"]. Nested dotted names are supported.",
+        json_schema_extra={"editor": "json", "rows": 3, **_READ_RESULT},
+    )
+    offset: int = Field(default=0, ge=0, description="Start index for saved result rows. Continue at next_offset.", json_schema_extra=_READ_RESULT)
     tool_id: str = Field(
         default="",
         description="A tool id from operation=search (e.g. 'serper.web.search').",
@@ -106,10 +127,10 @@ class TregActionParams(BaseModel):
         # a model may send the object as a JSON string.
         return coerce_blank_params(cls, values, object_fields=("params",))
 
-    @field_validator("body", mode="before")
+    @field_validator("body", "fields", mode="before")
     @classmethod
-    def _body(cls, value: Any) -> Any:
-        """An empty body is no body; a body given as text is JSON."""
+    def _json_input(cls, value: Any, info: ValidationInfo) -> Any:
+        """The panel supplies JSON fields as text."""
         if not isinstance(value, str):
             return value
         text = value.strip()
@@ -118,7 +139,7 @@ class TregActionParams(BaseModel):
         try:
             return json.loads(text)
         except ValueError as exc:
-            raise ValueError(f"body must be JSON: {exc}") from exc
+            raise ValueError(f"{info.field_name} must be JSON: {exc}") from exc
 
 
 class TregActionOutput(BaseModel):
@@ -127,6 +148,7 @@ class TregActionOutput(BaseModel):
     query: Optional[str] = None
     count: Optional[int] = None
     total: Optional[int] = None
+    next_offset: Optional[int] = None
     verdict: Optional[str] = None
     reason: Optional[str] = None
     tools: Optional[List[Dict[str, Any]]] = None
@@ -233,25 +255,11 @@ def _excerpt(answer: Any, limit: int = 500) -> str:
     return text if len(text) <= limit else text[:limit] + "..."
 
 
-def _at(value: Any, path: Any) -> Any:
-    """The value at a dotted path such as ``tasks.0.id``; None when absent."""
-    if not isinstance(path, str) or not path:
-        return None
-    for part in path.split("."):
-        if isinstance(value, list) and part.isdigit() and int(part) < len(value):
-            value = value[int(part)]
-        elif isinstance(value, dict):
-            value = value.get(part)
-        else:
-            return None
-    return value
-
-
 def _task(endpoint: Dict[str, Any], answer: Any) -> Optional[Dict[str, Any]]:
     """How to check an asynchronous task (a generation), from the tool's
     catalog descriptor: its id and the call that reads its state."""
     descriptor = endpoint.get("async") if isinstance(endpoint.get("async"), dict) else {}
-    task_id = _at(answer, descriptor.get("id_from"))
+    task_id = value_at(answer, descriptor.get("id_from"))
     poll = descriptor.get("poll") if isinstance(descriptor.get("poll"), dict) else {}
     param = poll.get("param") if isinstance(poll.get("param"), dict) else {}
     check = None
@@ -350,8 +358,8 @@ class TregActionNode(ActionNode):
         "them) runs it; use body only for a whole JSON body params cannot express, such as a list of several items. "
         "Each call is billed to the team's treg balance: cost_usd says what it cost, and is absent when treg did not "
         "bill it. The owner caps what one call may cost; a dearer call is refused before anything is charged. A large "
-        "answer is saved to the workspace: file.path is where, and preview shows its shape; read the fields you need "
-        "from that file instead of calling again. A generation tool answers with task: run task.check (a call) until "
+        "JSON answer has file.path and a preview. Use free operation=read_result with file_path=file.path, a dotted "
+        "result_path from the preview and optional fields. Page with next_offset. A generation tool answers with task: run task.check (a call) until "
         "its status_path shows a done_when value. operation=balance reads the team balance in USD. Search and describe "
         "are free."
     )
@@ -498,6 +506,13 @@ class TregActionNode(ActionNode):
             task=_task(endpoint, answer) if meta.get("async") else None,
             **delivered,
         )
+
+    @Operation("read_result")
+    async def read_result(self, ctx: NodeContext, params: TregActionParams) -> Any:
+        answer = await asyncio.to_thread(
+            read_saved_result, ctx, params.file_path, params.result_path, params.fields, params.offset, params.limit
+        )
+        return {"operation": "read_result", **answer}
 
     @Operation("balance")
     async def balance(self, ctx: NodeContext, params: TregActionParams) -> Any:

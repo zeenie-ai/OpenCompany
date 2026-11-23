@@ -1,6 +1,6 @@
 """Talk sees bounded durable evidence, and runtime crashes stay distinct."""
 import pytest
-from models.database import AgentTeam, TeamTask
+from models.database import AgentTeam
 from models.employees import EmployeeJob
 from services.employees.jobs import bind_job_team, fail_before_assignment, get_job_status, job_progress
 
@@ -74,3 +74,16 @@ async def test_delivered_job_is_reported_even_when_home_has_no_active_progress(r
     await install(real_database, state="delivered")
     assert await job_progress(real_database, "wf") is None
     assert (await get_job_status(real_database, workflow_id="wf", lead_node_id="lead"))["job"]["state"] == "delivered"
+
+
+@pytest.mark.parametrize(("posted", "destination"), [(True, "original conversation"), (False, "Task Manager assignment")])
+def test_blocked_status_points_to_the_reviewed_delivery_without_exposing_it(posted, destination):
+    from services.employees.job_status import _job_progress
+    job = EmployeeJob(id="job", workflow_id="wf", lead_node_id="lead", origin_execution_id="run",
+                      state="delivered" if posted else "completed", result="PRIVATE explanation",
+                      source={"nodes": [{"id": "reply", "type": "chatReply"}]},
+                      delivery={"work_blocked": True, "completed": ["reply"], "outputs": {"reply": {"posted": posted}}})
+    status = _job_progress(job)
+    assert status["failure_code"] == "work_blocked"
+    assert destination in status["message"]
+    assert "PRIVATE" not in str(status)

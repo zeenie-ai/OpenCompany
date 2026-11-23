@@ -82,6 +82,29 @@ describe('employee live work', () => {
     expect(actions.sendRequest.mock.calls.every(([type]) => type === 'get_employee')).toBe(true);
   });
 
+  it('shows a single blocked-work notice and distinguishes the reviewed assignment from its closed children', () => {
+    const status = { request_id: 'job-1', state: 'failed', message: "Work blocked. Read Chat's reply in the original conversation." };
+    show({ work_progress: { ...progress, ...status, steps: [
+      { id: 'outer', label: 'Find recent reels', member: 'Orchestrator', status: 'cancelled', outcome: 'reviewed_blocker' },
+      { id: 'first', label: 'Search reels', member: 'Scout', status: 'cancelled', outcome: 'parent_closed' },
+      { id: 'retry', label: 'Check search results', member: 'Scout', status: 'cancelled', outcome: 'parent_closed' },
+    ] }, job_progress: status });
+    openPill();
+    expect(screen.getAllByText(status.message)).toHaveLength(1);
+    expect(pill()).toHaveTextContent('3 steps');
+    expect(pill()).not.toHaveTextContent('0 of 3 steps finished');
+    expect(pill()).toHaveTextContent('Orchestrator · Blocked at review');
+    expect(screen.getAllByText('Scout · Closed with parent task')).toHaveLength(2);
+  });
+
+  it('keeps review recovery controls beside one status', () => {
+    const status = { request_id: 'job-1', state: 'review_blocked', message: 'The assigning employee needs another review turn.' };
+    show({ work_progress: { ...progress, ...status, state: 'waiting' }, job_progress: status });
+    openPill();
+    expect(screen.getAllByText(status.message)).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Retry review' })).toBeEnabled();
+  });
+
   it('shows stale activity as last known when disconnected and preserves it through reconnect', async () => {
     actions.isReady = false;
     const view = show();

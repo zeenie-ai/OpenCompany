@@ -14,6 +14,7 @@ from services.employees.hire_request import HireEmployeeRequest
 from services.employees.jobs import deliver_job
 from services.employees.llm import LLMChoice
 from services.employees.team_runtime import admit_team_plan
+from services.graph_build import graph_node, tool_edge
 from services.plugin import NodeContext
 from services.temporal.agent_activities import prepare_agent_payload
 from services.temporal.agent_instance_workflow import (
@@ -26,8 +27,8 @@ from services.workflow_sanitizer import sanitize_workflow_graph
 
 
 @pytest.fixture
-def hierarchy_graph():
-    request = HireEmployeeRequest.model_validate({
+def hierarchy_graph(request):
+    hire = HireEmployeeRequest.model_validate({
         "idempotency_key": "hierarchy", "job": "Research and review evidence", "name": "Maya",
         "role": "Research coordinator", "trigger": {"kind": "manual"}, "steps": [{"title": "Check evidence"}],
         "team": [
@@ -35,8 +36,15 @@ def hierarchy_graph():
             {"key": "analyst", "name": "Analyst", "responsibility": "Collect evidence", "reports_to": "research"},
         ],
     })
-    return build_employee_graph(BuildInputs(workflow_id="7", request=request, apps=[], memory=False, team=True,
+    built = build_employee_graph(BuildInputs(workflow_id="7", request=hire, apps=[], memory=False, team=True,
         llm=LLMChoice(provider="openai", model="test-model", local=False)))
+    if getattr(request, "param", None) == "treg":
+        specialist = built.node_roles["specialist_2"]
+        tool = "7:tregAction:1"
+        built.nodes.append(graph_node(tool, "tregAction", "treg", (0, 0)))
+        built.edges.append(tool_edge(tool, specialist).to_dict())
+        built.parameters[tool] = {}
+    return built
 
 
 @pytest.fixture
@@ -128,8 +136,22 @@ async def review(turn, prepared, task_id, *, feedback=None):
     return await call_tool(turn["context"], prepared, "request_changes" if feedback else "accept_task", arguments, "review")
 
 
-async def test_hired_chat_assigns_nested_tasks_and_delivers_its_own_review(real_database, hierarchy):
+@pytest.mark.parametrize("hierarchy_graph", ["treg"], indirect=True)
+async def test_hired_chat_assigns_nested_tasks_and_delivers_its_own_review(real_database, hierarchy, tmp_path, monkeypatch):
+    from core.container import container
+    from nodes.treg._result import deliver
+    from nodes.treg.treg_action import TregActionNode
+    from services.ai import AIService
+    from services.workflow import WorkflowService
+    from temporalio.testing import ActivityEnvironment
+
     db = real_database
+    settings = container.settings()
+    settings.workspace_base_resolved = str(tmp_path)
+    ai = AIService(container.auth_service(), db, None, settings)
+    workflow_service = WorkflowService(db, ai, None, None, None, None, settings)
+    monkeypatch.setattr(container, "ai_service", lambda: ai)
+    monkeypatch.setattr(container, "workflow_service", lambda: workflow_service)
     built, control, transport = hierarchy
     chat = built.team_plan["talk_node_id"]
     trigger = built.node_roles["talk_trigger"]
@@ -182,7 +204,25 @@ async def test_hired_chat_assigns_nested_tasks_and_delivers_its_own_review(real_
     assert "task_outcome" not in await finish(research, "I assigned the count.")
     worker, worker_payload = await take_turn(child["agent"]["id"], "collect")
     assert "cancel_task(task_ref, reason)" not in worker_payload["system_message"]
-    submitted = await finish(worker, "The count was 14.")
+    tool, = [entry for entry in worker_payload["tools"] if entry["name"] == "treg_action"]
+    assert "read_result" in tool["definition"]["parameters"]["properties"]["operation"]["enum"]
+    # The paid call has already returned. Only the second record contains the
+    # evidence the specialist needs, and the workspace preview hides it.
+    tool_id = tool["tool_node_id"]
+    saved = deliver(NodeContext(node_id=tool_id, node_type="tregAction", workspace_dir=str(tmp_path / "Maya_1")),
+                    "sample", {"output": {"reels": [{"views": 0, "caption": "x" * 32000}, {"views": 14}]}})
+    assert saved["preview"]["output"]["reels"][1] == "... 1 more"
+    args = {"operation": "read_result", "file_path": saved["file"]["path"], "result_path": "output.reels",
+            "fields": ["views"], "offset": 1, "limit": 1}
+    result = await ActivityEnvironment().run(TregActionNode.as_activity(), {
+        **worker["context"], "node_id": tool_id, "node_data": {**tool["parameters"], **args}, "tool_args": args,
+        "parent_node_id": worker["context"]["node_id"], "tool_call_id": "read-paid-result",
+    })
+    assert result.get("success"), result
+    page = result["result"]
+    assert page["total"] == 2 and page["data"] == [{"views": 14}]
+    count = page["data"][0]["views"]
+    submitted = await finish(worker, f"The count was {count}.")
     assert submitted["task_outcome"]["reviewer_instance_id"] == research["instance"]["id"]
     assert await claim_instance({"instance_id": boot["instance_id"], "request_id": "no-early-chat-review"}) is None
 
