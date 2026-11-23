@@ -51,8 +51,11 @@ An explicitly halted agent needs recovery; automatic messages cannot restart it.
 
 ## Employee contact
 
-Talk uses its connected Task Manager to call `submit_job(instructions)` for
-substantive work. Keep the returned job ID. When the owner asks for progress,
+Talk calls `submit_job(instructions)` for work its current team can perform.
+When the owner asks to add a specialist, or the job requires a missing
+specialist, use the connected Agent Builder to change the team first.
+Submit the original job after the specialist becomes available. Keep its job ID.
+When the owner asks for progress,
 call `get_job_status(job_id)` and report the saved state. A queued job with zero
 tasks is waiting for assignment. If it failed, report the failure. The lead
 reviews specialist submissions before the result is delivered.

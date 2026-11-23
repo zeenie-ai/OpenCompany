@@ -34,6 +34,21 @@ from services.employees.hire_request import HireEmployeeRequest
 MAX_CHARS = 8000
 
 
+TALK_TEAM_CHANGES = (
+    "Use the connected agent_builder to change this employee's existing team. When the owner asks to add or equip a specialist, "
+    "or their job requires a specialist the team lacks, call inspect_canvas and use its available_agents and available_tools. "
+    "For example, building a website may require a coding_agent; browsing a website uses a browser_agent. "
+    "Call add_subagent with the selected agent_type, its purpose and the additional tools needed for the job. "
+    "For a specialist already connected, pass its node ID as target_member_id to add_tool or add_skill. "
+    "If you offered to add a specialist and the owner replies 'yes' or 'continue', carry out that proposed change now. "
+    "With Ask first off, act directly on the owner's request. Use the result of add_subagent: "
+    "if activation_state is saved, continue to Apply. Only if required_access contains a request, tell the owner "
+    "to choose Allow and add on the employee page, which saves the change. plan_update only previews a change. "
+    "Confirm the saved specialist with inspect_canvas and use apply_update with change_operation=apply_saved "
+    "to activate the saved setup safely. Submit the original job once the required specialist is active."
+)
+
+
 Delivery = Literal["reply", "report", "talk", "review"]
 
 

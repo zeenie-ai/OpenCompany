@@ -7,6 +7,7 @@ const sendRequest = vi.fn();
 vi.mock('@/contexts/WebSocketContext', () => ({ useWebSocketActions: () => ({ sendRequest }) }));
 vi.mock('../ui/pillToast', () => ({ pillToast: vi.fn() }));
 import { EmployeeAccess } from '../employee/EmployeeAccess';
+import { pillToast } from '../ui/pillToast';
 
 function show(pendingOnly = false) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -16,6 +17,32 @@ function show(pendingOnly = false) {
 beforeEach(() => sendRequest.mockReset());
 
 describe('employee app access', () => {
+  it('keeps an approved specialist change accessible until it is saved', async () => {
+    sendRequest.mockImplementation(async (type: string) => type === 'list_employee_access'
+      ? { success: true, access: [{ id: 'coder', app: 'Coding Agent', approved: true, revoked: false, change_pending: true }] }
+      : { success: true, activation_state: 'saved' });
+    show(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry team change' }));
+    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { access_request_id: 'coder', allow: true });
+  });
+
+  it('offers to save the pending specialist on approval', async () => {
+    sendRequest.mockResolvedValue({ success: true, access: [{ id: 'coder', app: 'Coding Agent', approved: false, revoked: false, change_pending: true }] });
+    show(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Allow and add' }));
+    expect(sendRequest).toHaveBeenCalledWith('decide_employee_access', { access_request_id: 'coder', allow: true });
+  });
+
+  it('explains when another request already added the specialist', async () => {
+    const message = 'Ask Talk to update the existing specialist.';
+    sendRequest.mockImplementation(async (type: string) => type === 'list_employee_access'
+      ? { success: true, access: [{ id: 'coder', app: 'Coding Agent', approved: false, revoked: false, change_pending: true }] }
+      : { success: true, activation_state: 'superseded', message });
+    show(true);
+    await userEvent.click(await screen.findByRole('button', { name: 'Allow and add' }));
+    await waitFor(() => expect(pillToast).toHaveBeenCalledWith(message, { tone: 'info' }));
+  });
+
   it('explains the app and action and lets the owner allow it', async () => {
     sendRequest.mockResolvedValue({ success: true, access: [{ id: 'permission', app: 'Calendar', action: 'manage appointments', approved: false, revoked: false }] });
     show(true);

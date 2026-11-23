@@ -52,7 +52,9 @@ def employee_skill_parameters(role: Literal["lead", "talk"]) -> dict:
                         "request changes where needed, and accept the work before delivering a result.")
     elif role == "talk":
         name, description = "team-intake", "Submit requests and report verified job progress"
-        instructions = ("Clarify the owner's desired result and submit substantive work once through Task Manager. "
+        instructions = ("Clarify the owner's desired result. Use Agent Builder when the owner requests a specialist "
+                        "or the job needs a missing capability. Once the team has the required specialist and tools, "
+                        "submit the work once through Task Manager. "
                         "Use the returned job ID to check the saved status before reporting progress. "
                         "Share the reviewed result when the team delivers it.")
     else:

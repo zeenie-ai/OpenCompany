@@ -48,7 +48,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -180,10 +180,17 @@ async def _employee_of(database: Any, canvas: _Canvas) -> Optional[_Employee]:
         return None
     from services.employees import store
     from services.employees.start import AGENT_ROLES
+    from models.approvals import WorkflowRule
 
     row = await store.get_by_workflow(database, canvas.workflow_id)
     if row is None:
         return None
+    # Catalogues and tool defaults must agree with the live rule used at
+    # save time even if the hire-time rules still contain the old value.
+    async with database.get_session() as session:
+        rule = await session.get(WorkflowRule, canvas.workflow_id)
+    if rule is not None:
+        row = row.model_copy(update={"rules": {**(row.rules or {}), "ask_first": rule.ask_first}})
     roles = row.node_roles or {}
     agents = [value for role, value in roles.items() if (role in AGENT_ROLES or (role.startswith("specialist_") and role.rsplit("_", 1)[-1].isdigit())) and canvas.node(value)]
     skills = roles.get("skills") if canvas.node(roles.get("skills")) else None
@@ -203,6 +210,8 @@ def _mutation_id(ctx: NodeContext, params: BaseModel, caller: Optional[str]) -> 
     it has one (stable across retries of the same call), scoped to the run;
     otherwise the request itself."""
     raw = ctx.raw or {}
+    if raw.get("pending_builder_mutation"):
+        return str(raw["pending_builder_mutation"])
     run = str(ctx.execution_id or "")
     call = str(raw.get("tool_call_id") or "")
     if call:
@@ -236,15 +245,39 @@ async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: Gra
     async def authorize(session: Any) -> None:
         from models.employees import EmployeeGrant
 
+        reviewed = ctx.raw.get("reviewed_employee_grant")
+        if reviewed or ctx.raw.get("builder_direct_grants"):
+            from models.database import Workflow
+            from services.employees.talk_team_change import connected_builders
+
+            workflow = await session.get(Workflow, canvas.workflow_id)
+            if not workflow or ctx.node_id not in connected_builders(workflow.data or {}, _caller(ctx)):
+                raise _AccessChanged("Talk's Agent Builder connection changed before the team change was saved")
+        if reviewed and reviewed not in grant_ids:
+            raise _AccessChanged("The requested change no longer matches the owner's approval")
         for grant_id in grant_ids:
             grant = await session.get(EmployeeGrant, grant_id)
-            if grant is None or grant.workflow_id != canvas.workflow_id or grant.owner_id != ctx.user_id or grant.revoked_at is not None or not grant.limits.get("approved"):
-                raise _AccessChanged("The owner must approve access before saving this change")
+            direct = ctx.raw.get("builder_direct_grants", {}).get(grant_id)
+            if grant is None and direct:
+                grant = EmployeeGrant(id=grant_id, workflow_id=canvas.workflow_id, owner_id=ctx.user_id, **direct)
+                session.add(grant)
+            if grant is None or grant.workflow_id != canvas.workflow_id or grant.owner_id != ctx.user_id or grant.revoked_at is not None:
+                raise _AccessChanged("The owner's permission changed. Ask them to allow access again.")
+            if not grant.limits.get("approved"):
+                from services.employees.permissions import specialist_review_off
+                if (not direct or not await specialist_review_off(
+                        session, canvas.workflow_id, _caller(ctx), params.operation, grant.member_id, grant.capability)):
+                    raise _AccessChanged("The owner's Ask first setting changed. Review the team change in Talk.")
+                grant.limits = {**grant.limits, "approved": True}
             limits = {key: value for key, value in grant.limits.items() if key != "approved"}
             scope = [grant.workflow_id, grant.owner_id, grant.capability, grant.member_id, grant.account_id, limits]
             identity = hashlib.sha256(json.dumps(scope, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
             if identity != grant_id:
                 raise _AccessChanged("The approved access scope changed")
+            # Consume the pending change with its graph write. A rolled-back
+            # write leaves it available for the owner to retry.
+            if grant.pending_change and grant.pending_change.get("mutation_id") == _mutation_id(ctx, params, caller):
+                grant.pending_change = None
         if read_for_prepare:
             await read_for_prepare(session)
 
@@ -255,7 +288,7 @@ async def _save(ctx: NodeContext, database: Any, canvas: _Canvas, additions: Gra
         mutation_id=_mutation_id(ctx, params, caller),
         caller_node_id=caller,
         prepare=prepare,
-        authorize=authorize if grant_ids or read_for_prepare else None,
+        authorize=authorize if grant_ids or read_for_prepare or ctx.raw.get("reviewed_employee_grant") else None,
         authorization_grant_ids=grant_ids,
     )
 
@@ -277,13 +310,32 @@ def _refused(operation: str, summary: str) -> "AgentBuilderOutput":
 
 async def _permission(database: Any, ctx: NodeContext, params: "AgentBuilderParams", capability: str, members: Sequence[str], limits: Dict[str, Any], grant_ids: Optional[List[str]] = None) -> Optional["AgentBuilderOutput"]:
     from services.employees.permissions import require_builder_access
+    from services.chat.stream import chat_run_id_of
 
     pending = []
     refusal = None
+    change = None
+    run_id = chat_run_id_of(ctx.raw)
+    if (run_id and len(members) == 1 and params.operation in {"add_subagent", "add_tool", "add_skill"}
+            and (not params.dry_run or ctx.raw.get("save_after_builder_review"))):
+        # Persist only validated inputs for this operation. The replay checks
+        # the same chat identity, saved connections and exact grant scope.
+        fields = {
+            "add_subagent": {"operation", "agent_type", "purpose", "tool_types", "tool_parameters", "skill_names", "app_id"},
+            "add_tool": {"operation", "node_type", "app_id", "target_member_id", "tool_parameters"},
+            "add_skill": {"operation", "skill_name", "target_member_id"},
+        }[params.operation]
+        change = {"params": params.model_dump(include=fields, exclude_defaults=True), "run_id": run_id,
+                  "builder_id": ctx.node_id, "caller_id": _caller(ctx), "mutation_id": _mutation_id(ctx, params, _caller(ctx))}
     for member in members:
-        access = await require_builder_access(database, ctx, capability, member_id=member, limits=limits)
+        access = await require_builder_access(database, ctx, capability, member_id=member, limits=limits,
+                                              pending_change=change, operation=params.operation, preview=params.dry_run)
         if access["authorized"] and access.get("request_id") and grant_ids is not None:
             grant_ids.append(access["request_id"])
+            if access.get("grant_on_save"):
+                ctx.raw.setdefault("builder_direct_grants", {})[access["request_id"]] = access["grant_on_save"]
+            if access.get("pending_mutation_id"):
+                ctx.raw["pending_builder_mutation"] = access["pending_mutation_id"]
         if not access["authorized"]:
             refusal = access
             pending.extend(access.get("required_access") or [])
@@ -505,6 +557,62 @@ async def _owner_timezone(database: Any) -> str:
     return str(settings.get("profile_timezone") or "UTC")
 
 
+def _specialist_defaults(agent_type: str) -> set[str]:
+    if agent_type == "coding_agent":
+        from services.coding_agent_recipe import default_pi_tool_types
+        return set(default_pi_tool_types())
+    return {"browser", "visionAnalyze"} if agent_type == "browser_agent" else set()
+
+
+def _validated_tool_settings(node_type: str, supplied: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate saved settings separately from arguments supplied later by the tool caller."""
+    from services.plugin.base import locked_tool_fields
+    from services.workflow_sanitizer import sanitize_runtime_payload
+
+    cls = get_node_class(node_type)
+    if not supplied:
+        return {}
+    if set(supplied) & locked_tool_fields(cls) or sanitize_runtime_payload(supplied) != supplied:
+        raise ValueError("Use existing connections and preserve locked tool settings.")
+    model = cls.Params
+    if issubclass(cls, ToolNode) and cls.tool_input_model() is model:
+        model = cls.partial_config_model()
+    try:
+        settings = model.model_validate(supplied).model_dump(exclude_unset=True)
+    except ValueError:
+        raise ValueError(f"'{node_type}' needs valid configuration. Inspect its node contract first.") from None
+    if set(supplied) - settings.keys():
+        raise ValueError(f"'{node_type}' received an unknown setting. Inspect its node contract first.")
+    return settings
+
+
+async def _employee_tool_settings(database: Any, employee: _Employee, node_type: str, owner_type: str,
+                                  supplied: Dict[str, Any], connected: Sequence[str], app_id: str, operation: str) -> Tuple[str, Dict[str, Any]]:
+    from services.employees.policy import check_tool
+    from services.node_allowlist import is_hire_allowed
+
+    # Private recipe tools have their own Hire allowlist entries. Browser
+    # itself is an app and goes through its employee access rules below.
+    if node_type != "browser" and node_type in _specialist_defaults(owner_type):
+        if node_type not in _allowed_tool_types() or not is_hire_allowed(node_type):
+            raise ValueError(f"'{node_type}' is disabled for this specialist.")
+        return get_node_class(node_type).display_name, supplied
+    app = None
+    if _app_field(node_type) is not None:
+        app = (await _owner_apps()).get(app_id) if app_id else None
+        if app is None:
+            raise ValueError(f"{operation}: '{node_type}' needs the app_id of its entry in inspect_canvas available_tools.")
+    decision = check_tool(node_type, employee=employee.row, connected=connected, app=app)
+    if not decision.allowed:
+        raise ValueError(decision.reason)
+    defaults = dict(decision.params)
+    if decision.app is not None and any(key in defaults and value != defaults[key] for key, value in supplied.items()):
+        raise ValueError(f"'{node_type}' must preserve this employee's app configuration.")
+    if decision.app is None and "timezone" in defaults:
+        defaults["timezone"] = await _owner_timezone(database)
+    return decision.label, {**defaults, **supplied}
+
+
 async def _employee_tools(employee: _Employee) -> List[Dict[str, Any]]:
     """What policy lets this employee be given: the tools every hire gets,
     then each app's tools (the registry's, then the owner's own), each in
@@ -681,10 +789,10 @@ class AgentBuilderParams(BaseModel):
     agent_type: str = Field(
         default="",
         description=(
-            "For add_subagent: agent node type to spawn (e.g. "
-            "'coding_agent', 'web_agent'). Must be component_kind='agent' "
-            "and not a team-lead. Caller must itself be a team-lead "
-            "(orchestrator_agent / ai_employee)."
+            "For add_subagent, choose a specialist from inspect_canvas.available_agents, such as "
+            "'coding_agent' for software development or 'browser_agent' for browser work. "
+            "A managed employee's Talk contact can add a specialist to its existing lead. "
+            "In an editor-built team the caller is the team lead."
         ),
         json_schema_extra={"displayOptions": {"show": {"operation": ["add_subagent"]}}},
     )
@@ -749,10 +857,9 @@ class AgentBuilderNode(ToolNode):
     subtitle = "Runtime canvas-mutation tool"
     group = ("tool", "ai")
     description = (
-        "Lets the agent it is wired to inspect the workflow canvas and add "
-        "to it while it runs: tools, skills, and (for team leads) teammates. "
-        "Changes are saved and show on the canvas at once. Wire to an AI "
-        "agent's input-tools handle."
+        "Inspect the workflow and add tools, skills and specialists. Managed employee Talk can add "
+        "specialists to its lead. Editor team leads can also add their own specialists. "
+        "Wire to the calling agent's input-tools handle."
     )
     component_kind = "tool"
     # The per-tool activity gets the run's canvas (ctx.nodes / ctx.edges)
@@ -764,10 +871,9 @@ class AgentBuilderNode(ToolNode):
         "Inspect and grow the workflow canvas while you run. ALWAYS call "
         "inspect_canvas FIRST: it lists what you may add (available_tools, "
         "available_agents, available_skills) and the current canvas. "
-        "add_tool wires a tool from available_tools to you (a tool you "
-        "already have but lack in this run is bound again); add_skill adds "
-        "a skill from available_skills; add_subagent adds a teammate (team "
-        "leads only). inspect_node reads live contracts; search_docs and "
+        "Managed employee Talk can call add_subagent to add a specialist to its existing lead. "
+        "Supply its purpose and additional tool_types. To equip a connected specialist, use "
+        "add_tool or add_skill with its target_member_id. inspect_node reads live contracts; search_docs and "
         "read_doc provide shipped documentation. plan_update validates a "
         "change and access; apply_update applies authorized changes. "
         "create_workflow creates a configured employee team through the shared "
@@ -920,9 +1026,11 @@ class AgentBuilderNode(ToolNode):
             rules = None
         else:
             from services.employees.policy import asks_first
+            from services.node_allowlist import is_hire_allowed
 
             available_tools = await _employee_tools(employee)
-            available_agents = [entry for entry in _catalogue_agents() if not _is_team_lead(entry["type"])] if employee.row.team_plan else []
+            available_agents = [entry for entry in _catalogue_agents() if not _is_team_lead(entry["type"])
+                                and is_hire_allowed(entry["type"])] if employee.row.team_plan else []
             rules = {"asks_first": asks_first(employee.row), "agents": employee.agents}
 
         parts = [f"{len(canvas.nodes)} nodes"]
@@ -970,27 +1078,12 @@ class AgentBuilderNode(ToolNode):
                     "Call inspect_canvas for the full catalogue with descriptions.",
                 )
             label = getattr(get_node_class(node_type), "display_name", "") or node_type
-            tool_params: Dict[str, Any] = {}
             targets = [caller] if caller else []
         else:
-            from services.employees.policy import check_tool
-
             if get_node_class(node_type) is None:
                 # Not a node type at all (a display name, say): a hint for
                 # the agent, not a refusal to pass on.
                 return _refused("add_tool", f"add_tool: '{node_type}' is not a node type. Use a type from inspect_canvas available_tools.")
-            app = None
-            if _app_field(node_type) is not None:
-                # One type, many apps: the agent says which (its app_id).
-                app = (await _owner_apps()).get(params.app_id) if params.app_id else None
-                if app is None:
-                    return _refused("add_tool", f"add_tool: '{node_type}' needs the app_id of its entry in inspect_canvas available_tools.")
-            decision = check_tool(node_type, employee=employee.row, connected=await _connected_apps(), app=app)
-            if not decision.allowed:
-                return _refused("add_tool", decision.reason)
-            label, tool_params = decision.label, dict(decision.params)
-            if decision.app is None and "timezone" in tool_params:
-                tool_params["timezone"] = await _owner_timezone(database)
             target = params.target_member_id or caller
             if target not in employee.agents:
                 return _refused("add_tool", "Choose a member of this employee’s team.")
@@ -998,17 +1091,31 @@ class AgentBuilderNode(ToolNode):
         problem = _unsaved(canvas, targets)
         if problem:
             return _refused("add_tool", problem)
+        if set(params.tool_parameters) - {node_type}:
+            return _refused("add_tool", "Supply settings only for the tool being added.")
+        try:
+            supplied = _validated_tool_settings(node_type, params.tool_parameters.get(node_type, {}))
+            tool_params = supplied
+            if employee is not None:
+                label, tool_params = await _employee_tool_settings(database, employee, node_type,
+                    str(canvas.node(targets[0])["type"]), supplied, await _connected_apps(), params.app_id, params.operation)
+        except ValueError as exc:
+            return _refused("add_tool", str(exc))
         # A type several apps share is the agent's tool only on the node
         # naming the same app.
         field_name = _app_field(node_type)
         named = (field_name, str(tool_params[field_name])) if field_name and tool_params.get(field_name) else None
         current: Dict[str, Dict[str, Any]] = {}
-        if named is not None:
+        if named is not None or supplied:
             for target in targets:
                 for source in canvas.sources(target, TOOLS_INPUT):
                     if (canvas.node(source) or {}).get("type") == node_type:
                         current[source] = await database.get_node_parameters(source) or {}
-        expanded = [target for target in targets if _existing_tool(canvas, target, node_type, named, current) is None]
+        expanded = []
+        for target in targets:
+            existing = _existing_tool(canvas, target, node_type, named, current)
+            if not existing or any(current.get(existing, {}).get(key) != value for key, value in supplied.items()):
+                expanded.append(target)
         grant_ids: List[str] = []
         if employee is not None and expanded:
             permission = await _permission(database, ctx, params, node_type, expanded, {"parameters": tool_params}, grant_ids)
@@ -1047,21 +1154,25 @@ class AgentBuilderNode(ToolNode):
                 raise ValueError("The target agent was removed")
             target = targets[0]
             existing = _existing_tool(live, target, node_type, named, saved_tool_parameters)
+            previous = saved_tool_parameters.get(existing, {})
+            patch = {key: value for key, value in supplied.items() if previous.get(key) != value} if existing else {}
+            if employee is not None and target not in expanded and (existing is None or patch):
+                raise ValueError("Access must be checked again for the changed binding")
             owners = {str(edge.get("target")) for edge in live.edges if edge.get("source") == existing and
                       (edge.get("targetHandle") or edge.get("target_handle")) == TOOLS_INPUT} if existing else set()
             if existing and owners == {target}:
-                return GraphAdditions(), {"tool": existing}
+                return GraphAdditions(merges=(ParamMerge(existing, patch),) if patch else ()), {"tool": existing}
             x, y = live.position(targets[0])
             spread = 170 * len(live.sources(targets[0], TOOLS_INPUT))
             return GraphAdditions(
-                nodes=(NewNode("tool", node_type, label, saved_tool_parameters.get(existing, {}) if existing else tool_params, position=(x - 240 + spread, y + 240)),),
+                nodes=(NewNode("tool", node_type, label, {**previous, **patch} if existing else tool_params, position=(x - 240 + spread, y + 240)),),
                 edges=(tool_edge("tool", target),),
                 removed_edges=(EdgeRemoval(existing, target, TOOLS_INPUT),) if existing else (),
             ), {}
         try:
             result = await _save(ctx, database, canvas, GraphAdditions(), params, caller, prepare=prepare, grant_ids=grant_ids, read_for_prepare=read_tool_parameters)
-        except _AccessChanged:
-            return _refused("add_tool", "The owner’s permission changed. Ask them to allow access again.")
+        except _AccessChanged as exc:
+            return _refused("add_tool", str(exc))
         except ValueError:
             logger.warning("Agent Builder change no longer fits the workflow", workflow_id=canvas.workflow_id, exc_info=True)
             return _refused("add_tool", "The workflow changed while I was adding to it. Try again.")
@@ -1192,8 +1303,8 @@ class AgentBuilderNode(ToolNode):
         edges = tuple(skill_edge("skills" if nodes else str(shared), target) for target in bare)
         try:
             result = await _save(ctx, database, canvas, GraphAdditions(nodes=nodes, edges=edges, merges=tuple(merges)), params, caller, grant_ids=grant_ids)
-        except _AccessChanged:
-            return _refused("add_skill", "The owner’s permission changed. Ask them to allow access again.")
+        except _AccessChanged as exc:
+            return _refused("add_skill", str(exc))
         except ValueError:
             logger.warning("Agent Builder change no longer fits the workflow", workflow_id=canvas.workflow_id, exc_info=True)
             return _refused("add_skill", "The workflow changed while I was adding to it. Try again.")
@@ -1224,6 +1335,44 @@ class AgentBuilderNode(ToolNode):
         return AgentBuilderOutput(operation="add_skill", summary=summary, operations=[], request_id=_mutation_id(ctx, params, caller), saved_revision=result.saved_revision, activation_state="saved")
 
     # ---- add_subagent -----------------------------------------------------
+
+    async def _equip_existing_member(self, ctx: NodeContext, params: AgentBuilderParams, member: str) -> AgentBuilderOutput:
+        """Reuse the member's normal, permission-checked tool and skill mutations."""
+        requests = [
+            AgentBuilderParams(operation="add_tool", target_member_id=member, node_type=kind,
+                               app_id=params.app_id, tool_parameters={kind: params.tool_parameters.get(kind, {})})
+            for kind in dict.fromkeys(params.tool_types)
+        ] + [
+            AgentBuilderParams(operation="add_skill", target_member_id=member, skill_name=name)
+            for name in dict.fromkeys(params.skill_names)
+        ]
+        request_key = _mutation_id(ctx, params, _caller(ctx))
+        pending = []
+        revision = None
+        # Check the whole request before saving any addition. Each write uses
+        # its own ledger key and rechecks its approved scope inside the save.
+        for planning in (True, False):
+            for index, request in enumerate(requests):
+                context = replace(ctx, raw={**(ctx.raw or {}), "tool_call_id": f"{request_key}:member:{index}",
+                                            "save_after_builder_review": not params.dry_run})
+                action = self.add_tool if request.operation == "add_tool" else self.add_skill
+                result = await action(context, request.model_copy(update={"dry_run": planning}))
+                if planning and result.required_access:
+                    pending.extend(result.required_access)
+                    continue
+                if result.activation_state == "blocked" or result.validation_issues:
+                    return result.model_copy(update={"operation": "add_subagent", "member_id": member})
+                revision = result.saved_revision or revision
+            if pending:
+                return AgentBuilderOutput(operation="add_subagent", member_id=member, activation_state="blocked",
+                    operations=[], required_access=pending,
+                    summary="The specialist is already on this team. The owner must approve the requested capabilities.")
+            if params.dry_run:
+                return AgentBuilderOutput(operation="add_subagent", member_id=member, activation_state="planned",
+                    operations=[], summary="The requested capabilities can be added to this specialist.")
+        return AgentBuilderOutput(operation="add_subagent", member_id=member, activation_state="saved",
+            operations=[], saved_revision=revision, request_id=request_key,
+            summary=f"The specialist ({member}) is on the team with the requested tools and skills. {_APPLY_HINT}")
 
     @Operation("add_subagent")
     async def add_subagent(
@@ -1258,12 +1407,20 @@ class AgentBuilderNode(ToolNode):
             )
         if _is_team_lead(agent_type):
             return _refused("add_subagent", f"add_subagent: cannot spawn another team-lead ('{agent_type}'); pick a specialized agent instead.")
+        if employee is not None:
+            from services.node_allowlist import is_hire_allowed
+            if not is_hire_allowed(agent_type):
+                return _refused("add_subagent", f"'{agent_type}' is disabled for hired employees.")
         problem = _unsaved(canvas, [str(caller)])
         if problem:
             return _refused("add_subagent", problem)
         # Custom aiAgent teammates are repeatable (their delegation identity
         # is per node); every other type has one type-wide delegate name.
         existing = None if agent_type == "aiAgent" else canvas.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
+        if set(params.tool_parameters) - set(params.tool_types):
+            return _refused("add_subagent", "Each configured tool must also appear in tool_types.")
+        if existing and employee is not None and employee.row.team_plan and (params.tool_types or params.skill_names):
+            return await self._equip_existing_member(ctx, params, existing)
         x, y = canvas.position(str(caller))
         label = getattr(get_node_class(agent_type), "display_name", "") or agent_type
         caller_params = await database.get_node_parameters(str(caller)) or {}
@@ -1272,54 +1429,61 @@ class AgentBuilderNode(ToolNode):
             f"{getattr(get_node_class(agent_type), 'description', '')} Work only on the lead's assigned mission. "
             "Use the supplied context and acceptance criteria, return evidence and a result for lead review, and never publish a final reply independently."
         )
-        from services.plugin.base import locked_tool_fields
-
         nodes = [NewNode("agent", agent_type, label, specialist_params, position=(x + 300, y + 200)),
                  NewNode("context", _CONTEXT_TYPE, "Context", position=(x + 300, y + 20), context_of="agent")]
         edges = [Edge("agent", _TEAMMATE_OUTPUT, str(caller), _TEAMMATES_INPUT)]
         bundled_tool_types: set[str] = set()
+        allowed_tools = _allowed_tool_types()
         if agent_type == "browser_agent":
             from services.browser_agent_recipe import BROWSER_AGENT_ROLE, browser_agent_additions
-            if not {"browser", "visionAnalyze"}.issubset(_allowed_tool_types()) or "web_agent" in _allowlist_config().get("disabled_skill_folders", []):
+            if not {"browser", "visionAnalyze"}.issubset(allowed_tools) or "web_agent" in _allowlist_config().get("disabled_skill_folders", []):
                 return _refused("add_subagent", "Browser tools or instructions are disabled by the operator.")
             specialist_params["system_message"] = BROWSER_AGENT_ROLE + "\n" + specialist_params["system_message"]
             bundle = browser_agent_additions(agent_parameters=specialist_params, position=(x + 300, y + 200))
             nodes = list(bundle.nodes)
             edges.extend(bundle.edges)
             bundled_tool_types.update({"browser", "visionAnalyze"})
-        for index, tool_type in enumerate(dict.fromkeys(params.tool_types)):
-            if tool_type not in _allowed_tool_types():
-                return _refused("add_subagent", f"The specialist cannot use '{tool_type}'. Inspect available tools first.")
-            cls = get_node_class(tool_type)
-            config = params.tool_parameters.get(tool_type, {})
-            if set(config) & (set(locked_tool_fields(cls)) | {"api_key", "access_token", "refresh_token", "password", "secret"}):
-                return _refused("add_subagent", "Specialist tools must use existing connections and preserve locked settings.")
-            try:
-                validated = cls.Params.model_validate(config).model_dump(exclude_unset=True)
-            except ValueError:
-                return _refused("add_subagent", f"'{tool_type}' needs valid configuration. Inspect its node contract first.")
-            if agent_type == "browser_agent" and tool_type in {"browser", "visionAnalyze"}:
-                # These private tools are already present in the shared recipe.
-                continue
-            ref = f"tool_{index}"
-            nodes.append(NewNode(ref, tool_type, getattr(cls, "display_name", "") or tool_type, validated, position=(x + 160 + index * 170, y + 440)))
-            edges.append(tool_edge(ref, "agent"))
         if agent_type == "coding_agent" and not existing:
             from services.coding_agent_recipe import coding_agent_additions, default_pi_tool_types
 
             bundled_tool_types.update(default_pi_tool_types())
-            if not bundled_tool_types.issubset(_allowed_tool_types()):
+            if not bundled_tool_types.issubset(allowed_tools):
                 return _refused("add_subagent", "Pi coding tools are disabled by the operator.")
-            # Explicit tools keep their validated configuration and identity.
             bundle = coding_agent_additions(position=(x + 300, y + 200),
-                create_agent=False, create_context=False, exclude_tool_types=params.tool_types)
+                create_agent=False, create_context=False)
             nodes.extend(bundle.nodes)
             edges.extend(bundle.edges)
+        tool_settings = {}
+        connected = await _connected_apps() if employee is not None else []
+        for index, tool_type in enumerate(dict.fromkeys([*params.tool_types, *sorted(bundled_tool_types)])):
+            if tool_type not in allowed_tools:
+                return _refused("add_subagent", f"The specialist cannot use '{tool_type}'. Inspect available tools first.")
+            tool_label = getattr(get_node_class(tool_type), "display_name", "") or tool_type
+            try:
+                settings = _validated_tool_settings(tool_type, params.tool_parameters.get(tool_type, {}))
+                if employee is not None:
+                    tool_label, settings = await _employee_tool_settings(database, employee, tool_type, agent_type,
+                        settings, connected, params.app_id, params.operation)
+            except ValueError as exc:
+                return _refused("add_subagent", str(exc))
+            if settings:
+                tool_settings[tool_type] = settings
+            if tool_type not in bundled_tool_types:
+                ref = f"tool_{index}"
+                nodes.append(NewNode(ref, tool_type, tool_label, settings, position=(x + 160 + index * 170, y + 440)))
+                edges.append(tool_edge(ref, "agent"))
+        nodes = [replace(node, params={**node.params, **tool_settings[node.type]})
+                 if node.type in bundled_tool_types and node.type in tool_settings else node for node in nodes]
         skill_config = {}
         if agent_type == "browser_agent":
             skill_config.update(next(node.params["skills_config"] for node in nodes if node.ref == "skills"))
         for name in dict.fromkeys(params.skill_names):
-            skill = await _find_skill(database, name, employee=False)
+            if employee is not None:
+                from services.employees.policy import check_skill
+                decision = check_skill(name)
+                if not decision.allowed:
+                    return _refused("add_subagent", decision.reason)
+            skill = await _find_skill(database, name, employee=employee is not None)
             if skill is None:
                 return _refused("add_subagent", f"There is no available skill called '{name}'.")
             skill_config[name] = {"enabled": True, "instructions": skill.instructions, "description": skill.description, "isCustomized": False}
@@ -1328,7 +1492,6 @@ class AgentBuilderNode(ToolNode):
 
             skill_config[SKILL_TOOL_NAME] = dict(SKILL_TOOL_ENTRY)
             if agent_type == "browser_agent":
-                from dataclasses import replace
                 nodes = [replace(node, params={**node.params, "skills_config": skill_config}) if node.ref == "skills" else node for node in nodes]
             else:
                 nodes.append(NewNode("skills", _MASTER_SKILL_TYPE, "Specialist skills", {"skill_folder": "assistant", "skills_config": skill_config}, position=(x + 20, y + 200)))
@@ -1340,7 +1503,7 @@ class AgentBuilderNode(ToolNode):
         if employee is not None and not existing:
             permission = await _permission(database, ctx, params, agent_type, [str(caller)], {
                 "purpose": specialist_params["system_message"], "tool_types": sorted(set(params.tool_types) | bundled_tool_types),
-                "tool_parameters": params.tool_parameters, "skill_names": sorted(set(params.skill_names)),
+                "tool_parameters": tool_settings, "skill_names": sorted(set(params.skill_names)),
                 "model": specialist_params.get("model"), "provider": specialist_params.get("provider"),
             }, grant_ids)
             if permission:
@@ -1352,21 +1515,28 @@ class AgentBuilderNode(ToolNode):
             if live.node(caller) is None:
                 raise ValueError("The lead was removed")
             reused = None if agent_type == "aiAgent" else live.source_of_type(str(caller), _TEAMMATES_INPUT, agent_type)
+            if existing and existing != reused:
+                raise ValueError("The specialist was removed or replaced")
             return (GraphAdditions(), {"agent": reused}) if reused else (additions, {})
         try:
             result = await _save(ctx, database, canvas, additions, params, caller, prepare=prepare, grant_ids=grant_ids)
-        except _AccessChanged:
-            return _refused("add_subagent", "The owner’s permission changed. Ask them to allow access again.")
+        except _AccessChanged as exc:
+            return _refused("add_subagent", str(exc))
         except ValueError:
             logger.warning("Agent Builder change no longer fits the workflow", workflow_id=canvas.workflow_id, exc_info=True)
             return _refused("add_subagent", "The workflow changed while I was adding to it. Try again.")
         if result is None:
             return _refused("add_subagent", "Save the workflow first, then ask again.")
         if not any(op.get("type") == "add_node" for op in result.operations):
-            return _refused("add_subagent", f"Teammate '{agent_type}' is already wired to you (node id={result.node_ids.get('agent') or existing}). Reusing existing instance.")
+            member = result.node_ids.get("agent") or existing
+            if employee is not None and (params.tool_types or params.skill_names):
+                return await self._equip_existing_member(ctx, params, member)
+            return AgentBuilderOutput(operation="add_subagent", operations=[], member_id=member, activation_state="saved",
+                summary=f"Teammate '{agent_type}' is already wired to the lead (node id={member}).")
         label = result.labels.get("agent") or label
         return AgentBuilderOutput(
             operation="add_subagent",
+            member_id=result.node_ids["agent"],
             summary=f"Added '{label}' with its own Context and scoped capabilities. Assign work through Task Manager for lead review. {_summary_suffix(ctx) if _caller(ctx) == caller else _APPLY_HINT}",
             operations=_scoped_runtime_operations(result.operations, _caller(ctx)),
             request_id=_mutation_id(ctx, params, caller), activation_state="saved",

@@ -4,7 +4,7 @@ description: How to use the Agent Builder tool (agent_builder) to inspect your c
 allowed-tools: "agentBuilder"
 metadata:
   author: opencompany
-  version: "5.3"
+  version: "5.4"
   category: autonomous
 ---
 
@@ -19,9 +19,9 @@ You are connected to an **Agent Builder** node. It gives you ONE tool,
 | `inspect_node` | Read the live parameter/output schemas, handles, credential requirements, locked fields, availability, and related documentation for a node ID or type. |
 | `search_docs` | Search shipped node logic flows, plugin Markdown, skills, guides, RFCs, and project documentation. |
 | `read_doc` | Read a bounded section by manifest document ID; follow the returned relative links by document ID. |
-| `add_tool` | Wire a tool to you (`node_type` from `available_tools`). |
-| `add_skill` | Give you a skill (`skill_name` from `available_skills`). |
-| `add_subagent` | Team leads only: add a teammate (`agent_type` from `available_agents`). |
+| `add_tool` | Wire a tool from `available_tools` to the selected employee member or the caller. |
+| `add_skill` | Give a skill from `available_skills` to the selected employee member or the caller. |
+| `add_subagent` | Add a specialist from `available_agents` to the existing lead. Managed Talk can do this on its lead's behalf. |
 | `plan_update` | Validate a complete scoped change and report required owner access without mutating the graph. |
 | `apply_update` | Apply the same authorized configuration, or apply saved capabilities at a safe point. |
 | `create_workflow` | Create a fully configured employee team using the shared Hire pipeline, from a trusted owner request. |
@@ -77,15 +77,22 @@ you are one of the owner's AI employees. Then:
   can be added. Say so plainly; do not look for a way around it.
 - `available_skills` lists the owner's own skills (Settings > Skills) and
   the Discover skills. A skill's text is copied in when you add it.
-- A managed team may add relevant specialists only after the owner approves
-  their purpose and scoped capabilities. Public app messages cannot authorize
-  expansion. Existing single-agent employees first need reviewed conversion.
-- Changes work for you now, in this conversation. They become part of all
-  your work once the owner presses **Apply** on your page. Current work
-  finishes before the updated setup becomes active; paused employees stay
-  paused. Tell the owner when abilities are saved but not available in
-  the current run. Do not use Reset to apply capabilities. Only stop work
-  when the owner explicitly approves **Stop work and apply**.
+- When a job needs a missing specialist, inspect the team and call
+  `add_subagent` with its purpose and capabilities. If you offered to add a
+  Coding Agent and the owner replies “continue”, that is your cue to make
+  the Builder call. When Ask first is off, carry out the authenticated owner's
+  request directly. If `add_subagent` reports `saved`, verify the specialist on
+  the canvas and proceed to safe Apply. Only when `required_access` contains a
+  request should you direct the owner to **Allow and add** on the employee
+  page. That choice approves and saves the specialist. `plan_update` previews
+  the change. Call `add_subagent` to make it. Only authenticated owner requests in Talk can expand access.
+  Existing single-agent employees need reviewed conversion.
+- After Builder saves the specialist, call `apply_update` with
+  `change_operation="apply_saved"` for safe activation, or the owner can
+  press **Apply**. Report the returned activation state. If activation
+  is waiting, keep any job that needs the new specialist pending until
+  Apply completes. Only interrupt current work when the owner explicitly
+  approves **Stop work and apply**.
 - **When a change is refused, the summary is one plain sentence meant for
   the owner.** Pass it on as it is, for example: *"Google Calendar can send
   things on your behalf, so it stays off while "Ask me before sending
@@ -140,11 +147,14 @@ An already enabled skill changes nothing.
 
 ### `add_subagent`
 
-Fields: `agent_type`, optional `purpose`, `tool_types`, `tool_parameters`,
-and `skill_names`. Team leads only (`orchestrator_agent`, `ai_employee`),
-and never another team lead. Adds a specialized agent with its own Context
-and wires it to the lead's `input-teammates`. On a managed hire, Talk can
-request a specialist for the employee's lead. The lead assigns the first
+Supply `agent_type`, `purpose`, and any `tool_types`, `tool_parameters` or
+`skill_names` the request needs. On a managed hire, Talk can do this for
+the existing AI Employee lead. An editor team lead can call it directly.
+Use `coding_agent` for software development and `browser_agent` for a
+specialist with its own Browser and Vision tools. For a specialist already
+on the team, give additional tools or skills to its `target_member_id`.
+Builder connects new specialists to the lead's `input-teammates` and gives
+each a private Context. The lead assigns the first
 task through its Task Manager with the advertised
 `spawn_<teammate>(instructions, after?)` tool. Include the mission, context
 and acceptance criteria in `instructions` and any prerequisite task references

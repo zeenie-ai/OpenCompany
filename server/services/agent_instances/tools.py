@@ -111,7 +111,7 @@ OPERATIONS: dict[str, tuple[type[Input], str, frozenset[str]]] = {
     "resume_agent": (AgentInput, "Explicitly resume an agent's held inbox. Failed tasks require retry_task.", frozenset({"mutates_lifecycle"})),
     "close_agent": (AgentInput, "Close an idle agent only after its outstanding tasks and messages are resolved.", frozenset({"mutates_lifecycle"})),
     "finish_team": (EmptyInput, "Finish this job after required work has passed the review and delivery gates.", frozenset({"mutates_lifecycle"})),
-    "submit_job": (InstructionsInput, "Give substantive work to the employee's team and receive an acknowledgement; the reviewed result follows.", frozenset({"mutates_lifecycle"})),
+    "submit_job": (InstructionsInput, "Submit work the currently connected specialists can perform and get its job receipt. Use Agent Builder first for a missing specialist or a requested team change.", frozenset({"mutates_lifecycle"})),
     "get_job_status": (JobStatusInput, "Read the actual saved status of this employee's job before reporting progress or submitting it again. Queued is not started, and a failed job will not finish by waiting.", frozenset()),
 }
 

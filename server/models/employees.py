@@ -129,6 +129,7 @@ class EmployeeGrant(SQLModel, table=True):
     member_id: str = Field(default="", max_length=255)
     account_id: str = Field(default="", max_length=255)
     limits: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    pending_change: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     revoked_at: Optional[datetime] = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
 
 

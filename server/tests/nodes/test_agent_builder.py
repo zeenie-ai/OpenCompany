@@ -605,10 +605,9 @@ class TestAddSubagent:
         permission = AsyncMock(return_value=ab.AgentBuilderOutput(operation="add_subagent", activation_state="blocked"))
         monkeypatch.setattr(ab, "_permission", permission)
 
-        await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent", tool_types=["httpRequest"],
-            tool_parameters={"httpRequest": {"url": "https://example.com"}})
+        await call("add_subagent", ctx("7:orchestrator_agent:1"), agent_type="coding_agent", tool_types=["duckduckgoSearch"])
 
-        assert set(permission.await_args.args[5]["tool_types"]) == {*default_pi_tool_types(), "httpRequest"}
+        assert set(permission.await_args.args[5]["tool_types"]) == {*default_pi_tool_types(), "duckduckgoSearch"}
         assert builder.frames == []
 
     async def test_an_existing_teammate_is_reused(self, builder, database):

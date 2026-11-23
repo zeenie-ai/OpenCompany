@@ -1795,7 +1795,32 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
             raise ApplicationError("Invalid Coding Agent tool mode", type="CodingToolModeInvalid", non_retryable=True)
 
     if instance_talk:
-        system_message += ("\n\nFor substantive team work, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. "
+        from services.employees.prompt import TALK_TEAM_CHANGES
+
+        roster = sorted({member["node_type"] for member in employee_plan.get("members", []) if member.get("node_type")})
+        system_message += "\n\nSpecialist types in the current team for this job: " + (", ".join(roster) or "none") + "."
+        if any(tool["node_type"] == "agentBuilder" for tool in tools_payload):
+            from services.approvals.rules import ask_first
+
+            # Existing hires keep their saved instructions. Supply today's routing
+            # when preparing a new turn without rewriting the owner's prompt.
+            if TALK_TEAM_CHANGES not in system_message:
+                system_message += "\n" + TALK_TEAM_CHANGES
+            try:
+                current_ask_first = await ask_first(database, workflow_id)
+            except Exception:
+                activity.logger.warning("Could not read Ask first for the employee Talk prompt", exc_info=True)
+                current_ask_first = None
+            if current_ask_first is not None:
+                state = "on" if current_ask_first else "off"
+                system_message += f"\nThe current Ask first setting for this employee is {state}. It supersedes earlier instructions about that setting."
+            system_message += (
+                "\nWhen the owner requests a team change, call Agent Builder immediately. The tool checks the current rule. "
+                "Ask the owner to act only when the tool reports required_access or waiting_for_owner."
+            )
+        else:
+            system_message += "\nAgent Builder is unavailable in this turn. If a team change is needed, report the missing Builder connection."
+        system_message += ("\nFor work the current team can perform, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. "
                            "Use get_job_status before reporting progress or retrying a job. Queued does not mean started or completed. "
                            "If the job failed, report its failure instead of telling the owner to keep waiting. Keep this conversation with the owner.")
     elif context.get("agent_instance_id"):

@@ -306,7 +306,7 @@ async def handle_list_employee_access(data: Dict[str, Any], websocket: WebSocket
 @ws_response
 async def handle_decide_employee_access(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
     from core.container import container
-    from services.employees.permissions import decide_access
+    from services.employees.permissions import decide_access, finish_approved_change
     # request_id belongs to the socket transport. Older direct service calls
     # without a message type may still supply the domain ID under that name.
     identifier = data.get("access_request_id")
@@ -315,8 +315,10 @@ async def handle_decide_employee_access(data: Dict[str, Any], websocket: WebSock
     request_id = identifier.strip() if isinstance(identifier, str) else ""
     if not request_id or not isinstance(data.get("allow"), bool):
         return {"success": False, "error": "invalid_request"}
-    allowed = await decide_access(container.database(), request_id, execution_principal(data, websocket), data["allow"])
-    return {"success": allowed, **({} if allowed else {"error": "not_found"})}
+    database, owner = container.database(), execution_principal(data, websocket)
+    if not await decide_access(database, request_id, owner, data["allow"]):
+        return {"success": False, "error": "not_found"}
+    return await finish_approved_change(database, request_id, owner) if data["allow"] else {"success": True}
 
 
 @ws_response

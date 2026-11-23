@@ -157,7 +157,8 @@ async def test_approved_specialist_commits_team_metadata_and_linked_access(build
         return True
 
     monkeypatch.setattr("services.employees.permissions.trusted_owner_request", trusted)
-    config = {"agent_type": "web_agent", "purpose": "Research evidence", "tool_types": ["httpRequest"], "tool_parameters": {"httpRequest": {"url": "https://example.com"}}}
+    config = {"agent_type": "web_agent", "purpose": "Research evidence", "tool_types": ["duckduckgoSearch"],
+              "tool_parameters": {"duckduckgoSearch": {"max_results": 3}}}
     review = await call("add_subagent", ctx(lead), **config)
     assert len(review.required_access) == 1
     request_id = review.required_access[0]["request_id"]
@@ -169,7 +170,8 @@ async def test_approved_specialist_commits_team_metadata_and_linked_access(build
     assert employee.node_roles["specialist_1"] == member["node_id"]
     assert employee.node_roles["specialist_1_context"] == member["context_node_id"]
     assert len(member["tools"]) == 1
+    assert await database.get_node_parameters(member["tools"][0]) == {"max_results": 3}
     async with database.get_session() as session:
         grants = (await session.execute(select(EmployeeGrant).where(EmployeeGrant.member_id == member["node_id"]))).scalars().all()
-    assert {grant.capability for grant in grants} == {"web_agent", "httpRequest"}
+    assert {grant.capability for grant in grants} == {"web_agent", "duckduckgoSearch"}
     assert all(grant.limits["parent_grant_id"] == request_id for grant in grants)

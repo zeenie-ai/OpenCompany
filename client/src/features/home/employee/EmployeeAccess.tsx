@@ -2,8 +2,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import { Button } from '@/components/ui/button';
 import { pillToast } from '../ui/pillToast';
+import { refreshEmployee } from '../data/employees';
 
-interface Access { id: string; app: string; action?: string; approved: boolean; revoked: boolean; parent_grant_id?: string | null; scope_apps?: string[]; account_id?: string }
+interface Access { id: string; app: string; action?: string; approved: boolean; revoked: boolean; change_pending?: boolean; parent_grant_id?: string | null; scope_apps?: string[]; account_id?: string }
+
+function describeAccess(row: Access, name: string) {
+  if (row.revoked) return `${name}’s team no longer has access to ${row.app}.`;
+  if (row.approved && row.change_pending) return `Access to ${row.app} is approved. The team change still needs to be saved.`;
+  const purpose = row.action || 'help with their assigned work';
+  if (row.approved) return `${name}’s team can use ${row.app} to ${purpose}.`;
+  return `Allow ${name}’s team to use ${row.app} to ${purpose}?`;
+}
+
+function allowButtonLabel(row: Access) {
+  if (row.revoked) return 'Allow again';
+  if (row.approved) return 'Retry team change';
+  return row.change_pending ? 'Allow and add' : 'Allow';
+}
 
 /** The access choices are neutral outlines: colour marks a state or a role,
  *  not a decision. */
@@ -19,10 +34,20 @@ export function EmployeeAccess({ workflowId, name, pendingOnly = false }: { work
     return response.access || [];
   }, refetchInterval: 5000 });
   const decide = useMutation({ mutationFn: async ({ id, allow }: { id: string; allow: boolean }) => {
-    const response = await sendRequest<{ success: boolean }>('decide_employee_access', { access_request_id: id, allow });
-    if (!response?.success) throw new Error('That permission could not be changed.');
-  }, onSuccess: () => cache.invalidateQueries({ queryKey: key }), onError: (error: Error) => pillToast(error.message, { tone: 'error' }) });
-  const rows = (access.data || []).filter((row) => !row.parent_grant_id && (!pendingOnly || (!row.approved && !row.revoked)));
+    const response = await sendRequest<{ success: boolean; activation_state?: string; message?: string }>('decide_employee_access', { access_request_id: id, allow });
+    if (!response?.success) throw new Error(response?.message || 'That permission could not be changed.');
+    if (response.activation_state === 'saved') {
+      refreshEmployee(cache, workflowId);
+      pillToast('Team change saved. Apply it for future work.', { tone: 'success' });
+    } else if (response.activation_state === 'superseded' && response.message) {
+      refreshEmployee(cache, workflowId);
+      pillToast(response.message, { tone: 'info' });
+    } else if (allow && access.data?.some(row =>
+      row.id === id && !row.approved && !row.revoked && !row.change_pending && row.scope_apps?.length)) {
+      pillToast('Access approved. Repeat the request in Talk to add the specialist.', { tone: 'success' });
+    }
+  }, onSettled: () => cache.invalidateQueries({ queryKey: key }), onError: (error: Error) => pillToast(error.message, { tone: 'error' }) });
+  const rows = (access.data || []).filter((row) => !row.parent_grant_id && (!pendingOnly || (!row.revoked && (!row.approved || row.change_pending))));
   if (pendingOnly && !rows.length) return null;
   return <div className="flex flex-col gap-3 rounded-card border border-border-default bg-bg-panel p-4">
     {!pendingOnly && <p className="m-0 font-medium">{name}’s app access</p>}
@@ -30,11 +55,11 @@ export function EmployeeAccess({ workflowId, name, pendingOnly = false }: { work
     {!access.isLoading && !rows.length && !pendingOnly && <p className="m-0 text-sm text-fg-muted">No app permissions to review.</p>}
     {rows.map((row) => <div key={row.id} className="flex flex-wrap items-center gap-3">
       <div className="min-w-0 flex-1">
-        <p className="m-0 text-sm">{row.revoked ? `${name}’s team no longer has access to ${row.app}.` : row.approved ? `${name}’s team can use ${row.app} to ${row.action || 'help with their assigned work'}.` : `Allow ${name}’s team to use ${row.app} to ${row.action || 'help with their assigned work'}?`}</p>
+        <p className="m-0 text-sm">{describeAccess(row, name)}</p>
         {row.scope_apps?.length ? <p className="mb-0 mt-1 text-sm text-fg-muted">Includes {row.scope_apps.join(', ')} for {row.action || 'their assigned work'}.</p> : null}
         {row.account_id && <p className="mb-0 mt-1 text-sm text-fg-muted">Account: {row.account_id}</p>}
       </div>
-      {(!row.approved || row.revoked) && <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: true })} className={DECIDE_BUTTON}>{row.revoked ? 'Allow again' : 'Allow'}</Button>}
+      {(!row.approved || row.revoked || row.change_pending) && <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: true })} className={DECIDE_BUTTON}>{allowButtonLabel(row)}</Button>}
       {!row.revoked && <Button variant="quiet" disabled={decide.isPending} onClick={() => decide.mutate({ id: row.id, allow: false })} className={DECIDE_BUTTON}>{row.approved ? 'Remove access' : 'Not now'}</Button>}
     </div>)}
   </div>;

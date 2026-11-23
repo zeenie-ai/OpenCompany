@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import nodes  # noqa: F401
@@ -51,7 +51,9 @@ async def started(real_database, monkeypatch):
         session.add(Employee(id="employee", workflow_id="7", owner_id="owner", hire_state="ready",
                              team_plan=built.team_plan, node_roles=built.node_roles))
         await session.commit()
-    monkeypatch.setattr(real_database, "get_workflow", AsyncMock(return_value=SimpleNamespace(data=saved, slug="Leo_1")))
+    assert await real_database.save_workflow("7", "Leo", "Leo_1", saved)
+    for node_id, parameters in normalized.node_parameters.items():
+        assert await real_database.save_node_parameters(node_id, parameters)
     # Temporal and the status broadcasts are the only parts not run for real.
     workflow_service = SimpleNamespace(
         is_workflow_deployed=lambda _workflow_id: False,
@@ -140,10 +142,54 @@ async def test_a_run_outside_a_started_generation_has_no_plan(started):
     assert await employee_runtime_plan(started.database, context) is None
 
 
+async def add_and_apply_coder(started, talk, monkeypatch):
+    """Use the owner's admitted Talk tool and hand the saved graph to the running generation."""
+    from services.chat.ledger import admit_message, finish_run, start_run
+    from services.employees.safe_apply import apply_saved_changes
+    from services.employees.team_runtime import team_plan_in
+    from services.handlers.tools import execute_tool
+
+    db = started.database
+    assert all(member["node_type"] != "coding_agent" for member in started.plan["members"])
+    chat = await admit_message(db, session_id="7", workflow_id="7", execution_id="add-coder",
+                               text="Add a Coding Agent to my team.", track=True)
+    claim = {"run_id": chat.run.run_id, "temporal_workflow_id": "add-coder", "temporal_run_id": "run"}
+    assert await start_run(db, **claim)
+    builder = started.roles["builder"]
+    config = {**talk, "parent_node_id": talk["node_id"], "node_id": builder, "tool_node_id": builder,
+              "node_type": "agentBuilder", "run_scope": {"run_id": chat.run.run_id}, "tool_call_id": "add-coder",
+              "parameters": talk["parameter_snapshot"].get(builder, {})}
+    change = await execute_tool("agent_builder", {"operation": "add_subagent", "agent_type": "coding_agent"}, config)
+    assert change.get("activation_state") == "saved" and not change.get("required_access"), change
+    coder = change["member_id"]
+    assert all(node["id"] != coder for node in started.control.graph_snapshot["nodes"])
+    assert await finish_run(db, success=True, **claim)
+
+    # Safe Apply loads the new graph and parameters from storage. Only its
+    # deployment manager and external Temporal controller are stand-ins.
+    manager = SimpleNamespace(_deployments={}, pause=Mock(), resume=AsyncMock())
+    service = SimpleNamespace(_get_deployment_manager=lambda: manager, get_deployment_status=lambda _: {})
+    with monkeypatch.context() as runtime:
+        runtime.setattr("core.container.container", SimpleNamespace(
+            database=lambda: db, settings=lambda: SimpleNamespace(temporal_enabled=True),
+            temporal_client=lambda: SimpleNamespace(client=None), workflow_service=lambda: service))
+        runtime.setattr("services.deployment.handlers._controller_handle", lambda _: SimpleNamespace(execute_update=AsyncMock()))
+        runtime.setattr("services.deployment.handlers._set_cron_pause", AsyncMock())
+        applied = await apply_saved_changes(db, "7", owner_id="owner", key="add-coder")
+    assert applied == {"success": True, "activation_state": "running"}
+    control = await db.get_latest_workflow_control("7")
+    assert control.generation == started.control.generation
+    plan = team_plan_in(control.graph_snapshot, started.roles["agent"])
+    assert any(m["node_id"] == coder and m["node_type"] == "coding_agent" for m in plan["members"])
+    return SimpleNamespace(database=db, control=control, listeners=control.graph_snapshot, roles=started.roles, plan=plan), coder
+
+
 @pytest.mark.parametrize("manager_available", [True, False])
 async def test_chat_job_reaches_the_connected_lead_and_specialist(started, monkeypatch, manager_available):
     """Exercise the production job, binding and task stores without paying for inference."""
     from models.database import TeamTask
+    from services.ai import AIService
+    from services.approvals.rules import set_ask_first
     from services.agent_instances.service import AgentInstanceService
     from services.agent_team import AgentTeamService
     from services.temporal.agent_activities import prepare_agent_payload
@@ -157,10 +203,12 @@ async def test_chat_job_reaches_the_connected_lead_and_specialist(started, monke
     settings = SimpleNamespace(temporal_task_queue="employees", max_concurrent_subagents=3,
                                max_delegation_depth=2, agent_recursion_limit=20, tool_result_max_chars=100_000)
     resolver = AsyncMock(side_effect=lambda parameters, *args, **kwargs: parameters)
+    auth = SimpleNamespace(has_valid_key=AsyncMock(return_value=True))
+    ai = AIService(auth_service=auth, database=db, cache=None, settings=settings)
     monkeypatch.setattr("core.container.container", SimpleNamespace(
-        database=lambda: db, settings=lambda: settings, ai_service=lambda: SimpleNamespace(),
+        database=lambda: db, settings=lambda: settings, ai_service=lambda: ai,
         temporal_client=lambda: SimpleNamespace(client=SimpleNamespace(start_workflow=dispatch)),
-        auth_service=lambda: SimpleNamespace(has_valid_key=AsyncMock(return_value=True)),
+        auth_service=lambda: auth,
         workflow_service=lambda: SimpleNamespace(_param_resolver=SimpleNamespace(resolve=resolver))))
     monkeypatch.setattr("core.config.Settings", lambda: settings)
     monkeypatch.setattr("services.plugin.deps.get_database", lambda: db)
@@ -177,7 +225,31 @@ async def test_chat_job_reaches_the_connected_lead_and_specialist(started, monke
     contact = started.roles["talk_agent"]
     talk = {**run(started, started.roles["talk_trigger"], contact), "node_type": "aiAgent",
             "agent_lifecycle_version": 1, "agent_protocol_version": 1}
+    # An existing contact can still have a saved job-only prompt from before
+    # Builder supported team changes. Its next turn must handle "continue"
+    # after offering to add a missing specialist to this employee's lead.
+    talk["parameter_snapshot"] = {**talk["parameter_snapshot"], contact: {
+        **talk["parameter_snapshot"][contact], "system_message": "Use submit_job for substantive work. Ask first is on at hire.", "prompt": "continue"}}
+    first_turn = await prepare_agent_payload(talk)
+    assert "The current Ask first setting for this employee is on." in first_turn["system_message"]
+    # Change the live rule while Talk still uses the same admitted generation.
+    await set_ask_first(db, talk["workflow_id"], False)
     talk_tools = await prepare_agent_payload(talk)
+    assert talk_tools["user_prompt"] == "continue"
+    assert any(tool["name"] == "agent_builder" for tool in talk_tools["tools"])
+    guidance = talk_tools["system_message"]
+    assert "Ask first is on at hire." in guidance
+    assert "The current Ask first setting for this employee is off." in guidance
+    assert "call Agent Builder immediately" in guidance
+    assert "'continue'" in guidance and "add_subagent" in guidance and "required_access" in guidance
+    assert "With Ask first off, act directly" in guidance
+    assert "if activation_state is saved, continue to Apply" in guidance and "apply_saved" in guidance
+    assert ", ".join(sorted({member["node_type"] for member in started.plan["members"]})) in guidance
+    coder = None
+    if manager_available:
+        started, coder = await add_and_apply_coder(started, talk, monkeypatch)
+        talk.update(run(started, started.roles["talk_trigger"], contact))
+        talk_tools = await prepare_agent_payload(talk)
     contact_manager = started.plan["talk_task_manager_node_id"]
     assert contact_manager == started.roles["talk_task_manager"]
     assert contact_manager != started.plan["task_manager_node_id"]
@@ -221,7 +293,7 @@ async def test_chat_job_reaches_the_connected_lead_and_specialist(started, monke
     assert sorted(tool["agent_template"]["node_id"] for tool in spawns) == sorted(
         member["node_id"] for member in started.plan["members"]
     )
-    spawn = spawns[0]
+    spawn = next(tool for tool in spawns if tool["agent_template"]["node_id"] == coder)
     result = await execute_instance_tool({
         "agent_tool_config": _lifecycle_binding(spawn, turn, prepared),
         "workflow_id": talk["workflow_id"], "execution_id": context["execution_id"],

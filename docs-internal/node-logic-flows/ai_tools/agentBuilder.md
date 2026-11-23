@@ -10,8 +10,9 @@
 
 ## Purpose
 
-Lets the agent it is wired to inspect the workflow canvas and add to it while
-it runs: tools, skills, and (team leads only) teammates. One node, one
+Lets the calling agent inspect the workflow and add tools or skills. Managed
+employee Talk can add specialists to its existing lead. An editor team lead can
+also add its own specialists. One node, one
 `Params` model with an `operation: Literal[...]` discriminator, multiple
 `@Operation` methods; the LLM sees one tool with a select-style `operation`
 field.
@@ -75,7 +76,7 @@ The `AgentBuilderParams` model fields ARE the LLM-provided tool args.
 | `app_id` | string | `""` | no | `operation == add_tool` | The tool's app, when its `available_tools` entry names one: required for a type several apps share (each custom connector is its own app) |
 | `target_member_id` | string | `""` | no | - | Employee member receiving the tool; defaults to the caller. Must belong to this employee, including legacy employees. |
 | `skill_name` | string | `""` | no | `operation == add_skill` | Skill name (SKILL.md frontmatter `name`, or a library skill's name), from `available_skills` |
-| `agent_type` | string | `""` | no | `operation == add_subagent` | Agent node type to add as a teammate (caller must be a team lead) |
+| `agent_type` | string | `""` | no | `operation == add_subagent` | Specialist type to add to the lead. A managed Talk contact can request this for its lead. |
 | `tool_types` | string array | `[]` | no | `operation == add_subagent` | Explicit scoped tools; Coding Agent also receives its default Pi tools without duplicate same-type nodes |
 | `tool_parameters` | object | `{}` | no | `operation == add_subagent` | Initial configuration by tool type, validated against its plugin contract |
 | `workflow_name` | string | `""` | no | `operation == create_workflow` | Employee display name for the shared Hire pipeline |
@@ -129,7 +130,7 @@ flowchart TD
   K -- no --> Kn[summary = reason]
   K -- yes --> Kp[merge into each target's Skills node row<br/>wire the shared one to a target without one, else a new Skills node]
   Kp --> S
-  R -- add_subagent --> G{caller a team lead,<br/>type allowed, not a team lead}
+  R -- add_subagent --> G{managed Talk or team lead,<br/>permitted specialist type}
   G -- no --> Gn[summary = reason]
   G -- yes --> Gp[agent + private Context + scoped tools<br/>Coding Agent includes Pi defaults<br/>output-top -> input-teammates]
   Gp --> S
@@ -170,9 +171,11 @@ flowchart TD
   target's tool only on a node naming the same app.
   `check_skill` refuses `skill` and `*-personality`; skills come from the
   library (all of it, on or off for new hires) and the Discover folder
-  (`server/skills/employee/`), text copied in. Managed teams route
-  `add_subagent` through their lead and require the owner's scoped permission;
-  callers without a team lead cannot add teammates.
+  (`server/skills/employee/`), text copied in. Managed Talk routes
+  `add_subagent` to the existing lead. An authenticated owner can request
+  a specialist directly when Ask first is off. When the configured rule
+  requires review, Builder returns `required_access` and the employee
+  page offers **Allow and add**. A saved change can proceed to safe Apply.
 - **One concrete tool owner**: a same-type tool on another member is never
   attached to this target. The target reuses its private node or receives a
   fresh node. Ownership and parameter rows are read inside the mutation
@@ -199,8 +202,9 @@ flowchart TD
   can use it now", else "Available on your next turn"). A skill merged into an
   existing Skills node applies from the next run; a new node or edge after a
   restart (Apply, on an employee's page).
-- **add_subagent**: team leads only (`orchestrator_agent`, `ai_employee`),
-  never another team lead; one teammate per type except repeatable `aiAgent`.
+- **`add_subagent`** connects a new specialist to the existing team lead.
+  Managed Talk can make the call from the authenticated owner conversation.
+  Registered specialist types have one teammate each. Custom `aiAgent` types can repeat.
   The new agent gets its own Context (`context_of`) and an `output-top` →
   `input-teammates` edge. Coding Agent's Pi defaults are separate saved nodes
   connected only to that specialist. Creation is refused if a required default

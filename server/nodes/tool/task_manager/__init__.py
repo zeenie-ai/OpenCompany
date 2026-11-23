@@ -162,8 +162,8 @@ class TaskManagerNode(ToolNode):
         "assign_task requires title, mission, and assignee_node_id or delegate_name. "
         f"Example: {ASSIGN_TASK_EXAMPLE}. "
         "Use list_tasks with include_history=true to consult prior executions. "
-        "An employee's conversational contact uses submit_job with mission to admit substantive work "
-        "for its configured team and receive a prompt acknowledgement; reviewed delivery follows separately."
+        "Employee Talk uses submit_job with mission to admit work its configured team can perform. "
+        "Team changes go through Agent Builder. The receipt identifies the job, and reviewed delivery follows separately."
     )
     handles = (
         {"name": "input-main", "kind": "input", "position": "left", "label": "Input", "role": "main"},
@@ -246,6 +246,10 @@ async def _execute_task_manager(args: Dict[str, Any], config: Dict[str, Any]) ->
         mission = str(args.get("mission") or "").strip()
         if not mission:
             raise NodeUserError("submit_job requires the substantive mission and expected result")
+        from services.employees.talk_team_change import route_talk_team_change
+        team_change = await route_talk_team_change(database, config, plan, mission)
+        if team_change is not None:
+            return team_change
         from services.employees.jobs import create_job, dispatch_job
         job = await create_job(database, NodeContext.from_legacy(talk_id, "chatAgent", config), mission=mission,
             lead_node_id=plan["lead_node_id"], delivery_node_ids=plan["talk_delivery_node_ids"], dispatch=True)

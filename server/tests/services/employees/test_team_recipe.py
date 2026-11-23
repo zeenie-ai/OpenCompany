@@ -114,6 +114,8 @@ def test_role_prompts_describe_the_tools_the_contact_and_lead_own():
     contact = built.parameters[built.node_roles["talk_agent"]]["system_message"]
     lead = built.parameters[built.node_roles["agent"]]["system_message"]
     assert "submit_job" in contact and "write_todos" not in contact
+    assert "add_subagent" in contact and "target_member_id" in contact
+    assert "'continue'" in contact and "required_access" in contact
     assert "spawn_" in lead and "write_todos" in lead
     assert "agent_builder" not in lead and "goes straight to" not in lead
 

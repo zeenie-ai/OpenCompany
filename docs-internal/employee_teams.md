@@ -73,6 +73,13 @@ remain authoritative. Capability grants are scoped and revocable in Settings
 and checked again inside the graph mutation. Public app messages cannot
 approve expanded access. Execution approval for sending remains separate.
 
+When the owner asks Talk to add a specialist, Talk uses Agent Builder to
+connect that specialist to the lead. With **Ask first** off, the owner's
+request saves the specialist and its scoped tools directly. The same rule
+applies when the owner equips an existing specialist. With **Ask first**
+on, **Allow and add** in Access saves the reviewed change. Apply activates
+the saved team for future work, after which the lead can assign the task.
+
 Safe Apply pauses producer admission while allowing existing work and its reviews
 to finish when generation execution admission is open. It cannot reopen a
 stopped generation or drain reviews while Stop/held Resume closes admission.

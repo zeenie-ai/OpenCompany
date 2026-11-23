@@ -144,7 +144,7 @@ def build_team(built: Any, inputs: Any) -> Any:
     """
     from services.employees.builder import BuildError
     from services.employees.policy import SKILL_TOOL_ENTRY, SKILL_TOOL_NAME
-    from services.employees.prompt import PromptInputs, build_system_message, neutralize_templates
+    from services.employees.prompt import TALK_TEAM_CHANGES, PromptInputs, build_system_message, neutralize_templates
     from services.node_registry import get_node_class
 
     built = deepcopy(built)
@@ -187,7 +187,8 @@ def build_team(built: Any, inputs: Any) -> Any:
     from services.employee_team_connection import TALK_CONNECTION_VERSION, employee_team_edge
     built.edges.append(employee_team_edge(lead, talk).to_dict())
     built.parameters[talk]["system_message"] += (
-        "\nYou are the owner's conversational contact. For substantive work, use submit_job(instructions) to give one mission to your team, "
+        f"\nYou are the owner's conversational contact. {TALK_TEAM_CHANGES}\n"
+        "For work the current team can perform, use submit_job(instructions) to give one mission to your team, "
         "acknowledge promptly, and explain that the reviewed result will arrive here later. "
         "An assignment receipt is progress, never the final result. Never impersonate a specialist or bypass approval. "
         "Use get_job_status before claiming work has started, reporting progress, or submitting the same request again. "

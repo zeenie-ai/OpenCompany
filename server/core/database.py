@@ -207,9 +207,9 @@ class Database:
                 if self.engine.dialect.name == "postgresql":
                     await conn.run_sync(_rebuild_chat_lane_index)
 
-                # Additive instance fields are portable and preserve old generation
-                # records. Run before shared-schema validation on PostgreSQL too.
-                instance_additions = {
+                # Portable additive fields run before shared-schema validation.
+                table_additions = {
+                    "employee_grants": {"pending_change": "JSON"},
                     "agent_instance_runs": {"temporal_run_id": "VARCHAR(255)", "invalid_request_ids": "JSON NOT NULL DEFAULT '[]'",
                         "permit_leases": "JSON NOT NULL DEFAULT '[]'", "permits_pending": "BOOLEAN NOT NULL DEFAULT FALSE",
                         "last_permit_reconcile_at": "TIMESTAMP"},
@@ -222,7 +222,7 @@ class Database:
                         "input_snapshot": "JSON",
                     },
                 }
-                for table_name, additions in instance_additions.items():
+                for table_name, additions in table_additions.items():
                     names = await conn.run_sync(lambda sync, table_name=table_name: {
                         column["name"] for column in inspect_schema(sync).get_columns(table_name)})
                     for column_name, definition in additions.items():
