@@ -24,6 +24,11 @@ The upgrade adopts each role's existing managers and skill holders and adds
 missing ones. Each admitted generation retains its own graph until Apply.
 The Team input is excluded from ordinary graph execution, so a chat reply or
 a scheduled lead run cannot trigger a second job through this edge.
+In the editor, the canvas accepts a connection to the Team input only from
+`output-top` of a node whose spec declares the `leadsEmployeeTeam` uiHint (the
+AI Employee) to a node whose spec declares an `input-employee-team` handle
+(`useReactFlowNodes`); `employee_team_connection_issues` checks the same at
+save.
 
 Each concrete tool node has exactly one owning agent. Business capabilities
 belong to the specialist responsible for the work; the lead and Talk request
