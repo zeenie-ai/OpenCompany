@@ -50,6 +50,7 @@
     "context",
     "approvalGate",
     "duckduckgoSearch",
+    "classify",
 
     "whatsappReceive",
     "whatsappSend",

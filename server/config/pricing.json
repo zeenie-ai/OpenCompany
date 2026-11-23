@@ -309,6 +309,20 @@
       "meta": 0.0,
       "_default": 0.001
     },
+    "typesafe": {
+      "_description": "TypeSafe Jev judgments, per input token (images count as input tokens); output tokens are free",
+      "_source": "https://docs.typesafe.ai/models.md",
+      "_updated": "2026-11",
+      "judge": 4.2e-08,
+      "_default": 4.2e-08
+    },
+    "openrouter": {
+      "_description": "Jev judgments through OpenRouter, per input token. A reply that reports its own charge (usage.cost) is booked at that charge instead; this price covers one that does not.",
+      "_source": "https://openrouter.ai/docs/guides/community/jev.md",
+      "_updated": "2026-11",
+      "judge": 4.2e-08,
+      "_default": 4.2e-08
+    },
     "serper": {
       "_description": "Serper Google Search API pricing (per query)",
       "_source": "https://serper.dev/pricing",
@@ -479,6 +493,12 @@
       "call": "request",
       "fetch_url": "request",
       "account": "meta"
+    },
+    "typesafe": {
+      "judge": "judge"
+    },
+    "openrouter": {
+      "judge": "judge"
     },
     "serper": {
       "web_search": "web_search"

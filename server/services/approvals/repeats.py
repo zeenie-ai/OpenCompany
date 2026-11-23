@@ -33,6 +33,7 @@ REPEATABLE: FrozenSet[str] = frozenset(
         "calculatorTool",
         "cerebrasChatModel",
         "chatHistory",
+        "classify",
         "console",
         "context",
         "crawleeScraper",

@@ -1,0 +1,7 @@
+{
+  "_comment": "Takes the 'ai' palette group accent: the node is vendor-neutral (TypeSafe's Jev or the owner's chat model answers), so it carries no one provider's brand.",
+  "color": "#bd93f9",
+  "icons": {
+    "classify": "lucide:ListChecks"
+  }
+}

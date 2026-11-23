@@ -1,6 +1,6 @@
 # Registered-node capability index
 
-Source-backed declaration snapshot: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. **166 registered types**.
+Source-backed declaration snapshot: `56f0b397d0b313ec550791c1e2772525a9f7cf12`. **167 registered types**.
 
 Companion to views 06 and 07. Rows describe declarations, not successful provider/device execution.
 Agent-tool eligibility comes from `iter_tool_node_classes`; direct Workspace tasks require the explicit
@@ -38,6 +38,12 @@ Regenerate with the backend Python environment: `python scripts/architecture_dia
 | [`tool_agent`](../../../docs-internal/node-logic-flows/specialized_agents/tool_agent.md) · [source](../../../server/nodes/agent/tool_agent/__init__.py) | registered | SpecializedAgentBase | eligible | — | renderer-dependent | `ai-heavy` |
 | [`travel_agent`](../../../docs-internal/node-logic-flows/specialized_agents/travel_agent.md) · [source](../../../server/nodes/agent/travel_agent/__init__.py) | registered | SpecializedAgentBase | eligible | — | renderer-dependent | `ai-heavy` |
 | [`web_agent`](../../../docs-internal/node-logic-flows/specialized_agents/web_agent.md) · [source](../../../server/nodes/agent/web_agent/__init__.py) | registered | SpecializedAgentBase | eligible | — | renderer-dependent | `ai-heavy` |
+
+## ai (1)
+
+| Node / evidence | Status | Plugin base | Agent tool | Workspace task | Canvas hint | Queue |
+|---|---|---|---|---|---|---|
+| [`classify`](../../../docs-internal/node-logic-flows/ai_tools/classify.md) · [source](../../../server/nodes/judgment/classify.py) | registered | ActionNode | eligible | — | renderer-dependent | `rest-api` |
 
 ## android (16)
 

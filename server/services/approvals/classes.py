@@ -74,6 +74,7 @@ CLASSES: Dict[str, str] = {
     # Search and provider reads (a search through a search provider is not a
     # URL fetch, D11).
     "braveSearch": READ,
+    "classify": READ,
     "detectLanguage": READ,
     "duckduckgoSearch": READ,
     "embeddingGenerator": READ,

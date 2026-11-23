@@ -123,6 +123,7 @@ that a retired node remains registered.
 - [Agent Builder (`agentBuilder`)](./ai_tools/agentBuilder.md)
 - [Calculator Tool (`calculatorTool`)](./ai_tools/calculatorTool.md)
 - [Canvas (`canvas`)](./ai_tools/canvas.md)
+- [Classify (`classify`)](./ai_tools/classify.md)
 - [Current Time Tool (`currentTimeTool`)](./ai_tools/currentTimeTool.md)
 - [Data (`dataSource`)](./ai_tools/dataSource.md)
 - [DuckDuckGo Search (`duckduckgoSearch`)](./ai_tools/duckduckgoSearch.md)

@@ -22,3 +22,9 @@ def test_every_action_twitter_send_books_has_a_price(real_prices, action):
 )
 def test_a_web_search_has_a_price(real_prices, service, action):
     assert real_prices.calculate_api_cost(service, action)["total_cost"] > 0
+
+
+@pytest.mark.parametrize("service", ["typesafe", "openrouter"])
+def test_a_judgment_is_priced_per_input_token(real_prices, service):
+    """Jev charges $0.042 per million input tokens; output is free."""
+    assert real_prices.calculate_api_cost(service, "judge", 1_000_000)["total_cost"] == pytest.approx(0.042)

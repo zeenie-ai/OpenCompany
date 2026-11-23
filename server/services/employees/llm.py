@@ -146,9 +146,14 @@ async def employees_chat(
     max_tokens: int = SETUP_MAX_TOKENS,
     timeout: Optional[float] = None,
     principal: Optional[str] = None,
+    temperature: float = SETUP_TEMPERATURE,
+    sdk_max_retries: int = 1,
 ) -> LLMResponse:
     """One completion on the chosen model. Raises ``asyncio.TimeoutError``
-    past the budget and ``NodeUserError`` for provider failures."""
+    past the budget and ``NodeUserError`` for provider failures.
+
+    The judgment plugin's chat-model fallback asks with temperature 0 and no
+    SDK retry, since its caller makes exactly one attempt."""
     api_key = await auth_service.resolve_api_key(choice.provider, principal=principal) or ""
     try:
         from services.model_registry import get_model_registry
@@ -164,9 +169,9 @@ async def employees_chat(
             api_key=api_key,
             messages=messages,
             model=choice.model,
-            temperature=SETUP_TEMPERATURE,
+            temperature=temperature,
             max_tokens=max_tokens,
-            sdk_max_retries=1,
+            sdk_max_retries=sdk_max_retries,
         ),
         timeout=timeout if timeout is not None else choice.budget_seconds,
     )
