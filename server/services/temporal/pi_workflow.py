@@ -14,10 +14,30 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.workflow import ActivityCancellationType
 
+from services.llm.protocol import Message, message_to_wire
+
 from ._exits import is_workflow_bug
 from .agent_workflow import AgentWorkflow, LLM_STEP_HEARTBEAT_TIMEOUT, LLM_STEP_RETRY, llm_attempt_timeout
 from .pi_protocol import DRIVER_QUEUE, INLINE_LIMIT, OperationLedger, canonical_digest, canonical_json, conflict, tool_operation_id
 from .pi_control import PiDescendantExecutionControl, PiLocalExecutionControl
+
+
+def _expand_legacy_text_messages(messages: list[dict]) -> None:
+    """Expand compact inbox and chat text on the transcript shared with Context."""
+    legacy = [
+        index for index, message in enumerate(messages)
+        if isinstance(message, dict)
+        and message.keys() <= {"role", "content", "ts"}
+        and message.get("role") in ("system", "user", "assistant")
+        and isinstance(message.get("content"), str)
+        and ("ts" not in message or isinstance(message["ts"], str))
+    ]
+    # Recorded Pi updates and checkpoints must replay against their original digest.
+    if legacy and workflow.patched("pi-instance-message-wire-v1"):
+        for index in legacy:
+            original = messages[index]
+            wire = message_to_wire(Message(role=original["role"], content=original["content"]))
+            messages[index] = {**original, **wire}  # retain an optional Context timestamp
 
 
 @workflow.defn(sandboxed=False, name="PiCodingAgentWorkflow")
@@ -232,6 +252,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         self._pi.complete(identity, result)
 
     async def _before_runtime_model_step(self, llm_payload, context, payload, iteration, tools=None):
+        _expand_legacy_text_messages(llm_payload["messages"])
         self._pi_context = context
         self._pi_turn_start = len(llm_payload["messages"])
         self._pi_detached = False

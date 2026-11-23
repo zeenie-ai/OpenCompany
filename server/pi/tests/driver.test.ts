@@ -28,15 +28,17 @@ test("snapshot rebuild and binding refresh add no blank user or duplicate policy
   expect(projectCanonical(third.snapshot.entries.filter(entry=>entry.type==="message").map(entry=>entry.message) as never).filter(wire=>wire.role==="system")).toHaveLength(1);
 });
 
-test.each(["unknown","validation","parse","length"])("%s tool calls get non-effect coordinator receipts",async(mode)=>{
+test.each(["unknown","validation","non-object","parse","length"])("%s tool calls get non-effect coordinator receipts",async(mode)=>{
   const c=call();
   if (mode==="unknown") c.name="missing";
   if (mode==="validation") c.args={file_path:{unexpected:true}};
+  if (mode==="non-object") c.args=["invalid"];
   if (mode==="parse") {c.args={};c.parse_error="Invalid JSON";c.raw_arguments="{";}
-  const assistant=message("assistant","",[c]); const ops:Operation[]=[];
-  const output=await new TurnDriver(run(),async(op)=>{ops.push(op);return op.kind==="model" ? {assistant_message:assistant,finish_reason:mode==="length"?"length":"tool_calls"} : {message:toolResult(c.id,c.name,"rejected"),is_error:true};}).execute();
+  const input=run(); const assistant=message("assistant","",[c]); const ops:Operation[]=[];
+  const output=await new TurnDriver(input,async(op)=>{ops.push(op);return op.kind==="model" ? {assistant_message:assistant,finish_reason:mode==="length"?"length":"tool_calls"} : {message:toolResult(c.id,c.name,"rejected"),is_error:true};}).execute();
   expect(ops[1]!.payload.receipt_only).toBe(true);
   expect(output.tool_results[0]!.content).toBe("rejected");
+  expect(output.projection_digest).toBe(canonicalDigest([...input.messages, assistant, ...output.tool_results]));
 });
 
 test("coerced SDK arguments never cross the authority boundary",async()=>{
@@ -52,6 +54,69 @@ test("duplicate recorded calls fail before effects",async()=>{
   const driver=new TurnDriver(run(),async(op)=>{kinds.push(op.kind);return {assistant_message:message("assistant","",[call(),call()])};});
   await expect(driver.execute()).rejects.toMatchObject({code:"invalid_calls"});
   expect(kinds).toEqual(["model"]);
+});
+
+test("malformed transcript messages fail before a model request with a content-free error", async () => {
+  const privateText = "private assigned work";
+  const user = message("user", privateText);
+  const malformed = [
+    null,
+    {role: "user", content: privateText},
+    {...user, role: ["user"]},
+    {...user, blocks: [null]},
+    {...user, blocks: [{...user.blocks[0], metadata: privateText}]},
+    {...user, blocks: [{...user.blocks[0], type: "tool_call"}]},
+    {...user, tool_calls: [{id: "c1", name: "file_read", raw_arguments: privateText, parse_error: null}]},
+    {...user, provider_state: [privateText]},
+    {...toolResult(), tool_call_id: {privateText}},
+    {...toolResult(), tool_call_id: null},
+    {...toolResult(), tool_call_id: ""},
+  ];
+  for (const invalid of malformed) {
+    const requests: Operation[] = [];
+    const driver = new TurnDriver(run([invalid as MessageWire]), async operation => {
+      requests.push(operation);
+      return {assistant_message: message("assistant", "unexpected request")};
+    });
+    await expect(driver.execute()).rejects.toMatchObject({code: "invalid_message", message: "Invalid canonical Pi message"});
+    expect(requests).toHaveLength(0);
+  }
+});
+
+test("a matching old snapshot cannot admit an unidentified tool result", async () => {
+  const initial = run();
+  const assistant = message("assistant", "Finished");
+  const first = await new TurnDriver(initial, async () => ({assistant_message: assistant})).execute();
+  const restored = run([...initial.messages, assistant, {...toolResult(), tool_call_id: null}]);
+  restored.snapshot = {...first.snapshot, context_digest: restored.context_digest};
+  const requests: Operation[] = [];
+  const driver = new TurnDriver(restored, async operation => {
+    requests.push(operation);
+    return {assistant_message: assistant};
+  });
+  await expect(driver.execute()).rejects.toMatchObject({code: "invalid_message"});
+  expect(requests).toHaveLength(0);
+});
+
+test("a malformed assistant receipt fails before tool execution", async () => {
+  const operations: Operation[] = [];
+  const driver = new TurnDriver(run(), async operation => {
+    operations.push(operation);
+    return {assistant_message: {role: "assistant", content: "private output"} as MessageWire};
+  });
+  await expect(driver.execute()).rejects.toMatchObject({code: "invalid_message", message: "Invalid canonical Pi message"});
+  expect(operations.map(operation => operation.kind)).toEqual(["model"]);
+});
+
+test("a malformed tool receipt fails without reissuing the tool operation", async () => {
+  const operations: Operation[] = [];
+  const driver = new TurnDriver(run(), async operation => {
+    operations.push(operation);
+    if (operation.kind === "model") return {assistant_message: message("assistant", "", [call()])};
+    return {message: {...toolResult(), blocks: [null]} as unknown as MessageWire};
+  });
+  await expect(driver.execute()).rejects.toMatchObject({code: "invalid_message", message: "Invalid canonical Pi message"});
+  expect(operations.map(operation => operation.kind)).toEqual(["model", "tool"]);
 });
 
 test("error assistant unresolved calls still reconcile non-effect receipts",async()=>{
@@ -182,7 +247,7 @@ test("durable SDK preflight precedes callbacks and preserves original argument t
   const driver=new TurnDriver(run(),async(op)=>{events.push(op.kind);return op.kind==="model" ? {assistant_message:message("assistant","",[c])} : {message:toolResult("a","file_read","invalid"),is_error:true};},async(event)=>{
     events.push(event.type);expect(event).toMatchObject({type:"assistant_ready",calls:[{call_id:"a",call_index:0,receipt_only:true}]});
   });
-  await driver.execute();expect(events).toEqual(["model","assistant_ready","tool"]);expect(c.args.file_path).toEqual({bad:true});
+  await driver.execute();expect(events).toEqual(["model","assistant_ready","tool"]);expect(c.args).toEqual({file_path:{bad:true}});
 });
 
 test("corrupt, stale-scope and unrecorded snapshot content cannot become Context",async()=>{

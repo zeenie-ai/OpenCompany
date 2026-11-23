@@ -196,6 +196,7 @@ async def test_host_eof_is_a_retryable_transport_interruption(monkeypatch, tmp_p
     ("transport_write_failed", True, "PiTransportFailure", True),
     ("sdk_failure", False, "PiSDKFailure", True),
     ("snapshot_incompatible", False, "PiSnapshotIncompatible", True),
+    ("invalid_message", False, "PiProtocolConflict", True),
     ("projection_mismatch", False, "PiProtocolConflict", True),
     ("invalid_blob", False, "PiProtocolConflict", False),
     ("private-code", False, "PiProtocolConflict", False),
@@ -211,9 +212,37 @@ async def test_host_error_codes_are_classified_without_exposing_diagnostics(monk
     assert caught.value.non_retryable is not retryable
     assert "private" not in str(caught.value)
     assert "private" not in repr(caught.value.details)
-    message = "Pi SDK host could not complete the coding turn"
+    message = ("Pi host received an invalid canonical message" if code == "invalid_message"
+               else "Pi SDK host could not complete the coding turn")
     assert caught.value.message == (f"{message} ({code})" if diagnostic else message)
     assert caught.value.details == (({"host_code": code},) if diagnostic else ())
+
+
+@pytest.mark.asyncio
+async def test_packaged_host_rejects_malformed_assignment_before_any_operation(monkeypatch, tmp_path):
+    from core.js_runtime import bun_binary
+    from services import pi_runtime
+
+    bun = bun_binary()
+    distribution = Path(pi_runtime.__file__).resolve().parent.parent / "pi" / "dist"
+    if not bun or not (distribution / "package.json").is_file():
+        pytest.skip("Build server/pi's bundle and provide Bun for the packaged boundary gate")
+    host = pi_runtime.resolve_pi_host()
+    assert host == distribution / "index.js"
+    run = _run(tmp_path)
+    run["messages"][1]["blocks"] = [{"metadata": {"private": "inbox body"}}]
+    run["context_digest"] = canonical_digest(run["messages"])
+    env = {**os.environ, "PI_PACKAGE_DIR": str(pi_runtime.pi_package_dir(host)), "PI_OFFLINE": "1"}
+    handle = SimpleNamespace(execute_update=AsyncMock(), query=AsyncMock(return_value={"status": "pending"}))
+    monkeypatch.setattr(pi_activities.activity, "heartbeat", lambda: None)
+    with pytest.raises(ApplicationError) as caught:
+        await asyncio.wait_for(pi_activities.PiDriverActivities(MagicMock())._run_host(
+            bun, host, env, run, ScopedProtocolBlobs(tmp_path, run["scope"], run["epoch"]), handle,
+            AsyncMock(), AsyncMock()), timeout=30)
+    assert caught.value.type == "PiProtocolConflict" and caught.value.non_retryable
+    assert caught.value.details == ({"host_code": "invalid_message"},)
+    assert "inbox body" not in str(caught.value)
+    handle.execute_update.assert_not_awaited()
 
 
 @pytest.mark.asyncio

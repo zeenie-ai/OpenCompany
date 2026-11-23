@@ -5,7 +5,7 @@ import {
 import { type AssistantMessage, type Message, type ToolResultMessage } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
-import { applyCanonicalToolResult, projectCanonical, sdkValidationNumbers, wireToPi } from "./codec.ts";
+import { applyCanonicalToolResult, assertMessageWire, projectCanonical, sdkValidationNumbers, wireToPi } from "./codec.ts";
 import { canonicalDigest } from "./protocol.ts";
 import {
   DriverInterrupted, ProtocolError, SDK_VERSION, type HostOutput, type ModelResult, type Operation,
@@ -54,7 +54,9 @@ export function validateRun(input: RunTurn): void {
 }
 
 function toolWire(result: OperationResult, callId: string, name: string): ToolResult {
+  if (!result || typeof result !== "object") throw new ProtocolError("result_mismatch", "Missing tool receipt");
   const decoded = "message" in result ? result as ToolResult : {message: result as MessageWire, is_error: false};
+  assertMessageWire(decoded.message);
   if (decoded.message.role !== "tool" || decoded.message.tool_call_id !== callId || decoded.message.name !== name) {
     throw new ProtocolError("result_mismatch", "Tool receipt does not match the recorded call");
   }
@@ -112,6 +114,8 @@ export class TurnDriver {
     // The snapshot is a derived cache: canonical context/bindings/config decide reuse.
     if (snapshot && snapshot.context_digest === this.run.context_digest
       && snapshot.binding_digest === this.run.binding_digest && snapshot.config_digest === this.run.config_digest) {
+      // A reusable SDK snapshot bypasses wireToPi, including its input validation.
+      this.run.messages.forEach(assertMessageWire);
       if (!snapshot.header || !Array.isArray(snapshot.entries) || snapshot.entries.some(entry => !["message", "model_change", "thinking_level_change"].includes(entry.type))) {
         throw new ProtocolError("invalid_snapshot", "Unsupported Pi snapshot entries");
       }
@@ -138,12 +142,12 @@ export class TurnDriver {
         if (this.modelResult) throw new ProtocolError("extra_model_call", "Pi attempted more than one model request in a round");
         if (canonicalDigest(projectCanonical(context.messages)) !== this.run.context_digest) throw new ProtocolError("projection_mismatch", "Pi model context differs from admitted Context");
         const result = await this.operation("model", `turn:${this.run.turn}:model`, this.payload({purpose: "assistant"}), options?.signal) as ModelResult;
-        if (!result.assistant_message || result.assistant_message.role !== "assistant") throw new ProtocolError("result_mismatch", "Model receipt lacks a canonical assistant");
+        if (!result?.assistant_message || result.assistant_message.role !== "assistant") throw new ProtocolError("result_mismatch", "Model receipt lacks a canonical assistant");
+        const message = wireToPi(result.assistant_message, this.run.model, result) as AssistantMessage;
         const calls = result.assistant_message.tool_calls;
         if (calls.some(call => !call.id || !call.name) || new Set(calls.map(call => call.id)).size !== calls.length) throw new ProtocolError("invalid_calls", "Recorded tool call IDs must be unique and nonempty");
         this.modelResult = result;
         this.assistant = structuredClone(result.assistant_message);
-        const message = wireToPi(result.assistant_message, this.run.model, result) as AssistantMessage;
         // Durable preflight arrives before callback-driven tools. The coordinator can safely
         // batch/park delegation only after recording these exact SDK validation outcomes.
         const verdicts=calls.map((call,call_index)=>{
@@ -188,10 +192,18 @@ export class TurnDriver {
     const call = this.assistant!.tool_calls[index]!;
     const existing = this.tools.get(callId);
     if (existing) return existing;
-    const result = toolWire(await this.operation("tool", `turn:${this.run.turn}:tool:${index}:${callId}`,
-      this.payload({call_id:callId,call_index:index,receipt_only:receiptOnly,...(error ? {error} : {})}), signal), callId, call.name);
-    this.tools.set(callId, result);
-    return result;
+    const receipt = await this.operation("tool", `turn:${this.run.turn}:tool:${index}:${callId}`,
+      this.payload({call_id:callId,call_index:index,receipt_only:receiptOnly,...(error ? {error} : {})}), signal);
+    try {
+      const result = toolWire(receipt, callId, call.name);
+      this.tools.set(callId, result);
+      return result;
+    } catch (cause) {
+      // Pi emits an error tool result after a failed callback. A corrupt receipt
+      // is terminal; that event must not request the same operation again.
+      if (cause instanceof ProtocolError) this.fatal = cause;
+      throw cause;
+    }
   }
 
   async execute(): Promise<TurnCheckpoint> {

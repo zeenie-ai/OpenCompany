@@ -8,7 +8,8 @@ export const INLINE_LIMIT_BYTES = 256 * 1024;
 export interface ToolCallWire {
   id: string;
   name: string;
-  args: Record<string, unknown>;
+  /** The SDK validates the exact JSON supplied by the model before tool execution. */
+  args: unknown;
   raw_arguments: string | null;
   parse_error: string | null;
 }

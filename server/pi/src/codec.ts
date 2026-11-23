@@ -50,11 +50,43 @@ function callContent(call: ToolCallWire): PiContent {
   return { type: "toolCall", id: call.id, name: call.name, arguments: structuredClone(call.args) };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === "string";
+}
+
+function isToolCall(value: unknown): boolean {
+  return isRecord(value) && typeof value.id === "string" && typeof value.name === "string"
+    && Object.hasOwn(value, "args") && isNullableString(value.raw_arguments) && isNullableString(value.parse_error);
+}
+
+function isBlock(value: unknown): boolean {
+  return isRecord(value) && typeof value.type === "string" && typeof value.text === "string"
+    && isNullableString(value.name) && isNullableString(value.tool_call_id) && isRecord(value.metadata)
+    && (value.source === undefined || value.source === null || isRecord(value.source))
+    && (value.type === "tool_call" ? isToolCall(value.tool_call) : value.tool_call === null);
+}
+
+/** Incoming JSON is untyped. Reject missing structured fields before invoking the SDK. */
+export function assertMessageWire(value: unknown): asserts value is MessageWire {
+  if (!isRecord(value) || typeof value.role !== "string" || !["system", "user", "assistant", "tool"].includes(value.role)
+    || typeof value.content !== "string" || !Array.isArray(value.blocks) || !value.blocks.every(isBlock)
+    || !Array.isArray(value.tool_calls) || !value.tool_calls.every(isToolCall) || !isRecord(value.provider_state)
+    || !isNullableString(value.tool_call_id) || !isNullableString(value.name)
+    || (value.role === "tool" && !value.tool_call_id)
+    || (value.ts !== undefined && typeof value.ts !== "string")) {
+    throw new ProtocolError("invalid_message", "Invalid canonical Pi message");
+  }
+}
+
 /** Only minimal reconstruction metadata is added; provider state is never rewritten. */
 export function wireToPi(wire: MessageWire, model: ModelWire, options: {
   usage?: Record<string, number>; finish_reason?: string;
 } = {}): PiMessage {
-  if (!["system", "user", "assistant", "tool"].includes(wire.role)) throw new ProtocolError("invalid_role", "Unsupported canonical message role");
+  assertMessageWire(wire);
   const blocks: PiContent[] = wire.blocks.map(block => {
     const meta = blockMetadata(block);
     if (block.type === "tool_call" && block.tool_call) return { ...callContent(block.tool_call), _ocBlock: meta };
@@ -98,7 +130,7 @@ export function piToWire(message: Message): MessageWire {
   for (const part of content) {
     const metadata = part._ocBlock;
     if (!metadata) throw new ProtocolError("projection_mismatch", "Pi message contains unrecorded content");
-    const call = part.type === "toolCall" ? { id: String(part.id), name: String(part.name), args: structuredClone(part.arguments as Record<string, unknown>),
+    const call = part.type === "toolCall" ? { id: String(part.id), name: String(part.name), args: structuredClone(part.arguments),
       raw_arguments: metadata.call?.raw_arguments ?? null, parse_error: metadata.call?.parse_error ?? null } : null;
     if (call) calls.set(call.id, call);
     if (!metadata.derived) blocks.push({type: metadata.type, text: part.type === "thinking" ? String(part.thinking ?? "") : String(part.text ?? ""),

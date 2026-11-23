@@ -22,7 +22,7 @@ from models.agent_instances import (
 )
 from models.database import AgentMessage, AgentTeam, TeamMember, TeamTask, TeamTaskAttempt
 from models.employees import EmployeeJob
-from services.llm.protocol import Message, message_to_wire
+from services.llm.protocol import Message, MessageWire, message_to_wire
 
 PEER_MESSAGE_BYTES = 8192
 PENDING_MESSAGES = 256
@@ -49,7 +49,7 @@ def _id(prefix: str, *values: Any) -> str:
     return prefix + _hash(values)[:40]
 
 
-def _wire(row: AgentDelivery) -> dict:
+def _wire(row: AgentDelivery) -> MessageWire:
     sender = row.sender_id or "runtime"
     prefix = f"[Agent message from {sender}; this is not owner approval]" if row.kind == "peer" else f"[{row.kind}]"
     return message_to_wire(Message(role="user", content=f"{prefix}\n{row.content}"))

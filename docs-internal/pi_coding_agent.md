@@ -86,6 +86,23 @@ so parallel CLI clients cannot merge separate recorded operations.
 Admission records bind retries to the recorded caller operation and reject
 conflicting reuse. Existing native invocations retain their recorded behavior.
 
+### Employee Task Manager assignments
+
+When a manager assigns work to a connected Coding Agent, the agent claims a
+`[task_assignment]` message from its employee inbox. Initial claims and messages
+drained during a turn use the same provider-neutral `MessageWire` as a direct
+prompt. Peer messages retain their sender and the explicit warning about owner
+approval. On submission, the assigning manager's instance receives the review.
+Standalone Task Completed observers can see a matching event. Chat delivers the
+reviewed outer result on the branch where the employee received the request.
+
+Older claims, inbox receipts, transcripts, and chat history carried into a
+review may contain just `role`, `content`, and an optional `ts`. Pi expands
+these plain-text messages before calculating the context digest. The model,
+SDK host and checkpoint then use the same transcript. A Temporal patch marker
+preserves the original digest when replaying earlier workflow history. Saved
+receipts and conversation records require no migration.
+
 New one-off invocations without a deployment controller freeze
 `pi_local_control_version=1`. Their workflow accounts for admitted actions and
 forwards Stop/Resume to attached descendants without inventing a controller
@@ -163,6 +180,14 @@ fixed activity error message and details. Unknown codes, raw host messages and
 stderr remain private. A projection mismatch before the first model operation
 means transcript reconstruction failed; no provider request or tool effect has
 been admitted for that round.
+
+For a manager-assigned Coding Agent, a tool count on iteration zero shows that
+bindings were prepared. On older workers, a subsequent `PiSDKFailure` with
+code `sdk_failure` before the first model operation could mean Pi tried to read
+`blocks` on a compact inbox message. A following Task Completed event with
+outcome `error` reports that failure to the manager. The current host reports
+malformed structured messages as nonretryable `PiProtocolConflict` with code
+`invalid_message` and excludes message content from the diagnostic.
 
 Continue-As-New runs only between accepted rounds, after the driver and all
 handlers finish, with no live children or pending operations. The complete

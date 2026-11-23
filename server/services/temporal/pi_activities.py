@@ -302,13 +302,15 @@ class PiDriverActivities:
                         "transport_write_failed": "PiTransportFailure",
                         "sdk_failure": "PiSDKFailure",
                         "snapshot_incompatible": "PiSnapshotIncompatible",
+                        "invalid_message": "PiProtocolConflict",
                         "projection_mismatch": "PiProtocolConflict",
                     }
                     known = isinstance(code, str) and code in error_types
                     error_type = error_types[code] if known else "PiProtocolConflict"
                     # Expose only fixed protocol codes, never host diagnostics
                     # or an unrecognized value that could carry private data.
-                    message = "Pi SDK host could not complete the coding turn"
+                    message = ("Pi host received an invalid canonical message" if code == "invalid_message"
+                               else "Pi SDK host could not complete the coding turn")
                     details = ({"host_code": code},) if known else ()
                     raise ApplicationError(
                         f"{message} ({code})" if known else message, *details,
