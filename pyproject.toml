@@ -58,3 +58,9 @@ dev = []
 # Keeping the CLI independent of the uv workspace means contributors
 # can install / run / debug ``company`` on whatever interpreter is on
 # PATH -- no per-checkout venv activation required.
+
+# Read by ``python -m pytest cli/tests/`` from the repo root (the predeploy
+# cli-tests job); server/ and gateway/ keep their own pytest tables.
+# pytest-asyncio is installed there and warns while this scope is unset.
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

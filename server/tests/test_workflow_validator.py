@@ -21,9 +21,6 @@ import pytest
 from pydantic import BaseModel, Field
 
 
-pytestmark = pytest.mark.asyncio
-
-
 # ---------------------------------------------------------------------------
 # Fakes — a small in-memory plugin registry so tests are deterministic and
 # don't depend on which plugins happen to be installed at run time.
