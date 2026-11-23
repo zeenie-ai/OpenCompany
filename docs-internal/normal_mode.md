@@ -1155,9 +1155,11 @@ asks, within the rule Hire applies
 - **Skills**: from the owner's library (Settings > Skills, on or off for new
   hires) and the Discover folder (`server/skills/employee/`), with their text
   copied in; never `skill` or a `*-personality` skill.
-- On a managed team, an owner-authorized `add_subagent` connects the new
-  specialist to the lead. The lead can assign it a task when that connection
-  is active.
+- On a managed team, Talk uses `add_subagent` to connect a specialist to
+  the lead. When **Ask first** is off, the owner's request saves the change
+  directly. When it is on, **Allow and add** saves the reviewed change.
+  These rules also cover adding tools or skills to an existing specialist.
+  After Apply, the lead can assign the specialist a task through Task Manager.
 - A new tool belongs to the selected member, defaulting to the caller. A
   managed team's skill goes on the selected member's Master Skill.
 
@@ -1360,7 +1362,7 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `list_employees` | `{}` | `{employees}`; each summary's `canvas_node_id` is its Canvas board: the one it was hired with, else the graph's first Canvas node, else null. `browser_request` is a browser waiting for the owner (`{node_id, reason, since}`), else null. `talk` is `{state: "on" \| "off" \| "unsupported", agent_node_id}` (the agent that answers the owner; not in `watch_node_ids`). `task` is `{label, text}`, or null when the page already says it (a running employee with Talk on whose only work is the owner's messages). `asks_first` is the hire's "ask me first" rule (built in Dev mode: whether it has an approval gate). `pending_changes` is true when the saved graph's structure differs from the live generation's snapshot. `photo_url` is the photo the owner gave them (the workspace file route, versioned), else null. `activation_state` is how the hire's own start went (`saved`, `blocked`, `running` or `failed`), null for a workflow built in the editor |
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone, whole team; `since` is that 1st as YYYY-MM-DD) |
-| `get_workflow_costs` | `{}` | `{since, total_cost, workflows: [{workflow_id, name, total_cost}]}`: this month's estimated cost in USD by employee, highest first, then one row with a null id and name for calls that belong to no employee. Answered by the usage service ([Pricing Service](./pricing_service.md)), read by the cost panel |
+| `get_workflow_costs` | `{}` | `{since, total_cost, workflows: [{workflow_id, name, total_cost, total_tokens}]}`: this month's estimated cost in USD and model tokens by employee, highest cost first, then one row with a null id and name for calls that belong to no employee. Answered by the usage service ([Pricing Service](./pricing_service.md)), read by the cost panel |
 | `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
 | `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building |

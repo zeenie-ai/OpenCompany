@@ -7,9 +7,10 @@
 - ``get_chat_run_costs {workflow_id}`` answers ``{runs: {run_id: usd}}``: what
   each chat run of one workflow cost, for the figure under a reply.
 - ``get_workflow_costs {}`` answers ``{since, total_cost, workflows:
-  [{workflow_id, name, total_cost}]}``: this month's cost by employee, for
-  the cost panel. ``since`` is the 1st of the month in the owner's time zone,
-  as YYYY-MM-DD.
+  [{workflow_id, name, total_cost, total_tokens}]}``: this month's cost and
+  model tokens by employee, for the cost panel, the cost under each name in
+  Home's team list and an employee's Usage. ``since`` is the 1st of the month
+  in the owner's time zone, as YYYY-MM-DD.
 
 A cost counts model calls and paid tool calls. A failed read of the two cost
 commands answers ``success: false``, so a screen shows that the figure is

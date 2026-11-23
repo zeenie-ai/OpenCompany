@@ -456,11 +456,11 @@ from services.usage import chat_run_costs, month_start, workflow_costs
 runs = await chat_run_costs(database, workflow_id)
 # Returns: {'r_3f2a...': 0.412, 'r_91bc...': 0.058}
 
-# USD per workflow since an instant, highest first
+# USD and model tokens per workflow since an instant, highest cost first
 since = month_start(datetime.now(timezone.utc), settings.get('profile_timezone'))
 costs = await workflow_costs(database, since)
-# Returns: [{'workflow_id': '2', 'name': 'Ava', 'total_cost': 3.2},
-#           {'workflow_id': None, 'name': None, 'total_cost': 0.04}]
+# Returns: [{'workflow_id': '2', 'name': 'Ava', 'total_cost': 3.2, 'total_tokens': 1840210},
+#           {'workflow_id': None, 'name': None, 'total_cost': 0.04, 'total_tokens': 9120}]
 ```
 
 - A chat run with no booked call is absent from `chat_run_costs`.
@@ -475,6 +475,9 @@ costs = await workflow_costs(database, since)
 - `workflow_costs` ends with one unnamed row (`workflow_id` and `name` both
   `None`) for calls booked with no workflow, such as a hire screen's setup
   call, and for a workflow deleted since.
+- A row's `total_tokens` adds up its model calls' `total_tokens`: every token
+  the model read or wrote, cached ones included, as the provider reports
+  them. A paid tool call adds cost and no tokens.
 - `month_start` is midnight on the 1st in the owner's `profile_timezone`
   (UTC when unset or unknown), the month Settings > Billing counts tasks over.
 - Both read functions let an error propagate, so a screen shows that the
@@ -482,8 +485,8 @@ costs = await workflow_costs(database, since)
 
 The commands are `get_chat_run_costs {workflow_id}`, answering
 `{runs: {run_id: usd}}`, and `get_workflow_costs {}`, answering
-`{since, total_cost, workflows: [{workflow_id, name, total_cost}]}` with
-`since` as YYYY-MM-DD.
+`{since, total_cost, workflows: [{workflow_id, name, total_cost, total_tokens}]}`
+with `since` as YYYY-MM-DD.
 
 Not counted, because nothing books them: Claude Code and Codex agents, the
 RLM agent, standalone chat-model nodes, in-process agents without a memory

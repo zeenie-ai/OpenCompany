@@ -105,7 +105,18 @@ async def test_an_employees_model_and_tool_calls_add_up(database):
     await add_model_cost(database, "wf-1", 0.5)
     await add_tool_cost(database, "wf-1", 0.25)
 
-    assert await workflow_costs(database, NOVEMBER) == [{"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.75}]
+    assert await workflow_costs(database, NOVEMBER) == [{"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.75, "total_tokens": 0}]
+
+
+async def test_an_employees_tokens_are_its_model_calls_tokens(database):
+    await add_workflow(database, "wf-1", "Ava")
+    await add_model_cost(database, "wf-1", 0.5, total_tokens=1200)
+    await add_model_cost(database, "wf-1", 0.25, total_tokens=300)
+    await add_tool_cost(database, "wf-1", 0.25)
+
+    [row] = await workflow_costs(database, NOVEMBER)
+
+    assert row["total_tokens"] == 1500
 
 
 async def test_employees_come_highest_cost_first(database):
@@ -123,14 +134,14 @@ async def test_calls_with_no_employee_add_up_in_one_last_row(database):
     await add_workflow(database, "wf-1", "Ava")
     await add_model_cost(database, "wf-1", 0.25)
     # A hire screen's setup call has no workflow; "gone" was deleted since.
-    await add_model_cost(database, None, 0.5)
+    await add_model_cost(database, None, 0.5, total_tokens=900)
     await add_tool_cost(database, "gone", 0.25)
 
     costs = await workflow_costs(database, NOVEMBER)
 
     assert costs == [
-        {"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.25},
-        {"workflow_id": None, "name": None, "total_cost": 0.75},
+        {"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.25, "total_tokens": 0},
+        {"workflow_id": None, "name": None, "total_cost": 0.75, "total_tokens": 900},
     ]
 
 
@@ -140,7 +151,7 @@ async def test_calls_before_the_start_are_left_out(database):
     await add_tool_cost(database, "wf-1", 0.5, when=IN_OCTOBER)
     await add_model_cost(database, "wf-1", 0.25)
 
-    assert await workflow_costs(database, NOVEMBER) == [{"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.25}]
+    assert await workflow_costs(database, NOVEMBER) == [{"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.25, "total_tokens": 0}]
 
 
 async def test_no_calls_means_no_rows(database):
@@ -210,7 +221,7 @@ async def test_the_month_command_answers_the_total_and_each_employee(served):
     now = datetime.now(timezone.utc)
     this_month = {"model": now.replace(tzinfo=None), "api": now}
     await add_workflow(served, "wf-1", "Ava")
-    await add_model_cost(served, "wf-1", 0.5, when=this_month)
+    await add_model_cost(served, "wf-1", 0.5, when=this_month, total_tokens=2000)
     await add_tool_cost(served, "wf-1", 0.25, when=this_month)
     await add_model_cost(served, None, 0.125, when=this_month)
 
@@ -220,8 +231,8 @@ async def test_the_month_command_answers_the_total_and_each_employee(served):
     assert reply["since"] == month_start(now, None).date().isoformat()
     assert reply["total_cost"] == 0.875
     assert reply["workflows"] == [
-        {"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.75},
-        {"workflow_id": None, "name": None, "total_cost": 0.125},
+        {"workflow_id": "wf-1", "name": "Ava", "total_cost": 0.75, "total_tokens": 2000},
+        {"workflow_id": None, "name": None, "total_cost": 0.125, "total_tokens": 0},
     ]
 
 

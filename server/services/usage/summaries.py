@@ -107,8 +107,11 @@ async def workflow_cost_since(database: Any, workflow_id: str, since: datetime) 
 
 
 async def workflow_costs(database: Any, since: datetime) -> List[Dict[str, Any]]:
-    """USD per workflow since ``since``: ``[{workflow_id, name, total_cost}]``.
+    """USD and tokens per workflow since ``since``:
+    ``[{workflow_id, name, total_cost, total_tokens}]``.
 
+    ``total_tokens`` is the model calls' tokens (``TokenUsageMetric.total_tokens``:
+    input, cache and output); a paid tool call adds cost and no tokens.
     Workflows come highest cost first. Calls booked with no workflow (a hire
     screen's setup call), or for a workflow deleted since, add up in one last
     row whose ``workflow_id`` and ``name`` are ``None``. Errors propagate.
@@ -118,7 +121,7 @@ async def workflow_costs(database: Any, since: datetime) -> List[Dict[str, Any]]
         # token_usage_metrics.created_at holds UTC without a zone;
         # api_usage_metrics.timestamp is declared with one.
         model_calls = await session.execute(
-            select(TokenUsageMetric.workflow_id, func.sum(TokenUsageMetric.total_cost))
+            select(TokenUsageMetric.workflow_id, func.sum(TokenUsageMetric.total_cost), func.sum(TokenUsageMetric.total_tokens))
             .where(TokenUsageMetric.created_at >= since_utc.replace(tzinfo=None))
             .group_by(TokenUsageMetric.workflow_id)
         )
@@ -127,22 +130,23 @@ async def workflow_costs(database: Any, since: datetime) -> List[Dict[str, Any]]
             .where(APIUsageMetric.timestamp >= since_utc)
             .group_by(APIUsageMetric.workflow_id)
         )
-        rows = [*model_calls.all(), *tool_calls.all()]
+        rows = [*model_calls.all(), *((workflow_id, cost, 0) for workflow_id, cost in tool_calls.all())]
         names = dict((await session.execute(select(Workflow.id, Workflow.name))).all())
 
-    costs: Dict[Optional[str], float] = {}
-    for workflow_id, cost in rows:
-        key = workflow_id if workflow_id in names else None
-        costs[key] = costs.get(key, 0.0) + float(cost or 0)
+    totals: Dict[Optional[str], Dict[str, Any]] = {}
+    for workflow_id, cost, tokens in rows:
+        total = totals.setdefault(workflow_id if workflow_id in names else None, {"cost": 0.0, "tokens": 0})
+        total["cost"] += float(cost or 0)
+        total["tokens"] += int(tokens or 0)
 
-    workflows = [
-        {"workflow_id": workflow_id, "name": names[workflow_id], "total_cost": round(cost, 6)}
-        for workflow_id, cost in costs.items()
-        if workflow_id is not None
-    ]
+    def row(workflow_id: Optional[str]) -> Dict[str, Any]:
+        total = totals[workflow_id]
+        return {"workflow_id": workflow_id, "name": names.get(workflow_id), "total_cost": round(total["cost"], 6), "total_tokens": total["tokens"]}
+
+    workflows = [row(workflow_id) for workflow_id in totals if workflow_id is not None]
     workflows.sort(key=itemgetter("total_cost"), reverse=True)
-    if None in costs:
-        workflows.append({"workflow_id": None, "name": None, "total_cost": round(costs[None], 6)})
+    if None in totals:
+        workflows.append(row(None))
     return workflows
 
 
