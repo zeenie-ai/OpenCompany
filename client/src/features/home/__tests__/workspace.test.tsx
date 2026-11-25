@@ -172,11 +172,11 @@ const banner = () => screen.getByText(BANNER).closest<HTMLElement>('[data-slot="
 function takeOverAnswers() {
   screenControl.claim.mockReset().mockResolvedValue(screenControl.giveBack);
   screenControl.giveBack.mockReset();
-  actions.pauseWorkflow.mockReset().mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 5 }, 'w1'));
+  actions.pauseWorkflow.mockReset().mockResolvedValue({ ...normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 6, root_execution_id: 'w1-root' }, 'w1'), pause_started_revision: 5 });
   actions.resumeWorkflow.mockReset().mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 6 }, 'w1'));
 }
 
-const running = (revision: number, id = 'w1') => normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision }, id);
+const running = (revision: number, id = 'w1') => normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision, root_execution_id: `${id}-root` }, id);
 
 beforeEach(() => {
   localStorage.clear();
@@ -349,7 +349,7 @@ describe('WorkspaceDock', () => {
     expect(stop).toHaveClass('size-7.5', 'rounded-full');
     expect(stop).toHaveTextContent('');
     fireEvent.click(stop);
-    expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
+    expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4, 'w1-root');
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
   });
 
@@ -359,7 +359,7 @@ describe('WorkspaceDock', () => {
     useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
     renderWith([employee({ control: running(4) })]);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    await waitFor(() => expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4));
+    await waitFor(() => expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4, 'w1-root'));
     await act(async () => {});
     expect(pillToast).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
@@ -451,7 +451,7 @@ describe('WorkspaceDock', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
     // The screen first, so the employee never acts on it again, then Stop.
     expect(screenControl.claim).toHaveBeenCalledOnce();
-    expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
+    expect(actions.pauseWorkflow).toHaveBeenCalledWith('w1', 4, 'w1-root');
     expect(screenControl.claim.mock.invocationCallOrder[0]).toBeLessThan(actions.pauseWorkflow.mock.invocationCallOrder[0]);
     expect(await screen.findByText(BANNER)).toBeInTheDocument();
     // Home says what happened in its pill toast, in the message's tone.
@@ -548,7 +548,7 @@ describe('WorkspaceDock', () => {
     const giveBackMaya = vi.fn();
     const giveBackLeo = vi.fn();
     screenControl.claim.mockReset().mockResolvedValueOnce(giveBackMaya).mockResolvedValueOnce(giveBackLeo);
-    actions.pauseWorkflow.mockReset().mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 5 }, 'w1'));
+    actions.pauseWorkflow.mockReset().mockResolvedValue({ ...normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 6, root_execution_id: 'w1-root' }, 'w1'), pause_started_revision: 5 });
     actions.resumeWorkflow.mockReset().mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 6 }, 'w1'));
     useHomeStore.setState({ workspaceOpen: true, workspaceTab: 'browser' });
     renderWith([employee({ control: running(4) }), employee({ workflow_id: 'w2', name: 'Leo', control: running(9, 'w2') })]);

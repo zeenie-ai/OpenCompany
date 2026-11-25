@@ -86,6 +86,25 @@ async def test_stale_start_returns_current_status_without_starting_or_error_trac
 
 
 @pytest.mark.asyncio
+async def test_stale_stop_returns_the_observed_revision_without_admitting_a_pause(monkeypatch):
+    running = _control("running", 7)
+    service = SimpleNamespace(
+        database=SimpleNamespace(get_latest_workflow_control=AsyncMock(return_value=running)),
+        transition=AsyncMock(),
+    )
+    monkeypatch.setattr(handlers, "_control_service", lambda: service)
+    monkeypatch.setattr(handlers, "_reconcile_control", AsyncMock(return_value=(running, None)))
+    monkeypatch.setattr(handlers, "_with_runtime_counts", AsyncMock(side_effect=lambda snapshot, _: snapshot))
+    result = await handlers.handle_pause_workflow({
+        "workflow_id": "wf", "expected_revision": 3, "expected_root_execution_id": running.root_execution_id,
+    }, None)
+    assert result["success"] is False and result["error"] == "control_revision_conflict"
+    assert result["state"] == "running" and result["revision"] == 7
+    assert result["root_execution_id"] == running.root_execution_id
+    service.transition.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_start_waits_for_deployment_setup_before_publishing_running(monkeypatch):
     starting = _control("starting", 0)
     starting_with_run = _control("starting", 1)
@@ -514,6 +533,7 @@ async def test_pause_response_is_final_only_after_temporal_ack(monkeypatch):
 
     assert result["success"] is True
     assert result["state"] == "paused"
+    assert result["pause_started_revision"] == 3
     assert order == [
         "db:pausing",
         "broadcast:pausing",

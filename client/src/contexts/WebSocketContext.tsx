@@ -198,6 +198,11 @@ export interface WorkflowStartGraph {
   edges: any[];
 }
 
+/** A direct Stop reply can prove this request started the pause at revision N. */
+export interface WorkflowPauseResult extends WorkflowControlStatus {
+  pause_started_revision?: number;
+}
+
 /**
  * Successful Start responses carry the backend-admitted graph in addition to
  * the lifecycle snapshot. The graph is optional because timeout recovery can
@@ -531,9 +536,9 @@ interface WebSocketContextValue {
   cancelExecution: (workflowId: string, nodeId?: string) => Promise<any>;
   getWorkflowStatus: (workflowId: string) => Promise<{ executing: boolean }>;
   startWorkflow: (workflowId: string, nodes: any[], edges: any[], sessionId?: string, expectedRevision?: number) => Promise<WorkflowStartResult>;
-  pauseWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  pauseWorkflow: (workflowId: string, expectedRevision: number, expectedRootExecutionId?: string | null) => Promise<WorkflowPauseResult>;
   stopChatRun: (workflowId: string, expectedRevision: number, runId: string) => Promise<WorkflowControlStatus>;
-  resumeWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
+  resumeWorkflow: (workflowId: string, expectedRevision: number, expectedRootExecutionId?: string | null) => Promise<WorkflowControlStatus>;
   resetWorkflow: (workflowId: string, expectedRevision: number) => Promise<WorkflowControlStatus>;
   getWorkflowControlStatus: (workflowId: string) => Promise<WorkflowControlStatus>;
   getTeamTaskTrace: (scope: Record<string, any>) => Promise<TeamTaskTraceResponse>;
@@ -2814,7 +2819,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     type: WorkflowControlMutationRequest,
     workflowId: string,
     data: Record<string, any>,
-  ): Promise<WorkflowStartResult> => {
+  ): Promise<WorkflowStartResult & WorkflowPauseResult> => {
     const existingOwner = workflowControlPendingRef.current.get(workflowId);
     if (existingOwner && (type !== 'reset_workflow' || isWorkflowResetBlocked(existingOwner.pending))) {
       throw new Error('A workflow lifecycle change is already in progress');
@@ -2822,7 +2827,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const pending = { ...WORKFLOW_CONTROL_PENDING_BY_REQUEST[type] };
     const previousStatus = workflowControlStatusesRef.current[workflowId];
-    const matchesGeneration = (status: WorkflowControlStatus) => (
+    const pauseRoot = type === 'pause_workflow' ? data.expected_root_execution_id : undefined;
+    const expectedRoot = type === 'resume_workflow' ? data.expected_root_execution_id : pauseRoot;
+    const matchesGeneration = (status: WorkflowControlStatus) => expectedRoot
+      ? status.root_execution_id === expectedRoot : (
       (previousStatus?.generation === undefined || status.generation === previousStatus.generation)
       && (!previousStatus?.root_execution_id || status.root_execution_id === previousStatus.root_execution_id)
     );
@@ -2845,7 +2853,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const owner: WorkflowControlMutationOwner = {
       pending,
       generation: previousStatus?.generation,
-      rootExecutionId: previousStatus?.root_execution_id,
+      rootExecutionId: expectedRoot ?? previousStatus?.root_execution_id,
       superseded: false,
       supersede: () => {
         owner.superseded = true;
@@ -2862,9 +2870,13 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       resetRequestIds.add(previousStatus.workspace_reset_request_id);
     }
     let resetExpectedRevision = Number(mutationData.expected_revision ?? previousStatus?.revision ?? 0);
+    let rejectedPauseRevision: number | undefined;
     const isReconciled = (status: WorkflowControlStatus) => type === 'reset_workflow'
       ? matchesGeneration(status) && isWorkflowResetRecoveryConfirmed(status, resetExpectedRevision, resetRequestIds)
-      : isWorkflowControlMutationConfirmed(pending.action, status);
+      : (!expectedRoot || matchesGeneration(status)) && (
+        isWorkflowControlMutationConfirmed(pending.action, status)
+        || (pauseRoot && status.execution_control_version === 1 && status.state === 'pausing')
+      );
     workflowControlPendingRef.current.set(workflowId, owner);
     setWorkflowControlPending((previous) => ({ ...previous, [workflowId]: pending }));
     useWorkflowControlStore.getState().setPending(workflowId, pending);
@@ -2872,7 +2884,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const sendMutationAttempt = async (
       attemptData: Record<string, any>,
-    ): Promise<WorkflowStartResult> => {
+    ): Promise<WorkflowStartResult & WorkflowPauseResult> => {
       const idempotencyKey = crypto.randomUUID();
       if (type === 'reset_workflow') {
         resetRequestIds.add(idempotencyKey);
@@ -2890,7 +2902,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // A success:false response can still be the newest authoritative
       // snapshot. Merge it before assertion so the UI is correct even if the
       // subsequent reconciliation request is unavailable.
-      const snapshot = extractWorkflowControlStatusSnapshot(response, workflowId);
+      // A pause receipt belongs to this caller. Keep it out of the shared snapshot.
+      const { pause_started_revision: pauseRevision, ...statusResponse } = response;
+      const snapshot = extractWorkflowControlStatusSnapshot(statusResponse, workflowId);
+      if (pauseRoot && response?.error === 'control_revision_conflict'
+        && snapshot?.state === 'running' && matchesGeneration(snapshot)
+        && snapshot.revision > attemptData.expected_revision) {
+        rejectedPauseRevision = snapshot.revision;
+      }
       const acceptedSnapshot = snapshot
         ? applyWorkflowControlStatus(workflowId, snapshot)
         : undefined;
@@ -2900,7 +2919,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (response?.superseded === true) throw new WorkflowControlMutationSupersededError();
       assertWorkflowControlMutationSucceeded(response);
       const acceptedStatus = acceptedSnapshot
-        ?? applyWorkflowControlStatus(workflowId, response);
+        ?? applyWorkflowControlStatus(workflowId, statusResponse);
+      if (expectedRoot && !matchesGeneration(acceptedStatus)) throw new WorkflowControlMutationSupersededError();
+      if (pauseRoot && pauseRevision === attemptData.expected_revision + 1
+        && snapshot && snapshot.root_execution_id === pauseRoot && snapshot.revision === acceptedStatus.revision
+        && snapshot.state === acceptedStatus.state
+        && ((snapshot.state === 'pausing' && snapshot.revision === pauseRevision)
+          || (snapshot.state === 'paused' && snapshot.revision === pauseRevision + 1))) {
+        return { ...acceptedStatus, pause_started_revision: pauseRevision };
+      }
       if (type === 'reset_workflow' && (!matchesGeneration(acceptedStatus)
         || !isWorkflowControlMutationConfirmed('reset', acceptedStatus)
         || acceptedStatus.workspace_resetting === true
@@ -2951,15 +2978,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         console.error('[WebSocket] Failed to resync workflow control status:', resyncError);
       }
 
-      // Start can legitimately advance `starting -> starting` while attaching
-      // its controller run id, which increments the revision. If Reset raced
-      // that CAS, retry exactly once with the newly read revision. Other
-      // mutations and other errors never retry automatically.
+      // A Stop from a stale employee summary can retry the running revision
+      // returned by the server. A newer intent during resync wins the CAS.
       if (
-        type === 'reset_workflow'
-        && reconciled
+        reconciled
         && matchesGeneration(reconciled)
-        && shouldRetryResetWorkflowAfterConflict(error, reconciled)
+        && (
+          (type === 'reset_workflow' && shouldRetryResetWorkflowAfterConflict(error, reconciled))
+          || (rejectedPauseRevision === reconciled.revision && reconciled.state === 'running' && reconciled.can_pause)
+        )
       ) {
         try {
           return await sendMutationAttempt({
@@ -2976,7 +3003,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               return retryReconciled;
             }
           } catch (resyncError) {
-            console.error('[WebSocket] Failed to resync workflow control status after reset retry:', resyncError);
+            console.error('[WebSocket] Failed to resync workflow control status after retry:', resyncError);
           }
           throw retryError;
         }
@@ -3024,14 +3051,18 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const startEmployeeAsync = useCallback((workflowId: string, expectedRevision: number) =>
     controlMutation('start_employee', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
 
-  const pauseWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
-    controlMutation('pause_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
+  const pauseWorkflowAsync = useCallback((workflowId: string, expectedRevision: number, expectedRootExecutionId?: string | null) =>
+    controlMutation('pause_workflow', workflowId, {
+      expected_revision: expectedRevision, expected_root_execution_id: expectedRootExecutionId,
+    }), [controlMutation]);
 
   const stopChatRunAsync = useCallback((workflowId: string, expectedRevision: number, runId: string) =>
     controlMutation('stop_chat_run', workflowId, { expected_revision: expectedRevision, run_id: runId }), [controlMutation]);
 
-  const resumeWorkflowAsync = useCallback((workflowId: string, expectedRevision: number) =>
-    controlMutation('resume_workflow', workflowId, { expected_revision: expectedRevision }), [controlMutation]);
+  const resumeWorkflowAsync = useCallback((workflowId: string, expectedRevision: number, expectedRootExecutionId?: string | null) =>
+    controlMutation('resume_workflow', workflowId, {
+      expected_revision: expectedRevision, expected_root_execution_id: expectedRootExecutionId,
+    }), [controlMutation]);
 
   const resetWorkflowAsync = useCallback(async (workflowId: string, expectedRevision: number) => {
     const result = await controlMutation(

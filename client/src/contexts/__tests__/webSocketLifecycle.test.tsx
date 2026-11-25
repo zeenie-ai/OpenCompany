@@ -187,6 +187,66 @@ describe('WebSocket recovery and ownership', () => {
     expect(clear).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { root: 'g1', revision: 7, state: 'running', expected: 'retry' },
+    { root: 'g1', revision: 9, state: 'running', expected: 'conflict' }, // a newer Resume
+    { root: 'g1', revision: 8, state: 'pausing', expected: 'pausing' },
+    { root: 'g2', revision: 7, state: 'running', expected: 'conflict' },
+    { root: 'g2', revision: 9, state: 'paused', expected: 'conflict' },
+  ])('recovers a stale Stop when resync sees $root at $state revision $revision', async ({ root, revision, state, expected }) => {
+    await mount();
+    await open();
+    // Home can have a summary before the socket has any control snapshot.
+    const running = { workflow_id: 'browser', state: 'running', generation: 1,
+      root_execution_id: 'g1', revision: 7, execution_control_version: 1 };
+    let result!: Promise<unknown>;
+    act(() => { result = actions.pauseWorkflow('browser', 3, 'g1').catch(error => error.message); });
+    const pauses = () => latest().sent.filter(item => item.type === 'pause_workflow');
+    const first = pauses()[0];
+    expect(first).toMatchObject({ expected_revision: 3, expected_root_execution_id: 'g1' });
+    await act(async () => latest().message({ request_id: first.request_id, success: false,
+      error: 'control_revision_conflict', ...running }));
+    const read = latest().sent.filter(item => item.type === 'get_workflow_control_status').at(-1)!;
+    await act(async () => latest().message({ request_id: read.request_id, success: true,
+      ...running, root_execution_id: root, generation: root === 'g1' ? 1 : 2, revision, state }));
+    if (expected === 'retry') {
+      const retry = pauses()[1];
+      expect(retry).toMatchObject({ expected_revision: 7, expected_root_execution_id: 'g1' });
+      expect(retry.idempotency_key).not.toBe(first.idempotency_key);
+      await act(async () => latest().message({ request_id: retry.request_id, success: true,
+        ...running, state: 'paused', revision: 9, pause_started_revision: 8 }));
+      await expect(result).resolves.toMatchObject({ state: 'paused', revision: 9, pause_started_revision: 8 });
+      expect(context.workflowControlStatuses.browser).not.toHaveProperty('pause_started_revision');
+      expect(pauses()).toHaveLength(2);
+    } else {
+      if (expected === 'pausing') await expect(result).resolves.toMatchObject({ state: 'pausing', revision: 8 });
+      else await expect(result).resolves.toBe('control_revision_conflict');
+      expect(pauses()).toHaveLength(1);
+    }
+  });
+
+  it.each([
+    { receipt: undefined, replyRevision: 5, broadcastRevision: 5, owns: false }, // legacy or joined
+    { receipt: 4, replyRevision: 5, broadcastRevision: 5, owns: true },
+    { receipt: 4, replyRevision: 5, broadcastRevision: 9, owns: false }, // stale direct reply
+    { receipt: 8, replyRevision: 9, broadcastRevision: 9, owns: false }, // later pause
+  ])('keeps pause receipt $receipt scoped to direct reply $replyRevision at revision $broadcastRevision', async ({
+    receipt, replyRevision, broadcastRevision, owns,
+  }) => {
+    await mount();
+    await open();
+    const paused = { workflow_id: 'browser', generation: 1, root_execution_id: 'g1', state: 'paused' };
+    let result!: ReturnType<typeof actions.pauseWorkflow>;
+    act(() => { result = actions.pauseWorkflow('browser', 3, 'g1'); });
+    const request = latest().sent.find(item => item.type === 'pause_workflow')!;
+    act(() => latest().message({ type: 'workflow_control_status', data: { ...paused, revision: broadcastRevision } }));
+    await act(async () => latest().message({ request_id: request.request_id, success: true,
+      ...paused, revision: replyRevision, pause_started_revision: receipt }));
+    if (owns) await expect(result).resolves.toHaveProperty('pause_started_revision', 4);
+    else await expect(result).resolves.not.toHaveProperty('pause_started_revision');
+    expect(context.workflowControlStatuses.browser).not.toHaveProperty('pause_started_revision');
+  });
+
   it('uses the generation control protocol for chat Stop and reconciles a lost acknowledgement', async () => {
     await mount();
     await open();

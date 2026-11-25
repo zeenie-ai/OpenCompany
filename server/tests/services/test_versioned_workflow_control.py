@@ -222,6 +222,7 @@ async def test_blocked_stop_status_returns_and_reset_supersedes_poll(monkeypatch
     outcome = await asyncio.wait_for(stop, HANG_GUARD_SECONDS)
     assert reset["success"] and reset["state"] == "ready"
     assert outcome["success"] and outcome["superseded"]
+    assert "pause_started_revision" not in outcome
     assert outcome["state"] in {"resetting", "ready"}
     assert record.row.status == "reset"
     assert record.broadcasts == [("pausing", 3), ("pausing", 3), ("resetting", 4), ("reset", 5)]
@@ -270,11 +271,17 @@ async def test_a_stop_still_draining_answers_pending_and_the_drain_goes_on(monke
         handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None), HANG_GUARD_SECONDS)
     assert outcome["success"] and outcome["transition_pending"] and not outcome["superseded"]
     assert outcome["state"] == "pausing"
+    assert outcome["pause_started_revision"] == 3
+    joined = await handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None)
+    assert joined["state"] == "pausing" and "pause_started_revision" not in joined
     transition_task = handlers._control_transition_tasks[(record.row.id, 3)]
     assert admitted.is_set() and not transition_task.done()
     release.set()
     finished, _ = await asyncio.wait_for(asyncio.shield(transition_task), HANG_GUARD_SECONDS)
     assert finished.status == "paused" and record.row.status == "paused"
+
+    already_paused = await handlers.handle_pause_workflow({"workflow_id": "canvas", "expected_revision": 2}, None)
+    assert already_paused["idempotent"] and "pause_started_revision" not in already_paused
 
 
 @pytest.mark.asyncio

@@ -2376,6 +2376,12 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
             "error": "workflow_control_transition_pending",
             **await _control_payload(control, controller_status=controller_status),
         }
+    expected_revision = _expected_revision(data, control)
+    if expected_revision != control.revision:
+        # Return the row observed by this Stop. A retry can target that exact
+        # revision, and the CAS below still fences any intervening transition.
+        return {"success": False, "error": "control_revision_conflict",
+                **await _control_payload(control, controller_status=controller_status)}
     # Only server-side callers (no socket) may say why a pause happened: a
     # client must not be able to dress its own pause up as an automatic one.
     reason_values = _automatic_pause_values(data) if websocket is None else None
@@ -2383,7 +2389,7 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
     async with _control_completion_lock(workflow_id):
         control = await service.transition(
             control,
-            expected_revision=_expected_revision(data, control),
+            expected_revision=expected_revision,
             from_statuses={"running"},
             status="pausing",
             **transition_kwargs,
@@ -2392,7 +2398,13 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         await _broadcast_control(control)
         container.workflow_service().pause_deployment(workflow_id)
     if _versioned_control(control):
-        return await _await_versioned_transition(service, control, task=transition_task)
+        outcome = await _await_versioned_transition(service, control, task=transition_task)
+        if not outcome["superseded"] and (outcome["state"], outcome["revision"]) in {
+            ("pausing", control.revision), ("paused", control.revision + 1),
+        }:
+            # Only the request that won running -> pausing may resume it on hand-back.
+            outcome["pause_started_revision"] = control.revision
+        return outcome
     try:
         controller_status = await _update_controller_state(
             control,
@@ -2446,6 +2458,7 @@ async def handle_pause_workflow(data: Dict[str, Any], websocket: WebSocket) -> D
         "success": True, "signalled_executions": signalled,
         "paused_schedules": paused_schedules, "paused_triggers": paused_triggers,
         **payload,
+        "pause_started_revision": expected_revision + 1,
     }
 
 

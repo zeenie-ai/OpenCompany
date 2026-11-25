@@ -146,7 +146,7 @@ const nodes: Node[] = [
   { id: 'web1', type: 'webPlugin', position: { x: 1, y: 0 }, data: { label: 'Research browser' } },
 ];
 
-const RUNNING = { status: 'working', control: { generation: 1, state: 'running', revision: 4 } };
+const RUNNING = { status: 'working', control: { generation: 1, state: 'running', revision: 4, root_execution_id: 'run-1' } };
 const STOPPED = { status: 'paused', control: { generation: 1, state: 'paused', revision: 5 } };
 const NEVER_STARTED = { status: 'ready' };
 
@@ -459,7 +459,7 @@ describe('The open workflow’s employee', () => {
 
   it('runs Take over for the employee, on the screen it takes, and says what happened in a toast', async () => {
     employeeAnswer = found(RUNNING);
-    ws.actions.pauseWorkflow.mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 5 }, 'wf1'));
+    ws.actions.pauseWorkflow.mockResolvedValue({ ...normalizeWorkflowControlStatus({ generation: 1, state: 'paused', revision: 6, root_execution_id: 'run-1' }, 'wf1'), pause_started_revision: 5 });
     ws.actions.resumeWorkflow.mockResolvedValue(normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 6 }, 'wf1'));
     useCanvasDockStore.setState({ tab: 'browser' });
     renderDock();
@@ -479,7 +479,7 @@ describe('The open workflow’s employee', () => {
     await waitFor(() => expect(takeOver()).toBeEnabled());
     fireEvent.click(takeOver());
     expect(await screen.findByText('You’re in control · Scout is waiting')).toBeInTheDocument();
-    expect(ws.actions.pauseWorkflow).toHaveBeenCalledWith('wf1', 4);
+    expect(ws.actions.pauseWorkflow).toHaveBeenCalledWith('wf1', 4, 'run-1');
     expect(toast.success).toHaveBeenCalledWith('You have control — Scout will wait');
     expect(screen.getByRole('status', { name: 'Waiting' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
@@ -488,7 +488,7 @@ describe('The open workflow’s employee', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hand back' }));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Handed back to Scout'));
     expect(screenControl.giveBack).toHaveBeenCalledOnce();
-    expect(ws.actions.resumeWorkflow).toHaveBeenCalledWith('wf1', 5);
+    expect(ws.actions.resumeWorkflow).toHaveBeenCalledWith('wf1', 6, 'run-1');
     expect(screen.queryByText('You’re in control · Scout is waiting')).toBeNull();
   });
 });

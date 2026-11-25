@@ -14,6 +14,9 @@ import type { SurfaceControl } from '../workspace/surface';
 export interface BrowserWorkspaceProps {
   workflowId?: string | null;
   nodes: { node_id: string; label: string }[];
+  requestedNodeId?: string;
+  heldNodeId?: string;
+  lockNodeSelection?: boolean;
   visible?: boolean;
   /** The name on the agent's cursor (the employee's). */
   agentName?: string;
@@ -58,15 +61,24 @@ function webPage(url: string): boolean {
  *  work while the owner has control; the page's domain; Open in new tab;
  *  Take over). `ref`: the Workspace's Take over (SurfaceControl), for the
  *  browser shown. `dev` adds Dev mode's extras. */
-export default function BrowserWorkspace({ workflowId, nodes, visible = true, agentName, action, dev = false, flushCanvas, ref }: BrowserWorkspaceProps & { ref?: Ref<SurfaceControl> }) {
+export default function BrowserWorkspace({ workflowId, nodes, requestedNodeId, heldNodeId, lockNodeSelection = false, visible = true, agentName, action, dev = false, flushCanvas, ref }: BrowserWorkspaceProps & { ref?: Ref<SurfaceControl> }) {
   const [selected, setSelected] = useState('');
-  const nodeId = nodes.some((n) => n.node_id === selected) ? selected : nodes[0]?.node_id;
+  const [lastNodeId, setLastNodeId] = useState<string>();
+  const current = nodes.find((node) => node.node_id === lastNodeId);
+  const manual = nodes.find((node) => node.node_id === selected);
+  const requested = nodes.find((node) => node.node_id === requestedNodeId);
+  const held = nodes.find((node) => node.node_id === heldNodeId);
+  const preferred = lockNodeSelection && current ? current : manual ?? requested ?? current ?? nodes[0];
+  const nodeId = (heldNodeId ? held : preferred)?.node_id;
+  // Remember the session even after its help request clears on takeover.
+  if (nodeId !== lastNodeId) setLastNodeId(nodeId);
   if (!workflowId) return <EmptyBrowser message="Save this workflow to open its browser." />;
+  if (heldNodeId && !held) return <EmptyBrowser message="The browser you took over is no longer in this workflow." />;
   if (!nodeId) return <EmptyBrowser message="Add a Browser node to this workflow to watch it here." />;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
       {nodes.length > 1 && (
-        <select aria-label="Browser node" className={`${inputClass} mx-2 mt-2 shrink-0`} value={nodeId} onChange={(e) => setSelected(e.target.value)}>
+        <select aria-label="Browser node" className={`${inputClass} mx-2 mt-2 shrink-0`} value={nodeId} disabled={lockNodeSelection} onChange={(e) => setSelected(e.target.value)}>
           {nodes.map((node) => <option key={node.node_id} value={node.node_id}>{node.label || 'Browser'}</option>)}
         </select>
       )}
@@ -148,6 +160,7 @@ function BrowserSessionView({ workflowId, nodeId, visible, agentName, action, de
       if (controlRef.current) send({ type: 'control_release' });
     };
     return {
+      nodeId,
       claim: () => new Promise<(() => void) | null>((resolve) => {
         if (controlRef.current) { resolve(giveBack); return; }
         const socket = socketRef.current;
@@ -158,7 +171,7 @@ function BrowserSessionView({ workflowId, nodeId, visible, agentName, action, de
         socket.send(JSON.stringify({ type: 'control_request', force: true }));
       }),
     };
-  }, [answerClaim, send, setError]);
+  }, [answerClaim, nodeId, send, setError]);
 
   useEffect(() => {
     if (!isReady) { setPhase('connecting'); return; }

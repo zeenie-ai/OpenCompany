@@ -21,10 +21,9 @@
  *
  * Hand back gives the screen back first, so that call can go on, then waits
  * for Take over's Stop and resumes them from the newest control it has, the
- * summary's or the Stop's answer: the server resumes only from paused, at the
- * current revision. A Stop answers within 10 s even while the drain goes on,
- * so while the control is still pausing Hand back sends the Stop again, which
- * waits for the drain and answers with the paused revision.
+ * summary's or the Stop's answer. A Stop can answer while the drain is still
+ * in progress. Hand back watches that pause reach its checkpoint and resumes
+ * only the generation and revision that completed it.
  *
  * What happened is kept in homeStore (`takeovers`, by employee): the tab
  * whose screen was taken, the way to give it back, and Take over's Stop. So
@@ -48,6 +47,7 @@ export interface TakeOver {
   active: boolean;
   /** The tab whose screen they took, while they have it. */
   screen: WorkspaceTab | null;
+  nodeId?: string;
   /** Taking the screen or handing it back, not while Take over's Stop drains. */
   busy: boolean;
   /** Takes the screen on show; `onTaken` runs once it is the owner's. */
@@ -66,7 +66,7 @@ export function useTakeOver(
   surface: () => SurfaceControl | null,
   notify: Notify,
 ): TakeOver {
-  const { pauseWorkflow, resumeWorkflow } = useWebSocketActions();
+  const { pauseWorkflow, resumeWorkflow, getWorkflowControlStatus } = useWebSocketActions();
   const id = employee?.workflow_id ?? '';
   const mine = useHomeStore((s) => s.takeovers[id]);
   const setTakeover = useHomeStore((s) => s.setTakeover);
@@ -77,6 +77,7 @@ export function useTakeOver(
   const takeOver = async (onTaken?: () => void) => {
     const screen = surface();
     if (!employee || !screen || busyNow()) return;
+    const nodeId = screen.nodeId;
     setBusy(id, true);
     const giveBack = await screen.claim().finally(() => setBusy(id, false));
     if (!giveBack) {
@@ -86,13 +87,14 @@ export function useTakeOver(
     // Taken again after it let go: they still wait, on the Stop they had.
     const taken = useHomeStore.getState().takeovers[id];
     if (taken) {
-      setTakeover(id, { ...taken, giveBack });
+      setTakeover(id, { ...taken, nodeId, giveBack });
       onTaken?.();
       return;
     }
     // Only a running employee is stopped, and only then resumed later.
-    const stop = presentEmployee(employee).primary.kind === 'pause' ? pauseWorkflow(id, employee.control.revision) : undefined;
-    setTakeover(id, { screen: tab, giveBack, stop });
+    const stop = presentEmployee(employee).primary.kind === 'pause'
+      ? pauseWorkflow(id, employee.control.revision, employee.control.root_execution_id) : undefined;
+    setTakeover(id, { screen: tab, nodeId, giveBack, stop });
     onTaken?.();
     notify(`You have control — ${employee.name} will wait`, 'success');
     if (!stop) return;
@@ -116,13 +118,19 @@ export function useTakeOver(
     mine.giveBack();
     setTakeover(id, null);
     try {
-      if (mine.stop) {
-        // A Stop that failed leaves the summary to say where they are.
-        const answer = await mine.stop.catch(() => undefined);
-        let control = answer ? mergeWorkflowControlStatus(employee.control, answer) : employee.control;
-        // Still draining: each Stop waits up to 10 s for the drain to end.
-        while (control.state === 'pausing') control = await pauseWorkflow(id, control.revision);
-        await resumeWorkflow(id, control.revision);
+      const answer = await mine.stop;
+      if (answer?.pause_started_revision !== undefined) {
+        // A later Resume, Stop or Reset owns its own transition. Hand back
+        // observes the original drain without issuing another Stop.
+        let control = mergeWorkflowControlStatus(employee.control, answer);
+        const sameRun = () => control.generation === answer.generation && control.root_execution_id === answer.root_execution_id;
+        while (sameRun() && control.state === 'pausing' && control.revision === answer.pause_started_revision) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          control = await getWorkflowControlStatus(id);
+        }
+        if (sameRun() && control.state === 'paused' && control.revision === answer.pause_started_revision + 1) {
+          await resumeWorkflow(id, control.revision, control.root_execution_id);
+        }
       }
       notify(`Handed back to ${employee.name}`, 'success');
     } catch (error) {
@@ -133,5 +141,5 @@ export function useTakeOver(
     }
   };
 
-  return { active: Boolean(mine), screen: mine?.screen ?? null, busy, takeOver, handBack };
+  return { active: Boolean(mine), screen: mine?.screen ?? null, nodeId: mine?.nodeId, busy, takeOver, handBack };
 }

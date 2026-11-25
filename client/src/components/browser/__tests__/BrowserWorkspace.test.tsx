@@ -91,6 +91,49 @@ describe('BrowserWorkspace session lifecycle', () => {
     expect(current.sent[0]).toMatchObject({ target: { node_id: 'browser-2' }, visible: false });
     unmount(); expect(current.close).toHaveBeenCalledOnce();
   });
+  it('attaches to the browser requesting help and keeps its socket when the request clears or the screen is held', () => {
+    const browsers = [...nodes, { node_id: 'browser-2', label: 'Orders' }];
+    const view = (requestedNodeId?: string, lockNodeSelection = false) =>
+      <BrowserWorkspace workflowId="wf" nodes={browsers} requestedNodeId={requestedNodeId} lockNodeSelection={lockNodeSelection} />;
+    const { rerender } = render(view());
+    expect(screen.getByRole('combobox')).toHaveValue('browser-1');
+    rerender(view('browser-2'));
+    const socket = MockSocket.instances.at(-1)!;
+    act(() => socket.open());
+    expect(socket.sent[0]).toMatchObject({ type: 'attach', target: { workflow_id: 'wf', node_id: 'browser-2' } });
+    rerender(view());
+    expect(screen.getByRole('combobox')).toHaveValue('browser-2');
+    rerender(view('browser-1', true));
+    expect(screen.getByRole('combobox')).toBeDisabled();
+    expect(screen.getByRole('combobox')).toHaveValue('browser-2');
+    expect(socket.close).not.toHaveBeenCalled();
+    rerender(view('browser-1'));
+    expect(screen.getByRole('combobox')).toHaveValue('browser-1');
+    expect(socket.close).toHaveBeenCalledOnce();
+  });
+  it('keeps an explicitly selected browser when another node requests help', () => {
+    const browsers = [...nodes, { node_id: 'browser-2', label: 'Orders' }];
+    const { rerender } = render(<BrowserWorkspace workflowId="wf" nodes={browsers} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'browser-2' } });
+    const socket = MockSocket.instances.at(-1)!;
+    rerender(<BrowserWorkspace workflowId="wf" nodes={browsers} requestedNodeId="browser-1" />);
+    expect(screen.getByRole('combobox')).toHaveValue('browser-2');
+    expect(socket.close).not.toHaveBeenCalled();
+  });
+  it('reattaches to the claimed node when the dock reopens and releases the socket if that node is removed', () => {
+    const browsers = [...nodes, { node_id: 'browser-2', label: 'Orders' }];
+    const props = { workflowId: 'wf', requestedNodeId: 'browser-1', heldNodeId: 'browser-2', lockNodeSelection: true };
+    const ref = createRef<SurfaceControl>();
+    const { rerender } = render(<BrowserWorkspace {...props} ref={ref} nodes={browsers} />);
+    const socket = MockSocket.instances.at(-1)!;
+    act(() => socket.open());
+    expect(socket.sent[0]).toMatchObject({ target: { node_id: 'browser-2' } });
+    expect(ref.current?.nodeId).toBe('browser-2');
+    rerender(<BrowserWorkspace {...props} ref={ref} nodes={nodes} />);
+    expect(socket.close).toHaveBeenCalledOnce();
+    expect(ref.current).toBeNull();
+    expect(screen.getByText('The browser you took over is no longer in this workflow.')).toBeVisible();
+  });
   it('gates navigation and keyboard input on server-confirmed control and hands back on unmount', () => {
     const { unmount } = render(<BrowserWorkspace workflowId="wf" nodes={nodes} />);
     const socket = MockSocket.instances[0];

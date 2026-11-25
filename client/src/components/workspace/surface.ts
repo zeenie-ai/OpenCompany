@@ -3,6 +3,8 @@
  * take its screen for the owner.
  */
 export interface SurfaceControl {
+  /** The graph node whose session this handle controls, when available. */
+  nodeId?: string;
   /** Take the screen. Once the server granted it, resolves to the way to give
    *  that screen back, letting the employee's waiting work on it go on; null
    *  when it was refused. Giving back works after this view went away (the

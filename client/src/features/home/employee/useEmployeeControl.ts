@@ -105,7 +105,7 @@ export function useEmployeeControl(employee: EmployeeSummary, onConnect: (provid
     try {
       const run =
         kind === 'pause'
-          ? actions.pauseWorkflow(id, current.revision)
+          ? actions.pauseWorkflow(id, current.revision, current.root_execution_id)
           : kind === 'resume'
             ? actions.resumeWorkflow(id, current.revision)
             : kind === 'reset'

@@ -36,6 +36,8 @@ vi.mock('../../ui/pillToast', () => ({ pillToast: vi.fn() }));
 interface ViewerProps {
   workflowId?: string | null;
   nodes: { node_id: string; label: string }[];
+  requestedNodeId?: string;
+  heldNodeId?: string;
   visible?: boolean;
   agentName?: string;
   canvasNodeId?: string | null;
@@ -59,10 +61,11 @@ const screenControl = vi.hoisted(() => ({ claim: vi.fn(), giveBack: vi.fn() }));
 const viewer = vi.hoisted(() => (testId: string) => async () => {
   const { useImperativeHandle, useState } = await import('react');
   return {
-    default: function Viewer({ workflowId, nodes, visible, agentName, canvasNodeId, notify, dev = false, action, flushCanvas, ref }: ViewerProps) {
+    default: function Viewer({ workflowId, nodes, requestedNodeId, heldNodeId, visible, agentName, canvasNodeId, notify, dev = false, action, flushCanvas, ref }: ViewerProps) {
       const [held, setHeld] = useState(false);
       if (held && !visible) setHeld(false);
       useImperativeHandle(ref, () => ({
+        nodeId: heldNodeId ?? requestedNodeId ?? nodes[0]?.node_id,
         claim: async () => {
           const giveBack = (await screenControl.claim()) as (() => void) | null;
           if (!giveBack) return null;
@@ -81,6 +84,8 @@ const viewer = vi.hoisted(() => (testId: string) => async () => {
           data-dev={String(dev)}
           data-take-over={action === undefined ? 'own' : action === null ? 'none' : 'dock'}
           data-agent={agentName ?? ''}
+          data-requested-node={requestedNodeId}
+          data-held-node={heldNodeId}
           data-canvas={canvasNodeId ?? ''}
         >
           {nodes.map((node) => (
@@ -321,6 +326,8 @@ describe('What the host gives the Workspace', () => {
     expect(frame()).toBeNull();
     // Maya's is still the owner's, for when the dock shows her again.
     expect(Object.keys(useHomeStore.getState().takeovers)).toEqual(['w1']);
+    rerender({ employee: maya() });
+    expect(browser()).toHaveAttribute('data-held-node', 'w1:browser:1');
   });
 
   it('leaves Dev mode’s extras out unless the host asks for them', () => {
@@ -386,6 +393,7 @@ describe('A busy tab', () => {
     // On show, the tab needs no dot: the request is on the page.
     showTab('Browser (busy)');
     expect(screen.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
+    expect(browser()).toHaveAttribute('data-requested-node', WAITING_IN_BROWSER.browser_request.node_id);
     showTab('Canvas');
     expect(screen.getByRole('tab', { name: 'Browser (busy)' })).toBeInTheDocument();
     // The owner answered: no dot.

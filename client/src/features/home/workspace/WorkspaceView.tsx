@@ -249,6 +249,9 @@ export function WorkspaceView({
             ref={browserRef}
             workflowId={workflowId}
             nodes={browserNodes}
+            requestedNodeId={employee?.browser_request?.node_id}
+            heldNodeId={takeover.screen === 'browser' ? takeover.nodeId : undefined}
+            lockNodeSelection={takeover.busy || takeover.screen === 'browser'}
             visible={visible && tab === 'browser'}
             agentName={employee?.name}
             action={takeOverOn('browser')}

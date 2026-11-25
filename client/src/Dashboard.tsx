@@ -746,7 +746,7 @@ const DashboardContent: React.FC = () => {
     const workflowId = currentWorkflow?.id;
     if (!workflowId) return;
     try {
-      await pauseWorkflow(workflowId, workflowControl.revision);
+      await pauseWorkflow(workflowId, workflowControl.revision, workflowControl.root_execution_id);
     } catch (error: any) {
       if (error?.message === 'workflow_control_superseded') return;
       toast.error(error?.message || 'Unable to pause workflow');

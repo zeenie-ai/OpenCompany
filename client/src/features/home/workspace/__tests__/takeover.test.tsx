@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react';
 const mocks = vi.hoisted(() => ({
   pauseWorkflow: vi.fn(),
   resumeWorkflow: vi.fn(),
+  getWorkflowControlStatus: vi.fn(),
   /** The host's way of saying what happened (Home: the pill toast; the editor: a toast). */
   notify: vi.fn(),
 }));
@@ -21,7 +22,10 @@ import { useHomeStore } from '../../state/homeStore';
 import { pillToast } from '../../ui/pillToast';
 import { useTakeOver } from '../takeover';
 
-const status = (state: string, revision: number) => normalizeWorkflowControlStatus({ generation: 1, state, revision }, 'w1');
+const status = (state: string, revision: number) => normalizeWorkflowControlStatus({ generation: 1, state, revision, root_execution_id: 'w1-root' }, 'w1');
+const pauseAnswer = (state: 'paused' | 'pausing', revision: number) => ({
+  ...status(state, revision), pause_started_revision: state === 'pausing' ? revision : revision - 1,
+});
 
 /** Maya as her summary shows her: running at revision 4 unless told otherwise. */
 const maya = (state = 'running', revision = 4) =>
@@ -51,8 +55,9 @@ function takeOverHook() {
 beforeEach(() => {
   vi.clearAllMocks();
   useHomeStore.setState({ takeovers: {}, takeoverBusy: {} });
-  mocks.pauseWorkflow.mockReset().mockResolvedValue(status('paused', 5));
+  mocks.pauseWorkflow.mockReset().mockResolvedValue(pauseAnswer('paused', 5));
   mocks.resumeWorkflow.mockReset().mockResolvedValue(status('running', 6));
+  mocks.getWorkflowControlStatus.mockReset();
 });
 
 afterEach(() => {
@@ -77,7 +82,7 @@ describe('Hand back lifecycle recovery', () => {
       await act(async () => result.current.handBack());
 
       // The revision the Stop answered (paused at 5), not the summary's older 4.
-      expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 5);
+      expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 5, 'w1-root');
       expect(giveBack).toHaveBeenCalledOnce();
       expect(result.current).toMatchObject({ active: false, busy: false });
       expect(useHomeStore.getState().takeovers).toEqual({});
@@ -103,14 +108,14 @@ describe('Take over', () => {
     });
 
     expect(screen.claim.mock.invocationCallOrder[0]).toBeLessThan(mocks.pauseWorkflow.mock.invocationCallOrder[0]);
-    expect(mocks.pauseWorkflow).toHaveBeenCalledWith('w1', 4);
+    expect(mocks.pauseWorkflow).toHaveBeenCalledWith('w1', 4, 'w1-root');
     expect(result.current).toMatchObject({ active: true, screen: 'browser', busy: false });
     expect(useHomeStore.getState().takeovers.w1).toEqual({ screen: 'browser', giveBack, stop: stop.promise });
     expect(useHomeStore.getState().takeovers.w1.stop).toBe(stop.promise);
     expect(mocks.notify).toHaveBeenCalledWith('You have control — Maya will wait', 'success');
 
     await act(async () => {
-      stop.resolve(status('paused', 6));
+      stop.resolve(pauseAnswer('paused', 6));
       await taking;
     });
     expect(result.current.active).toBe(true);
@@ -218,7 +223,7 @@ describe('One dock, several employees', () => {
     const screen = { claim: vi.fn(async () => vi.fn()) };
     const leo = parseEmployee({
       workflow_id: 'w2', name: 'Leo', role: 'Researcher', status: 'working',
-      control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 9 }, 'w2'),
+      control: normalizeWorkflowControlStatus({ generation: 1, state: 'running', revision: 9, root_execution_id: 'w2-root' }, 'w2'),
     })!;
     // The dock's one hook instance follows whichever employee it shows.
     const { result, rerender } = renderHook(({ employee }) => useTakeOver(employee, 'browser', () => screen, mocks.notify), {
@@ -241,13 +246,13 @@ describe('One dock, several employees', () => {
       void result.current.takeOver();
     });
     expect(result.current.active).toBe(true);
-    expect(mocks.pauseWorkflow).toHaveBeenLastCalledWith('w2', 9);
+    expect(mocks.pauseWorkflow).toHaveBeenLastCalledWith('w2', 9, 'w2-root');
 
     await act(async () => {
-      stop.resolve(status('paused', 6));
+      stop.resolve(pauseAnswer('paused', 6));
       await Promise.all([taking, handing]);
     });
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6, 'w1-root');
   });
 });
 
@@ -277,7 +282,7 @@ describe('Taking the screen again', () => {
     await act(async () => result.current.handBack());
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledOnce();
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 5);
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 5, 'w1-root');
   });
 
   it('gives back the screen taken last when the Stop fails', async () => {
@@ -304,6 +309,15 @@ describe('Taking the screen again', () => {
 });
 
 describe('Hand back', () => {
+  it('keeps an independently paused workflow stopped when Take over joined its pause', async () => {
+    mocks.pauseWorkflow.mockResolvedValue(status('paused', 6));
+    const { result, giveBack } = takeOverHook();
+    await act(async () => result.current.takeOver());
+    await act(async () => result.current.handBack());
+    expect(giveBack).toHaveBeenCalledOnce();
+    expect(mocks.resumeWorkflow).not.toHaveBeenCalled();
+  });
+
   it('works while the Stop is still draining, then resumes from its answer', async () => {
     const stop = deferred<WorkflowControlStatus>();
     mocks.pauseWorkflow.mockReturnValue(stop.promise);
@@ -323,33 +337,34 @@ describe('Hand back', () => {
     expect(result.current).toMatchObject({ active: false, busy: true });
 
     await act(async () => {
-      stop.resolve(status('paused', 6));
+      stop.resolve(pauseAnswer('paused', 6));
       await Promise.all([taking, handing]);
     });
     expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6, 'w1-root');
     expect(result.current).toMatchObject({ active: false, busy: false });
     expect(mocks.notify).toHaveBeenLastCalledWith('Handed back to Maya', 'success');
   });
 
-  it('from pausing, sends the Stop once more and resumes with the revision it answers', async () => {
+  it('observes the checkpoint before resuming the paused generation', async () => {
     // A Stop answers within 10 s even while the drain goes on.
-    mocks.pauseWorkflow.mockResolvedValueOnce(status('pausing', 5)).mockResolvedValueOnce(status('paused', 6));
+    mocks.pauseWorkflow.mockResolvedValueOnce(pauseAnswer('pausing', 5));
+    mocks.getWorkflowControlStatus.mockResolvedValueOnce(status('paused', 6));
     const { result, giveBack } = takeOverHook();
     await act(async () => result.current.takeOver());
 
     await act(async () => result.current.handBack());
 
-    expect(mocks.pauseWorkflow.mock.calls).toEqual([['w1', 4], ['w1', 5]]);
-    expect(giveBack.mock.invocationCallOrder[0]).toBeLessThan(mocks.pauseWorkflow.mock.invocationCallOrder[1]);
+    expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
+    expect(giveBack.mock.invocationCallOrder[0]).toBeLessThan(mocks.getWorkflowControlStatus.mock.invocationCallOrder[0]);
     expect(mocks.resumeWorkflow).toHaveBeenCalledOnce();
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6, 'w1-root');
   });
 
-  it('sends the Stop again for as long as it answers pausing', async () => {
+  it('waits through a pending checkpoint without issuing another Stop', async () => {
     // Given back, a phone task goes on with its goal, and the drain with it.
-    mocks.pauseWorkflow
-      .mockResolvedValueOnce(status('pausing', 5))
+    mocks.pauseWorkflow.mockResolvedValueOnce(pauseAnswer('pausing', 5));
+    mocks.getWorkflowControlStatus
       .mockResolvedValueOnce(status('pausing', 5))
       .mockResolvedValueOnce(status('paused', 6));
     const { result } = takeOverHook();
@@ -357,12 +372,13 @@ describe('Hand back', () => {
 
     await act(async () => result.current.handBack());
 
-    expect(mocks.pauseWorkflow.mock.calls).toEqual([['w1', 4], ['w1', 5], ['w1', 5]]);
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
+    expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
+    expect(mocks.getWorkflowControlStatus).toHaveBeenCalledTimes(2);
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6, 'w1-root');
   });
 
   it('from paused, resumes with the newest revision and sends no Stop', async () => {
-    mocks.pauseWorkflow.mockResolvedValueOnce(status('pausing', 5));
+    mocks.pauseWorkflow.mockResolvedValueOnce(pauseAnswer('pausing', 5));
     const { result, rerender } = takeOverHook();
     await act(async () => result.current.takeOver());
     // The drain ended on its own, and the summary has caught up.
@@ -372,10 +388,10 @@ describe('Hand back', () => {
 
     expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
     expect(mocks.resumeWorkflow).toHaveBeenCalledOnce();
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6);
+    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 6, 'w1-root');
   });
 
-  it('stays quiet when the Stop fails after Hand back', async () => {
+  it('releases the screen without resuming when its Stop fails during Hand back', async () => {
     const stop = deferred<WorkflowControlStatus>();
     mocks.pauseWorkflow.mockReturnValue(stop.promise);
     const { result, giveBack } = takeOverHook();
@@ -393,10 +409,22 @@ describe('Hand back', () => {
       await Promise.all([taking, handing]);
     });
 
-    // The screen given back once and no error: Hand back goes on from the summary.
     expect(giveBack).toHaveBeenCalledOnce();
-    expect(mocks.notify).not.toHaveBeenCalledWith(expect.anything(), 'error');
-    expect(mocks.resumeWorkflow).toHaveBeenCalledWith('w1', 4);
-    expect(mocks.notify).toHaveBeenLastCalledWith('Handed back to Maya', 'success');
+    expect(mocks.resumeWorkflow).not.toHaveBeenCalled();
+    expect(mocks.notify).toHaveBeenLastCalledWith('That did not work. Try again.', 'error');
+  });
+
+  it.each([
+    { ...status('paused', 9) },
+    { ...status('paused', 6), generation: 2, root_execution_id: 'new-root' },
+  ])('leaves a newer pause alone on Hand back', async (newerPause) => {
+    mocks.pauseWorkflow.mockResolvedValueOnce(pauseAnswer('pausing', 5));
+    const { result, rerender, giveBack } = takeOverHook();
+    await act(async () => result.current.takeOver());
+    rerender({ employee: { ...maya(), control: newerPause } });
+    await act(async () => result.current.handBack());
+    expect(giveBack).toHaveBeenCalledOnce();
+    expect(mocks.pauseWorkflow).toHaveBeenCalledOnce();
+    expect(mocks.resumeWorkflow).not.toHaveBeenCalled();
   });
 });
