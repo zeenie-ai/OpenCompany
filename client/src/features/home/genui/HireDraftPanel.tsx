@@ -50,6 +50,7 @@ const FAILURE_DETAIL: Record<DraftFailure['code'], string> = {
   busy: 'Another setup is still being written.',
   invalid_request: 'That description couldn’t be used.',
   no_ai_provider: 'Connect an AI model first. The setup carries on once one is connected.',
+  model_unavailable: 'The model picked for them can’t answer right now. Pick another one.',
   cancelled: 'It was stopped.',
 };
 

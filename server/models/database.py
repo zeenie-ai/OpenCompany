@@ -343,6 +343,10 @@ class UserSettings(SQLModel, table=True):
     # ("" for Balanced, "low" for Quick, "high" for Thorough).
     chat_model: str = Field(default="auto", max_length=300)
     chat_effort: str = Field(default="", max_length=10)
+    # Home's hire composer picker, the same ids: the model that writes a new
+    # employee's setup and that it runs on, and each new agent's Effort.
+    hire_model: str = Field(default="auto", max_length=300)
+    hire_effort: str = Field(default="", max_length=10)
     auto_add_skill_for_tools: bool = Field(
         default=True
     )  # When a tool node connects to an AI agent's input-tools, auto-enable the matching skill

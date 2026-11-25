@@ -85,7 +85,7 @@ import {
   useSwitchChatBranch,
   type ChatBranchError,
 } from './data/branches';
-import { useChatChoice, useChatModels } from './data/models';
+import { CHAT_CHOICE, useChatModels, useModelChoice } from './data/models';
 import { sendOptions, useSendChatMessage, type ChatSendError } from './data/send';
 import { useStopChatRun } from './data/stop';
 import { useUiStateSync } from './data/uiState';
@@ -128,7 +128,7 @@ export function ChatPane({ host, ref }: { host: ChatHost; ref?: Ref<ChatPaneHand
   const chatContext = contextQuery.data;
   const pickerHost = Boolean(host.modelPicker && workflowId);
   const takesChoice = pickerHost && chatContext?.modelChoice === true;
-  const { choice, pending: choicePending, choose } = useChatChoice((message) => notify(message, 'error'));
+  const { choice, pending: choicePending, choose } = useModelChoice(CHAT_CHOICE, (message) => notify(message, 'error'));
   const modelsQuery = useChatModels(sessionId, takesChoice);
   // Until the choice is known a message waits, so it never goes on a model
   // the owner didn't pick.

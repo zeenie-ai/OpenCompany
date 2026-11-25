@@ -1,9 +1,15 @@
-"""Writing a new employee's setup screen: ``generate_employee_setup`` and
-``cancel_employee_setup``.
+"""Writing a new employee's setup screen: ``generate_employee_setup``,
+``cancel_employee_setup``, and the hire composer's model picker
+(``get_hire_models``).
 
-``generate_employee_setup {job, refine?, history?, draft_token}`` asks the
-owner's AI model for the setup screen and returns the reply; the client
-reads it and makes it safe to render. While the owner has Generated UI on,
+``generate_employee_setup {job, refine?, history?, draft_token, model?}``
+asks the AI model picked in the hire composer (``model``, a
+``provider::model`` id; none or ``auto`` is Auto, llm.py) for the setup
+screen and returns the reply; the client reads it and makes it safe to
+render. The thinking level picked there is not sent: a setup is written at
+the model's own pace, within its time budget.
+
+While the owner has Generated UI on,
 config/genui_catalog.json describes what the screen may contain, and the
 server builds every message: the catalogue prompt, the owner's context, and
 the "The job:" / "Change the setup:" prefixes. Of the earlier replies it
@@ -34,7 +40,12 @@ something new arrives in Gmail" without its own copy of the app registry.
 Failures: ``{success: false,
 error}`` with error one of ``no_ai_provider``, ``timeout``,
 ``provider_error``, ``unparseable``, ``cancelled``, ``busy``,
-``invalid_request``.
+``invalid_request``, and ``model_unavailable`` (with a ``detail``) for a
+picked model the pickers no longer offer.
+
+``get_hire_models`` answers the picker's rows (services/chat/choice.py
+``list_hire_models``): Auto, saying what a hire gets without a pick, each
+connected provider's models, and the thinking levels.
 """
 
 from __future__ import annotations
@@ -64,6 +75,8 @@ logger = get_logger(__name__)
 
 MAX_JOB_CHARS = 2000
 MAX_TOKEN_CHARS = 128
+#: A picked model's ``provider::model`` id (``UserSettings.hire_model``'s limit).
+MAX_MODEL_CHARS = 300
 MAX_HISTORY_TURNS = 3
 MAX_REPLY_CHARS = 65536
 #: Below this many seconds left, a retry would only time out.
@@ -72,7 +85,7 @@ MIN_RETRY_SECONDS = 15.0
 TRUNCATED_FINISH_REASONS = frozenset({"length", "max_tokens", "max_output_tokens"})
 
 ERROR_CODES = frozenset(
-    {"no_ai_provider", "timeout", "provider_error", "unparseable", "cancelled", "busy", "invalid_request"}
+    {"no_ai_provider", "timeout", "provider_error", "unparseable", "cancelled", "busy", "invalid_request", "model_unavailable"}
 )
 
 
@@ -86,6 +99,8 @@ class SetupRequest:
     token: str
     change: Optional[str] = None
     history: tuple = ()
+    #: The model picked in the hire composer; none is Auto.
+    model: Optional[str] = None
 
 
 def _clean(value: Any, limit: int) -> str:
@@ -110,7 +125,8 @@ def parse_setup_request(data: Dict[str, Any]) -> SetupRequest:
                     change=_clean(item.get("change"), MAX_JOB_CHARS) or None,
                 )
             )
-    return SetupRequest(job=job, token=token, change=change, history=tuple(history))
+    model = _clean(data.get("model"), MAX_MODEL_CHARS) or None
+    return SetupRequest(job=job, token=token, change=change, history=tuple(history), model=model)
 
 
 def _failure(code: str, token: str, **extra: Any) -> Dict[str, Any]:
@@ -170,12 +186,16 @@ def _with_nudge(messages: List[Message], nudge: str) -> List[Message]:
 
 async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
     from core.container import container
+    from services.chat.choice import ChoiceRefused
     from services.usage import record_llm_usage
 
     database = container.database()
     auth_service = container.auth_service()
     connections = Connections(auth_service, principal=owner)
-    choice: Optional[LLMChoice] = await resolve_llm_choice(database, auth_service, connections)
+    try:
+        choice: Optional[LLMChoice] = await resolve_llm_choice(database, auth_service, connections, model=request.model)
+    except ChoiceRefused as exc:
+        return _failure("model_unavailable", request.token, detail=exc.detail)
     if choice is None:
         return _failure("no_ai_provider", request.token)
 
@@ -306,9 +326,28 @@ async def handle_cancel_employee_setup(data: Dict[str, Any], websocket: WebSocke
     return {"success": True, "cancelled": False, "draft_token": token}
 
 
+@ws_response
+async def handle_get_hire_models(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    """The hire composer's model picker: ``{auto, models, efforts}``, each row
+    as ``get_chat_models`` sends it. The owner's choice is in their settings
+    (``hire_model`` / ``hire_effort``)."""
+    from core.container import container
+    from services.chat.choice import list_hire_models
+
+    database = container.database()
+    auth_service = container.auth_service()
+    owner = execution_principal(data, websocket)
+    auto = await resolve_llm_choice(database, auth_service, Connections(auth_service, principal=owner))
+    picker = await list_hire_models(
+        database, auth_service, principal=owner, auto=(auto.provider, auto.model) if auto is not None else None
+    )
+    return {"success": True, **picker}
+
+
 WS_HANDLERS: Dict[str, Any] = {
     "generate_employee_setup": handle_generate_employee_setup,
     "cancel_employee_setup": handle_cancel_employee_setup,
+    "get_hire_models": handle_get_hire_models,
 }
 
 
@@ -318,6 +357,7 @@ __all__ = [
     "WS_HANDLERS",
     "handle_cancel_employee_setup",
     "handle_generate_employee_setup",
+    "handle_get_hire_models",
     "parse_setup_request",
     "reset_for_tests",
 ]

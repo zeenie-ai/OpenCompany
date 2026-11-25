@@ -430,8 +430,9 @@ class Database:
                         default_on = 1 if UserSettings.model_fields[col].default else 0
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} BOOLEAN DEFAULT {default_on}"))
                         logger.info(f"Added {col} column to user_settings")
-                # The chat's model picker; existing rows take the model default.
-                for col, length in [("chat_model", 300), ("chat_effort", 10)]:
+                # Home's model pickers (the chat's, the hire composer's);
+                # existing rows take the model default.
+                for col, length in [("chat_model", 300), ("chat_effort", 10), ("hire_model", 300), ("hire_effort", 10)]:
                     if col not in columns:
                         default = str(UserSettings.model_fields[col].default)
                         await conn.execute(text(f"ALTER TABLE user_settings ADD COLUMN {col} VARCHAR({length}) NOT NULL DEFAULT '{default}'"))
@@ -2607,6 +2608,8 @@ class Database:
                     "default_llm_model": settings.default_llm_model,
                     "chat_model": settings.chat_model,
                     "chat_effort": settings.chat_effort,
+                    "hire_model": settings.hire_model,
+                    "hire_effort": settings.hire_effort,
                     "auto_add_skill_for_tools": settings.auto_add_skill_for_tools,
                     "auto_rebind_tools_after_canvas_change": settings.auto_rebind_tools_after_canvas_change,
                     "agent_recursion_limit": settings.agent_recursion_limit,

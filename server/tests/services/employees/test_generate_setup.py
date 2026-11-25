@@ -131,9 +131,60 @@ async def generate(**payload):
 
 def test_handlers_are_registered_and_not_internal():
     registered = get_ws_handlers()
-    for name in ("generate_employee_setup", "cancel_employee_setup"):
+    for name in ("generate_employee_setup", "cancel_employee_setup", "get_hire_models"):
         assert name in registered
         assert name not in INTERNAL_SOCKET_HANDLERS
+
+
+async def test_the_model_picked_in_the_hire_composer_writes_the_setup(harness, monkeypatch):
+    asked = []
+
+    async def choose(*_args, model=None, **_kwargs):
+        asked.append(model)
+        return LLMChoice(provider="anthropic", model="claude-sonnet-5-5", local=False)
+
+    monkeypatch.setattr(setup, "resolve_llm_choice", choose)
+    result = await generate(model="anthropic::claude-sonnet-5-5")
+
+    assert result["success"] is True
+    assert asked == ["anthropic::claude-sonnet-5-5"]
+    assert (result["provider"], result["model"]) == ("anthropic", "claude-sonnet-5-5")
+    assert harness.unifier.calls[0]["provider"] == "anthropic"
+    # The picked level is the employee's, not the setup call's.
+    assert "effort" not in harness.unifier.calls[0]
+
+
+async def test_a_picked_model_that_cannot_answer_writes_nothing(harness, monkeypatch):
+    from services.chat.choice import ChoiceRefused
+
+    async def refuse(*_args, **_kwargs):
+        raise ChoiceRefused("That model isn’t offered any more. Pick another one.")
+
+    monkeypatch.setattr(setup, "resolve_llm_choice", refuse)
+    result = await generate(model="anthropic::claude-haiku-4-5")
+
+    assert result == {
+        "success": False,
+        "error": "model_unavailable",
+        "draft_token": "t1",
+        "detail": "That model isn’t offered any more. Pick another one.",
+    }
+    assert harness.unifier.calls == []
+
+
+async def test_the_hire_picker_lists_the_models_and_what_auto_uses(harness, monkeypatch):
+    from services.chat import choice
+
+    async def providers(_database, _auth, _principal):
+        return [{"provider": "openai", "display_name": "OpenAI", "offered": ["gpt-x", "gpt-y"]}]
+
+    monkeypatch.setattr(choice, "_providers", providers)
+    picker = await setup.handle_get_hire_models({}, socket())
+
+    assert picker["success"] is True
+    assert picker["auto"]["description"] == "Uses gpt-x"
+    assert [row["id"] for row in picker["models"]] == ["openai::gpt-x", "openai::gpt-y"]
+    assert [level["id"] for level in picker["efforts"]] == ["low", "", "high"]
 
 
 async def test_returns_the_reply_with_its_apps_resolved(harness):

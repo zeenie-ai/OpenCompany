@@ -8,9 +8,10 @@
    failed attempt left behind is resumed, and so is one still marked
    building long after any attempt could be (the server stopped mid-way).
 3. Resolve the named apps against the registry (unknown ones are kept as
-   unsupported, never blocking), pick the AI model, look up the owner's
-   own addresses for reports and the skills that are on in their library,
-   and build the graph (builder.py).
+   unsupported, never blocking), take the AI model picked in the hire
+   composer (else Auto: llm.py), look up the owner's own addresses for
+   reports and the skills that are on in their library, and build the
+   graph (builder.py).
 4. Validate it exactly as a Start would (errors refuse the hire), save it
    as a new workflow, attach it to the row with the apps the graph
    actually uses (one left out, such as a tool that sends while they ask
@@ -24,7 +25,8 @@ node_count, warnings, idempotent, request_id, activation_state,
 readiness_issue}``. ``node_count`` is the saved graph's size (the new hire's
 first day says "Workflow built · 9 blocks"). Errors: ``invalid_request``,
 ``too_large``, ``conflict``, ``busy``, ``not_allowed``, ``build_failed``,
-``save_failed``.
+``save_failed``, and ``model_unavailable`` (with a ``detail``) for a
+picked model the pickers no longer offer.
 """
 
 from __future__ import annotations
@@ -83,6 +85,8 @@ def payload_hash(request: HireEmployeeRequest) -> str:
         body.pop("team", None)  # Keep already-issued idempotency keys valid.
     if not request.wake_rule:
         body.pop("wake_rule", None)  # The same, for hires with no wake rule.
+    if request.effort is None:
+        body.pop("effort", None)  # The same, for hires at Balanced.
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -241,10 +245,13 @@ async def _build_and_save(
         settings = await database.get_user_settings(SETTINGS_USER_ID) or {}
     except Exception:
         settings = {}
-    llm = await resolve_llm_choice(database, auth_service, connections)
-    if request.source.provider and request.source.model and request.source.provider in await connections.ai_providers():
-        from services.employees.llm import LLMChoice, runs_locally
-        llm = LLMChoice(provider=request.source.provider, model=request.source.model, local=runs_locally(request.source.provider))
+    from services.chat.choice import ChoiceRefused
+
+    try:
+        llm = await resolve_llm_choice(database, auth_service, connections, model=request.source.picked_model())
+    except ChoiceRefused as exc:
+        await store.mark_failed(database, row_id, claim_token)
+        return _fail("model_unavailable", detail=exc.detail)
     try:
         built = build_employee_graph(
             BuildInputs(
@@ -257,6 +264,7 @@ async def _build_and_save(
                 owner_values=await _owner_values(connections, auth_service),
                 timezone=str(settings.get("profile_timezone") or "UTC"),
                 llm=llm,
+                effort=request.effort,
                 memory=settings.get("memory_across_chats") is not False,
                 skills=await _library_skills(database),
                 allowed=is_hire_allowed,

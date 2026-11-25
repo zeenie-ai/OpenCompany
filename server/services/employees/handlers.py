@@ -139,9 +139,9 @@ async def _talk_tools_for(auth_service: Any, row: Any) -> List[TalkTool]:
 
 
 async def _new_talk_agent(database: Any, workflow: Any, row: Any, state: TalkState, *, sends: bool = False) -> TalkAgent:
-    """The talk agent a whole line adds, on the worker's model. A hired
-    employee's instructions are written again from its hire; one built in
-    the editor keeps the worker's own, with a note that this is Talk."""
+    """The talk agent a whole line adds, on the worker's model and Effort. A
+    hired employee's instructions are written again from its hire; one built
+    in the editor keeps the worker's own, with a note that this is Talk."""
     graph = workflow.data or {}
     worker = await database.get_node_parameters(state.worker) or {}
     try:
@@ -171,7 +171,7 @@ async def _new_talk_agent(database: Any, workflow: Any, row: Any, state: TalkSta
                 has_send_tools=sends,
             )
         )
-    model = {key: worker[key] for key in ("provider", "model") if key in worker}
+    model = {key: worker[key] for key in ("provider", "model", "effort") if key in worker}
     return TalkAgent(talk_agent_label(workflow.name), {"system_message": system_message, **model})
 
 

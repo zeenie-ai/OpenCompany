@@ -14,6 +14,7 @@
 import { useCallback } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
+import { HIRE_CHOICE, savedChoice } from '@/features/chat/data/models';
 import { refreshEmployee } from '../data/employees';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { SPIKE, spikeOrb } from '../orb/orb';
@@ -34,6 +35,7 @@ const HIRE_ERRORS: Record<string, string> = {
   not_allowed: "This setup needs something that can't be set up from here yet. Try changing it.",
   build_failed: "Couldn't put this employee together. Try changing the setup.",
   save_failed: "Couldn't save them. Press Hire again.",
+  model_unavailable: "The model picked for them can't answer right now. Pick another model, then press Hire again.",
   teams_disabled: 'Team hiring is not available on this installation yet. Ask your administrator to enable it.',
 };
 
@@ -121,7 +123,8 @@ export function useHire(collapse: () => Promise<void>) {
         params,
         job: draft.job,
         idempotencyKey: '',
-        source: draft.source,
+        // The hire composer's model and level, as they are when Hire is pressed.
+        choice: savedChoice(queryClient, HIRE_CHOICE),
         team: draft.team ?? undefined,
         core,
       });

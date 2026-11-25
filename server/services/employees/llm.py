@@ -1,6 +1,10 @@
-"""Which AI model writes a setup screen, and calling it.
+"""Which AI model writes a setup screen and runs the new employee, and
+calling it.
 
-``resolve_llm_choice`` picks, in order:
+``resolve_llm_choice`` takes the model the owner picked in the hire
+composer (``provider::model``, services/chat/choice.py) as it is; a model
+the pickers no longer offer is refused (``ChoiceRefused``), never swapped
+for another. Without a pick (Auto) it picks, in order:
 
 1. a local model server (Ollama, LM Studio: providers the credential
    catalogue marks ``runs_locally``), when the owner keeps
@@ -90,8 +94,17 @@ async def resolve_llm_choice(
     connections: Connections,
     *,
     user_id: str = SETTINGS_USER_ID,
+    model: Optional[str] = None,
 ) -> Optional[LLMChoice]:
-    """The model to use, or None when no AI model is set up."""
+    """The model to use, or None when no AI model is set up. ``model`` is the
+    hire composer's pick; none, or ``auto``, picks as above. Raises
+    ``ChoiceRefused`` for a picked model the pickers no longer offer."""
+    from services.chat.choice import AUTO, offered_model
+
+    if model and model != AUTO:
+        provider, name = await offered_model(database, auth_service, model, principal=getattr(connections, "principal", None))
+        return LLMChoice(provider=provider, model=name, local=runs_locally(provider))
+
     usable = await connections.ai_providers()
     endpoints = []
     try:

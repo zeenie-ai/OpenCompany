@@ -192,6 +192,9 @@ class BuildInputs:
     owner_values: Mapping[str, str] = field(default_factory=dict)
     timezone: str = "UTC"
     llm: Optional[LLMChoice] = None
+    #: How hard each new agent's model thinks (its Effort): ``low`` or
+    #: ``high``; none is Balanced.
+    effort: Optional[str] = None
     memory: bool = True
     #: Settings > Skills: the library skills that are on.
     skills: Sequence[LibrarySkill] = ()
@@ -200,6 +203,14 @@ class BuildInputs:
     now: Optional[datetime] = None
     #: Opt-in template team. Legacy graphs remain available for compatibility.
     team: bool = False
+
+    def agent_model(self) -> Dict[str, str]:
+        """What every new agent runs on: the provider and model, and its
+        Effort when one was picked."""
+        model = {"provider": self.llm.provider if self.llm is not None else "openai", "model": self.llm.model if self.llm is not None else ""}
+        if self.effort:
+            model["effort"] = self.effort
+        return model
 
 
 @dataclass
@@ -765,10 +776,7 @@ def _build_single_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
     system_message = instructions(delivery_mode, delivery_app=delivery.app.name if delivery is not None else None, has_builder=talks_itself)
     if trigger.kind == "schedule" and request.trigger is not None and request.trigger.every == "weekday":
         system_message += f"\n- You work on weekdays only. On a Saturday or Sunday, answer exactly {NO_REPLY}."
-    model = {
-        "provider": inputs.llm.provider if inputs.llm is not None else "openai",
-        "model": inputs.llm.model if inputs.llm is not None else "",
-    }
+    model = inputs.agent_model()
 
     graph = _Graph(inputs.workflow_id, inputs.allowed)
     roles: Dict[str, str] = {}

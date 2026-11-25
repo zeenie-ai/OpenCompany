@@ -100,6 +100,18 @@ async def test_whatsapp_receptionist_asks_before_replying():
     await assert_valid(built)
 
 
+async def test_every_agent_thinks_at_the_picked_effort():
+    built = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}, effort="high"))
+    for role in ("agent", "talk_agent"):
+        assert built.parameters[built.node_roles[role]]["effort"] == "high"
+    await assert_valid(built)
+
+    # Balanced: no level of their own.
+    balanced = build_employee_graph(inputs(hire(), "whatsapp", connected={"whatsapp"}))
+    for role in ("agent", "talk_agent"):
+        assert "effort" not in balanced.parameters[balanced.node_roles[role]]
+
+
 async def test_without_asking_first_the_reply_still_goes_through_the_gate():
     # The gate reads the live rule: with it off the draft goes straight
     # through, and turning it on later needs no rebuild.

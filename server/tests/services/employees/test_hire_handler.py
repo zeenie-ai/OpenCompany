@@ -122,17 +122,18 @@ async def harness(monkeypatch, real_database):
     FakeConnections.ai = True
 
 
-def test_a_hire_without_a_wake_rule_keeps_its_earlier_payload_hash():
-    """Keys issued before hires could carry a wake rule stay valid."""
+def test_a_hire_without_a_wake_rule_or_effort_keeps_its_earlier_payload_hash():
+    """Keys issued before hires could carry a wake rule or an effort stay valid."""
     import hashlib
     import json
 
     request = HireEmployeeRequest.model_validate(payload())
-    earlier = request.model_dump(mode="json", exclude={"idempotency_key", "team", "wake_rule"})
+    earlier = request.model_dump(mode="json", exclude={"idempotency_key", "team", "wake_rule", "effort"})
     digest = hashlib.sha256(json.dumps(earlier, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     assert hire.payload_hash(request) == digest
     assert hire.payload_hash(HireEmployeeRequest.model_validate(payload(wake_rule="a customer asks"))) != digest
+    assert hire.payload_hash(HireEmployeeRequest.model_validate(payload(effort="high"))) != digest
 
 
 def test_hire_and_start_are_registered():
@@ -167,6 +168,53 @@ async def test_a_hire_saves_a_valid_workflow_and_starts_it(harness):
     kinds = [frame.get("stage") or frame["data"]["type"] for frame in harness.frames]
     assert "created" in kinds and "com.opencompany.employee.hired" in kinds
     assert harness.starts == [(workflow_id, "owner", "hire-1")]
+
+
+async def test_every_agent_runs_on_the_picked_model_at_the_picked_effort(harness, monkeypatch):
+    from services.employees.graph_index import index_graph
+
+    asked = []
+
+    async def choose(*_args, model=None, **_kwargs):
+        asked.append(model)
+        return LLMChoice(provider="anthropic", model="claude-sonnet-5-5", local=False)
+
+    monkeypatch.setattr(hire, "resolve_llm_choice", choose)
+    picked = {"spec_version": 1, "provider": "anthropic", "model": "claude-sonnet-5-5"}
+    result = await hire.handle_hire_employee(payload(source=picked, effort="high"), SOCKET)
+
+    assert result["success"] is True, result
+    assert asked == ["anthropic::claude-sonnet-5-5"]
+    workflow = await harness.database.get_workflow(result["employee"]["workflow_id"])
+    agents = index_graph(workflow.data).agent_ids
+    assert agents
+    for agent in agents:
+        parameters = await harness.database.get_node_parameters(agent)
+        assert (parameters["provider"], parameters["model"], parameters["effort"]) == ("anthropic", "claude-sonnet-5-5", "high")
+
+    # Auto and Balanced: the model Auto picks, and no level of their own.
+    balanced = await hire.handle_hire_employee(payload(idempotency_key="hire-2"), SOCKET)
+    assert asked[-1] is None
+    workflow = await harness.database.get_workflow(balanced["employee"]["workflow_id"])
+    for agent in index_graph(workflow.data).agent_ids:
+        assert "effort" not in await harness.database.get_node_parameters(agent)
+
+
+async def test_a_picked_model_that_cannot_answer_hires_nobody(harness, monkeypatch):
+    from services.chat.choice import ChoiceRefused
+
+    async def refuse(*_args, **_kwargs):
+        raise ChoiceRefused("That model isn’t offered any more. Pick another one.")
+
+    monkeypatch.setattr(hire, "resolve_llm_choice", refuse)
+    picked = {"spec_version": 1, "provider": "anthropic", "model": "claude-haiku-4-5"}
+    result = await hire.handle_hire_employee(payload(source=picked), SOCKET)
+
+    assert result == {"success": False, "error": "model_unavailable", "detail": "That model isn’t offered any more. Pick another one."}
+    # A retry with the same key resumes the row.
+    row = await store.get_by_idempotency_key(harness.database, "owner", "hire-1")
+    assert row.hire_state == "failed"
+    assert harness.starts == []
 
 
 async def test_the_same_key_finds_the_same_employee(harness):

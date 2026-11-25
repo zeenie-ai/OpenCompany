@@ -16,7 +16,8 @@
  * The server builds the model's messages (the catalogue prompt, or the fixed
  * form while the owner has Generated UI off; the owner's context; the
  * "The job:" / "Change the setup:" prefixes); the client sends
- * the owner's words and the earlier replies, then reads the reply it gets
+ * the owner's words, the earlier replies and the model picked in the hire
+ * composer (as it is when the request goes), then reads the reply it gets
  * back (parse) and makes it safe to render (normalize) before showing it.
  * The screen's trigger is then checked against the apps the server
  * resolved for that reply: one naming an app that cannot start the work
@@ -26,9 +27,11 @@
 
 import { useMemo } from 'react';
 import type { StateModel } from '@json-render/core';
+import { useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { create } from 'zustand';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
+import { HIRE_CHOICE, savedChoice } from '@/features/chat/data/models';
 // The file, not the index: this module is in Home's first chunk.
 import { isForbiddenSegment, readPath, writePath } from '@/lib/jsonRender/paths';
 import { appRefSchema } from '../data/schemas';
@@ -49,6 +52,7 @@ export type SetupErrorCode =
   | 'cancelled'
   | 'busy'
   | 'invalid_request'
+  | 'model_unavailable'
   | 'connection';
 
 const SERVER_CODES: ReadonlySet<string> = new Set([
@@ -59,6 +63,7 @@ const SERVER_CODES: ReadonlySet<string> = new Set([
   'cancelled',
   'busy',
   'invalid_request',
+  'model_unavailable',
 ]);
 
 /** One accepted reply. `change` is what the owner asked to change, null for
@@ -90,11 +95,6 @@ export interface DraftFailure {
 /** What the server said about a failure, beyond its code. */
 type FailureInfo = Pick<DraftFailure, 'detail' | 'requiresUserAction'>;
 
-export interface DraftSource {
-  provider: string | null;
-  model: string | null;
-}
-
 /** An app a reply names, as the server resolved it, and whether it can
  *  start the work (a new message or email in it). */
 const draftAppSchema = appRefSchema.extend({ can_trigger: z.boolean().catch(false) });
@@ -113,7 +113,6 @@ export interface DraftState {
   token: string | null;
   request: PendingRequest | null;
   failure: DraftFailure | null;
-  source: DraftSource | null;
   /** The latest reply, read and made safe to render. */
   spec: NormalizedSpec | null;
   /** What the owner has set on the setup screen (toggles, choices, inputs). */
@@ -140,7 +139,6 @@ const INITIAL: DraftState = {
   token: null,
   request: null,
   failure: null,
-  source: null,
   spec: null,
   uiState: {},
   apps: {},
@@ -286,7 +284,6 @@ export function acceptReply(token: string, response: SetupResponse, request: Pen
     token: null,
     request: null,
     failure: null,
-    source: { provider: response.provider ?? null, model: response.model ?? null },
     spec,
     uiState: fitTrigger(spec.state, apps),
     apps,
@@ -299,10 +296,15 @@ export function acceptReply(token: string, response: SetupResponse, request: Pen
 
 /**
  * Send the composer's text: a new job, or a change to the current draft
- * when the composer is refining one. Resolves false when nothing was sent
- * (empty text, or a request already in flight).
+ * when the composer is refining one, written by `model` (the hire
+ * composer's pick; none or `auto` is Auto). Resolves false when nothing was
+ * sent (empty text, or a request already in flight).
  */
-export async function submitDraft(send: SendRequest, raw: string, options: { refine?: boolean } = {}): Promise<boolean> {
+export async function submitDraft(
+  send: SendRequest,
+  raw: string,
+  options: { refine?: boolean; model?: string } = {},
+): Promise<boolean> {
   const text = raw.trim().slice(0, MAX_JOB_LENGTH);
   const state = useDraftStore.getState();
   if (!text || state.status === 'working' || state.hiring) return false;
@@ -320,6 +322,7 @@ export async function submitDraft(send: SendRequest, raw: string, options: { ref
   const payload: Record<string, unknown> = refine
     ? { job, refine: text, history: state.turns.slice(-HISTORY_TURNS), draft_token: token }
     : { job, draft_token: token };
+  if (options.model) payload.model = options.model;
   try {
     // json-render reads the reply's expressions; it loads while the model writes.
     const [core, response]: [JsonRenderCore, SetupResponse | undefined] = await Promise.all([
@@ -334,12 +337,12 @@ export async function submitDraft(send: SendRequest, raw: string, options: { ref
   return true;
 }
 
-/** Send the failed request again. */
-export function retryDraft(send: SendRequest): Promise<boolean> {
+/** Send the failed request again, written by `model`. */
+export function retryDraft(send: SendRequest, model?: string): Promise<boolean> {
   const { failure, turns } = useDraftStore.getState();
   if (!failure) return Promise.resolve(false);
   useDraftStore.setState({ status: failure.refine && turns.length > 0 ? 'ready' : 'idle', failure: null });
-  return submitDraft(send, failure.text, { refine: failure.refine });
+  return submitDraft(send, failure.text, { refine: failure.refine, model });
 }
 
 /** Stop the setup being written and hand the owner's words back to the
@@ -409,15 +412,18 @@ export function resetDraftForTests(): void {
 /** The draft actions, bound to the WebSocket. Stable across renders. */
 export function useDraftActions() {
   const { sendRequest } = useWebSocketActions();
+  const queryClient = useQueryClient();
   return useMemo(() => {
     const send = sendRequest as SendRequest;
+    // The hire composer's model, as it is when a request goes.
+    const model = () => savedChoice(queryClient, HIRE_CHOICE)?.model;
     return {
-      submit: (text: string, options?: { refine?: boolean }) => submitDraft(send, text, options),
-      retry: () => retryDraft(send),
+      submit: (text: string, options?: { refine?: boolean }) => submitDraft(send, text, { ...options, model: model() }),
+      retry: () => retryDraft(send, model()),
       cancel: () => cancelDraft(send),
       discard: () => discardDraft(send),
       setRefining,
       setInput: setComposerInput,
     };
-  }, [sendRequest]);
+  }, [sendRequest, queryClient]);
 }

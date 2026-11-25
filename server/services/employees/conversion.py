@@ -189,7 +189,7 @@ def _prepare(source: dict, employee: Any, workflow_id: str, name: str) -> dict:
     # Appending the lead through the manual recipe preserves the original
     # worker and its Context. Nonmanual intake is rewired explicitly below.
     proposed = build_team(built, BuildInputs(workflow_id=workflow_id, request=request_from_employee(employee, name),
-        apps=[app for app in (get_app(app_id) for app_id in employee.apps or []) if app], llm=llm,
+        apps=[app for app in (get_app(app_id) for app_id in employee.apps or []) if app], llm=llm, effort=params.get("effort"),
         memory=any(node["type"] == "simpleMemory" for node in built.nodes), allowed=is_hire_allowed, team=True),
         legacy_conversion=True)
     old_context = next((edge["source"] for edge in source["graph"]["edges"] if edge.get("target") == original and edge.get("targetHandle") == "input-context"), None)

@@ -1,7 +1,9 @@
-"""Which model writes a setup screen: a local server when the owner keeps
-everything on this computer, else the global default when it is usable,
-else the OpenCompany Gateway's default when it is usable, else the first
-usable provider, else a saved OpenAI-compatible endpoint."""
+"""Which model writes a setup screen and runs the new employee: the one the
+owner picked in the hire composer, used as it is while the pickers offer it;
+else (Auto) a local server when the owner keeps everything on this computer,
+else the global default when it is usable, else the OpenCompany Gateway's
+default when it is usable, else the first usable provider, else a saved
+OpenAI-compatible endpoint."""
 
 from __future__ import annotations
 
@@ -102,3 +104,29 @@ async def test_an_endpoint_when_nothing_else_is_set_up(local_and_endpoints):
 
 async def test_nothing_set_up():
     assert await choose([]) is None
+
+
+async def test_a_picked_model_is_used_as_it_is(monkeypatch):
+    from services.chat import choice
+
+    async def offered(_database, _auth, model_id, *, principal):
+        assert model_id == "anthropic::claude-sonnet-5-5"
+        return ("anthropic", "claude-sonnet-5-5")
+
+    monkeypatch.setattr(choice, "offered_model", offered)
+    usable = Connections(["ollama", "anthropic"])
+    picked = await llm.resolve_llm_choice(Database(), Auth(), usable, model="anthropic::claude-sonnet-5-5")
+    assert picked == llm.LLMChoice(provider="anthropic", model="claude-sonnet-5-5", local=False)
+    # Auto picks as before: here the local server.
+    assert (await llm.resolve_llm_choice(Database(), Auth(), usable, model="auto")).provider == "ollama"
+
+
+async def test_a_picked_model_the_pickers_no_longer_offer_is_refused(monkeypatch):
+    from services.chat import choice
+
+    async def refuse(*_args, **_kwargs):
+        raise choice.ChoiceRefused("That model isn’t offered any more. Pick another one.")
+
+    monkeypatch.setattr(choice, "offered_model", refuse)
+    with pytest.raises(choice.ChoiceRefused):
+        await llm.resolve_llm_choice(Database(), Auth(), Connections(["anthropic"]), model="anthropic::claude-haiku-4-5")

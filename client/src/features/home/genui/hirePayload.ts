@@ -10,9 +10,14 @@
  * whose times and weekdays are the builder's own
  * (tests/test_genui_catalog_sync.py), so a schedule shown here is the one
  * that runs.
+ *
+ * The model picked in the hire composer goes as `source.provider` /
+ * `source.model` (it wrote the setup, and every agent runs on it; Auto sends
+ * none), and its thinking level as `effort` (Balanced sends none).
  */
 
 import type { StateModel } from '@json-render/core';
+import { modelParts, type ChatChoice } from '@/features/chat/data/models';
 // The file, not the index: this module is in Home's first chunk.
 import { bindingPath, readPath } from '@/lib/jsonRender/paths';
 import { trigger as triggerLists } from '../../../../../server/config/genui_catalog.json';
@@ -36,6 +41,7 @@ export const HIRE_PAYLOAD_KEYS = [
   'source',
   'team',
   'wake_rule',
+  'effort',
 ] as const;
 
 export const TRIGGER_KINDS: readonly string[] = triggerLists.kinds;
@@ -93,7 +99,10 @@ export interface HireEmployeePayload {
   /** Which app events are worth their work ("Wake me when"), for an
    *  app-event hire only (server services/employees/triage.py). */
   wake_rule?: string;
+  /** The model picked in the hire composer, if not Auto. */
   source: { spec_version: 1; provider?: string; model?: string };
+  /** Its thinking level, each agent's Effort, if not Balanced. */
+  effort?: 'low' | 'high';
 }
 
 export interface HireTeamMember {
@@ -297,11 +306,23 @@ export interface HireInput {
   params: Record<string, unknown>;
   job: string;
   idempotencyKey: string;
-  source?: { provider?: string | null; model?: string | null } | null;
+  /** The hire composer's model and level; null until the settings load. */
+  choice?: ChatChoice | null;
   core: JsonRenderCore;
 }
 
-export function buildHirePayload({ spec, state, params, job, idempotencyKey, source, team, core }: HireInput): HireEmployeePayload {
+/** The hire composer's pick, on a payload: the model (Auto adds none) and
+ *  its level (Balanced adds none). */
+function addChoice(payload: HireEmployeePayload, choice: ChatChoice | null | undefined): void {
+  const picked = choice ? modelParts(choice.model) : null;
+  if (picked) {
+    payload.source.provider = picked.provider;
+    payload.source.model = picked.model;
+  }
+  if (choice?.effort) payload.effort = choice.effort;
+}
+
+export function buildHirePayload({ spec, state, params, job, idempotencyKey, choice, team, core }: HireInput): HireEmployeePayload {
   const agent = resolved('AgentCard', elementsOf(spec, 'AgentCard')[0], state, core);
   const plan = resolved('Plan', elementsOf(spec, 'Plan')[0], state, core);
 
@@ -381,19 +402,18 @@ export function buildHirePayload({ spec, state, params, job, idempotencyKey, sou
   if (sendsVia) payload.sends_via = sendsVia;
   const wakeRule = trigger?.kind === 'app_event' ? clip(readPath(state, STATE_PATHS.wakeRule), HIRE_LIMITS.wakeRule) : '';
   if (wakeRule) payload.wake_rule = wakeRule;
-  if (source?.provider) payload.source.provider = source.provider;
-  if (source?.model) payload.source.model = source.model;
+  addChoice(payload, choice);
   return payload;
 }
 
 // ----- a starter, hired in one click -----
 
 /** A starter's own setup (hire/starters.json), hired as it stands and
- *  asking first. Its name is the first of its names nobody on the team
- *  has, else its first name, numbered. */
+ *  asking first, on the hire composer's model. Its name is the first of its
+ *  names nobody on the team has, else its first name, numbered. */
 export function starterHirePayload(
   starter: Starter,
-  { idempotencyKey, taken }: { idempotencyKey: string; taken: readonly string[] },
+  { idempotencyKey, taken, choice }: { idempotencyKey: string; taken: readonly string[]; choice?: ChatChoice | null },
 ): HireEmployeePayload {
   const { hire } = starter;
   const used = new Set(taken.map((name) => name.trim().toLowerCase()));
@@ -419,6 +439,7 @@ export function starterHirePayload(
     source: { spec_version: 1 },
   };
   if (hire.sends_via) payload.sends_via = hire.sends_via;
+  addChoice(payload, choice);
   return payload;
 }
 

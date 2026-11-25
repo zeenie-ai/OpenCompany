@@ -41,7 +41,7 @@ describe('buildHirePayload', () => {
       params: hireParams(spec),
       job: '  Answer WhatsApp and book visits  ',
       idempotencyKey: 'k1',
-      source: { provider: 'openai', model: 'gpt-x' },
+      choice: { model: 'openai::gpt-x', effort: 'high' },
       core,
     });
     expect(Object.keys(payload).every((key) => (HIRE_PAYLOAD_KEYS as readonly string[]).includes(key))).toBe(true);
@@ -56,6 +56,7 @@ describe('buildHirePayload', () => {
       trigger: { kind: 'app_event', app: 'WhatsApp' },
       sends_via: 'WhatsApp',
       source: { spec_version: 1, provider: 'openai', model: 'gpt-x' },
+      effort: 'high',
     });
     expect(payload.steps).toEqual([
       { title: 'When a message arrives', detail: 'On WhatsApp', role: 'trigger', app: 'WhatsApp' },
@@ -282,6 +283,29 @@ describe('starterHirePayload', () => {
     expect(starterHirePayload(receptionist, { idempotencyKey: 'k', taken: [first.toUpperCase()] }).name).toBe(second);
     const everyName = [...receptionist.hire.names, `${first} 2`];
     expect(starterHirePayload(receptionist, { idempotencyKey: 'k', taken: everyName }).name).toBe(`${first} 3`);
+  });
+
+  it('hires a starter on the model and level picked in the hire composer', () => {
+    const choice = { model: 'openrouter::anthropic/claude-sonnet-5.5', effort: 'low' as const };
+    const payload = starterHirePayload(receptionist, { idempotencyKey: 'k', taken: [], choice });
+    expect(payload.source).toEqual({ spec_version: 1, provider: 'openrouter', model: 'anthropic/claude-sonnet-5.5' });
+    expect(payload.effort).toBe('low');
+  });
+});
+
+describe('the hire composer’s model', () => {
+  const spec = specOf('clean minified reply');
+  const hire = (choice: { model: string; effort: '' | 'low' | 'high' } | null) =>
+    buildHirePayload({ spec, state: spec.state, params: hireParams(spec), job: 'Answer WhatsApp', idempotencyKey: 'k', choice, core });
+
+  it('sends none for Auto and Balanced', () => {
+    const payload = hire({ model: 'auto', effort: '' });
+    expect(payload.source).toEqual({ spec_version: 1 });
+    expect(payload.effort).toBeUndefined();
+  });
+
+  it('sends none before the owner’s settings have loaded', () => {
+    expect(hire(null).source).toEqual({ spec_version: 1 });
   });
 });
 

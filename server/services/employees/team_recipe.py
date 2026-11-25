@@ -180,7 +180,7 @@ def build_team(built: Any, inputs: Any, *, legacy_conversion: bool = False) -> A
     manual = built.trigger.get("kind") == "manual"
     ids = NodeIds(inputs.workflow_id, built.nodes)
     labels = Labels(node["data"]["label"] for node in built.nodes)
-    model = {"provider": inputs.llm.provider if inputs.llm else "openai", "model": inputs.llm.model if inputs.llm else ""}
+    model = inputs.agent_model()
     original_parameters = deepcopy(built.parameters[original])
     # The existing Talk line keeps its Chat trigger, reply, Context and library
     # skills; allocate a canonical ID of the new node type before persistence.

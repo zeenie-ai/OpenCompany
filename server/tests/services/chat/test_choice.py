@@ -149,6 +149,40 @@ async def test_a_saved_choice_keeps_to_what_the_picker_offers(database, connecte
         await check({"chat_effort": "max"})
 
 
+async def test_a_saved_hire_choice_keeps_to_what_the_picker_offers(database, connected):
+    async def check(patch):
+        await choice.check_settings(database, None, patch, principal=None)
+
+    await check({"hire_model": "auto", "hire_effort": ""})
+    await check({"hire_model": SONNET, "hire_effort": "low"})
+    with pytest.raises(choice.ChoiceRefused) as refused:
+        await check({"hire_model": GPT})
+    assert refused.value.detail == GPT_UNAVAILABLE
+    with pytest.raises(choice.ChoiceRefused, match="Quick, Balanced or Thorough"):
+        await check({"hire_effort": "medium"})
+
+
+async def test_a_picked_model_is_used_only_while_the_pickers_offer_it(database, connected):
+    assert await choice.offered_model(database, None, SONNET, principal=None) == ("anthropic", "claude-sonnet-5-5")
+    with pytest.raises(choice.ChoiceRefused) as refused:
+        await choice.offered_model(database, None, GPT, principal=None)
+    assert refused.value.detail == GPT_UNAVAILABLE
+
+
+async def test_the_hire_picker_lists_the_same_models_and_what_auto_uses(database, connected):
+    picker = await choice.list_hire_models(database, None, principal=None, auto=("anthropic", "claude-sonnet-5-5"))
+    auto = picker["auto"]
+    assert (auto["id"], auto["description"], auto["available"], auto["effort"]) == ("auto", "Uses claude-sonnet-5-5", True, True)
+    assert [row["id"] for row in picker["models"]] == ANTHROPIC_ROWS
+    assert [(effort["id"], effort["label"]) for effort in picker["efforts"]] == [("low", "Quick"), ("", "Balanced"), ("high", "Thorough")]
+
+    # The saved hire choice shows, and can't be picked, while its provider isn't connected.
+    await database.save_user_settings({"hire_model": GPT})
+    picker = await choice.list_hire_models(database, None, principal=None, auto=("anthropic", "claude-sonnet-5-5"))
+    saved = picker["models"][-1]
+    assert (saved["id"], saved["available"], saved["reason"]) == (GPT, False, GPT_UNAVAILABLE)
+
+
 def test_the_model_and_effort_a_run_chose():
     assert choice.model_of({"model": SONNET}) == ("anthropic", "claude-sonnet-5-5")
     assert choice.model_of({}) is None and choice.model_of({"model": "auto"}) is None

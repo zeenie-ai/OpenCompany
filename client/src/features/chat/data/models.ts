@@ -10,15 +10,20 @@
  * A message, an edit or a retry carries the choice as `options.model` /
  * `options.effort` (send.ts `sendOptions`); the server resolves Auto and
  * refuses a model that can't answer.
+ *
+ * The hire composer's model picker has rows of the same shape and its own
+ * saved choice (`HIRE_CHOICE`).
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
 import {
   SettingsSaveError,
+  USER_SETTINGS_QUERY_KEY,
   useSaveUserSettingsMutationCore,
   useUserSettingsQueryCore,
+  type UserSettings,
 } from '@/hooks/useUserSettingsQuery';
 
 /** How hard the model thinks: Quick (`low`), Balanced (none sent) or
@@ -121,24 +126,55 @@ export function useChatModels(sessionId: string, enabled: boolean) {
   });
 }
 
-const choiceSchema = z.object({ chat_model: z.string().min(1).catch(AUTO), chat_effort: effortId.catch('') });
+/** Where a picker's choice is saved with the owner's settings. */
+export interface ChoiceKeys {
+  model: string;
+  effort: string;
+}
+
+/** The chat's picker: the model and level of the employee answering. */
+export const CHAT_CHOICE: ChoiceKeys = { model: 'chat_model', effort: 'chat_effort' };
+/** The hire composer's: the model a new employee's setup is written with and
+ *  that it runs on, and each of its agents' Effort. */
+export const HIRE_CHOICE: ChoiceKeys = { model: 'hire_model', effort: 'hire_effort' };
+
+const savedModel = z.string().min(1).catch(AUTO);
+const savedEffort = effortId.catch('');
+
+/** A picker's choice in the owner's settings. */
+export function choiceOf(settings: UserSettings, keys: ChoiceKeys): ChatChoice {
+  return { model: savedModel.parse(settings[keys.model]), effort: savedEffort.parse(settings[keys.effort]) };
+}
+
+/** The choice the cached settings hold as a request goes; null until they
+ *  have loaded. */
+export function savedChoice(queryClient: QueryClient, keys: ChoiceKeys): ChatChoice | null {
+  const settings = queryClient.getQueryData<UserSettings>(USER_SETTINGS_QUERY_KEY);
+  return settings ? choiceOf(settings, keys) : null;
+}
+
+/** A picked model's provider and model (its id is `provider::model`); null
+ *  for Auto. */
+export function modelParts(id: string): { provider: string; model: string } | null {
+  const at = id.indexOf('::');
+  return at > 0 ? { provider: id.slice(0, at), model: id.slice(at + 2) } : null;
+}
 
 /**
- * The owner's choice, from their settings (null until they have loaded), and
- * `choose`, which saves a change at once and puts it back when the save
+ * A picker's choice, from the owner's settings (null until they have loaded),
+ * and `choose`, which saves a change at once and puts it back when the save
  * fails; `onRefused` hears why, in the server's words when it gave them.
  */
-export function useChatChoice(onRefused: (message: string) => void) {
+export function useModelChoice(keys: ChoiceKeys, onRefused: (message: string) => void) {
   const { sendRequest, isReady } = useWebSocketActions();
   const settings = useUserSettingsQueryCore(sendRequest, isReady);
   const save = useSaveUserSettingsMutationCore(sendRequest);
-  const parsed = settings.data ? choiceSchema.parse(settings.data) : null;
-  const choice: ChatChoice | null = parsed ? { model: parsed.chat_model, effort: parsed.chat_effort } : null;
+  const choice = settings.data ? choiceOf(settings.data, keys) : null;
   const choose = (change: Partial<ChatChoice>) =>
     save.mutate(
       {
-        ...(change.model !== undefined ? { chat_model: change.model } : {}),
-        ...(change.effort !== undefined ? { chat_effort: change.effort } : {}),
+        ...(change.model !== undefined ? { [keys.model]: change.model } : {}),
+        ...(change.effort !== undefined ? { [keys.effort]: change.effort } : {}),
       },
       {
         onError: (error) =>

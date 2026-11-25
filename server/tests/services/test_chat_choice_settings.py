@@ -1,7 +1,8 @@
-"""The chat model picker's saved choice (``UserSettings.chat_model`` /
-``chat_effort``, services/chat/choice.py) against real SQLite: it round-trips
-with the model's defaults, an older database gains the columns, and a save
-keeps to what the picker offers (services/settings/handlers.py)."""
+"""Home's model pickers' saved choices (the chat's ``UserSettings.chat_model``
+/ ``chat_effort`` and the hire composer's ``hire_model`` / ``hire_effort``,
+services/chat/choice.py) against real SQLite: they round-trip with the
+model's defaults, an older database gains the columns, and a save keeps to
+what the pickers offer (services/settings/handlers.py)."""
 
 from __future__ import annotations
 
@@ -46,19 +47,23 @@ async def test_the_choice_round_trips_with_its_defaults(settings_database):
     assert await settings_database.save_user_settings({"getting_started_said_hello": True}, user_id="default")
     settings = await settings_database.get_user_settings("default")
     assert (settings["chat_model"], settings["chat_effort"]) == ("auto", "")
+    assert (settings["hire_model"], settings["hire_effort"]) == ("auto", "")
     assert await settings_database.save_user_settings({"chat_model": SONNET, "chat_effort": "high"}, user_id="default")
+    assert await settings_database.save_user_settings({"hire_model": SONNET, "hire_effort": "low"}, user_id="default")
     settings = await settings_database.get_user_settings("default")
     assert (settings["chat_model"], settings["chat_effort"]) == (SONNET, "high")
+    assert (settings["hire_model"], settings["hire_effort"]) == (SONNET, "low")
 
 
 async def test_an_older_database_gains_the_columns_with_their_defaults(settings_database):
     assert await settings_database.save_user_settings({"getting_started_said_hello": True}, user_id="default")
     async with settings_database.engine.begin() as conn:
-        await conn.execute(text("ALTER TABLE user_settings DROP COLUMN chat_model"))
-        await conn.execute(text("ALTER TABLE user_settings DROP COLUMN chat_effort"))
+        for column in ("chat_model", "chat_effort", "hire_model", "hire_effort"):
+            await conn.execute(text(f"ALTER TABLE user_settings DROP COLUMN {column}"))
     await settings_database._migrate_user_settings()
     settings = await settings_database.get_user_settings("default")
     assert (settings["chat_model"], settings["chat_effort"]) == ("auto", "")
+    assert (settings["hire_model"], settings["hire_effort"]) == ("auto", "")
 
 
 async def test_a_save_keeps_to_what_the_picker_offers(settings_database, monkeypatch):
@@ -90,3 +95,9 @@ async def test_a_save_keeps_to_what_the_picker_offers(settings_database, monkeyp
     saved = await handle_save_user_settings({"settings": {"chat_model": SONNET, "chat_effort": "low"}}, None)
     assert saved["success"] is True
     assert (saved["settings"]["chat_model"], saved["settings"]["chat_effort"]) == (SONNET, "low")
+
+    # The hire composer's choice keeps to the same rule.
+    refused = await handle_save_user_settings({"settings": {"hire_model": "anthropic::claude-haiku-4-5"}}, None)
+    assert refused == {"success": False, "error": "chat_choice_refused", "detail": "That model isn’t offered any more. Pick another one."}
+    saved = await handle_save_user_settings({"settings": {"hire_model": SONNET, "hire_effort": "high"}}, None)
+    assert (saved["settings"]["hire_model"], saved["settings"]["hire_effort"]) == (SONNET, "high")

@@ -154,6 +154,10 @@ class HireTrigger(_Lenient):
 
 
 class HireSource(_Lenient):
+    """The setup screen's format, and the model picked in the hire composer:
+    it wrote the setup, and every agent of the employee runs on it. None is
+    Auto (llm.py)."""
+
     spec_version: Literal[1] = 1
     provider: Optional[str] = None
     model: Optional[str] = None
@@ -162,6 +166,12 @@ class HireSource(_Lenient):
     @classmethod
     def _short(cls, value: Any) -> Optional[str]:
         return _clip(value, 200) or None
+
+    def picked_model(self) -> Optional[str]:
+        """The pick as the pickers name it (``provider::model``), if any."""
+        if self.provider and self.model:
+            return f"{self.provider}::{self.model}"
+        return None
 
 
 class HireTeamMember(BaseModel):
@@ -193,11 +203,19 @@ class HireEmployeeRequest(_Lenient):
     #: Which app events are worth the employee's work ("Wake me when ...");
     #: kept on the team plan of an app-event hire (team_recipe.build_team).
     wake_rule: str = ""
+    #: How hard the picked model thinks: Quick (``low``) or Thorough
+    #: (``high``), each new agent's Effort; none is Balanced.
+    effort: Optional[Literal["low", "high"]] = None
 
     @field_validator("wake_rule", mode="before")
     @classmethod
     def _wake_rule(cls, value: Any) -> str:
         return _clip(value, WAKE_RULE_MAX)
+
+    @field_validator("effort", mode="before")
+    @classmethod
+    def _effort(cls, value: Any) -> Optional[str]:
+        return value if value in ("low", "high") else None
 
     @field_validator("team")
     @classmethod

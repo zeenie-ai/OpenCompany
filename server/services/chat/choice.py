@@ -1,4 +1,4 @@
-"""The model and thinking the owner picks for the employee answering them.
+"""The model and thinking the owner picks in Home's two model pickers.
 
 Home's employee chat has a model picker: Auto, or a model of a provider the
 owner can run on now, and how hard the model thinks: Balanced (no effort
@@ -19,7 +19,13 @@ applies it to the agent that answers the run only.
 - A model whose provider can't run is refused, never swapped for another,
   and so is a model the picker no longer offers.
 
-The picker's words come from ``chat_defaults.json`` (``choice``); a model is
+The hire composer has the same picker (``list_hire_models``, saved as
+``hire_model`` / ``hire_effort``): the model it picks writes a new
+employee's setup and is the one the employee runs on, and its level becomes
+each new agent's Effort (services/employees/llm.py, builder.py). Its Auto is
+what a new hire gets without a pick (``resolve_llm_choice``).
+
+The pickers' words come from ``chat_defaults.json`` (``choice``); a model is
 named by its id, under its provider's name.
 """
 
@@ -34,6 +40,8 @@ from services.llm.config import agent_model, provider_display_name, split_chat_m
 EFFORTS = ("low", "high")
 AUTO = "auto"
 SETTINGS_USER_ID = "default"
+#: Where each picker's choice is saved: (model, effort) settings keys.
+CHOICE_SETTINGS = (("chat_model", "chat_effort"), ("hire_model", "hire_effort"))
 
 
 class ChoiceRefused(Exception):
@@ -126,20 +134,30 @@ async def run_options(database: Any, auth: Any, raw: Any, *, principal: Optional
     return options
 
 
+async def offered_model(database: Any, auth: Any, model_id: str, *, principal: Optional[str]) -> Tuple[str, str]:
+    """``model_id`` (``provider::model``) as ``(provider, model)``, when the
+    pickers offer it now. Raises :class:`ChoiceRefused`."""
+    refusal = _refusal(model_id, await _providers(database, auth, principal))
+    if refusal is not None:
+        raise ChoiceRefused(refusal)
+    return split_chat_model(model_id)
+
+
 async def check_settings(database: Any, auth: Any, patch: Mapping[str, Any], *, principal: Optional[str]) -> None:
-    """A settings save that sets the picker's choice keeps to what it offers
+    """A settings save that sets a picker's choice keeps to what it offers
     now. Raises :class:`ChoiceRefused`."""
-    if "chat_model" in patch and patch["chat_model"] != AUTO:
-        chosen = patch["chat_model"]
-        refusal = (
-            _refusal(chosen, await _providers(database, auth, principal))
-            if isinstance(chosen, str)
-            else str(choice_setting("not_offered"))
-        )
-        if refusal is not None:
-            raise ChoiceRefused(refusal)
-    if "chat_effort" in patch and patch["chat_effort"] not in ("", *EFFORTS):
-        raise ChoiceRefused(str(choice_setting("bad_effort")))
+    for model_key, effort_key in CHOICE_SETTINGS:
+        if model_key in patch and patch[model_key] != AUTO:
+            chosen = patch[model_key]
+            refusal = (
+                _refusal(chosen, await _providers(database, auth, principal))
+                if isinstance(chosen, str)
+                else str(choice_setting("not_offered"))
+            )
+            if refusal is not None:
+                raise ChoiceRefused(refusal)
+        if effort_key in patch and patch[effort_key] not in ("", *EFFORTS):
+            raise ChoiceRefused(str(choice_setting("bad_effort")))
 
 
 def model_of(options: Mapping[str, Any]) -> Optional[Tuple[str, str]]:
@@ -240,12 +258,21 @@ async def list_models(
             effort_note=_effort_note(effort, own[1] if own is not None else name),
             reason=None,
         )
+    return {
+        "auto": auto,
+        "models": _offered_rows(providers, str(settings.get("chat_model") or AUTO)),
+        "efforts": [dict(effort) for effort in choice_setting("efforts")],
+    }
+
+
+def _offered_rows(providers: Sequence[Mapping[str, Any]], chosen: str) -> List[Dict[str, Any]]:
+    """Each connected provider's offered models in ``connected_providers``
+    order, and the saved choice's row when the picker no longer offers it."""
     rows = [
         _row(str(entry["provider"]), str(entry["display_name"]), model, available=True, reason=None)
         for entry in providers
         for model in entry["offered"]
     ]
-    chosen = str(settings.get("chat_model") or AUTO)
     if chosen != AUTO and all(row["id"] != chosen for row in rows):
         # Saved while its provider could run and the picker offered it:
         # shown, under its provider, and not usable.
@@ -253,20 +280,51 @@ async def list_models(
         named = next((str(entry["display_name"]) for entry in providers if entry["provider"] == provider), None)
         saved = _row(provider, named or provider_display_name(provider), model or chosen, available=False, reason=_refusal(chosen, providers))
         rows.append({**saved, "id": chosen})
+    return rows
+
+
+async def list_hire_models(
+    database: Any,
+    auth: Any,
+    *,
+    principal: Optional[str],
+    auto: Optional[Tuple[str, str]],
+) -> Dict[str, Any]:
+    """The hire composer's picker: Auto's row (``auto``, the ``(provider,
+    model)`` a new hire gets without a pick; none while no AI model is set
+    up), each connected provider's offered models, the saved choice's row
+    even when it can't answer, and the thinking levels. The choice itself is
+    read with the owner's settings (``hire_model`` / ``hire_effort``)."""
+    providers = await _providers(database, auth, principal)
+    settings = await _settings(database)
+    if auto is None:
+        auto_row = _auto_row("", effort=False, effort_note=None, reason=None)
+    else:
+        provider, model = auto
+        effort = supports_effort(provider, model)
+        auto_row = _auto_row(
+            str(choice_setting("hire_auto")).format(model=model),
+            effort=effort,
+            effort_note=_effort_note(effort, model),
+            reason=None,
+        )
     return {
-        "auto": auto,
-        "models": rows,
+        "auto": auto_row,
+        "models": _offered_rows(providers, str(settings.get("hire_model") or AUTO)),
         "efforts": [dict(effort) for effort in choice_setting("efforts")],
     }
 
 
 __all__ = [
     "AUTO",
+    "CHOICE_SETTINGS",
     "EFFORTS",
     "ChoiceRefused",
     "check_settings",
     "effort_of",
+    "list_hire_models",
     "list_models",
     "model_of",
+    "offered_model",
     "run_options",
 ]

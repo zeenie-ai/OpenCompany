@@ -68,8 +68,24 @@ describe('submitDraft', () => {
     expect(state.status).toBe('ready');
     expect(state.spec).not.toBeNull();
     expect(state.uiState).toMatchObject({ rules: { askFirst: true } });
-    expect(state.source).toEqual({ provider: 'openai', model: 'gpt-x' });
     expect(state.turns).toEqual([{ change: null, reply: GOOD_REPLY }]);
+  });
+
+  it('asks the model picked in the hire composer, and Try again asks it too', async () => {
+    const send = vi.fn<Send>().mockResolvedValue({ success: false, error: 'timeout' });
+    await submitDraft(send, 'Answer my WhatsApp', { model: 'anthropic::claude-sonnet-5-5' });
+    expect(send.mock.calls[0][1]).toMatchObject({ model: 'anthropic::claude-sonnet-5-5' });
+
+    send.mockResolvedValue({ success: true, reply: GOOD_REPLY });
+    await retryDraft(send, 'openai::gpt-x');
+    expect(send.mock.calls[1][1]).toMatchObject({ job: 'Answer my WhatsApp', model: 'openai::gpt-x' });
+  });
+
+  it('says why a picked model wrote nothing, in the server’s words', async () => {
+    const detail = 'gpt-x can’t answer right now: OpenAI isn’t connected.';
+    const send = vi.fn<Send>().mockResolvedValue({ success: false, error: 'model_unavailable', detail });
+    await submitDraft(send, 'Answer my WhatsApp', { model: 'openai::gpt-x' });
+    expect(useDraftStore.getState().failure).toMatchObject({ code: 'model_unavailable', detail });
   });
 
   it('ignores empty text and a second send while one is in flight', async () => {
