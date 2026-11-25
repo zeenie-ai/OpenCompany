@@ -1,7 +1,8 @@
 /**
  * The hire composer (design handoff "Composer"): the job description box,
  * the connected-apps pill, the model picker (the employee chat's, whose
- * panel opens against the box) and Create.
+ * panel opens in the page under the box, so it never covers the heading)
+ * and Create.
  *
  * Keys: Enter sends, Shift+Enter starts a new line, Escape stops editing
  * the draft. While an input method is composing (Japanese, Chinese, Korean
@@ -15,7 +16,7 @@ import { ArrowRight } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ModelPicker, ModelPickerButton, type ChatChoice, type ChatModels, type Effort } from '@/features/chat';
+import { ModelPickerSection, ModelPickerToggle, type ChatChoice, type ChatModels, type Effort } from '@/features/chat';
 import { isSendKey } from '@/lib/composerKeys';
 import { animate } from '@/lib/motion';
 import { useAutoGrow } from '@/lib/useAutoGrow';
@@ -191,7 +192,7 @@ export function Composer({
         </Button>
         {refining && <span className="text-xs font-medium text-fg-muted">Editing the draft</span>}
         <div className="ml-auto flex min-w-0 items-center gap-1.5">
-          {picker && <ModelPickerButton />}
+          {picker && <ModelPickerToggle />}
           <Button ref={createRef} variant="invert" size="pill" disabled={!canCreate} onClick={submit}>
             {createLabel(working, refining, idleLabel)}
             <ArrowRight aria-hidden strokeWidth={2.25} />
@@ -202,9 +203,9 @@ export function Composer({
   );
   if (!picker) return surface;
   return (
-    <ModelPicker name="your new hire" {...picker} boxRef={boxRef}>
+    <ModelPickerSection name="your new hire" {...picker} boxRef={boxRef}>
       {surface}
-    </ModelPicker>
+    </ModelPickerSection>
   );
 }
 

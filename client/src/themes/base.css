@@ -180,6 +180,7 @@
   --w-home-content: 1000px;
   --w-composer: 740px;
   --h-composer-max: 200px;   /* the job box grows with its text up to this */
+  --h-hire-model-section: 300px; /* the model picker's section under the job box: its list scrolls past this */
   --w-employee-card: 620px;
   --size-orb-hire: min(200px, 24vh);
   --size-orb-employee: min(96px, 14vh);  /* small: the conversation has the page */
@@ -209,7 +210,7 @@
   --dur-chip-pop: 360ms;           /* an attachment chip arriving */
   --dur-pick: 260ms;               /* the model picker's button settling after a pick */
   --dur-level-drag: 120ms;         /* a level slider's knob while dragged (--dur-slow otherwise) */
-  --w-chat-model-menu: 320px;      /* the model menu (Home's chat picker, Set Global Model), and the Ask first menu */
+  --w-chat-model-menu: 320px;      /* the model menu (Home's chat picker, Set Global Model), the level beside the list in the hire composer's, and the Ask first menu */
   --h-chat-model-menu: 460px;      /* ...at most; less on a short window */
   --shadow-knob: 0 1px 4px rgb(0 0 0 / 0.25);  /* a level slider's knob */
   /* The employee's face beside their turns and on their page's header (chat

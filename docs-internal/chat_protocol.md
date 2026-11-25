@@ -603,9 +603,11 @@ are the two hosts.
   `effort_note`. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
   once and put back when `save_user_settings` refuses it (`SettingsSaveError`, its `detail` shown); a message waits
   until it is known. Every send, edit and retry carries the same `options` (`sendOptions` in `data/send.ts`), and a
-  `model_unavailable` refusal shows the server's `detail`. Home's hire composer mounts the same picker, exported
-  from the chat's index with the choice helpers (`useModelChoice(keys)`, `HIRE_CHOICE`, `savedChoice`), over
-  `get_hire_models` and `hire_model` / `hire_effort` ([Normal Mode](./normal_mode.md#1-the-setup-screen)). In an empty chat on Home, commands marked `suggest` show
+  `model_unavailable` refusal shows the server's `detail`. Home's hire composer shows the same panel body
+  (`PickerBody`: the list and the level) in the page under its box instead of floating
+  (`ModelPickerSection` / `ModelPickerToggle`, exported from the chat's index with the choice helpers
+  `useModelChoice(keys)`, `HIRE_CHOICE` and `savedChoice`), over `get_hire_models` and `hire_model` /
+  `hire_effort` ([Normal Mode](./normal_mode.md#1-the-setup-screen)). In an empty chat on Home, commands marked `suggest` show
   as cards that fill the box; the editor's chat, a console for trying chat triggers, shows none. Cmd/Ctrl+K focuses the box on Home; the editor's palette has Focus Chat.
 - **Changing the conversation** (`data/branches.ts`, `thread/turnActions.ts`): under the owner's message a hover bar
   (`turns/UserTurn.tsx`: time, ‹ 1 / 2 › between versions, Edit, Copy; Edit opens `turns/UserEditBox.tsx` in place,

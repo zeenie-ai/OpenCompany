@@ -6,9 +6,9 @@
 
 export { ChatPane } from './ChatPane';
 export type { ChatHost, ChatHostKind, ChatPaneHandle, ChatPersona, ComposerMode, NotifyTone } from './host';
-// The model picker, which the hire composer shows too, over its own rows
-// and saved choice.
-export { ModelPicker, ModelPickerButton } from './composer/ModelPicker';
+// The model picker, which the hire composer shows too, in the page under its
+// box, over its own rows and saved choice.
+export { ModelPickerSection, ModelPickerToggle } from './composer/ModelPicker';
 export {
   HIRE_CHOICE,
   modelParts,

@@ -1,11 +1,12 @@
 /**
  * The hire composer's model picker (hire/useHirePicker.ts, the employee
  * chat's composer/ModelPicker.tsx): no button until an AI model is set up;
- * the panel lists Auto (which model a hire gets without a pick), each
+ * the panel opens in the page under the box, never floating over the
+ * heading, and lists Auto (which model a hire gets without a pick), each
  * connected provider's models under its name, and the thinking levels; a
  * pick and a level are saved with the owner's settings (`hire_model` /
- * `hire_effort`); the button names the pick; and the job goes to the picked
- * model.
+ * `hire_effort`); a pick or Esc closes it and puts the cursor back in the
+ * box; the button names the pick; and the job goes to the picked model.
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -141,36 +142,54 @@ describe('the hire composer’s model picker', () => {
     expect(sent('get_hire_models')).toEqual([]);
   });
 
-  it('lists what a new hire can run on, and how hard it thinks', async () => {
+  it('opens in the page under the box, listing what a new hire can run on and how hard it thinks', async () => {
     const user = userEvent.setup();
     renderComposer();
-    await user.click(await screen.findByRole('button', { name: 'Auto' }));
-    const panel = await screen.findByRole('dialog', { name: 'Choose how your new hire answers' });
-    expect(within(panel).getAllByRole('option').map((option) => option.textContent)).toEqual([
+    const toggle = await screen.findByRole('button', { name: 'Auto' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await user.click(toggle);
+    const section = await screen.findByRole('region', { name: 'Choose how your new hire answers' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAttribute('aria-controls', section.id);
+    // Not a floating panel: the section follows the box in the page.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const box = screen.getByRole('textbox', { name: 'Describe the job' });
+    expect(box.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(section).getAllByRole('option').map((option) => option.textContent)).toEqual([
       'AutoUses gpt-x',
       'claude-sonnet-5-5',
       'gpt-x',
     ]);
-    expect(within(panel).getByRole('group', { name: 'Anthropic' })).toBeInTheDocument();
-    expect(within(panel).getByRole('slider', { name: 'How hard your new hire thinks' })).toHaveAttribute('aria-valuetext', 'Balanced');
+    expect(within(section).getByRole('group', { name: 'Anthropic' })).toBeInTheDocument();
+    expect(within(section).getByRole('listbox', { name: 'Model' })).toHaveFocus();
+    expect(within(section).getByRole('slider', { name: 'How hard your new hire thinks' })).toHaveAttribute('aria-valuetext', 'Balanced');
+
+    // The button closes it again.
+    await user.click(toggle);
+    expect(screen.queryByRole('region', { name: 'Choose how your new hire answers' })).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('saves a pick and a level, and the job goes to the picked model', async () => {
     const user = userEvent.setup();
     renderComposer();
     await user.click(await screen.findByRole('button', { name: 'Auto' }));
-    const panel = await screen.findByRole('dialog', { name: 'Choose how your new hire answers' });
-    await user.click(within(panel).getByRole('option', { name: 'claude-sonnet-5-5' }));
+    const section = await screen.findByRole('region', { name: 'Choose how your new hire answers' });
+    await user.click(within(section).getByRole('option', { name: 'claude-sonnet-5-5' }));
     expect(sent('save_user_settings')).toEqual([{ settings: { hire_model: SONNET } }]);
+    // A pick closes it and puts the cursor back in the job box.
+    expect(screen.queryByRole('region', { name: 'Choose how your new hire answers' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Describe the job' })).toHaveFocus();
 
     await user.click(await screen.findByRole('button', { name: 'claude-sonnet-5-5' }));
-    await screen.findByRole('dialog', { name: 'Choose how your new hire answers' });
+    await screen.findByRole('region', { name: 'Choose how your new hire answers' });
     // The list has the focus: ArrowRight goes one level up.
     await user.keyboard('{ArrowRight}');
     expect(sent('save_user_settings')[1]).toEqual({ settings: { hire_effort: 'high' } });
     await user.keyboard('{Escape}');
     expect(await screen.findByRole('button', { name: 'claude-sonnet-5-5 · Thorough' })).toBeInTheDocument();
-    // Closing puts the cursor back in the job box.
+    expect(screen.queryByRole('region', { name: 'Choose how your new hire answers' })).not.toBeInTheDocument();
+    // Esc puts the cursor back in the job box too.
     expect(screen.getByRole('textbox', { name: 'Describe the job' })).toHaveFocus();
 
     await user.type(screen.getByRole('textbox', { name: 'Describe the job' }), 'Answer my WhatsApp');

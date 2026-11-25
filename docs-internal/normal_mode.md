@@ -525,9 +525,16 @@ same component ([chat/composer/ModelPicker.tsx](../client/src/features/chat/comp
 and its [ModelMenu](../client/src/components/ui/ModelMenu.tsx), imported from
 the chat's index), bound by [hire/useHirePicker.ts](../client/src/features/home/hire/useHirePicker.ts):
 a button beside Create naming the model, and the level unless it is
-Balanced ("claude-sonnet-5-5 · Thorough"), and a panel above the box with
-Auto, each connected provider's models under its name, and the Quick /
-Balanced / Thorough slider. The rows come from `get_hire_models`
+Balanced ("claude-sonnet-5-5 · Thorough"), that opens and closes a section
+in the page under the box (`ModelPickerSection` / `ModelPickerToggle`):
+Auto and each connected provider's models under its name, and the Quick /
+Balanced / Thorough slider, beside the list on a wide screen. The chat's
+panel floats above its box at the foot of the page; here the box sits under
+the hero, so a floating panel covered the heading and, on a short window,
+ran off the top. The section pushes the starter chips (and a draft) down
+instead, its list scrolls past `--h-hire-model-section`, and opening it
+scrolls it into view and gives the list the focus; a pick or Esc closes it
+and puts the cursor back in the box. The rows come from `get_hire_models`
 (`services/chat/choice.py` `list_hire_models`: the chat picker's rows, with
 Auto's line saying which model a hire gets without a pick, "Uses {model}"),
 and the choice is saved with the owner's settings (`hire_model` /
