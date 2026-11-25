@@ -1,8 +1,9 @@
 /**
  * The hire view (design handoff "Hire view"): the orb, a greeting, the
- * question, the composer, starter jobs (each can also be hired as it
- * stands), and the new employee's setup screen once the owner has
- * described one.
+ * question, the composer with its model picker (the model that writes the
+ * setup and runs the new employee, and how hard it thinks), starter jobs
+ * (each can also be hired as it stands, on that model), and the new
+ * employee's setup screen once the owner has described one.
  *
  * The hero rises in on arrival (every `[data-intro]` element, staggered).
  */
@@ -23,9 +24,11 @@ import { greetingFor } from './greeting';
 import { TemplateChips } from './TemplateChips';
 import { HIRE_TEMPLATES, type Starter } from './templates';
 import { StarterTeamReview } from './StarterTeamReview';
+import { useHirePicker } from './useHirePicker';
 
 export function HireView({ onConnect }: { onConnect: (providerId: string) => void }) {
   const composer = useHireComposer();
+  const picker = useHirePicker();
   const starterHire = useStarterHire();
   const [starter, setStarter] = useState<Starter | null>(null);
   const { connectedApps } = useConnectors();
@@ -104,6 +107,7 @@ export function HireView({ onConnect }: { onConnect: (providerId: string) => voi
         onFocusTaken={consumeComposerFocus}
         onFocusChange={setFocused}
         maxLength={2000}
+        picker={picker}
       />
       <TemplateChips
         picked={picked}

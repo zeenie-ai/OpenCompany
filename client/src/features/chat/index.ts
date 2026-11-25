@@ -6,6 +6,19 @@
 
 export { ChatPane } from './ChatPane';
 export type { ChatHost, ChatHostKind, ChatPaneHandle, ChatPersona, ComposerMode, NotifyTone } from './host';
+// The model picker, which the hire composer shows too, over its own rows
+// and saved choice.
+export { ModelPicker, ModelPickerButton } from './composer/ModelPicker';
+export {
+  HIRE_CHOICE,
+  modelParts,
+  parseChatModels,
+  savedChoice,
+  useModelChoice,
+  type ChatChoice,
+  type ChatModels,
+  type Effort,
+} from './data/models';
 export { useClearChat } from './data/send';
 export { useLaneRun } from './data/runs';
 export { useChatThread, type ThreadScope } from './data/thread';

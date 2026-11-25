@@ -14,7 +14,7 @@
 import { useCallback } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import { HIRE_CHOICE, savedChoice } from '@/features/chat/data/models';
+import { HIRE_CHOICE, savedChoice } from '@/features/chat';
 import { refreshEmployee } from '../data/employees';
 import { parseEmployee, type EmployeeSummary } from '../data/schemas';
 import { SPIKE, spikeOrb } from '../orb/orb';

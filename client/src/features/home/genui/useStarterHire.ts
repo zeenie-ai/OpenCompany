@@ -9,7 +9,7 @@
 import { useCallback } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useWebSocketActions, type WebSocketActions } from '@/contexts/WebSocketContext';
-import { HIRE_CHOICE, savedChoice } from '@/features/chat/data/models';
+import { HIRE_CHOICE, savedChoice } from '@/features/chat';
 import { fetchFolderSkills, folderSkillsQueryKey } from '@/hooks/useFolderSkills';
 import { USER_SKILLS_QUERY_KEY, fetchUserSkills } from '@/hooks/useUserSkills';
 import { EMPLOYEES_QUERY_KEY } from '../data/employees';

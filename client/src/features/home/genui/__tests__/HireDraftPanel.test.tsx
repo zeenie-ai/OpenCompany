@@ -7,9 +7,10 @@
  * hire clears the draft and opens the new employee's page (with what the
  * hire said, and the AI models dialog when there is no model), "Change
  * something" hands the composer the draft, controls write back into the
- * draft, changing when they work reaches the hire, a reply in json-render's
- * own shape works the same, a failed setup says so on a neutral notice with
- * Try again, the wait is shown honestly with a way to cancel, and the spec
+ * draft, changing when they work reaches the hire, the hire runs on the
+ * model and level picked in the composer, a reply in json-render's own
+ * shape works the same, a failed setup says so on a neutral notice with Try
+ * again, the wait is shown honestly with a way to cancel, and the spec
  * inspector is for developers only.
  */
 
@@ -17,6 +18,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { setReducedMotion } from '@/test/waapi';
+import { USER_SETTINGS_QUERY_KEY } from '@/hooks/useUserSettingsQuery';
 import { useAppStore } from '@/store/useAppStore';
 
 const sendRequest = vi.fn();
@@ -379,6 +381,19 @@ describe('HireDraftPanel', () => {
     const payload = sendRequest.mock.calls.find(([type]) => type === 'hire_employee')![1];
     expect(payload.trigger).toEqual({ kind: 'schedule', every: 'weekday', at: '09:00' });
     expect(payload.steps[0]).toEqual({ title: 'Every weekday at 09:00', detail: '', role: 'trigger' });
+  });
+
+  it('hires on the model and level picked in the composer', async () => {
+    sendRequest.mockResolvedValue(hired());
+    const { queryClient } = renderPanel();
+    queryClient.setQueryData(USER_SETTINGS_QUERY_KEY, { hire_model: 'anthropic::claude-sonnet-5-5', hire_effort: 'high' });
+    const hire = await hireButton();
+    await act(async () => {
+      fireEvent.click(hire);
+    });
+    const payload = sendRequest.mock.calls.find(([type]) => type === 'hire_employee')![1];
+    expect(payload.source).toEqual({ spec_version: 1, provider: 'anthropic', model: 'claude-sonnet-5-5' });
+    expect(payload.effort).toBe('high');
   });
 
   it('works the same from a reply in json-render’s own shape', async () => {

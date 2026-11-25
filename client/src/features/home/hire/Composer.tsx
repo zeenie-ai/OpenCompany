@@ -1,19 +1,21 @@
 /**
  * The hire composer (design handoff "Composer"): the job description box,
- * the connected-apps pill, and Create.
+ * the connected-apps pill, the model picker (the employee chat's, whose
+ * panel opens against the box) and Create.
  *
  * Keys: Enter sends, Shift+Enter starts a new line, Escape stops editing
  * the draft. While an input method is composing (Japanese, Chinese, Korean
  * and other IMEs), Enter confirms the composition and never sends.
  *
  * Presentational: the hire view owns what submitting does (the AI check,
- * the draft request).
+ * the draft request) and what the picker offers (useHirePicker.ts).
  */
 
 import { ArrowRight } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { ModelPicker, ModelPickerButton, type ChatChoice, type ChatModels, type Effort } from '@/features/chat';
 import { isSendKey } from '@/lib/composerKeys';
 import { animate } from '@/lib/motion';
 import { useAutoGrow } from '@/lib/useAutoGrow';
@@ -26,6 +28,17 @@ export interface ComposerApp {
   id: string;
   name: string;
   icon_ref?: string | null;
+}
+
+/** The model picker's rows and the owner's choice (useHirePicker.ts). */
+export interface ComposerModelPicker {
+  /** Absent until they load: then there is no button yet. */
+  models: ChatModels | undefined;
+  choice: ChatChoice | null;
+  onModel: (id: string) => void;
+  onEffort: (effort: Effort) => void;
+  /** The panel opened (read the rows again). */
+  onOpen: () => void;
 }
 
 export interface ComposerProps {
@@ -50,6 +63,9 @@ export interface ComposerProps {
   idleLabel?: string;
   /** No float shadow: the box sits inside a dialog (the Welcome guide). */
   flat?: boolean;
+  /** Which model writes the setup and runs the new employee, and how hard
+   *  it thinks; no picker when absent. */
+  picker?: ComposerModelPicker;
 }
 
 const APP_STACK = 3;
@@ -69,6 +85,7 @@ export function Composer({
   maxLength,
   idleLabel,
   flat = false,
+  picker,
 }: ComposerProps) {
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -120,7 +137,7 @@ export function Composer({
   };
 
   const stack = apps.slice(0, APP_STACK);
-  return (
+  const surface = (
     <div
       ref={surfaceRef}
       data-intro
@@ -173,19 +190,21 @@ export function Composer({
           </span>
         </Button>
         {refining && <span className="text-xs font-medium text-fg-muted">Editing the draft</span>}
-        <Button
-          ref={createRef}
-          variant="invert"
-          size="pill"
-          disabled={!canCreate}
-          onClick={submit}
-          className="ml-auto"
-        >
-          {createLabel(working, refining, idleLabel)}
-          <ArrowRight aria-hidden strokeWidth={2.25} />
-        </Button>
+        <div className="ml-auto flex min-w-0 items-center gap-1.5">
+          {picker && <ModelPickerButton />}
+          <Button ref={createRef} variant="invert" size="pill" disabled={!canCreate} onClick={submit}>
+            {createLabel(working, refining, idleLabel)}
+            <ArrowRight aria-hidden strokeWidth={2.25} />
+          </Button>
+        </div>
       </div>
     </div>
+  );
+  if (!picker) return surface;
+  return (
+    <ModelPicker name="your new hire" {...picker} boxRef={boxRef}>
+      {surface}
+    </ModelPicker>
   );
 }
 

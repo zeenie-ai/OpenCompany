@@ -17,7 +17,7 @@
  */
 
 import type { StateModel } from '@json-render/core';
-import { modelParts, type ChatChoice } from '@/features/chat/data/models';
+import { modelParts, type ChatChoice } from '@/features/chat';
 // The file, not the index: this module is in Home's first chunk.
 import { bindingPath, readPath } from '@/lib/jsonRender/paths';
 import { trigger as triggerLists } from '../../../../../server/config/genui_catalog.json';

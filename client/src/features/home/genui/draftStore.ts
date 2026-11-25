@@ -31,7 +31,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { create } from 'zustand';
 import { useWebSocketActions } from '@/contexts/WebSocketContext';
-import { HIRE_CHOICE, savedChoice } from '@/features/chat/data/models';
+import { HIRE_CHOICE, savedChoice } from '@/features/chat';
 // The file, not the index: this module is in Home's first chunk.
 import { isForbiddenSegment, readPath, writePath } from '@/lib/jsonRender/paths';
 import { appRefSchema } from '../data/schemas';
