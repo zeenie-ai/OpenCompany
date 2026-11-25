@@ -2,7 +2,7 @@
 
 Possible defects and document drift that the gatherers met while mapping the code on 2026-11-12 (commit 908a8ce6). None of this was the task, and none of it was run: every item is read from code. "Lead check" says what the lead re-read. Items the gatherers marked INFERRED stay inferred until someone reproduces them.
 
-Nothing here was fixed or planned when it was written. It is a list to pick from. Ten of the sixteen possible defects were checked again on 2026-11-19; one has been fixed since ([Checked again on 2026-11-19](#checked-again-on-2026-11-19)).
+Nothing here was fixed or planned when it was written. It is a list to pick from. Ten of the sixteen possible defects were checked again on 2026-11-19; one had been fixed since ([Checked again on 2026-11-19](#checked-again-on-2026-11-19)). All sixteen were checked on 2026-11-23, after reusable agent instances arrived, and five new ones were found ([Checked again on 2026-11-23](#checked-again-on-2026-11-23)).
 
 ## Possible defects
 
@@ -45,6 +45,46 @@ Checked at commit 092def0c, again from code only. Nothing was run.
 | 16 | Still as described: `image_blocks_from_tool_result` is called only by the in-process loop ([agent_runtime.py:440](../../../server/services/agent_runtime.py#L440)) |
 
 Items 3, 4, 5, 6, 7 and 13 were not checked again.
+
+### Checked again on 2026-11-23
+
+Checked at commit cfb06d6c by read-only agents, from code only; the lead re-read items 1, 8 and new item A. Nothing was run.
+
+Since commit e599ebe0 (2026-11-20) there are two delegation runtimes ([CROSS-REFERENCE.md](CROSS-REFERENCE.md), section 11.1). Hired employees in generations started since then run on agent instances (version 1). Older generations, and plain agents with agents wired as tools, keep Task Manager and `delegate_to_*` (version 0). Items 1 to 7 concern Task Manager and the team permits, so each has two answers.
+
+| # | Version 0 | Version 1 |
+|---|---|---|
+| 1 | Still there: no code unblocks a `blocked` task ([agent_team.py:216](../../../server/services/agent_team.py#L216)) | Fixed: `accept_task` queues and wakes the dependent tasks ([service.py:829](../../../server/services/agent_instances/service.py#L829)) |
+| 2 | Still there | Changed: a failed task stays `failed`; retry, request changes and reassign queue it and wake the instance |
+| 3 | Still there | Fixed: a waiting manager takes a fresh lease |
+| 4 | Still there | Still there. Opaque instance turns may run up to a day, so a permit past three hours can be released while its run goes on, and the limit of three can be exceeded (inferred) |
+| 5 | Still there | Cannot happen: instances never see `delegate_to_*`, and ids come from team, job, instance, run and tool call |
+| 6 | Still there | Fixed: cancelling fences and stops the running attempt and the work below it |
+| 7 | Still there | Changed: the editor refuses these tasks; recovery is Retry review |
+
+| # | Result |
+|---|---|
+| 8 | Still there. The prompt block is now at [agent_activities.py:1885](../../../server/services/temporal/agent_activities.py#L1885) and is still appended to any agent that has `delegate_to_*` tools and is not an instance. The "returns task_id immediately" text remains in [ai.py](../../../server/services/ai.py) and [plugin/base.py](../../../server/services/plugin/base.py) |
+| 9 | Still there: the pin is unchanged |
+| 10 | Not checked: [plugin/tool.py](../../../server/services/plugin/tool.py), which it rests on, has changed since |
+| 11 | Still there, now at [workflow.py:644](../../../server/services/temporal/workflow.py#L644) |
+| 12 | Still there |
+| 13 | Still there |
+| 14 | Still there. Commit ba81442b only moved the skill load off the event loop |
+| 15 | Fixed (2026-11-18, see above) |
+| 16 | Partly fixed: Temporal tool messages now carry image blocks for `piRead` results only |
+
+New possible defects, read from code and not reproduced:
+
+| # | What | Where |
+|---|---|---|
+| A | Stop can be acknowledged while a Claude Code, Codex, RLM or Gemini CLI instance turn is still running. The session counts the turn only while starting it: `child_start()` closes as soon as the activity has started, and neither `set_control_state` nor `wait_for_checkpoint` waits for the running activity. [agent_teams.md](../../agent_teams.md) says opaque managed agents "finish the whole node Activity before acknowledging Stop". The lead re-read this | [agent_instance_workflow.py:443](../../../server/services/temporal/agent_instance_workflow.py#L443), [execution_control.py:108](../../../server/services/temporal/execution_control.py#L108) |
+| B | An instance's whole transcript travels in the claim activity's result and in the run snapshot, and the instance load has no 1 MB guard like the node-keyed store's. A long transcript could exceed Temporal's payload limit (inferred) | [service.py:1137](../../../server/services/agent_instances/service.py#L1137) |
+| C | The session continues as new after every 100 runs, not on history pressure, and without waiting for its handlers to finish (inferred) | [agent_instance_workflow.py:515](../../../server/services/temporal/agent_instance_workflow.py#L515) |
+| D | The session builds its `RetryPolicy` inline, and its module is not in the list that the retry-policy test scans | [tests/test_retry_policies.py](../../../server/tests/test_retry_policies.py) |
+| E | Three registered workflow types (`ApprovalWorkflow` and the two agent instance types) have no replay recorder scenario, so the next release's replay corpus cannot cover them until scenarios exist | [record_fixtures.py](../../../server/tests/temporal/record_fixtures.py) |
+
+Document drift on 2026-11-23: the four CLAUDE.md items below are all still there. The code now has 22 distinct patch ids; [TEMPORAL_ARCHITECTURE.md](../../TEMPORAL_ARCHITECTURE.md) names 14 of them somewhere, and its list of live markers still names nine.
 
 ## Document drift
 

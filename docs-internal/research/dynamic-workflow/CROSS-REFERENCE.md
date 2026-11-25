@@ -1,6 +1,6 @@
 # Dynamic workflows on OpenCompany: cross-reference
 
-> **Status: Planned.** Research result written 2026-11-12; section 10 on Code Mode added 2026-11-19. Nothing in this file is built or decided. It processes the twelve gathered files in this folder; each claim names the file and section that holds the evidence. The code maps cite commit 908a8ce6. The line numbers in this file were checked again at commit 03327c5b on 2026-11-19. What happens next is in [PLAN.md](PLAN.md).
+> **Status: Planned.** Research result written 2026-11-12; section 10 on Code Mode added 2026-11-19; section 11, a check against the code of 2026-11-23, added that day. Nothing in this file is built or decided. It processes the twelve gathered files in this folder; each claim names the file and section that holds the evidence. The code maps cite commit 908a8ce6. The line numbers in this file were checked again at commit cfb06d6c on 2026-11-23. Sections 1 to 10 are kept as written: where the code has since moved away from them, section 11 says so. What happens next is in [PLAN.md](PLAN.md).
 
 Terms used here:
 
@@ -19,6 +19,7 @@ Terms used here:
 6. A standing decision applies. On 2026-11-11 the owner decided that OpenCompany "takes no pydantic-ai dependency and builds no Code Mode feature" ([temporal_production_practices.md](../../temporal_production_practices.md), "Decisions in this pass"). The build in section 5 honours the first half. Whether the second half covers a dynamic workflow is the owner's call. Section 8, question 1.
 7. Six decisions are open. Section 8.
 8. Added 2026-11-19: Claude Code shipped its own Code Mode on 2026-11-12, experimental and off by default. It is the same script idea with tools as the functions instead of sub-agents. It cannot be switched on inside OpenCompany's Claude Code agent, and it changes none of the recommendations above. What its design shows, and what a Code Mode here would touch, is in section 10.
+9. Added 2026-11-23: since 2026-11-20 OpenCompany has two delegation runtimes. Hired employees in new generations delegate through reusable agent instances, where a teammate is started in its own top-level workflow and its answer arrives later. The build in section 5 was written for the other runtime, the one plain Dev-mode agents still use. Which runtime a script tool should target is now the first question. Section 11.
 
 ## 2. One pattern, four implementations
 
@@ -83,9 +84,9 @@ Recommendation: C for a script tool, and D as a first step that needs no release
 
 ### 4.2 Why Pydantic's placement does not fit here
 
-1. **Workflow code here is coordination only, and nothing enforces it.** Every workflow class is declared `sandboxed=False` (for example [agent_workflow.py:848](../../../server/services/temporal/agent_workflow.py#L848), [workflow.py:216](../../../server/services/temporal/workflow.py#L216)) and no lint exists. Determinism rests on convention, the replay corpus and the golden identity file ([analysis/01](analysis/01-graph-execution-on-temporal.md) section 5.1, [analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 24). Running a model-written script there is the opposite of the rule, with no check behind it.
+1. **Workflow code here is coordination only, and nothing enforces it.** Every workflow class is declared `sandboxed=False` (for example [agent_workflow.py:909](../../../server/services/temporal/agent_workflow.py#L909), [workflow.py:220](../../../server/services/temporal/workflow.py#L220)) and no lint exists. Determinism rests on convention, the replay corpus and the golden identity file ([analysis/01](analysis/01-graph-execution-on-temporal.md) section 5.1, [analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 24). Running a model-written script there is the opposite of the rule, with no check behind it.
 2. **A workflow task must return within 2 seconds.** The installed SDK (temporalio 1.34.0, `temporalio/worker/_workflow.py`) runs each workflow activation in a thread and fails the task after `_deadlock_timeout_seconds = 2`. Temporal then retries the task while the run stays open. A script that computes for two seconds would wedge the lead's run. Pydantic's docs give the same warning, and its only guard against a runaway loop inside a workflow, `max_duration_seconds`, is itself a replay hazard ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 6.5).
-3. **All workflow code shares ten slots.** Workflow tasks of every workflow type run on the main worker, at most 10 at a time ([worker.py:252](../../../server/services/temporal/worker.py#L252)). Script execution would compete with every employee's coordination.
+3. **All workflow code shares ten slots.** Workflow tasks of every workflow type run on the main worker, at most 10 at a time ([worker.py:296](../../../server/services/temporal/worker.py#L296)). Script execution would compete with every employee's coordination.
 4. **Replay would re-run every script.** After a restart, each recorded script would run again in a fresh sandbox ([sources/03](sources/03-pydantic-monty-and-temporal-durability.md) section 3.6). Replaying an open run would then depend on the installed Monty behaving exactly as before. Monty went from 1.0 to 1.6 in seven weeks, and its API was rewritten between the pinned 0.0.18 and 1.x.
 5. **Pydantic also runs the sub-agents' loops inline.** Under Temporal a sub-agent's whole run executes in the parent's workflow code; only model requests and tool calls are activities, all in one history ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 6.3). OpenCompany's agents are child workflows with their own history, compaction, approvals and Stop handling. That part should not be copied at all.
 6. **Maturity.** The capability is about four months old and has one Temporal test. Its own migration note says it is not "a durable background task service". The upstream test for a remote sandbox inside a workflow is skipped as flaky ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 9, [sources/03](sources/03-pydantic-monty-and-temporal-durability.md) section 8.3).
@@ -145,10 +146,10 @@ MASS's search loop (run a workflow, let the model judge it against the best so f
 
 This is a shape, not a plan. Each piece names what it mirrors.
 
-1. **A tool node in its own plugin folder.** Model-facing name `run_workflow`, one argument, `code`. The description is built from the lead's teammate entries: fixed rules, a budget sentence, and one line per teammate in the form `async def <name>(*, task: str) -> str`. Mirrors Pydantic's tool ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 3.2) and the roster the lead's prompt already gets ([agent_activities.py:1705](../../../server/services/temporal/agent_activities.py#L1705)).
+1. **A tool node in its own plugin folder.** Model-facing name `run_workflow`, one argument, `code`. The description is built from the lead's teammate entries: fixed rules, a budget sentence, and one line per teammate in the form `async def <name>(*, task: str) -> str`. Mirrors Pydantic's tool ([sources/01](sources/01-pydantic-dynamic-workflow.md) section 3.2) and the roster the lead's prompt already gets ([agent_activities.py:1885](../../../server/services/temporal/agent_activities.py#L1885)).
 2. **A step activity owned by the plugin.** It type-checks the script against the same signatures, runs it until it blocks, and returns the pending calls, the final value or the error text. An error goes back to the model as one tool error that lists what to fix, as `show_ui` does. It runs on the `code-exec` queue, where `montyExecutor` runs.
-3. **A new workflow type that owns one script run.** A loop: step activity, start the children, collect the answers, with the concurrency window and the call budget. It takes part in Stop and Resume the way [EmployeeJobWorkflow](../../../server/services/temporal/employee_job_workflow.py#L71) does. Children start the way the direct delegation path starts them ([agent_workflow.py:1926](../../../server/services/temporal/agent_workflow.py#L1926)). A lead with a team could instead start them through the team's task runner, `DelegatedTaskWorkflow` ([agent_workflow.py:583](../../../server/services/temporal/agent_workflow.py#L583)), which another workflow type already starts and awaits. Each call would then be a task on the board with times and tokens, but that runner also publishes the task event that starts a review run. That choice belongs to question 3. A new workflow type needs no patch marker ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 1).
-4. **One branch in the agent workflow's tool dispatch** that starts that workflow as a child and awaits its result. Make it data-driven: the tool entry built at prepare time names the workflow type, as an entry can already name its own activity ([agent_workflow.py:2432](../../../server/services/temporal/agent_workflow.py#L2432)). That is one general rule. Task Manager's branch on its node type is the form not to repeat.
+3. **A new workflow type that owns one script run.** A loop: step activity, start the children, collect the answers, with the concurrency window and the call budget. It takes part in Stop and Resume the way [EmployeeJobWorkflow](../../../server/services/temporal/employee_job_workflow.py#L74) does. Children start the way the direct delegation path starts them ([agent_workflow.py:2037](../../../server/services/temporal/agent_workflow.py#L2037)). A lead with a team could instead start them through the team's task runner, `DelegatedTaskWorkflow` ([agent_workflow.py:644](../../../server/services/temporal/agent_workflow.py#L644)), which another workflow type already starts and awaits. Each call would then be a task on the board with times and tokens, but that runner also publishes the task event that starts a review run. That choice belongs to question 3. A new workflow type needs no patch marker ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) rule 1).
+4. **One branch in the agent workflow's tool dispatch** that starts that workflow as a child and awaits its result. Make it data-driven: the tool entry built at prepare time names the workflow type, as an entry can already name its own activity ([agent_workflow.py:2565](../../../server/services/temporal/agent_workflow.py#L2565)). That is one general rule. Task Manager's branch on its node type is the form not to repeat.
 5. **A generation flag for piece 4**, written at Start, so only new generations take the branch. A flag touches seven places ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) section 7). Tests: a golden entry with `flags` and `new_types`, one recorded replay scenario, one real-SDK test per branch ([analysis/04](analysis/04-deployment-control-and-durability-rules.md) section 5.11).
 6. **Two rows in central tables**: the approval class and the repeat safety of the new tool type. An unlisted type counts as a send ([classes.py:32](../../../server/services/approvals/classes.py#L32)) and is never repeated after a broken-off attempt.
 
@@ -226,7 +227,7 @@ Each option states what it assumes. The first option is the recommendation.
 Checked by the lead against the code or the installed packages:
 
 - RFC-0006 sections 12.5, 16.14 and 18.17, as quoted in section 4.2.
-- Every production workflow class is `sandboxed=False`; `GENERATION_FLAGS` ([workflow.py:187](../../../server/services/temporal/workflow.py#L187)); `DORMANT_PATCHES` ([patches.py:14](../../../server/services/temporal/patches.py#L14)); the body of `DelegatedTaskWorkflow`; the id helpers and the sliding window of three; `NON_PARTICIPANTS` ([execution_control.py:29](../../../server/services/deployment/execution_control.py#L29)); the `needs_canvas` allowlist ([test_plugin_contract.py:362](../../../server/tests/test_plugin_contract.py#L362)); the approval default; the golden file's `flags` and `new_types` keys; the 2026-11-11 decision text.
+- Every production workflow class is `sandboxed=False`; `GENERATION_FLAGS` ([workflow.py:190](../../../server/services/temporal/workflow.py#L190)); `DORMANT_PATCHES` ([patches.py:14](../../../server/services/temporal/patches.py#L14)); the body of `DelegatedTaskWorkflow`; the id helpers and the sliding window of three; `NON_PARTICIPANTS` ([execution_control.py:29](../../../server/services/deployment/execution_control.py#L29)); the `needs_canvas` allowlist ([test_plugin_contract.py:362](../../../server/tests/test_plugin_contract.py#L362)); the approval default; the golden file's `flags` and `new_types` keys; the 2026-11-11 decision text.
 - The SDK's 2-second check and the worker's 10 workflow-task slots.
 - The `pydantic-monty` 0.0.18 API from its installed stub, and the probe in Appendix A.
 - Every file in this folder passes the docs lint (`cli/tests/test_docs_paths_resolve.py`).
@@ -291,14 +292,14 @@ The full table is in [sources/06](sources/06-claude-code-code-mode.md), section 
 | Code that calls tools | Only the RLM agent. Tools are blocking Python functions inside one activity with one attempt; nothing inside it is durable | [analysis/05](analysis/05-code-execution-and-sandboxes.md) section 4.1 |
 | "Code Mode" by name | The autonomous agent's skill: a prompt that tells the model to batch calculations into one Python call. It has no tools as functions | [analysis/05](analysis/05-code-execution-and-sandboxes.md) section 4.2 |
 | A sandbox | `montyExecutor`. A script in it cannot call tools | Section 3 |
-| Tool calls on Temporal | One at a time, in the order of the model's message ([agent_workflow.py:2228](../../../server/services/temporal/agent_workflow.py#L2228)), each as the tool's own activity. That activity holds the approval check, the repeat guard and the chat step | [analysis/02](analysis/02-agent-loop-on-temporal.md) sections 4.4 and 4.7 |
+| Tool calls on Temporal | One at a time, in the order of the model's message ([agent_workflow.py:2340](../../../server/services/temporal/agent_workflow.py#L2340)), each as the tool's own activity. That activity holds the approval check, the repeat guard and the chat step | [analysis/02](analysis/02-agent-loop-on-temporal.md) sections 4.4 and 4.7 |
 | Size of results | By default a tool result is cut to 100,000 characters for the model ([config.py:514](../../../server/core/config.py#L514)). TikHub and treg save an answer over 20,000 characters to a workspace file and return a reference with a preview | Read at 03327c5b |
 | Approval classes | One central table gives every call a class: `read`, `write`, `send` or `money`. An unlisted type is `send` ([classes.py:29](../../../server/services/approvals/classes.py#L29)) | Read at 03327c5b |
 
 **The Claude Code agent cannot simply turn Code Mode on.** This is read from the code and from the Code Mode page. It was not tried, because the installed CLI is never run here.
 
 - The pinned CLI is 2.1.258 ([ai_cli_providers.json:4](../../../server/config/ai_cli_providers.json#L4)). Code Mode needs 2.1.323.
-- The agent drives `claude` over stream-json pipes with `--ide`, without a terminal ([_provider.py:188](../../../server/nodes/agent/claude_code_agent/_provider.py#L188)). The page limits Code Mode to "an interactive `claude` session in a terminal" and names `-p`, the Agent SDK and the VS Code panel as unsupported.
+- The agent drives `claude` over stream-json pipes with `--ide`, without a terminal ([_provider.py:191](../../../server/nodes/agent/claude_code_agent/_provider.py#L191)). The page limits Code Mode to "an interactive `claude` session in a terminal" and names `-p`, the Agent SDK and the VS Code panel as unsupported.
 - The agent's default model is `claude-sonnet-4-6`. The page lists four newer models.
 - On the gateway route the agent sets `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` ([_oauth.py:343](../../../server/nodes/agent/claude_code_agent/_oauth.py#L343)). Each is a listed reason for Code Mode not to start.
 
@@ -341,6 +342,84 @@ Different:
   - The measured benefit depends on the kind of work, and the cheaper changes for the two measured runs are already made.
   - If the script tool of section 5 is built, tools as functions are a later addition to the same step activity and the same workflow type. It is a second kind of call, not a second feature.
 - Questions 2 to 6 are unaffected.
+
+## 11. Checked again on 2026-11-23
+
+Added 2026-11-23. Eight read-only agents and the lead checked sections 1 to 10, [FINDINGS.md](FINDINGS.md) and the six external sources against commit cfb06d6c, 94 commits after the check of 2026-11-19. In that time 161 files under `server/services`, `server/nodes` and `server/core` changed. The lead re-read the code behind every claim this section rests on. Nothing was run.
+
+### 11.1 Two delegation runtimes
+
+Commit e599ebe0 (2026-11-20) added reusable agent instances. Every Start since then writes `agent_lifecycle_version` and `agent_protocol_version` 1 into the generation ([control.py:169](../../../server/services/deployment/control.py#L169)). Only a hired lead, `ai_employee` or `orchestrator_agent`, then runs as an instance ([protocol.py:56](../../../server/services/agent_instances/protocol.py#L56)). Everything else delegates as before. A script tool would therefore meet one of two runtimes:
+
+| | Direct delegation | Agent instances |
+|---|---|---|
+| Who uses it | A plain agent with agents wired to its tools input, in Dev mode; every generation admitted before 2026-11-20 | Hired employees (the Chat Employee, the Orchestrator and their roles) in new generations |
+| The call | `delegate_to_<teammate>` | `spawn_<teammate>(instructions, after)` or `assign_task(agent, instructions, after)` ([tools.py:94](../../../server/services/agent_instances/tools.py#L94)) |
+| What it returns | The teammate's answer, in the same turn ([agent_workflow.py:2037](../../../server/services/temporal/agent_workflow.py#L2037)) | At once: the task, `queued` or `blocked`. The answer arrives later as a review notice in the assigner's inbox. `wait_for_agents` waits at most 30 seconds and returns status, never answers ([service.py:733](../../../server/services/agent_instances/service.py#L733)) |
+| Where the teammate runs | An attached child of the caller's agent workflow | Its own top-level `AgentInstanceSessionWorkflow`, started from an activity through the client ([runtime.py:32](../../../server/services/agent_instances/runtime.py#L32)); each of its turns is a child of that session |
+| Its conversation | The node-keyed store. Two runs of one teammate at once overwrite it | One transcript per instance, always, saved with revision and run fences |
+| Limits | Three at a time, depth two | Three runs at a time per job. The service checks no spawn count or depth; the graph bounds depth |
+| What the caller reads | The full response text | A 4,000-character preview, with `inspect_task` to page ([service.py:33](../../../server/services/agent_instances/service.py#L33)) |
+| Review | None | `accept_task`, `request_changes`, `retry_task` and others. A manager's own task cannot be submitted until its children are accepted or blocked |
+| Cost | The child's model steps carry the chat run, so they count under the reply and toward its spend limit | Instance runs drop the chat run. Their cost shows under the reply through the job and is never limited, because the limit leaves employee jobs out ([limit.py](../../../server/services/usage/limit.py)) |
+
+### 11.2 What still holds
+
+- **Section 4.2.** Every workflow class, now 17, is `sandboxed=False`. The installed SDK still fails a workflow task after 2 seconds, and all workflow tasks still share 10 slots ([worker.py:296](../../../server/services/temporal/worker.py#L296)). Option C stays the recommendation.
+- **Pydantic moved the same way.** On 2026-11-18 it began running remote Code Mode turns as activities "so long snippets don't trip the deadlock detector" (pydantic-ai pull request 13756, harness 0.71.0). Its DynamicWorkflow and its local sandbox still run scripts in workflow code. It carries Monty session dumps from one activity to the next; it does not re-run the script against recorded results.
+- **The gap.** Neither runtime starts and joins several sub-agent runs inside one tool call.
+- **Piece 4.** No general mechanism lets a tool entry name a child workflow type; the child's type is computed from the node type. The nearest precedents are the new `agent_operation` arm of the dispatch ([agent_workflow.py:2566](../../../server/services/temporal/agent_workflow.py#L2566)) and `ToolBinding.execution_traits` (`starts_child`, `waits_for_child`), which any plugin can declare ([tool.py:126](../../../server/services/plugin/tool.py#L126)).
+- **Piece 6.** An unlisted tool type is still a `send`, and the repeat table is still the guard. The lifecycle tools skip both. Like handing work to an agent before, they ask the owner nothing, and each teammate's own calls are checked ([tools.py:185](../../../server/services/handlers/tools.py#L185)).
+- **Path A.** A plain agent's `delegate_to_*` tools still wait and return the answer, and the prompt block that tells it never to call them is still appended ([agent_activities.py:1885](../../../server/services/temporal/agent_activities.py#L1885)).
+- **The sandbox.** `pydantic-monty` is still pinned at 0.0.18. The API the probe used is unchanged in the installed package, and nothing in the repository uses its suspend-and-resume API.
+
+### 11.3 What changed for the build
+
+1. **Section 5 fits only the direct runtime.** Its workflow type starts teammates as `AgentWorkflow` children, which is the path instances hide from a hired lead ([agent_activities.py:1785](../../../server/services/temporal/agent_activities.py#L1785)). For hired leads a script would sit on the instance runtime:
+   - each function is a spawn or an assignment, and each is already an isolated instance;
+   - the join is a wait for submitted task results.
+
+   Two pieces are missing there. One is a workflow-side wait for a submitted result; `agent.instance.dispatch_wait`, which waits on a session's result, is the nearest. The other is a ruling on review, since a manager's task now waits until its children's tasks are accepted. The lead's reading, not checked further: the step design of section 4.3 suits this runtime, because nothing is held in memory between steps, so a script can be stepped again whenever a review notice wakes its manager.
+2. **Chaining still runs through a model.** A dependent task's input is its instructions and review feedback; the prerequisite's result is not passed in ([service.py:498](../../../server/services/agent_instances/service.py#L498)). `after` does now unblock a dependent task once its prerequisite is accepted ([service.py:829](../../../server/services/agent_instances/service.py#L829)), which removes FINDINGS item 1 for new generations.
+3. **Model-written code already starts agents.** Inside an instance run the RLM agent gets the lifecycle tools as Python functions. Each call is identified by its position in the code and by the run ([adapters.py:255](../../../server/services/rlm/adapters.py#L255)), and the service uses that id to make the change idempotent. It is not durable in Temporal's sense: the RLM turn is one activity with one attempt. Question 1 should weigh it.
+4. **New rules for new workflow code**, from the code and [TEMPORAL_ARCHITECTURE.md](../../TEMPORAL_ARCHITECTURE.md):
+   - A Temporal id that host code chooses, and that a re-arm recomputes, needs a flag frozen at Start (commit 8f9ff0e7).
+   - `GENERATION_FLAGS` grew from two to five. The three new flags were read and written in the same unreleased cycle, not a release apart as step 5 of Path B in [PLAN.md](PLAN.md) says. The owner should say which rule applies.
+   - Two new patch markers shipped active, because the workflow types they sit in have never been released.
+   - Periodic maintenance runs as a database scan under a lease in the worker, not as a timer workflow.
+   - The monthly budget pauses an employee through the same control walk as Stop, so a new workflow type must take part in pause or it keeps spending.
+   - The golden identity test checks only its newest entries, and three registered workflow types have no replay recorder scenario. The next release's replay corpus needs those scenarios, and one for any type this build adds.
+5. **Pi.** Pi's built-in tools are now connected tool nodes (commit f3dab3f0), each call a durable activity with a receipt. That makes Pi a closer precedent for the mechanics (epochs, receipts, digests). It is still not a script runtime: its ledger admits only the calls the workflow predicted from the model's reply.
+
+### 11.4 External sources since 2026-11-12
+
+| Source | Change | Effect here |
+|---|---|---|
+| Monty | 1.7.0b1, a pre-release (2026-11-20). The stable release is still 1.6.0, called "ready for production use". The suspend-and-resume API is unchanged. The dump format went from version 15 to 16, and 1.6 cannot read 1.7 dumps. Python 3.10 is dropped | Question 5 stands. A build on 1.x pins one minor version on every worker |
+| Pydantic AI Harness | 0.69 to 0.71, still alpha. Remote Code Mode turns run as activities (11.2). DynamicWorkflow still runs its script in workflow code. It gained `call_scheduler` but still has no concurrency limit; workflows still do not nest; sub-agents still cannot pause for approval | Supports section 4 |
+| Claude Code Code Mode | Releases 2.1.329 and 2.1.330. Still "experimental and off by default", still "an interactive `claude` session in a terminal", still not through a gateway, same four models | Section 10.4 stands |
+| Claude Code dynamic workflows | The page now lists `claude -p` and the Agent SDK among the places they run, with no experimental label. The feature dates from 2.1.154, before the pinned 2.1.258 | Not checked whether OpenCompany's Claude Code agent can use them |
+| Claude Code `REPL` tool | The Agent SDK reference says an experimental predecessor, switched on with `CLAUDE_CODE_REPL=1`, existed through 2.1.274. The pinned 2.1.258 contains that variable | Not verified to work over stream-json or a gateway. Removed in 2.1.275, so a dead end for upgrades |
+| Claude API programmatic tool calling | No change: stable, about 4 minutes per waiting call, containers kept 30 days | None |
+| DeepSeek Harness | Pre-releases up to 0.2.3-alpha.2; still a developer preview; Python PTC dropped | None |
+| Sakana MASS | No change | None |
+| temporalio | Releases 1.35.0 to 1.36.1. The 2-second limit is unchanged; nothing new for running untrusted code. The repository pins `>=1.34.0` and has 1.34.0 installed | None |
+
+### 11.5 Effect on the decisions in section 8
+
+- **A question now comes first: which runtime does a script tool serve?**
+  - (a) Hired employees, on the agent instance runtime (11.3 item 1). Assumes the feature belongs on the product's main path, and a build that differs from section 5: no workflow type that starts `AgentWorkflow` children, a wait for submitted results, and a ruling on review.
+  - (b) Plain Dev-mode agents, on direct delegation. Assumes section 5 as written, on the path [agent_delegation.md](../../agent_delegation.md) now calls compatibility behaviour.
+- **Question 1** keeps its options. A fact to weigh: model-written RLM code already starts agents inside instances (11.3 item 3).
+- **Question 2** keeps its recommendation, but Path A now reaches only plain Dev-mode agents. For hired teams, the Orchestrator's saved prompt already carries the delegation instructions ([team_recipe.py:253](../../../server/services/employees/team_recipe.py#L253)). The MASS fields of the older Task Manager (`mission`, `acceptance_criteria`, `depends_on`) are no longer arguments; `instructions` and `after` replace them.
+- **Question 3** merges into the new first question.
+- **Question 4** is answered by design for hired teams: each spawn is an isolated instance with its own stored transcript. "Isolated" there means a fresh instance, not "no stored conversation". For direct delegation it stays as written.
+- **Question 5** stands (11.4).
+- **Question 6** has a house style for hired teams: the call returns at once and the result arrives through the inbox. For direct delegation, option (a) still matches how delegation works today.
+
+The lead's recommendation, revised: still a dynamic workflow only, and still the prompt-level plan first where it costs nothing. If a script tool is built, build it for the agent instance runtime. That is where hired employees work, and where isolation, permits, review and a durable inbox already exist. Section 5 stays as the shape of the sandbox and the step activity, not of the workflow that runs the teammates.
+
+Possible defects met during this check are in [FINDINGS.md](FINDINGS.md), "Checked again on 2026-11-23".
 
 ## Appendix A. The probe
 

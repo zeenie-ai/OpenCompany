@@ -2,19 +2,19 @@
 
 This folder answers one question: how could a "dynamic workflow" capability be built properly on OpenCompany's Temporal execution engine. It holds the gathered sources, six maps of the existing code, and the cross-reference that processes them.
 
-Written 2026-11-12. A sixth source, Claude Code's Code Mode, was added on 2026-11-19. Research only: nothing here is built or decided.
+Written 2026-11-12. A sixth source, Claude Code's Code Mode, was added on 2026-11-19. Everything was checked again against the code and the sources on 2026-11-23. Research only: nothing here is built or decided.
 
-State on 2026-11-19: the research is complete, and the next step is the owner's answers to six questions. [PLAN.md](PLAN.md) holds that state and what follows from each answer.
+State on 2026-11-23: the research is complete, and the next step is the owner's answers. Since 2026-11-20 hired employees delegate through reusable agent instances, so a new first question asks which runtime a script tool would serve. [PLAN.md](PLAN.md) holds that state and what follows from each answer.
 
 A dynamic workflow, as the sources use the term: an agent gets one tool, its model writes a short script in which each available sub-agent is a function, the script fans out, chains and loops inside that one tool call, and only its final value returns to the model.
 
 ## Read this first
 
-[CROSS-REFERENCE.md](CROSS-REFERENCE.md) is the result: the four implementations side by side, what OpenCompany already has, where the script should run under Temporal and why, the smallest proper build, and six decisions for the owner. Its section 10, added 2026-11-19, covers Code Mode: how Claude Code built it and what one would touch here.
+[CROSS-REFERENCE.md](CROSS-REFERENCE.md) is the result: the four implementations side by side, what OpenCompany already has, where the script should run under Temporal and why, the smallest proper build, and six decisions for the owner. Its section 10, added 2026-11-19, covers Code Mode: how Claude Code built it and what one would touch here. Its section 11, added 2026-11-23, says what the reusable agent instances and the newer source releases change.
 
-[PLAN.md](PLAN.md) is the short plan: where things stand, the six questions with the recommended answers, the two paths that follow, and how to resume after a break.
+[PLAN.md](PLAN.md) is the short plan: where things stand, the owner's questions with the recommended answers, the two paths that follow, and how to resume after a break.
 
-[FINDINGS.md](FINDINGS.md) lists possible defects and document drift the gatherers met on the way. Ten of its sixteen defects were checked again on 2026-11-19: one has been fixed since, and the other nine are as they were.
+[FINDINGS.md](FINDINGS.md) lists possible defects and document drift the gatherers met on the way. All sixteen defects were checked again on 2026-11-23. Most of those about team tasks are fixed in the new instance runtime and still there in older generations, and five new ones are listed.
 
 [PROBE.md](PROBE.md) holds the feasibility probe in full: the script, how to run it, and its output on the pinned Monty 0.0.18.
 
@@ -35,7 +35,7 @@ Digests of other projects, written from their documentation and source code. Eac
 
 Facts about this repository as of commit 908a8ce6. Every claim links to a file and line. INFERRED marks a conclusion drawn from several places; NOT VERIFIED marks something not checked. Each map ends with the places where a document and the code disagree.
 
-The code has moved since. At commit 03327c5b on 2026-11-19, 54 files under `server/services`, `server/nodes` and `server/core` differed from 908a8ce6, so a line number in a code map may be stale. Find the symbol by name before relying on it. The line numbers in the cross-reference were checked again that day.
+The code has moved since. At commit cfb06d6c on 2026-11-23, 187 files under `server/services`, `server/nodes` and `server/core` differed from 908a8ce6, so a line number in a code map may be stale. Find the symbol by name before relying on it. The line numbers in the cross-reference were checked again that day.
 
 The maps are kept as they were written and are not updated. Each opens with a notice that says so and names the maintained document for its subject.
 
@@ -43,7 +43,7 @@ The maps are kept as they were written and are not updated. Each opens with a no
 |---|---|
 | [analysis/01-graph-execution-on-temporal.md](analysis/01-graph-execution-on-temporal.md) | How a workflow graph runs: `MachinaWorkflow`, node activities, the worker pool, patch markers and generation flags |
 | [analysis/02-agent-loop-on-temporal.md](analysis/02-agent-loop-on-temporal.md) | `AgentWorkflow`: the turn loop and how every kind of tool call is dispatched |
-| [analysis/03-delegation-and-teams.md](analysis/03-delegation-and-teams.md) | How one agent runs another: Task Manager, `delegate_to_*`, teams, permits, the task tables |
+| [analysis/03-delegation-and-teams.md](analysis/03-delegation-and-teams.md) | How one agent runs another: Task Manager, `delegate_to_*`, teams, permits, the task tables. Since 2026-11-20 this is the older runtime only; hired employees in new generations use agent instances ([CROSS-REFERENCE.md](CROSS-REFERENCE.md), section 11.1) |
 | [analysis/04-deployment-control-and-durability-rules.md](analysis/04-deployment-control-and-durability-rules.md) | Generations, Start, Stop, Resume, Reset, recovery, and 46 rules for new workflow code with their sources |
 | [analysis/05-code-execution-and-sandboxes.md](analysis/05-code-execution-and-sandboxes.md) | The code executor nodes including Monty, the RLM agent, the Pi coding agent and its inline delegation |
 | [analysis/06-tools-plugins-and-graph-mutation.md](analysis/06-tools-plugins-and-graph-mutation.md) | What a plugin can and cannot add, how a tool reaches a model, the Agent Builder, Hire and validation |
@@ -55,6 +55,7 @@ The maps are kept as they were written and are not updated. Each opens with a no
 - The external sources were fetched that day. Each digest records the URLs, the clone commits and the licences. Nothing downloaded was executed.
 - The code maps were read-only. No test and no server code was run. HEAD moved during the work, from 908a8ce6 to 13708877 (the v0.3.2 release commits). Nothing under `server/services`, `server/nodes` or `server/core` differs between the two.
 - On 2026-11-19 the lead added the sixth source alone, from Anthropic's public documentation pages, and wrote section 10 of the cross-reference. Each quoted passage in that digest was matched by a script against the downloaded pages. No Claude Code session was started in Code Mode.
+- On 2026-11-23 eight read-only agents checked the cross-reference, the findings list and the external sources against commit cfb06d6c; the lead re-read the code behind section 11 and wrote it. The source digests were not edited: their changes since are in section 11.4.
 
 ## A standing decision this touches
 
@@ -64,4 +65,4 @@ The maps are kept as they were written and are not updated. Each opens with a no
 
 - The folder was committed on 2026-11-19. Until then it was untracked.
 - All files pass the docs lint: `cli/tests/test_docs_paths_resolve.py`, selected with `-k dynamic-workflow`.
-- [builder_documentation.py](../../../server/services/builder_documentation.py) collects every Markdown file under `docs-internal`. In a source checkout the Agent Builder's documentation search can therefore read these files, and a bundle built from this tree would include them.
+- [builder_documentation.py](../../../server/services/builder_documentation.py) collects every Markdown file under `docs-internal`. The Agent Builder's documentation search can therefore read these files, and the tracked bundle includes them.
