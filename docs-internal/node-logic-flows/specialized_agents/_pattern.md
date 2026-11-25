@@ -72,6 +72,7 @@ All 13 specialized agents share the `SpecializedAgentParams` Pydantic model in
 | `system_message` | string\|null | `"You are a helpful assistant"` | no | - | System instructions (3 rows) |
 | `temperature` | float\|null | `None` | no | group `options` | 0.0-2.0; `None` -> `agent.default_temperature` in `llm_defaults.json` |
 | `max_tokens` | int\|null | `None` | no | group `options` | 1-200000; `None` -> per-model default (not silently capped); on OpenRouter none is sent, so the serving endpoint applies its own limit |
+| `effort` | `low`\|`high`\|null | `None` | no | group `options` | How hard the model thinks on every run, as [`aiAgent`](../ai_agents/aiAgent.md)'s `effort` (`nodes/agent/_effort.py`); a hire sets it on every agent it builds from the hire composer's picker. RLM does not send it |
 
 ## Outputs (handles)
 

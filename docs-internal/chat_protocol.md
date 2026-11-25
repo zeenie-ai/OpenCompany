@@ -603,7 +603,9 @@ are the two hosts.
   `effort_note`. The choice lives in the owner's settings (`chat_model` / `chat_effort`), saved at
   once and put back when `save_user_settings` refuses it (`SettingsSaveError`, its `detail` shown); a message waits
   until it is known. Every send, edit and retry carries the same `options` (`sendOptions` in `data/send.ts`), and a
-  `model_unavailable` refusal shows the server's `detail`. In an empty chat on Home, commands marked `suggest` show
+  `model_unavailable` refusal shows the server's `detail`. Home's hire composer mounts the same picker, exported
+  from the chat's index with the choice helpers (`useModelChoice(keys)`, `HIRE_CHOICE`, `savedChoice`), over
+  `get_hire_models` and `hire_model` / `hire_effort` ([Normal Mode](./normal_mode.md#1-the-setup-screen)). In an empty chat on Home, commands marked `suggest` show
   as cards that fill the box; the editor's chat, a console for trying chat triggers, shows none. Cmd/Ctrl+K focuses the box on Home; the editor's palette has Focus Chat.
 - **Changing the conversation** (`data/branches.ts`, `thread/turnActions.ts`): under the owner's message a hover bar
   (`turns/UserTurn.tsx`: time, ‹ 1 / 2 › between versions, Edit, Copy; Edit opens `turns/UserEditBox.tsx` in place,
@@ -805,8 +807,9 @@ each node keeps its model.
   employee answers on its own model.
 - **The choice is the owner's**, saved with their settings (`UserSettings.chat_model`, default `"auto"`, and
   `chat_effort`, default `""`) through `save_user_settings`, which refuses a model the picker doesn't offer or an
-  effort other than `low` / `high` (`chat_choice_refused`). The client sends it as `options.model` /
-  `options.effort` with every message, edit and retry.
+  effort other than `low` / `high` (`chat_choice_refused`; `check_settings` applies the same rule to the hire
+  composer's `hire_model` / `hire_effort`). The client sends it as `options.model` / `options.effort` with every
+  message, edit and retry.
 - **Admission resolves it** (`run_options`) and keeps the result on the run: Auto becomes the default's
   `provider::model` (nothing when no default is set). A model whose provider has no key, or one the picker no longer
   offers, is refused with `model_unavailable` and a `detail` in the owner's words, and nothing is saved; there is
@@ -821,7 +824,15 @@ each node keeps its model.
   `output_config.effort`, OpenAI as `reasoning_effort` (Chat Completions) or `reasoning.effort` (Responses),
   Gemini 3 as `thinking_level`, OpenRouter (Claude 5.x models) as `reasoning.effort` in the request body. It never
   turns thinking on or off; any other model answers as without it, and the
-  picker shows `effort_note` ("{model} sets its own pace") in place of the levels.
+  picker shows `effort_note` ("{model} sets its own pace") in place of the levels. The level picked in the chat
+  applies to the agent that answers the run; any other agent, and the answering one at Balanced, sends its own
+  Effort option (`effort`: `low` / `high`, unset for Balanced, on AI Agent, Zeenie and the specialized agents,
+  `nodes/agent/_effort.py`), on every run, whatever started it. The in-process agent loop sends the agent's Effort
+  too (`run_native_agent_loop(effort=)`). A hire gives each agent it builds the level picked in the hire composer.
+- **The hire composer** has the same picker over its own rows and choice: `get_hire_models`
+  (`list_hire_models`, the same rows with Auto saying which model a hire gets without a pick, `hire_auto` in
+  `choice`) and `UserSettings.hire_model` / `hire_effort`, checked by the same save rule. The pick writes the new
+  employee's setup and every agent of theirs runs on it ([Normal Mode](./normal_mode.md#1-the-setup-screen)).
 - **`get_chat_models`** lists the picker for one employee: Auto's row says what Auto uses now (the default model, or
   the answering agent's own), then each connected provider's offered models in `connected_providers` order (each row
   with `provider` and `provider_name`), plus the saved choice's row, under its provider, even when it can't answer
@@ -940,7 +951,7 @@ and server tests alike:
 | `engine_unavailable` | send, edit, regenerate | A workflow's chat while Temporal is not connected: nothing could deliver the message, so nothing was saved. |
 | `invalid_request` | send, save, edit, regenerate, get_chat_models | A malformed field (`detail` says which): an empty message, a role other than the owner's, a bad `client_message_id`, or an effort other than `low` / `high`; `get_chat_models` for the `default` session. |
 | `model_unavailable` | send, edit, regenerate | The model chosen can't answer: its provider isn't connected, or the picker no longer offers it. `detail` says so in the owner's words; nothing was saved. |
-| `chat_choice_refused` | save_user_settings | A saved `chat_model` the picker doesn't offer now (its provider isn't connected, or the provider doesn't list it), or a `chat_effort` other than `""`, `low` or `high`. |
+| `chat_choice_refused` | save_user_settings | A saved `chat_model` or `hire_model` the pickers don't offer now (its provider isn't connected, or the provider doesn't list it), or a `chat_effort` or `hire_effort` other than `""`, `low` or `high`. |
 | `read_failed` | get_chat_messages, chat_subscribe | The thread could not be read. Never answered as an empty thread. |
 | `not_found` | get_chat_run, stop_chat_run | No such run. |
 | `attachment_rejected` | send | A file outside `uploads/`, gone, or more than six; `detail` says which. |

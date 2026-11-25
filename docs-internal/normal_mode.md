@@ -459,7 +459,7 @@ are is on their page's header, not in the dock.
 
 ### 1. The setup screen
 
-`generate_employee_setup {job, refine?, history?, draft_token}`
+`generate_employee_setup {job, refine?, history?, draft_token, model?}`
 ([services/employees/setup.py](../server/services/employees/setup.py)):
 
 - **The server builds every message** ([setup_prompt.py](../server/services/employees/setup_prompt.py)):
@@ -473,11 +473,17 @@ are is on their page's header, not in the dock.
   turns, within a character budget. That is while Generated UI is on; with it
   off, the form takes the catalogue's place and a change works on the form
   (see **Generated UI off** below).
-- **Model choice** ([llm.py](../server/services/employees/llm.py)): a local
-  provider when the owner prefers local AI, else the global default provider
-  when it has a key, else the first usable provider, else the first saved
-  endpoint. Calls go through `ChatUnifier` with a deadline (longer for local
-  models). One retry when the reply was cut off or cannot be salvaged. Usage is
+- **Model choice** ([llm.py](../server/services/employees/llm.py)
+  `resolve_llm_choice`): the model picked in the hire composer (`model`, a
+  `provider::model` id; see **The model picker** below), used as it is while
+  the pickers offer it and otherwise refused with `model_unavailable`, never
+  swapped for another. With Auto (no `model`, or `auto`): a local provider
+  when the owner prefers local AI, else the global default provider when it
+  has a key, else the OpenCompany Gateway's default when it serves it, else
+  the first usable provider, else the first saved endpoint. The picked
+  thinking level is not sent to the setup call, which keeps its time budget.
+  Calls go through `ChatUnifier` with a deadline (longer for local models).
+  One retry when the reply was cut off or cannot be salvaged. Usage is
   recorded for every call.
 - **One request in flight per owner**: a newer `draft_token` cancels the older
   call, and `cancel_employee_setup` cancels explicitly. The payload field is
@@ -494,7 +500,9 @@ are is on their page's header, not in the dock.
 - **Errors**: `no_ai_provider` (the AI models dialog opens,
   below; the owner's words stay in the draft, which is sent again by itself
   once a model is connected), `timeout`, `provider_error`, `unparseable`,
-  `cancelled`, `busy`, `invalid_request`. A `provider_error` carries `detail`,
+  `cancelled`, `busy`, `invalid_request`, `model_unavailable` (the picked
+  model's provider isn't connected, or the pickers no longer offer it; its
+  `detail` says which). A `provider_error` carries `detail`,
   the LLM layer's public message ("OpenRouter authentication failed. Check the
   configured API key."), and `requires_user_action`, true when only the owner
   can fix it (a refused key, no credits).
@@ -511,6 +519,27 @@ are is on their page's header, not in the dock.
   and costs the one retry. The reply has the same `{"text", "spec"}` shape, so
   everything below applies to it unchanged. A change request sends the
   latest setup back as the form it describes.
+
+**The model picker.** The composer has the employee chat's model picker, the
+same component ([chat/composer/ModelPicker.tsx](../client/src/features/chat/composer/ModelPicker.tsx)
+and its [ModelMenu](../client/src/components/ui/ModelMenu.tsx), imported from
+the chat's index), bound by [hire/useHirePicker.ts](../client/src/features/home/hire/useHirePicker.ts):
+a button beside Create naming the model, and the level unless it is
+Balanced ("claude-sonnet-5-5 · Thorough"), and a panel above the box with
+Auto, each connected provider's models under its name, and the Quick /
+Balanced / Thorough slider. The rows come from `get_hire_models`
+(`services/chat/choice.py` `list_hire_models`: the chat picker's rows, with
+Auto's line saying which model a hire gets without a pick, "Uses {model}"),
+and the choice is saved with the owner's settings (`hire_model` /
+`hire_effort`, kept to what the pickers offer by `save_user_settings`). The
+picked model writes the setup and every agent of the new employee runs on
+it; the level becomes each new agent's Effort (below). The setup request,
+Try again, Hire and Hire now read the choice from the cached settings as
+they send (`savedChoice(HIRE_CHOICE)`), so a change applies to the next one
+of them. No button shows until an AI model is set up, though the composer
+wraps its box in the picker from the first render, so the box is never
+mounted twice. The Welcome guide's composer has no picker; its job goes to
+the saved choice.
 
 A template chip under the composer fills the box with its starter's job for
 the owner to read, change and send; it never sends by itself. While the box
@@ -636,7 +665,15 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    and one whose first attempt is still building `busy`. A row a failed attempt
    left behind is resumed, and so is one still marked building after
    `BUILDING_STALE_AFTER` (the server stopped mid-way);
-2. resolves the apps it names through the app registry
+2. takes the AI model picked in the hire composer, which rides
+   `source.provider` / `source.model` (none is Auto), through
+   `resolve_llm_choice`, so a pick the pickers no longer offer answers
+   `model_unavailable` with a `detail`; every agent the hire builds runs on
+   it, and with Quick or Thorough (`effort: "low" | "high"`) each takes the
+   level as its Effort option (`BuildInputs.agent_model`, shared by the
+   builder and the team recipe). A hire at Balanced keeps its earlier
+   payload hash, as one without a wake rule does;
+3. resolves the apps it names through the app registry
    ([config/employee_apps.json](../server/config/employee_apps.json),
    [apps.py](../server/services/employees/apps.py)): each app's provider,
    its trigger / reply / notify-owner / tool nodes with parameter templates,
@@ -649,7 +686,7 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    (`BaseNode.app_field`), and the card reads it. Apps nobody knows are
    recorded as unsupported, named in the instructions, and never block a
    start;
-3. builds the graph for an app event, schedule or manual chat. With managed
+4. builds the graph for an app event, schedule or manual chat. With managed
    teams enabled, Hire saves the reporting lines reviewed by the owner. The
    Chat Employee (`ai_employee`) has one direct report, the Orchestrator
    (`orchestrator_agent`). Up to two additional roles can report to the
@@ -696,13 +733,13 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    panel manages optional login profiles. Every node type must pass
    `node_allowlist.is_hire_allowed` ([Node Allowlist](./node_allowlist.md));
    node types never come from the payload;
-4. validates it with `validate_workflow` and saves it with
+5. validates it with `validate_workflow` and saves it with
    [persist_new_workflow](../server/services/workflow_storage/persist.py)
    (shared with workflow import);
-5. records on the row the apps the graph actually uses (`built.app_ids`), so
+6. records on the row the apps the graph actually uses (`built.app_ids`), so
    an app the hire named but left out never shows as one to connect;
    summaries read apps off the graph the same way;
-6. answers `{employee, started, missing_apps, needs_ai, unsupported_apps,
+7. answers `{employee, started, missing_apps, needs_ai, unsupported_apps,
    node_count, warnings, idempotent, request_id, activation_state,
    readiness_issue}` and, when every app is connected and an AI model exists,
    starts the employee in the background
@@ -715,7 +752,7 @@ the client's `HIRE_PAYLOAD_KEYS` must match, locked by
    editor), and a change to it is broadcast at once, since a start that is
    held or fails before Start made a control row changes nothing else the
    page hears about. Errors: `invalid_request`, `too_large`, `conflict`,
-   `busy`, `not_allowed`, `build_failed`, `save_failed`.
+   `busy`, `not_allowed`, `build_failed`, `save_failed`, `model_unavailable`.
 
 On the client ([genui/useHire.ts](../client/src/features/home/genui/useHire.ts))
 every successful hire lands on the new employee's page, on their first day
@@ -777,7 +814,8 @@ starts the work and the app it answers through (`hire/templates.ts` parses it
 with zod). **Hire now**, on a picked chip or as Hire on a Settings > Plugins
 card, puts the starter's skills in the library (switching on any that are
 off), then hires that setup as it stands with "Ask me before sending
-anything" on (`genui/useStarterHire.ts`, `starterHirePayload` in
+anything" on, on the hire composer's model and level
+(`genui/useStarterHire.ts`, `starterHirePayload` in
 `genui/hirePayload.ts`). It shares the one hire slot with the setup screen
 and lands like any hire. `test_home_catalog_contract.py` builds every starter
 that way and fails when one loses an app it names or the way it starts.
@@ -913,7 +951,10 @@ sending and drafts belong to the chat (wire and client rules in
   Thorough (or "{model} sets its own pace"). The choice is the owner's, kept in
   their settings, and every message, edit and retry carries it; a model
   that can't answer is refused in the server's words and the message comes
-  back into the box.
+  back into the box. A level the owner did not pick (Balanced) leaves the
+  agent's own Effort, the one its hire gave it. The hire composer shows the
+  same picker over its own rows and choice (see
+  [The model picker](#1-the-setup-screen) under Hiring).
   The Dev editor's chat has none: each node keeps its model. See
   [Chat Protocol → Model and thinking](./chat_protocol.md#model-and-thinking).
 - **The thread** is `get_chat_messages` with `all_generations: true` (the
@@ -1405,9 +1446,10 @@ WebSocket requests (snake_case; failures come back as `success: false` with an
 | `get_employee` | `{workflow_id}` | the summary plus `description`, `job`, `plan`, `rules`, `choices`, `trigger_text`, `last_run`, `latest_report` |
 | `get_employee_usage` | `{workflow_id?}` | `{tasks_this_month, since}` (successful runs since the 1st, owner's timezone; the whole team's, or one employee's with `workflow_id`, `not_found` when it is not the owner's; `since` is that 1st as YYYY-MM-DD) |
 | `get_workflow_costs` | `{}` | `{since, total_cost, workflows: [{workflow_id, name, total_cost, total_tokens}]}`: this month's estimated cost in USD and model tokens by employee, highest cost first, then one row with a null id and name for calls that belong to no employee. Answered by the usage service ([Pricing Service](./pricing_service.md)), read by the cost panel |
-| `generate_employee_setup` | `{job, refine?, history?, draft_token}` | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger` |
+| `generate_employee_setup` | `{job, refine?, history?, draft_token, model?}` (`model`: the hire composer's pick, `provider::model`; none or `auto` is Auto) | `{draft_token, reply, provider, model, usage, retried, finish_reason, apps}`; `apps` maps each app the reply mentions to its AppRef plus `can_trigger`; `model_unavailable` with `detail` when the pick can't answer |
 | `cancel_employee_setup` | `{draft_token}` | `{cancelled}` |
-| `hire_employee` | `HireEmployeeRequest` | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building |
+| `get_hire_models` | `{}` | `{auto, models, efforts}`: the hire composer's model picker, rows as `get_chat_models` sends them; Auto's `description` says which model a hire gets without a pick. The owner's choice is `hire_model` / `hire_effort` in `get_user_settings`, saved with `save_user_settings` (refused with `chat_choice_refused` and `detail`) |
+| `hire_employee` | `HireEmployeeRequest` (the pick in `source.provider` / `source.model`, its level in `effort`) | `{employee, started, missing_apps, needs_ai, unsupported_apps, node_count, warnings, idempotent, request_id, activation_state, readiness_issue}`: `node_count` is the saved graph's size; `activation_state` is `starting` or `blocked` (a replay of the same key: the stored one), `readiness_issue` why a team cannot start yet; errors include `busy` while the same key's first attempt is still building, and `model_unavailable` (with `detail`) for a pick the pickers no longer offer |
 | `start_employee` | `{workflow_id, expected_revision, idempotency_key}` | as `start_workflow` |
 | `pause_workflow` / `resume_workflow` | `{workflow_id, expected_revision, idempotency_key}` | Generation control snapshot: `state`, `revision`, root and execution identities, capabilities and `execution_control_version`; acknowledged `paused` means admitted work drained for version 1. Transitional status is reconciled after a timeout |
 | `enable_employee_talk` | `{workflow_id, idempotency_key}` | Fresh `{employee}` plus Safe Apply result when activation is needed: `activation_state` can be `saved`, `waiting`, `starting`, `running` or `paused`. Errors include `invalid_request`, `not_found`, `unsupported`, `conflict`, `invalid_changes`, `safe_apply_disabled`, `safe_apply_runtime_required` and `apply_failed` |

@@ -274,7 +274,8 @@ and the onboarding v3 handoff:
   Credentials, the theme button, Logout, Stop, Reset, Save, the labels) is a
   neutral outline, and the sidebar, Components and Workspace toggles fill
   with `bg-bg-active` while their panel shows. Set Global Model opens the
-  model menu Home's chat picker shows too (`components/ui/ModelMenu.tsx`,
+  model menu Home's model picker shows too, in the chat and the hire
+  composer (`components/ui/ModelMenu.tsx`,
   since 2026-11-13): each provider's models under its name in the menu
   label's muted capitals, the chosen one ticked in ink, and no provider in
   a brand colour.

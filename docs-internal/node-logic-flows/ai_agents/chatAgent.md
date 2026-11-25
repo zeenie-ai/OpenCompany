@@ -59,7 +59,8 @@ Stop acknowledgement. See [Chat protocol](../../chat_protocol.md),
 
 `ChatAgentParams` mirrors [`aiAgent`](./aiAgent.md)'s `AIAgentParams`
 (`provider` as the loader-driven `ProviderRef`, `model`, `prompt`,
-`system_message`, `temperature` / `max_tokens` in the `options` group).
+`system_message`, `temperature` / `max_tokens` / `effort` in the `options`
+group).
 Differences:
 
 - `prompt` default `""` (empty) — Zeenie relies on the auto-prompt fallback

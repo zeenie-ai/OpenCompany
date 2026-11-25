@@ -71,8 +71,9 @@ Source: `AIAgentParams` in [`ai_agent/__init__.py`](../../../server/nodes/agent/
 | `system_message` | string (rows 3) | `You are a helpful assistant` | no | - | System prompt prepended to the conversation. |
 | `temperature` | number (optional) | `None` | no | options | 0-2, step 0.1. Unset falls through to `agent.default_temperature` in `llm_defaults.json`. |
 | `max_tokens` | int (optional) | `None` | no | options | 1-200000. Unset falls through to the per-model default (on OpenRouter none is sent, so the serving endpoint applies its own limit); clamped in `AIService._resolve_max_tokens`. |
+| `effort` | `low` \| `high` (optional) | `None` | no | options | How hard the model thinks on every run (`nodes/agent/_effort.py`): `low` is the chat picker's Quick, `high` its Thorough, unset Balanced (the model's `default_effort`). Sent as each LLM step's `effort` on both paths and reaches the provider only for a model in its `effort_models`. A level the owner picked in Home's chat wins for the agent answering that chat run. A hire sets it from the hire composer's picker. |
 
-> Note: `api_key` is **not** a declared field — credentials are auto-injected at execution time by `node_executor._inject_api_keys`. The thinking/reasoning controls are resolved by the LLM service layer from provider/model metadata, not exposed as `AIAgentParams` fields.
+> Note: `api_key` is **not** a declared field — credentials are auto-injected at execution time by `node_executor._inject_api_keys`. Other thinking/reasoning controls are resolved by the LLM service layer from provider/model metadata, not exposed as `AIAgentParams` fields.
 
 ## Outputs (handles)
 

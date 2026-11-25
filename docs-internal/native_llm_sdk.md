@@ -253,8 +253,10 @@ class LLMProvider(Protocol):
     async def fetch_models(self, api_key: str) -> List[str]: ...
 ```
 
-`effort` is the owner's choice in Home's chat model picker (Quick `low` /
-Thorough `high`; see [Chat Protocol](chat_protocol.md#model-and-thinking)).
+`effort` is how hard the model thinks (Quick `low` / Thorough `high`): the
+owner's choice in Home's chat model picker for the agent that answers them,
+else the agent's own Effort option, which a hire sets from the hire
+composer's picker (see [Chat Protocol](chat_protocol.md#model-and-thinking)).
 `ChatUnifier.chat` passes it only for a model listed (prefix-matched) in its
 provider's `effort_models` in `llm_defaults.json` (`supports_effort` in
 `services/llm/config.py`), so a provider that never declares the list never
@@ -265,7 +267,8 @@ budget never go together, and OpenRouter as `reasoning.effort` in the request
 body, which it maps to the vendor's own setting (Anthropic's
 `output_config.effort`). OpenRouter lists only the Claude 5.x families: their
 thinking is on by default, while on Claude 4.x an effort would turn it on. It
-overrides the agent's own effort or level and never turns thinking on or off.
+overrides the effort or level of a thinking config (`reasoning_effort`,
+`thinking_level`) and never turns thinking on or off.
 
 When nobody chose an effort, `ChatUnifier.chat` uses the model's
 `default_effort`: a map of model prefix to level in the provider's block

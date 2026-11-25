@@ -41,7 +41,8 @@ Same 5 shared handles as the generic specialized agents. **No
 
 `RLMAgentNode.Params = SpecializedAgentParams` — the **same** model as the
 generic specialized agents (`prompt`, `provider`, `model`, `system_message`,
-`temperature`, `max_tokens`). There is **no** `maxIterations` field on the node
+`temperature`, `max_tokens`, `effort`). RLM builds its own model clients and
+does not send `effort`. There is **no** `maxIterations` field on the node
 params. The service reads `max_iterations`, `max_depth`, `max_budget`, and `max_timeout`, but this plugin's `extra="ignore"` shared Params does not expose or forward those settings. Service defaults still bound the REPL; their node-configuration gap is not fixed by this documentation. The inherited `runtime_behavior_version` is server-controlled.
 
 | Name | Type | Default | Required | displayOptions.show | Description |
@@ -52,6 +53,7 @@ params. The service reads `max_iterations`, `max_depth`, `max_budget`, and `max_
 | `system_message` | string\|null | `"You are a helpful assistant"` | no | - | System instructions |
 | `temperature` | float\|null | `None` | no | group `options` | 0.0-2.0 |
 | `max_tokens` | int\|null | `None` | no | group `options` | 1-200000 |
+| `effort` | `low`\|`high`\|null | `None` | no | group `options` | Declared by the shared Params; RLM does not send it |
 
 ## Outputs (handles)
 

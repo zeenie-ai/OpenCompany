@@ -133,7 +133,7 @@ client/src/
 │   │   ├── WakeRuleButton.tsx # Wake: the same button in Home's header and the editor's top toolbar, editing
 │   │   │                    # which app events wake an employee (shown only for one an app event starts)
 │   │   ├── ConsolePanel.tsx # Chat (ConsoleChat, the shared chat) + console + terminal + output
-│   │   ├── ModelMenu.tsx    # The one model menu: Set Global Model and Home's chat picker
+│   │   ├── ModelMenu.tsx    # The one model menu: Set Global Model and Home's model picker (chat and hire composer)
 │   │   └── TopToolbar.tsx   # File menu + Set Global Model (ModelMenu) + Usage + Wake + workflow controls
 │   │
 │   ├── Modal.tsx (src/components/ui/Modal.tsx)
@@ -380,7 +380,7 @@ All under [components/ui/](../client/src/components/ui/). Editable — add varia
 | Badge | `Badge` | + `success | warning | info` (ours) |
 | Alert | `Alert + AlertTitle + AlertDescription` | + `success | warning | info` (ours) |
 | Overlay | `Dialog`, `AlertDialog`, `Tooltip`, `DropdownMenu`, `Popover` | Radix. A `Popover` that opens over the editor's canvas is `modal` (Set Global Model in `TopToolbar.tsx`, and `UsageButton.tsx` and `WakeRuleButton.tsx`, which the toolbar shares with Home's header): Radix closes a non-modal popover on an outside press only when the press's `mousedown` reaches the document, and React Flow stops it on the canvas, so the popover stayed open |
-| Lists | `Command` (the chat's slash menu, which is driven from another field, so it controls `value` and filters itself; `ModelMenu`, the model menu both model pickers show) | cmdk |
+| Lists | `Command` (the chat's slash menu, which is driven from another field, so it controls `value` and filters itself; `ModelMenu`, the model menu every model picker shows: Set Global Model, and the chat's picker in Home's chat and hire composer) | cmdk |
 | Toggle | `Toggle`, `ToggleGroup + ToggleGroupItem` | Radix. Variants `default | segmented | chips` (ours); the CVA in `components/ui/toggle.tsx` is authoritative. A picked `chips` item is neutral (`bg-bg-active`, `border-border-strong`, `text-fg-default`), so it reads as picked, not as a role; a caller that marks a status passes its tint in `className` (the chat's Web and Ask first chips) |
 | Disclosure | `Accordion`, `Collapsible`, `Tabs` | Radix |
 | Inputs | `Input`, `Textarea`, `Select`, `Switch`, `Checkbox`, `Slider`, `Label` | Radix (Select/Switch/Checkbox/Slider). `Switch` takes `size` (`sm | default | md`) and `tone` (`default | ink`, `components/ui/switch.tsx`): every switch on Home's own screens and in the shared chat is `ink` (the shared credentials dialog's panels keep the default), the foreground as the track and the app background as the knob when on, and a strong-border outline round a default-border track with a muted knob when off. A tone owns all of the switch's colours, so tones are never layered |
