@@ -70,6 +70,12 @@ configure_logging(settings)
 init_tracing(console_spans=settings.tracing_console_spans_enabled)
 logger = get_logger(__name__)
 
+# Windows: a connection Windows has already dropped still closes, and the
+# server stops waiting for it (core/windows_sockets.py). No-op elsewhere.
+from core.windows_sockets import install_shutdown_guard
+
+install_shutdown_guard()
+
 _startup_log("Importing DI container + all services...")
 from core.container import container
 

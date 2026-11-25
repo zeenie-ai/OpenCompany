@@ -839,3 +839,43 @@ a saved result needs a tool that runs a command in the workspace
 (`shell_execute`); without one the agent has only the preview.
 
 Locked by `server/tests/nodes/test_tikhub.py`.
+
+## 37. `Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)` with `OSError: [WinError 10022]` (Windows)
+
+**Symptom**: on Windows, after the computer wakes from sleep or the network
+drops, the backend log shows:
+
+```
+Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  ...
+  File "...\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+OSError: [WinError 10022] An invalid argument was supplied
+```
+
+usually followed by `[StatusBroadcaster] Client disconnected` and a
+reconnect. The next stop of the backend then waits out the whole
+`--timeout-graceful-shutdown` (5 s, entry 20) and logs
+`Cancel N running task(s), timeout graceful shutdown exceeded`.
+
+**Root cause**: asyncio's Windows transport ends a connection in
+`_call_connection_lost`: it tells the protocol, calls
+`sock.shutdown(SHUT_RDWR)`, then closes the socket and detaches the
+connection from its server. When Windows has already dropped the
+connection, `shutdown` raises and the rest never runs. The socket stays open
+until garbage collection, and the asyncio server keeps counting the
+connection, so uvicorn's `server.wait_closed()`, the last step of its
+connection drain, waits until the timeout. CPython 3.12.15 and 3.13.1 still
+call `shutdown` unguarded.
+
+**Fix**: `server/core/windows_sockets.py`, installed by `main.py` on Windows
+only. The stdlib's own cleanup runs with a socket whose refused shutdown is
+logged at DEBUG instead of raised, so the socket closes and the server lets
+go of the connection. Locked by
+`server/tests/core_config/test_windows_sockets.py`. Its first test checks
+that the stdlib still skips that cleanup: when a Python release fixes it,
+that test fails and the guard can go.
+
+**Recovery**: restart the backend to load the guard.
