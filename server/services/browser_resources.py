@@ -37,6 +37,24 @@ def _bindings(graph):
     return nodes, result
 
 
+class BrowserAgentRequired(NodeUserError):
+    def as_dict(self):
+        return {**super().as_dict(), "code": "BROWSER_AGENT_REQUIRED"}
+
+
+def validate_new_browser_connections(graph: Mapping, previous: Mapping | None = None) -> None:
+    """Allow legacy miswiring to be edited or removed without admitting more of it."""
+    from services.agent_bindings import BROWSER_AGENT_ONLY, agent_can_bind_tool
+
+    def invalid(graph):
+        nodes, bindings = _bindings(graph)
+        return {(source, target) for source, targets in bindings.items() for target in targets
+                if not agent_can_bind_tool(nodes.get(target, {}).get("type"), "browser")}
+
+    if invalid(graph) - invalid(previous or {}):
+        raise BrowserAgentRequired(BROWSER_AGENT_ONLY)
+
+
 async def allocate_new_browser_resources(session, workflow_id: str, principal: str, graph: dict,
                                          parameters: dict, new_node_ids) -> None:
     """Allocate metadata only for fresh tools owned by exactly one saved v1 agent.

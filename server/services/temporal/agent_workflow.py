@@ -58,7 +58,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy, WorkflowIDReusePolicy  # RetryPolicy kept for type hints
 from temporalio.workflow import ActivityCancellationType, ChildWorkflowCancellationType, ParentClosePolicy
 
-from services.agent_bindings import unique_node_bindings, hydrate_temporal_binding
+from services.agent_bindings import agent_can_bind_tool, unique_node_bindings, hydrate_temporal_binding
 from services.coding_agent_runtime import agent_workflow_name, uses_pi
 from services.node_registry import get_node_class
 from services.plugin.base import BaseNode
@@ -441,6 +441,25 @@ _CARRY_DROPPED_KEYS = frozenset({"conversation", "memory_content", "parameter_sn
 def _carried_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """The prepared payload a durable rollover carries: all of it but the seed keys."""
     return {key: value for key, value in payload.items() if key not in _CARRY_DROPPED_KEYS}
+
+
+def _admitted_tools(agent_type: str | None, tools: list[dict]) -> list[dict]:
+    # Prepared results, refreshes and Continue-As-New inputs may predate the
+    # activity-side binding rule. Preserve their original Pi digests on replay.
+    allowed = [tool for tool in tools if agent_can_bind_tool(agent_type, tool.get("node_type"))]
+    if len(allowed) != len(tools) and workflow.patched("browser-agent-only-tools-v1"):
+        return allowed
+    return tools
+
+
+async def _release_browser_task(binding: dict, task_id: str) -> None:
+    await asyncio.shield(workflow.execute_activity(
+        "browser_tasks.release", {"binding": binding, "task_id": task_id},
+        task_queue=binding.get("task_queue") or workflow.info().task_queue,
+        start_to_close_timeout=timedelta(seconds=120), heartbeat_timeout=timedelta(seconds=30),
+        retry_policy=BROWSER_TASK_CLEANUP_RETRY,
+        cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
+    ))
 
 
 def _inherited_scope(context: Dict[str, Any], *, delegation: bool = False) -> Dict[str, Any]:
@@ -1106,19 +1125,7 @@ class AgentWorkflow:
                             start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY,
                             cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
                     for binding in reversed(self._browser_claims):
-                        async def release(binding=binding):
-                            await workflow.execute_activity(
-                                "browser_tasks.release",
-                                {"binding": binding, "task_id": context["_browser_task_id"]},
-                                task_queue=binding.get("task_queue") or workflow.info().task_queue,
-                                start_to_close_timeout=timedelta(seconds=120),
-                                heartbeat_timeout=timedelta(seconds=30),
-                                retry_policy=BROWSER_TASK_CLEANUP_RETRY,
-                                cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED,
-                            )
-                        # Owner absence leaves cleanup queued. Cancel/Reset wait for
-                        # its receipt instead of releasing another task's claim.
-                        await asyncio.shield(asyncio.create_task(release()))
+                        await _release_browser_task(binding, context["_browser_task_id"])
                 if self._execution_control.enabled:
                     await workflow.wait_condition(workflow.all_handlers_finished)
 
@@ -1220,11 +1227,26 @@ class AgentWorkflow:
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2,
                     retry_policy=AGENT_ACTIVITY_RETRY,
                 )
+        agent_type = context.get("node_type")
+        carried_task = context.get("_browser_task_id")
+        if resume and carried_task and not agent_can_bind_tool(agent_type, "browser"):
+            # Continue-As-New retains claims across runs. Release only leases
+            # stamped by the owner for this task, including hot-added tools.
+            inherited_claims = {}
+            for source in (context, payload):
+                for binding in (source.get("browser_bindings") or {}).values():
+                    if binding.get("profile_task_id") == carried_task and workflow.patched("browser-agent-only-tools-v1"):
+                        inherited_claims[binding["profile_id"]] = dict(binding)
+                        binding.pop("profile_task_id")
+            self._browser_claims.extend(inherited_claims.values())
+            while self._browser_claims:
+                await _release_browser_task(self._browser_claims[-1], carried_task)
+                self._browser_claims.pop()
         if payload.get("browser_runtime_version") == 1:
             context["browser_runtime_version"] = 1
             context["browser_bindings"] = payload.get("browser_bindings") or {}
             durable_runtime = True
-            await self._claim_browser_tools(context, payload.get("tools") or [])
+            await self._claim_browser_tools(context, _admitted_tools(agent_type, payload.get("tools") or []))
         # Stable per-run execution id, forwarded into every tool-call
         # activity so session-keyed nodes (browser) reuse one instance
         # across iterations instead of minting a fresh uuid per call
@@ -1278,6 +1300,7 @@ class AgentWorkflow:
         # entry per tool, told apart by ``binding_key``.
         tool_key = "binding_key" if workflow.patched("agent-tool-binding-key-v1") else "tool_node_id"
         tools = (resume.get("tools") if (self._execution_control.enabled or "agent_tool_runtime" in payload) and "tools" in resume else payload.get("tools")) or []
+        tools = _admitted_tools(agent_type, tools)
         if binding_refresh_v2:
             tools = unique_node_bindings(tools, id_key=tool_key)
         duplicate_tool_error = _duplicate_visible_tool_name_error(tools)
@@ -2890,7 +2913,7 @@ class AgentWorkflow:
                                         context["nodes"] = refreshed_graph.get("nodes") or context.get("nodes") or []
                                         context["edges"] = refreshed_graph.get("edges") or context.get("edges") or []
                                         context["parameter_snapshot"] = {**(context.get("parameter_snapshot") or {}), **(refresh_result.get("parameter_updates") or {})}
-                                    added_tools = refresh_result.get("tools") or []
+                                    added_tools = _admitted_tools(agent_type, refresh_result.get("tools") or [])
                                     if binding_refresh_v2:
                                         added_tools = unique_node_bindings(
                                             added_tools, id_key=tool_key,

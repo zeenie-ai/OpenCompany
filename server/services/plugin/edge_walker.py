@@ -42,6 +42,7 @@ from collections import Counter
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from services.genui.switch import drop_chat_ui_when_off
+from services.agent_bindings import agent_can_bind_tool
 from services.workspace_capabilities import is_registered_agent
 from core.logging import get_logger
 
@@ -242,6 +243,7 @@ async def collect_agent_connections(
         logger.debug(f"{log_prefix} Edge: source={e.get('source')}, " f"targetHandle={e.get('targetHandle')}")
 
     tool_incoming = [e for e in incoming_edges if edge_target_handle(e) == "input-tools"]
+    owner_type = next((node.get("type") for node in nodes if node.get("id") == node_id), None)
     logger.info(f"{log_prefix} Tool edges (input-tools handle): {len(tool_incoming)}")
 
     task_sources = []
@@ -289,6 +291,8 @@ async def collect_agent_connections(
             )
 
         elif target_handle == "input-tools":
+            if not agent_can_bind_tool(owner_type, source_node.get("type")):
+                continue
             await _append_tool_entry(
                 source_node,
                 source_node_id,
@@ -525,7 +529,7 @@ async def _append_tool_entry(
             logger.debug(
                 f"{log_prefix} Child agent {source_node_id}: " f"tool edge from {child_tool_id}, node found: {child_tool_node is not None}"
             )
-            if child_tool_node:
+            if child_tool_node and agent_can_bind_tool(tool_type, child_tool_node.get("type")):
                 child_tool_type = child_tool_node.get("type", "")
                 child_tool_label = child_tool_node.get("data", {}).get("label", child_tool_type)
                 child_tools.append({"node_type": child_tool_type, "label": child_tool_label})
@@ -765,7 +769,7 @@ async def collect_teammate_connections(
             if edge.get("target") != source_id or edge_target_handle(edge) != "input-tools":
                 continue
             child = next((n for n in nodes if n.get("id") == edge.get("source")), None)
-            if child:
+            if child and agent_can_bind_tool(descriptor["node_type"], child.get("type")):
                 child_tools.append({
                     "node_id": child.get("id"),
                     "node_type": child.get("type"),

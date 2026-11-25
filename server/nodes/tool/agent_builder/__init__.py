@@ -1098,6 +1098,9 @@ class AgentBuilderNode(ToolNode):
         problem = _unsaved(canvas, targets)
         if problem:
             return _refused("add_tool", problem)
+        from services.agent_bindings import BROWSER_AGENT_ONLY, agent_can_bind_tool
+        if any(not agent_can_bind_tool((canvas.node(target) or {}).get("type"), node_type) for target in targets):
+            return _refused("add_tool", BROWSER_AGENT_ONLY)
         if set(params.tool_parameters) - {node_type}:
             return _refused("add_tool", "Supply settings only for the tool being added.")
         try:
@@ -1393,6 +1396,9 @@ class AgentBuilderNode(ToolNode):
         agent_type = (params.agent_type or "").strip()
         if not agent_type:
             return _refused("add_subagent", "add_subagent: agent_type is required.")
+        from services.agent_bindings import BROWSER_AGENT_ONLY, agent_can_bind_tool
+        if any(not agent_can_bind_tool(agent_type, tool_type) for tool_type in params.tool_types):
+            return _refused("add_subagent", BROWSER_AGENT_ONLY)
         database = get_database()
         caller = _caller(ctx)
         canvas = await _load_canvas(ctx, database)

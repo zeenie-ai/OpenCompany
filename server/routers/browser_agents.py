@@ -114,6 +114,9 @@ async def create_private_browser(agent_node_id: str, body: CreatePrivateBrowser,
         params = await session.get(NodeParameter, agent_node_id)
         if saved is None or str(graph.get("owner_id") or "owner") != principal or cls is None or cls.component_kind != "agent":
             raise HTTPException(status_code=404, detail="Agent not found")
+        from services.agent_bindings import BROWSER_AGENT_ONLY, agent_can_bind_tool
+        if not agent_can_bind_tool(agent["type"], "browser"):
+            raise HTTPException(status_code=409, detail=BROWSER_AGENT_ONLY)
         if runtime_behavior_version(params.parameters if params else {}) != 1:
             raise HTTPException(status_code=409, detail="Create a new agent to use a private Browser profile.")
         reused.clear()

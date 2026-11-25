@@ -7,6 +7,13 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+BROWSER_AGENT_ONLY = "Connect the Browser tool to a Browser AI Agent. Delegate browser work to that agent."
+
+
+def agent_can_bind_tool(agent_type: str | None, tool_type: str | None) -> bool:
+    return tool_type != "browser" or agent_type == "browser_agent"
+
+
 def compact_temporal_binding(binding: dict) -> dict:
     """Transport one tool's identity, never a copy of its whole agent graph.
 
@@ -141,6 +148,9 @@ def delegation_roster(bindings: Iterable[Mapping[str, Any]]) -> str:
 
 def rebind_allowed(operation, agent_id, *, nodes=(), edges=(), operations=()):
     """A mutation only binds nodes attached to this invoking agent's tool/team input."""
+    owner = next((node for node in nodes if node.get("id") == agent_id), {})
+    if not agent_can_bind_tool(owner.get("type"), operation.get("node_type")):
+        return False
     if not agent_id:
         return True  # Legacy callers lacking an invoking runtime identity.
     candidate = operation.get("minted_id") or operation.get("client_ref")

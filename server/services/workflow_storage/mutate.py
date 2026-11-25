@@ -128,6 +128,8 @@ async def apply_graph_additions(
                 raise ValueError("This employee or one of its required nodes is disabled for hires.")
             batch = replace(batch, edges=(*batch.edges, Edge(agent.ref, "output-top", manager_id, "input-teammates")))
         placed = add_to_graph(workflow_id, workflow.data or {}, batch)
+        from services.browser_resources import validate_new_browser_connections
+        validate_new_browser_connections(placed.graph, workflow.data)
         from services.browser_resources import allocate_new_browser_resources, validate_browser_resource_bindings
         resource_parameters = {}
         for node in placed.graph.get("nodes", []):

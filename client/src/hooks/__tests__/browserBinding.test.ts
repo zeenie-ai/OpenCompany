@@ -8,9 +8,15 @@ import { browserBindingProblem, useAutoSkillEdges } from '../useAutoSkillEdges';
 import { useAppStore } from '../../store/useAppStore';
 import { queryClient } from '../../lib/queryClient';
 import { nodeParamsQueryKey } from '../useNodeParamsQuery';
-const agent = { id: 'agent', type: 'aiAgent', data: {}, position: { x: 0, y: 0 } } as Node;
+import { nodeSpecQueryKey } from '../../lib/nodeSpec';
+const agent = { id: 'agent', type: 'browser_agent', data: {}, position: { x: 0, y: 0 } } as Node;
 const browser = { id: 'browser', type: 'browser', data: {}, position: { x: 0, y: 0 } } as Node;
-beforeEach(() => { sendRequest.mockReset(); getNodeParameters.mockReset(); queryClient.clear(); });
+beforeEach(() => {
+  sendRequest.mockReset();
+  getNodeParameters.mockReset();
+  queryClient.clear();
+  queryClient.setQueryData(nodeSpecQueryKey('browser_agent'), { uiHints: { createsBrowserAgent: true } });
+});
 it('allows legacy connections and only the exact reserved browser for a fresh agent', () => {
   expect(browserBindingProblem(browser, { ...agent, data: {} }, 'input-tools')).toBeNull();
   expect(browserBindingProblem(browser, agent, 'input-tools', 1)).toBe('private_browser_required');
@@ -31,6 +37,18 @@ it('checks authoritative saved version before connection or automatic skill side
   expect(baseOnConnect).not.toHaveBeenCalled();
   expect(sendRequest).not.toHaveBeenCalled();
   expect(getNodeParameters).not.toHaveBeenCalled();
+});
+
+it.each(['coding_agent', 'aiAgent', 'orchestrator_agent'])('rejects a Browser tool on %s before offering a private profile or adding an edge', async (type) => {
+  const graph = { id: 'wf', nodes: [browser, { ...agent, type }], edges: [] };
+  useAppStore.setState({ currentWorkflow: graph as any });
+  queryClient.setQueryData(nodeSpecQueryKey(type), { uiHints: {} });
+  const baseOnConnect = vi.fn();
+  const { result } = renderHook(() => useAutoSkillEdges({ baseOnConnect, baseOnEdgesDelete: vi.fn(), nodes: graph.nodes, edges: [], setNodes: vi.fn(), setEdges: vi.fn() }));
+  await act(async () => { await result.current.onConnect({ source: 'browser', target: 'agent', targetHandle: 'input-tools', sourceHandle: 'output-tool' }); });
+  expect(baseOnConnect).not.toHaveBeenCalled();
+  expect(getNodeParameters).not.toHaveBeenCalled();
+  expect(sendRequest).not.toHaveBeenCalled();
 });
 
 it('ignores a pending saved-version read after its graph has changed', async () => {

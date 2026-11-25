@@ -299,7 +299,22 @@ async def _config(ctx: NodeContext, params: BaseModel) -> BrowserParams:
         return params if isinstance(params, BrowserParams) else BrowserParams.model_validate(params.model_dump())
     from services.plugin.deps import get_database
 
-    saved = await get_database().get_node_parameters(ctx.node_id)
+    database = get_database()
+    agent_id = ctx.raw.get("invoking_agent_node_id") or ctx.raw.get("parent_node_id")
+    if agent_id:
+        # A workflow already in flight can still hold a pre-fix tool manifest.
+        from services.agent_bindings import BROWSER_AGENT_ONLY, agent_can_bind_tool
+
+        nodes = ctx.nodes or []
+        if ctx.workflow_id:
+            workflow = await database.get_workflow(ctx.workflow_id)
+            if workflow is not None:
+                graph = workflow.get("data", workflow) if isinstance(workflow, dict) else workflow.data
+                nodes = graph.get("nodes", [])
+        agent_type = next((n.get("type") for n in nodes if n.get("id") == agent_id), None)
+        if not agent_can_bind_tool(agent_type, "browser"):
+            raise NodeUserError(BROWSER_AGENT_ONLY)
+    saved = await database.get_node_parameters(ctx.node_id)
     if saved is None:
         raise NodeUserError("This Browser node's settings could not be loaded. Save the workflow and try again.")
     snapshot = ctx.raw.get("parameter_snapshot") or {}

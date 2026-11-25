@@ -51,7 +51,7 @@ async def run_gate(cli: str):
     async def prepare(ctx: dict):
         prepared_calls.append(ctx["execution_id"])
         binding = ctx["browser_bindings"]["browser"]
-        return {"node_id": "agent", "node_type": "browser_agent", "workflow_id": "saved", "session_id": ctx["session_id"],
+        return {"node_id": ctx["node_id"], "node_type": ctx["node_type"], "workflow_id": "saved", "session_id": ctx["session_id"],
             "provider": "openai", "model": "fixture", "system_message": "Browser role stays intact", "user_prompt": ctx["workspace_task_prompt"],
             "max_iterations": 3, "memory_node_id": "", "memory_content": "", "compaction_threshold": None,
             "browser_runtime_version": 1, "browser_bindings": ctx["browser_bindings"],
@@ -65,6 +65,9 @@ async def run_gate(cli: str):
     @activity.defn(name="agent.execute_llm_step")
     async def llm(payload: dict):
         llm_calls.append(payload)
+        if payload["node_id"] == "coder":
+            assert not any(tool["name"] == "browser" for tool in payload["tools"])
+            return {"kind": "final", "content": "done", "usage": {}}
         if payload["iteration"] == 0:
             call = ToolCall(id="call-1", name="browser", args={"operation": "snapshot"})
             return {"kind": "tool_calls", "calls": [{"id": "call-1", "name": "browser", "args": {"operation": "snapshot"}}],
@@ -179,8 +182,21 @@ async def run_gate(cli: str):
             assert owners["a"].releases[-1] == cancelled
             assert (cancelled, "cancelled") in records
 
+            # A pre-fix continuation can carry both the forbidden tool and a
+            # live claim from the previous run. Drain that claim without
+            # reacquiring it or passing the browser to the model.
+            carried = f"browser-{token}-legacy-coder"
+            ctx = {**context(carried, "a"), "node_type": "coding_agent", "node_id": "coder"}
+            ctx["browser_bindings"]["browser"]["profile_task_id"] = carried
+            prepared = await prepare(ctx)
+            ctx["_agent_resume"] = {"prepared_payload": prepared, "tools": prepared["tools"]}
+            coder = await client.start_workflow(AgentWorkflow.run, ctx, id=carried, task_queue=main_queue)
+            assert (await asyncio.wait_for(coder.result(), 15))["success"]
+            assert carried not in owners["a"].claims and carried not in owners["a"].operations
+            assert owners["a"].releases.count(carried) == 1
+
             replayer = Replayer(workflows=[WorkspaceTaskControllerWorkflow, NodeInvocationWorkflow, AgentWorkflow])
-            for identity in (first, second, cancelled, controller_id):
+            for identity in (first, second, cancelled, controller_id, carried):
                 history = await client.get_workflow_handle(identity).fetch_history()
                 assert (await replayer.replay_workflow(history)).replay_failure is None
             for identity in (first, second, cancelled):

@@ -28,7 +28,7 @@ import type { Node, Edge, Connection } from 'reactflow';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { useUserSettingsQuery } from './useUserSettingsQuery';
 import { applyOperations, addSavedNodes, addSavedEdges, type WorkflowOperation } from '../lib/workflowOps';
-import { getCachedNodeSpec } from '../lib/nodeSpec';
+import { fetchNodeSpec, getCachedNodeSpec } from '../lib/nodeSpec';
 import { createPrivateBrowser, createSavedGraphResource } from '../services/agentCreationApi';
 import { toast } from 'sonner';
 import { queryClient } from '../lib/queryClient';
@@ -152,6 +152,12 @@ export function useAutoSkillEdges({
         if (pendingConnections.current.has(pendingKey) || acceptedConnections.current.has(pendingKey)) return;
         pendingConnections.current.add(pendingKey);
         try {
+          const type = target.type || '';
+          const spec = getCachedNodeSpec(type) ?? await fetchNodeSpec(type, sendRequest);
+          if (!spec?.uiHints?.createsBrowserAgent) {
+            toast.error(spec ? 'Connect the Browser tool to a Browser AI Agent.' : 'Could not check the browser connection. Try again.');
+            return;
+          }
           const cached = queryClient.getQueryData<NodeParameters>(nodeParamsQueryKey(target.id));
           const row = cached ?? await getNodeParameters(target.id);
           if (!row || useAppStore.getState().currentWorkflow !== graph
