@@ -12,6 +12,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from services.employees.apps import AppSpec, resolve_app
+from services.employees.hire_request import HireTeamMember
 from services.graph_build import (
     CONTEXT_TYPE, Edge, GraphAdditions, Labels, NewNode, NodeIds, add_to_graph, context_data, context_edge,
     graph_node, label_key, main_edge, ref, skill_edge, tool_edge,
@@ -37,6 +39,9 @@ RESPONSIBILITIES = (
     Responsibility("operations", "tool_agent", "App tasks", "Handles routine work in your apps", ("email", "inbox", "gmail", "outlook", "message", "customer", "reception", "payment", "spreadsheet", "whatsapp", "telegram")),
 )
 DEFAULT_RESPONSIBILITY = RESPONSIBILITIES[-1]
+BROWSER = Responsibility("browser", "browser_agent", "Browser Agent", "Uses the web browser for assigned tasks",
+                         ("browser", "web", "website", "research"))
+_BROWSER_NAMES = {"browser", "web browser", "browser agent", "browser ai agent", "browser specialist"}
 
 # A website can be either a research source or the requested deliverable.
 # Match construction of an artifact within one clause of the reviewed brief.
@@ -57,21 +62,55 @@ def select_responsibilities(job: str, apps: Iterable[str] = ()) -> list[Responsi
     return (selected or [DEFAULT_RESPONSIBILITY])[:3]
 
 
-def team_preview(job: str, apps: Iterable[str] = ()) -> list[dict[str, str]]:
+def _member_responsibility(entry: HireTeamMember, *, browser_requested: bool) -> Responsibility:
+    if entry.kind == "specialist":
+        name = entry.name.casefold()
+        if name in _BROWSER_NAMES:
+            return BROWSER
+        key = entry.key.casefold().replace("_", " ").replace("-", " ")
+        if browser_requested or key in _BROWSER_NAMES:
+            for role in RESPONSIBILITIES:
+                if name in (role.label.casefold(), role.node_type.replace("_", " ")):
+                    return role
+        if key in _BROWSER_NAMES:
+            return BROWSER
+    return next((role for role in RESPONSIBILITIES if role.key == entry.key), None) or select_responsibilities(entry.responsibility)[0]
+
+
+def _team_responsibilities(team: list[HireTeamMember], *, browser_requested: bool) -> list[Responsibility]:
+    roles = [_member_responsibility(entry, browser_requested=browser_requested) for entry in team]
+    if browser_requested and BROWSER not in roles:
+        for index, (entry, role) in enumerate(zip(team, roles)):
+            if entry.kind == "specialist" and role.node_type == "web_agent":
+                roles[index] = BROWSER
+                break
+    return roles
+
+
+def _has_browser_app(apps: Iterable[AppSpec | None]) -> bool:
+    return any(tool.type == "browser" for app in apps if app is not None for tool in app.tools)
+
+
+def team_preview(job: str, apps: Iterable[str] = (), *, browser_app: bool = False) -> list[dict[str, str]]:
     """Only ordinary-language responsibilities cross the normal-mode UI."""
-    selected = select_responsibilities(job, apps)
+    selected = select_responsibilities(job, (*apps, BROWSER.label) if browser_app else apps)
     # Work explicitly requesting a software deliverable needs a coding
     # specialist even when the routine also mentions research and a calendar.
     if len(selected) > 2 and any(role.key == "coding" for role in selected):
         selected = sorted(selected, key=lambda role: role.key != "coding")
+    if browser_app:
+        selected = [BROWSER, *(role for role in selected if role.node_type != "web_agent")]
     return [{"key": role.key, "name": role.label, "responsibility": role.description,
              "kind": "specialist", "reports_to": "orchestrator"} for role in selected[:2]]
 
 
-def preview_from_reply(job: str, raw_reply: str) -> list[dict[str, str]]:
+def preview_from_reply(job: str, raw_reply: str, *, selected_apps: dict[str, AppSpec | None] | None = None) -> list[dict[str, str]]:
     """Use the reviewed routine, so ordinary-language changes change the team."""
-    from services.employees.setup_reply import app_names, parse_reply, usable_elements
+    from services.employees.setup_reply import hire_app_names, parse_reply, usable_elements
 
+    if selected_apps is None:
+        selected_apps = {name: resolve_app(name) for name in hire_app_names(raw_reply)}
+    browser_app = _has_browser_app(selected_apps.values())
     text = [job]
     for element in usable_elements(parse_reply(raw_reply).spec):
         props = element["props"]
@@ -83,14 +122,21 @@ def preview_from_reply(job: str, raw_reply: str) -> list[dict[str, str]]:
                 try:
                     preview = HireEmployeeRequest(idempotency_key="preview", job=job, name="Setup", role="Setup",
                                                   steps=[], team=proposed)
-                    return [entry.model_dump() for entry in preview.team]
                 except ValidationError:
-                    pass  # The owner sees the deterministic, registry-backed proposal instead.
+                    continue  # Fall back to a proposal based on the routine.
+                team = preview.team
+                if browser_app and BROWSER not in _team_responsibilities(team, browser_requested=True):
+                    if len(team) == 2:
+                        text.extend(entry.responsibility for entry in team)
+                        continue  # Build a compatible two-role proposal for the owner to review.
+                    key = "browser_agent" if any(entry.key == BROWSER.key for entry in team) else BROWSER.key
+                    team.append(HireTeamMember(key=key, name=BROWSER.label, responsibility=BROWSER.description))
+                return [entry.model_dump() for entry in team]
         elif element["type"] == "AgentCard":
             text.append(str(props.get("role") or ""))
         elif element["type"] == "Plan":
             text.extend(str(step.get("title") or "") for step in props.get("steps", []) if isinstance(step, dict))
-    return team_preview("\n".join(text), app_names(raw_reply))
+    return team_preview("\n".join(text), selected_apps, browser_app=browser_app)
 
 
 def _repoint(value: Any, old: str, new: str) -> Any:
@@ -261,29 +307,35 @@ def build_team(built: Any, inputs: Any, *, legacy_conversion: bool = False) -> A
         f"{review_instruction} "
         "Do not present an assignment acknowledgement as completed work. Do not independently publish through apps."
     )
-    from services.employees.hire_request import HireTeamMember
     brief = "\n".join((inputs.request.job, inputs.request.role, *(step.title for step in inputs.request.steps)))
     apps = [app.name for app in inputs.apps]
+    browser_app = _has_browser_app(inputs.apps)
+    browser_requested = browser_app or any(word in inputs.request.job.lower() for word in ("browser", "website"))
     if legacy_conversion:
         reviewed = [HireTeamMember(key=role.key, name=role.label, responsibility=role.description)
                     for role in select_responsibilities(brief, apps)]
+        # A separately triggered employee keeps its historical worker during
+        # conversion. Give that worker a distinct slot on a browser-only team.
+        if original != talk and _team_responsibilities(reviewed, browser_requested=browser_requested) == [BROWSER]:
+            role = DEFAULT_RESPONSIBILITY
+            reviewed.append(HireTeamMember(key=role.key, name=role.label, responsibility=role.description))
     else:
         reviewed = inputs.request.team if inputs.request.team is not None else [
-            HireTeamMember(**entry) for entry in team_preview(brief, apps)]
+            HireTeamMember(**entry) for entry in team_preview(brief, apps, browser_app=browser_app)]
         built.parameters[lead]["system_message"] += (
             " If no connected worker can perform the assignment, report the missing capability to the Chat Employee. "
             "Ask the owner to approve the team change and start fresh work after applying it."
         )
-    roles_by_key = {role.key: role for role in RESPONSIBILITIES}
-    selected = [roles_by_key.get(entry.key) or select_responsibilities(entry.responsibility)[0] for entry in reviewed]
+    selected = _team_responsibilities(reviewed, browser_requested=browser_requested)
+    if browser_app and BROWSER not in selected:
+        raise BuildError("browser_agent_required", "Add a Browser Agent to the reviewed team to use the Web browser app.")
     member_ids: dict[str, str] = {"orchestrator": lead}
     members: list[dict[str, Any]] = []
     for index, (responsibility, entry) in enumerate(zip(selected, reviewed), 1):
         node_type = "ai_employee" if entry.kind == "employee" else responsibility.node_type
-        if node_type == "web_agent" and (any(tool.type == "browser" for app in inputs.apps for tool in app.tools)
-                                         or any(word in inputs.request.job.lower() for word in ("browser", "website"))):
-            node_type = "browser_agent"
         if get_node_class(node_type) is None or not inputs.allowed(node_type):
+            if node_type == "browser_agent":
+                raise BuildError("not_allowed", "The Browser Agent required for this team is not available")
             if node_type == "coding_agent":
                 raise BuildError("not_allowed", "The coding specialist required to build this software is not available")
             node_type = "aiAgent"
@@ -349,9 +401,14 @@ def build_team(built: Any, inputs: Any, *, legacy_conversion: bool = False) -> A
         original_tools = []
     for tool in dict.fromkeys(original_tools):
         node_type = nodes[tool]["type"]
-        text = (app_types.get(node_type, "research") + " " + node_type).lower()
-        recipient = next((member for member, role in zip(members, selected) if any(word in text for word in role.words)), None)
-        recipient = recipient or next((member for member in members if member["role"] == "operations"), members[0])
+        if node_type == "browser":
+            recipient = next((member for member in members if member["node_type"] == "browser_agent"), None)
+            if recipient is None:
+                raise BuildError("browser_agent_required", "Add a Browser AI Agent to use the Web browser app.")
+        else:
+            text = (app_types.get(node_type, "research") + " " + node_type).lower()
+            recipient = next((member for member, role in zip(members, selected) if any(word in text for word in role.words)), None)
+            recipient = recipient or next((member for member in members if member["role"] == "operations"), members[0])
         built.edges.append(tool_edge(tool, recipient["node_id"]).to_dict())
         recipient["tools"].append(tool)
     # Complete Browser specialists through the same recipe as canvas/Builder,

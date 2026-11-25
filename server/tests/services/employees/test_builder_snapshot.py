@@ -47,18 +47,16 @@ def _inputs(request: Dict[str, Any], *app_ids: str, **fields: Any) -> BuildInput
 
 
 def _chat() -> BuildInputs:
-    """A manual hire the owner talks to, with the browser read-only."""
+    """A manual research hire with the base search tool."""
     return _inputs(
         {
             "job": "Help me research suppliers and draft replies",
             "name": "Sam",
             "role": "Assistant",
-            "apps": ["Web browser"],
-            "steps": [{"title": "Research suppliers", "role": "agent", "app": "Web browser"}],
+            "steps": [{"title": "Research suppliers", "role": "agent"}],
             "trigger": {"kind": "manual"},
             "rules": {"ask_first": True, "items": [{"key": "short", "label": "Keep it short", "value": True}]},
         },
-        "web",
         unsupported_apps=["Notion"],
     )
 
@@ -88,14 +86,13 @@ def _schedule() -> BuildInputs:
 
 
 def _app_event_asking_first() -> BuildInputs:
-    """A WhatsApp receptionist that asks first: replies wait at the gate,
-    tools that send or spend stay off, the browser stays read-only."""
+    """A WhatsApp receptionist whose replies wait at the approval gate."""
     return _inputs(
         {
             "job": "Answer customer messages on WhatsApp and book appointments",
             "name": "Maya",
             "role": "Receptionist",
-            "apps": ["WhatsApp", "Google Sheets", "Google Calendar", "Stripe", "Web browser"],
+            "apps": ["WhatsApp", "Google Sheets", "Google Calendar", "Stripe"],
             "steps": [{"title": "When a message arrives", "role": "trigger", "app": "WhatsApp"}, {"title": "Answer it", "role": "agent"}],
             "rules": {"ask_first": True},
         },
@@ -103,7 +100,6 @@ def _app_event_asking_first() -> BuildInputs:
         "google_sheets",
         "google_calendar",
         "stripe",
-        "web",
         connected_app_ids={"whatsapp"},
     )
 

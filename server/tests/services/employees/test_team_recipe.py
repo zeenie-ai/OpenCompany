@@ -86,6 +86,20 @@ def test_new_browser_employee_gets_complete_private_capability():
 def test_browser_employee_respects_companion_node_policy():
     with pytest.raises(BuildError, match="Browser tools"):
         build(job="Use the browser to read website accounts", allowed=lambda kind: kind != "visionAnalyze")
+    with pytest.raises(BuildError, match="Browser Agent"):
+        build(job="Use the browser to read website accounts", allowed=lambda kind: kind != "browser_agent")
+
+
+def test_reviewed_browser_specialist_keeps_the_browser_when_a_researcher_is_listed_first():
+    built = build(job="Use the browser to verify balances", team=[
+        {"key": "research", "name": "Research", "responsibility": "Research public records"},
+        {"key": "checks", "name": "Browser AI Agent", "responsibility": "Verify balances"},
+    ])
+    members = {member["role"]: member for member in built.team_plan["members"]}
+    assert members["research"]["node_type"] == "web_agent"
+    assert members["checks"]["node_type"] == "browser_agent"
+    [browser] = [node for node in built.nodes if node["type"] == "browser"]
+    assert [edge["target"] for edge in built.edges if edge["source"] == browser["id"]] == [members["checks"]["node_id"]]
 
 
 @pytest.mark.parametrize("job", ["Develop software", "Create a dynamic interactive weather report site", "Build a web app"])

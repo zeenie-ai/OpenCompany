@@ -357,6 +357,43 @@ async def test_with_generated_ui_off_the_server_draws_the_card_from_a_form(harne
     assert fields_prompt() in system and "Components (use ONLY these)" not in system
 
 
+@pytest.mark.parametrize("team,expected", [
+    ([], ["browser"]),
+    ([{"key": "dev", "name": "Coding Agent", "responsibility": "Build software"}], ["dev", "browser"]),
+    ([{"key": "coding", "name": "Developer", "responsibility": "Build software"},
+      {"key": "calendar", "name": "Planner", "responsibility": "Manage appointments"}], ["browser", "coding"]),
+])
+async def test_setup_proposes_a_browser_specialist_before_the_owner_reviews_chrome(team, expected, harness):
+    harness.database.settings["generated_ui"] = False
+    fields = {**json.loads(FORM["fields"]), "apps": ["Chrome"], "team": team}
+    harness.unifier = FakeUnifier(json.dumps(fields))
+    result = await generate(job="Verify balances")
+    assert result["success"] and result["apps"]["chrome"]["app_id"] == "web"
+    assert [member["key"] for member in result["team"]] == expected
+    browser = next(member for member in result["team"] if member["key"] == "browser")
+    assert browser["name"] == "Browser Agent" and browser["kind"] == "specialist"
+
+
+@pytest.mark.parametrize("params,steps,uses_browser", [
+    ({"apps": []}, [], False),
+    ({"apps": [], "trigger": {"kind": "app_event", "app": "Chrome"}}, [{"title": "When Chrome opens", "role": "trigger", "app": "Chrome"}], False),
+    ({}, [], True),
+    ({"apps": []}, [{"title": "Check a balance", "role": "tool", "app": "Chrome"}], True),
+    ({"apps": [], "sends_via": "Chrome"}, [], True),
+])
+async def test_only_submitted_apps_require_a_browser_specialist(harness, params, steps, uses_browser):
+    elements = {
+        "card": {"type": "AgentCard", "props": {"name": "Clerk", "apps": ["Chrome"]}},
+        "plan": {"type": "Plan", "props": {"steps": steps}},
+        "connect": {"type": "Button", "props": {"label": "Connect", "action": "connect_app", "actionParams": {"app": "Chrome"}}},
+        "hire": {"type": "Button", "props": {"label": "Hire", "action": "hire_employee", "actionParams": {"team": [], **params}}},
+    }
+    harness.unifier = FakeUnifier(json.dumps({"text": "Review the setup", "spec": {"elements": elements}}))
+    result = await generate(job="Verify balances")
+    assert result["success"] and result["apps"]["chrome"]["app_id"] == "web"
+    assert [member["key"] for member in result["team"]] == (["browser"] if uses_browser else [])
+
+
 async def test_with_generated_ui_off_a_form_that_names_no_one_gets_one_retry(harness):
     harness.database.settings["generated_ui"] = False
     harness.unifier = FakeUnifier('{"text":"Hello"}', FORM["fields"])

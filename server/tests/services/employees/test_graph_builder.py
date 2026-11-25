@@ -137,7 +137,7 @@ async def test_without_asking_first_the_reply_still_goes_through_the_gate():
 def test_the_instructions_read_the_same_with_the_rule_on_or_off(request_patch, apps):
     def instructions(ask_first):
         built = build_employee_graph(
-            inputs(hire(**request_patch, rules={"ask_first": ask_first, "items": []}), *apps, connected=set(apps))
+            inputs(hire(**request_patch, rules={"ask_first": ask_first, "items": []}), *apps, connected=set(apps), team="web" in apps)
         )
         return {role: built.parameters[built.node_roles[role]]["system_message"] for role in ("agent", "talk_agent") if role in built.node_roles}
 
@@ -193,11 +193,22 @@ async def test_money_tools_come_back_when_not_asking_first():
 async def test_the_browser_reads_only_per_call_while_asking_first():
     # Its node is saved whole; while they ask first each call runs read-only.
     request = hire(apps=["Web browser"], steps=[{"title": "Check prices online", "role": "agent"}], trigger=None)
-    built = build_employee_graph(inputs(request, "web"))
+    built = build_employee_graph(inputs(request, "web", team=True))
     assert built.parameters[built.node_roles["browser"]]["interaction"] == "full"
-    instructions = built.parameters[built.node_roles["agent"]]["system_message"]
-    assert "request_user" in instructions and "your browser can only read" in instructions
+    specialist = next(n for n in built.nodes if n["type"] == "browser_agent")
+    browser_id = built.node_roles["browser"]
+    assert [e["target"] for e in built.edges if e["source"] == browser_id] == [specialist["id"]]
+    instructions = built.parameters[specialist["id"]]["system_message"]
+    assert "request_user" in instructions and "Ask first" in instructions
     await assert_valid(built)
+
+
+@pytest.mark.parametrize("trigger", [{"kind": "manual"}, {"kind": "schedule", "every": "day"}])
+def test_single_employee_with_browser_requires_a_browser_specialist(trigger):
+    request = hire(apps=["Web browser"], trigger=trigger)
+    with pytest.raises(BuildError) as error:
+        build_employee_graph(inputs(request, "web", team=False))
+    assert error.value.code == "browser_agent_required"
 
 
 async def test_no_apps_means_they_answer_in_talk():

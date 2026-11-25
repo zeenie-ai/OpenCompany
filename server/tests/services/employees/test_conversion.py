@@ -6,7 +6,7 @@ import pytest
 import nodes as _nodes  # noqa: F401 - register shipped plugins
 
 from services.employees.apps import get_app
-from services.employees.builder import BuildInputs, build_employee_graph
+from services.employees.builder import BuildInputs, _build_single_employee_graph
 from services.employees.conversion import _prepare, _recognizable, plan_conversion, apply_conversion, rollback_conversion
 from services.employees.hire_request import HireEmployeeRequest
 from services.employees.llm import LLMChoice
@@ -14,11 +14,16 @@ from services.workflow_validator import validate_workflow
 from services.graph_build import tool_edge
 
 
-def fixture_graph(kind="manual"):
+def fixture_graph(kind="manual", *, browser=False):
+    apps = ["whatsapp"] if kind == "app_event" else []
+    if browser:
+        apps.append("web")
     request = HireEmployeeRequest.model_validate({"idempotency_key": "legacy", "name": "Maya", "role": "Assistant",
-        "job": "Research customer messages and book appointments", "apps": ["WhatsApp"] if kind == "app_event" else [],
-        "steps": [{"title": "Handle appointments"}], "trigger": {"kind": kind, **({"app": "WhatsApp"} if kind == "app_event" else {"every": "day"} if kind == "schedule" else {})}})
-    built = build_employee_graph(BuildInputs(workflow_id="81", request=request, apps=[get_app("whatsapp")] if kind == "app_event" else [],
+        "job": "Browse websites" if browser else "Research customer messages and book appointments",
+        "apps": [get_app(app).name for app in apps],
+        "steps": [{"title": "Read prices" if browser else "Handle appointments"}],
+        "trigger": {"kind": kind, **({"app": "WhatsApp"} if kind == "app_event" else {"every": "day"} if kind == "schedule" else {})}})
+    built = _build_single_employee_graph(BuildInputs(workflow_id="81", request=request, apps=[get_app(app) for app in apps],
         llm=LLMChoice(provider="openai", model="existing-model", local=False)))
     employee = SimpleNamespace(id="old-employee", idempotency_key="legacy", role=request.role, job=request.job, description="",
         apps=built.app_ids, plan=[step.model_dump() for step in request.steps], choices=[], rules={"ask_first": True}, trigger=built.trigger,
@@ -124,6 +129,31 @@ async def test_conversion_isolates_legacy_memory_without_erasing_history(kind, s
     assert report["errors"] == [], report["errors"]
 
 
+@pytest.mark.parametrize("kind", ["schedule", "app_event", "manual"])
+async def test_conversion_moves_existing_browser_to_its_own_specialist(kind):
+    source, employee = fixture_graph(kind, browser=True)
+    worker = source["employee"]["node_roles"]["agent"]
+    browser = source["employee"]["node_roles"]["browser"]
+    old_browser_ids = {node["id"] for node in source["graph"]["nodes"] if node["type"] == "browser"}
+    for node_id in old_browser_ids:
+        source["parameters"][node_id]["profile_id"] = "legacy-owner-profile"
+    proposed = _prepare(source, employee, "81", "Maya")
+    graph = proposed["graph"]
+    members = proposed["employee"]["team_plan"]["members"]
+    [specialist] = [member for member in members if member["node_type"] == "browser_agent"]
+    assert {node["id"] for node in graph["nodes"] if node["type"] == "browser"} == old_browser_ids
+    assert [(edge["source"], edge["target"]) for edge in graph["edges"]
+            if edge["source"] in old_browser_ids] == [(browser, specialist["node_id"])]
+    assert browser in specialist["tools"]
+    assert worker != specialist["node_id"]
+    if worker != source["employee"]["node_roles"]["talk_agent"]:
+        assert any(member["node_id"] == worker for member in members)
+    assert proposed["parameters"][browser] == source["parameters"][browser]
+    assert_private_callable_bindings(proposed)
+    report = await validate_workflow(nodes=graph["nodes"], edges=graph["edges"], parameters_by_id=proposed["parameters"])
+    assert report["errors"] == [], report["errors"]
+
+
 def test_conversion_keeps_legacy_shared_builder_and_ui_on_talk_only():
     source, employee = fixture_graph("app_event")
     roles = source["employee"]["node_roles"]
@@ -164,10 +194,10 @@ async def test_disabled_rollout_never_changes_or_reads_an_existing_employee():
     assert await apply_conversion(Database(), "review", "owner") == {"success": False, "error": "conversion_not_enabled"}
 
 
-async def save_existing(database, kind="manual", shared_memory=None):
+async def save_existing(database, kind="manual", shared_memory=None, *, browser=False):
     from models.database import Workflow, NodeParameter
     from models.employees import Employee
-    source, employee = fixture_graph(kind)
+    source, employee = fixture_graph(kind, browser=browser)
     if shared_memory is not None:
         configure_legacy_memory(source, shared=shared_memory)
     async with database.reserved_session() as session:
@@ -186,6 +216,48 @@ async def test_review_is_owner_isolated_and_does_not_mutate_configuration(real_d
     assert planned["success"] is True, planned
     assert planned["review_id"]
     assert planned["requires_review"] is True
+    assert (await real_database.get_workflow("81")).data == source["graph"]
+
+
+async def test_conversion_refuses_to_transfer_an_existing_private_profile(real_database):
+    from models.browser_profiles import BrowserProfileReservation, BrowserProfileRow
+    source = await save_existing(real_database, "schedule", browser=True)
+    worker = source["employee"]["node_roles"]["agent"]
+    browser = source["employee"]["node_roles"]["browser"]
+    profile = "private-existing"
+    for node in source["graph"]["nodes"]:
+        if node["type"] == "browser":
+            await real_database.save_node_parameters(node["id"], {**source["parameters"][node["id"]], "profile_id": profile})
+    async with real_database.reserved_session() as session:
+        session.add(BrowserProfileRow(id=profile, name="Original", owner_id="owner", kind="agent"))
+        session.add(BrowserProfileReservation(profile_id=profile, owner_id="owner", workflow_id="81",
+            agent_node_id=worker, browser_node_id=browser))
+        await session.commit()
+    result = await plan_conversion(real_database, "81", "owner", enabled=True)
+    assert result["error"] == "needs_dev_review"
+    assert (await real_database.get_workflow("81")).data == source["graph"]
+
+
+async def test_apply_refuses_a_previously_reviewed_browser_on_a_generic_worker(real_database, monkeypatch):
+    from models.employee_conversion import EmployeeConversion
+    from services.employees import safe_apply, team_runtime
+    source = await save_existing(real_database, "schedule", browser=True)
+    worker = source["employee"]["node_roles"]["agent"]
+    browser = source["employee"]["node_roles"]["browser"]
+    result = await plan_conversion(real_database, "81", "owner", enabled=True)
+    async with real_database.reserved_session() as session:
+        review = await session.get(EmployeeConversion, result["review_id"])
+        proposal = deepcopy(review.proposed)
+        edge = next(edge for edge in proposal["graph"]["edges"] if edge["source"] == browser)
+        edge.update(tool_edge(browser, worker).to_dict())
+        review.proposed = proposal
+        await session.commit()
+    monkeypatch.setattr(team_runtime, "team_runtime_error", lambda: None)
+    apply = AsyncMock()
+    monkeypatch.setattr(safe_apply, "apply_saved_changes", apply)
+    result = await apply_conversion(real_database, result["review_id"], "owner", enabled=True)
+    assert result["error"] == "needs_dev_review"
+    apply.assert_not_called()
     assert (await real_database.get_workflow("81")).data == source["graph"]
 
 

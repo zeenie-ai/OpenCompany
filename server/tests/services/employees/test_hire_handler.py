@@ -12,9 +12,12 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 
 import nodes  # noqa: F401 - registers every plugin for the validator
 import services.employees  # noqa: F401 - registers the handlers
+from models.browser_profiles import BrowserProfileReservation, BrowserProfileRow
+from models.employees import EmployeeGrant
 from services.employees import hire, store
 from services.employees.apps import get_apps
 from services.employees.hire_request import HireEmployeeRequest
@@ -225,6 +228,60 @@ async def test_the_same_key_finds_the_same_employee(harness):
     assert again["node_count"] == first["node_count"] > 0
     await asyncio.sleep(0)
     assert len(harness.starts) == 1
+
+
+@pytest.mark.parametrize("trigger", [{"kind": "manual"}, {"kind": "schedule", "every": "day", "at": "08:00"}],
+                         ids=["manual", "scheduled"])
+async def test_hire_binds_the_selected_browser_only_to_the_reviewed_browser_agent(harness, monkeypatch, trigger):
+    monkeypatch.setenv("NEW_AGENT_RUNTIME_V1_ENABLED", "true")
+    data = payload(apps=["Web browser"], trigger=trigger, team=[
+        {"key": "coding", "name": "Coding Agent", "responsibility": "Build the reporting software"},
+        {"key": "account_check", "name": "Browser Agent", "responsibility": "Verify account balances"},
+    ])
+    first = await hire.handle_hire_employee(data, SOCKET)
+    assert first["success"], first
+    workflow_id = first["employee"]["workflow_id"]
+    retry = await hire.handle_hire_employee(data, SOCKET)
+    assert retry["idempotent"] and retry["employee"]["workflow_id"] == workflow_id
+
+    workflow = await harness.database.get_workflow(workflow_id)
+    graph_nodes = workflow.data["nodes"]
+    [browser] = [node for node in graph_nodes if node["type"] == "browser"]
+    [specialist] = [node for node in graph_nodes if node["type"] == "browser_agent"]
+    assert specialist["data"]["label"] == "Browser Agent"
+    assert any(node["type"] == "coding_agent" for node in graph_nodes)
+    owners = [edge["target"] for edge in workflow.data["edges"]
+              if edge["source"] == browser["id"] and edge["targetHandle"] == "input-tools"]
+    assert owners == [specialist["id"]]
+    employee = await store.get_by_workflow(harness.database, workflow_id)
+    assert employee.node_roles["browser"] == browser["id"]
+    assert [member["node_id"] for member in employee.team_plan["members"]
+            if browser["id"] in member["tools"]] == owners
+
+    parameters = await harness.database.get_node_parameters(browser["id"])
+    async with harness.database.get_session() as session:
+        reservation = (await session.scalars(select(BrowserProfileReservation))).one()
+        assert reservation.profile_id == parameters["profile_id"]
+        assert reservation.workflow_id == workflow_id
+        assert reservation.agent_node_id == specialist["id"]
+        assert reservation.browser_node_id == browser["id"]
+        grant = (await session.scalars(select(EmployeeGrant).where(EmployeeGrant.capability == "browser"))).one()
+        assert grant.member_id == specialist["id"] and grant.limits["tool_node_id"] == browser["id"]
+
+
+@pytest.mark.parametrize("team", [
+    [],
+    [{"key": "coding", "name": "Coding Agent", "responsibility": "Build the reporting software"}],
+    [{"key": "browser", "name": "Browser Agent", "responsibility": "Manage the team", "kind": "employee"}],
+], ids=["empty", "coding-only", "manager-only"])
+async def test_hire_refuses_browser_without_a_reviewed_browser_owner(harness, team):
+    result = await hire.handle_hire_employee(payload(apps=["Web browser"], team=team), SOCKET)
+    assert result["success"] is False and result["error"] == "browser_agent_required", result
+    assert not await harness.database.get_all_workflows()
+    async with harness.database.get_session() as session:
+        assert not (await session.scalars(select(BrowserProfileRow))).all()
+        assert not (await session.scalars(select(BrowserProfileReservation))).all()
+    assert harness.starts == []
 
 
 async def test_scheduled_hire_with_disconnected_whatsapp_replies_to_each_transport_request(harness, monkeypatch):

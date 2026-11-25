@@ -134,6 +134,19 @@ def _hash(snapshot: dict) -> str:
     return hashlib.sha256(json.dumps(snapshot, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 
+async def _browser_review_error(session, workflow_id, owner_id, proposal):
+    from services.browser_resources import (
+        BrowserAgentRequired, BrowserResourceError, validate_browser_resource_bindings, validate_new_browser_connections,
+    )
+
+    try:
+        validate_new_browser_connections(proposal["graph"])
+        await validate_browser_resource_bindings(session, workflow_id, owner_id, proposal["graph"], proposal["parameters"])
+    except (BrowserAgentRequired, BrowserResourceError) as exc:
+        return {"success": False, "error": "needs_dev_review", "review_required": True, "message": str(exc)}
+    return None
+
+
 async def _snapshot(database: Any, workflow: Any, employee: Any) -> dict:
     graph = deepcopy(workflow.data or {})
     return {"graph": graph, "parameters": {node["id"]: await database.get_node_parameters(node["id"]) or {} for node in graph.get("nodes", [])},
@@ -183,21 +196,41 @@ def _prepare(source: dict, employee: Any, workflow_id: str, name: str) -> dict:
     built = BuiltEmployee(nodes=deepcopy(source["graph"]["nodes"]), edges=deepcopy(source["graph"]["edges"]),
         parameters=deepcopy(source["parameters"]), node_roles=dict(source["employee"]["node_roles"]),
         trigger={"kind": "manual"}, delivery="talk", delivery_app=None, app_ids=list(employee.apps or []), warnings=[])
+    apps = [app for app in (get_app(app_id) for app_id in built.app_ids) if app]
+    # The manual recipe redistributes the contact's tools. Include the
+    # historical worker's Browser in that pass so its ID and settings follow
+    # the new specialist, even when the old worker has its own Talk line.
+    browser_nodes = {node["id"] for node in built.nodes if node["type"] == "browser"}
+    bindings = [edge for edge in built.edges if edge["source"] in browser_nodes
+                and edge.get("targetHandle") == "input-tools" and edge["target"] in {original, talk}]
+    if bindings:
+        browser_app = get_app("web")
+        # Old Talk lines can have a second copy of the worker's Browser.
+        # Keep both historical nodes, but only expose the worker's original
+        # callable. Different profile or interaction settings need review.
+        browser = next((edge["source"] for edge in bindings if edge["target"] == original), bindings[0]["source"])
+        if browser_app is None or any(built.parameters.get(edge["source"], {}) != built.parameters.get(browser, {})
+                                      for edge in bindings):
+            raise _OwnershipReviewNeeded("Review the employee's existing Browser tools")
+        if browser_app not in apps:
+            apps.append(browser_app)
+        built.edges = [edge for edge in built.edges if edge not in bindings]
+        built.edges.append(tool_edge(browser, talk).to_dict())
     params = source["parameters"][original]
     llm = LLMChoice(provider=str(params.get("provider") or (employee.llm or {}).get("provider") or "openai"),
         model=str(params.get("model") or (employee.llm or {}).get("model") or ""), local=False)
     # Appending the lead through the manual recipe preserves the original
     # worker and its Context. Nonmanual intake is rewired explicitly below.
     proposed = build_team(built, BuildInputs(workflow_id=workflow_id, request=request_from_employee(employee, name),
-        apps=[app for app in (get_app(app_id) for app_id in employee.apps or []) if app], llm=llm, effort=params.get("effort"),
+        apps=apps, llm=llm, effort=params.get("effort"),
         memory=any(node["type"] == "simpleMemory" for node in built.nodes), allowed=is_hire_allowed, team=True),
         legacy_conversion=True)
     old_context = next((edge["source"] for edge in source["graph"]["edges"] if edge.get("target") == original and edge.get("targetHandle") == "input-context"), None)
     # A separately triggered existing worker can keep doing its established
     # responsibility as a specialist. Its node identity and conversation stay.
     if original != talk:
-        members = proposed.team_plan["members"]
-        reused = next((member for member in members if member["role"] == "operations"), members[0])
+        reusable = [member for member in proposed.team_plan["members"] if member["node_type"] != "browser_agent"]
+        reused = next((member for member in reusable if member["role"] == "operations"), reusable[0])
         replaced = reused["node_id"]
         removable = {replaced}
         if old_context:
@@ -299,6 +332,9 @@ async def plan_conversion(database: Any, workflow_id: str, owner_id: str, *, ena
     review = EmployeeConversion(id=uuid.uuid4().hex, workflow_id=workflow_id, owner_id=owner_id,
         source_hash=_hash(source), source=source, proposed=proposed)
     async with database.reserved_session() as session:
+        error = await _browser_review_error(session, workflow_id, owner_id, proposed)
+        if error:
+            return error
         session.add(review)
         await session.commit()
     return {"success": True, "review_id": review.id,
@@ -323,6 +359,10 @@ async def apply_conversion(database: Any, review_id: str, owner_id: str, *, enab
         employee = (await session.execute(select(Employee).where(Employee.workflow_id == review.workflow_id))).scalar_one_or_none()
         if not workflow or not employee or employee.owner_id != owner_id:
             return {"success": False, "error": "not_found"}
+        # Pending and previously saved reviews may predate Browser isolation.
+        error = await _browser_review_error(session, review.workflow_id, owner_id, review.proposed)
+        if error:
+            return error
         if review.state not in {"saved", "applied"}:
             parameters = {}
             for node in (workflow.data or {}).get("nodes", []):

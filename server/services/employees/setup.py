@@ -59,13 +59,13 @@ from fastapi import WebSocket
 
 from core.logging import get_logger
 from services.authz.ws_surface import execution_principal
-from services.employees.apps import resolve_app
+from services.employees.apps import AppSpec, resolve_app
 from services.employees.connections import Connections
 from services.employees.context import build_setup_prompt_context
 from services.employees.llm import USAGE_NODE_ID, LLMChoice, employees_chat, resolve_llm_choice
 from services.employees.setup_form import FORM_RETRY_NUDGE, fill_form, form_messages
 from services.employees.setup_prompt import RETRY_NUDGE, HistoryTurn, build_messages
-from services.employees.setup_reply import app_names, is_salvageable
+from services.employees.setup_reply import app_names, hire_app_names, is_salvageable
 from services.employees.team_recipe import preview_from_reply
 from services.llm.protocol import LLMResponse, Message, Usage
 from services.plugin.base import NodeUserError
@@ -151,17 +151,18 @@ def reset_for_tests() -> None:
     _active.clear()
 
 
-async def _resolve_apps(connections: Connections, reply: str) -> Dict[str, Dict[str, Any]]:
-    """AppRefs for the app names the reply mentions, each saying whether the
-    app can start the work (it has a trigger in the registry)."""
+async def _resolve_apps(connections: Connections, reply: str) -> tuple[Dict[str, Dict[str, Any]], dict[str, AppSpec | None]]:
+    """Resolve the apps displayed on the card and the subset selected for the hire."""
     names = app_names(reply)
     if not names:
-        return {}
+        return {}, {}
     connected = await connections.connected_app_ids()
     apps = (await connections.apps()).values()
     refs: Dict[str, Dict[str, Any]] = {}
+    matched = {}
     for name in names:
         app = resolve_app(name, connected, apps)
+        matched[name.lower()] = app
         if app is not None:
             refs[name.lower()] = {**await connections.app_ref(app), "can_trigger": app.trigger is not None}
         else:
@@ -174,7 +175,9 @@ async def _resolve_apps(connections: Connections, reply: str) -> Dict[str, Dict[
                 "supported": False,
                 "can_trigger": False,
             }
-    return refs
+    trigger_apps = {name for name, ref in refs.items() if ref["can_trigger"]}
+    selected = hire_app_names(reply, trigger_apps=trigger_apps)
+    return refs, {name: matched.get(name.lower()) for name in selected}
 
 
 def _with_nudge(messages: List[Message], nudge: str) -> List[Message]:
@@ -271,6 +274,7 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
     )
     if kept is None:
         return _failure("unparseable", request.token, retried=retried)
+    apps, selected_apps = await _resolve_apps(connections, reply)
     return {
         "success": True,
         "draft_token": request.token,
@@ -280,8 +284,8 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
         "usage": {"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens, "total_tokens": usage.total_tokens},
         "retried": retried,
         "finish_reason": kept.finish_reason,
-        "apps": await _resolve_apps(connections, reply),
-        "team": preview_from_reply(request.job, reply),
+        "apps": apps,
+        "team": preview_from_reply(request.job, reply, selected_apps=selected_apps),
     }
 
 

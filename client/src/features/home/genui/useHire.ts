@@ -32,6 +32,7 @@ const HIRE_ERRORS: Record<string, string> = {
   too_large: 'This setup is too long to hire. Try a shorter job description.',
   conflict: 'This hire changed while it was being saved. Press Hire again.',
   busy: 'They are still being set up. Give it a moment, then press Hire again.',
+  browser_agent_required: 'Add a Browser Agent to the team or remove Web browser from the setup.',
   not_allowed: "This setup needs something that can't be set up from here yet. Try changing it.",
   build_failed: "Couldn't put this employee together. Try changing the setup.",
   save_failed: "Couldn't save them. Press Hire again.",

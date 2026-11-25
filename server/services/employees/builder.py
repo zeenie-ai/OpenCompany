@@ -91,7 +91,7 @@ from services.graph_build import (
     tool_edge,
 )
 
-BUILDER_VERSION = 9
+BUILDER_VERSION = 10
 #: The first builder whose graphs follow the live Ask first rule (every app
 #: reply behind a gate, sending tools attached and held per call). Older
 #: graphs need Apply for a changed rule to take full effect.
@@ -883,11 +883,17 @@ def _build_single_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
 
 
 def build_employee_graph(inputs: BuildInputs) -> BuiltEmployee:
+    from services.browser_resources import BrowserAgentRequired, validate_new_browser_connections
+
     built = _build_single_employee_graph(inputs)
     if inputs.team:
         from services.employees.team_recipe import build_team
 
         built = build_team(built, inputs)
+    try:
+        validate_new_browser_connections({"nodes": built.nodes, "edges": built.edges})
+    except BrowserAgentRequired as exc:
+        raise BuildError("browser_agent_required", str(exc)) from exc
     owners: Dict[str, str] = {}
     for edge in built.edges:
         if edge.get("targetHandle") != "input-tools":

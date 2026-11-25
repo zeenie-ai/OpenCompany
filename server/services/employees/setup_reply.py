@@ -277,6 +277,48 @@ def _strings(values: Any) -> Iterable[str]:
                 yield text
 
 
+def hire_app_names(raw: Any, *, trigger_apps: set[str] | None = None) -> List[str]:
+    """Apps on the initial Hire submission, including its routine and delivery."""
+    from services.employees.hire_request import APPS_MAX, STEPS_MAX
+
+    elements = usable_elements(parse_reply(raw).spec)
+    card = next((e["props"] for e in elements if e["type"] == "AgentCard"), {})
+    plan = next((e["props"] for e in elements if e["type"] == "Plan"), {})
+    button = next((e["press"][1] for e in elements if e.get("press") and e["press"][0] == "hire_employee"), {})
+    apps = button.get("apps") if isinstance(button.get("apps"), list) else card.get("apps")
+    names: dict[str, str] = {}
+
+    def add(value: Any) -> None:
+        name = _text(value)[:40]
+        if name:
+            names.setdefault(name.lower(), name)
+
+    for name in _strings(apps):
+        add(name)
+        if len(names) == APPS_MAX:
+            break
+    raw_steps = plan.get("steps")
+    steps = []
+    if isinstance(raw_steps, list):
+        steps = [step for step in raw_steps if isinstance(step, dict) and _text(step.get("title"))][:STEPS_MAX]
+    trigger_step = next((s for s in steps if s.get("role") == "trigger"), None)
+    trigger = button.get("trigger")
+    trigger = trigger if isinstance(trigger, dict) else {}
+    trigger_app = _text(trigger.get("app")) if trigger.get("kind") == "app_event" else ""
+    if not trigger_app and trigger.get("kind") not in ("manual", "schedule") and trigger_step:
+        trigger_app = _text(trigger_step.get("app"))
+    # The client changes an unsupported app-event trigger to manual and
+    # rewrites the first When step. App selections and other steps survive.
+    manual_fallback = bool(trigger_app and trigger_apps is not None and trigger_app.lower() not in trigger_apps)
+    for step in steps:
+        if not (manual_fallback and step is trigger_step):
+            add(step.get("app"))
+    if not manual_fallback:
+        add(trigger_app)
+    add(button.get("sendsVia") if button.get("sendsVia") is not None else button.get("sends_via"))
+    return list(names.values())
+
+
 def app_names(raw: Any) -> List[str]:
     """Every app name the reply mentions, in first-seen order: the agent's
     apps, the steps' apps, connect buttons, and the hire button's apps,
@@ -308,7 +350,7 @@ def app_names(raw: Any) -> List[str]:
                 trigger = params.get("trigger")
                 if isinstance(trigger, dict):
                     add(trigger.get("app"))
-                add(params.get("sendsVia"))
+                add(params.get("sendsVia") if params.get("sendsVia") is not None else params.get("sends_via"))
     return list(seen.values())
 
 
@@ -316,6 +358,7 @@ __all__ = [
     "ParsedReply",
     "app_names",
     "button_press",
+    "hire_app_names",
     "is_salvageable",
     "json_object",
     "parse_reply",
