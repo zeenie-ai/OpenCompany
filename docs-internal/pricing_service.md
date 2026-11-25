@@ -618,7 +618,7 @@ the same figures and the same limits.
   `employee_monthly_budget_usd`. 0 means no budget. See "The monthly budget of
   an employee" above.
 - **Skip reviews when sure.** The same field in percent (`LimitField`'s
-  `unit`), with Save, which sends only `review_auto_accept_percent`. 0, the
+  `unit`), with Save setting, which sends only `review_auto_accept_percent`. 0, the
   default, means off. Above it a teammate's submitted work is accepted without
   a model turn for its reviewer, which saves that turn's cost; see review
   auto-accept in [judgment_service.md](./judgment_service.md#where-it-is-used).

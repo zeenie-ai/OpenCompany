@@ -1312,7 +1312,7 @@ changing page clears it.
   `chat_run_spend_limit_usd` (0 means no limit), and "Monthly budget per
   employee", whose Save budget writes only `employee_monthly_budget_usd` (0
   means no budget; an employee that reaches it pauses and shows as needing
-  attention), and "Skip reviews when sure", whose Save writes only
+  attention), and "Skip reviews when sure", whose Save setting writes only
   `review_auto_accept_percent` (0, the default, means off). With it set, a
   teammate's submitted work that a calibrated judgment is at least that sure
   completes its instructions is accepted without waking its reviewer; Chat's
