@@ -441,6 +441,16 @@ and let runtime calls surface the 401 — see `nodes/search/perplexity_search/__
 for the canonical no-probe pattern. `ProbeResult` is exported from
 `services.plugin` for this override.
 
+The LLM credentials (`_LLMApiKey` in `nodes/model/_credentials.py`)
+validate a key by listing the provider's models, which also fills the
+model dropdown. A provider whose model list answers without checking
+the key also declares `probe_url`, and `_LLMApiKey._probe` calls that
+declarative probe first. OpenRouter is the one today: its `/models` is
+public and answers any key, so `OpenRouterCredential` checks the key at
+`/api/v1/key`, which answers 401 to a key OpenRouter does not know.
+Before that, a refused OpenRouter key was stored as validated and only
+the first call failed.
+
 Auto-discovery rides on node-package import. When
 `nodes/__init__.py:pkgutil.walk_packages` imports a plugin module,
 that module's `from ._credentials import XCredential` statement

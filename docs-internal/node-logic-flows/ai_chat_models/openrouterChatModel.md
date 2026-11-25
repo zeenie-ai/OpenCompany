@@ -98,7 +98,7 @@ flowchart TD
 
 ## External Dependencies
 
-- **Credentials**: `auth_service.get_api_key('openrouter', 'default')` plus optional `openrouter_proxy`.
+- **Credentials**: `auth_service.get_api_key('openrouter', 'default')` plus optional `openrouter_proxy`. Saving a key checks it at `GET https://openrouter.ai/api/v1/key` (`OpenRouterCredential.probe_url`) before listing models, because the model list is public and answers any key; a key OpenRouter refuses is not stored ("OpenRouter rejected the API key.").
 - **Services**: `services/llm/providers/openrouter.py`.
 - **Python packages**: `openai`.
 - **Environment variables**: none.

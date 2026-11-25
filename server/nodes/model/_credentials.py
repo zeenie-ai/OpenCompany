@@ -49,7 +49,14 @@ class _LLMApiKey(ApiKeyCredential):
         :meth:`AIService.fetch_models`. Returns a populated
         :class:`ProbeResult` on success; raises ``httpx``/``openai``
         exceptions for the base ``Credential.validate`` to classify.
+
+        A provider whose model list answers without checking the key sets
+        ``probe_url`` to a route that does. The declarative
+        :meth:`ApiKeyCredential._probe` calls it first, so a key the
+        provider refuses raises here and is never stored as validated.
         """
+        if cls.probe_url:
+            await super()._probe(api_key)
         from services.plugin.deps import get_ai_service
 
         ai_service = get_ai_service()
@@ -98,6 +105,11 @@ class OpenRouterCredential(_LLMApiKey):
     id = "openrouter"
     display_name = "OpenRouter"
     docs_url = "https://openrouter.ai/keys"
+    # OpenRouter's model list is public and answers any key, so listing
+    # models proves nothing about this one. /key describes the key it is
+    # sent, and answers 401 ("User not found.") to a key OpenRouter does
+    # not know (openrouter.ai/docs/api-reference/limits).
+    probe_url = "https://openrouter.ai/api/v1/key"
 
 
 class GroqCredential(_LLMApiKey):
