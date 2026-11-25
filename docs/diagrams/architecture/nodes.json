@@ -4149,6 +4149,7 @@
         "balance",
         "call",
         "describe",
+        "read_result",
         "search"
       ],
       "source": "server/nodes/treg/treg_action.py",

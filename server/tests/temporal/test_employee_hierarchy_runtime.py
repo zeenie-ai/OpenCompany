@@ -147,9 +147,12 @@ async def test_hired_chat_assigns_nested_tasks_and_delivers_its_own_review(real_
 
     db = real_database
     settings = container.settings()
-    settings.workspace_base_resolved = str(tmp_path)
     ai = AIService(container.auth_service(), db, None, settings)
     workflow_service = WorkflowService(db, ai, None, None, None, None, settings)
+    # Set the workspace on the service, not on settings: in a full run the
+    # auth/core_config/credentials conftests load the real core.config, whose
+    # workspace_base_resolved is a read-only property.
+    workflow_service._get_workspace_dir = lambda slug: str(tmp_path / slug)
     monkeypatch.setattr(container, "ai_service", lambda: ai)
     monkeypatch.setattr(container, "workflow_service", lambda: workflow_service)
     built, control, transport = hierarchy
