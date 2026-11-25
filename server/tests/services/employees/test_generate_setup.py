@@ -24,7 +24,7 @@ from services.employees.llm import LLMChoice
 from services.employees.setup_form import FORM_RETRY_NUDGE, fields_prompt
 from services.employees.setup_prompt import RETRY_NUDGE
 from services.employees.team_recipe import preview_from_reply
-from services.llm.protocol import LLMResponse, Usage
+from services.llm.protocol import LLMError, LLMErrorCategory, LLMResponse, Usage
 from services.plugin.base import NodeUserError
 from services.ws_handler_registry import get_ws_handlers
 
@@ -221,10 +221,26 @@ async def test_failures_come_back_as_codes(harness):
     failed = await generate()
     assert failed["error"] == "provider_error"
     assert failed["detail"] == "Invalid API key"
+    assert failed["requires_user_action"] is False
 
     harness.choice = None
     assert (await generate())["error"] == "no_ai_provider"
     assert (await generate(job="  "))["error"] == "invalid_request"
+
+
+async def test_a_key_the_provider_refuses_is_the_owners_to_fix(harness):
+    # The 401 OpenRouter gives a key it does not know (2026-11-25): Home must
+    # say the key was refused and offer the AI models dialog, since Try again
+    # alone repeats the refusal.
+    refused = LLMError(
+        message="User not found.", provider="openrouter",
+        category=LLMErrorCategory.AUTHENTICATION, status_code=401,
+    ).as_node_error()
+    harness.unifier = FakeUnifier(refused)
+    failed = await generate()
+    assert failed["error"] == "provider_error"
+    assert failed["detail"] == "OpenRouter authentication failed. Check the configured API key."
+    assert failed["requires_user_action"] is True
 
 
 async def test_a_slow_model_times_out(harness, monkeypatch):

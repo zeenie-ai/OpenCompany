@@ -409,6 +409,21 @@ describe('HireDraftPanel', () => {
     expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
   });
 
+  it('says why the model failed, and opens the AI models dialog when only the owner can fix it', () => {
+    const detail = 'OpenRouter authentication failed. Check the configured API key.';
+    useDraftStore.setState({
+      status: 'failed',
+      failure: { code: 'provider_error', text: 'Answer WhatsApp', refine: false, detail, requiresUserAction: true },
+    });
+    renderPanel();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(detail);
+    expect(alert).not.toHaveTextContent('The AI model returned an error.');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Connect an AI model' }));
+    expect(useHomeStore.getState().connectAI).toEqual({ open: true, provider: null, closeOnConnect: true });
+  });
+
   it('offers Try again after any failure, in neutral colours', async () => {
     useDraftStore.setState({ status: 'failed', failure: { code: 'timeout', text: 'Answer WhatsApp', refine: false } });
     sendRequest.mockResolvedValue({ success: true, reply });

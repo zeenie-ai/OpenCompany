@@ -494,7 +494,10 @@ are is on their page's header, not in the dock.
 - **Errors**: `no_ai_provider` (the AI models dialog opens,
   below; the owner's words stay in the draft, which is sent again by itself
   once a model is connected), `timeout`, `provider_error`, `unparseable`,
-  `cancelled`, `busy`, `invalid_request`.
+  `cancelled`, `busy`, `invalid_request`. A `provider_error` carries `detail`,
+  the LLM layer's public message ("OpenRouter authentication failed. Check the
+  configured API key."), and `requires_user_action`, true when only the owner
+  can fix it (a refused key, no credits).
 - **Generated UI off** (the owner's switch in Settings > Profile, off by
   default; [services/genui/switch.py](../server/services/genui/switch.py)):
   the model gets no catalogue. It fills a fixed form instead
@@ -520,8 +523,10 @@ While the model writes, the draft panel shows one honest line, "Writing their
 setup…", with the time so far and Cancel, and after `SLOW_AFTER_SECONDS` a
 note that some models take a few minutes. A setup that fails says so on a
 neutral card with the attention dot ("Couldn’t finish setting this up", or
-"Couldn’t make that change" for a change, and why), with Try again, and
-Connect an AI model for `no_ai_provider`. Development builds also show the
+"Couldn’t make that change" for a change, and why: a `provider_error`'s own
+`detail` in place of the fixed line), with Try again, and Connect an AI model
+for `no_ai_provider` or a `requires_user_action` failure, since Try again
+alone repeats a refused key. Development builds also show the
 screen's spec and its patch stream (`spec.json` / `patches.jsonl`).
 
 The reply is a flat JSON UI spec in json-render's shape (catalogue

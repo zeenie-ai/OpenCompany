@@ -78,7 +78,17 @@ export interface DraftFailure {
   /** What Retry sends again, and whether it was a change request. */
   text: string;
   refine: boolean;
+  /** The server's words for a model's failure (the LLM layer's public
+   *  message, such as "OpenRouter authentication failed. Check the
+   *  configured API key."), shown in place of the code's fixed line. */
+  detail?: string;
+  /** Only the owner can fix it (a refused key, no credits), so the notice
+   *  offers the AI models dialog: Try again alone repeats the failure. */
+  requiresUserAction?: boolean;
 }
+
+/** What the server said about a failure, beyond its code. */
+type FailureInfo = Pick<DraftFailure, 'detail' | 'requiresUserAction'>;
 
 export interface DraftSource {
   provider: string | null;
@@ -174,10 +184,19 @@ export interface SetupResponse {
   model?: string | null;
   apps?: unknown;
   team?: unknown;
+  detail?: unknown;
+  requires_user_action?: unknown;
 }
 
 function errorCode(value: unknown): SetupErrorCode {
   return typeof value === 'string' && SERVER_CODES.has(value) ? (value as SetupErrorCode) : 'provider_error';
+}
+
+function failureInfo(response: SetupResponse): FailureInfo {
+  const info: FailureInfo = {};
+  if (typeof response.detail === 'string' && response.detail.trim()) info.detail = response.detail.trim();
+  if (response.requires_user_action === true) info.requiresUserAction = true;
+  return info;
 }
 
 function isTimeout(error: unknown): boolean {
@@ -240,11 +259,11 @@ function cancelOnServer(send: SendRequest, token: string | null): void {
 /** Record a failure if it belongs to the request still in flight. A failed
  *  change keeps the last good version on screen, so Retry can send it
  *  again and Hire still works. */
-export function failRequest(token: string, code: SetupErrorCode, request: PendingRequest): boolean {
+export function failRequest(token: string, code: SetupErrorCode, request: PendingRequest, info: FailureInfo = {}): boolean {
   if (useDraftStore.getState().token !== token) return false;
   // Cancelled by a newer request or by Discard; whoever did that owns the state.
   if (code === 'cancelled') return false;
-  useDraftStore.setState({ status: 'failed', token: null, request: null, failure: { code, ...request } });
+  useDraftStore.setState({ status: 'failed', token: null, request: null, failure: { code, ...request, ...info } });
   spikeOrb(SPIKE.draftFailed);
   return true;
 }
@@ -307,7 +326,7 @@ export async function submitDraft(send: SendRequest, raw: string, options: { ref
       import('@json-render/core'),
       send('generate_employee_setup', payload, SETUP_TIMEOUT_MS),
     ]);
-    if (response?.success === false) failRequest(token, errorCode(response.error), request);
+    if (response?.success === false) failRequest(token, errorCode(response.error), request, failureInfo(response));
     else acceptReply(token, response ?? {}, request, core);
   } catch (error) {
     failRequest(token, isTimeout(error) ? 'timeout' : 'connection', request);

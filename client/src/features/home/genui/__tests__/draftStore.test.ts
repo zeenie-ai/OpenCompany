@@ -145,6 +145,25 @@ describe('submitDraft', () => {
     const send = vi.fn<Send>().mockResolvedValue({ success: false, error: 'mystery' });
     await submitDraft(send, 'job');
     expect(useDraftStore.getState().failure?.code).toBe('provider_error');
+    expect(useDraftStore.getState().failure).not.toHaveProperty('detail');
+    expect(useDraftStore.getState().failure).not.toHaveProperty('requiresUserAction');
+  });
+
+  it('keeps what the server said about a failure only the owner can fix', async () => {
+    const send = vi.fn<Send>().mockResolvedValue({
+      success: false,
+      error: 'provider_error',
+      detail: 'OpenRouter authentication failed. Check the configured API key.',
+      requires_user_action: true,
+    });
+    await submitDraft(send, 'job');
+    expect(useDraftStore.getState().failure).toEqual({
+      code: 'provider_error',
+      text: 'job',
+      refine: false,
+      detail: 'OpenRouter authentication failed. Check the configured API key.',
+      requiresUserAction: true,
+    });
   });
 
   it('only edits a draft that exists', () => {

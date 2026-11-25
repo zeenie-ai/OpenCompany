@@ -110,10 +110,13 @@ function FailureNotice({ failure, onRetry, onConnectAi }: { failure: DraftFailur
           {failure.refine ? 'Couldn’t make that change' : 'Couldn’t finish setting this up'}
         </span>
         <span className="text-sm text-fg-muted">
-          {FAILURE_DETAIL[failure.code]} {failure.refine ? 'The last version is still here.' : 'Your description is saved.'}
+          {failure.detail ?? FAILURE_DETAIL[failure.code]}{' '}
+          {failure.refine ? 'The last version is still here.' : 'Your description is saved.'}
         </span>
       </div>
-      {failure.code === 'no_ai_provider' && (
+      {/* A refused key or an empty balance is the owner's to fix, in the
+          same dialog a missing model opens: Try again alone repeats it. */}
+      {(failure.code === 'no_ai_provider' || failure.requiresUserAction) && (
         <Button variant="quiet" onClick={onConnectAi} className={NEUTRAL_BUTTON}>
           Connect an AI model
         </Button>

@@ -208,7 +208,17 @@ async def _generate(request: SetupRequest, owner: str) -> Dict[str, Any]:
             if kept is not None:
                 break
             logger.warning("Setup model failed", provider=choice.provider, model=choice.model, error=str(exc))
-            return _failure("provider_error", request.token, detail=str(exc))
+            # detail is the LLM layer's public message ("OpenRouter
+            # authentication failed. Check the configured API key."), and
+            # requires_user_action says only the owner can fix it (a rejected
+            # key, no credits), so Home offers the AI models dialog rather
+            # than only Try again.
+            return _failure(
+                "provider_error",
+                request.token,
+                detail=str(exc),
+                requires_user_action=exc.requires_user_action,
+            )
         billed = response.billing_usage or response.usage
         await record_llm_usage(
             provider=choice.provider,
