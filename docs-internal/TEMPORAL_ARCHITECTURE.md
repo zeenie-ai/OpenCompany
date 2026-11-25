@@ -76,6 +76,21 @@ history without it keeps them compact, so recorded Pi updates and checkpoints
 replay against their original digest. A step with no compact message does not
 evaluate the marker. It is not in `DORMANT_PATCHES`, so it records at once.
 
+**Pi cancellation (`pi-sticky-workflow-cancellation-v1`).** An activity
+cancelled with `WAIT_CANCELLATION_COMPLETED` can still return a normal result,
+so a Pi run checks for a cancellation request itself
+(`services/temporal/pi_control.py::raise_if_pi_cancelled`): around each
+activity that goes through `execute_pi_activity` (the model step in
+`PiCodingAgentWorkflow`, and the plugin tool activities that
+`AgentWorkflow._execute_plugin_tool_activity` runs for a Pi run), in
+`PiDescendantExecutionControl.wait_until_running`, after the driver stops or
+parks, and before a Continue-As-New. Once the workflow has a cancellation
+request, the check raises `CancelledError`. The marker is evaluated only after
+such a request, and a history without it does not raise, so it replays as
+recorded; the activities themselves (types, arguments, ids) are unchanged. It
+is not in `DORMANT_PATCHES`, so it records at once. Its identity entry is in
+`tests/temporal/fixtures/workflow_identities.json`.
+
 **Browser owner routing (`browser_routing_version: 1`).** Distributed starts
 also capture server-resolved `browser_bindings`, including profile, principal,
 owner, runtime epoch and physical queue. The Browser queue overrides the

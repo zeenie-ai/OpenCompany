@@ -989,6 +989,12 @@
       "after": "efef6dec708a526dd7814541bddafdc07e01fe97bc9f4cc6b79e552214294f08",
       "patch": "pi-instance-message-wire-v1",
       "reason": "PiCodingAgentWorkflow expands compact text messages (role, content and an optional ts) to the MessageWire form before a model step only behind pi-instance-message-wire-v1; a history without the marker keeps them compact and replays against its recorded digests. It ships active, not dormant: message_to_wire always writes the full wire keys, so compact messages reach a Pi step only from agent-instance transcripts, whose workflow types (AgentInstanceSessionWorkflow, AgentInstanceReconcilerWorkflow) are new since the release. The release can run none of those generations, so a dormant marker would protect no rollback and would switch the fix off for a release. The lead_id = reviewer.id binding in this digest is activity code (route_instance_task_event), not a command."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "312201cd2cb2a5ae091ac064b22717bc563eaf878be1654593b53f6ba8bf259d",
+      "patch": "pi-sticky-workflow-cancellation-v1",
+      "reason": "Pi cancellation: PiCodingAgentWorkflow's model step (agent.execute_llm_step, llm-step-N) and a Pi run's plugin tool activities (AgentWorkflow._execute_plugin_tool_activity, which picks execute_pi_activity when uses_pi) go through pi_control.execute_pi_activity. It issues the same workflow.execute_activity commands, with the same types, arguments and activity ids, and raises CancelledError before and after them once the workflow has a cancellation request, only behind pi-sticky-workflow-cancellation-v1, which is checked only after such a request; a history without the marker replays as recorded. The identity scan sees the wrapped calls as one execute_activity(*args) in pi_control.py in place of agent.execute_llm_step in pi_workflow.py and four calls in agent_workflow.py (agent.instance.admit, the agent operation, its wait polls and the plain tool call); this digest differs from efef6dec by exactly those items and the marker. It ships active, not dormant (it is not in DORMANT_PATCHES), since the owner ruled out rollbacks on 2026-11-23."
     }
   ],
   "handlers": {
