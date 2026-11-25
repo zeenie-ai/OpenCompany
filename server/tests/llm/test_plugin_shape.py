@@ -169,6 +169,24 @@ async def test_all_registered_providers_are_agent_selectable():
     assert {option["value"] for option in options} == set(all_providers()) - {ENDPOINT_PROVIDER}
 
 
+def test_every_native_agent_has_an_effort_option():
+    """How hard the agent's model thinks, in its Options: low or high, and
+    unset (Balanced) unless the owner picks one."""
+    from pydantic import ValidationError
+
+    from nodes.agent._specialized import SpecializedAgentParams
+    from nodes.agent.ai_agent import AIAgentParams
+    from nodes.agent.chat_agent import ChatAgentParams
+
+    for params_type in (AIAgentParams, ChatAgentParams, SpecializedAgentParams):
+        schema = params_type.model_json_schema()["properties"]["effort"]
+        assert schema["group"] == "options", params_type.__name__
+        assert params_type().effort is None
+        assert params_type(effort="high").effort == "high"
+        with pytest.raises(ValidationError):
+            params_type(effort="medium")
+
+
 # ---------------------------------------------------------------------------
 # 4. ai.py imports ChatUnifier somewhere (delegation contract)
 # ---------------------------------------------------------------------------

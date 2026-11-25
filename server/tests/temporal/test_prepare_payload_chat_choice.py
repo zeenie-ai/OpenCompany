@@ -1,8 +1,9 @@
 """``agent.prepare_payload`` and the model the owner picked in Home's chat
 (services/chat/choice.py): it applies to the agent that answers the chat run
 only, it replaces the node's own model and key (so the chosen provider's key
-is checked), and the LLM step reads the effort. The step never sends a
-node's own key to another provider.
+is checked), and the LLM step reads the effort: the level picked in the
+chat, else the agent's own Effort option, on every run. The step never sends
+a node's own key to another provider.
 
 Calls the activity bodies directly, collaborators patched by string path
 (see test_prepare_payload_pressure.py)."""
@@ -34,6 +35,7 @@ _NODE = {"provider": "openai", "model": "gpt-6-sol", "api_key": "sk-node", "prom
 def prepare(monkeypatch):
     """Patch prepare_agent_payload's collaborators; tests steer ``state``."""
     state = SimpleNamespace(
+        node=dict(_NODE),
         options={},
         answers=True,
         connected={"anthropic"},
@@ -45,8 +47,11 @@ def prepare(monkeypatch):
         state.keys_checked.append(provider)
         return provider in state.connected
 
+    async def node_parameters(_node_id):
+        return dict(state.node)
+
     database = SimpleNamespace(
-        get_node_parameters=AsyncMock(return_value=dict(_NODE)),
+        get_node_parameters=node_parameters,
         get_user_settings=AsyncMock(return_value=None),
         get_workflow_control_generation=AsyncMock(return_value=None),
     )
@@ -141,6 +146,32 @@ async def test_without_a_model_the_agent_keeps_its_own_at_the_effort_picked(prep
     payload = await prepare_agent_payload(dict(_CONTEXT))
 
     assert (payload["provider"], payload["model"], payload["effort"]) == ("openai", "gpt-6-sol", "low")
+
+
+@pytest.mark.asyncio
+async def test_every_run_sends_the_agents_own_effort(prepare):
+    prepare.node = {**_NODE, "effort": "high"}
+    prepare.answers = False
+
+    payload = await prepare_agent_payload(dict(_CONTEXT))
+
+    assert payload["effort"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_a_level_picked_in_the_chat_wins_for_the_answering_agent(prepare):
+    prepare.node = {**_NODE, "effort": "high"}
+    prepare.options = {"effort": "low"}
+
+    payload = await prepare_agent_payload(dict(_CONTEXT))
+
+    assert payload["effort"] == "low"
+
+    # Balanced in the chat sends no level: the agent's own applies.
+    prepare.options = {}
+    payload = await prepare_agent_payload(dict(_CONTEXT))
+
+    assert payload["effort"] == "high"
 
 
 @pytest.mark.asyncio

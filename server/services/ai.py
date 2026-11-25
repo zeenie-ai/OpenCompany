@@ -1010,6 +1010,10 @@ class AIService:
                 logger.debug(f"[Agent] Thinking enabled: budget={thinking_config.budget}, effort={thinking_config.effort}")
 
             temperature = _resolve_temperature(flattened, model, provider, bool(thinking_config and thinking_config.enabled))
+            from services.chat.choice import effort_of
+
+            # The agent's own Effort option, sent on every step.
+            effort = effort_of(flattened)
 
             # Broadcast: Initializing model
             await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model, "active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
@@ -1482,6 +1486,7 @@ class AIService:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 thinking=thinking_config,
+                effort=effort,
                 initial_messages=initial_messages,
                 tools=tools if tools else None,
                 tool_executor=tool_executor if tools else None,
@@ -1863,6 +1868,10 @@ class AIService:
                 )
 
             temperature = _resolve_temperature(flattened, model, provider, bool(thinking_config and thinking_config.enabled))
+            from services.chat.choice import effort_of
+
+            # The agent's own Effort option, sent on every step.
+            effort = effort_of(flattened)
 
             # Broadcast: Initializing
             await broadcast_status("initializing", {"message": f"Initializing {provider} model...", "provider": provider, "model": model, "active_skills": [], "last_skills": [], "last_tool_name": None, "last_capability": None})
@@ -2205,6 +2214,7 @@ class AIService:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     thinking=thinking_config,
+                    effort=effort,
                     initial_messages=messages,
                     tools=all_tools,
                     tool_executor=chat_tool_executor,
@@ -2240,6 +2250,7 @@ class AIService:
                     temperature=temperature,
                     max_tokens=max_tokens,
                     thinking=thinking_config,
+                    effort=effort,
                     initial_messages=messages,
                     max_iterations=1,
                     conversation_saver=(

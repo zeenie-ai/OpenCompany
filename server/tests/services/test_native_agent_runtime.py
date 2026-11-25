@@ -770,6 +770,25 @@ async def test_ai_service_agent_entrypoints_use_native_unifier(method_name):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method_name", ["execute_agent", "execute_chat_agent"])
+async def test_in_process_agents_send_their_own_effort(method_name):
+    from services.ai import AIService
+
+    unifier = _FakeUnifier([LLMResponse(content="careful answer", usage=Usage(input_tokens=3, output_tokens=2))])
+    database = _Database()
+    service = AIService(auth_service=_Auth(), database=database, cache=None, settings=object(), chat_unifier=unifier)
+
+    result = await getattr(service, method_name)(
+        node_id="agent-1",
+        parameters={"provider": "openai", "model": "gpt-4o-mini", "api_key": "secret", "prompt": "hello", "effort": "high"},
+        database=database,
+    )
+
+    assert result["success"] is True, result
+    assert unifier.calls[0]["effort"] == "high"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method_name", ["execute_agent", "execute_chat_agent"])
 async def test_an_unsaved_named_endpoint_is_reported_as_not_configured(method_name):
     # No key was injected because the endpoint's rows are gone; the agent
     # must say so, not "API key is required", and send nothing.

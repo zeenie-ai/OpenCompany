@@ -701,12 +701,12 @@ class TestDisplayOptionsEnrichment:
 
     def test_specialized_agent_shares_ai_agent_tuning_surface(self):
         # SpecializedAgentParams mirrors AIAgentParams — same provider,
-        # model, temperature, max_tokens, system_message fields. No
+        # model, temperature, max_tokens, effort, system_message fields. No
         # api_key (injected at runtime). Thinking mode surfaces via
         # AIAgentOutput.thinking, not as a Params toggle.
         spec = get_node_spec("coding_agent")
         props = spec["inputs"]["properties"]
-        for field in ("provider", "model", "temperature", "max_tokens", "system_message"):
+        for field in ("provider", "model", "temperature", "max_tokens", "effort", "system_message"):
             assert field in props, f"coding_agent missing {field}"
         assert "api_key" not in props
 

@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.plugin import ActionNode, NodeContext, Operation, TaskQueue
 
+from ._effort import AgentEffort
 from ._handles import STD_AGENT_HINTS, std_agent_handles
 from ._provider import ProviderRef
 
@@ -73,6 +74,7 @@ class SpecializedAgentParams(AgentRuntimeParams):
         le=200000,
         json_schema_extra={"group": "options"},
     )
+    effort: AgentEffort = None
 
     model_config = ConfigDict(
         extra="ignore",

@@ -632,8 +632,9 @@ async def _execute_native_llm_step(payload: Dict[str, Any]) -> Dict[str, Any]:
                     # where it is converted to a safe Temporal failure.
                     translate_errors=False,
                     on_event=emitter,
-                    # The owner's chat choice (Quick / Thorough), for the
-                    # agent that answers them only (prepare_agent_payload).
+                    # The level the owner picked in the chat, for the agent
+                    # that answers them, else the agent's own Effort
+                    # (prepare_agent_payload).
                     effort=payload.get("effort"),
                 ),
                 chat_run_id if isinstance(chat_run_id, str) else None,
@@ -1406,6 +1407,11 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         # provider, so the chosen provider's key is checked below.
         provider, model = chosen
         api_key = None
+    # How hard the model thinks: the level the owner picked in the chat, for
+    # the agent that answers them, else the agent's own Effort option.
+    effort = effort_of(chat_options) if chat_stream else None
+    if effort is None:
+        effort = effort_of(flattened)
 
     if not api_key:
         # Try auth_service one more time (covers chatAgent flow where
@@ -2077,9 +2083,8 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         # How long one LLM attempt may take for this provider (None: the
         # workflow's default). The workflow reads it here, never in config.
         "llm_attempt_timeout_seconds": attempt_timeout_seconds(provider),
-        # The owner's chat choice (Quick / Thorough), for the agent that
-        # answers them; the LLM step sends it (services/chat/choice.py).
-        "effort": effort_of(chat_options) if chat_stream else None,
+        # Quick (low) or Thorough (high); the LLM step sends it.
+        "effort": effort,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "system_message": system_message,

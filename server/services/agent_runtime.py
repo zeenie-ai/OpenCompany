@@ -123,7 +123,9 @@ async def run_native_llm_step(
     normalized as retryable :class:`LLMError` values are repeated. Temporal
     passes ``explicit_max_retries=0`` and owns activity-level retry itself.
     ``on_event`` receives the response as it is written (ChatUnifier.chat).
-    ``effort`` is the owner's chat choice for the agent that answers them.
+    ``effort`` is how hard the model thinks (``low`` / ``high``): the level
+    the owner picked in the chat for the agent that answers them, else the
+    agent's own Effort option.
     """
 
     if chat_unifier is None:
@@ -232,6 +234,7 @@ async def run_native_agent_loop(
     ] = None,
     tool_output_limit: Optional[int] = None,
     observer_payload: Optional[Dict[str, Any]] = None,
+    effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run the shared buffered native tool-agent loop.
 
@@ -241,7 +244,8 @@ async def run_native_agent_loop(
 
     ``tool_output_limit`` caps, in characters, what one external tool result
     adds to ``messages`` (see ``services.tool_output``); ``None`` or ``0``
-    keeps results whole.
+    keeps results whole. ``effort`` is the agent's own Effort option, sent
+    on every step (run_native_llm_step).
     """
 
     current_tools: List[AgentToolSpec] = list(tools or ())
@@ -281,6 +285,7 @@ async def run_native_agent_loop(
                 thinking=thinking,
                 tools=current_tools,
                 context_management=context_management,
+                effort=effort,
                 **({"observer_payload": {**observer_payload, "iteration": iteration}} if observer_payload else {}),
             )
         except BaseException as exc:
