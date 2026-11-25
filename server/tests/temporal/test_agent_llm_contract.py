@@ -1217,6 +1217,10 @@ class TestLLMAttemptTimeout:
             return {"kind": "final", "content": "done"}
 
         monkeypatch.setattr(pi_workflow.workflow, "execute_activity", fake_execute_activity)
+        # The model step runs through pi_control.execute_pi_activity, which asks
+        # the workflow for a cancellation request around the activity; this
+        # step runs outside a workflow, with none.
+        monkeypatch.setattr(pi_workflow.workflow, "cancellation_reason", lambda: None)
         value = pi_workflow.PiCodingAgentWorkflow({})
         value._pi.begin(0, {"turn:0:model": {"kind": "model", "payload": {}}})
 
