@@ -122,9 +122,14 @@ async def test_a_run_with_arms_records_no_job_failure_for_a_bug(monkeypatch, exc
     ("exc", "stopped"),
     [(RuntimeError("bug"), False), (ApplicationError("conflict", type="PiProtocolConflict"), True), (_Continued(), True)],
 )
-async def test_pi_stops_its_driver_only_without_a_bug(exc, stopped):
+async def test_pi_stops_its_driver_only_without_a_bug(exc, stopped, monkeypatch):
+    from services.temporal import pi_workflow
     from services.temporal.pi_workflow import PiCodingAgentWorkflow
 
+    # run() checks for a cancellation request before it returns a failure
+    # result (pi_control.raise_if_pi_cancelled); this runs outside a
+    # workflow, with none.
+    monkeypatch.setattr(pi_workflow.workflow, "cancellation_reason", lambda: None)
     context = {"node_type": "coding_agent", "pi_harness_version": 1, "node_id": "coder"}
     pi = PiCodingAgentWorkflow(context)
     pi._execution_control = SimpleNamespace(bind=lambda _data: None, enabled=False)
