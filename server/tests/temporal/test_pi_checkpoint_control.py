@@ -75,6 +75,7 @@ async def test_parked_driver_reconstructs_receipts_before_stop_without_resume(mo
         return task
 
     monkeypatch.setattr(pi_workflow.workflow, "patched", lambda _: True)
+    monkeypatch.setattr(pi_workflow.workflow, "cancellation_reason", lambda: None)
     monkeypatch.setattr(pi_workflow.workflow, "wait_condition", wait_condition)
     monkeypatch.setattr(pi_workflow.workflow, "start_activity", start_activity)
     if inside_model_action:
@@ -153,6 +154,7 @@ async def test_unpatched_history_keeps_parked_driver_resume_boundary(monkeypatch
         return result
 
     monkeypatch.setattr(pi_workflow.workflow, "patched", lambda _: False)
+    monkeypatch.setattr(pi_workflow.workflow, "cancellation_reason", lambda: None)
     monkeypatch.setattr(pi_workflow.workflow, "wait_condition", wait_condition)
     monkeypatch.setattr(pi_workflow.workflow, "start_activity", start_activity)
     await value._execution_control.set_control_state({"state": "paused", "revision": 1})

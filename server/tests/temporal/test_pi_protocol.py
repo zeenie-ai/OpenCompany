@@ -10,6 +10,7 @@ from services.temporal.pi_protocol import OperationLedger, canonical_digest, can
 def receipt_checkpoint_patch(monkeypatch):
     # Direct coordinator unit calls do not run inside a Temporal history.
     monkeypatch.setattr("services.temporal.pi_workflow.workflow.patched", lambda _: True)
+    monkeypatch.setattr("services.temporal.pi_workflow.workflow.cancellation_reason", lambda: None)
 
 
 def _request(epoch=1, **changes):

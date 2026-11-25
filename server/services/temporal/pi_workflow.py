@@ -19,7 +19,7 @@ from services.llm.protocol import Message, message_to_wire
 from ._exits import is_workflow_bug
 from .agent_workflow import AgentWorkflow, LLM_STEP_HEARTBEAT_TIMEOUT, LLM_STEP_RETRY, llm_attempt_timeout
 from .pi_protocol import DRIVER_QUEUE, INLINE_LIMIT, OperationLedger, canonical_digest, canonical_json, conflict, tool_operation_id
-from .pi_control import PiDescendantExecutionControl, PiLocalExecutionControl
+from .pi_control import PiDescendantExecutionControl, PiLocalExecutionControl, execute_pi_activity, raise_if_pi_cancelled
 
 
 def _expand_legacy_text_messages(messages: list[dict]) -> None:
@@ -155,7 +155,6 @@ class PiCodingAgentWorkflow(AgentWorkflow):
                 result = await super().run(context)
                 if not result.get("success", True):
                     await self._clear_failed_skills(context)
-                return result
             except Exception as exc:
                 if is_workflow_bug(exc):
                     bug = True
@@ -167,7 +166,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
                 await self._clear_failed_skills(context)
                 await self._emit_phase(context["node_id"], context.get("workflow_id"), max(self._pi.turn, 0),
                     max(self._pi.turn + 1, 1), phase="failed", status="error")
-                return {"success": False, "error": "Pi could not safely complete the Coding Agent turn",
+                result = {"success": False, "error": "Pi could not safely complete the Coding Agent turn",
                     "error_type": getattr(cause, "type", None) or "PiProtocolConflict"}
         finally:
             # Cancellation and terminal failure cannot leave a driver process
@@ -177,6 +176,8 @@ class PiCodingAgentWorkflow(AgentWorkflow):
                 await self._stop_driver(cancel=True)
                 self._pi_checkpointing = False
                 self._pi_receipt_checkpointing = False
+        raise_if_pi_cancelled()
+        return result
 
     async def _clear_failed_skills(self, context):
         await workflow.execute_activity("agent.skill.clear", {"workflow_id": context.get("workflow_id"),
@@ -204,6 +205,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
             if result.get("status") == "completed":
                 raise conflict("Pi driver completed before the coordinator accepted its checkpoint")
             self._pi_driver = None
+        raise_if_pi_cancelled()
         self._pi.parked = False
         self._pi_driver_sequence += 1
         self._pi_driver = workflow.start_activity("coding.pi_drive_turn", self._pi_request,
@@ -284,7 +286,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
 
     async def _execute_model_step(self, llm_payload, context, payload, iteration):
         model_id = f"turn:{iteration}:model"
-        step = await workflow.execute_activity("agent.execute_llm_step", args=[llm_payload],
+        step = await execute_pi_activity("agent.execute_llm_step", args=[llm_payload],
             activity_id=f"llm-step-{iteration + 1}", start_to_close_timeout=llm_attempt_timeout(payload),
             heartbeat_timeout=LLM_STEP_HEARTBEAT_TIMEOUT, retry_policy=LLM_STEP_RETRY)
         self._pi_calls = list(step.get("calls") or [])
@@ -411,6 +413,7 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         await self._checkpoint_instance(messages)
 
     async def _before_runtime_rollover(self):
+        raise_if_pi_cancelled()
         if self._pi_driver is not None or self._pi_request or self._pi.operations or self._pi.expected or self._pi_checkpointing:
             raise conflict("Pi Continue-As-New requires a terminal driver and accepted complete round")
         # Task Manager runners return a queued receipt before their child is

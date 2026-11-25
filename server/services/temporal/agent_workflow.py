@@ -88,6 +88,7 @@ from .agent_context_pressure import (
 from .agent_tool_errors import tool_failure_text
 from .workflow import AGENT_WORKFLOW_TYPES
 from .execution_control import ExecutionControl
+from .pi_control import execute_pi_activity
 
 
 # Activity timeouts. LLM step can stream for several minutes on
@@ -137,18 +138,20 @@ async def _execute_plugin_tool_activity(
     on either path. Routing comes from frozen workflow input, never live
     process settings.
     """
+    pi_runtime = uses_pi(context.get("node_type"), context)
+    execute = execute_pi_activity if pi_runtime else workflow.execute_activity
     policy = (tool_info or {}).get("activity_policy")
     if context.get("agent_instance_id"):
         # All plugin activities, including those on the legacy routing path,
         # carry the same authenticated instance and attempt identity.
         tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
-        admission = await workflow.execute_activity("agent.instance.admit", {
+        admission = await execute("agent.instance.admit", {
             "instance_id": context["agent_instance_id"], "run_id": context["agent_run_id"]},
             start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY)
         if not admission["allowed"]:
             return {"success": False, "error_type": "agent_turn_halted", "error": "Agent execution is halted."}
     if (tool_info or {}).get("agent_operation"):
-        result = await workflow.execute_activity(activity_name, args=[tool_payload], activity_id=activity_id,
+        result = await execute(activity_name, args=[tool_payload], activity_id=activity_id,
             start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY,
             cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
         if "waits_for_child" in ((tool_info or {}).get("execution_traits") or ()):
@@ -159,14 +162,14 @@ async def _execute_plugin_tool_activity(
                 if not isinstance(result, dict) or result.get("status") != "pending":
                     break
                 await workflow.sleep(timedelta(seconds=1))
-                result = await workflow.execute_activity(activity_name, args=[tool_payload],
+                result = await execute(activity_name, args=[tool_payload],
                     activity_id=f"{activity_id}-wait-{poll + 1}",
                     start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY,
                     cancellation_type=ActivityCancellationType.WAIT_CANCELLATION_COMPLETED)
         return result
     if (context.get("execution_control_version") == 1 or context.get("native_workspace_version") == 1
             or context.get("browser_runtime_version") == 1 or context.get("browser_routing_version") == 1
-            or uses_pi(context.get("node_type"), context)) and policy:
+            or pi_runtime) and policy:
         options = _frozen_tool_activity_options(policy, context)
         tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
     else:
@@ -177,7 +180,7 @@ async def _execute_plugin_tool_activity(
             if context.get("temporal_worker_pool_enabled") is True:
                 options["task_queue"] = cls.task_queue
             tool_payload = {**tool_payload, **_inherited_scope(context), "user_id": str(context.get("user_id") or "owner")}
-    return await workflow.execute_activity(
+    return await execute(
         activity_name,
         args=[tool_payload],
         activity_id=activity_id,

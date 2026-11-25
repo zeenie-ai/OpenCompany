@@ -1,9 +1,26 @@
 """Versioned one-off control accounting without a synthetic deployment root."""
 
-from .execution_control import ExecutionControl
+import asyncio
 from datetime import timedelta
+
 from temporalio import workflow
+
 from ._retry_policies import DEFAULT_ACTIVITY_RETRY
+from .execution_control import ExecutionControl
+
+
+def raise_if_pi_cancelled() -> None:
+    # A WAIT_CANCELLATION_COMPLETED activity can still return a normal result.
+    # The workflow cancellation request survives that race, including on replay.
+    if workflow.cancellation_reason() is not None and workflow.patched("pi-sticky-workflow-cancellation-v1"):
+        raise asyncio.CancelledError()
+
+
+async def execute_pi_activity(*args, **kwargs):
+    raise_if_pi_cancelled()
+    result = await workflow.execute_activity(*args, **kwargs)
+    raise_if_pi_cancelled()
+    return result
 
 
 class PiDescendantExecutionControl(ExecutionControl):
@@ -12,6 +29,11 @@ class PiDescendantExecutionControl(ExecutionControl):
         self.children = {}
         self._child_handles = {}
         self._control_calls = 0
+
+    async def wait_until_running(self) -> None:
+        raise_if_pi_cancelled()
+        await super().wait_until_running()
+        raise_if_pi_cancelled()
 
     def bind(self, data):
         if not self._bound:

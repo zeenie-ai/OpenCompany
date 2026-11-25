@@ -76,6 +76,37 @@ async def _wait_for_child_receipt_checkpoint(client):
         await asyncio.sleep(0.01)
 
 
+async def _cancel_during_tool(handle):
+    await STARTED.wait()
+    await handle.cancel()
+    tool_schedule = None
+    cancel_requested = False
+    tool_completed = False
+    async for event in handle.fetch_history_events(wait_new_event=True):
+        if event.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+            name = event.activity_task_scheduled_event_attributes.activity_type.name
+            if name in {"node.pi_test_tool.v1", "agent.execute_llm_step"}:
+                assert not cancel_requested, f"Scheduled {name} after workflow cancellation at event {event.event_id}"
+            if name == "node.pi_test_tool.v1":
+                tool_schedule = event.event_id
+        elif event.event_type == EventType.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
+            assert tool_schedule is not None
+            cancel_requested = True
+        elif event.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED:
+            if event.activity_task_cancel_requested_event_attributes.scheduled_event_id == tool_schedule:
+                assert cancel_requested
+                # Simulate a command that exits before its next heartbeat delivers cancellation.
+                RELEASE.set()
+        elif event.event_type == EventType.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+            if event.activity_task_completed_event_attributes.scheduled_event_id == tool_schedule:
+                assert RELEASE.is_set()
+                tool_completed = True
+        elif event.event_type == EventType.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+            assert tool_completed, "The admitted tool must finish successfully after its cancellation request"
+            return
+    raise AssertionError("Pi closed without recording workflow cancellation")
+
+
 def _binding(name, node_type="pi_test_tool", node_id=None):
     return {"name": name, "node_type": node_type, "version": 1, "tool_node_id": node_id or name,
         "parameters": {}, "tool_info": {}, "definition": {"name": name, "description": name,
@@ -290,14 +321,20 @@ async def _scenario(environment, mode, *, actual=False):
     from services.temporal.pi_activities import PiControlActivities, pi_put_blob
     async with Worker(environment.client, task_queue=QUEUE, workflows=workflows,
             activities=[_prepare, _llm, _tool, _task, _broadcast, _store, _clear, pi_put_blob,
-                *PiControlActivities(environment.client).activities()], max_cached_workflows=0), \
+                *PiControlActivities(environment.client).activities()],
+            max_cached_workflows=1 if mode == "stop-cancel-race" else 0), \
             Worker(environment.client, task_queue=DRIVER_QUEUE, activities=[peer],
                 max_concurrent_activities=1):
         handle = await environment.client.start_workflow("PiCodingAgentWorkflow", {"node_id": "agent",
             "node_type": "coding_agent", "pi_harness_version": 1, "mode": mode,
             "pi_local_control_version": 1, "pi_local_control_revision": 0},
             id=f"pi-{mode}-{uuid4().hex}", task_queue=QUEUE)
-        if mode in {"stop", "model-stop", "delegate-stop", "task-wait"}:
+        if mode == "stop-cancel-race":
+            try:
+                await asyncio.wait_for(_cancel_during_tool(handle), 20)
+            finally:
+                RELEASE.set()
+        elif mode in {"stop", "model-stop", "delegate-stop", "task-wait"}:
             checkpoint = None
             try:
                 try:
@@ -358,7 +395,7 @@ async def _scenario(environment, mode, *, actual=False):
             assert stopped["checkpoint"] and stopped["pi_driver_checkpoint"]
             assert COUNTS["llm:agent"] == COUNTS["A"] == COUNTS["B"] == 1
             await handle.execute_update("set_control_state", {"state": "running", "revision": 2})
-        result = await asyncio.wait_for(handle.result(), 25)
+        result = None if mode == "stop-cancel-race" else await asyncio.wait_for(handle.result(), 25)
         histories = []
         child_histories = []
         run_id = handle.first_execution_run_id
@@ -375,7 +412,9 @@ async def _scenario(environment, mode, *, actual=False):
                         child_histories.append(await environment.client.get_workflow_handle(
                             child.workflow_id, run_id=child.run_id).fetch_history())
             assert child_histories, "Replay must include the delegated child's checkpoint history"
-    if mode == "large-overflow":
+    if mode == "stop-cancel-race":
+        assert COUNTS["llm:agent"] == COUNTS["A"] == 1 and COUNTS["B"] == 0
+    elif mode == "large-overflow":
         assert result["success"] is False and result["error_type"] == "AgentContinuationTooLarge", result
         assert COUNTS["clear"] == COUNTS["failed_phase"] == COUNTS["llm:agent"] == 1
         assert COUNTS["A"] == COUNTS["B"] == 1
@@ -464,6 +503,7 @@ async def _main():
                     agent_workflow._AGENT_HISTORY_SOFT_CAP = previous
                 return
             await _scenario(environment, "stop")
+            await _scenario(environment, "stop-cancel-race")
             await _scenario(environment, "delegate")
             for mode in ("model-stop", "mixed", "reject-delegate", "reject-task", "fault-submit", "fault-result", "fault-leaf", "delegate-stop", "exhausted", "task-wait"):
                 await _scenario(environment, mode)
