@@ -879,3 +879,22 @@ that the stdlib still skips that cleanup: when a Python release fixes it,
 that test fails and the guard can go.
 
 **Recovery**: restart the backend to load the guard.
+
+## 38. The Temporal Web UI is a blank page in Chrome 158 and later
+
+**Status**: fixed after 0.3.2 (2026-11-26) by pinning Temporal CLI 1.10.1. 0.3.2 and earlier are affected. Chrome 158 reached the stable channel on 2026-11-17.
+
+**Symptom**: `http://localhost:<TEMPORAL_UI_PORT>` opens to an empty page, and the browser console shows:
+
+```
+Loading the script 'http://localhost:5680/_app/immutable/entry/start.Bw1_UQ8P.js' violates the following Content Security Policy directive: "script-src 'strict-dynamic' 'sha256-JbX+KzwiaNhpTJ/IexfiVyhBZi+EpZ98mo5XPpvzKeU='". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked.
+Uncaught (in promise) TypeError: Failed to fetch dynamically imported module: http://localhost:5680/_app/immutable/entry/start.Bw1_UQ8P.js
+```
+
+**Root cause**: the Web UI inside the dev server (UI 2.54.1 in CLI 1.9.1) sets its policy in a `<meta>` tag: `script-src 'strict-dynamic'` plus the hash of its inline startup script. That script runs, but the modules it loads with `import()` inherit its parser-inserted status, and under `'strict-dynamic'` such a request is allowed only with a nonce, never with a hash. Older Chrome versions loaded the page anyway: the `<link rel="modulepreload">` tags had already put the same modules in the module map, and a module found there was not checked against the policy again. Chromium closed that gap as a CSP bypass (crbug 515948871, first in Chrome 158), so the UI never starts. Temporal changed the policy to `script-src 'self'` (temporalio/ui#4125, #4126) and ships it in CLI 1.10.1, whose UI is 2.56.4.
+
+**Fix**: `server/config/temporal_cli.json` pins CLI 1.10.1 (server 1.32.2). The server moves from 1.32.0 to 1.32.2, a patch release of the same minor, so the next start keeps the Temporal database (RFC-0005 E16); the SQLite schema files are identical in the two releases. The previous CLI's folder (about 200 MB) stays under `packages/temporal/` until a later minor bump resets the database.
+
+**Recovery**: restart OpenCompany after updating. The first start downloads the new CLI (about 40 MB); then reload the UI tab.
+
+**Workaround** (0.3.2 and earlier): the CLI binary under `<DATA_DIR>/packages/temporal/<version>/` still lists and describes workflows, for example `temporal workflow list --address localhost:$TEMPORAL_FRONTEND_GRPC_PORT`.

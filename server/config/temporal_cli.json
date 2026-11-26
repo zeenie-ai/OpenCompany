@@ -1,7 +1,7 @@
 {
   "_comment": "The Temporal CLI pin (services/temporal/_install.py). Asset keys are <os>_<arch> in the CLI release's spellings. Bump the version, server_version and all checksums together from the official checksums.txt. A new server minor starts every install from an empty Temporal database: at the next start, a database the pinned server minor did not create is deleted with every older CLI file (RFC-0005 E16). A patch bump of the same minor keeps the database. dynamic_config is passed to start-dev on every boot (RFC-0006 T17): fairness on and one task-queue partition, and a run gets the TemporalReportedProblems search attribute after 5 failed workflow tasks in a row (the watchdog's stuck-runs count, 1b.38b). The marker records the partition values, and a database created with others starts from new, because partitions can be lowered safely only on a new database.",
-  "version": "1.9.1",
-  "server_version": "1.32.0",
+  "version": "1.10.1",
+  "server_version": "1.32.2",
   "dynamic_config": {
     "matching.enableFairness": true,
     "matching.numTaskqueueReadPartitions": 1,
@@ -10,11 +10,11 @@
   },
   "base": "https://github.com/temporalio/cli/releases/download/v{version}/",
   "assets": {
-    "linux_amd64": { "file": "temporal_cli_1.9.1_linux_amd64.tar.gz", "sha256": "09a0326a51db84d02735e53542b9ebd8c4758daf47482a9ab0abce15844e60d5" },
-    "linux_arm64": { "file": "temporal_cli_1.9.1_linux_arm64.tar.gz", "sha256": "6c57c352d52fc3df34412376fd9ba6f74b7e3ace8e426e6cba8600156d36a145" },
-    "darwin_amd64": { "file": "temporal_cli_1.9.1_darwin_amd64.tar.gz", "sha256": "48cdd6c84c56e27ae8e4d9a47052b89289a9c552dee029b49dd312c6fb72873f" },
-    "darwin_arm64": { "file": "temporal_cli_1.9.1_darwin_arm64.tar.gz", "sha256": "41e0425378fcb4fb5766340b97435e20fe47bbff2d7bf644ec2d51f7662b7c56" },
-    "windows_amd64": { "file": "temporal_cli_1.9.1_windows_amd64.zip", "sha256": "babb65844835045c91fb98930fe10b81de28db80c8c609180473d2c0b18c7589" },
-    "windows_arm64": { "file": "temporal_cli_1.9.1_windows_arm64.zip", "sha256": "709dd23d856020b318676064ea0141adc35eae3716360265481b13e54988e12f" }
+    "linux_amd64": { "file": "temporal_cli_1.10.1_linux_amd64.tar.gz", "sha256": "4c1500e2ce2d4de136e5fe8852d9b7f82eb62f19b6b383b3e0c040519a9d20b1" },
+    "linux_arm64": { "file": "temporal_cli_1.10.1_linux_arm64.tar.gz", "sha256": "2f748e9411b37c9cabb57f1f08e37765388c12b5534432c7aea28b593df9145d" },
+    "darwin_amd64": { "file": "temporal_cli_1.10.1_darwin_amd64.tar.gz", "sha256": "8ec6c513ad2177de4eb15d2cb17a4fe5070e6078afd7f80bdfcc37fae459d3c4" },
+    "darwin_arm64": { "file": "temporal_cli_1.10.1_darwin_arm64.tar.gz", "sha256": "94f7f982b26438e8abbde6000ba471b694be6a2413b31f6162f87a9f9c48c738" },
+    "windows_amd64": { "file": "temporal_cli_1.10.1_windows_amd64.zip", "sha256": "5069cdb76569914305ed7c90e1c8406cd27bcb6c2a822fce201a488c34ab074f" },
+    "windows_arm64": { "file": "temporal_cli_1.10.1_windows_arm64.zip", "sha256": "dcd1964a5544bbd2e3c8036abc273100d4171cf192a55347a87ab525872aea08" }
   }
 }
