@@ -89,6 +89,23 @@ class InspectInput(TaskReadInput):
     limit: int = Field(default=25, ge=1, le=100)
 
 
+class DecisionQuestionInput(Input):
+    question: Text = Field(description="The blocking question that must be answered before this task can continue.")
+    context: Annotated[str, StringConstraints(max_length=10000)] | None = Field(
+        default=None, description="Relevant evidence or choices needed to make the decision.")
+
+
+class DecisionAnswerInput(Input):
+    decision_id: Reference = Field(description="Copy the decision ID from the admitted decision request.")
+    answer: Text = Field(description="The decision or instruction to send to the original requester.")
+
+
+class DecisionEscalateInput(Input):
+    decision_id: Reference = Field(description="Copy the decision ID from the admitted decision request.")
+    note: Annotated[str, StringConstraints(max_length=10000)] | None = Field(
+        default=None, description="Optional context to add when asking the next manager or the owner.")
+
+
 # One validator is used at declaration and dispatch, including transported calls
 # whose Python model class cannot be serialized into Temporal history.
 OPERATIONS: dict[str, tuple[type[Input], str, frozenset[str]]] = {
@@ -97,13 +114,16 @@ OPERATIONS: dict[str, tuple[type[Input], str, frozenset[str]]] = {
     "send_message": (MessageInput, "Send coordination text to an agent in this job. The receipt states whether it is queued or consumed. Use request_changes for task revisions.", frozenset({"mutates_lifecycle"})),
     "list_agents": (EmptyInput, "List this job's agent instances, capabilities and execution states.", frozenset()),
     "get_agent": (AgentInput, "Read one agent's actual state and latest result.", frozenset()),
+    "request_decision": (DecisionQuestionInput, "Ask your immediate manager to resolve a blocking decision for the current task. The task pauses until an answer arrives.", frozenset({"mutates_lifecycle", "requests_decision"})),
+    "answer_decision": (DecisionAnswerInput, "Answer an admitted decision request and return the answer to its immediate requester.", frozenset({"mutates_lifecycle", "starts_child"})),
+    "escalate_decision": (DecisionEscalateInput, "Escalate an admitted blocking decision to your immediate manager, or persist it for the owner when you are the Chat lead. The current task pauses for the answer.", frozenset({"mutates_lifecycle", "starts_child", "escalates_decision"})),
     "wait_for_agents": (WaitInput, "Wait briefly for agent progress, or return pending when this runtime cannot yield capacity. Idle does not mean its task was accepted.", frozenset({"waits_for_child"})),
     "list_tasks": (TaskListInput, "List this job's tasks with current task_ref and allowed review actions.", frozenset()),
     "get_task": (TaskReadInput, "Read a task and its current task_ref before reviewing or modifying it.", frozenset()),
     "inspect_task": (InspectInput, "Inspect bounded task-attempt evidence and execution traces.", frozenset()),
-    "modify_task": (ModifyInput, "Edit queued or blocked work; omitted after preserves its dependencies.", frozenset({"mutates_lifecycle"})),
+    "modify_task": (ModifyInput, "Edit queued or blocked work; omitted after preserves its dependencies.", frozenset({"starts_child", "mutates_lifecycle"})),
     "request_changes": (FeedbackInput, "Append feedback to the original requirements and queue another attempt on the same agent.", frozenset({"starts_child", "mutates_lifecycle"})),
-    "accept_task": (TaskInput, "Accept submitted work after reviewing its result against the instructions.", frozenset({"mutates_lifecycle"})),
+    "accept_task": (TaskInput, "Accept submitted work after reviewing its result against the instructions.", frozenset({"mutates_lifecycle", "starts_child"})),
     "retry_task": (TaskInput, "Retry unresolved work with the same requirements, feedback and agent history.", frozenset({"starts_child", "mutates_lifecycle"})),
     "cancel_task": (CancelInput, "Cancel this work and fence its active attempt. The agent remains reusable.", frozenset({"mutates_lifecycle"})),
     "reassign": (TaskInput, "Transfer this task to a fresh connected teammate instance, retaining its requirements and review feedback.", frozenset({"starts_child", "mutates_lifecycle"})),
@@ -136,15 +156,29 @@ def build_bindings(parameters: dict | None = None, runtime: dict | None = None) 
     if isinstance(templates, dict):
         templates = list(templates.values())
     instance_id = runtime.get("agent_instance_id") or (runtime.get("agent_instance_scope") or {}).get("agent_instance_id")
-    role = runtime.get("role") or (runtime.get("agent_instance_scope") or {}).get("role")
+    role = (runtime.get("role") or runtime.get("agent_instance_role")
+            or (runtime.get("agent_instance_scope") or {}).get("role"))
+    plan = runtime.get("employee_team_plan") or {}
     is_lead = role in {"lead", "team_lead"} if role is not None else bool(templates)
     operations = LEAD_OPERATIONS if is_lead else PEER_OPERATIONS
     if role == "manager":
         operations = MANAGER_OPERATIONS
     if role == "reviewer":
         operations = REVIEWER_OPERATIONS
+    if plan.get("delegation_runtime_version") == 1 and runtime.get("managed_delegation_active") is True:
+        # New admitted managed teams park at the committed delegation
+        # boundary. Keep the poll tool in the registry for old generations,
+        # but do not expose it to models running the event-driven protocol.
+        operations = tuple(operation for operation in operations if operation != "wait_for_agents")
     if role == "talk" or not instance_id:
         operations = ("submit_job", "get_job_status")
+        if (instance_id and role == "talk" and plan.get("delegation_runtime_version") == 1
+                and runtime.get("managed_delegation_active") is True):
+            # A taskless Chat turn can receive an escalated question and relay
+            # the owner's answer. It cannot request a decision for a task.
+            instance_role = runtime.get("agent_instance_role")
+            if instance_role == "lead":
+                operations = (*operations, "answer_decision", "escalate_decision")
     bindings = []
 
     def add(operation: str, name: str | None = None, template: dict | None = None):
@@ -157,6 +191,21 @@ def build_bindings(parameters: dict | None = None, runtime: dict | None = None) 
             parameters={"_agent_operation": operation, **({"_agent_template": template} if template else {})},
         ))
 
+    if (instance_id and plan.get("delegation_runtime_version") == 1
+            and runtime.get("managed_delegation_active") is True):
+        template = (runtime.get("runtime_context") or {}).get("node_type") or runtime.get("node_type")
+        checkpoint_capable = template not in {"claude_code_agent", "codex_agent", "rlm_agent", "gemini_cli_agent"}
+        if checkpoint_capable and role not in {"lead", "talk", "reviewer"}:
+            if "request_decision" not in operations:
+                operations = (*operations, "request_decision")
+        if checkpoint_capable and role in {"manager", "lead", "reviewer"}:
+            for operation in ("answer_decision", "escalate_decision"):
+                if operation not in operations:
+                    operations = (*operations, operation)
+        if checkpoint_capable and role == "talk" and runtime.get("agent_instance_role") == "lead":
+            for operation in ("answer_decision", "escalate_decision"):
+                if operation not in operations:
+                    operations = (*operations, operation)
     for operation in operations:
         add(operation)
     if instance_id and (is_lead or role == "manager"):

@@ -562,7 +562,7 @@ def build_team(built: Any, inputs: Any, *, legacy_conversion: bool = False) -> A
                        "lead_skill_node_id": roles["lead_skills"], "talk_skill_node_id": roles["talk_skills"],
                        "task_trigger_node_id": roles["task_trigger"], "members": members,
                        "model": model, "requires": ["temporal", "agent_workflow"], "delivery_node_ids": delivery_ids,
-                       "talk_delivery_node_ids": [final_reply]}
+                       "talk_delivery_node_ids": [final_reply], "delegation_runtime_version": 1}
     if not manual:
         built.team_plan.update(intake_trigger_node_id=roles["trigger"], app_intake_prompt=original_parameters.get("prompt", ""))
         if inputs.request.wake_rule and built.trigger.get("kind") == "app_event":

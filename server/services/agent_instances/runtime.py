@@ -43,6 +43,13 @@ async def wake_instance(instance_id: str, *, client=None, context=None, database
         "workflow_id", "generation", "execution_id", "root_execution_id", "execution_control_version",
         "controller_workflow_id", "execution_control_state", "execution_control_revision",
         "execution_control_producers_held") if key in admitted}
+    plan = admitted.get("employee_team_plan") or {}
+    if plan.get("delegation_runtime_version") == 1:
+        # This admitted behavior version is frozen in the instance config and
+        # carried on the Session Workflow input. Its command branch therefore
+        # stays stable across idle wakes and old Session histories keep the
+        # input shape and behavior they were admitted with.
+        control["delegation_runtime_version"] = 1
     from services.temporal.trigger_listener_workflow import event_workflow_search_attributes
     search_attributes = event_workflow_search_attributes(instance.get("workflow_id"))
     return await client.start_workflow(

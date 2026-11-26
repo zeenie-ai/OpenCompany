@@ -52,8 +52,8 @@ function StateMark({ state }: { state: string }) {
  * step with who has it, in a list that scrolls. Never a card that crowds the
  * conversation. A lost connection or a failed refresh says so under the pill.
  */
-function WorkPanel({ progress, connected, failed, refresh }: {
-  progress: WorkProgress; connected: boolean; failed: boolean; refresh: () => void;
+function WorkPanel({ progress, connected, failed, refresh, liveMessage }: {
+  progress: WorkProgress; connected: boolean; failed: boolean; refresh: () => void; liveMessage?: string;
 }) {
   const [now, setNow] = useState(Date.now);
   const [open, setOpen] = useState(false);
@@ -82,7 +82,7 @@ function WorkPanel({ progress, connected, failed, refresh }: {
         >
           <CollapsibleTrigger className={cn('flex max-w-full items-center gap-2 pr-2.5 pl-3 text-left text-xs font-medium text-fg-default hover:bg-bg-hover focus-visible:-outline-offset-2', open ? 'min-h-8.5 py-1' : 'h-8.5')}>
             <StateMark state={progress.state} />
-            <span role="status" className={cn('min-w-0', open ? 'break-words' : 'truncate')}>{progress.message}</span>
+            <span role="status" className={cn('min-w-0', open ? 'break-words' : 'truncate')}>{liveMessage || progress.message}</span>
             {/* Out of the button's name, which would otherwise change every second. */}
             {meta && <span aria-hidden className="shrink-0 text-fg-muted tabular-nums">{meta}</span>}
             <ChevronDown
@@ -126,7 +126,7 @@ function WorkPanel({ progress, connected, failed, refresh }: {
  *  the employee's own work (team tasks, scheduled work, what waits for the
  *  owner), while no reply is under way. */
 export function EmployeeWork({ employee }: { employee: EmployeeSummary }) {
-  const { isReady } = useWebSocketActions();
+  const { isReady, addEventListener } = useWebSocketActions();
   const detail = useEmployeeDetailQuery(employee.workflow_id, { live: true });
   const lane = useLaneRun(employee.workflow_id);
   const saved = detail.data?.work_progress;
@@ -134,12 +134,39 @@ export function EmployeeWork({ employee }: { employee: EmployeeSummary }) {
   // LiveWork); the employee's own snapshot describes it too.
   const progress = lane ? null : saved ?? null;
   const job = detail.data ? detail.data.job_progress : employee.job_progress;
-  const decision = job && ['delivery_needs_review', 'review_blocked'].includes(job.state);
+  const [liveEvent, setLiveEvent] = useState<Record<string, unknown> | null>(null);
+  useEffect(() => {
+    setLiveEvent(null);
+  }, [job?.request_id]);
+  useEffect(() => addEventListener('employee_work_progress', (data) => {
+    if (!data || typeof data !== 'object' || data.workflow_id !== employee.workflow_id
+        || data.job_id !== job?.request_id) return;
+    if (data.milestone === 'submitted' || data.milestone === 'failed') {
+      setLiveEvent((current) => current?.agent_run_id === data.agent_run_id ? null : current);
+      return;
+    }
+    const nextAt = typeof data.timestamp === 'string' ? Date.parse(data.timestamp) : NaN;
+    setLiveEvent((current) => {
+      const currentAt = typeof current?.timestamp === 'string' ? Date.parse(current.timestamp) : NaN;
+      return Number.isFinite(nextAt) && Number.isFinite(currentAt) && nextAt < currentAt ? current : data;
+    });
+  }), [addEventListener, employee.workflow_id, job?.request_id]);
+  const liveMessage = (() => {
+    if (!isReady || !liveEvent) return undefined;
+    const milestone = liveEvent.milestone;
+    if (milestone === 'waiting') return typeof liveEvent.message === 'string' && liveEvent.message
+      ? `Waiting for ${liveEvent.message}.` : 'Waiting for a teammate.';
+    if (milestone === 'decision_requested') return 'A teammate needs a decision before continuing.';
+    if (milestone === 'resumed') return 'The team resumed work.';
+    if (milestone === 'running') return 'The team is working on your request.';
+    return undefined;
+  })();
+  const decision = job && ['delivery_needs_review', 'review_blocked', 'waiting_for_decision'].includes(job.state);
   const sameStatus = progress?.request_id === job?.request_id && progress?.message === job?.message;
   const approval = job?.state === 'waiting_for_approval' && !sameStatus && (!progress?.request_id || progress.request_id === job.request_id);
   const fallback = !lane && (!saved || saved.state === 'unavailable');
   return <>
-    {progress && <WorkPanel progress={progress} connected={isReady} failed={detail.isError || progress.state === 'unavailable'} refresh={() => void detail.refetch()} />}
+    {progress && <WorkPanel progress={progress} connected={isReady} failed={detail.isError || progress.state === 'unavailable'} liveMessage={liveMessage} refresh={() => void detail.refetch()} />}
     {!saved && !lane && detail.isError && <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
       <span>Work progress is unavailable.</span>
       <Button variant="quiet" size="sm" onClick={() => void detail.refetch()} className={REFRESH_BUTTON}>Refresh progress</Button>

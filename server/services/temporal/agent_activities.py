@@ -1124,6 +1124,90 @@ async def broadcast_agent_progress(payload: Dict[str, Any]) -> Dict[str, Any]:
     return {"emitted": True}
 
 
+@activity.defn(name="agent.progress.stream_forward")
+async def forward_employee_progress_stream(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Forward bounded Workflow Stream milestones to the existing status socket.
+
+    The stream is an observer channel for an active managed turn. Assignment,
+    review and completion remain in the database inbox and task receipts. A
+    disconnected broadcaster or an unavailable stream must never change the
+    work outcome.
+    """
+    from temporalio.contrib.workflow_streams import WorkflowStreamClient
+    from services.status_broadcaster import get_status_broadcaster
+
+    forwarded = 0
+    heartbeat_task = cancel_task = stream_task = None
+    try:
+        broadcaster = get_status_broadcaster()
+        client = WorkflowStreamClient.from_within_activity()
+        topic = client.topic("employee_progress", type=dict)
+        async def consume() -> None:
+            nonlocal forwarded
+            async for item in topic.subscribe():
+                event = item.data
+                if not isinstance(event, dict):
+                    continue
+                if any(payload.get(key) and event.get(key) != payload[key]
+                       for key in ("workflow_id", "team_id", "job_id", "agent_instance_id", "agent_run_id")):
+                    continue
+                # Only forward the small lifecycle contract. Never relay arbitrary
+                # stream values, which could contain prompts, results or tool data.
+                milestone = event.get("milestone")
+                if milestone not in {"running", "waiting", "decision_requested", "resumed", "submitted", "failed"}:
+                    continue
+                bounded = {
+                    key: str(event[key])[:255]
+                    for key in ("workflow_id", "team_id", "job_id", "agent_instance_id", "agent_run_id", "node_id", "task_id")
+                    if isinstance(event.get(key), str) and event[key]
+                }
+                attempt = event.get("attempt")
+                if isinstance(attempt, int) and not isinstance(attempt, bool) and attempt >= 0:
+                    bounded["attempt"] = attempt
+                bounded["milestone"] = milestone
+                if isinstance(item.offset, int) and item.offset >= 0:
+                    bounded["stream_offset"] = item.offset
+                    if bounded.get("agent_run_id"):
+                        bounded["event_id"] = f"{bounded['agent_run_id']}:{item.offset}"
+                message = event.get("message")
+                if isinstance(message, str) and message.strip():
+                    bounded["message"] = message.strip()[:180]
+                timestamp = event.get("timestamp")
+                if isinstance(timestamp, str):
+                    bounded["timestamp"] = timestamp[:40]
+                await broadcaster.broadcast_employee_work_progress(bounded)
+                forwarded += 1
+                activity.heartbeat({"forwarded": forwarded, "milestone": milestone})
+                if milestone in {"submitted", "failed"}:
+                    break
+
+        async def heartbeat_until_cancelled() -> None:
+            while True:
+                await asyncio.sleep(1)
+                activity.heartbeat({"forwarded": forwarded})
+
+        stream_task = asyncio.create_task(consume())
+        heartbeat_task = asyncio.create_task(heartbeat_until_cancelled())
+        cancel_task = asyncio.create_task(activity.wait_for_cancelled())
+        done, _ = await asyncio.wait((stream_task, cancel_task), return_when=asyncio.FIRST_COMPLETED)
+        if cancel_task in done:
+            stream_task.cancel()
+            raise asyncio.CancelledError()
+        await stream_task
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - observer failures are not task failures
+        logger.debug("Employee progress stream forwarding ended", extra={"error": str(exc)[:200]})
+    finally:
+        tasks = [task for task in (heartbeat_task, cancel_task, stream_task) if task is not None]
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+    return {"forwarded": forwarded}
+
+
 @activity.defn(name="agent.store_output")
 async def store_agent_output(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Persist the agent's final ``result`` dict via the existing
@@ -1864,6 +1948,12 @@ async def prepare_agent_payload(context: Dict[str, Any]) -> Dict[str, Any]:
         system_message += ("\nFor work the current team can perform, call submit_job(instructions). The runtime handles the job and returns its reviewed result here. "
                            "Use get_job_status before reporting progress or retrying a job. Queued does not mean started or completed. "
                            "If the job failed, report its failure instead of telling the owner to keep waiting. Keep this conversation with the owner.")
+    elif hierarchical and employee_plan.get("delegation_runtime_version") == 1:
+        # New admitted team members use their configured node instructions,
+        # connected skill and specialized-agent prompt as authored. Their
+        # permissions and handoff behavior come from the admitted Task Manager
+        # bindings and durable inbox, not an appended orchestration prompt.
+        pass
     elif hierarchical and role in {"reviewer", "manager"}:
         if role == "reviewer":
             system_message += ("\nYou are reviewing the Orchestrator's existing assignment for the original request. "
@@ -3001,6 +3091,7 @@ def collect_agent_activities() -> List[Any]:
         prepare_agent_payload,
         coding_workspace_tool,
         broadcast_agent_progress,
+        forward_employee_progress_stream,
         store_agent_output,
         refresh_agent_tools,
         invoke_agent_skill,

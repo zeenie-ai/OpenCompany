@@ -12,6 +12,7 @@ from typing import Any
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.contrib.workflow_streams import WorkflowStreamState
 from temporalio.workflow import ActivityCancellationType
 
 from services.llm.protocol import Message, message_to_wire
@@ -45,8 +46,8 @@ class PiCodingAgentWorkflow(AgentWorkflow):
     _pi_runtime_enabled = True
 
     @workflow.init
-    def __init__(self, context: dict | None = None) -> None:
-        super().__init__(context)
+    def __init__(self, context: dict | None = None, stream_state: WorkflowStreamState | None = None) -> None:
+        super().__init__(context, stream_state)
         if context is not None:
             self._execution_control = (PiDescendantExecutionControl() if context.get("execution_control_version") == 1
                 else PiLocalExecutionControl())
@@ -145,14 +146,14 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         return self._pi.status(request["id"], epoch)
 
     @workflow.run
-    async def run(self, context: dict | None = None) -> dict:
+    async def run(self, context: dict | None = None, stream_state: WorkflowStreamState | None = None) -> dict:
         if not context or context.get("pi_harness_version") != 1 or context.get("node_type") != "coding_agent":
             raise conflict("Pi workflow requires an admitted Coding Agent runtime marker")
         self._pi_context = context
         bug = False
         try:
             try:
-                result = await super().run(context)
+                result = await super().run(context, stream_state)
                 if not result.get("success", True):
                     await self._clear_failed_skills(context)
             except Exception as exc:
@@ -312,7 +313,8 @@ class PiCodingAgentWorkflow(AgentWorkflow):
         bindings = {entry["name"]: entry for entry in tools}
         # These native branches start an independent bounded child batch, or
         # await durable tasks. Park the parent before children need driver slots.
-        self._pi_detached = any(bool(set((bindings.get(call.get("name")) or {}).get("execution_traits") or ()) & {"starts_child", "waits_for_child"}) or str(call.get("name") or "").startswith("delegate_to_") or
+        self._pi_detached = any(bool(set((bindings.get(call.get("name")) or {}).get("execution_traits") or ()) & {
+            "starts_child", "waits_for_child", "requests_decision", "escalates_decision"}) or str(call.get("name") or "").startswith("delegate_to_") or
             (bindings.get(call.get("name")) or {}).get("node_type") == "taskManager" for call in calls)
         if self._pi_detached:
             await self._stop_driver()

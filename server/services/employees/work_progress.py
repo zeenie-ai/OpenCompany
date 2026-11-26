@@ -233,7 +233,7 @@ async def work_progress(database: Any, workflow: Any, *, control: Any = None,
         steps.insert(0, _step("browser", "Waiting for your help in the browser", "Employee", "waiting", node_id=browser_request.get("node_id")))
     job_message = None
     if job and job_status and job_status.get("request_id") == job.id and job_status.get("state") in {
-        "failed", "cancelled", "waiting_for_approval", "delivery_needs_review", "review_blocked"
+        "failed", "cancelled", "waiting_for_approval", "delivery_needs_review", "review_blocked", "waiting_for_decision"
     }:
         state = _state(job_status["state"]) if job_status["state"] in {"failed", "cancelled"} else "waiting"
         job_message = job_status.get("message")

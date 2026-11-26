@@ -482,6 +482,14 @@ class StatusBroadcaster:
             }
         )
 
+    async def broadcast_employee_work_progress(self, data: Dict[str, Any]) -> None:
+        """Forward one bounded live milestone from a managed agent turn.
+
+        This is an ephemeral observer event. The employee progress query
+        remains the reconnect and parked-turn source of truth.
+        """
+        await self.broadcast({"type": "employee_work_progress", "data": data})
+
     async def broadcast_agent_capability(
         self,
         agent_node_id: str,

@@ -31,8 +31,10 @@ CHAIN_TURNS = 8
 MAX_BATCH_MESSAGES = 16
 MAX_BATCH_BYTES = 32768
 RESULT_PREVIEW_CHARS = 4000
+MAX_OWNER_DECISIONS = 32
+MAX_WAITING_TASKS = 512
 TERMINAL_DELIVERY = {"consumed", "cancelled", "recipient_closed"}
-MANAGER_OPERATIONS = {"spawn", "assign_task", "modify_task", "request_changes", "accept_task", "retry_task", "cancel_task", "reassign"}
+MANAGER_OPERATIONS = {"spawn", "assign_task", "modify_task", "request_changes", "accept_task", "retry_task", "cancel_task", "reassign", "answer_decision", "escalate_decision"}
 
 
 class InstanceError(ValueError):
@@ -481,8 +483,11 @@ class AgentInstanceService:
             instance = await self._instance(session, instance_id)
             delivery = await self._enqueue(session, instance, identity=_id("delivery_", instance_id, request_id),
                                           sender_id=None, kind=kind, content=content, payload=payload)
+            parked = await self._parked_wait(session, instance)
+            eligible = not parked or await self._matches_parked_delivery(session, instance, parked, delivery)
+            wake = [instance_id] if eligible else []
             await session.commit()
-            return {"delivery": delivery.model_dump(mode="json"), "instance_wake": [instance_id]}
+            return {"delivery": delivery.model_dump(mode="json"), "instance_wake": wake}
 
     async def _attempt(self, session, task: TeamTask, instance: AgentInstance) -> TeamTaskAttempt:
         snapshot = {"instructions": (task.acceptance_criteria or {}).get("instructions", task.mission), "context": deepcopy(task.context or {}),
@@ -626,6 +631,99 @@ class AgentInstanceService:
             AgentRun.attempt == task.current_attempt)
         return (await session.execute(query)).scalars().all()
 
+    async def _open_child_ids(self, session, task: TeamTask | None) -> list[str]:
+        if task is None:
+            return []
+        children = await self._children_of_attempt(session, task)
+        open_ids = sorted(child.id for child in children if child.status not in {"accepted", "cancelled"})
+        if len(open_ids) > MAX_WAITING_TASKS:
+            raise InstanceError("too_many_waiting_tasks", "This task has more open child assignments than one turn can track.")
+        return open_ids
+
+    @staticmethod
+    def _owner_decision_matches(record: dict, decision_id: str, instance: AgentInstance,
+                                job: EmployeeJob, task: TeamTask | None,
+                                statuses: set[str]) -> bool:
+        task_id, attempt = (task.id, task.current_attempt) if task else (None, None)
+        return bool(
+            isinstance(record, dict)
+            and record.get("decision_id") == decision_id
+            and record.get("status") in statuses
+            and instance.role == "lead"
+            and record.get("instance_id") == instance.id
+            and record.get("job_id") == job.id
+            and record.get("workflow_id") == job.workflow_id
+            and record.get("team_id") == job.team_id
+            and int(record.get("generation") or 0) == instance.generation
+            and record.get("task_id") == task_id
+            and record.get("attempt") == attempt
+        )
+
+    @staticmethod
+    def _pending_owner_decision_ids(job: EmployeeJob, actor: AgentInstance,
+                                    task: TeamTask | None) -> list[str]:
+        """Keep other owner decisions for this Chat task attempt in the wait set.
+
+        Chat may receive several blocking questions from the same outer
+        Orchestrator attempt. Answering one must not strand the others on an
+        older, already parked Chat run.
+        """
+        records = (job.delivery or {}).get("owner_decisions") or {}
+        if not isinstance(records, dict):
+            return []
+        task_id, attempt = (task.id, task.current_attempt) if task else (None, None)
+        return sorted(str(identity) for identity, record in records.items()
+            if isinstance(record, dict) and record.get("status") == "pending"
+            and record.get("instance_id") == actor.id and record.get("job_id") == job.id
+            and record.get("workflow_id") == job.workflow_id and record.get("team_id") == job.team_id
+            and int(record.get("generation") or 0) == actor.generation
+            and record.get("task_id") == task_id and record.get("attempt") == attempt)
+
+    async def _pending_source_decision_ids(self, session, actor: AgentInstance,
+                                           task: TeamTask | None) -> list[str]:
+        """Return this task attempt's unanswered requests to its assigner.
+
+        A resumed turn may use a new AgentRun while the TeamTask attempt stays
+        the same. The task attempt and source instance therefore own the
+        decision; the original run remains evidence of where it was asked.
+        """
+        if task is None:
+            return []
+        rows = (await session.execute(select(AgentDelivery).where(
+            AgentDelivery.team_id == actor.team_id,
+            AgentDelivery.generation == actor.generation,
+            AgentDelivery.kind == "decision_request"))).scalars().all()
+        pending = []
+        for row in rows:
+            payload = row.payload or {}
+            decision_id = payload.get("decision_id")
+            if (not decision_id
+                    or payload.get("decision_state") not in {"pending", "escalated"}
+                    or payload.get("source_instance_id") != actor.id
+                    or payload.get("source_task_id") != task.id
+                    or payload.get("source_attempt") != task.current_attempt):
+                continue
+            source_run = await session.get(AgentRun, str(payload.get("source_run_id") or ""))
+            if (source_run is None or source_run.instance_id != actor.id
+                    or source_run.task_id != task.id or source_run.attempt != task.current_attempt
+                    or source_run.status not in {"running", "parked", "completed"}):
+                continue
+            if source_run.status == "running" and actor.active_run_id != source_run.id:
+                continue
+            pending.append(str(decision_id))
+        return sorted(set(pending))
+
+    async def _waiting_after_task_change(self, session, scope: dict, task: TeamTask) -> list[str]:
+        run = await session.get(AgentRun, str(scope.get("agent_run_id") or ""))
+        parent_task = await session.get(TeamTask, run.task_id) if run and run.task_id else None
+        if parent_task:
+            return await self._open_child_ids(session, parent_task)
+        actor = await session.get(AgentInstance, str(scope.get("agent_instance_id") or ""))
+        if (actor and actor.role == "lead" and task.parent_agent_id == actor.template_node_id
+                and task.team_id == actor.team_id and task.status not in {"accepted", "cancelled"}):
+            return [task.id]
+        return []
+
     async def _cancel_branch(self, session, parent, stops):
         """Fence all still-open work induced by the invalidated parent attempt."""
         for task in await self._children_of_attempt(session, parent):
@@ -680,6 +778,325 @@ class AgentInstanceService:
             if member.status != "offline":
                 member.status = "working" if active else "idle"
 
+    @staticmethod
+    def _vnext_plan(job: EmployeeJob | None) -> dict:
+        plan = (job.source.get("team_plan") or {}) if job else {}
+        if plan.get("version") != 3 or plan.get("delegation_runtime_version") != 1:
+            raise InstanceError("invalid_operation", "Decision operations require the admitted event-driven team recipe.")
+        return plan
+
+    async def _route_to_assigner(self, session, job, plan, task: TeamTask) -> tuple[AgentInstance, AgentRun, TeamTask | None]:
+        """Resolve the exact immediate assigner captured by this task."""
+        generation = int(job.source.get("generation") or 0)
+        parent_task = None
+        if task.assigning_run_id:
+            parent_run = await session.get(AgentRun, task.assigning_run_id)
+            if parent_run is None:
+                raise InstanceError("decision_route_missing")
+            parent = await self._instance(session, parent_run.instance_id, {
+                "workflow_id": task.workflow_id or job.workflow_id, "generation": generation,
+                "team_id": job.team_id, "job_id": job.id})
+            # The fixed Chat -> Orchestrator assignment is created by a
+            # taskless admission turn that completes immediately. Later Chat
+            # reviews use a new taskless run, so route a blocking question to
+            # that active or parked review run while retaining the original
+            # assigning run as the durable relationship.
+            if (parent.role == "lead" and task.parent_agent_id == job.lead_node_id
+                    and task.assigned_to == plan.get("orchestrator_node_id")
+                    and task.assigned_instance_id):
+                current = await session.get(AgentRun, parent.active_run_id) if parent.active_run_id else None
+                if current and current.instance_id == parent.id and current.task_id is None and current.status == "running":
+                    parent_run = current
+                elif parent.active_run_id is None:
+                    parked_runs = (await session.execute(select(AgentRun).where(
+                        AgentRun.instance_id == parent.id, AgentRun.status == "parked", AgentRun.task_id.is_(None))
+                        .order_by(AgentRun.created_at.desc(), AgentRun.id.desc()))).scalars().all()
+                    waiting_run = next((candidate for candidate in parked_runs
+                        if task.id in self._waiting_ids(candidate)), None)
+                    if waiting_run is not None:
+                        parent_run = waiting_run
+        else:
+            # The fixed intake assignment is created while Chat completes its
+            # taskless admission turn; older admitted rows may not record that
+            # run on the TeamTask. Resolve only the one exact outer assignment
+            # and the matching lead instance/run from the same job.
+            assignee = await session.get(AgentInstance, task.assigned_instance_id) if task.assigned_instance_id else None
+            if (task.parent_agent_id != job.lead_node_id or task.team_id != job.team_id
+                    or task.assigned_to != plan.get("orchestrator_node_id")
+                    or assignee is None or assignee.job_id != job.id or assignee.generation != generation
+                    or assignee.template_node_id != plan.get("orchestrator_node_id")):
+                raise InstanceError("decision_route_missing", "This task has no recorded immediate assigning run.")
+            leads = (await session.execute(select(AgentInstance).where(
+                AgentInstance.job_id == job.id, AgentInstance.team_id == job.team_id,
+                AgentInstance.generation == generation, AgentInstance.role == "lead",
+                AgentInstance.template_node_id == job.lead_node_id))).scalars().all()
+            if len(leads) != 1:
+                raise InstanceError("decision_route_missing", "The admitted Chat lead is missing or ambiguous.")
+            parent = leads[0]
+            parent_run = await session.get(AgentRun, parent.active_run_id) if parent.active_run_id else None
+            if parent_run is None:
+                parked_runs = (await session.execute(select(AgentRun).where(
+                    AgentRun.instance_id == parent.id, AgentRun.status == "parked", AgentRun.task_id.is_(None))
+                    .order_by(AgentRun.created_at.desc(), AgentRun.id.desc()))).scalars().all()
+                parent_run = next((candidate for candidate in parked_runs
+                    if task.id in self._waiting_ids(candidate)), None)
+            if parent_run is None:
+                completed_runs = (await session.execute(select(AgentRun).where(
+                    AgentRun.instance_id == parent.id, AgentRun.status == "completed", AgentRun.task_id.is_(None))
+                    .order_by(AgentRun.created_at.desc(), AgentRun.id.desc()).limit(20))).scalars().all()
+                parent_run = next((candidate for candidate in completed_runs
+                    if (candidate.result or {}).get("task_id") == task.id
+                    and (candidate.result or {}).get("status") == "queued"), None)
+            if parent_run is None:
+                raise InstanceError("decision_route_missing", "The taskless Chat lead has no matching admitted run.")
+        if parent.template_node_id != task.parent_agent_id or parent.team_id != task.team_id:
+            raise InstanceError("decision_route_missing", "The assigning run no longer matches this task's manager.")
+        if parent_run.task_id:
+            parent_task = await session.get(TeamTask, parent_run.task_id)
+            if (parent_run.status not in {"running", "parked", "completed"} or parent_run.attempt is None
+                    or parent_task is None or parent_task.current_attempt != parent_run.attempt
+                    or parent_task.assigned_instance_id != parent.id or parent_task.status != "running"):
+                raise InstanceError("stale_decision", "The immediate manager's task attempt is no longer active.")
+            if parent_task.assigned_run_id != parent_run.id:
+                current = await session.get(AgentRun, parent_task.assigned_run_id) if parent_task.assigned_run_id else None
+                if (current is None or current.instance_id != parent.id
+                        or current.task_id != parent_task.id or current.attempt != parent_task.current_attempt):
+                    raise InstanceError("stale_decision", "The immediate manager has moved to another task attempt.")
+                if current.status == "running" and parent.active_run_id == current.id:
+                    parent_run = current
+                elif (current.status == "parked" and parent.active_run_id is None
+                        and task.id in self._waiting_ids(current)):
+                    parent_run = current
+                elif current.status not in {"running", "parked"}:
+                    raise InstanceError("stale_decision", "The immediate manager has moved to another task attempt.")
+            if parent_run.status == "running" and parent.active_run_id != parent_run.id:
+                raise InstanceError("stale_decision", "The immediate manager's active turn has changed.")
+            if parent_run.status == "parked" and (parent.active_run_id is not None
+                    or task.id not in self._waiting_ids(parent_run)):
+                raise InstanceError("stale_decision", "The immediate manager is no longer waiting on this child attempt.")
+        else:
+            # The fixed Chat -> Orchestrator intake run is completed once it
+            # creates the outer task. It remains the authoritative parent for
+            # a blocking question from that outer task.
+            outer = (parent.role == "lead" and task.parent_agent_id == job.lead_node_id
+                     and task.assigned_to == plan.get("orchestrator_node_id")
+                     and task.assigned_instance_id is not None
+                     and (await self._instance(session, task.assigned_instance_id)).template_node_id == plan.get("orchestrator_node_id"))
+            if not outer or parent_run.status not in {"running", "parked", "completed"}:
+                raise InstanceError("stale_decision", "The taskless parent is not the admitted Chat lead for this outer assignment.")
+        return parent, parent_run, parent_task
+
+    async def _decision_request_for(self, session, actor: AgentInstance, decision_id: str) -> AgentDelivery:
+        rows = (await session.execute(select(AgentDelivery).where(
+            AgentDelivery.recipient_id == actor.id, AgentDelivery.kind == "decision_request")
+            .order_by(AgentDelivery.created_at.desc(), AgentDelivery.sequence.desc()))).scalars().all()
+        row = next((item for item in rows if (item.payload or {}).get("decision_id") == decision_id), None)
+        if row is None or row.state not in {"admitted", "consumed"} or not row.run_id:
+            raise InstanceError("decision_not_admitted", "Use the decision ID from a request delivered to this manager.")
+        admitted_run = await session.get(AgentRun, row.run_id)
+        payload = row.payload or {}
+        if (admitted_run is None or admitted_run.instance_id != actor.id
+                or (admitted_run.task_id, admitted_run.attempt) !=
+                   (payload.get("response_task_id"), payload.get("response_attempt"))):
+            raise InstanceError("stale_decision", "The decision request belongs to a different manager task attempt.")
+        return row
+
+    async def _validate_decision_turn(self, session, actor: AgentInstance, run: AgentRun,
+                                      request: AgentDelivery) -> tuple[TeamTask | None, dict]:
+        payload = request.payload or {}
+        response_task_id, response_attempt = payload.get("response_task_id"), payload.get("response_attempt")
+        if (payload.get("response_instance_id") != actor.id
+                or (run.task_id, run.attempt) != (response_task_id, response_attempt)):
+            raise InstanceError("stale_decision", "This decision is not addressed to the current task attempt.")
+        task = None
+        if response_task_id:
+            task = await session.get(TeamTask, response_task_id)
+            if (task is None or task.current_attempt != response_attempt or task.assigned_instance_id != actor.id
+                    or task.assigned_run_id != run.id or task.status != "running"):
+                raise InstanceError("stale_decision", "The manager's task attempt is no longer active.")
+        elif actor.role != "lead" or run.task_id is not None:
+            raise InstanceError("stale_decision", "Only the taskless Chat lead can resolve an owner decision.")
+        state = payload.get("decision_state", "pending")
+        if state == "answered":
+            raise InstanceError("decision_already_answered")
+        if state == "escalated" and not payload.get("upstream_answer_delivery_id"):
+            raise InstanceError("decision_already_escalated", "This decision is waiting for its parent or the owner.")
+        return task, payload
+
+    async def _decision_source(self, session, scope, payload: dict) -> tuple[AgentInstance, TeamTask, AgentRun]:
+        source_id, task_id = payload.get("source_instance_id"), payload.get("source_task_id")
+        source = await self._instance(session, str(source_id or ""), scope)
+        task = await session.get(TeamTask, str(task_id or ""))
+        if (task is None or task.team_id != source.team_id or task.current_attempt != payload.get("source_attempt")
+                or task.assigned_instance_id != source.id or task.status != "running"):
+            raise InstanceError("stale_decision", "The requesting task attempt has ended or changed.")
+        source_run = await session.get(AgentRun, str(payload.get("source_run_id") or ""))
+        if (source_run is None or source_run.instance_id != source.id or source_run.task_id != task.id
+                or source_run.attempt != task.current_attempt
+                or source_run.status not in {"running", "parked", "completed"}):
+            raise InstanceError("stale_decision", "The requesting execution is no longer available.")
+        if source_run.status == "running" and source.active_run_id != source_run.id:
+            raise InstanceError("stale_decision", "The requesting execution has been fenced.")
+        if source_run.status in {"parked", "completed"} and source.active_run_id is not None:
+            # A same-attempt resumed turn can already be draining inbox work.
+            active = await session.get(AgentRun, source.active_run_id)
+            if not active or active.task_id != task.id or active.attempt != task.current_attempt:
+                raise InstanceError("stale_decision", "The requesting execution has moved to another task attempt.")
+        return source, task, source_run
+
+    async def _request_decision(self, session, scope, actor, run, job, plan, args, key) -> dict:
+        node_type = (actor.config.get("template") or {}).get("node_type")
+        if node_type in {"claude_code_agent", "codex_agent", "rlm_agent", "gemini_cli_agent"}:
+            raise InstanceError("unsupported_decision", "This worker cannot checkpoint for a mid-turn decision.")
+        task = await session.get(TeamTask, run.task_id) if run.task_id else None
+        if (task is None or task.current_attempt != run.attempt or task.assigned_instance_id != actor.id
+                or task.assigned_run_id != run.id or task.status != "running"):
+            raise InstanceError("decision_requires_task", "A blocking decision must belong to the current running task attempt.")
+        parent, parent_run, parent_task = await self._route_to_assigner(session, job, plan, task)
+        decision_id = _id("decision_", actor.id, task.id, task.current_attempt, run.id, key)
+        identity = _id("delivery_", decision_id, "request", parent.id)
+        question, context = str(args["question"]).strip(), str(args.get("context") or "").strip()
+        if not question:
+            raise InstanceError("invalid_tool_input", "The decision question must not be blank.")
+        content = f"Blocking decision {decision_id}\nQuestion: {question}"
+        if context:
+            content += f"\nContext: {context}"
+        payload = {
+            "decision_id": decision_id, "decision_state": "pending", "question": question, "context": context,
+            "source_instance_id": actor.id, "source_task_id": task.id,
+            "source_attempt": task.current_attempt, "source_run_id": run.id,
+            "response_instance_id": parent.id, "response_run_id": parent_run.id,
+            "response_task_id": parent_task.id if parent_task else None,
+            "response_attempt": parent_task.current_attempt if parent_task else None,
+            "response_delivery_id": None,
+        }
+        delivery = await self._enqueue(session, parent, identity=identity, sender_id=actor.id,
+            kind="decision_request", content=content, payload=payload, task=parent_task)
+        waiting = await self._open_child_ids(session, task)
+        return {"success": True, "status": "queued", "decision_id": decision_id,
+                "delivery_id": delivery.id, "instance_wake": [parent.id],
+                "waiting_task_ids": waiting[:MAX_WAITING_TASKS], "decision_ids": [decision_id]}
+
+    async def _answer_decision(self, session, scope, actor, run, job, plan, args) -> dict:
+        decision_id = str(args["decision_id"])
+        request = await self._decision_request_for(session, actor, decision_id)
+        current_task, request_payload = await self._validate_decision_turn(session, actor, run, request)
+        source, source_task, source_run = await self._decision_source(session, scope, request_payload)
+
+        owner_decision = (job.delivery.get("owner_decisions") or {}).get(decision_id)
+        if actor.role == "lead" and owner_decision and owner_decision.get("status") == "answered":
+            if (owner_decision.get("instance_id") != actor.id or owner_decision.get("job_id") != job.id
+                    or owner_decision.get("task_id") != (current_task.id if current_task else None)
+                    or owner_decision.get("attempt") != (current_task.current_attempt if current_task else None)):
+                raise InstanceError("stale_decision", "The owner answer belongs to another Chat task attempt.")
+        answer = str(args["answer"]).strip()
+        if not answer:
+            raise InstanceError("invalid_tool_input", "The decision answer must not be blank.")
+        answer_identity = _id("delivery_", decision_id, "answer", request.id)
+        answer_payload = {
+            "decision_id": decision_id, "response_delivery_id": request.id,
+            "source_instance_id": actor.id, "source_task_id": current_task.id if current_task else None,
+            "source_attempt": current_task.current_attempt if current_task else None, "source_run_id": run.id,
+            "response_instance_id": source.id, "response_task_id": source_task.id,
+            "response_attempt": source_task.current_attempt, "response_run_id": source_run.id,
+            "answer": answer, "owner_answer": bool(owner_decision and owner_decision.get("status") == "answered"),
+        }
+        content = f"Decision answer {decision_id}\n{answer}"
+        delivery = await self._enqueue(session, source, identity=answer_identity, sender_id=actor.id,
+            kind="decision_answer", content=content, payload=answer_payload, task=source_task)
+        request.payload = {**request_payload, "decision_state": "answered", "answer_delivery_id": delivery.id,
+                           "answer": answer, "answered_by_instance_id": actor.id, "answered_by_run_id": run.id}
+        if request_payload.get("response_delivery_id"):
+            upstream = await session.get(AgentDelivery, request_payload["response_delivery_id"])
+            if (upstream is None or upstream.kind != "decision_request" or upstream.recipient_id != source.id
+                    or (upstream.payload or {}).get("decision_id") != decision_id
+                    or (upstream.payload or {}).get("decision_state") != "escalated"):
+                raise InstanceError("stale_decision", "The escalated request no longer matches its original manager turn.")
+            upstream.payload = {**(upstream.payload or {}), "decision_state": "pending",
+                "upstream_answer_delivery_id": delivery.id, "upstream_answer": answer,
+                "upstream_answered_by_instance_id": actor.id}
+        waiting = await self._open_child_ids(session, current_task) if current_task else [source_task.id]
+        pending_owner_decisions = self._pending_owner_decision_ids(job, actor, current_task)
+        return {"success": True, "status": "answered", "decision_id": decision_id,
+                "delivery_id": delivery.id, "instance_wake": [source.id],
+                "waiting_task_ids": waiting[:MAX_WAITING_TASKS],
+                "decision_ids": pending_owner_decisions[:MAX_OWNER_DECISIONS]}
+
+    async def _escalate_decision(self, session, scope, actor, run, job, plan, args) -> dict:
+        decision_id = str(args["decision_id"])
+        request = await self._decision_request_for(session, actor, decision_id)
+        current_task, request_payload = await self._validate_decision_turn(session, actor, run, request)
+        note = str(args.get("note") or "").strip()
+        question = str(request_payload.get("question") or request.content)
+        context = str(request_payload.get("context") or "").strip()
+        if note:
+            addition = f"Additional context from {actor.display_name}: {note}"
+            context = f"{context}\n{addition}".strip()
+        context = context[:10000]
+
+        if actor.role == "lead":
+            records = dict((job.delivery or {}).get("owner_decisions") or {})
+            existing = records.get(decision_id)
+            if existing:
+                if (existing.get("instance_id") != actor.id or existing.get("run_id") != run.id
+                        or existing.get("request_delivery_id") != request.id):
+                    raise InstanceError("decision_already_escalated")
+                return {"success": True, "status": existing.get("status", "pending"),
+                        "decision_id": decision_id, "owner_decision": deepcopy(existing),
+                        "instance_wake": [], "decision_ids": [decision_id],
+                        "waiting_task_ids": (await self._open_child_ids(session, current_task)
+                                             if current_task else [str(request_payload.get("source_task_id"))])}
+            records = {identity: value for identity, value in records.items()
+                       if value.get("status") == "pending"}
+            if len(records) >= MAX_OWNER_DECISIONS:
+                raise InstanceError("owner_decisions_full", "Resolve an existing owner decision before escalating another.")
+            entry = {
+                "decision_id": decision_id, "status": "pending", "job_id": job.id,
+                "workflow_id": job.workflow_id, "team_id": job.team_id,
+                "generation": int(job.source.get("generation") or 0),
+                "instance_id": actor.id, "run_id": run.id,
+                "task_id": current_task.id if current_task else None,
+                "attempt": current_task.current_attempt if current_task else None,
+                "request_delivery_id": request.id, "question": question, "context": context,
+                "requested_by": {key: request_payload.get(key) for key in (
+                    "source_instance_id", "source_task_id", "source_attempt", "source_run_id")},
+                "created_at": now().isoformat(),
+            }
+            records[decision_id] = entry
+            job.delivery = {**(job.delivery or {}), "owner_decisions": records}
+            request.payload = {**request_payload, "decision_state": "escalated", "owner_decision_id": decision_id}
+            waiting = await self._open_child_ids(session, current_task) if current_task else [str(request_payload.get("source_task_id"))]
+            return {"success": True, "status": "pending_owner", "decision_id": decision_id,
+                    "owner_decision": deepcopy(entry), "instance_wake": [],
+                    "waiting_task_ids": waiting[:MAX_WAITING_TASKS], "decision_ids": [decision_id]}
+
+        if current_task is None or current_task.assigned_run_id != run.id or current_task.status != "running":
+            raise InstanceError("decision_requires_task", "Only a manager working on an assigned task can escalate to its parent.")
+        parent, parent_run, parent_task = await self._route_to_assigner(session, job, plan, current_task)
+        identity = _id("delivery_", decision_id, "escalation", request.id, parent.id)
+        response_delivery_id = request.id
+        payload = {
+            "decision_id": decision_id, "decision_state": "pending", "question": question,
+            "context": context,
+            "source_instance_id": actor.id, "source_task_id": current_task.id,
+            "source_attempt": current_task.current_attempt, "source_run_id": run.id,
+            "response_instance_id": parent.id, "response_run_id": parent_run.id,
+            "response_task_id": parent_task.id if parent_task else None,
+            "response_attempt": parent_task.current_attempt if parent_task else None,
+            "response_delivery_id": response_delivery_id,
+            "escalated_from_delivery_id": request.id,
+        }
+        delivery = await self._enqueue(session, parent, identity=identity, sender_id=actor.id,
+            kind="decision_request", content=f"Blocking decision {decision_id} escalated\nQuestion: {question}"
+                + (f"\nContext: {context}" if context else ""),
+            payload=payload, task=parent_task)
+        request.payload = {**request_payload, "decision_state": "escalated",
+                           "escalation_delivery_id": delivery.id, "escalated_by_run_id": run.id}
+        waiting = await self._open_child_ids(session, current_task)
+        return {"success": True, "status": "escalated", "decision_id": decision_id,
+                "delivery_id": delivery.id, "instance_wake": [parent.id],
+                "waiting_task_ids": waiting, "decision_ids": [decision_id]}
+
     async def execute(self, operation: str, *, scope: dict, arguments: dict, request_id: str,
                       template: dict | None = None) -> dict:
         scope = self._scope(scope)
@@ -689,7 +1106,8 @@ class AgentInstanceService:
         fingerprint = _hash([operation, arguments, template])
         reads = {"list_agents", "get_agent", "wait_for_agents", "list_tasks", "get_task", "inspect_task"}
         async with self.database.reserved_session() as session:
-            await self._authorize(session, scope, lead=operation not in reads | {"send_message"}, operation=operation)
+            await self._authorize(session, scope,
+                lead=operation not in reads | {"send_message", "request_decision"}, operation=operation)
             prior = await self._receipt(session, key, fingerprint) if operation not in reads else None
             if prior is not None:
                 return prior
@@ -716,7 +1134,8 @@ class AgentInstanceService:
                 else:
                     instance = await self._instance(session, str(arguments.get("agent") or ""), scope)
                 task = await self._new_task(session, scope, instance, arguments, key)
-                result.update(agent=_public_instance(instance), task=_task_dict(task), instance_wake=[instance.id])
+                result.update(agent=_public_instance(instance), task=_task_dict(task), instance_wake=[instance.id],
+                              waiting_task_ids=[task.id])
             elif operation == "send_message":
                 sender = await self._instance(session, str(scope.get("agent_instance_id") or ""), scope)
                 if sender.state in {"halted", "closed"}:
@@ -733,7 +1152,22 @@ class AgentInstanceService:
                     run.chain_id = chain_id
                 delivery = await self._enqueue(session, recipient, identity=_id("delivery_", key), sender_id=sender.id,
                                                kind="peer", content=content, chain_id=chain_id)
-                result.update(delivery=delivery.model_dump(mode="json"), status=delivery.state, instance_wake=[recipient.id])
+                parked = await self._parked_wait(session, recipient)
+                result.update(delivery=delivery.model_dump(mode="json"), status=delivery.state,
+                              instance_wake=[] if parked else [recipient.id])
+            elif operation in {"request_decision", "answer_decision", "escalate_decision"}:
+                job = await session.get(EmployeeJob, scope["job_id"])
+                plan = self._vnext_plan(job)
+                actor = await self._instance(session, scope.get("agent_instance_id"), scope)
+                run = await session.get(AgentRun, str(scope.get("agent_run_id") or ""))
+                if run is None or run.instance_id != actor.id or actor.active_run_id != run.id or run.status != "running":
+                    raise InstanceError("stale_run")
+                if operation == "request_decision":
+                    result.update(await self._request_decision(session, scope, actor, run, job, plan, arguments, key))
+                elif operation == "answer_decision":
+                    result.update(await self._answer_decision(session, scope, actor, run, job, plan, arguments))
+                else:
+                    result.update(await self._escalate_decision(session, scope, actor, run, job, plan, arguments))
             elif operation in {"list_agents", "wait_for_agents"}:
                 agents = (await session.execute(select(AgentInstance).where(AgentInstance.team_id == scope["team_id"],
                     AgentInstance.job_id == scope["job_id"], AgentInstance.generation == scope["generation"]).order_by(AgentInstance.created_at, AgentInstance.id))).scalars().all()
@@ -798,6 +1232,96 @@ class AgentInstanceService:
                 raise InstanceError("invalid_operation")
             return result if operation in reads else await self._commit(session, key, fingerprint, result)
 
+    async def answer_owner_decision(self, workflow_id: str, job_id: str, decision_id: str, answer: str,
+                                    *, request_id: str) -> dict:
+        """Commit an owner answer to the exact pending Chat instance turn.
+
+        The authenticated owner-facing handler calls this after validating the
+        user. The job record remains the source of truth for which instance,
+        task attempt, and decision the answer belongs to.
+        """
+        if not request_id or not decision_id:
+            raise InstanceError("invalid_request_identity")
+        answer = str(answer or "").strip()
+        if not answer or len(answer) > 10000:
+            raise InstanceError("invalid_tool_input", "The owner answer must contain between 1 and 10000 characters.")
+        key = _id("mutation_", job_id, "owner_decision_answer", decision_id, request_id)
+        fingerprint = _hash([workflow_id, decision_id, answer])
+        async with self.database.reserved_session() as session:
+            prior = await self._receipt(session, key, fingerprint)
+            if prior is not None:
+                return prior
+            job = await session.get(EmployeeJob, job_id)
+            if job is None or job.workflow_id != workflow_id or not job.team_id:
+                raise InstanceError("job_not_found")
+            if job.state in {"delivered", "completed", "cancelled", "failed"}:
+                raise InstanceError("stale_decision", "The original employee job has already ended.")
+            plan = self._vnext_plan(job)
+            record = (job.delivery or {}).get("owner_decisions", {}).get(decision_id)
+            if not record or record.get("decision_id") != decision_id or record.get("status") != "pending":
+                raise InstanceError("decision_not_pending", "This owner decision is missing, stale, or already answered.")
+            if (record.get("job_id") != job.id or record.get("workflow_id") != job.workflow_id
+                    or record.get("team_id") != job.team_id
+                    or int(record.get("generation") or 0) != int(job.source.get("generation") or 0)):
+                raise InstanceError("stale_decision")
+            instance = await session.get(AgentInstance, str(record.get("instance_id") or ""))
+            if (instance is None or instance.role != "lead" or instance.job_id != job.id
+                    or instance.team_id != job.team_id or instance.generation != int(record.get("generation") or 0)
+                    or instance.template_node_id != plan.get("lead_node_id") or instance.state in {"halted", "closed"}):
+                raise InstanceError("stale_decision", "The original Chat lead is no longer available.")
+            run = await session.get(AgentRun, str(record.get("run_id") or ""))
+            task = await session.get(TeamTask, str(record.get("task_id") or "")) if record.get("task_id") else None
+            if (run is None or run.instance_id != instance.id
+                    or (run.task_id, run.attempt) != (record.get("task_id"), record.get("attempt"))):
+                raise InstanceError("stale_decision", "The original Chat turn no longer matches this decision.")
+            if task:
+                if (task.team_id != job.team_id or task.current_attempt != record.get("attempt")
+                        or task.assigned_instance_id != instance.id or task.status != "running"):
+                    raise InstanceError("stale_decision", "The Chat task attempt has ended or changed.")
+            elif run.task_id is not None or record.get("attempt") is not None:
+                raise InstanceError("stale_decision")
+            if run.status == "parked":
+                parked = run.result or {}
+                if (instance.active_run_id is not None or parked.get("reason") not in {"decision", "child_work"}
+                        or decision_id not in (parked.get("decision_ids") or [])):
+                    raise InstanceError("stale_decision", "The Chat lead is no longer waiting on this owner decision.")
+                if task and task.assigned_run_id != run.id:
+                    raise InstanceError("stale_decision")
+            elif run.status == "running":
+                if instance.active_run_id != run.id or (task and task.assigned_run_id != run.id):
+                    raise InstanceError("stale_decision")
+            else:
+                raise InstanceError("stale_decision", "The original Chat turn has already ended.")
+            request = await session.get(AgentDelivery, str(record.get("request_delivery_id") or ""))
+            request_payload = (request.payload or {}) if request else {}
+            if (request is None or request.kind != "decision_request" or request.recipient_id != instance.id
+                    or request_payload.get("decision_id") != decision_id
+                    or request_payload.get("decision_state") != "escalated"
+                    or request_payload.get("response_instance_id") != instance.id
+                    or (request_payload.get("response_task_id"), request_payload.get("response_attempt"))
+                       != (record.get("task_id"), record.get("attempt"))):
+                raise InstanceError("stale_decision", "The owner request no longer matches its original Chat turn.")
+            identity = _id("delivery_", decision_id, "owner_answer", instance.id, request.id)
+            payload = {"decision_id": decision_id, "response_delivery_id": request.id,
+                       "response_instance_id": instance.id, "response_task_id": task.id if task else None,
+                       "response_attempt": task.current_attempt if task else None,
+                       "owner_answer": True, "answer": answer}
+            delivery = await self._enqueue(session, instance, identity=identity, sender_id=None,
+                kind="decision_answer", content=f"Owner answer {decision_id}\n{answer}",
+                payload=payload, task=task)
+            request.payload = {**request_payload, "decision_state": "pending",
+                "upstream_answer_delivery_id": delivery.id, "upstream_answer": answer,
+                "upstream_answered_by_owner": True}
+            records = dict((job.delivery or {}).get("owner_decisions") or {})
+            records[decision_id] = {**record, "status": "answered", "answer": answer,
+                "answer_delivery_id": delivery.id, "answered_at": now().isoformat(), "answer_request_id": request_id}
+            job.delivery = {**(job.delivery or {}), "owner_decisions": records}
+            result = {"success": True, "status": "answered", "job_id": job.id,
+                "decision_id": decision_id, "delivery_id": delivery.id,
+                "instance_wake": [instance.id],
+                "waiting_task_ids": [task.id] if task else [], "decision_ids": [decision_id]}
+            return await self._commit(session, key, fingerprint, result)
+
     async def _mutate_task(self, session, scope, task, operation, args, template, key):
         if operation not in _task_actions(task):
             raise InstanceError("invalid_transition", f"{operation} is unavailable while task is {task.status}.")
@@ -826,6 +1350,7 @@ class AgentInstanceService:
                     "dependencies": deps, "revision": task.revision, "acceptance_criteria": task.acceptance_criteria}
                 attempt.status = task.status
             wake.append(instance.id)
+            waiting_task_ids = [task.id]
         elif operation == "accept_task":
             task.status = "accepted"
             if args.get("auto_confidence") is not None:
@@ -847,6 +1372,9 @@ class AgentInstanceService:
                     dependent.status = "queued"
                     dependent.revision += 1
                     wake.append(dependent.assigned_instance_id)
+            actor_run = await session.get(AgentRun, str(scope.get("agent_run_id") or ""))
+            parent_task = await session.get(TeamTask, actor_run.task_id) if actor_run and actor_run.task_id else None
+            waiting_task_ids = await self._open_child_ids(session, parent_task)
         elif operation == "cancel_task":
             if task.assigning_run_id and task.status in {"submitted", "failed"}:
                 reason = str(args.get("reason") or "").strip()
@@ -873,6 +1401,7 @@ class AgentInstanceService:
                 attempt.status = "cancelled"
                 attempt.error = attempt.error or task.cancellation_reason
                 attempt.completed_at = attempt.completed_at or now()
+            waiting_task_ids = []
         else:
             if instance.active_run_id:
                 active = await session.get(AgentRun, instance.active_run_id)
@@ -907,8 +1436,12 @@ class AgentInstanceService:
             await self._attempt(session, task, instance)
             await self._queue_task(session, task, instance, chain_id=scope.get("_chain_id"))
             wake.append(instance.id)
+            waiting_task_ids = [task.id] if task.status in {"queued", "blocked"} else []
+        if operation != "accept_task":
+            waiting_task_ids = await self._waiting_after_task_change(session, scope, task)
         return {"task": _task_dict(task), "agent": _public_instance(instance),
-                "instance_wake": sorted(set(filter(None, wake))), "instance_stop": stops}
+                "instance_wake": sorted(set(filter(None, wake))), "instance_stop": stops,
+                "waiting_task_ids": waiting_task_ids}
 
     async def _control(self, session, instance, operation):
         if operation == "stop_agent":
@@ -980,6 +1513,158 @@ class AgentInstanceService:
             ).values(available_at=clock + timedelta(seconds=delay_seconds)))
             await session.commit()
 
+    @staticmethod
+    def _waiting_ids(run: AgentRun) -> dict[str, int | None]:
+        values = (run.result or {}).get("waiting_task_ids") or []
+        items: dict[str, int | None] = {}
+        for value in values:
+            if isinstance(value, dict) and value.get("task_id"):
+                items[str(value["task_id"])] = int(value["attempt"]) if value.get("attempt") is not None else None
+            elif value:
+                items[str(value)] = None
+        return items
+
+    async def _parked_wait(self, session, instance: AgentInstance) -> dict | None:
+        """Return the frozen vNext wait state that gates inbox admission."""
+        if instance.active_run_id:
+            return None
+        job = await session.get(EmployeeJob, instance.job_id)
+        plan = (job.source.get("team_plan") or {}) if job else {}
+        if plan.get("version") != 3 or plan.get("delegation_runtime_version") != 1:
+            return None
+        runs = (await session.execute(select(AgentRun).where(AgentRun.instance_id == instance.id,
+            AgentRun.status == "parked").order_by(AgentRun.created_at.desc(), AgentRun.id.desc()))).scalars().all()
+        for run in runs:
+            result = run.result or {}
+            reason = result.get("reason")
+            if reason not in {"child_work", "decision"}:
+                continue
+            if run.task_id:
+                task = await session.get(TeamTask, run.task_id)
+                if (task is None or run.attempt is None or task.current_attempt != run.attempt
+                        or task.assigned_instance_id != instance.id or task.assigned_run_id != run.id
+                        or task.status != "running"):
+                    continue
+                waiting = self._waiting_ids(run)
+                decisions = set(map(str, result.get("decision_ids") or []))
+                children = await self._children_of_attempt(session, task)
+                current = {child.id: child for child in children if child.status not in {"accepted", "cancelled"}}
+                waiting = {identity: attempt for identity, attempt in waiting.items()
+                           if (identity == task.id and reason == "decision") or
+                           (identity in current and (attempt is None or attempt == current[identity].current_attempt))}
+                if not waiting and not decisions:
+                    continue
+                return {"run": run, "task": task, "job": job, "plan": plan,
+                        "reason": reason, "waiting_task_ids": waiting, "decision_ids": decisions}
+            elif instance.role == "lead":
+                waiting = self._waiting_ids(run)
+                decisions = set(map(str, result.get("decision_ids") or []))
+                owner = (job.delivery or {}).get("owner_decisions") or {}
+                decisions = {identity for identity in decisions
+                             if self._owner_decision_matches(owner.get(identity), identity, instance, job,
+                                                             None, {"pending", "answered"})}
+                outer = {}
+                for identity, attempt in waiting.items():
+                    task = await session.get(TeamTask, identity)
+                    target = await session.get(AgentInstance, task.assigned_instance_id) if task and task.assigned_instance_id else None
+                    if (task and task.team_id == job.team_id and task.workflow_id == job.workflow_id
+                            and task.parent_agent_id == job.lead_node_id
+                            and task.assigned_to == plan.get("orchestrator_node_id")
+                            and target and target.job_id == job.id and target.generation == instance.generation
+                            and target.template_node_id == plan.get("orchestrator_node_id")
+                            and (attempt is None or attempt == task.current_attempt)
+                            and task.status not in {"accepted", "cancelled"}):
+                        outer[task.id] = attempt
+                waiting = outer
+                if not waiting and not decisions:
+                    continue
+                return {"run": run, "task": None, "job": job, "plan": plan,
+                        "reason": reason, "waiting_task_ids": waiting, "decision_ids": decisions}
+        return None
+
+    async def _matches_parked_delivery(self, session, instance: AgentInstance, wait: dict,
+                                       row: AgentDelivery) -> bool:
+        payload = row.payload or {}
+        run, task = wait["run"], wait.get("task")
+        decision_id = str(payload.get("decision_id") or "")
+        if row.kind == "decision_answer" and decision_id in wait["decision_ids"]:
+            if payload.get("response_instance_id") != instance.id:
+                return False
+            return ((row.task_id, row.attempt) == (task.id, task.current_attempt)
+                    and payload.get("response_task_id") == task.id
+                    and payload.get("response_attempt") == task.current_attempt
+                    if task else row.task_id is None and row.attempt is None
+                    and payload.get("response_task_id") is None and payload.get("response_attempt") is None)
+        if row.kind == "task_review":
+            child_id = str(payload.get("task_id") or "")
+            child = await session.get(TeamTask, child_id) if child_id else None
+            expected_attempt = wait["waiting_task_ids"].get(child_id)
+            if (not child or child.current_attempt != payload.get("attempt")
+                    or child.status not in {"submitted", "failed", "cancelled"}
+                    or (expected_attempt is not None and expected_attempt != child.current_attempt)):
+                return False
+            if task:
+                if (child_id not in wait["waiting_task_ids"]
+                        or (row.task_id, row.attempt) != (task.id, task.current_attempt)
+                        or child.assigning_run_id is None):
+                    return False
+                child_run = await session.get(AgentRun, child.assigning_run_id)
+                return bool(child_run and child_run.instance_id == instance.id
+                            and child_run.task_id == task.id and child_run.attempt == task.current_attempt)
+            return (child_id in wait["waiting_task_ids"] and child.team_id == instance.team_id
+                    and child.parent_agent_id == wait["plan"].get("lead_node_id")
+                    and child.assigned_to == wait["plan"].get("orchestrator_node_id")
+                    and row.task_id is None and row.attempt is None)
+        if row.kind == "decision_request":
+            source_task_id = str(payload.get("source_task_id") or "")
+            source_task = await session.get(TeamTask, source_task_id) if source_task_id else None
+            expected_attempt = wait["waiting_task_ids"].get(source_task_id)
+            if (payload.get("response_instance_id") != instance.id or not source_task
+                    or source_task.current_attempt != payload.get("source_attempt")
+                    or source_task.status != "running"
+                    or source_task.team_id != instance.team_id
+                    or (expected_attempt is not None and expected_attempt != source_task.current_attempt)):
+                return False
+            requester = await session.get(AgentInstance, source_task.assigned_instance_id) if source_task.assigned_instance_id else None
+            requester_run = await session.get(AgentRun, str(payload.get("source_run_id") or ""))
+            if (requester is None or requester.team_id != instance.team_id
+                    or requester.generation != instance.generation
+                    or requester_run is None or requester_run.instance_id != requester.id
+                    or requester_run.task_id != source_task.id
+                    or requester_run.attempt != source_task.current_attempt
+                    or requester_run.status not in {"running", "parked"}
+                    or source_task.assigned_run_id != requester_run.id
+                    or (requester_run.status == "running" and requester.active_run_id != requester_run.id)):
+                return False
+            if task:
+                response_run = await session.get(AgentRun, str(payload.get("response_run_id") or ""))
+                assigning_run = await session.get(AgentRun, source_task.assigning_run_id) if source_task.assigning_run_id else None
+                return bool(source_task_id in wait["waiting_task_ids"]
+                    and (row.task_id, row.attempt) == (task.id, task.current_attempt)
+                    and payload.get("response_task_id") == task.id
+                    and payload.get("response_attempt") == task.current_attempt
+                    and response_run is not None and response_run.id == run.id
+                    and response_run.instance_id == instance.id
+                    and response_run.task_id == task.id and response_run.attempt == task.current_attempt
+                    and assigning_run is not None and assigning_run.instance_id == instance.id
+                    and assigning_run.task_id == task.id and assigning_run.attempt == task.current_attempt
+                    and source_task.parent_agent_id == instance.template_node_id
+                    and source_task.assigned_to == requester.template_node_id)
+            response_run = await session.get(AgentRun, str(payload.get("response_run_id") or ""))
+            assigning_run = await session.get(AgentRun, source_task.assigning_run_id) if source_task.assigning_run_id else None
+            return bool(source_task_id in wait["waiting_task_ids"]
+                and row.task_id is None and row.attempt is None
+                and payload.get("response_task_id") is None and payload.get("response_attempt") is None
+                and response_run is not None and response_run.id == run.id
+                and response_run.instance_id == instance.id
+                and response_run.task_id is None and response_run.attempt is None
+                and assigning_run is not None and assigning_run.instance_id == instance.id
+                and assigning_run.task_id is None and assigning_run.attempt is None
+                and source_task.parent_agent_id == wait["plan"].get("lead_node_id")
+                and source_task.assigned_to == wait["plan"].get("orchestrator_node_id")
+                and requester.template_node_id == wait["plan"].get("orchestrator_node_id"))
+        return False
+
     async def list_pending(self, limit: int = 100) -> list[dict]:
         from models.employees import EmployeeJob
         # Blocked assignments wait for acceptance. Stale assignments still
@@ -997,14 +1682,31 @@ class AgentInstanceService:
                     (EmployeeJob.id.is_(None) & (AgentTeam.id.is_(None) | (AgentTeam.status != "completed"))),
                     AgentInstance.active_run_id.is_not(None) | (AgentInstance.state.in_(["idle", "running"]) & has_mail))
                 .order_by(AgentInstance.updated_at, AgentInstance.id)
-                .limit(max(1, limit)))).scalars().all()
+                .limit(max(1, limit * 8)))).scalars().all()
             checked_at = now()
+            pending = []
             for instance in rows:
                 # Persist rotation before external hints. Failed hints and
                 # active owners must not occupy the first page on every sweep.
                 instance.updated_at = checked_at
+                if not instance.active_run_id:
+                    parked = await self._parked_wait(session, instance)
+                    if parked:
+                        deliveries = (await session.execute(select(AgentDelivery).where(
+                            AgentDelivery.recipient_id == instance.id, AgentDelivery.state == "queued")
+                            .order_by(AgentDelivery.sequence))).scalars().all()
+                        eligible = False
+                        for delivery in deliveries:
+                            if await self._matches_parked_delivery(session, instance, parked, delivery):
+                                eligible = True
+                                break
+                        if not eligible:
+                            continue
+                pending.append(instance)
+                if len(pending) >= max(1, limit):
+                    break
             await session.commit()
-            return [instance.model_dump(mode="json") for instance in rows]
+            return [instance.model_dump(mode="json") for instance in pending]
 
     async def list_stopping(self, limit: int = 100) -> list[str]:
         """Durable interrupted executors whose stop hint may have been lost."""
@@ -1023,7 +1725,10 @@ class AgentInstanceService:
         rows = (await session.execute(select(AgentDelivery).where(AgentDelivery.recipient_id == instance.id,
             AgentDelivery.state == "queued").order_by(AgentDelivery.sequence))).scalars().all()
         admitted, used, selected_task = [], 0, None
+        parked = await self._parked_wait(session, instance)
         for row in rows:
+            if parked and not await self._matches_parked_delivery(session, instance, parked, row):
+                continue
             if row.kind == "task_review" and row.payload.get("review_reminder"):
                 reviewed = await session.get(TeamTask, row.payload["task_id"])
                 if reviewed is None or task_ref(reviewed) != row.payload["task_ref"]:
@@ -1037,7 +1742,7 @@ class AgentInstanceService:
                     continue
                 if task.status == "blocked":
                     continue
-                if row.kind == "task_review":
+                if row.kind in {"task_review", "decision_request", "decision_answer"}:
                     if not allow_tasks and (run.task_id, run.attempt) != (task.id, task.current_attempt):
                         continue
                     if selected_task and selected_task.id != task.id:
@@ -1125,6 +1830,32 @@ class AgentInstanceService:
             if not deliveries:
                 await session.commit()
                 return None
+            carried_wait = await self._parked_wait(session, instance)
+            carried_waiting = dict(carried_wait.get("waiting_task_ids") or {}) if carried_wait else {}
+            carried_decisions = set(carried_wait.get("decision_ids") or []) if carried_wait else set()
+            answered_decisions = set()
+            for delivery in deliveries:
+                payload = delivery.payload or {}
+                if delivery.kind == "task_review":
+                    child_id = str(payload.get("task_id") or "")
+                    expected = carried_waiting.get(child_id)
+                    if expected is None or expected == payload.get("attempt"):
+                        carried_waiting.pop(child_id, None)
+                elif delivery.kind == "decision_answer":
+                    identity = str(payload.get("decision_id") or "")
+                    if identity:
+                        answered_decisions.add(identity)
+                        carried_decisions.discard(identity)
+            carried_decisions.update(await self._pending_source_decision_ids(session, instance, task))
+            carried_decisions.difference_update(answered_decisions)
+            if instance.role == "lead" and job:
+                # Owner decisions marked answered stay parked until the
+                # corresponding decision_answer is actually admitted.
+                records = (job.delivery or {}).get("owner_decisions") or {}
+                carried_decisions.update(str(identity) for identity, record in records.items()
+                    if self._owner_decision_matches(record, str(identity), instance, job, task,
+                                                    {"pending", "answered"})
+                    and str(identity) not in answered_decisions)
             instance.fence, instance.active_run_id, instance.state = run.fence, run.id, "running"
             instance.updated_at = now()
             if task:
@@ -1145,7 +1876,12 @@ class AgentInstanceService:
             result = {"run_id": run.id, "instance": instance.model_dump(mode="json"),
                 "messages": [_wire(row) for row in deliveries], "deliveries": [row.id for row in deliveries],
                 "task": _task_dict(task) if task else None, "transcript": deepcopy(transcript.messages),
-                "transcript_revision": transcript.revision}
+                "transcript_revision": transcript.revision,
+                "managed_waiting_task_ids": [
+                    {"task_id": identity, **({"attempt": attempt} if attempt is not None else {})}
+                    for identity, attempt in sorted(carried_waiting.items())
+                ],
+                "managed_pending_decision_ids": sorted(carried_decisions)}
             run.input_snapshot = deepcopy(result)
             session.add(run)
             await self._refresh_member(session, instance)
@@ -1274,6 +2010,24 @@ class AgentInstanceService:
 
     async def _review_gate(self, session, instance, task, *, chain_id):
         """Return whether a parked task can submit, or why it cannot finish."""
+        if task and await self._pending_source_decision_ids(session, instance, task):
+            return False, None
+        if task:
+            requests = (await session.execute(select(AgentDelivery).where(
+                AgentDelivery.team_id == instance.team_id,
+                AgentDelivery.generation == instance.generation,
+                AgentDelivery.kind == "decision_request"))).scalars().all()
+            for request in requests:
+                payload = request.payload or {}
+                if (payload.get("source_instance_id") != instance.id
+                        or payload.get("source_task_id") != task.id
+                        or payload.get("source_attempt") != task.current_attempt
+                        or payload.get("decision_state") != "answered"):
+                    continue
+                answer_id = payload.get("answer_delivery_id") or payload.get("upstream_answer_delivery_id")
+                answer = await session.get(AgentDelivery, str(answer_id or "")) if answer_id else None
+                if answer is not None and answer.state != "consumed":
+                    return False, None
         children = await self._children_of_attempt(session, task)
         if not children:
             job = await session.get(EmployeeJob, instance.job_id)
@@ -1339,6 +2093,151 @@ class AgentInstanceService:
         if notice or await self._remind_review(session, instance, outer, parent_task=None, chain_id=chain_id):
             return None
         return error
+
+    async def park_run(self, instance_id: str, run_id: str, *, reason: str,
+                       waiting_task_ids: list[str] | None = None,
+                       decision_ids: list[str] | None = None, request_id: str) -> dict:
+        """Settle one execution turn while keeping its assigned task open.
+
+        The receipt captures the exact child tasks and decisions that may wake
+        this turn. Chat may also park without its own TeamTask when it has
+        committed the fixed outer Orchestrator assignment or an owner request.
+        """
+        waiting: dict[str, int | None] = {}
+        if not isinstance(waiting_task_ids, (list, tuple)):
+            raise InstanceError("invalid_wait_set")
+        for value in waiting_task_ids or []:
+            identity, attempt = (value.get("task_id"), value.get("attempt")) if isinstance(value, dict) else (value, None)
+            identity = str(identity or "").strip()
+            if not identity or len(identity) > 255 or attempt is not None and int(attempt) < 0:
+                raise InstanceError("invalid_wait_set")
+            attempt = int(attempt) if attempt is not None else None
+            if identity in waiting and waiting[identity] != attempt:
+                raise InstanceError("invalid_wait_set")
+            waiting[identity] = attempt
+        if len(waiting) > MAX_WAITING_TASKS:
+            raise InstanceError("invalid_wait_set", "Too many waiting tasks were reported for one execution turn.")
+        decisions = sorted({str(value).strip() for value in (decision_ids or []) if str(value).strip()})
+        if len(decisions) > MAX_OWNER_DECISIONS or any(len(value) > 255 for value in decisions):
+            raise InstanceError("invalid_wait_set", "Too many pending decisions were reported for one execution turn.")
+        waiting_items = [{"task_id": identity, "attempt": waiting[identity]} for identity in sorted(waiting)]
+        key = _id("mutation_", run_id, "park", request_id)
+        fingerprint = _hash([reason, waiting_items, decisions])
+        async with self.database.reserved_session() as session:
+            prior = await self._receipt(session, key, fingerprint)
+            if prior is not None:
+                return prior
+            instance = await self._instance(session, instance_id)
+            run = await session.get(AgentRun, run_id)
+            if run is None or run.instance_id != instance_id:
+                raise InstanceError("stale_run")
+            if run.status != "running" or instance.active_run_id != run_id or instance.fence != run.fence:
+                if run.status == "parked":
+                    return {"status": "parked", "instance_wake": [], "task_id": run.task_id,
+                            "attempt": run.attempt, "waiting_task_ids": sorted(self._waiting_ids(run)),
+                            "decision_ids": (run.result or {}).get("decision_ids") or []}
+                raise InstanceError("stale_run")
+            job = await session.get(EmployeeJob, instance.job_id)
+            plan = (job.source.get("team_plan") or {}) if job else {}
+            vnext = bool(plan.get("version") == 3 and plan.get("delegation_runtime_version") == 1)
+            if vnext and reason not in {"child_work", "decision"}:
+                raise InstanceError("invalid_park_reason")
+            task = await session.get(TeamTask, run.task_id) if run.task_id else None
+            if run.task_id:
+                if (task is None or run.attempt is None or task.current_attempt != run.attempt
+                        or task.assigned_run_id != run_id or task.assigned_instance_id != instance_id
+                        or task.status != "running"):
+                    raise InstanceError("stale_task_attempt")
+            elif not vnext or instance.role != "lead" or instance.template_node_id != plan.get("lead_node_id"):
+                raise InstanceError("park_requires_task")
+
+            validated_waiting: dict[str, int] = {}
+            if vnext and task:
+                children = await self._children_of_attempt(session, task)
+                open_children = {child.id: child for child in children
+                                 if child.status not in {"accepted", "cancelled"}}
+                for identity, expected_attempt in waiting.items():
+                    if identity == task.id and reason == "decision":
+                        if expected_attempt is not None and expected_attempt != task.current_attempt:
+                            raise InstanceError("stale_task_attempt")
+                        validated_waiting[identity] = task.current_attempt
+                        continue
+                    child = open_children.get(identity)
+                    if child is None or (expected_attempt is not None and child.current_attempt != expected_attempt):
+                        raise InstanceError("stale_waiting_task", "A waiting task is not open under this exact parent attempt.")
+                    validated_waiting[identity] = child.current_attempt
+                if reason == "child_work" and not validated_waiting:
+                    raise InstanceError("park_requires_child", "Child-work parking requires an open child task for this attempt.")
+            elif vnext:
+                if not job or not job.team_id or job.team_id != instance.team_id:
+                    raise InstanceError("invalid_scope")
+                for identity, expected_attempt in waiting.items():
+                    outer = await session.get(TeamTask, identity)
+                    assignee = await session.get(AgentInstance, outer.assigned_instance_id) if outer and outer.assigned_instance_id else None
+                    if (outer is None or outer.team_id != job.team_id or outer.workflow_id != job.workflow_id
+                            or outer.parent_agent_id != plan.get("lead_node_id")
+                            or outer.assigned_to != plan.get("orchestrator_node_id")
+                            or outer.current_attempt != (expected_attempt if expected_attempt is not None else outer.current_attempt)
+                            or outer.status in {"accepted", "cancelled"}
+                            or assignee is None or assignee.job_id != job.id
+                            or assignee.generation != instance.generation
+                            or assignee.template_node_id != plan.get("orchestrator_node_id")):
+                        raise InstanceError("stale_waiting_task", "A taskless Chat lead may wait only on its admitted outer Orchestrator task.")
+                    validated_waiting[identity] = outer.current_attempt
+                if reason == "child_work" and not validated_waiting:
+                    raise InstanceError("park_requires_child", "Taskless Chat can park for child work only on its outer Orchestrator assignment.")
+
+            if vnext and reason == "decision" and not decisions:
+                raise InstanceError("park_requires_decision", "Decision parking requires a committed decision request.")
+            if vnext and decisions:
+                owner_decisions = (job.delivery or {}).get("owner_decisions") or {} if job else {}
+                for decision_id in decisions:
+                    owner = owner_decisions.get(decision_id) or {}
+                    if self._owner_decision_matches(owner, decision_id, instance, job, task,
+                                                    {"pending", "answered"}):
+                        continue
+                    requests = (await session.execute(select(AgentDelivery).where(
+                        AgentDelivery.team_id == instance.team_id, AgentDelivery.generation == instance.generation,
+                        AgentDelivery.kind == "decision_request"))).scalars().all()
+                    committed = False
+                    for row in requests:
+                        payload = row.payload or {}
+                        if (payload.get("decision_id") != decision_id
+                                or payload.get("source_instance_id") != instance.id
+                                or payload.get("source_task_id") != (task.id if task else None)
+                                or payload.get("source_attempt") != (task.current_attempt if task else None)
+                                or payload.get("decision_state") not in {"pending", "answered", "escalated"}):
+                            continue
+                        source_run = await session.get(AgentRun, str(payload.get("source_run_id") or ""))
+                        if (source_run is not None and source_run.instance_id == instance.id
+                                and source_run.task_id == (task.id if task else None)
+                                and source_run.attempt == (task.current_attempt if task else None)
+                                and source_run.status in {"running", "parked", "completed"}):
+                            committed = True
+                            break
+                    if not committed:
+                        raise InstanceError("stale_decision", "A parked decision must match a committed request from this exact run.")
+
+            run.status = "parked"
+            run.result = {"status": "parked", "reason": str(reason)[:100],
+                          "task_id": task.id if task else None,
+                          "attempt": task.current_attempt if task else None,
+                          "waiting_task_ids": [{"task_id": identity, "attempt": attempt}
+                                               for identity, attempt in sorted(validated_waiting.items())],
+                          "decision_ids": decisions}
+            run.completed_at = now()
+            instance.active_run_id = None
+            if instance.state == "running":
+                instance.state = "idle"
+            instance.updated_at = now()
+            conversation = await session.get(AgentInstanceConversation, instance_id)
+            if conversation and conversation.owning_run_id == run_id:
+                conversation.owning_run_id = None
+            await self._refresh_member(session, instance)
+            result = {"status": "parked", "instance_wake": [], "task_id": task.id if task else None,
+                      "attempt": task.current_attempt if task else None,
+                      "waiting_task_ids": sorted(validated_waiting), "decision_ids": decisions}
+            return await self._commit(session, key, fingerprint, result)
 
     async def complete_run(self, instance_id: str, run_id: str, *, result: dict | None = None,
                            error: str | dict | None = None, request_id: str) -> dict:

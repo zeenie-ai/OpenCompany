@@ -335,6 +335,32 @@ async def handle_resolve_employee_delivery(data: Dict[str, Any], websocket: WebS
         request_key=str(data.get("idempotency_key") or ""))
 
 
+@ws_response
+async def handle_answer_employee_decision(data: Dict[str, Any], websocket: WebSocket) -> Dict[str, Any]:
+    from core.container import container
+    from services.agent_instances.service import AgentInstanceService
+    from services.agent_instances.runtime import wake_instances
+
+    database = container.database()
+    workflow_id = str(data.get("workflow_id") or "")
+    if ((getattr(websocket, "scope", {}) or {}).get("path") == "/ws/internal"
+        or not getattr(getattr(websocket, "state", None), "user_id", None)
+        or not workflow_id or not await _owns(database, websocket, workflow_id)):
+        return {"success": False, "error": "not_found"}
+    answer = str(data.get("answer") or "").strip()
+    decision_id = str(data.get("decision_id") or "")
+    request_id = str(data.get("idempotency_key") or "")
+    if not answer or len(answer) > 4000 or not decision_id or not request_id:
+        return {"success": False, "error": "invalid_request"}
+    result = await AgentInstanceService(database).answer_owner_decision(
+        workflow_id=workflow_id, job_id=str(data.get("job_id") or ""), decision_id=decision_id,
+        answer=answer, request_id=request_id)
+    if result.get("success"):
+        await wake_instances(result, database=database)
+        employee_changed_now(workflow_id)
+    return result
+
+
 # ----- Name and photo -----
 
 
@@ -483,6 +509,7 @@ WS_HANDLERS: Dict[str, Any] = {
     "list_employee_access": handle_list_employee_access,
     "decide_employee_access": handle_decide_employee_access,
     "resolve_employee_delivery": handle_resolve_employee_delivery,
+    "answer_employee_decision": handle_answer_employee_decision,
     "retry_employee_review": handle_retry_employee_review,
     "rename_employee": handle_rename_employee,
     "set_employee_photo": handle_set_employee_photo,

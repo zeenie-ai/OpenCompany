@@ -1,53 +1,86 @@
-# Let the Orchestrator sleep while its team works
+# Event-Driven Delegation with Active-Turn Progress Streams
 
-Implementation plan for managed employee teams, reviewed against OpenCompany `a078f889` on November 26, 2026.
+Implementation plan for managed employee teams, aligned to the Dynamic Workflow repository study and the existing Temporal execution architecture.
 
-## Outcome
+## Goal
 
-Once an Orchestrator assigns work to the Coding Agent, the runtime saves the assignment and releases the Orchestrator's execution slot. During an uneventful ten-minute coding task the Orchestrator makes **zero further model calls and zero Task Manager checks**. A submission, failure, or an explicit question that blocks the worker can wake its immediate manager. Chat receives the Orchestrator's own reviewed submission and replies in the originating conversation.
+When a manager commits child work, it checkpoints the turn, releases its execution permit, and returns to idle. It makes no model calls or Task Manager checks while the child is working. The database inbox remains authoritative: a matching child submission, failure, or blocking decision wakes only the immediate assigner for the same job and task attempt. Ordinary progress and peer messages do not wake a parked manager.
 
-In the November 26 incident, the Coding Agent worked from 14:21:02 to 14:31:25 IST. The Orchestrator issued 17 thirty-second waits, one task read and one inspection. Its 19 model calls during that interval cost approximately $0.1982. The worker sent one completion notice. This is a baseline from one run. [Native agent tool loop](../../../server/services/temporal/agent_workflow.py) · [Instance review routing](../../../server/services/agent_instances/service.py)
+Use Temporal Workflow Streams only for compact, live progress during active turns. The existing database-backed progress view remains the durable source and the fallback while an employee is parked or a viewer reconnects.
 
-## Architecture
+## Visible workflow
 
-The repository's Dynamic Workflow study recommends retaining managed employees' task receipts, isolated instances and review inbox. At the study's upstream commit, Pydantic's Dynamic Workflow dispatches child calls and records their results. Its Code Mode executor awaits outstanding calls on the host and returns results or exceptions to the suspended computation. OpenCompany can use the same division of work with its existing Task Manager and Temporal session. A checkpointed manager owns an open task while the worker executes. [Repository study, §11.3](CROSS-REFERENCE.md#113-what-changed-for-the-build) · [Pinned Dynamic Workflow dispatch](https://github.com/pydantic/pydantic-ai/blob/d94586aad1acd640715f2bf1152e8d730c8f9938/src/pydantic_ai_harness/pydantic_ai_harness/dynamic_workflow/_toolset.py#L802) · [Pinned Code Mode executor](https://github.com/pydantic/pydantic-ai/blob/d94586aad1acd640715f2bf1152e8d730c8f9938/src/pydantic_ai_harness/pydantic_ai_harness/_monty_exec.py#L446)
+```mermaid
+sequenceDiagram
+    actor User
+    participant Chat as Chat Employee
+    participant Manager as Orchestrator / manager
+    participant Worker as Subagent
+    participant Inbox as Durable inbox
+    participant Stream as Active-turn progress stream
+    participant UI as Existing progress UI
 
-| Event | Who takes a turn | What happens to the assignment |
-| --- | --- | --- |
-| Orchestrator assigns coding and research together | Both workers can start within the configured slot limit | The Orchestrator checkpoints the whole batch and releases its slot. |
-| Worker reports ordinary progress | The worker continues | Its update is available to the UI and to the manager at its next turn. |
-| Coding Agent needs a decision to proceed | The Coding Agent parks. The Orchestrator answers the question. | The answer resumes the same Coding Agent attempt. The Orchestrator yields again. |
-| A worker submits or fails | Its immediate manager reviews the outcome | The manager can accept, request changes, handle the failure, or assign a next step. |
-| Orchestrator submits its own result | Chat reviews and replies | The existing delivery receipt binds the answer to the original conversation. |
+    User->>Chat: Request work
+    Chat->>Manager: Commit Task Manager assignment
+    Chat-->>User: Acknowledge the request
+    Manager->>Worker: Commit subtask assignment
+    Manager->>Stream: Publish waiting milestone
+    Stream-->>UI: Forward live progress
+    Note over Manager: Checkpoint, release permit, return to idle
+    Worker->>Inbox: Commit submission or failure
+    Inbox->>Manager: Wake exact assigning instance
+    Manager->>Manager: Resume same task attempt and review
+    Manager->>Stream: Publish resumed / review milestone
+    Stream-->>UI: Forward live progress
+    Manager-->>Chat: Submit reviewed result
+    Chat-->>User: Write final reply
 
-## Implementation order
+    opt Worker needs a blocking decision
+        Worker->>Inbox: Commit decision request
+        Inbox->>Manager: Wake immediate manager
+        Manager->>Chat: Escalate owner decision
+        Chat-->>User: Ask in original conversation
+        User-->>Chat: Answer pending decision
+        Chat->>Inbox: Commit answer for same task attempt
+        Inbox->>Worker: Wake checkpoint-capable worker
+    end
+```
 
-1. **Reproduce the cost before changing the loop.** Extend the existing local Temporal single-slot test. Hold a coding worker open and have the manager's model double call `wait_for_agents` if it is scheduled again. Count every model activity, tool check and permit acquisition by instance and attempt. The current test counts only iteration zero, so it misses polling inside one turn. Use the same fixture for the before/after comparison. [Single-slot integration test](../../../server/tests/temporal/test_employee_single_slot_integration.py)
+At each review, the assigning employee accepts the submission or requests changes on the same task. A specialist completing its work wakes its immediate manager. Chat's review trigger runs when the Orchestrator submits Chat's outer task. Greetings, clarifications, and status questions remain with Chat and do not create a new assignment.
 
-2. **Park at the committed tool-batch boundary.** Scope the behavior to task-scoped managers and reviewers in the admitted managed hierarchy, including Chat when it sends the outer task back for revision. Use the existing `starts_child` tool trait and each operation's successful receipt. Finish the entire batch, preserve call/result order, checkpoint, and finish the execution turn with the parent task still open. Let the session release the permit. A parked turn produces no task submission, completion trigger or user reply. For a mixed batch, retain successful assignments and give the manager the failed operation to correct once actionable. When every dispatch fails, surface the error immediately. [Tool traits](../../../server/services/agent_instances/tools.py) · [Checkpoint and execution loop](../../../server/services/temporal/agent_workflow.py) · [Permit owner](../../../server/services/temporal/agent_instance_workflow.py)
+## Design boundaries
 
-3. **Resume on actionable inbox work.** Preserve the existing assignment identity and review the first child that submits or fails. Consume other ready notices for the same upstream attempt together. Keep every unreviewed outcome actionable across a checkpoint, including one that arrives while the manager is parking. Park again when only outstanding work remains. Accepting a prerequisite can release its dependent even while another sibling runs. For “code, then verify in a browser,” let the manager pass the accepted coding result into the verification assignment. `after` currently supplies ordering only. [Inbox admission, review gate and dependencies](../../../server/services/agent_instances/service.py) · [Event OS wake and reconciliation](../../../RFC-0005-EVENT-OS-ON-TEMPORAL.md)
+- **Keep Temporal and the current inbox in charge.** The database inbox and mutation receipts own assignment, review, and answer state. Signal-With-Start is a wake hint; signal acceptance is not task processing. The existing reconciler recovers missed signals. Do not add a persistent supervisor, polling loop, event bus, or script engine. [Temporal message passing](https://docs.temporal.io/develop/python/workflows/message-passing) · [RFC-0005](../../../RFC-0005-EVENT-OS-ON-TEMPORAL.md) · [Workflow control](../../temporal-workflow-control.md)
+- **Do not change prompts.** Keep each subagent's connected skill and existing specialized-agent system prompt intact. Do not append or rewrite manager instructions, connected skills, or the Task Manager skill. Enforce behavior through typed Task Manager operations, inbox data, execution traits, and runtime rules.
+- **Keep task completion separate.** Parking, progress, questions, and answers do not create a task-completion outcome. A canvas Task Completed trigger still matches only the employee connected to its Task input and its existing filters. Matching standalone automation triggers continue to work. Teammate configuration edges remain excluded from forward trigger traversal.
+- **Preserve the Dynamic Workflow division of work.** The repository study supports retaining durable task receipts, isolated agent instances, and a review inbox. Its pinned Pydantic implementation records child calls and returns child results or exceptions to the waiting computation; OpenCompany applies that boundary with Task Manager and Temporal rather than introducing a new executor. [Study, §11.3](CROSS-REFERENCE.md#113-what-changed-for-the-build) · [Pinned dispatch](https://github.com/pydantic/pydantic-ai/blob/d94586aad1acd640715f2bf1152e8d730c8f9938/src/pydantic_ai_harness/pydantic_ai_harness/dynamic_workflow/_toolset.py#L802) · [Pinned Code Mode executor](https://github.com/pydantic/pydantic-ai/blob/d94586aad1acd640715f2bf1152e8d730c8f9938/src/pydantic_ai_harness/pydantic_ai_harness/_monty_exec.py#L446)
 
-4. **Support the agreed exception for a blocking decision.** Extend existing instance messaging with an explicit decision request and correlated answer. Derive the immediate assigner and child/upstream attempt identities from the active task. Persist the request, park the worker and release its slot. Admit the manager's decision turn against its upstream task so it can answer. Resume only the requesting worker on a valid answer. Keep routine updates available without waking a parked manager. An unanswered request keeps the worker's task open, including a leaf worker that has no children. Fence duplicate, stale and cancelled requests and answers. Owner-only approvals continue through the approval flow. Cover the native Coding Agent adapter, including Pi when configured, before enabling this behavior for that team. [Current peer messages and task-scoped permissions](../../../server/services/agent_instances/service.py) · [Instance tool contracts](../../../server/services/agent_instances/tools.py)
+## Implementation plan
 
-5. **Separate accepting evidence from finishing the parent mission.** With **Skip reviews when sure** enabled, the current automatic reviewer can accept a child's result and immediately submit the parent's accumulated child results. For a parked manager, keep automatic child acceptance and give the manager one continuation when it needs to decide what to assign next or to write its own submission. In particular, a successful coding task must still lead to required browser verification. Chat retains final review. Update managed-role instructions to batch independent assignments and explain the wake conditions. [Automatic review](../../../server/services/agent_instances/auto_review.py) · [Parent submission](../../../server/services/agent_instances/service.py)
+1. **Freeze the protocol on admission.** Use the managed team plan's delegation runtime version for new admissions. Carry it through the job, instance configuration, Session Workflow input, tool preparation, and resumed turns. New managed bindings omit `wait_for_agents`; older session histories, opaque workers, and workflows without the version marker keep their admitted behavior. Never alter model prompts or skill contents.
 
-6. **Release through generation admission.** Freeze the behavior at Start and carry it through job admission, instance configuration, tool preparation and resumed turns. Older generations and in-flight jobs retain their admitted behavior. Ship reader support across workers before enabling new admissions. Verify old and new recorded Temporal histories, Stop/Resume, budget pause and Reset. The change fits the existing session, inbox, task board and execution permit. [Instance protocol](../../../server/services/agent_instances/protocol.py) · [Temporal design rules](../../../RFC-0006-TEMPORAL-DESIGN-PATTERNS.md) · [Replay and release checks](../../TEMPORAL_ARCHITECTURE.md)
+2. **Park after a committed assignment batch.** Detect successful Task Manager operations that start or retry child work from their existing execution traits and committed receipts. Finish the tool batch in call order, checkpoint the transcript and receipts, then return an internal parked disposition before another model call or permit reacquisition. The session settles the AgentRun and releases its permit while leaving its parent task and attempt open. For the taskless Chat lead reviewing the initial Orchestrator task, park only when the committed operation names that exact outer task and the job, role, assigned instance, and attempt validate. A parked result does not run task completion, final delivery, or Task Completed triggers.
 
-### Two details that affect correctness
+3. **Resume from actionable inbox state only.** Correlate each child task and result with the immediate assigning instance, logical run, upstream task, and attempt. Wake a `child_work` park only for the stored child task's matching submission or failure. Wake a `decision` park only for its matching answer. Ignore generic peer messages and progress for wake eligibility in both inbox admission and the reconciler. Validate every event against current task and attempt state before claiming it; stale or duplicate events cannot resume replacement work. Managers can review sibling results as they become actionable and park again while other children continue.
 
-- Record an explicit parked-turn outcome at the checkpoint. The instance session must recognize it before its normal success, output and delivery paths. This matters when Chat requests a revision and when a leaf worker asks a question. Both can end their execution turn with a task still in progress.
-- Make wake eligibility consistent in inbox admission and reconciliation. Suppressing a Temporal signal alone would leave an ordinary progress message eligible for the next recovery scan. A decision request carries its own identity, the task attempt and the intended reviewer. The answer refers to that request. Treat a duplicate as the same exchange. Workers choose this message type explicitly when they need a decision.
+4. **Route blocking decisions to the immediate manager.** Add typed request, answer, and escalation operations backed by idempotent database receipts. Derive the intended assigner and task-attempt identity from the active task. A manager may answer or escalate; Chat asks the owner in the originating conversation, or on Home for the original task when no chat exists. The answer resumes the same job and task attempt. Expose mid-turn decisions only to checkpoint-capable native/Pi workers. Opaque CLI/RLM workers retain their current execution and review behavior.
+
+5. **Stream small progress events during active turns.** Use the installed Temporal Python SDK 1.34.0 Workflow Streams API. The feature is Public Preview, so keep it as a progress-only observer. Construct the stream from `@workflow.init`, emit bounded lifecycle milestones such as running, waiting for a named teammate, decision requested, resumed, submitted, and failed, and forward them through the existing progress WebSocket path. Do not stream prompts, results, or token deltas. Keep the database progress projection authoritative while parked or disconnected. Carry the concrete `WorkflowStreamState` across AgentWorkflow Continue-As-New, truncate old stream entries to keep state bounded, and let the stream helper drain pollers and wait for handlers before rollover. Do not add a completion delay or subscriber acknowledgement handshake. [Workflow Streams](https://docs.temporal.io/develop/python/workflows/workflow-streams) · [Continue-As-New](https://docs.temporal.io/develop/python/workflows/continue-as-new)
+
+6. **Preserve replay and existing operations.** Activities own database, model, network, and WebSocket side effects; Workflow code remains deterministic. Gate shared command-history changes with the repository's `workflow.patched` practice. Keep existing workflow types, retry ownership, inbox, generation controller, Stop/Resume, Reset, and Safe Apply. Old histories replay with their original admitted behavior. Replay representative old and new histories before enabling new admissions. [Temporal versioning](https://docs.temporal.io/develop/python/workflows/versioning) · [RFC-0006](../../../RFC-0006-TEMPORAL-DESIGN-PATTERNS.md)
 
 ## Release checks
 
-| Scenario | Evidence required |
+| Scenario | Required result |
 | --- | --- |
-| One slot, slow Coding Agent, no actionable event | Zero manager model activities, status tools and wait timers between committed handoff and outcome. The worker acquires the released slot. |
-| Parallel siblings, dependency, or partial assignment failure | Successful siblings run once. Independent results can arrive in either order. Accepting A releases dependent B. A failed dispatch is visible and correctable. |
-| Blocking question alongside routine progress | Progress causes zero manager turns. One question reaches the immediate assigner and one answer resumes the same worker attempt, including with one slot. |
-| Nested manager, failure, retry, or requested changes | Each outcome travels one level. The revised task keeps its board identity. Chat sends one final reply after reviewing the outer assignment. |
-| Code followed by browser verification | With automatic review both on and off, the required verification happens before parent submission. |
-| Completion at checkpoint, duplicate delivery, restart, Stop/Resume, budget pause, or Reset | No lost review or duplicated work. A paused team consumes no model turns. A stale answer or outcome cannot resume a replacement attempt. Old histories replay. |
+| Hire or Builder creates and retries a managed team | One outer task and one task per committed assignment; retries are idempotent and preserve the reviewed topology. |
+| Greeting, clarification, status question, then substantive work | Chat responds directly to the first three; only substantive work creates a job and a visible Task Manager assignment. |
+| Slow worker with one execution permit | After committing child work, its manager makes zero model calls, Task Manager reads, waits, or permit reacquisitions until actionable inbox work arrives. |
+| Nested manager and worker complete in either order | Each result wakes and is reviewed by its immediate assigner, one level at a time; only matching employee triggers fire. |
+| Worker asks a blocking question while also sending progress | Routine progress causes no manager turn; one matching decision wakes its manager and the valid answer resumes the same checkpoint-capable worker attempt. |
+| Chat requests changes to the Orchestrator result | Chat parks against the exact outer task; the same board task receives a new attempt; Chat replies after accepting the revised result. |
+| Standalone Task Completed observer and employee-connected trigger both match | Both retain their existing filters and deduplication; parking and decision events trigger neither. |
+| Two jobs finish in reverse order with restart or duplicate events | Results stay bound to the original instance, task attempt, job, and conversation branch; accepted work is delivered once. |
+| Stream disconnect, rollover, Stop/Resume, Reset, or Safe Apply | Live milestones resume on active turns; the database view remains correct while idle or disconnected; old histories and stale-attempt fences remain valid. |
 
-After these checks, compare a controlled normal-UI job with the incident using the existing model usage ledger, task receipts and inbox timestamps. Report manager calls during idle time separately from the cost of dispatch, substantive decisions and final review. The UI can refresh progress throughout.
+The Dynamic Workflow study informs the call/result boundary; the repository's Temporal RFCs and official Temporal guidance define durable execution, wake, rollover, and replay behavior. Keep implementation inside those existing boundaries and avoid new framework layers.

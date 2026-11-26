@@ -10,6 +10,26 @@ from services.employees.failures import FAILURE_MESSAGES, NO_ASSIGNMENTS_CODE
 
 
 def _job_progress(job: EmployeeJob) -> dict:
+    owner_decisions = job.delivery.get("owner_decisions") or {}
+    pending_decisions = [
+        {
+            "decision_id": str(decision_id),
+            "question": str(decision.get("question") or "")[:4000],
+            **({"context": str(decision.get("context") or "")[:4000]}
+               if decision.get("context") else {}),
+            "requested_by": (decision.get("requested_by")[:120]
+                if isinstance(decision.get("requested_by"), str) else "A teammate"),
+        }
+        for decision_id, decision in owner_decisions.items()
+        if isinstance(decision, dict) and decision.get("status") == "pending"
+    ] if isinstance(owner_decisions, dict) else []
+    if pending_decisions and job.state not in {"delivered", "completed", "cancelled", "failed"}:
+        return {
+            "request_id": job.id,
+            "state": "waiting_for_decision",
+            "message": "A teammate needs your decision before continuing.",
+            "owner_decisions": pending_decisions,
+        }
     inflight = job.delivery.get("inflight")
     node_types = {node["id"]: node["type"] for node in job.source.get("nodes", [])}
     lease = job.delivery.get("lease_until")

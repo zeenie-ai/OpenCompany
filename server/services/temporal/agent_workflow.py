@@ -56,6 +56,7 @@ from typing import Any, Dict, List, Optional
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy, WorkflowIDReusePolicy  # RetryPolicy kept for type hints
+from temporalio.contrib.workflow_streams import WorkflowStream, WorkflowStreamState
 from temporalio.workflow import ActivityCancellationType, ChildWorkflowCancellationType, ParentClosePolicy
 
 from services.agent_bindings import agent_can_bind_tool, unique_node_bindings, hydrate_temporal_binding
@@ -427,6 +428,7 @@ def _employee_runtime_metadata() -> dict:
 # complete encoded continuation and fails explicitly if it cannot fit.
 _CAN_TRANSCRIPT_MAX_BYTES = 1_000_000
 _CAN_INPUT_MAX_BYTES = 1_900_000
+_EMPLOYEE_PROGRESS_LOG_ITEMS = 32
 
 # The seed keys of the prepared payload that a durable rollover does not carry
 # (1b.19). The resumed run reads `conversation` and `memory_content` only when
@@ -944,7 +946,7 @@ class AgentWorkflow:
     _pi_runtime_enabled = False
 
     @workflow.init
-    def __init__(self, context: Dict[str, Any] = None) -> None:
+    def __init__(self, context: Dict[str, Any] = None, stream_state: WorkflowStreamState | None = None) -> None:
         self._control_paused = False
         if context and context.get("pi_local_control_version") == 1 and context.get("execution_control_version") != 1:
             from .pi_control import PiLocalExecutionControl
@@ -953,6 +955,16 @@ class AgentWorkflow:
             self._execution_control = ExecutionControl()
         self._browser_claims = []
         self._continuing = False
+        self._managed_delegation_v1 = False
+        self._employee_progress_enabled = False
+        self._employee_progress_stream = None
+        self._employee_progress_topic = None
+        self._employee_progress_forwarder = None
+        plan = (context or {}).get("employee_team_plan") or {}
+        if (plan.get("delegation_runtime_version") == 1 and (context or {}).get("agent_instance_id")
+                and (context or {}).get("managed_delegation_active", True)):
+            self._employee_progress_stream = WorkflowStream(prior_state=stream_state)
+            self._employee_progress_topic = self._employee_progress_stream.topic("employee_progress", type=dict)
         if context is not None:
             self._execution_control.bind(context)
 
@@ -1074,8 +1086,20 @@ class AgentWorkflow:
                 binding.update(claim["binding"])
 
     @workflow.run
-    async def run(self, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def run(self, context: Dict[str, Any] = None, stream_state: WorkflowStreamState | None = None) -> Dict[str, Any]:
         from services.agent_instances.protocol import should_bootstrap
+        plan = (context or {}).get("employee_team_plan") or {}
+        managed_v1 = bool(plan.get("delegation_runtime_version") == 1 and
+                          (context or {}).get("managed_delegation_active", True) and
+                          workflow.patched("managed-agent-event-driven-delegation-v1"))
+        self._managed_delegation_v1 = managed_v1
+        if context is not None:
+            # The existing task binding activity uses the same frozen turn
+            # decision; it must not hide legacy wait tools from an older
+            # active Session Workflow during rollout.
+            context["managed_delegation_active"] = managed_v1
+        progress_v1 = bool(managed_v1 and workflow.patched("managed-agent-progress-stream-v1"))
+        self._employee_progress_enabled = progress_v1
         if should_bootstrap(context or {}):
             admitted = await workflow.execute_activity("agent.instance.bootstrap", context,
                 start_to_close_timeout=PERSIST_TURN_TIMEOUT * 2, retry_policy=AGENT_ACTIVITY_RETRY)
@@ -1099,7 +1123,31 @@ class AgentWorkflow:
                     activity_id="employee-runtime-failed", start_to_close_timeout=PERSIST_TURN_TIMEOUT, retry_policy=BOOKKEEPING_RETRY))
         bug = False
         try:
+            if progress_v1 and context and context.get("agent_instance_id"):
+                self._employee_progress_forwarder = workflow.start_activity(
+                    "agent.progress.stream_forward",
+                    {
+                        "workflow_id": context.get("workflow_id"),
+                        "team_id": context.get("team_id"),
+                        "job_id": context.get("employee_job_id"),
+                        "agent_instance_id": context.get("agent_instance_id"),
+                        "agent_run_id": context.get("agent_run_id"),
+                    },
+                    start_to_close_timeout=timedelta(days=1),
+                    heartbeat_timeout=timedelta(seconds=10),
+                    retry_policy=RetryPolicy(maximum_attempts=1),
+                    cancellation_type=ActivityCancellationType.TRY_CANCEL,
+                )
+                inbox = context.get("agent_input_messages") or []
+                resumed = any(
+                    isinstance(message, dict) and isinstance(message.get("content"), str)
+                    and any(marker in message["content"] for marker in ("[task_review]", "[decision_request]", "[decision_answer]"))
+                    for message in inbox
+                )
+                self._publish_employee_progress(context, "resumed" if resumed else "running")
             result = await self._run_impl(context)
+            if progress_v1 and context and context.get("agent_instance_id") and result.get("disposition") != "parked":
+                self._publish_employee_progress(context, "submitted" if result.get("success", True) else "failed")
             if not result.get("success", True):
                 await fail_job()
             return result
@@ -1111,9 +1159,14 @@ class AgentWorkflow:
                 bug = True
                 raise
             from temporalio.exceptions import is_cancelled_exception
+            if progress_v1 and context and context.get("agent_instance_id"):
+                self._publish_employee_progress(context, "failed")
             await fail_job(cancelled=is_cancelled_exception(exc))
             raise
         finally:
+            if self._employee_progress_forwarder is not None:
+                self._employee_progress_forwarder.cancel()
+                self._employee_progress_forwarder = None
             # A bug fails the task and records nothing on the way out (_exits).
             if not bug:
                 if not self._continuing:
@@ -1470,6 +1523,44 @@ class AgentWorkflow:
             # already-issued correction without granting a second allowance.
             messages.append(_native_message(role="user", content=correction_text))
         delegation_repair = False
+        managed_waiting_task_ids: dict[str, int | None] = {}
+        if self._managed_delegation_v1 and self._instance_context:
+            carried_waiting = (resume.get("managed_waiting_task_ids")
+                if "managed_waiting_task_ids" in resume else context.get("managed_waiting_task_ids")) or []
+            for item in carried_waiting:
+                identity = item.get("task_id") if isinstance(item, dict) else item
+                if not isinstance(identity, str) or not identity:
+                    continue
+                attempt = item.get("attempt") if isinstance(item, dict) else None
+                managed_waiting_task_ids[identity[:255]] = (
+                    attempt if isinstance(attempt, int) and not isinstance(attempt, bool) and attempt >= 0 else None
+                )
+        carried_decisions = (resume.get("managed_pending_decision_ids")
+            if "managed_pending_decision_ids" in resume else context.get("managed_pending_decision_ids")) or []
+        managed_decision_ids = {
+            str(identity)[:255] for identity in carried_decisions
+            if isinstance(identity, str) and identity
+        } if self._managed_delegation_v1 and self._instance_context else set()
+        managed_waiting_name: str | None = resume.get("managed_waiting_name")
+
+        async def park_managed_turn() -> dict:
+            await self._complete_runtime_turn(messages)
+            await self._persist_turn(payload, human_text=user_prompt, assistant_text="", interim=True)
+            if managed_decision_ids:
+                self._publish_employee_progress(context, "decision_requested")
+            if managed_waiting_task_ids:
+                self._publish_employee_progress(context, "waiting", message=managed_waiting_name)
+            return {
+                "success": True,
+                "disposition": "parked",
+                "reason": "decision" if managed_decision_ids else "child_work",
+                "waiting_task_ids": [
+                    {"task_id": identity, **({"attempt": attempt} if attempt is not None else {})}
+                    for identity, attempt in sorted(managed_waiting_task_ids.items())
+                ],
+                "decision_ids": sorted(managed_decision_ids),
+            }
+
         for iteration in range(iteration_offset, max_iterations):
             await self._wait_until_resumed()
             if self._instance_context:
@@ -1706,6 +1797,9 @@ class AgentWorkflow:
                     continue
 
                 if kind == "final":
+                    if (self._managed_delegation_v1 and self._instance_context
+                            and (managed_waiting_task_ids or managed_decision_ids)):
+                        return await park_managed_turn()
                     await self._complete_runtime_turn(messages)
                     final_content = step_result.get("content", "")
                     team_id = str(payload.get("team_id") or "")
@@ -2815,6 +2909,60 @@ class AgentWorkflow:
                                                      "error_type": "agent_turn_halted", "review_blocked": True}
                             elif tool_result.get("error_type") == "agent_turn_halted":
                                 blocked_error = {**tool_result, "review_blocked": True}
+                        if (self._managed_delegation_v1 and self._instance_context
+                                and tool_info.get("agent_operation") and isinstance(tool_result, dict)
+                                and tool_result.get("success", True) is not False
+                                and not tool_result.get("error") and not tool_result.get("error_type")):
+                            operation = tool_info.get("agent_operation")
+                            traits = set(tool_info.get("execution_traits") or ())
+                            returned_decisions = tool_result.get("decision_ids") or []
+                            if operation in {"request_decision", "escalate_decision"} and tool_result.get("decision_id"):
+                                returned_decisions = [*returned_decisions, tool_result["decision_id"]]
+                            if traits & {"requests_decision", "escalates_decision"}:
+                                managed_decision_ids.update(
+                                    str(identity)[:255] for identity in returned_decisions
+                                    if isinstance(identity, str) and identity
+                                )
+                            elif operation == "answer_decision":
+                                resolved = tool_result.get("decision_id")
+                                if isinstance(resolved, str) and resolved:
+                                    managed_decision_ids.discard(resolved[:255])
+                                managed_decision_ids.update(
+                                    str(identity)[:255] for identity in returned_decisions
+                                    if isinstance(identity, str) and identity
+                                )
+                            if traits & {"starts_child", "requests_decision", "escalates_decision", "mutates_lifecycle"}:
+                                returned_tasks = (tool_result.get("waiting_task_ids")
+                                    or tool_result.get("woken_task_ids") or [])
+                                if "waiting_task_ids" in tool_result and operation not in {"spawn", "assign_task"}:
+                                    # Review, retry, cancel and decision actions
+                                    # return the complete open-child set for
+                                    # this parent attempt. Replace stale waits
+                                    # before merging the assignment receipt.
+                                    managed_waiting_task_ids.clear()
+                                    managed_waiting_name = None
+                                if not returned_tasks and operation in {
+                                    "spawn", "assign_task", "modify_task", "request_changes", "retry_task", "reassign"
+                                }:
+                                    assigned = tool_result.get("task")
+                                    if isinstance(assigned, dict) and assigned.get("id"):
+                                        returned_tasks = [{"task_id": assigned["id"],
+                                            "attempt": assigned.get("current_attempt")}]
+                                for item in returned_tasks:
+                                    identity = item.get("task_id") if isinstance(item, dict) else item
+                                    if isinstance(identity, str) and identity:
+                                        attempt = item.get("attempt") if isinstance(item, dict) else None
+                                        if isinstance(attempt, int) and not isinstance(attempt, bool) and attempt >= 0:
+                                            managed_waiting_task_ids[identity[:255]] = attempt
+                                        else:
+                                            managed_waiting_task_ids.setdefault(identity[:255], None)
+                                if managed_waiting_task_ids:
+                                    if operation in {"spawn", "assign_task", "modify_task", "request_changes", "retry_task", "reassign"}:
+                                        template = (tool_info.get("agent_template") or
+                                            (tool_info.get("parameters") or {}).get("_agent_template") or {})
+                                        label = ((tool_info.get("tool_info") or {}).get("label")
+                                            or template.get("label") or tool_info.get("node_type") or "teammate")
+                                        managed_waiting_name = str(label)[:120]
                         # piRead is a new node type, so existing histories keep
                         # their exact text-only wire. New Pi reads retain image
                         # references through receipts and provider hydration.
@@ -3098,6 +3246,14 @@ class AgentWorkflow:
                 if self._execution_control.enabled and is_delegation and next_delegation_to_start < len(delegation_call_indices):
                     await _start_delegation(delegation_call_indices[next_delegation_to_start])
                     next_delegation_to_start += 1
+
+            if (self._managed_delegation_v1 and self._instance_context
+                    and (managed_waiting_task_ids or managed_decision_ids)):
+                # The whole call batch and its receipts are checkpointed. End
+                # this model turn before a manager can issue another read or
+                # reacquire a child permit. The session owns the durable park
+                # record; the task and attempt stay open for an inbox wake.
+                return await park_managed_turn()
 
             await self._complete_runtime_turn(messages)
 
@@ -3474,6 +3630,12 @@ class AgentWorkflow:
                                 "agent_delivery_ids": self._instance_delivery_ids,
                                 "agent_checkpoint_sequence": self._instance_checkpoint_sequence,
                                 "agent_invalid_count": self._instance_invalid_count,
+                                "managed_waiting_task_ids": [
+                                    {"task_id": identity, **({"attempt": attempt} if attempt is not None else {})}
+                                    for identity, attempt in sorted(managed_waiting_task_ids.items())
+                                ],
+                                "managed_pending_decision_ids": sorted(managed_decision_ids),
+                                "managed_waiting_name": managed_waiting_name,
                                 "tools": tools,
                                 "thinking": thinking_accumulated,
                                 "browser_artifacts": browser_artifacts,
@@ -3490,7 +3652,12 @@ class AgentWorkflow:
                                 type="AgentContinuationTooLarge", non_retryable=True,
                             )
                         self._continuing = True
-                        workflow.continue_as_new(args=[next_context])
+                        if self._employee_progress_enabled and self._employee_progress_stream:
+                            await self._employee_progress_stream.continue_as_new(
+                                lambda state: [next_context, state]
+                            )
+                        else:
+                            workflow.continue_as_new(args=[next_context])
                     # The live transcript crosses the boundary directly.
                     # Compaction keeps it token-bounded; the byte guard
                     # below keeps a pathological transcript away from
@@ -3514,21 +3681,30 @@ class AgentWorkflow:
                         f"AgentWorkflow continue_as_new at iteration "
                         f"{iteration + 1} (history pressure)"
                     )
-                    workflow.continue_as_new(
-                        args=[
-                            {
-                                **context,
-                                _RESUME_MARKER: {
-                                    "iteration": iteration + 1,
-                                    "delegation_correction_count": correction_count,
-                                    "execution_id": execution_id,
-                                    "transcript": carried,
-                                    "usage": usage_total,
-                                    "context_usage": context_usage_total,
-                                },
-                            }
-                        ]
-                    )
+                    next_context = {
+                        **context,
+                        _RESUME_MARKER: {
+                            "iteration": iteration + 1,
+                            "delegation_correction_count": correction_count,
+                            "execution_id": execution_id,
+                            "transcript": carried,
+                            "usage": usage_total,
+                            "context_usage": context_usage_total,
+                            "managed_waiting_task_ids": [
+                                {"task_id": identity, **({"attempt": attempt} if attempt is not None else {})}
+                                for identity, attempt in sorted(managed_waiting_task_ids.items())
+                            ],
+                            "managed_pending_decision_ids": sorted(managed_decision_ids),
+                            "managed_waiting_name": managed_waiting_name,
+                        },
+                    }
+                    if self._employee_progress_enabled and self._employee_progress_stream:
+                        self._continuing = True
+                        await self._employee_progress_stream.continue_as_new(
+                            lambda state: [next_context, state]
+                        )
+                    else:
+                        workflow.continue_as_new(args=[next_context])
 
         else:
             # Loop exited without break -- hit max_iterations.
@@ -3551,6 +3727,10 @@ class AgentWorkflow:
                     max_iterations, phase="failed", status="error")
                 return {"success": False, "error": "Coding Agent exhausted its maximum iterations without a final response",
                     "error_type": "PiIterationExhausted", "result": {"iterations": max_iterations, "usage": usage_total}}
+
+        if (self._managed_delegation_v1 and self._instance_context
+                and (managed_waiting_task_ids or managed_decision_ids)):
+            return await park_managed_turn()
 
         result_payload = {
             "response": final_content,
@@ -3665,6 +3845,36 @@ class AgentWorkflow:
     def _runtime_child_finished(self, identity):
         if hasattr(self._execution_control, "forget_child"):
             self._execution_control.forget_child(identity)
+
+    def _publish_employee_progress(self, context: Dict[str, Any], milestone: str, *, message: str | None = None) -> None:
+        topic = self._employee_progress_topic
+        stream = self._employee_progress_stream
+        if topic is None or stream is None:
+            return
+        event = {
+            "workflow_id": str(context.get("workflow_id") or "")[:255],
+            "temporal_workflow_id": workflow.info().workflow_id[:255],
+            "temporal_run_id": workflow.info().run_id[:255],
+            "team_id": str(context.get("team_id") or "")[:255],
+            "job_id": str(context.get("employee_job_id") or "")[:255],
+            "agent_instance_id": str(context.get("agent_instance_id") or "")[:255],
+            "agent_run_id": str(context.get("agent_run_id") or "")[:255],
+            "node_id": str(context.get("node_id") or "")[:255],
+            "milestone": milestone,
+            "timestamp": workflow.now().isoformat(),
+        }
+        if context.get("team_task_id"):
+            event["task_id"] = str(context["team_task_id"])[:255]
+        attempt = context.get("task_attempt")
+        if isinstance(attempt, int) and not isinstance(attempt, bool) and attempt >= 0:
+            event["attempt"] = attempt
+        if message and message.strip():
+            event["message"] = message.strip()[:120]
+        topic.publish(event)
+        state = stream.get_state()
+        excess = len(state.log) - _EMPLOYEE_PROGRESS_LOG_ITEMS
+        if excess > 0:
+            stream.truncate(state.base_offset + excess)
 
     async def _before_runtime_tool_batch(self, calls, tools):
         pass

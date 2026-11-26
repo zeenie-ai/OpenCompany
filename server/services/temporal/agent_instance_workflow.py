@@ -67,6 +67,8 @@ def turn_context(claim: dict[str, Any]) -> dict[str, Any]:
         "agent_transcript_revision": claim.get("transcript_revision", 0),
         "agent_input_messages": claim.get("messages") or [],
         "agent_initial_transcript": claim.get("transcript") or [],
+        "managed_waiting_task_ids": claim.get("managed_waiting_task_ids") or [],
+        "managed_pending_decision_ids": claim.get("managed_pending_decision_ids") or [],
         "team_id": instance.get("team_id") or scope.get("team_id"),
         "employee_job_id": original.get("employee_job_id"),
     })
@@ -308,6 +310,18 @@ async def complete_instance(payload: dict) -> dict:
     return result
 
 
+@activity.defn(name="agent.instance.park")
+async def park_instance(payload: dict) -> dict:
+    """Persist a checkpointed turn boundary without completing its task."""
+    store = _store()
+    result = await store.park_run(payload["instance_id"], payload["run_id"],
+        reason=payload.get("reason") or "child_work",
+        waiting_task_ids=payload.get("waiting_task_ids") or [],
+        decision_ids=payload.get("decision_ids") or [], request_id=payload["request_id"])
+    await _notify_instance(payload["instance_id"])
+    return result
+
+
 @activity.defn(name="agent.instance.reconcile")
 async def reconcile_instances(payload: dict) -> dict:
     from services.agent_instances.runtime import reconcile_pending
@@ -425,6 +439,7 @@ class AgentInstanceSessionWorkflow:
         from services.coding_agent_runtime import agent_workflow_name
         from services.temporal.agent_workflow import _normalise_delegated_result
         request = request or {}
+        event_driven_parking = request.get("delegation_runtime_version") == 1
         self._instance_id = request["instance_id"]
         self._control.bind(request)
         await self._control.register_root()
@@ -450,10 +465,14 @@ class AgentInstanceSessionWorkflow:
                     last = {"success": claim["status"] == "completed", "result": claim.get("result"), "error": claim.get("error")}
                     continue
                 context = claim["context"]
+                node_type = context.get("node_type")
+                checkpoint_capable = node_type not in {"claude_code_agent", "codex_agent", "rlm_agent", "gemini_cli_agent"}
+                context["managed_delegation_active"] = bool(event_driven_parking and checkpoint_capable)
                 run_id = claim["run_id"]
                 self._current_run_id = run_id
                 permit_id = None
                 error = None
+                parked = False
                 try:
                     if (claim.get("instance") or {}).get("role") != "lead":
                         permit_handle = workflow.start_activity("agent.acquire_subagent_permit", {
@@ -499,6 +518,8 @@ class AgentInstanceSessionWorkflow:
                         await workflow.execute_activity("agent.instance.checkpoint", {
                             **transcript, "instance_id": request["instance_id"], "run_id": run_id},
                             start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING)
+                    parked = bool(context.get("managed_delegation_active") and last.get("success", True)
+                                  and last.get("disposition") == "parked")
                     error = last.get("error") if not last.get("success", True) else None
                 except Exception as exc:
                     if is_workflow_bug(exc):
@@ -520,16 +541,31 @@ class AgentInstanceSessionWorkflow:
                     self._current_handle = None
                     self._current_run_id = None
                     if not workflow_bug:
-                        _text, summary = _normalise_delegated_result(last)
-                        await workflow.execute_activity("agent.instance.complete", {
-                            "instance_id": request["instance_id"], "run_id": run_id,
-                            "result": summary, "error": error, "request_id": f"complete:{run_id}"},
-                            start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING)
+                        if parked:
+                            await workflow.execute_activity("agent.instance.park", {
+                                "instance_id": request["instance_id"], "run_id": run_id,
+                                "reason": last.get("reason") or "child_work",
+                                "waiting_task_ids": last.get("waiting_task_ids") or [],
+                                "decision_ids": last.get("decision_ids") or [],
+                                "request_id": f"park:{run_id}"},
+                                start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING)
+                        else:
+                            _text, summary = _normalise_delegated_result(last)
+                            await workflow.execute_activity("agent.instance.complete", {
+                                "instance_id": request["instance_id"], "run_id": run_id,
+                                "result": summary, "error": error, "request_id": f"complete:{run_id}"},
+                                start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING)
                         if permit_id:
                             await workflow.execute_activity("agent.release_subagent_permit", {
                                 "agent_instance_id": request["instance_id"], "agent_run_id": run_id,
                                 "root_execution_id": context.get("root_execution_id") or context.get("execution_id"), "permit_id": permit_id},
                                 start_to_close_timeout=timedelta(seconds=60), retry_policy=BOOKKEEPING)
+                if parked:
+                    last = {"success": True, "status": "parked", "task_id": context.get("team_task_id"),
+                            "reason": last.get("reason") or "child_work"}
+                    if sequence % 100 == 0:
+                        workflow.continue_as_new({**request, "sequence": sequence})
+                    continue
                 if error and (claim.get("instance") or {}).get("role") == "lead" and context.get("employee_job_id"):
                     # This transaction refuses to fail a job with any child
                     # tasks. Those jobs remain recoverable through review.
@@ -567,4 +603,4 @@ class AgentInstanceReconcilerWorkflow:
 
 INSTANCE_ACTIVITIES = [bootstrap_instance, dispatch_wait, claim_instance, checkpoint_instance,
                        drain_instance, admit_instance_operation, halt_instance, record_invalid_instance_request,
-                       complete_instance, reconcile_instances, execute_instance_tool, execute_instance_node]
+                       complete_instance, park_instance, reconcile_instances, execute_instance_tool, execute_instance_node]
