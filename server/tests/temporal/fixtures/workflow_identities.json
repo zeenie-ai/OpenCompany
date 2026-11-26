@@ -995,6 +995,12 @@
       "after": "312201cd2cb2a5ae091ac064b22717bc563eaf878be1654593b53f6ba8bf259d",
       "patch": "pi-sticky-workflow-cancellation-v1",
       "reason": "Pi cancellation: PiCodingAgentWorkflow's model step (agent.execute_llm_step, llm-step-N) and a Pi run's plugin tool activities (AgentWorkflow._execute_plugin_tool_activity, which picks execute_pi_activity when uses_pi) go through pi_control.execute_pi_activity. It issues the same workflow.execute_activity commands, with the same types, arguments and activity ids, and raises CancelledError before and after them once the workflow has a cancellation request, only behind pi-sticky-workflow-cancellation-v1, which is checked only after such a request; a history without the marker replays as recorded. The identity scan sees the wrapped calls as one execute_activity(*args) in pi_control.py in place of agent.execute_llm_step in pi_workflow.py and four calls in agent_workflow.py (agent.instance.admit, the agent operation, its wait polls and the plain tool call); this digest differs from efef6dec by exactly those items and the marker. It ships active, not dormant (it is not in DORMANT_PATCHES), since the owner ruled out rollbacks on 2026-11-23."
+    },
+    {
+      "before": "e992b0e5db18fbd4c0a63a8e8ae82b9806ae91839e348096dcfe6d2a1781cf6a",
+      "after": "4e8ee301bb17bbf03a23f97bb65c44cdf910c245ecc05dc95d17afc299c6d303",
+      "patch": "browser-agent-only-tools-v1",
+      "reason": "Browser tools belong to Browser AI Agents only (services/agent_bindings.agent_can_bind_tool). AgentWorkflow drops a Browser tool from a non-browser agent's prepared, refreshed or carried tool list (_admitted_tools), and on a Continue-As-New resume a non-browser agent releases the browser leases it inherited for the carried task (browser_tasks.release, the command the release already issues, now in _release_browser_task), each only behind browser-agent-only-tools-v1. The marker is evaluated only when a tool would be dropped or such a lease exists, and a history without it keeps the tools and leases as recorded. This digest differs from 312201cd by exactly the two workflow.patched calls. It ships active, not dormant (it is not in DORMANT_PATCHES), since the owner ruled out rollbacks on 2026-11-23."
     }
   ],
   "handlers": {

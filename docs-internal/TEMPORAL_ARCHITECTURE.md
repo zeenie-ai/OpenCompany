@@ -91,6 +91,18 @@ recorded; the activities themselves (types, arguments, ids) are unchanged. It
 is not in `DORMANT_PATCHES`, so it records at once. Its identity entry is in
 `tests/temporal/fixtures/workflow_identities.json`.
 
+**Browser tools on browser agents only (`browser-agent-only-tools-v1`).** Only
+a Browser AI Agent may hold the Browser tool
+(`services/agent_bindings.agent_can_bind_tool`). `AgentWorkflow` drops a
+Browser tool from any other agent's prepared, refreshed or carried tool list
+(`_admitted_tools`), and on a Continue-As-New resume such an agent releases the
+browser leases it inherited for the carried task (`_release_browser_task`,
+the `browser_tasks.release` activity). Both happen only behind this marker,
+which is evaluated only when a tool would be dropped or such a lease exists; a
+history without it keeps the tools and leases as recorded. It is not in
+`DORMANT_PATCHES`, so it records at once. Its identity entry is in
+`tests/temporal/fixtures/workflow_identities.json`.
+
 **Browser owner routing (`browser_routing_version: 1`).** Distributed starts
 also capture server-resolved `browser_bindings`, including profile, principal,
 owner, runtime epoch and physical queue. The Browser queue overrides the
