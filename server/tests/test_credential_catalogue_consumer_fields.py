@@ -174,6 +174,8 @@ class TestCatalogueFields:
             ("deepgram", "language"),
             ("github", "developer"),
             ("claude_code", "developer"),
+            # TypeSafe's Jev is an AI provider but not a chat model.
+            ("typesafe", "developer"),
             ("android_remote", "devices"),
             ("browser", "devices"),
             ("openai_compatible", "ai"),

@@ -34,6 +34,7 @@ from services.plugin import NodeUserError
 from ._mocks import patched_container
 
 TYPESAFE = "https://api.typesafe.ai/v1/systemone"
+TYPESAFE_MODELS = "https://api.typesafe.ai/v1/models"
 OPENROUTER = "https://openrouter.ai/api/v1/systemone"
 NODE = "wf:classify:1"
 MESSAGE = "Hi, my invoice for March was charged twice. Can you refund one of them today?"
@@ -442,23 +443,58 @@ def test_jev_is_registered_twice_and_the_chat_model_once():
 
 
 @respx.mock
-async def test_a_typesafe_key_is_checked_with_one_small_judgment():
-    route = respx.post(TYPESAFE).mock(return_value=reply({"ok": {"type": "noul", "noul": 0.99}}))
+async def test_a_typesafe_key_is_checked_by_listing_its_models_which_costs_nothing():
+    # respx refuses any request not mocked here, so a judgment would fail the test.
+    route = respx.get(TYPESAFE_MODELS).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "models": [
+                    {"name": "jev-latest", "description": "General-purpose system one model.", "release_date": "2026-09-15"},
+                    {"name": "jev-1.14.0", "description": "Takes images.", "release_date": "2026-10-14"},
+                ]
+            },
+        )
+    )
 
     result = await TypeSafeCredential._probe("ts-key")
 
     assert result.valid is True
-    request = route.calls.last.request
-    assert request.headers["authorization"] == "Bearer ts-key"
-    assert json.loads(request.content)["questions"] == {"ok": {"type": "noul", "instructions": "This text is a connection test."}}
+    assert result.models == ["jev-latest", "jev-1.14.0"]
+    assert route.calls.last.request.headers["authorization"] == "Bearer ts-key"
 
 
 @respx.mock
 async def test_a_refused_typesafe_key_fails_its_check():
-    respx.post(TYPESAFE).mock(return_value=httpx.Response(401, json={"detail": "Invalid API key"}))
+    respx.get(TYPESAFE_MODELS).mock(return_value=httpx.Response(401, json={"detail": "Invalid API key"}))
 
     with pytest.raises(httpx.HTTPStatusError):
         await TypeSafeCredential._probe("made-up-key")
+
+
+@pytest.mark.parametrize("body", ["<html>Sign in</html>", '["jev-latest"]', '{"detail": "ok"}'])
+async def test_an_answer_without_a_model_list_is_not_taken_for_a_valid_key(body):
+    with respx.mock() as router:
+        router.get(TYPESAFE_MODELS).mock(return_value=httpx.Response(200, text=body))
+
+        result = await TypeSafeCredential._probe("ts-key")
+
+    assert result.valid is False
+    assert result.models == []
+
+
+def test_typesafe_sits_with_the_ai_providers_but_never_counts_as_a_chat_model():
+    from services.credential_registry import CredentialRegistry
+
+    entry = CredentialRegistry().get_provider("typesafe")
+
+    assert (entry["category"], entry["kind"]) == ("ai", "apiKey")
+    # Home counts consumer_category "ai" as a chat model (the guide, Get started).
+    assert entry["consumer_category"] == "developer"
+    assert not entry.get("has_defaults")
+    # A one-key panel shows its field's help, not the entry's instructions.
+    assert "console.typesafe.ai/keys" in entry["fields"][0]["help"]
+    assert "Jev" in entry["description"]
 
 
 # ---- the Classify node

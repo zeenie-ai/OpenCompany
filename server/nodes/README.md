@@ -340,7 +340,7 @@ from ._credentials import TwitterCredential              # shared with 3 sibling
 | `nodes/scraper/` | `ApifyCredential` (Bearer, SDK probe) + `TikHubCredential` (Bearer, declarative httpx probe against `tikhub/user/get_user_info` — kept SDK-free so the modal validates even if the `tikhub` import fails) | apify_actor / tikhub_action |
 | `nodes/model/` | 14 LLM credential classes: 11 cloud (`OpenAI / Anthropic / Gemini / OpenRouter / Groq / Cerebras / DeepSeek / Kimi / Mistral / xAI / Sarvam`), Ollama / LM Studio, and `OpenAICompatibleCredential` (any number of named endpoints, RFC-0003) | 13 chat models (xAI has no standalone chat-model node) **plus the `nodes/speech/` and `nodes/translate/` Sarvam providers**, which import `SarvamCredential` from here — one stored key serves Sarvam's OpenAI-compatible chat endpoint *and* its `api-subscription-key` REST APIs |
 | `nodes/search/` | `BraveSearch / Serper / Perplexity` inlined in each plugin file | single-use per plugin |
-| `nodes/judgment/` | `TypeSafeCredential` (Bearer; declarative probe that asks one noul) | classify, with `OpenRouterCredential` from `nodes/model/` |
+| `nodes/judgment/` | `TypeSafeCredential` (Bearer; declarative probe that lists the key's models, `GET /v1/models`, which is free where a judgment is billed) | classify, with `OpenRouterCredential` from `nodes/model/` |
 
 Declare inline only when genuinely single-use (see
 `nodes/search/brave_search/__init__.py` for the inline pattern). Declare in

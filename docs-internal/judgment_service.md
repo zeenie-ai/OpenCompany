@@ -100,6 +100,22 @@ registers them with `register_judgment_provider` when it loads.
 | `openrouter` | the same API through OpenRouter, `POST https://openrouter.ai/api/v1/systemone` | the owner's OpenRouter key | yes | choice, score, noul, box |
 | `llm` | the owner's chat model, answering as JSON | none of its own | no | choice, score, noul |
 
+**The TypeSafe key** is entered on TypeSafe's card in Connectors, under
+Developer. Home's Settings and Dev's Connectors dialog show the same list
+(`CredentialsBrowser`), and searching "jev" finds the card, since its
+description names Jev.
+- The card is an ordinary `apiKey` entry in `config/credential_providers.json`,
+  drawn by the shared `ApiKeyPanel`. Its field's `help` says where keys are
+  made (`console.typesafe.ai/keys`) and what Jev does.
+- Its `category` is `ai`, like ElevenLabs, Deepgram and the Claude Code and
+  Codex sign-ins. Its `consumer_category` is `developer`, never `ai`,
+  because Home counts an `ai` card as a chat model: the Welcome guide's
+  Connect step, Get started and the hire composer.
+- Checking a key lists its models (`GET https://api.typesafe.ai/v1/models`,
+  `TypeSafeCredential` in `nodes/judgment/_credentials.py`). That call is
+  free, where a judgment would be billed. A refused key gets 401, and an
+  answer without a model list fails the check.
+
 **Jev's request and reply** follow TypeSafe's and OpenRouter's System One
 references, read on 2026-11-23. Two functions in
 `_providers/systemone.py`, `to_systemone` and `from_systemone`, are the only
@@ -271,7 +287,8 @@ finder sends the phone's screenshot.
 - `server/tests/services/judgment/test_judgment_service.py`: provider
   order, one attempt, the answer checks and the question rules.
 - `server/tests/nodes/test_judgment.py`: the wire shapes, cost booking, the
-  fallback's reading and the Classify node.
+  fallback's reading, the TypeSafe key check and card, and the Classify
+  node.
 - `server/tests/llm/test_json_reply.py`: the JSON reader the fallback and
   translate share.
 - `server/tests/services/employees/test_triage.py`,

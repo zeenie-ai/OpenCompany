@@ -7,18 +7,21 @@ would collide in ``CREDENTIAL_REGISTRY``.
 
 from __future__ import annotations
 
-from services.judgment import Question
-from services.judgment import config as judgment_config
-from services.plugin.credential import ApiKeyCredential
+import httpx
 
-from ._providers.systemone import PATH, to_systemone
+from services.judgment import config as judgment_config
+from services.plugin.credential import ApiKeyCredential, ProbeResult
+
+#: TypeSafe's list of the models a key can ask (``GET /v1/models``).
+MODELS_PATH = "/models"
 
 
 class TypeSafeCredential(ApiKeyCredential):
     """TypeSafe API key, sent as a Bearer token.
 
-    The probe asks one noul, the cheapest call that proves the key works
-    (a few input tokens, and output is free). It is not booked as usage.
+    The check lists the key's models, which costs nothing; a judgment would
+    be billed. A refused key gets 401, and an answer without a model list is
+    not taken for a valid key.
     """
 
     id = "typesafe"
@@ -26,13 +29,18 @@ class TypeSafeCredential(ApiKeyCredential):
     category = "AI"
     key_location = "bearer"
     docs_url = "https://docs.typesafe.ai"
-    probe_method = "POST"
-    probe_url = judgment_config.base_url("typesafe") + PATH
-    probe_json = to_systemone(
-        judgment_config.model("typesafe"),
-        "Connection test.",
-        {"ok": Question(type="noul", description="This text is a connection test.")},
-    )
+    probe_url = judgment_config.base_url("typesafe") + MODELS_PATH
+
+    @classmethod
+    def _handle_probe_response(cls, response: httpx.Response) -> ProbeResult:
+        try:
+            models = response.json().get("models")
+        except (ValueError, AttributeError):
+            models = None
+        if not isinstance(models, list):
+            return ProbeResult(valid=False, message="TypeSafe's answer listed no models, so the key could not be checked.")
+        names = [str(model["name"]) for model in models if isinstance(model, dict) and model.get("name")]
+        return ProbeResult(valid=True, message=f"{cls.display_name} API key is valid", models=names)
 
 
-__all__ = ["TypeSafeCredential"]
+__all__ = ["MODELS_PATH", "TypeSafeCredential"]
