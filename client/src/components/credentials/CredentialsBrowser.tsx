@@ -67,6 +67,7 @@ function toItem(provider: ConsumerProvider): CatalogItem {
     byline: provider.publisher ? `by ${provider.publisher}` : undefined,
     verified: provider.verified,
     category: provider.consumer_category,
+    alsoIn: provider.also_consumer_categories ?? undefined,
     meta: meta || undefined,
     tile: { iconRef: provider.icon_ref },
     state: connected ? 'added' : 'available',

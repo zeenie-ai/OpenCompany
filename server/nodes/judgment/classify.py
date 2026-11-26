@@ -1,4 +1,9 @@
-"""Classify: typed questions about a text, answered with probabilities.
+"""The Jev Classifier (type ``classify``): typed questions about a text,
+answered with probabilities.
+
+Named for the model it is built for, with TypeSafe's mark (``icon.svg``),
+so the owner can tell it apart on the canvas and in the palette; the type
+and the tool name stay ``classify``, since saved workflows keep the type.
 
 One node, one input, and a named map of questions answered in one call by
 the judgment service (``services/judgment``): TypeSafe's Jev with the
@@ -95,7 +100,7 @@ class ClassifyParams(BaseModel):
         for name, question in asked.items():
             if question.type == "box":
                 raise ValueError(
-                    f"{name!r} is a box question, which needs an image; Classify judges text, "
+                    f"{name!r} is a box question, which needs an image; the Jev Classifier judges text, "
                     "so ask a choice, score or noul"
                 )
         return asked
@@ -127,10 +132,10 @@ def _unavailable(judgment: Judgment) -> NodeUserError:
 
 class ClassifyNode(ActionNode):
     type = "classify"
-    display_name = "Classify"
-    subtitle = "Typed Judgment"
+    display_name = "Jev Classifier"
+    subtitle = "TypeSafe"
     group = ("ai",)
-    description = "Answer yes-or-no, multiple-choice and scale questions about a text, with probabilities"
+    description = "TypeSafe's Jev answers yes-or-no, multiple-choice and scale questions about a text, with probabilities"
     component_kind = "square"
     tool_name = "classify"
     tool_description = TOOL_DESCRIPTION

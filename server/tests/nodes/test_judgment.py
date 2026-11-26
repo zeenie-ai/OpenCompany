@@ -1,6 +1,6 @@
 """The judgment plugin (``nodes/judgment``): Jev's System One API at TypeSafe
 and through OpenRouter, the chat-model fallback, the TypeSafe credential and
-the Classify node. The service's own rules are in
+the Jev Classifier node (``classify``). The service's own rules are in
 ``tests/services/judgment/test_judgment_service.py``."""
 
 from __future__ import annotations
@@ -483,21 +483,39 @@ async def test_an_answer_without_a_model_list_is_not_taken_for_a_valid_key(body)
     assert result.models == []
 
 
-def test_typesafe_sits_with_the_ai_providers_but_never_counts_as_a_chat_model():
+def test_typesafe_is_listed_under_developer_and_ai_but_never_counts_as_a_chat_model():
     from services.credential_registry import CredentialRegistry
 
     entry = CredentialRegistry().get_provider("typesafe")
 
     assert (entry["category"], entry["kind"]) == ("ai", "apiKey")
-    # Home counts consumer_category "ai" as a chat model (the guide, Get started).
+    # Home counts consumer_category "ai" as a chat model (the guide, Get
+    # started, the hire composer); the AI category lists the card as well.
     assert entry["consumer_category"] == "developer"
+    assert entry["also_consumer_categories"] == ["ai"]
     assert not entry.get("has_defaults")
     # A one-key panel shows its field's help, not the entry's instructions.
     assert "console.typesafe.ai/keys" in entry["fields"][0]["help"]
     assert "Jev" in entry["description"]
 
 
-# ---- the Classify node
+def test_the_node_and_the_typesafe_card_show_typesafes_mark():
+    from nodes._visuals import get_plugin_icon_path
+    from nodes.judgment.classify import ClassifyNode
+    from services.credential_registry import CredentialRegistry
+
+    card = TypeSafeCredential.get_icon_path()
+    node = get_plugin_icon_path(ClassifyNode.type)
+
+    assert card is not None and card.name == "typesafe.svg"
+    assert node is not None and node.name == "icon.svg"
+    assert node.read_bytes() == card.read_bytes()
+    assert CredentialRegistry().get_provider("typesafe")["icon_ref"] == "/api/schemas/credentials/typesafe/icon"
+    # Named for Jev so the owner can find it; the stored type stays the same.
+    assert (ClassifyNode.type, ClassifyNode.display_name, ClassifyNode.subtitle) == ("classify", "Jev Classifier", "TypeSafe")
+
+
+# ---- the Jev Classifier node (``classify``)
 
 
 class TestClassifyNode:

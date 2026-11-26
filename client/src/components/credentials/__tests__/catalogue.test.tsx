@@ -17,7 +17,7 @@ vi.mock('@/hooks/useNodeAllowlist', () => ({
   useNodeAllowlist: () => ({ isCredentialCategoryDisabled: (category: string) => disabled.includes(category) }),
 }));
 
-import { isConnected, useCredentialsCatalogue } from '../catalogue';
+import { isConnected, useConnectors, useCredentialsCatalogue } from '../catalogue';
 
 function provider(id: string, category: string, consumerCategory: string): ServerProviderConfig {
   return { id, name: id, category, category_label: category, consumer_category: consumerCategory, color: '', kind: 'apiKey' };
@@ -46,6 +46,19 @@ describe('shared credentials catalogue', () => {
     expect(result.current.providers.map((p) => p.id)).toEqual(['github', 'openai']);
     expect(result.current.categories.map((c) => c.key)).toEqual(['developer', 'ai']);
     expect(result.current.catalogue.data).toBe(data);
+  });
+
+  it('shows the extra categories a card is listed under, without making it a chat model', () => {
+    data = {
+      ...data!,
+      providers: [{ ...provider('typesafe', 'ai', 'developer'), also_consumer_categories: ['ai'], connected: true }],
+    };
+    const { result } = renderHook(useCredentialsCatalogue);
+    expect(result.current.categories.map((c) => c.key)).toEqual(['developer', 'ai']);
+
+    const connectors = renderHook(useConnectors).result.current;
+    expect(connectors.hasAi).toBe(false);
+    expect(connectors.connectedApps.map((p) => p.id)).toEqual(['typesafe']);
   });
 
   it('keeps query state and retry available with an empty cold catalogue', () => {

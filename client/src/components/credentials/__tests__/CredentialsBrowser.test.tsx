@@ -133,6 +133,33 @@ describe('CredentialsBrowser', () => {
     expect(onConnect).toHaveBeenCalledWith('mcp', 'connect');
   });
 
+  it('lists a card under each category it names, and once when none is chosen', () => {
+    const TYPESAFE: ConsumerProvider = {
+      id: 'typesafe', name: 'TypeSafe', category: 'ai', category_label: 'AI Providers', consumer_category: 'developer',
+      also_consumer_categories: ['ai'], color: '', kind: 'apiKey', connected: false, publisher: 'TypeSafe', verified: true,
+    };
+    const view = {
+      ...catalogue([ENDPOINT, TYPESAFE]),
+      categories: [{ key: 'developer', label: 'Developer', order: 0 }, { key: 'ai', label: 'AI', order: 1 }],
+    } as unknown as CredentialsCatalogue;
+    const shown = (initialCategory?: string) => {
+      const { unmount } = render(
+        <ThemeProvider><CredentialsBrowser catalogue={view} initialCategory={initialCategory} onConnect={vi.fn()} /></ThemeProvider>,
+      );
+      const result = {
+        typesafe: screen.queryAllByRole('button', { name: 'Connect TypeSafe' }).length,
+        endpoint: screen.queryAllByText('Model server').length,
+      };
+      unmount();
+      return result;
+    };
+
+    expect(shown('developer')).toEqual({ typesafe: 1, endpoint: 0 });
+    expect(shown('ai').typesafe).toBe(1);
+    expect(shown('ai').endpoint).toBeGreaterThan(0);
+    expect(shown().typesafe).toBe(1);
+  });
+
   it('has no Add where the host turns custom connectors off', () => {
     render(<ThemeProvider><CredentialsBrowser catalogue={catalogue()} onConnect={vi.fn()} customConnectors={false} /></ThemeProvider>);
     expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument();

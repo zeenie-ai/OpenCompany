@@ -18,6 +18,9 @@ export interface CatalogItem {
   verified?: boolean;
   /** A category key, for the filter chips. */
   category?: string;
+  /** More category keys that list the same card. It still shows once when
+   *  no category is chosen. */
+  alsoIn?: string[];
   /** One short mono line under the byline. */
   meta?: string;
   /** A brand icon, or tinted initials when there is none. */
@@ -38,7 +41,7 @@ export function catalogSlice(
 ): { shown: CatalogItem[]; total: number } {
   const q = query.trim().toLowerCase();
   const matched = items.filter((item) => {
-    if (category !== 'all' && item.category !== category) return false;
+    if (category !== 'all' && item.category !== category && !item.alsoIn?.includes(category)) return false;
     if (!q) return true;
     return [item.name, item.description, item.byline].some((text) => text?.toLowerCase().includes(q));
   });

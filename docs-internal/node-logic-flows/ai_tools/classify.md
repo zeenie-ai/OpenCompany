@@ -1,8 +1,9 @@
-# Classify (`classify`)
+# Jev Classifier (`classify`)
 
 | Field | Value |
 |------|-------|
 | **Category** | ai |
+| **Shown as** | "Jev Classifier", subtitle "TypeSafe", with TypeSafe's mark ([`icon.svg`](../../../server/nodes/judgment/icon.svg), the same file as the TypeSafe card's `typesafe.svg`), so the owner can find it by Jev or TypeSafe; the type and the tool name stay `classify` |
 | **Backend handler** | [`server/nodes/judgment/classify.py`](../../../server/nodes/judgment/classify.py) - `ClassifyNode`; dispatched via `BaseNode.execute()` + the `@Operation("classify")` method |
 | **Judgment service** | [`server/services/judgment/`](../../../server/services/judgment/) (`judge`), providers in [`server/nodes/judgment/_providers/`](../../../server/nodes/judgment/_providers/) |
 | **Providers config** | [`server/config/judgment_defaults.json`](../../../server/config/judgment_defaults.json) |

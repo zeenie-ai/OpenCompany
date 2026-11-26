@@ -174,6 +174,10 @@ export interface ServerProviderConfig {
   connected?: boolean;
   /** Shared Connectors category; declared by every shipped provider. */
   consumer_category?: string | null;
+  /** More Connectors categories that list the same card (TypeSafe's Jev is
+   *  a Developer card the AI category lists too). Only `consumer_category`
+   *  says what the provider counts as, so such a card is never a chat model. */
+  also_consumer_categories?: string[] | null;
   /** One short line for the Normal-mode Connectors card. */
   description?: string;
   /** Who makes the app, for the card's "by …" line. */

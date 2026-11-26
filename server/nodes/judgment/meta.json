@@ -1,7 +1,4 @@
 {
-  "_comment": "Takes the 'ai' palette group accent: the node is vendor-neutral (TypeSafe's Jev or the owner's chat model answers), so it carries no one provider's brand.",
-  "color": "#bd93f9",
-  "icons": {
-    "classify": "lucide:ListChecks"
-  }
+  "_comment": "TypeSafe's pink: the node is the Jev Classifier, named and drawn (icon.svg, the same mark as the TypeSafe card's typesafe.svg) for the model it is built for. An OpenRouter key reaches Jev too, and the owner's chat model answers only when neither key is connected.",
+  "color": "#E551BA"
 }

@@ -95,6 +95,19 @@ class TestCatalogueFields:
             assert isinstance(publisher, str) and publisher.strip(), provider["id"]
             assert isinstance(provider.get("verified"), bool), provider["id"]
 
+    def test_a_card_listed_under_more_categories_names_known_ones(self, registry):
+        """``also_consumer_categories`` lists the same card under more
+        categories (TypeSafe's Jev under AI as well as Developer). Only
+        ``consumer_category`` says what the provider counts as."""
+        known = {c["key"] for c in registry.get_consumer_categories()}
+        listed = [p for p in registry.get_all_providers() if "also_consumer_categories" in p]
+        assert [p["id"] for p in listed] == ["typesafe"]
+        for provider in listed:
+            extra = provider["also_consumer_categories"]
+            assert isinstance(extra, list) and extra and len(set(extra)) == len(extra), provider["id"]
+            assert set(extra) <= known, provider["id"]
+            assert provider["consumer_category"] not in extra, provider["id"]
+
     def test_a_connector_lists_usage_services_its_nodes_book_under(self, registry):
         """The API usage section adds up the rows of the services a connector
         lists, so a name nothing books under shows no usage. Google Workspace

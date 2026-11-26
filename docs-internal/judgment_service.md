@@ -2,8 +2,8 @@
 
 `server/services/judgment/` answers typed questions about one input with
 probabilities instead of text. It is for decisions where a yes, a no or a
-label is enough, so that a full model run is not spent on them. The
-Classify node, triage of app events, review auto-accept and the Mobile
+label is enough, so that a full model run is not spent on them. The Jev
+Classifier node, triage of app events, review auto-accept and the Mobile
 element finder use it ([Where it is used](#where-it-is-used)).
 
 ## Questions and answers
@@ -100,17 +100,22 @@ registers them with `register_judgment_provider` when it loads.
 | `openrouter` | the same API through OpenRouter, `POST https://openrouter.ai/api/v1/systemone` | the owner's OpenRouter key | yes | choice, score, noul, box |
 | `llm` | the owner's chat model, answering as JSON | none of its own | no | choice, score, noul |
 
-**The TypeSafe key** is entered on TypeSafe's card in Connectors, under
-Developer. Home's Settings and Dev's Connectors dialog show the same list
-(`CredentialsBrowser`), and searching "jev" finds the card, since its
-description names Jev.
+**The TypeSafe key** is entered on TypeSafe's card in Connectors, listed
+under both Developer and AI. Home's Settings and Dev's Connectors dialog show
+the same list (`CredentialsBrowser`), and searching "jev" finds the card,
+since its description names Jev.
 - The card is an ordinary `apiKey` entry in `config/credential_providers.json`,
   drawn by the shared `ApiKeyPanel`. Its field's `help` says where keys are
   made (`console.typesafe.ai/keys`) and what Jev does.
 - Its `category` is `ai`, like ElevenLabs, Deepgram and the Claude Code and
   Codex sign-ins. Its `consumer_category` is `developer`, never `ai`,
   because Home counts an `ai` card as a chat model: the Welcome guide's
-  Connect step, Get started and the hire composer.
+  Connect step, Get started and the hire composer. `also_consumer_categories:
+  ["ai"]` lists the same card under AI as well, without making it a chat
+  model.
+- Its icon is TypeSafe's mark, `nodes/judgment/typesafe.svg`, the same file
+  as the node's `icon.svg`: the logomark from typesafe.ai on the pink circle
+  of TypeSafe's favicon, drawn at the favicon's line weight.
 - Checking a key lists its models (`GET https://api.typesafe.ai/v1/models`,
   `TypeSafeCredential` in `nodes/judgment/_credentials.py`). That call is
   free, where a judgment would be billed. A refused key gets 401, and an
@@ -183,9 +188,12 @@ finder sends the phone's screenshot.
 
 ## Where it is used
 
-- **The Classify node** ([card](./node-logic-flows/ai_tools/classify.md)).
-  It asks choice, score and noul questions about a text, and an agent can
-  call it as a tool. A judgment that is not available is a `NodeUserError`,
+- **The Jev Classifier node** (type `classify`,
+  [card](./node-logic-flows/ai_tools/classify.md)). It asks choice, score
+  and noul questions about a text, and an agent can call it as a tool,
+  `classify`. It is named for Jev and drawn with TypeSafe's mark so the
+  owner can find it; the type and the tool name never change, since saved
+  workflows keep the type. A judgment that is not available is a `NodeUserError`,
   and `not_connected` asks the owner to act.
 - **Triage of app events** (`services/employees/triage.py`). It answers
   whether an app, webhook or polling event is worth a job for a team
@@ -287,8 +295,8 @@ finder sends the phone's screenshot.
 - `server/tests/services/judgment/test_judgment_service.py`: provider
   order, one attempt, the answer checks and the question rules.
 - `server/tests/nodes/test_judgment.py`: the wire shapes, cost booking, the
-  fallback's reading, the TypeSafe key check and card, and the Classify
-  node.
+  fallback's reading, the TypeSafe key check, card and mark, and the Jev
+  Classifier node.
 - `server/tests/llm/test_json_reply.py`: the JSON reader the fallback and
   translate share.
 - `server/tests/services/employees/test_triage.py`,

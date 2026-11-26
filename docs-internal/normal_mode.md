@@ -1406,8 +1406,12 @@ changing page clears it.
   `publisher` (the card's "by …" line) and `verified`, and
   `test_credential_catalogue_consumer_fields.py` fails when one does not, or
   when a plugin credential has no catalogue entry at all, so a new connector
-  cannot silently miss the page. They are listed in category order, so apps
-  come before AI models. The catalogue adds `connected`, which differs from
+  cannot silently miss the page. A provider may also name
+  `also_consumer_categories`, more categories that list the same card:
+  TypeSafe's Jev is a Developer card that AI lists too. Only
+  `consumer_category` says what a provider counts as, so such a card never
+  counts as a chat model. They are listed in category order, so apps come
+  before AI models. The catalogue adds `connected`, which differs from
   `stored` for providers with a `connected_check` (WhatsApp's live pairing,
   the IMAP/SMTP account's keys; `builtin`, always connected, for the Web
   browser, whose panel manages optional login profiles). **Add** opens the
@@ -1436,6 +1440,8 @@ Skills, Connectors and Plugins are built on a shared page:
 The page supplies both lists, so the layout never needs to know which page it
 is on:
 - Discover shows eight cards until Show all.
+- A card can be listed under more than one category (the item's `alsoIn`);
+  with no category chosen it shows once.
 - A card's "+" turns into a check, which removes on hover only when the page
   can remove. The check stays green, since it marks a state; the "+" and the
   remove hovers are neutral.

@@ -818,7 +818,7 @@
     },
     {
       "type": "classify",
-      "name": "Classify",
+      "name": "Jev Classifier",
       "family": "ai",
       "groups": [
         "ai"

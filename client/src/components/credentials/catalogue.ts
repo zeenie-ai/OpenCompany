@@ -50,7 +50,7 @@ export function useCredentialsCatalogue() {
     [catalogue.data, isCredentialCategoryDisabled, waitingForAllowlist],
   );
   const categories = useMemo(() => {
-    const visible = new Set(providers.map((provider) => provider.consumer_category));
+    const visible = new Set(providers.flatMap((provider) => [provider.consumer_category, ...(provider.also_consumer_categories ?? [])]));
     return (catalogue.data?.consumer_categories ?? []).filter((category) => visible.has(category.key));
   }, [catalogue.data, providers]);
   return {

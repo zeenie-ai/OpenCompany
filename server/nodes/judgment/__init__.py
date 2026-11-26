@@ -1,9 +1,11 @@
-"""Judgment plugin: the Classify node, and the providers that answer System
-One judgments for ``services/judgment``.
+"""Judgment plugin: the Jev Classifier node (type ``classify``), and the
+providers that answer System One judgments for ``services/judgment``.
 
 Layout::
 
-    classify.py        the Classify node (choice, score and noul about a text)
+    classify.py        the Jev Classifier (choice, score and noul about a text)
+    icon.svg           TypeSafe's mark, for the node; typesafe.svg is the
+                       same file for the TypeSafe card
     _providers/        systemone (TypeSafe's Jev, also through OpenRouter)
                        and llm (the owner's chat model, as JSON)
     _credentials.py    TypeSafe; OpenRouter's key is the chat-model one
