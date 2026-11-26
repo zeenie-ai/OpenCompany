@@ -82,6 +82,9 @@
   "chatTrigger": {
     "icon": "💬"
   },
+  "classify": {
+    "skill": "jev-classifier-skill"
+  },
   "claude_code_agent": {
     "icon": "lobehub:Claude"
   },

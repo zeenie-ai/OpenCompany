@@ -8,7 +8,7 @@
 | **Judgment service** | [`server/services/judgment/`](../../../server/services/judgment/) (`judge`), providers in [`server/nodes/judgment/_providers/`](../../../server/nodes/judgment/_providers/) |
 | **Providers config** | [`server/config/judgment_defaults.json`](../../../server/config/judgment_defaults.json) |
 | **Tests** | [`server/tests/nodes/test_judgment.py`](../../../server/tests/nodes/test_judgment.py), [`server/tests/services/judgment/test_judgment_service.py`](../../../server/tests/services/judgment/test_judgment_service.py) |
-| **Skill (if any)** | none |
+| **Skill (if any)** | [`server/skills/assistant/jev-classifier-skill/SKILL.md`](../../../server/skills/assistant/jev-classifier-skill/SKILL.md), paired through `visuals.json` (`"classify": {"skill": "jev-classifier-skill"}`), so connecting the node to an agent's Tools adds it to the agent's Master Skill |
 | **Dual-purpose tool** | yes - tool name `classify` |
 | **Direct Run** | supported; needs a TypeSafe key, an OpenRouter key or a connected AI model |
 | **Controlled execution** | per-type activity on the `rest-api` queue; listed in `REPEATABLE` (a repeated call re-asks the same questions) |

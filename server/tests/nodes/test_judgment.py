@@ -515,6 +515,25 @@ def test_the_node_and_the_typesafe_card_show_typesafes_mark():
     assert (ClassifyNode.type, ClassifyNode.display_name, ClassifyNode.subtitle) == ("classify", "Jev Classifier", "TypeSafe")
 
 
+def test_connecting_the_node_to_an_agent_brings_its_skill():
+    from pathlib import Path
+
+    from nodes._visuals import get_skill
+    from services.skill_loader import SkillLoader
+
+    # services.auto_skill reads this pairing when the node joins an agent's Tools.
+    assert get_skill("classify") == "jev-classifier-skill"
+    skill_md = Path(nodes.judgment.__file__).resolve().parents[2] / "skills" / "assistant" / "jev-classifier-skill" / "SKILL.md"
+    meta = SkillLoader()._parse_skill_metadata(skill_md)
+    assert meta is not None
+    assert (meta.name, meta.allowed_tools) == ("jev-classifier-skill", ["classify"])
+    # The Master Skill row takes the node's icon, TypeSafe's mark.
+    assert meta.metadata["icon"] == "/api/schemas/nodes/classify/icon"
+    text = skill_md.read_text(encoding="utf-8")
+    for taught in ('"type": "noul"', '"type": "choice"', '"type": "score"', "calibrated", "No judgment model is connected"):
+        assert taught in text
+
+
 # ---- the Jev Classifier node (``classify``)
 
 

@@ -194,7 +194,12 @@ finder sends the phone's screenshot.
   `classify`. It is named for Jev and drawn with TypeSafe's mark so the
   owner can find it; the type and the tool name never change, since saved
   workflows keep the type. A judgment that is not available is a `NodeUserError`,
-  and `not_connected` asks the owner to act.
+  and `not_connected` asks the owner to act. Its skill,
+  [`jev-classifier-skill`](../server/skills/assistant/jev-classifier-skill/SKILL.md),
+  teaches an agent when to ask and how: statements for a noul, options that
+  cover every case, every question about one text in one call, and acting
+  only on clear probabilities. `visuals.json` pairs it with the node, so
+  connecting the node to an agent's Tools adds the skill.
 - **Triage of app events** (`services/employees/triage.py`). It answers
   whether an app, webhook or polling event is worth a job for a team
   employee (recipe v3), before any model runs.

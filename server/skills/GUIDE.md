@@ -11,8 +11,8 @@ server/skills/
 ├── GUIDE.md                  # This file
 ├── assistant/                # General-purpose assistant skills
 │     advisor, agent-builder-skill, assistant-personality, compaction-skill,
-│     data-skill, humanify-skill, memory-skill, skill, subagent-skill,
-│     task-manager, vision-skill, write-todos-skill
+│     data-skill, humanify-skill, jev-classifier-skill, memory-skill, skill,
+│     subagent-skill, task-manager, vision-skill, write-todos-skill
 ├── android_agent/            # Android device control skills
 │     personality + one skill per Android service node (battery, wifi,
 │     bluetooth, location, app-launcher, app-list, audio, screen-control,
