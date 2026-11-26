@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from nodes.tool import agent_builder as ab
+from services import agent_bindings as ab_bindings
 from services.employees import store
 from services.employees.genui_catalog import load_genui_catalog
 from services.graph_build import main_edge, skill_edge, tool_edge
@@ -196,20 +197,32 @@ class TestTools:
         [
             ("googleCalendar", {"operation": "list", "calendar_id": "primary", "send_updates": "none"}),
             ("stripeAction", {"command": ""}),
-            ("browser", {"interaction": "full"}),
         ],
     )
     async def test_asking_first_adds_what_sends_or_spends_whole(self, builder, database, node_type, params):
-        # Each call waits for the owner (Stripe is refused, the browser reads
-        # only) while they ask first, decided per call: services/approvals.
+        # Each call waits for the owner (Stripe is refused) while they ask
+        # first, decided per call: services/approvals.
         await save_graph(database, employee_graph())
         await hire(database, ask_first=True)
-        builder.connected = ["google_calendar", "stripe", "web"]
+        builder.connected = ["google_calendar", "stripe"]
 
         result = await call("add_tool", talk(), node_type=node_type)
 
         assert result.summary.startswith("Added "), result.summary
         assert await database.get_node_parameters(f"7:{node_type}:1") == params
+
+    async def test_the_browser_is_refused_on_talk(self, builder, database):
+        # Only a Browser AI Agent holds the Browser tool
+        # (services/agent_bindings.agent_can_bind_tool). A hire gets one from
+        # its recipe, which saves the tool whole (test_graph_builder.py).
+        await save_graph(database, employee_graph())
+        await hire(database, ask_first=True)
+        builder.connected = ["web"]
+
+        result = await call("add_tool", talk(), node_type="browser")
+
+        assert result.summary == ab_bindings.BROWSER_AGENT_ONLY
+        assert builder.frames == []
 
     async def test_an_app_that_is_not_connected_is_refused(self, builder, database):
         await save_graph(database, employee_graph())
